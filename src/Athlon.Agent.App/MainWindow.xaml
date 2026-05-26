@@ -347,7 +347,7 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="32" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid>
                     <TextBox Text="{Binding ComposerText, UpdateSourceTrigger=PropertyChanged}" MinHeight="48" BorderThickness="0" />
@@ -367,7 +367,7 @@
                         </TextBlock.Style>
                     </TextBlock>
                 </Grid>
-                <Grid Grid.Row="1" Margin="4,8,4,0">
+                <Grid Grid.Row="1" Margin="4,8,4,4" VerticalAlignment="Bottom">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -376,16 +376,33 @@
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
                         <Button Content="{Binding ActiveWorkspaceName, StringFormat=工作区: {0}}"
                                 Command="{Binding ConfigureWorkspaceCommand}"
-                                Padding="10,4"
+                                MinHeight="32"
+                                Padding="10,6"
+                                VerticalContentAlignment="Center"
                                 Margin="0,0,8,0" />
                         <TextBlock Text="@ 添加文件 / 技能  Ctrl+Enter 发送"
                                    Foreground="{StaticResource Brush.SubtleText}"
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis" />
                     </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button Content="停止" Command="{Binding StopCommand}" Margin="6,0,0,0" MinWidth="72" Padding="14,6" />
-                        <Button Content="发送" Command="{Binding SendCommand}" Margin="6,0,0,0" MinWidth="72" Padding="14,6" />
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center">
+                        <Button Content="停止"
+                                Command="{Binding StopCommand}"
+                                Margin="6,0,0,0"
+                                MinWidth="72"
+                                MinHeight="32"
+                                Padding="14,8"
+                                VerticalContentAlignment="Center" />
+                        <Button Content="发送"
+                                Command="{Binding SendCommand}"
+                                Margin="6,0,0,0"
+                                MinWidth="72"
+                                MinHeight="32"
+                                Padding="14,8"
+                                VerticalContentAlignment="Center" />
                     </StackPanel>
                 </Grid>
             </Grid>
@@ -393,7 +410,7 @@
 
         <DockPanel Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="2" Margin="10,0">
             <TextBlock Text="● Local Model Active" Foreground="#67C587" VerticalAlignment="Center" />
-            <TextBlock DockPanel.Dock="Right" Text="Logs: %USERPROFILE%/AthlonAgent/logs" Foreground="{StaticResource Brush.SubtleText}" VerticalAlignment="Center" />
+            <TextBlock DockPanel.Dock="Right" Text="Logs: %USERPROFILE%/.athlon-agent/logs" Foreground="{StaticResource Brush.SubtleText}" VerticalAlignment="Center" />
         </DockPanel>
     </Grid>
 </Window>

@@ -15,7 +15,9 @@ public interface IAppPathProvider
 
 public sealed class AppPathProvider : IAppPathProvider
 {
-    public string RootPath { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "AthlonAgent");
+    public const string AppDataFolderName = ".athlon-agent";
+
+    public string RootPath { get; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), AppDataFolderName);
     public string ConfigPath => Path.Combine(RootPath, "config");
     public string SessionsPath => Path.Combine(RootPath, "sessions");
     public string AuditPath => Path.Combine(RootPath, "audit");

@@ -48,7 +48,7 @@ tests/
 Runtime data is stored under the current Windows user profile, not `%LocalAppData%`:
 
 ```text
-C:\Users\<UserName>\AthlonAgent\
+C:\Users\<UserName>\.athlon-agent\
   config\        settings JSON
   sessions\      Markdown session history and metadata
   logs\          Serilog logs and startup diagnostics
@@ -128,7 +128,7 @@ All file tools should respect workspace boundaries through `WorkspaceGuard`. Wri
 - Prefer extending `AgentRuntime`, `AgentEnvironmentPromptBuilder`, and tool classes instead of adding model logic to the WPF layer.
 - Keep UI logic in `Athlon.Agent.App/ViewModels/AppViewModels.cs` following the existing MVVM pattern.
 - Keep persistence file-based unless there is a strong product reason to introduce a database.
-- Do not reintroduce `%LocalAppData%` for default app data. Use `IAppPathProvider`.
+- Do not reintroduce `%LocalAppData%` or `AthlonAgent` for default app data. Use `IAppPathProvider` (folder name: `.athlon-agent` under the user profile).
 - Before editing `.pen` design files, use the Pencil MCP tools only.
 - After substantive edits, run `dotnet build` and check lints for changed files.
 
