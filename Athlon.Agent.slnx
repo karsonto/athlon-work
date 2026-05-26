@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Athlon.Agent.App/Athlon.Agent.App.csproj" />
+    <Project Path="src/Athlon.Agent.Core/Athlon.Agent.Core.csproj" />
+    <Project Path="src/Athlon.Agent.Infrastructure/Athlon.Agent.Infrastructure.csproj" />
+    <Project Path="src/Athlon.Agent.Mcp/Athlon.Agent.Mcp.csproj" />
+    <Project Path="src/Athlon.Agent.Skills/Athlon.Agent.Skills.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Athlon.Agent.Tests/Athlon.Agent.Tests.csproj" />
+  </Folder>
+</Solution>

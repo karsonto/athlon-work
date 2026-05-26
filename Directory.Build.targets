@@ -1,0 +1,10 @@
+<Project>
+  <ItemGroup>
+    <Compile Remove="artifacts\**\*.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)artifacts\**\*.cs" />
+    <EmbeddedResource Remove="artifacts\**" />
+    <EmbeddedResource Remove="$(MSBuildThisFileDirectory)artifacts\**" />
+    <None Remove="artifacts\**" />
+    <None Remove="$(MSBuildThisFileDirectory)artifacts\**" />
+  </ItemGroup>
+</Project>

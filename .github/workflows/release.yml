@@ -1,0 +1,100 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build And Publish Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore src/Athlon.Agent.App/Athlon.Agent.App.csproj
+
+      - name: Publish self-contained x64
+        run: dotnet publish src/Athlon.Agent.App/Athlon.Agent.App.csproj -c Release -r win-x64 --self-contained true -o publish
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup -y
+          "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Get version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref }}" -like "refs/tags/*") {
+            $version = "${{ github.ref }}" -replace "refs/tags/v", ""
+          } else {
+            $version = "1.0.0-dev"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $version"
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path installer | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ steps.version.outputs.version }}" setup.iss
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Inno Setup build failed."
+            exit 1
+          }
+          Get-ChildItem installer\*.exe
+
+      - name: Build portable zip
+        shell: pwsh
+        run: Compress-Archive -Path publish/* -DestinationPath AthlonAgent-Portable-x64.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            installer/*.exe
+            AthlonAgent-Portable-x64.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## Download
+
+            ### Installer
+            - File: `AthlonAgent_Setup_v*.exe`
+            - Includes .NET 8 runtime
+            - Creates Start Menu and optional desktop shortcut
+
+            ### Portable
+            - File: `AthlonAgent-Portable-x64.zip`
+            - Extract and run `Athlon.Agent.App.exe`
+            - Includes .NET 8 runtime
+
+            ## System Requirements
+            - Windows 10 / Windows 11 x64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AthlonAgent-Release-${{ steps.version.outputs.version }}
+          path: |
+            installer/*.exe
+            AthlonAgent-Portable-x64.zip
+          retention-days: 30

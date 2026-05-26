@@ -1,0 +1,36 @@
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# .NET build outputs
+bin/
+obj/
+**/bin/
+**/obj/
+artifacts/
+**/artifacts/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# Publish and installer outputs
+publish/
+installer/
+*.nupkg
+*.snupkg
+
+# Runtime data and logs
+logs/
+*.log
+*.tmp
+*.bak
+
+# OS files
+Thumbs.db
+Desktop.ini
