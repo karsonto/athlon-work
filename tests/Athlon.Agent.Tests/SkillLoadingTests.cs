@@ -1,0 +1,67 @@
+using Athlon.Agent.Skills;
+using Athlon.Agent.Skills.Repository;
+
+namespace Athlon.Agent.Tests;
+
+public sealed class SkillLoadingTests
+{
+    [Fact]
+    public void MarkdownSkillParser_ParsesFrontmatterAndBody()
+    {
+        const string markdown = """
+            ---
+            name: data_cleaning
+            description: Clean tabular data
+            version: 1.0.0
+            ---
+            # Instructions
+            Use pandas when needed.
+            """;
+
+        var parsed = MarkdownSkillParser.Parse(markdown);
+
+        Assert.Equal("data_cleaning", parsed.Metadata["name"]);
+        Assert.Equal("Clean tabular data", parsed.Metadata["description"]);
+        Assert.Contains("# Instructions", parsed.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FileSystemSkillRepository_LoadsSkillFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-tests", Guid.NewGuid().ToString("N"));
+        var skillDir = Path.Combine(root, "sample-skill");
+        Directory.CreateDirectory(skillDir);
+
+        File.WriteAllText(
+            Path.Combine(skillDir, SkillUtil.SkillFileName),
+            """
+            ---
+            name: sample_skill
+            description: Sample skill for tests
+            ---
+            Follow these steps.
+            """);
+
+        var referencesDir = Path.Combine(skillDir, "references");
+        Directory.CreateDirectory(referencesDir);
+        File.WriteAllText(Path.Combine(referencesDir, "guide.md"), "# Guide");
+
+        try
+        {
+            var repo = new FileSystemSkillRepository(root);
+            var skills = repo.GetAllSkills();
+
+            Assert.Single(skills);
+            Assert.Equal("sample_skill", skills[0].Name);
+            Assert.Equal("Sample skill for tests", skills[0].Description);
+            Assert.Contains("Follow these steps.", skills[0].SkillContent, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+}

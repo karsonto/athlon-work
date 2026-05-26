@@ -50,6 +50,7 @@ Runtime data is stored under the current Windows user profile, not `%LocalAppDat
 ```text
 C:\Users\<UserName>\.athlon-agent\
   config\        settings JSON
+  skills\        AgentScope-style skill folders (<name>/SKILL.md + resources)
   sessions\      Markdown session history and metadata
   logs\          Serilog logs and startup diagnostics
   credentials\   DPAPI encrypted API key files

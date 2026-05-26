@@ -1,0 +1,48 @@
+<Window x:Class="Athlon.Agent.App.Windows.HtmlPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="HTML 预览"
+        Width="1200"
+        Height="820"
+        MinWidth="720"
+        MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        Background="#101012">
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="HTML 预览"
+                           FontSize="16"
+                           FontWeight="SemiBold"
+                           Foreground="#F4F4F5" />
+                <TextBlock Text="已在沙箱环境中渲染，不会影响当前页面"
+                           FontSize="12"
+                           Foreground="#A1A1AA"
+                           Margin="0,4,0,0" />
+            </StackPanel>
+            <Button Content="×"
+                    Width="40"
+                    Height="40"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Click="CloseButton_OnClick"
+                    ToolTip="关闭"
+                    Style="{StaticResource GhostButtonStyle}" />
+        </Grid>
+
+        <Border Grid.Row="1"
+                Background="White"
+                CornerRadius="16"
+                BorderBrush="#3F3F46"
+                BorderThickness="1"
+                Padding="12">
+            <wv2:WebView2 x:Name="PreviewWebView" />
+        </Border>
+    </Grid>
+</Window>

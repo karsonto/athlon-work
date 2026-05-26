@@ -54,9 +54,9 @@ public partial class App : Application
 
     internal static void StartupTrace(string message)
     {
-        var root = new AppPathProvider().LogsPath;
-        Directory.CreateDirectory(root);
-        File.AppendAllText(Path.Combine(root, "startup.log"), $"{DateTimeOffset.Now:O} {message}{Environment.NewLine}");
+        var paths = new AppPathProvider();
+        paths.EnsureCreated();
+        File.AppendAllText(Path.Combine(paths.LogsPath, "startup.log"), $"{DateTimeOffset.Now:O} {message}{Environment.NewLine}");
     }
 }
 

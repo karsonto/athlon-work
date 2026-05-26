@@ -41,6 +41,26 @@ public sealed record AgentSession(
         UpdatedAt = DateTimeOffset.UtcNow,
         Messages = Messages.Concat(new[] { message }).ToArray()
     };
+
+    public AgentSession WithWorkspace(string? workspaceRootPath) => this with
+    {
+        ActiveWorkspace = workspaceRootPath,
+        UpdatedAt = DateTimeOffset.UtcNow
+    };
+
+    public AgentSession WithTitle(string title) => this with
+    {
+        Title = title,
+        UpdatedAt = DateTimeOffset.UtcNow
+    };
+}
+
+public interface IActiveWorkspaceContext
+{
+    string? RootPath { get; }
+    string? DisplayName { get; }
+    IReadOnlyList<string> IgnorePatterns { get; }
+    void SetWorkspace(string? rootPath, string? displayName = null, IReadOnlyList<string>? ignorePatterns = null);
 }
 
 public sealed record ToolDefinition(
@@ -92,6 +112,13 @@ public interface IAgentEnvironmentPromptBuilder
     string Build(AgentSession session, IReadOnlyList<ToolDefinition> tools);
 }
 
+public sealed record AvailableSkillInfo(string Name, string Description, string SkillId);
+
+public interface IAvailableSkillsProvider
+{
+    IReadOnlyList<AvailableSkillInfo> GetSkills();
+}
+
 public interface IAgentRuntime
 {
     Task<AgentSession> SendAsync(AgentSession session, string userInput, Func<string, Task>? onToken = null, CancellationToken cancellationToken = default);
@@ -113,6 +140,8 @@ public interface IFileStorageService
 {
     string RootPath { get; }
     Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default);
+    Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default);
+    Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default);
     Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default);
     Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default);
@@ -192,9 +221,11 @@ public sealed class McpServerSettings
 
 public sealed class SkillSettings
 {
-    public string Name { get; set; } = "data-cleaning";
+    public string Name { get; set; } = string.Empty;
     public bool Enabled { get; set; } = true;
-    public string Path { get; set; } = ".codex/skills/data-cleaning.yaml";
+
+    /// <summary>Skill folder name under <c>~/.athlon-agent/skills</c> (optional override).</summary>
+    public string Path { get; set; } = string.Empty;
 }
 
 public sealed class WorkspaceSettings
@@ -229,12 +260,14 @@ public sealed class ToolRouter(IEnumerable<IAgentTool> tools) : IToolRouter
     }
 }
 
-public sealed class AgentEnvironmentPromptBuilder(AppSettings settings) : IAgentEnvironmentPromptBuilder
+public sealed class AgentEnvironmentPromptBuilder(
+    AppSettings settings,
+    IAvailableSkillsProvider skillsProvider) : IAgentEnvironmentPromptBuilder
 {
     public string Build(AgentSession session, IReadOnlyList<ToolDefinition> tools)
     {
         var builder = new StringBuilder();
-        var workspace = GetActiveWorkspace();
+        var workspace = ResolveWorkspace(session);
 
         builder.AppendLine("You are Athlon Agent, a Windows desktop coding agent.");
         builder.AppendLine("Use the provided function tools when you need to inspect or modify workspace files. Do not guess file contents.");
@@ -267,6 +300,25 @@ public sealed class AgentEnvironmentPromptBuilder(AppSettings settings) : IAgent
         builder.AppendLine();
         builder.AppendLine("MCP server status:");
         builder.AppendLine(mcpServers);
+
+        var skills = skillsProvider.GetSkills();
+        builder.AppendLine();
+        if (skills.Count == 0)
+        {
+            builder.AppendLine("Available skills: none installed under ~/.athlon-agent/skills.");
+            builder.AppendLine("Install skills as <skill-name>/SKILL.md with YAML frontmatter (name, description).");
+        }
+        else
+        {
+            builder.AppendLine("Available skills (each folder under ~/.athlon-agent/skills):");
+            foreach (var skill in skills)
+            {
+                builder.AppendLine($"- {skill.Name}: {skill.Description} (skill-id: {skill.SkillId})");
+            }
+
+            builder.AppendLine("When a skill matches the task, follow instructions in its SKILL.md content.");
+        }
+
         builder.AppendLine();
         builder.AppendLine("When answering questions about files, call file_read first if the content is needed.");
         builder.AppendLine("When the user asks what files exist in the workspace or a directory, call file_list before answering.");
@@ -277,8 +329,19 @@ public sealed class AgentEnvironmentPromptBuilder(AppSettings settings) : IAgent
         return builder.ToString();
     }
 
-    private WorkspaceSettings? GetActiveWorkspace()
+    private WorkspaceSettings? ResolveWorkspace(AgentSession session)
     {
+        if (!string.IsNullOrWhiteSpace(session.ActiveWorkspace))
+        {
+            var rootPath = Path.GetFullPath(session.ActiveWorkspace);
+            return new WorkspaceSettings
+            {
+                Name = Path.GetFileName(rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+                RootPath = rootPath,
+                IsDefault = true
+            };
+        }
+
         return settings.Workspaces.FirstOrDefault(workspace => workspace.IsDefault) ?? settings.Workspaces.FirstOrDefault();
     }
 

@@ -2,95 +2,159 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using Athlon.Agent.Core;
+using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 
 namespace Athlon.Agent.App.ViewModels;
 
-public sealed class ChatMessageViewModel
+public sealed partial class ChatMessageViewModel : ObservableObject
 {
-    public ChatMessageViewModel(ChatMessage message)
+    public ChatMessageViewModel(ChatMessage message, bool expandTool = false)
     {
         Role = message.Role.ToString();
         Content = message.Content;
         CreatedAt = message.CreatedAt.ToLocalTime().ToString("HH:mm:ss");
+        IsUser = message.Role == MessageRole.User;
+        IsTool = message.Role == MessageRole.Tool;
+        DisplayRole = IsUser ? "您" : IsTool ? "工具" : "Athlon 助手";
+
+        if (IsTool)
+        {
+            ParseToolContent(message.Content, out var header, out var summary, out var detail);
+            ToolHeader = header;
+            ToolSummary = summary;
+            ToolDetail = detail;
+            IsExpanded = expandTool;
+        }
+        else
+        {
+            ToolHeader = string.Empty;
+            ToolSummary = string.Empty;
+            ToolDetail = string.Empty;
+        }
     }
 
     public string Role { get; }
     public string Content { get; }
     public string CreatedAt { get; }
+    public bool IsUser { get; }
+    public bool IsTool { get; }
+    public bool AssistantTone => !IsUser;
+    public string DisplayRole { get; }
+    public string ToolHeader { get; }
+    public string ToolSummary { get; }
+    public string ToolDetail { get; }
+
+    [ObservableProperty]
+    private bool _isExpanded;
+
+    public string ChevronGlyph => IsExpanded ? "▼" : "▶";
+
+    partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(ChevronGlyph));
+
+    [RelayCommand]
+    private void ToggleToolExpand() => IsExpanded = !IsExpanded;
+
+    private static void ParseToolContent(string content, out string header, out string summary, out string detail)
+    {
+        var lines = content.Replace("\r\n", "\n").Split('\n');
+        header = lines.Length > 0 && !string.IsNullOrWhiteSpace(lines[0]) ? lines[0].Trim() : "工具调用";
+        summary = string.Empty;
+
+        foreach (var line in lines)
+        {
+            if (line.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
+            {
+                summary = line["Summary:".Length..].Trim();
+                break;
+            }
+        }
+
+        detail = content.Trim();
+    }
+}
+
+public sealed class SessionHistoryItemViewModel
+{
+    public SessionHistoryItemViewModel(SessionIndexEntry entry, bool isActive)
+    {
+        Id = entry.Id;
+        Title = string.IsNullOrWhiteSpace(entry.Title) ? "未命名对话" : entry.Title;
+        UpdatedAtText = entry.UpdatedAt.ToLocalTime().ToString("MM-dd HH:mm");
+        IsActive = isActive;
+    }
+
+    public string Id { get; }
+    public string Title { get; }
+    public string UpdatedAtText { get; }
+    public bool IsActive { get; }
 }
 
 public sealed partial class ContextSidebarViewModel : ObservableObject
 {
-    public ContextSidebarViewModel(AppSettings settings)
+    private readonly IAppPathProvider _paths;
+    private readonly IAgentSkillCatalog _skillCatalog;
+
+    public ContextSidebarViewModel(IAppPathProvider paths, IAgentSkillCatalog skillCatalog, AppSettings settings)
     {
+        _paths = paths;
+        _skillCatalog = skillCatalog;
         Refresh(settings);
     }
 
-    [ObservableProperty]
-    private string activeSkill = "No active skill";
-
-    public ObservableCollection<string> NativeTools { get; } = new() { "file_list", "file_read", "file_write", "file_edit", "grep_files", "glob_files", "execute_command" };
+    public ObservableCollection<string> Skills { get; } = new();
     public ObservableCollection<string> McpServers { get; } = new();
-    public ObservableCollection<string> RecentFiles { get; } = new();
+    public ObservableCollection<WorkspaceTreeNodeViewModel> WorkspaceTree { get; } = new();
     public string LocalModelStatus { get; set; } = "Local Model Active";
 
     public void Refresh(AppSettings settings)
     {
-        ActiveSkill = settings.Skills.FirstOrDefault(skill => skill.Enabled)?.Name ?? "No active skill";
+        _skillCatalog.Reload();
+        Skills.Clear();
+
+        var disabled = new HashSet<string>(
+            settings.Skills.Where(skill => !skill.Enabled).Select(skill => skill.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        if (_skillCatalog.Skills.Count == 0)
+        {
+            Skills.Add($"未安装技能 ({_paths.SkillsPath})");
+        }
+        else
+        {
+            foreach (var skill in _skillCatalog.Skills.OrderBy(skill => skill.Name, StringComparer.Ordinal))
+            {
+                var status = disabled.Contains(skill.Name) ? "○" : "●";
+                Skills.Add($"{status} {skill.Name}  ({skill.Description})");
+            }
+        }
 
         McpServers.Clear();
-        var servers = settings.McpServers.Count == 0
-            ? new[] { "No MCP servers configured" }
-            : settings.McpServers.Select(server => $"{(server.Enabled ? "●" : "○")} {server.Name}");
-
-        foreach (var server in servers)
+        if (settings.McpServers.Count == 0)
         {
-            McpServers.Add(server);
+            McpServers.Add("未配置 MCP 服务器");
         }
-
-        RefreshWorkspaceFiles(settings);
-    }
-
-    public void RefreshWorkspaceFiles(AppSettings settings)
-    {
-        RecentFiles.Clear();
-        var workspace = GetActiveWorkspace(settings);
-        if (workspace is null || string.IsNullOrWhiteSpace(workspace.RootPath) || !Directory.Exists(workspace.RootPath))
+        else
         {
-            RecentFiles.Add("No workspace configured");
-            return;
-        }
-
-        var files = Directory.EnumerateFiles(workspace.RootPath, "*", SearchOption.TopDirectoryOnly)
-            .Where(file => !ShouldIgnore(file, workspace.IgnorePatterns))
-            .OrderByDescending(File.GetLastWriteTimeUtc)
-            .Take(12)
-            .Select(Path.GetFileName)
-            .Where(name => !string.IsNullOrWhiteSpace(name));
-
-        foreach (var file in files)
-        {
-            RecentFiles.Add(file!);
-        }
-
-        if (RecentFiles.Count == 0)
-        {
-            RecentFiles.Add("Workspace has no files");
+            foreach (var server in settings.McpServers)
+            {
+                var status = server.Enabled ? "●" : "○";
+                var command = string.IsNullOrWhiteSpace(server.Command) ? string.Empty : $"  {server.Command}";
+                McpServers.Add($"{status} {server.Name}{command}");
+            }
         }
     }
 
-    public static WorkspaceSettings? GetActiveWorkspace(AppSettings settings)
+    public void RefreshWorkspaceTree(string? workspaceRootPath, IReadOnlyList<string> ignorePatterns)
     {
-        return settings.Workspaces.FirstOrDefault(workspace => workspace.IsDefault) ?? settings.Workspaces.FirstOrDefault();
-    }
-
-    private static bool ShouldIgnore(string file, IReadOnlyCollection<string> ignorePatterns)
-    {
-        var name = Path.GetFileName(file);
-        return ignorePatterns.Any(pattern => string.Equals(name, pattern, StringComparison.OrdinalIgnoreCase));
+        WorkspaceTree.Clear();
+        foreach (var node in WorkspaceTreeNodeViewModel.BuildTree(workspaceRootPath, ignorePatterns))
+        {
+            WorkspaceTree.Add(node);
+        }
     }
 }
 
@@ -289,27 +353,55 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IAgentOrchestrator _orchestrator;
     private readonly IFileStorageService _storage;
     private readonly ICredentialStore _credentialStore;
+    private readonly IActiveWorkspaceContext _workspaceContext;
     private readonly AppSettings _appSettings;
     private FileSystemWatcher? _workspaceWatcher;
     private CancellationTokenSource? _turnCancellation;
     private AgentSession _session = AgentSession.Create("New Chat");
 
-    public MainWindowViewModel(IAgentOrchestrator orchestrator, IFileStorageService storage, ICredentialStore credentialStore, AppSettings settings)
+    public MainWindowViewModel(
+        IAgentOrchestrator orchestrator,
+        IFileStorageService storage,
+        ICredentialStore credentialStore,
+        IActiveWorkspaceContext workspaceContext,
+        IAppPathProvider paths,
+        IAgentSkillCatalog skillCatalog,
+        AppSettings settings)
     {
         _orchestrator = orchestrator;
         _storage = storage;
         _credentialStore = credentialStore;
+        _workspaceContext = workspaceContext;
         _appSettings = settings;
         Settings = new SettingsViewModel(settings);
-        Sidebar = new ContextSidebarViewModel(settings);
+        Sidebar = new ContextSidebarViewModel(paths, skillCatalog, settings);
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
-        ActiveWorkspaceName = GetWorkspaceDisplayName(settings);
-        ConfigureWorkspaceWatcher();
+        ApplySessionWorkspace();
+        _ = InitializeAsync();
+    }
+
+    public async Task InitializeAsync()
+    {
+        await RefreshSessionHistoryAsync();
+        var latest = SessionHistory.FirstOrDefault();
+        if (latest is not null && _session.Messages.Count == 0)
+        {
+            await LoadSessionInternalAsync(latest.Id);
+        }
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages { get; } = new();
+    public ObservableCollection<SessionHistoryItemViewModel> SessionHistory { get; } = new();
     public ContextSidebarViewModel Sidebar { get; }
     public SettingsViewModel Settings { get; }
+
+    private CancellationTokenSource? _copyNoticeCts;
+
+    [ObservableProperty]
+    private string copyNotice = string.Empty;
+
+    [ObservableProperty]
+    private bool isCopyNoticeVisible;
 
     [ObservableProperty]
     private string composerText = string.Empty;
@@ -350,9 +442,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void NewSession()
+    private async Task NewSession()
     {
         _turnCancellation?.Cancel();
+        await SaveCurrentSessionIfNeededAsync();
         _session = AgentSession.Create("New Chat");
         CurrentSessionTitle = _session.Title;
         ComposerText = string.Empty;
@@ -360,7 +453,58 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IsBusy = false;
         Messages.Clear();
         CurrentPage = "Chat";
+        ApplySessionWorkspace();
+        await RefreshSessionHistoryAsync();
         SendCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand]
+    private async Task LoadSessionAsync(SessionHistoryItemViewModel? item)
+    {
+        if (item is null || item.Id == _session.Id)
+        {
+            return;
+        }
+
+        _turnCancellation?.Cancel();
+        await SaveCurrentSessionIfNeededAsync();
+        await LoadSessionInternalAsync(item.Id);
+        CurrentPage = "Chat";
+    }
+
+    [RelayCommand]
+    private async Task DeleteSessionAsync(SessionHistoryItemViewModel? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            $"确定删除对话「{item.Title}」吗？此操作无法撤销。",
+            "删除对话",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        await _storage.DeleteSessionAsync(item.Id);
+
+        if (string.Equals(_session.Id, item.Id, StringComparison.Ordinal))
+        {
+            _session = AgentSession.Create("New Chat");
+            CurrentSessionTitle = _session.Title;
+            ComposerText = string.Empty;
+            StreamingText = string.Empty;
+            Messages.Clear();
+            ApplySessionWorkspace();
+            CurrentPage = "Chat";
+        }
+
+        await RefreshSessionHistoryAsync();
+        SettingsStatus = "对话已删除。";
     }
 
     [RelayCommand(CanExecute = nameof(CanSend))]
@@ -377,6 +521,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         StreamingText = string.Empty;
         _turnCancellation = new CancellationTokenSource();
         Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input)));
+        SyncWorkspaceContext();
 
         try
         {
@@ -387,7 +532,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 return Task.CompletedTask;
             }, _turnCancellation.Token);
             CurrentSessionTitle = _session.Title;
-            foreach (var message in _session.Messages.Skip(previousMessageCount + 1))
+            await SaveCurrentSessionIfNeededAsync();
+            var newMessages = _session.Messages.Skip(previousMessageCount + 1).ToList();
+            foreach (var message in newMessages)
             {
                 Messages.Add(new ChatMessageViewModel(message));
             }
@@ -395,10 +542,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (OperationCanceledException)
         {
             Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, "生成已停止。")));
+            await SaveCurrentSessionIfNeededAsync();
         }
         catch (Exception ex)
         {
             Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, $"模型调用失败：{ex.Message}")));
+            await SaveCurrentSessionIfNeededAsync();
         }
         finally
         {
@@ -419,10 +568,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             Multiselect = false
         };
 
-        var currentWorkspace = ContextSidebarViewModel.GetActiveWorkspace(_appSettings);
-        if (currentWorkspace is not null && Directory.Exists(currentWorkspace.RootPath))
+        if (!string.IsNullOrWhiteSpace(_session.ActiveWorkspace) && Directory.Exists(_session.ActiveWorkspace))
         {
-            dialog.InitialDirectory = currentWorkspace.RootPath;
+            dialog.InitialDirectory = _session.ActiveWorkspace;
         }
 
         if (dialog.ShowDialog() != true)
@@ -430,16 +578,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var workspace = Settings.EditableWorkspace;
-        workspace.RootPath = dialog.FolderName;
-        workspace.Name = new DirectoryInfo(dialog.FolderName).Name;
-        workspace.IsDefault = true;
-        ActiveWorkspaceName = GetWorkspaceDisplayName(_appSettings);
-
-        await _storage.SaveSettingsAsync(_appSettings);
-        Sidebar.Refresh(_appSettings);
-        ConfigureWorkspaceWatcher();
-        SettingsStatus = $"Workspace saved at {DateTime.Now:HH:mm:ss}";
+        var folderName = new DirectoryInfo(dialog.FolderName).Name;
+        _session = _session.WithWorkspace(dialog.FolderName);
+        ApplySessionWorkspace();
+        await SaveCurrentSessionIfNeededAsync();
+        SettingsStatus = $"当前对话工作区：{folderName}";
     }
 
     [RelayCommand]
@@ -456,28 +599,110 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Settings.Settings.Model.LegacyApiKeyCredentialName = null;
         await _storage.SaveSettingsAsync(Settings.Settings);
         Sidebar.Refresh(Settings.Settings);
-        ActiveWorkspaceName = GetWorkspaceDisplayName(_appSettings);
-        ConfigureWorkspaceWatcher();
+        ApplySessionWorkspace();
         OnPropertyChanged(nameof(Sidebar));
         SettingsStatus = $"Saved at {DateTime.Now:HH:mm:ss}";
     }
 
     private bool CanSend() => !IsBusy;
 
+    private void ApplySessionWorkspace()
+    {
+        SyncWorkspaceContext();
+        ActiveWorkspaceName = string.IsNullOrWhiteSpace(_workspaceContext.DisplayName) ? "未配置工作区" : _workspaceContext.DisplayName!;
+        Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
+        ConfigureWorkspaceWatcher();
+        OnPropertyChanged(nameof(Sidebar));
+    }
+
+    private void SyncWorkspaceContext()
+    {
+        _workspaceContext.SetWorkspace(_session.ActiveWorkspace);
+    }
+
+    private async Task SaveCurrentSessionIfNeededAsync()
+    {
+        if (_session.Messages.Count == 0)
+        {
+            return;
+        }
+
+        _session = DeriveSessionTitle(_session);
+        await _storage.SaveSessionAsync(_session);
+        await RefreshSessionHistoryAsync();
+    }
+
+    private async Task RefreshSessionHistoryAsync()
+    {
+        var entries = await _storage.ListSessionsAsync();
+        SessionHistory.Clear();
+        foreach (var entry in entries)
+        {
+            SessionHistory.Add(new SessionHistoryItemViewModel(entry, entry.Id == _session.Id));
+        }
+
+        OnPropertyChanged(nameof(HasSessionHistory));
+    }
+
+    public bool HasSessionHistory => SessionHistory.Count > 0;
+
+    private async Task LoadSessionInternalAsync(string sessionId)
+    {
+        var loaded = await _storage.LoadSessionAsync(sessionId);
+        if (loaded is null)
+        {
+            SettingsStatus = "无法加载该对话。";
+            return;
+        }
+
+        _session = loaded;
+        CurrentSessionTitle = _session.Title;
+        ComposerText = string.Empty;
+        StreamingText = string.Empty;
+        Messages.Clear();
+
+        foreach (var message in _session.Messages)
+        {
+            Messages.Add(new ChatMessageViewModel(message));
+        }
+
+        ApplySessionWorkspace();
+        await RefreshSessionHistoryAsync();
+        SettingsStatus = $"已加载对话：{_session.Title}";
+    }
+
+    private static AgentSession DeriveSessionTitle(AgentSession session)
+    {
+        if (!string.Equals(session.Title, "New Chat", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(session.Title, "New chat", StringComparison.OrdinalIgnoreCase))
+        {
+            return session;
+        }
+
+        var firstUser = session.Messages.FirstOrDefault(message => message.Role == MessageRole.User);
+        if (firstUser is null || string.IsNullOrWhiteSpace(firstUser.Content))
+        {
+            return session;
+        }
+
+        var normalized = firstUser.Content.Replace("\r\n", " ").Replace('\n', ' ').Trim();
+        var title = normalized.Length <= 30 ? normalized : $"{normalized[..30]}...";
+        return session.WithTitle(title);
+    }
+
     private void ConfigureWorkspaceWatcher()
     {
         _workspaceWatcher?.Dispose();
         _workspaceWatcher = null;
 
-        var workspace = ContextSidebarViewModel.GetActiveWorkspace(_appSettings);
-        if (workspace is null || string.IsNullOrWhiteSpace(workspace.RootPath) || !Directory.Exists(workspace.RootPath))
+        if (string.IsNullOrWhiteSpace(_session.ActiveWorkspace) || !Directory.Exists(_session.ActiveWorkspace))
         {
             return;
         }
 
-        _workspaceWatcher = new FileSystemWatcher(workspace.RootPath)
+        _workspaceWatcher = new FileSystemWatcher(_session.ActiveWorkspace)
         {
-            IncludeSubdirectories = false,
+            IncludeSubdirectories = true,
             EnableRaisingEvents = true
         };
         _workspaceWatcher.Created += WorkspaceChanged;
@@ -488,18 +713,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void WorkspaceChanged(object sender, FileSystemEventArgs e)
     {
-        Application.Current.Dispatcher.InvokeAsync(() => Sidebar.RefreshWorkspaceFiles(_appSettings));
-    }
-
-    private static string GetWorkspaceDisplayName(AppSettings settings)
-    {
-        var workspace = ContextSidebarViewModel.GetActiveWorkspace(settings);
-        if (workspace is null || string.IsNullOrWhiteSpace(workspace.RootPath))
-        {
-            return "No workspace";
-        }
-
-        return string.IsNullOrWhiteSpace(workspace.Name) ? workspace.RootPath : workspace.Name;
+        Application.Current.Dispatcher.InvokeAsync(() =>
+            Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns));
     }
 
     public void Dispose()
@@ -536,5 +751,29 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsComposerEmpty));
         SendCommand.NotifyCanExecuteChanged();
+    }
+
+    public void ShowCopyNotice(string message)
+    {
+        CopyNotice = message;
+        IsCopyNoticeVisible = true;
+        _copyNoticeCts?.Cancel();
+        _copyNoticeCts?.Dispose();
+        _copyNoticeCts = new CancellationTokenSource();
+        var token = _copyNoticeCts.Token;
+        _ = HideCopyNoticeAsync(token);
+    }
+
+    private async Task HideCopyNoticeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(2400, cancellationToken);
+            IsCopyNoticeVisible = false;
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer notice.
+        }
     }
 }

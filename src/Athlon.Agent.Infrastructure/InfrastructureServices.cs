@@ -18,6 +18,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAthlonInfrastructure(this IServiceCollection services)
     {
         var paths = new AppPathProvider();
+        paths.EnsureCreated();
         var jsonFileStore = new JsonFileStore();
         var settingsPath = Path.Combine(paths.ConfigPath, "settings.json");
         var settings = LoadSettings(settingsPath) ?? new AppSettings();
@@ -25,6 +26,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(settings);
         services.AddSingleton<IAppPathProvider>(paths);
+        services.AddAthlonSkills();
         services.AddSingleton<IJsonFileStore>(jsonFileStore);
         services.AddSingleton<ICredentialStore, DpapiCredentialStore>();
         services.AddSingleton<IAppLogger>(logger);
@@ -34,6 +36,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentRuntime, AgentRuntime>();
         services.AddSingleton<IAgentEnvironmentPromptBuilder, AgentEnvironmentPromptBuilder>();
         services.AddSingleton<IToolRouter, ToolRouter>();
+        services.AddSingleton<IActiveWorkspaceContext, ActiveWorkspaceContext>();
         services.AddSingleton<WorkspaceGuard>();
         services.AddSingleton<AuditLogService>();
         services.AddSingleton<IAgentTool, FileListTool>();
@@ -127,6 +130,36 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         await AtomicFile.WriteAllTextAsync(Path.Combine(summaryDir, $"{summary.Id}.md"), SessionMarkdownWriter.WriteSummary(summary), cancellationToken);
     }
 
+    public async Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return null;
+        }
+
+        var directPath = Path.Combine(GetSessionDirectory(sessionId), "session.json");
+        if (File.Exists(directPath))
+        {
+            return await jsonFileStore.LoadAsync<AgentSession>(directPath, cancellationToken);
+        }
+
+        if (!Directory.Exists(paths.SessionsPath))
+        {
+            return null;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(paths.SessionsPath, "session.json", SearchOption.AllDirectories))
+        {
+            var session = await jsonFileStore.LoadAsync<AgentSession>(file, cancellationToken);
+            if (session is not null && string.Equals(session.Id, sessionId, StringComparison.Ordinal))
+            {
+                return session;
+            }
+        }
+
+        return null;
+    }
+
     public async Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default)
     {
         if (!Directory.Exists(paths.SessionsPath))
@@ -134,17 +167,54 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
             return Array.Empty<SessionIndexEntry>();
         }
 
-        var result = new List<SessionIndexEntry>();
+        var result = new Dictionary<string, SessionIndexEntry>(StringComparer.Ordinal);
         foreach (var file in Directory.EnumerateFiles(paths.SessionsPath, "session.json", SearchOption.AllDirectories))
         {
             var session = await jsonFileStore.LoadAsync<AgentSession>(file, cancellationToken);
-            if (session is not null)
+            if (session is null)
             {
-                result.Add(new SessionIndexEntry(session.Id, session.Title, Path.GetDirectoryName(file)!, session.UpdatedAt));
+                continue;
+            }
+
+            if (!result.TryGetValue(session.Id, out var existing) || session.UpdatedAt > existing.UpdatedAt)
+            {
+                result[session.Id] = new SessionIndexEntry(session.Id, session.Title, Path.GetDirectoryName(file)!, session.UpdatedAt);
             }
         }
 
-        return result.OrderByDescending(item => item.UpdatedAt).ToArray();
+        return result.Values.OrderByDescending(item => item.UpdatedAt).ToArray();
+    }
+
+    public async Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        var deleted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in await ListSessionsAsync(cancellationToken))
+        {
+            if (!string.Equals(entry.Id, sessionId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(entry.Path) && Directory.Exists(entry.Path))
+            {
+                Directory.Delete(entry.Path, true);
+                deleted.Add(entry.Path);
+            }
+        }
+
+        var directDir = GetSessionDirectory(sessionId);
+        if (Directory.Exists(directDir) && !deleted.Contains(directDir))
+        {
+            Directory.Delete(directDir, true);
+        }
+
+        await RefreshIndexAsync(cancellationToken);
+        _logger.Information("Deleted session {SessionId}", sessionId);
     }
 
     public async Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default)
@@ -161,17 +231,20 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
 
     public async Task<AppSettings> LoadSettingsAsync(CancellationToken cancellationToken = default)
     {
+        paths.EnsureCreated();
         var path = Path.Combine(paths.ConfigPath, "settings.json");
         var settings = await jsonFileStore.LoadAsync<AppSettings>(path, cancellationToken);
         if (settings is null)
         {
-            var defaults = new AppSettings();
+            var defaults = CreateDefaultSettings();
             await SaveSettingsAsync(defaults, cancellationToken);
             return defaults;
         }
 
         return settings;
     }
+
+    private static AppSettings CreateDefaultSettings() => new();
 
     private async Task RefreshIndexAsync(CancellationToken cancellationToken)
     {
@@ -180,11 +253,9 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         await jsonFileStore.SaveAsync(Path.Combine(paths.SessionsPath, "index.json"), index, cancellationToken);
     }
 
-    private string GetSessionDirectory(AgentSession session)
-    {
-        var safeTitle = FileNameSanitizer.Sanitize(session.Title);
-        return Path.Combine(paths.SessionsPath, $"{session.CreatedAt:yyyy-MM-dd}-{safeTitle}-{session.Id[..6]}");
-    }
+    private string GetSessionDirectory(AgentSession session) => GetSessionDirectory(session.Id);
+
+    private string GetSessionDirectory(string sessionId) => Path.Combine(paths.SessionsPath, sessionId);
 }
 
 [SupportedOSPlatform("windows")]
@@ -396,22 +467,60 @@ public sealed class AuditLogService(IAppLogger logger, IAppPathProvider paths, I
     }
 }
 
-public sealed class WorkspaceGuard(AppSettings settings)
+public sealed class ActiveWorkspaceContext : IActiveWorkspaceContext
+{
+    private static readonly string[] DefaultIgnorePatterns = [".git", "bin", "obj", "node_modules", ".vs", "artifacts", "publish"];
+
+    public string? RootPath { get; private set; }
+    public string? DisplayName { get; private set; }
+    public IReadOnlyList<string> IgnorePatterns { get; private set; } = DefaultIgnorePatterns;
+
+    public void SetWorkspace(string? rootPath, string? displayName = null, IReadOnlyList<string>? ignorePatterns = null)
+    {
+        if (string.IsNullOrWhiteSpace(rootPath))
+        {
+            RootPath = null;
+            DisplayName = null;
+            IgnorePatterns = DefaultIgnorePatterns;
+            return;
+        }
+
+        RootPath = Path.GetFullPath(rootPath);
+        DisplayName = displayName ?? Path.GetFileName(RootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        IgnorePatterns = ignorePatterns ?? DefaultIgnorePatterns;
+    }
+}
+
+public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, AppSettings settings)
 {
     public bool IsInsideWorkspace(string path)
     {
         var fullPath = Path.GetFullPath(path);
+        if (!string.IsNullOrWhiteSpace(workspaceContext.RootPath))
+        {
+            return fullPath.StartsWith(Path.GetFullPath(workspaceContext.RootPath), StringComparison.OrdinalIgnoreCase);
+        }
+
         return settings.Workspaces.Any(workspace => fullPath.StartsWith(Path.GetFullPath(workspace.RootPath), StringComparison.OrdinalIgnoreCase));
     }
 
     public string Normalize(string path, string? cwd = null)
     {
-        var rooted = Path.IsPathRooted(path) ? path : Path.Combine(cwd ?? settings.Workspaces.FirstOrDefault()?.RootPath ?? Environment.CurrentDirectory, path);
+        var basePath = workspaceContext.RootPath
+            ?? settings.Workspaces.FirstOrDefault(workspace => workspace.IsDefault)?.RootPath
+            ?? settings.Workspaces.FirstOrDefault()?.RootPath
+            ?? Environment.CurrentDirectory;
+        var rooted = Path.IsPathRooted(path) ? path : Path.Combine(cwd ?? basePath, path);
         return Path.GetFullPath(rooted);
     }
+
+    public IReadOnlyList<string> GetIgnorePatterns() =>
+        workspaceContext.IgnorePatterns.Count > 0
+            ? workspaceContext.IgnorePatterns
+            : settings.Workspaces.FirstOrDefault()?.IgnorePatterns ?? [".git", "bin", "obj", "node_modules"];
 }
 
-public sealed class FileListTool(WorkspaceGuard guard, AppSettings settings, AuditLogService audit) : IAgentTool
+public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool
 {
     public ToolDefinition Definition { get; } = new(
         "file_list",
@@ -432,8 +541,7 @@ public sealed class FileListTool(WorkspaceGuard guard, AppSettings settings, Aud
             return ToolResult.Failure("Directory not found", fullPath);
         }
 
-        var workspace = settings.Workspaces.FirstOrDefault(workspace => workspace.IsDefault) ?? settings.Workspaces.FirstOrDefault();
-        var ignorePatterns = workspace?.IgnorePatterns ?? new List<string>();
+        var ignorePatterns = guard.GetIgnorePatterns();
         var files = Directory.EnumerateFileSystemEntries(fullPath, "*", SearchOption.TopDirectoryOnly)
             .Where(path => !ignorePatterns.Any(pattern => string.Equals(Path.GetFileName(path), pattern, StringComparison.OrdinalIgnoreCase)))
             .OrderBy(path => Directory.Exists(path) ? 0 : 1)
