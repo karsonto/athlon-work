@@ -135,6 +135,21 @@ Before each model call, `PreCompletionPipeline` runs:
 
 Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction` (`contextWindowTokens`, `autoCompactThresholdRatio`, `microcompactAggressiveRatio`, etc.).
 
+## Session Disk Logs
+
+Per session under `~/.athlon-agent/sessions/<sessionId>/`:
+
+| Path | Content |
+|------|---------|
+| `session.json` | Full session snapshot (updated after each message during a turn) |
+| `conversation.md` | Human-readable transcript (rewritten on each snapshot) |
+| `conversation.jsonl` | One JSON line per message as it is added |
+| `tool-calls/calls.jsonl` | One JSON line per tool invocation (name, args, result, duration) |
+| `http/interactions.jsonl` | One JSON line per chat/completions HTTP call (request redacted, response truncated) |
+| `transcripts/transcript_<unix>.jsonl` | Full history archive before auto-compact |
+
+HTTP log lines include timestamp, endpoint, purpose (`chat-completion` or `context-summary`), HTTP status, duration, sanitized request JSON, response body (truncated for large/error bodies), and error text. Global Serilog files remain under `~/.athlon-agent/logs`. Workspace tool side effects also append to `~/.athlon-agent/audit/audit-<date>.jsonl`.
+
 ## Notes For Future AI Work
 
 - Prefer extending `AgentRuntime`, `AgentEnvironmentPromptBuilder`, and tool classes instead of adding model logic to the WPF layer.

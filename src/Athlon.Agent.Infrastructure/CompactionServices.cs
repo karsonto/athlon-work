@@ -55,7 +55,7 @@ public sealed class AutoCompactService(
         var originalCount = session.Messages.Count;
         var transcriptPath = await storage.SaveTranscriptAsync(session.Id, session.Messages, cancellationToken);
 
-        var conversationJson = JsonSerializer.Serialize(session.Messages);
+        var conversationJson = JsonSerializer.Serialize(session.Messages, JsonFileStore.JsonLineOptions);
         if (conversationJson.Length > cfg.MaxConversationCharsForSummary)
         {
             conversationJson = conversationJson[^cfg.MaxConversationCharsForSummary..];
@@ -80,6 +80,7 @@ public sealed class AutoCompactService(
         var compressedContent = $"[Compressed. Transcript: {transcriptPath}]\n{summary}";
         var compressedMessage = ChatMessage.Create(MessageRole.User, compressedContent);
         session = session.WithMessages(new[] { compressedMessage });
+        await storage.AppendConversationMessageAsync(session.Id, compressedMessage, cancellationToken);
 
         var contextSummary = new ContextSummary(
             Guid.NewGuid().ToString("N"),

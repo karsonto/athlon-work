@@ -25,6 +25,7 @@ public sealed class AgentRuntimeProgressTests
             new StaticPromptBuilder(),
             new NoOpPreCompletionPipeline(),
             new NoOpAutoCompactService(),
+            new NoOpActiveAgentSessionContext(),
             new NoOpLogger());
 
         var events = new List<string>();
@@ -116,9 +117,18 @@ public sealed class AgentRuntimeProgressTests
         public Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default) => Task.FromResult("/tmp/t.jsonl");
+        public Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<SessionIndexEntry>>(Array.Empty<SessionIndexEntry>());
         public Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<AppSettings> LoadSettingsAsync(CancellationToken cancellationToken = default) => Task.FromResult(new AppSettings());
+    }
+
+    private sealed class NoOpActiveAgentSessionContext : IActiveAgentSessionContext
+    {
+        public string? SessionId { get; private set; }
+
+        public void SetSession(string? sessionId) => SessionId = sessionId;
     }
 
     private sealed class NoOpLogger : IAppLogger

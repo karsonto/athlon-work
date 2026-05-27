@@ -428,6 +428,9 @@ public sealed partial class SettingsViewModel : ObservableObject
             return Settings.Workspaces[0];
         }
     }
+
+    internal static void PruneEmptyWorkspaces(AppSettings settings) =>
+        settings.Workspaces.RemoveAll(workspace => string.IsNullOrWhiteSpace(workspace.RootPath));
 }
 
 public partial class MainWindowViewModel : ObservableObject, IDisposable
@@ -657,6 +660,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
                 Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, "生成已停止。")));
             });
+
+            var reloaded = await _storage.LoadSessionAsync(_session.Id);
+            if (reloaded is not null)
+            {
+                _session = reloaded;
+            }
+
             await SaveCurrentSessionIfNeededAsync();
         }
         catch (Exception ex)
@@ -749,6 +759,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         Settings.Settings.Model.LegacyApiKeyCredentialName = null;
+        SettingsViewModel.PruneEmptyWorkspaces(Settings.Settings);
         await _storage.SaveSettingsAsync(Settings.Settings);
         Sidebar.Refresh(Settings.Settings);
         ApplySessionWorkspace();
@@ -769,7 +780,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void SyncWorkspaceContext()
     {
-        _workspaceContext.SetWorkspace(_session.ActiveWorkspace);
+        if (!string.IsNullOrWhiteSpace(_session.ActiveWorkspace))
+        {
+            _workspaceContext.SetWorkspace(_session.ActiveWorkspace);
+            return;
+        }
+
+        var configured = _appSettings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath));
+        if (configured is null)
+        {
+            _workspaceContext.SetWorkspace(null);
+            return;
+        }
+
+        _workspaceContext.SetWorkspace(configured.RootPath, configured.Name, configured.IgnorePatterns);
     }
 
     private async Task SaveCurrentSessionIfNeededAsync()

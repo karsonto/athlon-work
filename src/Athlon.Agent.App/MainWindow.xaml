@@ -703,6 +703,11 @@
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
                             <TextBlock Text="Workspace" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
+                            <TextBlock Text="未填写路径时视为未配置工作区；也可在对话侧栏点击「配置」为当前会话指定目录。"
+                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,0,0,12" />
                             <TextBox Text="{Binding Settings.EditableWorkspace.Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,12" />
                             <TextBox Text="{Binding Settings.EditableWorkspace.RootPath, UpdateSourceTrigger=PropertyChanged}" />
                         </StackPanel>

@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(settings);
         services.AddSingleton<IAppPathProvider>(paths);
+        services.AddSingleton<IAgentHostEnvironment, AgentHostEnvironment>();
         services.AddAthlonSkills();
         services.AddSingleton<IJsonFileStore>(jsonFileStore);
         services.AddSingleton<ICredentialStore, DpapiCredentialStore>();
@@ -38,6 +39,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentEnvironmentPromptBuilder, AgentEnvironmentPromptBuilder>();
         services.AddSingleton<IToolRouter, ToolRouter>();
         services.AddSingleton<IActiveWorkspaceContext, ActiveWorkspaceContext>();
+        services.AddSingleton<IActiveAgentSessionContext, ActiveAgentSessionContext>();
+        services.AddSingleton<ISessionHttpLogService, SessionHttpLogService>();
         services.AddSingleton<WorkspaceGuard>();
         services.AddSingleton<AuditLogService>();
         services.AddSingleton<IAgentTool, FileListTool>();
@@ -116,11 +119,8 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
 
     public async Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default)
     {
+        EnsureSessionLogDirectories(session.Id);
         var sessionDir = GetSessionDirectory(session);
-        Directory.CreateDirectory(sessionDir);
-        Directory.CreateDirectory(Path.Combine(sessionDir, "tool-calls"));
-        Directory.CreateDirectory(Path.Combine(sessionDir, "summaries"));
-        Directory.CreateDirectory(Path.Combine(sessionDir, "transcripts"));
 
         await jsonFileStore.SaveAsync(Path.Combine(sessionDir, "session.json"), session, cancellationToken);
         await AtomicFile.WriteAllTextAsync(Path.Combine(sessionDir, "conversation.md"), SessionMarkdownWriter.WriteConversation(session), cancellationToken);
@@ -144,11 +144,59 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         var builder = new StringBuilder();
         foreach (var message in messages)
         {
-            builder.AppendLine(JsonSerializer.Serialize(message, JsonFileStore.Options));
+            builder.AppendLine(JsonSerializer.Serialize(message, JsonFileStore.JsonLineOptions));
         }
 
         await AtomicFile.WriteAllTextAsync(path, builder.ToString(), cancellationToken);
         return path;
+    }
+
+    public async Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        EnsureSessionLogDirectories(sessionId);
+        var path = Path.Combine(GetSessionDirectory(sessionId), "conversation.jsonl");
+        await jsonFileStore.AppendJsonLineAsync(
+            path,
+            new
+            {
+                time = message.CreatedAt,
+                id = message.Id,
+                role = message.Role.ToString(),
+                parentId = message.ParentId,
+                content = message.Content
+            },
+            cancellationToken);
+    }
+
+    public async Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        EnsureSessionLogDirectories(sessionId);
+        var path = Path.Combine(GetSessionDirectory(sessionId), "tool-calls", "calls.jsonl");
+        await jsonFileStore.AppendJsonLineAsync(
+            path,
+            new
+            {
+                time = entry.Timestamp,
+                toolCallId = entry.ToolCallId,
+                toolName = entry.ToolName,
+                arguments = entry.Arguments,
+                succeeded = entry.Succeeded,
+                summary = entry.Summary,
+                content = HttpLogSanitizer.Truncate(entry.Content),
+                error = entry.Error,
+                durationMs = entry.DurationMs
+            },
+            cancellationToken);
     }
 
     public async Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -262,16 +310,42 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
             return defaults;
         }
 
+        if (RemoveLegacyDefaultWorkspace(settings))
+        {
+            await SaveSettingsAsync(settings, cancellationToken);
+        }
+
         return settings;
     }
 
     private static AppSettings CreateDefaultSettings() => new();
+
+    private static bool RemoveLegacyDefaultWorkspace(AppSettings settings)
+    {
+        var myDocuments = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        var removed = settings.Workspaces.RemoveAll(workspace =>
+            workspace.IsDefault
+            && string.Equals(workspace.Name, "Default", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(Path.GetFullPath(workspace.RootPath), Path.GetFullPath(myDocuments), StringComparison.OrdinalIgnoreCase));
+
+        return removed > 0;
+    }
 
     private async Task RefreshIndexAsync(CancellationToken cancellationToken)
     {
         var index = await ListSessionsAsync(cancellationToken);
         Directory.CreateDirectory(paths.SessionsPath);
         await jsonFileStore.SaveAsync(Path.Combine(paths.SessionsPath, "index.json"), index, cancellationToken);
+    }
+
+    private void EnsureSessionLogDirectories(string sessionId)
+    {
+        var sessionDir = GetSessionDirectory(sessionId);
+        Directory.CreateDirectory(sessionDir);
+        Directory.CreateDirectory(Path.Combine(sessionDir, "tool-calls"));
+        Directory.CreateDirectory(Path.Combine(sessionDir, "summaries"));
+        Directory.CreateDirectory(Path.Combine(sessionDir, "transcripts"));
+        Directory.CreateDirectory(Path.Combine(sessionDir, "http"));
     }
 
     private string GetSessionDirectory(AgentSession session) => GetSessionDirectory(session.Id);
@@ -325,7 +399,13 @@ public sealed class DpapiCredentialStore(IAppPathProvider paths) : ICredentialSt
     }
 }
 
-public sealed class OpenAiCompatibleChatModelClient(HttpClient httpClient, IAppLogger logger, AppSettings settings, ICredentialStore credentialStore) : IAgentModelClient
+public sealed class OpenAiCompatibleChatModelClient(
+    HttpClient httpClient,
+    IAppLogger logger,
+    AppSettings settings,
+    ICredentialStore credentialStore,
+    ISessionHttpLogService sessionHttpLog,
+    IActiveAgentSessionContext activeSessionContext) : IAgentModelClient
 {
     private readonly IAppLogger _logger = logger.ForContext("ModelGateway");
 
@@ -357,6 +437,7 @@ public sealed class OpenAiCompatibleChatModelClient(HttpClient httpClient, IAppL
     private async Task<AgentModelResponse> CompleteOpenAiCompatibleAsync(AgentModelRequest request, string apiKey, CancellationToken cancellationToken)
     {
         var endpoint = settings.Model.Endpoint.TrimEnd('/') + "/chat/completions";
+        var purpose = !request.AllowToolCalls && request.MaxTokens.HasValue ? "context-summary" : "chat-completion";
         var payload = new Dictionary<string, object?>
         {
             ["model"] = settings.Model.ModelName,
@@ -375,37 +456,79 @@ public sealed class OpenAiCompatibleChatModelClient(HttpClient httpClient, IAppL
             payload["max_tokens"] = request.MaxTokens.Value;
         }
 
-        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint)
-        {
-            Content = JsonContent.Create(payload)
-        };
-        httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+        var sessionId = activeSessionContext.SessionId;
+        var sw = Stopwatch.StartNew();
+        string? responseBody = null;
+        int? statusCode = null;
+        string? error = null;
 
-        using var response = await httpClient.SendAsync(httpRequest, cancellationToken);
-        response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-        var message = json.RootElement.GetProperty("choices")[0].GetProperty("message");
-        var content = message.TryGetProperty("content", out var contentElement) && contentElement.ValueKind == JsonValueKind.String
-            ? contentElement.GetString() ?? string.Empty
-            : string.Empty;
-
-        var toolCalls = new List<AgentToolCall>();
-        if (message.TryGetProperty("tool_calls", out var callsElement) && callsElement.ValueKind == JsonValueKind.Array)
+        try
         {
-            foreach (var call in callsElement.EnumerateArray())
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint)
             {
-                var function = call.GetProperty("function");
-                var id = call.GetProperty("id").GetString() ?? Guid.NewGuid().ToString("N");
-                var name = function.GetProperty("name").GetString() ?? string.Empty;
-                var argumentsJson = function.TryGetProperty("arguments", out var argumentsElement) && argumentsElement.ValueKind == JsonValueKind.String
-                    ? argumentsElement.GetString() ?? "{}"
-                    : "{}";
-                toolCalls.Add(new AgentToolCall(id, name, ParseArguments(argumentsJson)));
-            }
-        }
+                Content = JsonContent.Create(payload)
+            };
+            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
 
-        return new AgentModelResponse(content, toolCalls);
+            using var response = await httpClient.SendAsync(httpRequest, cancellationToken);
+            statusCode = (int)response.StatusCode;
+            responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                error = $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
+                _logger.Warning(
+                    "Model HTTP failed {StatusCode} for session {SessionId}: {Body}",
+                    statusCode,
+                    sessionId,
+                    HttpLogSanitizer.Truncate(responseBody));
+                throw new HttpRequestException($"{error}. Body: {HttpLogSanitizer.Truncate(responseBody)}");
+            }
+
+            using var json = JsonDocument.Parse(responseBody);
+            var message = json.RootElement.GetProperty("choices")[0].GetProperty("message");
+            var content = message.TryGetProperty("content", out var contentElement) && contentElement.ValueKind == JsonValueKind.String
+                ? contentElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            var toolCalls = new List<AgentToolCall>();
+            if (message.TryGetProperty("tool_calls", out var callsElement) && callsElement.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var call in callsElement.EnumerateArray())
+                {
+                    var function = call.GetProperty("function");
+                    var id = call.GetProperty("id").GetString() ?? Guid.NewGuid().ToString("N");
+                    var name = function.GetProperty("name").GetString() ?? string.Empty;
+                    var argumentsJson = function.TryGetProperty("arguments", out var argumentsElement) && argumentsElement.ValueKind == JsonValueKind.String
+                        ? argumentsElement.GetString() ?? "{}"
+                        : "{}";
+                    toolCalls.Add(new AgentToolCall(id, name, ParseArguments(argumentsJson)));
+                }
+            }
+
+            return new AgentModelResponse(content, toolCalls);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            error ??= ex.Message;
+            throw;
+        }
+        finally
+        {
+            sw.Stop();
+            await sessionHttpLog.LogInteractionAsync(
+                sessionId,
+                new SessionHttpInteractionLog(
+                    DateTimeOffset.UtcNow,
+                    endpoint,
+                    purpose,
+                    statusCode,
+                    payload,
+                    responseBody,
+                    error,
+                    sw.ElapsedMilliseconds),
+                CancellationToken.None);
+        }
     }
 
     private static Dictionary<string, object?> ToOpenAiMessage(AgentModelMessage message)
@@ -522,23 +645,26 @@ public sealed class ActiveWorkspaceContext : IActiveWorkspaceContext
 
 public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, AppSettings settings)
 {
+    public bool HasConfiguredWorkspace => TryGetWorkspaceRoot(out _);
+
     public bool IsInsideWorkspace(string path)
     {
-        var fullPath = Path.GetFullPath(path);
-        if (!string.IsNullOrWhiteSpace(workspaceContext.RootPath))
+        if (!TryGetWorkspaceRoot(out var rootPath))
         {
-            return fullPath.StartsWith(Path.GetFullPath(workspaceContext.RootPath), StringComparison.OrdinalIgnoreCase);
+            return false;
         }
 
-        return settings.Workspaces.Any(workspace => fullPath.StartsWith(Path.GetFullPath(workspace.RootPath), StringComparison.OrdinalIgnoreCase));
+        var fullPath = Path.GetFullPath(path);
+        return fullPath.StartsWith(Path.GetFullPath(rootPath), StringComparison.OrdinalIgnoreCase);
     }
 
     public string Normalize(string path, string? cwd = null)
     {
-        var basePath = workspaceContext.RootPath
-            ?? settings.Workspaces.FirstOrDefault(workspace => workspace.IsDefault)?.RootPath
-            ?? settings.Workspaces.FirstOrDefault()?.RootPath
-            ?? Environment.CurrentDirectory;
+        if (!TryGetWorkspaceRoot(out var basePath))
+        {
+            throw new InvalidOperationException("工作区尚未设定。请先在侧栏「配置」或设置页指定工作区目录。");
+        }
+
         var rooted = Path.IsPathRooted(path) ? path : Path.Combine(cwd ?? basePath, path);
         return Path.GetFullPath(rooted);
     }
@@ -546,7 +672,27 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
     public IReadOnlyList<string> GetIgnorePatterns() =>
         workspaceContext.IgnorePatterns.Count > 0
             ? workspaceContext.IgnorePatterns
-            : settings.Workspaces.FirstOrDefault()?.IgnorePatterns ?? [".git", "bin", "obj", "node_modules"];
+            : settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath))?.IgnorePatterns
+              ?? [".git", "bin", "obj", "node_modules"];
+
+    private bool TryGetWorkspaceRoot(out string rootPath)
+    {
+        if (!string.IsNullOrWhiteSpace(workspaceContext.RootPath))
+        {
+            rootPath = workspaceContext.RootPath;
+            return true;
+        }
+
+        var configured = settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath));
+        if (configured is null)
+        {
+            rootPath = string.Empty;
+            return false;
+        }
+
+        rootPath = configured.RootPath;
+        return true;
+    }
 }
 
 public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool

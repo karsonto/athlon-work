@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Athlon.Agent.Core;
 
@@ -62,7 +63,19 @@ public interface IJsonFileStore
 
 public sealed class JsonFileStore : IJsonFileStore
 {
-    public static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web) { WriteIndented = true };
+    public static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = true,
+        // Persist UTF-8 Chinese (and other non-ASCII) literally in session.json instead of \uXXXX.
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    /// <summary>Single-line JSON for *.jsonl append logs (http, tool-calls, conversation).</summary>
+    public static readonly JsonSerializerOptions JsonLineOptions = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = false,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
 
     public Task SaveAsync<T>(string path, T value, CancellationToken cancellationToken = default)
     {
@@ -84,7 +97,7 @@ public sealed class JsonFileStore : IJsonFileStore
     public async Task AppendJsonLineAsync(string path, object value, CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var line = JsonSerializer.Serialize(value, Options) + Environment.NewLine;
+        var line = JsonSerializer.Serialize(value, JsonLineOptions) + Environment.NewLine;
         await File.AppendAllTextAsync(path, line, cancellationToken);
     }
 }

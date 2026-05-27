@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
@@ -120,6 +121,25 @@ public interface IAgentEnvironmentPromptBuilder
     string Build(AgentSession session, IReadOnlyList<ToolDefinition> tools);
 }
 
+/// <summary>Current Windows desktop host facts injected into the agent environment prompt.</summary>
+public interface IAgentHostEnvironment
+{
+    bool IsWindows { get; }
+    string OsDescription { get; }
+    string OsVersion { get; }
+    string UserName { get; }
+    string UserDomainName { get; }
+    string MachineName { get; }
+    string UserProfilePath { get; }
+    string CurrentDirectory { get; }
+    string SystemDirectory { get; }
+    string ProcessArchitecture { get; }
+    string OsArchitecture { get; }
+    int ProcessorCount { get; }
+    string AppDataDirectory { get; }
+    string SkillsDirectory { get; }
+}
+
 public sealed record AvailableSkillInfo(string Name, string Description, string SkillId);
 
 public interface IAvailableSkillsProvider
@@ -156,6 +176,8 @@ public interface IFileStorageService
     Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default);
     Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default);
     Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default);
+    Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default);
+    Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default);
     Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default);
     Task<AppSettings> LoadSettingsAsync(CancellationToken cancellationToken = default);
@@ -247,9 +269,9 @@ public sealed class SkillSettings
 
 public sealed class WorkspaceSettings
 {
-    public string Name { get; set; } = "Default";
-    public string RootPath { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-    public bool IsDefault { get; set; } = true;
+    public string Name { get; set; } = string.Empty;
+    public string RootPath { get; set; } = string.Empty;
+    public bool IsDefault { get; set; }
     public List<string> IgnorePatterns { get; set; } = new() { ".git", "bin", "obj", "node_modules" };
 }
 
@@ -279,7 +301,8 @@ public sealed class ToolRouter(IEnumerable<IAgentTool> tools) : IToolRouter
 
 public sealed class AgentEnvironmentPromptBuilder(
     AppSettings settings,
-    IAvailableSkillsProvider skillsProvider) : IAgentEnvironmentPromptBuilder
+    IAvailableSkillsProvider skillsProvider,
+    IAgentHostEnvironment host) : IAgentEnvironmentPromptBuilder
 {
     public string Build(AgentSession session, IReadOnlyList<ToolDefinition> tools)
     {
@@ -288,15 +311,19 @@ public sealed class AgentEnvironmentPromptBuilder(
 
         builder.AppendLine("You are Athlon Agent, a Windows desktop coding agent.");
         builder.AppendLine("Use the provided function tools when you need to inspect or modify workspace files. Do not guess file contents.");
-        builder.AppendLine("All relative file paths are resolved from the active workspace. Never access files outside the configured workspace.");
+        builder.AppendLine();
+        AppendHostEnvironment(builder);
         builder.AppendLine();
 
         if (workspace is null || string.IsNullOrWhiteSpace(workspace.RootPath))
         {
-            builder.AppendLine("Active workspace: not configured.");
+            builder.AppendLine("当前工作区尚未设定。");
+            builder.AppendLine("请让用户通过侧栏「配置」或设置页的 Workspace 指定工作区目录后，再使用 file_list、file_read、file_write、file_edit、grep_files、glob_files 等文件工具。");
+            builder.AppendLine("在工作区未设定前，不要假设任何文件路径，也不要调用访问工作区文件的工具。");
         }
         else
         {
+            builder.AppendLine("All relative file paths are resolved from the active workspace. Never access files outside the configured workspace.");
             builder.AppendLine($"Active workspace: {workspace.Name}");
             builder.AppendLine($"Workspace root: {workspace.RootPath}");
             builder.AppendLine("Workspace contents are intentionally not embedded in this prompt because they change often.");
@@ -322,12 +349,12 @@ public sealed class AgentEnvironmentPromptBuilder(
         builder.AppendLine();
         if (skills.Count == 0)
         {
-            builder.AppendLine("Available skills: none installed under ~/.athlon-agent/skills.");
-            builder.AppendLine("Install skills as <skill-name>/SKILL.md with YAML frontmatter (name, description).");
+            builder.AppendLine($"Available skills: none installed under {host.SkillsDirectory}.");
+            builder.AppendLine($"Install skills as <skill-name>/SKILL.md under {host.SkillsDirectory} with YAML frontmatter (name, description).");
         }
         else
         {
-            builder.AppendLine("Available skills (each folder under ~/.athlon-agent/skills):");
+            builder.AppendLine($"Available skills (each folder under {host.SkillsDirectory}):");
             foreach (var skill in skills)
             {
                 builder.AppendLine($"- {skill.Name}: {skill.Description} (skill-id: {skill.SkillId})");
@@ -347,6 +374,21 @@ public sealed class AgentEnvironmentPromptBuilder(
         return builder.ToString();
     }
 
+    private void AppendHostEnvironment(StringBuilder builder)
+    {
+        builder.AppendLine("Host environment (current Windows user session):");
+        builder.AppendLine($"- Platform: {(host.IsWindows ? "Windows" : "non-Windows")}");
+        builder.AppendLine($"- OS: {host.OsDescription} ({host.OsVersion})");
+        builder.AppendLine($"- User: {host.UserDomainName}\\{host.UserName}");
+        builder.AppendLine($"- Machine: {host.MachineName}");
+        builder.AppendLine($"- User profile: {host.UserProfilePath}");
+        builder.AppendLine($"- Process current directory: {host.CurrentDirectory}");
+        builder.AppendLine($"- System directory: {host.SystemDirectory}");
+        builder.AppendLine($"- Architecture: process={host.ProcessArchitecture}, OS={host.OsArchitecture}, processors={host.ProcessorCount}");
+        builder.AppendLine($"- Agent app data: {host.AppDataDirectory}");
+        builder.AppendLine($"- Default skills directory: {host.SkillsDirectory}");
+    }
+
     private WorkspaceSettings? ResolveWorkspace(AgentSession session)
     {
         if (!string.IsNullOrWhiteSpace(session.ActiveWorkspace))
@@ -360,7 +402,7 @@ public sealed class AgentEnvironmentPromptBuilder(
             };
         }
 
-        return settings.Workspaces.FirstOrDefault(workspace => workspace.IsDefault) ?? settings.Workspaces.FirstOrDefault();
+        return settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath));
     }
 
 }
@@ -372,6 +414,7 @@ public sealed class AgentRuntime(
     IAgentEnvironmentPromptBuilder promptBuilder,
     IPreCompletionPipeline preCompletionPipeline,
     IAutoCompactService autoCompactService,
+    IActiveAgentSessionContext activeSessionContext,
     IAppLogger logger) : IAgentRuntime
 {
     private readonly IAppLogger _logger = logger.ForContext("AgentRuntime");
@@ -382,71 +425,137 @@ public sealed class AgentRuntime(
         AgentTurnCallbacks? callbacks = null,
         CancellationToken cancellationToken = default)
     {
-        var userMessage = ChatMessage.Create(MessageRole.User, userInput, session.Messages.LastOrDefault()?.Id);
-        session = session.WithMessage(userMessage);
-        var tools = toolRouter.ListTools();
-        var environmentPrompt = promptBuilder.Build(session, tools);
-        var modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
-
-        if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
+        activeSessionContext.SetSession(session.Id);
+        try
         {
-            var toolCall = new AgentToolCall(Guid.NewGuid().ToString("N"), "file_list", new Dictionary<string, string>());
-            await NotifyToolStartedAsync(callbacks, toolCall);
-            var result = await toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken);
-            var content = FormatToolResult(toolCall, result);
-            var toolMessage = ChatMessage.Create(MessageRole.Tool, content, userMessage.Id);
-            session = session.WithMessage(toolMessage);
-            await NotifyMessageAsync(callbacks, toolMessage);
-            modelMessages.Add(new AgentModelMessage("system", $"Preflight tool result for the user's file listing request:{Environment.NewLine}{content}"));
+            return await SendAsyncCore(session, userInput, callbacks, cancellationToken);
         }
-
-        while (true)
+        finally
         {
-            session = await preCompletionPipeline.RunAsync(session, cancellationToken);
-            modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
+            activeSessionContext.SetSession(null);
+        }
+    }
 
-            var response = await modelClient.CompleteAsync(new AgentModelRequest(modelMessages, tools), cancellationToken);
-            if (response.ToolCalls.Count == 0)
+    private async Task<AgentSession> SendAsyncCore(
+        AgentSession session,
+        string userInput,
+        AgentTurnCallbacks? callbacks,
+        CancellationToken cancellationToken) =>
+        SendAsyncTurnAsync(session, userInput, callbacks, cancellationToken);
+
+    private async Task<AgentSession> SendAsyncTurnAsync(
+        AgentSession session,
+        string userInput,
+        AgentTurnCallbacks? callbacks,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userMessage = ChatMessage.Create(MessageRole.User, userInput, session.Messages.LastOrDefault()?.Id);
+            session = session.WithMessage(userMessage);
+            await PersistMessageAsync(session, userMessage, cancellationToken);
+
+            var tools = toolRouter.ListTools();
+            var environmentPrompt = promptBuilder.Build(session, tools);
+            var modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
+
+            if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
             {
-                if (callbacks?.OnAssistantTextDelta is not null && !string.IsNullOrEmpty(response.Content))
-                {
-                    await callbacks.OnAssistantTextDelta(response.Content);
-                }
-
-                var assistant = ChatMessage.Create(MessageRole.Assistant, response.Content, userMessage.Id);
-                session = session.WithMessage(assistant);
-                await NotifyMessageAsync(callbacks, assistant);
-                await storage.SaveSessionAsync(session, cancellationToken);
-                _logger.Information("Saved session {SessionId} with {MessageCount} messages", session.Id, session.Messages.Count);
-                return session;
+                var toolCall = new AgentToolCall(Guid.NewGuid().ToString("N"), "file_list", new Dictionary<string, string>());
+                await NotifyToolStartedAsync(callbacks, toolCall);
+                session = await InvokeToolAndPersistAsync(session, userMessage.Id, toolCall, callbacks, cancellationToken);
+                var toolContent = session.Messages[^1].Content;
+                modelMessages.Add(new AgentModelMessage("system", $"Preflight tool result for the user's file listing request:{Environment.NewLine}{toolContent}"));
             }
 
-            modelMessages.Add(new AgentModelMessage("assistant", response.Content, ToolCalls: response.ToolCalls));
-            foreach (var toolCall in response.ToolCalls)
+            while (true)
             {
-                await NotifyToolStartedAsync(callbacks, toolCall);
+                session = await preCompletionPipeline.RunAsync(session, cancellationToken);
+                modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
 
-                if (string.Equals(toolCall.Name, CompressTool.ToolName, StringComparison.OrdinalIgnoreCase))
+                var response = await modelClient.CompleteAsync(new AgentModelRequest(modelMessages, tools), cancellationToken);
+                if (response.ToolCalls.Count == 0)
                 {
-                    session = await autoCompactService.CompactAsync(session, cancellationToken);
-                    var compressedNote = ChatMessage.Create(
-                        MessageRole.Assistant,
-                        "Context compressed. Continue from the summary in the latest user message.",
-                        userMessage.Id);
-                    session = session.WithMessage(compressedNote);
-                    await NotifyMessageAsync(callbacks, compressedNote);
-                    await storage.SaveSessionAsync(session, cancellationToken);
+                    if (callbacks?.OnAssistantTextDelta is not null && !string.IsNullOrEmpty(response.Content))
+                    {
+                        await callbacks.OnAssistantTextDelta(response.Content);
+                    }
+
+                    var assistant = ChatMessage.Create(MessageRole.Assistant, response.Content, userMessage.Id);
+                    session = session.WithMessage(assistant);
+                    await NotifyMessageAsync(callbacks, assistant);
+                    await PersistMessageAsync(session, assistant, cancellationToken);
+                    _logger.Information("Saved session {SessionId} with {MessageCount} messages", session.Id, session.Messages.Count);
                     return session;
                 }
 
-                var result = await toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken);
-                var content = FormatToolResult(toolCall, result);
-                var toolMessage = ChatMessage.Create(MessageRole.Tool, content, userMessage.Id);
-                session = session.WithMessage(toolMessage);
-                await NotifyMessageAsync(callbacks, toolMessage);
-                modelMessages.Add(new AgentModelMessage("tool", content, toolCall.Id));
+                modelMessages.Add(new AgentModelMessage("assistant", response.Content, ToolCalls: response.ToolCalls));
+                foreach (var toolCall in response.ToolCalls)
+                {
+                    await NotifyToolStartedAsync(callbacks, toolCall);
+
+                    if (string.Equals(toolCall.Name, CompressTool.ToolName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        session = await autoCompactService.CompactAsync(session, cancellationToken);
+                        var compressedNote = ChatMessage.Create(
+                            MessageRole.Assistant,
+                            "Context compressed. Continue from the summary in the latest user message.",
+                            userMessage.Id);
+                        session = session.WithMessage(compressedNote);
+                        await NotifyMessageAsync(callbacks, compressedNote);
+                        await PersistMessageAsync(session, compressedNote, cancellationToken);
+                        return session;
+                    }
+
+                    session = await InvokeToolAndPersistAsync(session, userMessage.Id, toolCall, callbacks, cancellationToken);
+                    modelMessages.Add(new AgentModelMessage("tool", session.Messages[^1].Content, toolCall.Id));
+                }
             }
         }
+        catch (OperationCanceledException)
+        {
+            await storage.SaveSessionAsync(session, CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task<AgentSession> InvokeToolAndPersistAsync(
+        AgentSession session,
+        string? parentMessageId,
+        AgentToolCall toolCall,
+        AgentTurnCallbacks? callbacks,
+        CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        var result = await toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken);
+        sw.Stop();
+
+        await storage.AppendToolCallLogAsync(
+            session.Id,
+            new SessionToolCallLogEntry(
+                DateTimeOffset.UtcNow,
+                toolCall.Id,
+                toolCall.Name,
+                toolCall.Arguments,
+                result.Succeeded,
+                result.Summary,
+                result.Content,
+                result.Error,
+                sw.ElapsedMilliseconds),
+            cancellationToken);
+
+        var content = FormatToolResult(toolCall, result);
+        var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
+        session = session.WithMessage(toolMessage);
+        await NotifyMessageAsync(callbacks, toolMessage);
+        await PersistMessageAsync(session, toolMessage, cancellationToken);
+        return session;
+    }
+
+    private async Task PersistMessageAsync(AgentSession session, ChatMessage message, CancellationToken cancellationToken)
+    {
+        await storage.AppendConversationMessageAsync(session.Id, message, cancellationToken);
+        await storage.SaveSessionAsync(session, cancellationToken);
     }
 
     private static async Task NotifyMessageAsync(AgentTurnCallbacks? callbacks, ChatMessage message)
