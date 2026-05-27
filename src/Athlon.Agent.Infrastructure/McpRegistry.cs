@@ -72,10 +72,16 @@ public sealed class McpRegistry(IAppLogger logger) : IMcpRegistry, IAsyncDisposa
                 }
             }
 
-            // Start/refresh enabled servers.
+            // Start/refresh enabled servers (always recreate so saved config changes apply).
             foreach (var (name, server) in enabled)
             {
-                var client = _clients.GetOrAdd(name, _ => CreateClient(name, server));
+                if (_clients.TryRemove(name, out var existing))
+                {
+                    try { await existing.DisposeAsync(); } catch { /* ignore */ }
+                }
+
+                var client = CreateClient(name, server);
+                _clients[name] = client;
                 try
                 {
                     await client.InitializeAsync(clientName: "Athlon.Agent", cancellationToken);

@@ -597,10 +597,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns));
     }
 
+    /// <summary>Cancel in-flight work and release watchers before process exit.</summary>
+    public void PrepareForShutdown()
+    {
+        try { _turnCancellation?.Cancel(); } catch { /* ignore */ }
+        _workspaceWatcher?.Dispose();
+        _workspaceWatcher = null;
+        StopStreamingFlushTimer();
+    }
+
     public void Dispose()
     {
-        _workspaceWatcher?.Dispose();
+        PrepareForShutdown();
         _turnCancellation?.Dispose();
+        _copyNoticeCts?.Cancel();
+        _copyNoticeCts?.Dispose();
     }
 
     private bool EnsureCurrentApiKeySecret(AppSettings settings)

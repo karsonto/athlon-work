@@ -2,6 +2,7 @@
 using System.Windows;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Mcp;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Athlon.Agent.App;
@@ -48,6 +49,23 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         StartupTrace($"OnExit {e.ApplicationExitCode}");
+        try
+        {
+            if (_services?.GetService<MainWindowViewModel>() is { } viewModel)
+            {
+                viewModel.PrepareForShutdown();
+            }
+
+            if (_services?.GetService<IMcpRegistry>() is IAsyncDisposable mcpRegistry)
+            {
+                mcpRegistry.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
+            }
+        }
+        catch (Exception ex)
+        {
+            StartupTrace($"OnExit cleanup failed: {ex}");
+        }
+
         _services?.Dispose();
         base.OnExit(e);
     }

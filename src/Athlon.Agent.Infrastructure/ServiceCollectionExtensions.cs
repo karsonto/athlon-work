@@ -73,7 +73,7 @@ public static class ServiceCollectionExtensions
         }
 
         var paths = new AppPathProvider();
-        var mcpServers = McpConfigFileService.LoadServersAsync(paths).GetAwaiter().GetResult();
+        var mcpServers = McpConfigFileService.LoadServers(paths);
         if (mcpServers.Count > 0)
         {
             settings.McpServers = mcpServers;

@@ -9,6 +9,9 @@ public static class McpConfigFileService
 
     public static string GetPath(IAppPathProvider paths) => Path.Combine(paths.ConfigPath, FileName);
 
+    public static List<McpServerSettings> LoadServers(IAppPathProvider paths) =>
+        ParseServersJson(ReadServersJson(paths));
+
     public static async Task<List<McpServerSettings>> LoadServersAsync(IAppPathProvider paths, CancellationToken cancellationToken = default)
     {
         var path = GetPath(paths);
@@ -17,7 +20,23 @@ public static class McpConfigFileService
             return new List<McpServerSettings>();
         }
 
-        var json = await File.ReadAllTextAsync(path, cancellationToken);
+        var json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        return ParseServersJson(json);
+    }
+
+    private static string? ReadServersJson(IAppPathProvider paths)
+    {
+        var path = GetPath(paths);
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        return File.ReadAllText(path);
+    }
+
+    private static List<McpServerSettings> ParseServersJson(string? json)
+    {
         if (string.IsNullOrWhiteSpace(json))
         {
             return new List<McpServerSettings>();
