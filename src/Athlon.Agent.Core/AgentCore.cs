@@ -129,7 +129,11 @@ public interface IAvailableSkillsProvider
 
 public interface IAgentRuntime
 {
-    Task<AgentSession> SendAsync(AgentSession session, string userInput, Func<string, Task>? onToken = null, CancellationToken cancellationToken = default);
+    Task<AgentSession> SendAsync(
+        AgentSession session,
+        string userInput,
+        AgentTurnCallbacks? callbacks = null,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IAgentTool
@@ -175,7 +179,11 @@ public interface ICredentialStore
 
 public interface IAgentOrchestrator
 {
-    Task<AgentSession> SendAsync(AgentSession session, string userInput, Func<string, Task>? onToken = null, CancellationToken cancellationToken = default);
+    Task<AgentSession> SendAsync(
+        AgentSession session,
+        string userInput,
+        AgentTurnCallbacks? callbacks = null,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class AppSettings
@@ -368,7 +376,11 @@ public sealed class AgentRuntime(
 {
     private readonly IAppLogger _logger = logger.ForContext("AgentRuntime");
 
-    public async Task<AgentSession> SendAsync(AgentSession session, string userInput, Func<string, Task>? onToken = null, CancellationToken cancellationToken = default)
+    public async Task<AgentSession> SendAsync(
+        AgentSession session,
+        string userInput,
+        AgentTurnCallbacks? callbacks = null,
+        CancellationToken cancellationToken = default)
     {
         var userMessage = ChatMessage.Create(MessageRole.User, userInput, session.Messages.LastOrDefault()?.Id);
         session = session.WithMessage(userMessage);
@@ -379,9 +391,12 @@ public sealed class AgentRuntime(
         if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
         {
             var toolCall = new AgentToolCall(Guid.NewGuid().ToString("N"), "file_list", new Dictionary<string, string>());
+            await NotifyToolStartedAsync(callbacks, toolCall);
             var result = await toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken);
             var content = FormatToolResult(toolCall, result);
-            session = session.WithMessage(ChatMessage.Create(MessageRole.Tool, content, userMessage.Id));
+            var toolMessage = ChatMessage.Create(MessageRole.Tool, content, userMessage.Id);
+            session = session.WithMessage(toolMessage);
+            await NotifyMessageAsync(callbacks, toolMessage);
             modelMessages.Add(new AgentModelMessage("system", $"Preflight tool result for the user's file listing request:{Environment.NewLine}{content}"));
         }
 
@@ -393,13 +408,14 @@ public sealed class AgentRuntime(
             var response = await modelClient.CompleteAsync(new AgentModelRequest(modelMessages, tools), cancellationToken);
             if (response.ToolCalls.Count == 0)
             {
-                if (onToken is not null && !string.IsNullOrEmpty(response.Content))
+                if (callbacks?.OnAssistantTextDelta is not null && !string.IsNullOrEmpty(response.Content))
                 {
-                    await onToken(response.Content);
+                    await callbacks.OnAssistantTextDelta(response.Content);
                 }
 
                 var assistant = ChatMessage.Create(MessageRole.Assistant, response.Content, userMessage.Id);
                 session = session.WithMessage(assistant);
+                await NotifyMessageAsync(callbacks, assistant);
                 await storage.SaveSessionAsync(session, cancellationToken);
                 _logger.Information("Saved session {SessionId} with {MessageCount} messages", session.Id, session.Messages.Count);
                 return session;
@@ -408,6 +424,8 @@ public sealed class AgentRuntime(
             modelMessages.Add(new AgentModelMessage("assistant", response.Content, ToolCalls: response.ToolCalls));
             foreach (var toolCall in response.ToolCalls)
             {
+                await NotifyToolStartedAsync(callbacks, toolCall);
+
                 if (string.Equals(toolCall.Name, CompressTool.ToolName, StringComparison.OrdinalIgnoreCase))
                 {
                     session = await autoCompactService.CompactAsync(session, cancellationToken);
@@ -416,15 +434,34 @@ public sealed class AgentRuntime(
                         "Context compressed. Continue from the summary in the latest user message.",
                         userMessage.Id);
                     session = session.WithMessage(compressedNote);
+                    await NotifyMessageAsync(callbacks, compressedNote);
                     await storage.SaveSessionAsync(session, cancellationToken);
                     return session;
                 }
 
                 var result = await toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken);
                 var content = FormatToolResult(toolCall, result);
-                session = session.WithMessage(ChatMessage.Create(MessageRole.Tool, content, userMessage.Id));
+                var toolMessage = ChatMessage.Create(MessageRole.Tool, content, userMessage.Id);
+                session = session.WithMessage(toolMessage);
+                await NotifyMessageAsync(callbacks, toolMessage);
                 modelMessages.Add(new AgentModelMessage("tool", content, toolCall.Id));
             }
+        }
+    }
+
+    private static async Task NotifyMessageAsync(AgentTurnCallbacks? callbacks, ChatMessage message)
+    {
+        if (callbacks?.OnMessage is not null)
+        {
+            await callbacks.OnMessage(message);
+        }
+    }
+
+    private static async Task NotifyToolStartedAsync(AgentTurnCallbacks? callbacks, AgentToolCall toolCall)
+    {
+        if (callbacks?.OnToolStarted is not null)
+        {
+            await callbacks.OnToolStarted(toolCall);
         }
     }
 
@@ -450,11 +487,12 @@ public sealed class AgentRuntime(
         return messages;
     }
 
-    private static string FormatToolResult(AgentToolCall call, ToolResult result)
+    public static string FormatToolResult(AgentToolCall call, ToolResult result)
     {
         var status = result.Succeeded ? "succeeded" : "failed";
         return string.Join(Environment.NewLine, new[]
         {
+            $"ToolCallId: {call.Id}",
             $"Tool `{call.Name}` {status}.",
             "",
             $"Arguments: {FormatArguments(call.Arguments)}",
@@ -485,8 +523,12 @@ public sealed class AgentRuntime(
 
 public sealed class AgentOrchestrator(IAgentRuntime agentRuntime) : IAgentOrchestrator
 {
-    public Task<AgentSession> SendAsync(AgentSession session, string userInput, Func<string, Task>? onToken = null, CancellationToken cancellationToken = default) =>
-        agentRuntime.SendAsync(session, userInput, onToken, cancellationToken);
+    public Task<AgentSession> SendAsync(
+        AgentSession session,
+        string userInput,
+        AgentTurnCallbacks? callbacks = null,
+        CancellationToken cancellationToken = default) =>
+        agentRuntime.SendAsync(session, userInput, callbacks, cancellationToken);
 }
 
 public static class CompressTool

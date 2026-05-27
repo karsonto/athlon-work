@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Threading;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Skills;
@@ -23,30 +24,61 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
         if (IsTool)
         {
-            ParseToolContent(message.Content, out var header, out var summary, out var detail);
+            ParseToolContent(message.Content, out var toolCallId, out var header, out var summary, out var detail);
+            ToolCallId = toolCallId;
             ToolHeader = header;
             ToolSummary = summary;
             ToolDetail = detail;
+            IsToolRunning = false;
             IsExpanded = expandTool;
         }
         else
         {
+            ToolCallId = null;
             ToolHeader = string.Empty;
             ToolSummary = string.Empty;
             ToolDetail = string.Empty;
+            IsToolRunning = false;
         }
     }
 
-    public string Role { get; }
-    public string Content { get; }
-    public string CreatedAt { get; }
+    private ChatMessageViewModel(AgentToolCall toolCall)
+    {
+        Role = MessageRole.Tool.ToString();
+        ToolCallId = toolCall.Id;
+        IsUser = false;
+        IsTool = true;
+        DisplayRole = "工具";
+        IsToolRunning = true;
+        CreatedAt = DateTimeOffset.Now.ToLocalTime().ToString("HH:mm:ss");
+        ToolHeader = $"Tool `{toolCall.Name}` running...";
+        ToolSummary = FormatArgumentsPreview(toolCall.Arguments);
+        ToolDetail = string.Empty;
+        Content = string.Empty;
+        IsExpanded = false;
+    }
+
+    public string Role { get; private set; }
+    public string Content { get; private set; }
+    public string CreatedAt { get; private set; }
     public bool IsUser { get; }
     public bool IsTool { get; }
     public bool AssistantTone => !IsUser;
     public string DisplayRole { get; }
-    public string ToolHeader { get; }
-    public string ToolSummary { get; }
-    public string ToolDetail { get; }
+
+    public string? ToolCallId { get; private set; }
+
+    [ObservableProperty]
+    private bool _isToolRunning;
+
+    [ObservableProperty]
+    private string _toolHeader = string.Empty;
+
+    [ObservableProperty]
+    private string _toolSummary = string.Empty;
+
+    [ObservableProperty]
+    private string _toolDetail = string.Empty;
 
     [ObservableProperty]
     private bool _isExpanded;
@@ -58,23 +90,73 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     [RelayCommand]
     private void ToggleToolExpand() => IsExpanded = !IsExpanded;
 
-    private static void ParseToolContent(string content, out string header, out string summary, out string detail)
+    public static ChatMessageViewModel CreatePendingTool(AgentToolCall toolCall) => new(toolCall);
+
+    public void ApplyCompletedTool(ChatMessage message)
     {
+        if (!IsTool)
+        {
+            return;
+        }
+
+        Content = message.Content;
+        CreatedAt = message.CreatedAt.ToLocalTime().ToString("HH:mm:ss");
+        ParseToolContent(message.Content, out var toolCallId, out var header, out var summary, out var detail);
+        if (!string.IsNullOrWhiteSpace(toolCallId))
+        {
+            ToolCallId = toolCallId;
+        }
+
+        ToolHeader = header;
+        ToolSummary = summary;
+        ToolDetail = detail;
+        IsToolRunning = false;
+    }
+
+    public void MarkToolCancelled()
+    {
+        if (!IsTool || !IsToolRunning)
+        {
+            return;
+        }
+
+        IsToolRunning = false;
+        ToolSummary = "已停止";
+    }
+
+    private static void ParseToolContent(string content, out string? toolCallId, out string header, out string summary, out string detail)
+    {
+        toolCallId = null;
         var lines = content.Replace("\r\n", "\n").Split('\n');
-        header = lines.Length > 0 && !string.IsNullOrWhiteSpace(lines[0]) ? lines[0].Trim() : "工具调用";
+        header = "工具调用";
         summary = string.Empty;
 
         foreach (var line in lines)
         {
+            if (line.StartsWith("ToolCallId:", StringComparison.OrdinalIgnoreCase))
+            {
+                toolCallId = line["ToolCallId:".Length..].Trim();
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(line) && header == "工具调用")
+            {
+                header = line.Trim();
+            }
+
             if (line.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
             {
                 summary = line["Summary:".Length..].Trim();
-                break;
             }
         }
 
         detail = content.Trim();
     }
+
+    private static string FormatArgumentsPreview(IReadOnlyDictionary<string, string> arguments) =>
+        arguments.Count == 0
+            ? string.Empty
+            : string.Join("; ", arguments.Select(argument => $"{argument.Key}={argument.Value}"));
 }
 
 public sealed class SessionHistoryItemViewModel
@@ -525,23 +607,56 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            var previousMessageCount = _session.Messages.Count;
-            _session = await _orchestrator.SendAsync(_session, input, token =>
+            var callbacks = new AgentTurnCallbacks
             {
-                StreamingText += token;
-                return Task.CompletedTask;
-            }, _turnCancellation.Token);
+                OnToolStarted = async toolCall => await RunOnUiAsync(() =>
+                {
+                    if (FindToolMessage(toolCall.Id) is not null)
+                    {
+                        return;
+                    }
+
+                    Messages.Add(ChatMessageViewModel.CreatePendingTool(toolCall));
+                }),
+                OnMessage = async message => await RunOnUiAsync(() =>
+                {
+                    if (message.Role == MessageRole.Tool)
+                    {
+                        var toolCallId = ExtractToolCallId(message.Content);
+                        var existing = FindToolMessage(toolCallId);
+                        if (existing is not null)
+                        {
+                            existing.ApplyCompletedTool(message);
+                            return;
+                        }
+
+                        Messages.Add(new ChatMessageViewModel(message));
+                        return;
+                    }
+
+                    Messages.Add(new ChatMessageViewModel(message));
+                }),
+                OnAssistantTextDelta = async token => await RunOnUiAsync(() =>
+                {
+                    StreamingText += token;
+                })
+            };
+
+            _session = await _orchestrator.SendAsync(_session, input, callbacks, _turnCancellation.Token);
             CurrentSessionTitle = _session.Title;
             await SaveCurrentSessionIfNeededAsync();
-            var newMessages = _session.Messages.Skip(previousMessageCount + 1).ToList();
-            foreach (var message in newMessages)
-            {
-                Messages.Add(new ChatMessageViewModel(message));
-            }
         }
         catch (OperationCanceledException)
         {
-            Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, "生成已停止。")));
+            await RunOnUiAsync(() =>
+            {
+                foreach (var message in Messages.Where(static message => message.IsToolRunning))
+                {
+                    message.MarkToolCancelled();
+                }
+
+                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, "生成已停止。")));
+            });
             await SaveCurrentSessionIfNeededAsync();
         }
         catch (Exception ex)
@@ -551,9 +666,46 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         finally
         {
+            StreamingText = string.Empty;
             IsBusy = false;
             SendCommand.NotifyCanExecuteChanged();
         }
+    }
+
+    private ChatMessageViewModel? FindToolMessage(string? toolCallId)
+    {
+        if (string.IsNullOrWhiteSpace(toolCallId))
+        {
+            return null;
+        }
+
+        return Messages.LastOrDefault(message =>
+            message.IsTool && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
+    }
+
+    private static string? ExtractToolCallId(string content)
+    {
+        foreach (var line in content.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (line.StartsWith("ToolCallId:", StringComparison.OrdinalIgnoreCase))
+            {
+                return line["ToolCallId:".Length..].Trim();
+            }
+        }
+
+        return null;
+    }
+
+    private Task RunOnUiAsync(Action action)
+    {
+        var dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
+        if (dispatcher.CheckAccess())
+        {
+            action();
+            return Task.CompletedTask;
+        }
+
+        return dispatcher.InvokeAsync(action).Task;
     }
 
     [RelayCommand]

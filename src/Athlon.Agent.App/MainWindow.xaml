@@ -417,6 +417,21 @@
                                                                     </Style>
                                                                 </TextBlock.Style>
                                                             </TextBlock>
+                                                            <TextBlock Text="执行中…"
+                                                                       FontSize="11"
+                                                                       Foreground="#86EFAC"
+                                                                       Margin="0,4,0,0">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding IsToolRunning}" Value="True">
+                                                                                <Setter Property="Visibility" Value="Visible" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
                                                         </StackPanel>
                                                         <TextBlock Grid.Column="2"
                                                                    Text="{Binding CreatedAt}"
