@@ -392,7 +392,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     public AppSettings Settings { get; }
-    public string[] Sections { get; } = { "Models", "Logging", "MCP", "Skills", "Workspace", "Tool Permissions", "Appearance" };
+    public string[] Sections { get; } = { "Models", "MCP", "Skills", "Workspace", "Tool Permissions", "Appearance" };
     public ObservableCollection<McpServerItemViewModel> McpServers { get; } = new();
 
     [ObservableProperty]

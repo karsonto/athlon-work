@@ -575,7 +575,7 @@
                 </ScrollViewer.Style>
                 <StackPanel MaxWidth="760">
                     <TextBlock Text="设置" FontSize="24" FontWeight="SemiBold" Margin="0,0,0,6" />
-                    <TextBlock Text="配置模型、日志、MCP、技能、工作区与工具权限。"
+                    <TextBlock Text="配置模型、MCP、技能、工作区与工具权限。"
                                Foreground="{StaticResource Brush.SubtleText}"
                                Margin="0,0,0,24" />
 
@@ -598,18 +598,6 @@
                             <TextBlock Text="API Key 使用 Windows DPAPI 加密保存在用户目录。"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource SettingsCardStyle}">
-                        <StackPanel>
-                            <TextBlock Text="Logging" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
-                            <TextBlock Text="Directory" Foreground="{StaticResource Brush.SubtleText}" />
-                            <TextBox Text="{Binding Settings.Settings.Logging.Directory, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
-                            <TextBlock Text="Minimum Level" Foreground="{StaticResource Brush.SubtleText}" />
-                            <TextBox Text="{Binding Settings.Settings.Logging.MinimumLevel, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
-                            <TextBlock Text="Retained Days" Foreground="{StaticResource Brush.SubtleText}" />
-                            <TextBox Text="{Binding Settings.Settings.Logging.RetainedDays, UpdateSourceTrigger=PropertyChanged}" />
                         </StackPanel>
                     </Border>
 

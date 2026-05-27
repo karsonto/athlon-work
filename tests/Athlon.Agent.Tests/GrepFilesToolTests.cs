@@ -1,0 +1,108 @@
+using Athlon.Agent.Core;
+using Athlon.Agent.Infrastructure;
+
+namespace Athlon.Agent.Tests;
+
+public sealed class GrepFilesToolTests
+{
+    [Fact]
+    public async Task InvokeAsync_SkipsIgnoredDirectories()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(workspaceRoot);
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, "node_modules", "pkg"));
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, "src"));
+
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "node_modules", "pkg", "a.txt"), "needle in ignored folder");
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "src", "a.txt"), "needle in source");
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
+            {
+                ["pattern"] = "needle"
+            }));
+
+            Assert.True(result.Succeeded);
+            Assert.NotNull(result.Content);
+            Assert.Contains("src", result.Content!, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("node_modules", result.Content!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_SkipsTooLargeFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(workspaceRoot);
+
+        var largeFile = Path.Combine(workspaceRoot, "large.txt");
+        var line = "needle-" + new string('x', 1024);
+        await File.WriteAllTextAsync(largeFile, string.Concat(Enumerable.Repeat(line + Environment.NewLine, 4000)));
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
+            {
+                ["pattern"] = "needle"
+            }));
+
+            Assert.True(result.Succeeded);
+            Assert.Equal("No matches found", result.Summary);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    private static GrepFilesTool CreateTool(string workspaceRoot, string appDataRoot)
+    {
+        var context = new ActiveWorkspaceContext();
+        context.SetWorkspace(workspaceRoot);
+        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+        var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+        return new GrepFilesTool(guard, audit);
+    }
+
+    private sealed class NoOpLogger : IAppLogger
+    {
+        public void Debug(string messageTemplate, params object[] values) { }
+        public void Information(string messageTemplate, params object[] values) { }
+        public void Warning(string messageTemplate, params object[] values) { }
+        public void Error(Exception exception, string messageTemplate, params object[] values) { }
+        public IAppLogger ForContext(string sourceContext) => this;
+    }
+
+    private sealed class TestPathProvider(string rootPath) : IAppPathProvider
+    {
+        public string RootPath { get; } = rootPath;
+        public string ConfigPath => Path.Combine(rootPath, "config");
+        public string SessionsPath => Path.Combine(rootPath, "sessions");
+        public string AuditPath => Path.Combine(rootPath, "audit");
+        public string LogsPath => Path.Combine(rootPath, "logs");
+        public string CredentialsPath => Path.Combine(rootPath, "credentials");
+        public string SkillsPath => Path.Combine(rootPath, "skills");
+
+        public void EnsureCreated() => Directory.CreateDirectory(rootPath);
+
+        public string ResolveSkillPath(string path) =>
+            Path.IsPathRooted(path) ? path : Path.Combine(SkillsPath, path);
+    }
+}

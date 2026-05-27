@@ -100,6 +100,34 @@ public sealed class AgentRuntimeProgressTests
         Assert.Equal(["he", "llo"], tokens);
     }
 
+    [Fact]
+    public async Task SendAsync_RunsToolInvocationOnThreadPoolThread()
+    {
+        var storage = new NoOpStorage();
+        var modelClient = new ScriptedModelClient(
+            new AgentModelResponse(string.Empty, new[]
+            {
+                new AgentToolCall("call-1", "alpha", new Dictionary<string, string>())
+            }),
+            new AgentModelResponse("done", Array.Empty<AgentToolCall>()));
+        var toolRouter = new ThreadCaptureToolRouter();
+
+        var runtime = new AgentRuntime(
+            modelClient,
+            storage,
+            toolRouter,
+            new StaticPromptBuilder(),
+            new NoOpPreCompletionPipeline(),
+            new NoOpAutoCompactService(),
+            new NoOpActiveAgentSessionContext(),
+            new NoOpLogger());
+
+        await runtime.SendAsync(AgentSession.Create("thread-test"), "run tool");
+
+        Assert.True(toolRouter.CapturedThreadId.HasValue);
+        Assert.True(toolRouter.CapturedOnThreadPool);
+    }
+
     private sealed class ScriptedModelClient(params AgentModelResponse[] responses) : IAgentModelClient
     {
         private int _index;
@@ -146,6 +174,22 @@ public sealed class AgentRuntimeProgressTests
 
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success($"ran {invocation.ToolName}"));
+    }
+
+    private sealed class ThreadCaptureToolRouter : IToolRouter
+    {
+        public int? CapturedThreadId { get; private set; }
+        public bool CapturedOnThreadPool { get; private set; }
+
+        public IReadOnlyList<ToolDefinition> ListTools() =>
+            new[] { new ToolDefinition("alpha", "a", new Dictionary<string, string>()) };
+
+        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
+        {
+            CapturedThreadId = Environment.CurrentManagedThreadId;
+            CapturedOnThreadPool = Thread.CurrentThread.IsThreadPoolThread;
+            return Task.FromResult(ToolResult.Success("ok"));
+        }
     }
 
     private sealed class StaticPromptBuilder : IAgentEnvironmentPromptBuilder

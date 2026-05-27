@@ -22,6 +22,8 @@ public sealed class AgentEnvironmentPromptBuilderTests
         Assert.Contains($"- Agent app data: {appDataPath}", prompt, StringComparison.Ordinal);
         Assert.Contains($"none installed under {skillsPath}", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("~/.athlon-agent/skills", prompt, StringComparison.Ordinal);
+        Assert.Contains("On Windows, execute commands with cmd/cmd.exe semantics; do not use PowerShell syntax or PowerShell-specific commands.", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("use PowerShell", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class FixedSkillsProvider : IAvailableSkillsProvider

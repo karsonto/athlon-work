@@ -214,12 +214,12 @@ public interface IAgentOrchestrator
 public sealed class AppSettings
 {
     public ModelSettings Model { get; set; } = new();
-    public LoggingSettings Logging { get; set; } = new();
     public ToolPermissionSettings ToolPermissions { get; set; } = new();
     public List<McpServerSettings> McpServers { get; set; } = new();
     public List<SkillSettings> Skills { get; set; } = new();
     public List<WorkspaceSettings> Workspaces { get; set; } = new();
     public UiSettings Ui { get; set; } = new();
+    public LoggingSettings Logging { get; set; } = new();
     public ContextCompactionSettings ContextCompaction { get; set; } = new();
 }
 
@@ -275,7 +275,6 @@ public sealed class WorkspaceSettings
 {
     public string Name { get; set; } = string.Empty;
     public string RootPath { get; set; } = string.Empty;
-    public bool IsDefault { get; set; }
     public List<string> IgnorePatterns { get; set; } = new() { ".git", "bin", "obj", "node_modules" };
 }
 
@@ -373,6 +372,7 @@ public sealed class AgentEnvironmentPromptBuilder(
         builder.AppendLine("When searching file contents, call grep_files. When finding files by name or extension, call glob_files.");
         builder.AppendLine("For write operations, explain your intent before calling file_write or file_edit.");
         builder.AppendLine("Use execute_command when a shell command is needed to complete the task.");
+        builder.AppendLine("On Windows, execute commands with cmd/cmd.exe semantics; do not use PowerShell syntax or PowerShell-specific commands.");
         builder.AppendLine("When context grows large, history is auto-compressed; full transcripts are kept under the session transcripts folder. Call compress to manually compact and end the current turn.");
 
         return builder.ToString();
@@ -401,8 +401,7 @@ public sealed class AgentEnvironmentPromptBuilder(
             return new WorkspaceSettings
             {
                 Name = Path.GetFileName(rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
-                RootPath = rootPath,
-                IsDefault = true
+                RootPath = rootPath
             };
         }
 
@@ -527,7 +526,11 @@ public sealed class AgentRuntime(
         CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
-        var result = await toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken);
+        // Force tool execution onto the thread pool so synchronous/heavy tool implementations
+        // do not run inline with the caller's context (e.g., UI-originated workflow).
+        var result = await Task.Run(
+            () => toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken),
+            cancellationToken);
         sw.Stop();
 
         await storage.AppendToolCallLogAsync(
