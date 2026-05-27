@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
@@ -11,7 +12,7 @@ public sealed class AgentRuntime(
     IToolRouter toolRouter,
     IAgentEnvironmentPromptBuilder promptBuilder,
     IPreCompletionPipeline preCompletionPipeline,
-    IAutoCompactService autoCompactService,
+    IToolResultEvictor toolResultEvictor,
     IActiveAgentSessionContext activeSessionContext,
     IAppLogger logger) : IAgentRuntime
 {
@@ -66,16 +67,29 @@ public sealed class AgentRuntime(
 
             while (true)
             {
-                session = await preCompletionPipeline.RunAsync(session, cancellationToken);
+                session = await RunPreCompletionPipelineAsync(
+                    session,
+                    callbacks,
+                    PreCompletionOptions.AgentLoop,
+                    cancellationToken);
                 modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
 
-                var response = await modelClient.CompleteAsync(
-                    new AgentModelRequest(modelMessages, tools),
-                    callbacks?.OnAssistantTextDelta,
+                var (updatedSession, response) = await CompleteWithOverflowRetryAsync(
+                    session,
+                    callbacks,
+                    modelMessages,
+                    tools,
+                    environmentPrompt,
                     cancellationToken);
+                session = updatedSession;
+
                 if (response.ToolCalls.Count == 0)
                 {
-                    var assistant = ChatMessage.Create(MessageRole.Assistant, response.Content, userMessage.Id);
+                    var assistant = ChatMessage.Create(
+                        MessageRole.Assistant,
+                        response.Content,
+                        userMessage.Id,
+                        reasoningContent: response.ReasoningContent);
                     session = session.WithMessage(assistant);
                     await NotifyMessageAsync(callbacks, assistant);
                     await PersistMessageAsync(session, assistant, cancellationToken);
@@ -83,14 +97,27 @@ public sealed class AgentRuntime(
                     return session;
                 }
 
-                modelMessages.Add(new AgentModelMessage("assistant", response.Content, ToolCalls: response.ToolCalls));
+                var assistantWithToolCalls = ChatMessage.Create(
+                    MessageRole.Assistant,
+                    response.Content,
+                    userMessage.Id,
+                    response.ToolCalls,
+                    response.ReasoningContent);
+                session = session.WithMessage(assistantWithToolCalls);
+                await PersistMessageAsync(session, assistantWithToolCalls, cancellationToken);
+
+                modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
                 foreach (var toolCall in response.ToolCalls)
                 {
                     await NotifyToolStartedAsync(callbacks, toolCall);
 
                     if (string.Equals(toolCall.Name, CompressTool.ToolName, StringComparison.OrdinalIgnoreCase))
                     {
-                        session = await autoCompactService.CompactAsync(session, cancellationToken);
+                        session = await RunPreCompletionPipelineAsync(
+                            session,
+                            callbacks,
+                            PreCompletionOptions.ManualForceCompact,
+                            cancellationToken);
                         var compressedNote = ChatMessage.Create(
                             MessageRole.Assistant,
                             "Context compressed. Continue from the summary in the latest user message.",
@@ -102,7 +129,6 @@ public sealed class AgentRuntime(
                     }
 
                     session = await InvokeToolAndPersistAsync(session, userMessage.Id, toolCall, callbacks, cancellationToken);
-                    modelMessages.Add(new AgentModelMessage("tool", session.Messages[^1].Content, toolCall.Id));
                 }
             }
         }
@@ -110,6 +136,43 @@ public sealed class AgentRuntime(
         {
             await storage.SaveSessionAsync(session, CancellationToken.None);
             throw;
+        }
+    }
+
+    private async Task<(AgentSession Session, AgentModelResponse Response)> CompleteWithOverflowRetryAsync(
+        AgentSession session,
+        AgentTurnCallbacks? callbacks,
+        IReadOnlyList<AgentModelMessage> modelMessages,
+        IReadOnlyList<ToolDefinition> tools,
+        string environmentPrompt,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await modelClient.CompleteAsync(
+                new AgentModelRequest(modelMessages, tools),
+                callbacks?.OnAssistantTextDelta,
+                callbacks?.OnAssistantReasoningDelta,
+                cancellationToken);
+            return (session, response);
+        }
+        catch (HttpRequestException ex) when (IsContextLengthError(ex))
+        {
+            _logger.Warning("Context length exceeded for session {SessionId}; forcing compact and retrying once", session.Id);
+
+            session = await RunPreCompletionPipelineAsync(
+                session,
+                callbacks,
+                PreCompletionOptions.ForceCompact,
+                cancellationToken);
+
+            var retryMessages = BuildModelMessages(environmentPrompt, session.Messages);
+            var response = await modelClient.CompleteAsync(
+                new AgentModelRequest(retryMessages, tools),
+                callbacks?.OnAssistantTextDelta,
+                callbacks?.OnAssistantReasoningDelta,
+                cancellationToken);
+            return (session, response);
         }
     }
 
@@ -121,8 +184,6 @@ public sealed class AgentRuntime(
         CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
-        // Force tool execution onto the thread pool so synchronous/heavy tool implementations
-        // do not run inline with the caller's context (e.g., UI-originated workflow).
         var result = await Task.Run(
             () => toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken),
             cancellationToken);
@@ -143,10 +204,55 @@ public sealed class AgentRuntime(
             cancellationToken);
 
         var content = FormatToolResult(toolCall, result);
+        content = await toolResultEvictor.EvictIfNeededAsync(
+            session.Id,
+            toolCall,
+            result,
+            content,
+            cancellationToken);
+
         var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
         session = session.WithMessage(toolMessage);
         await NotifyMessageAsync(callbacks, toolMessage);
         await PersistMessageAsync(session, toolMessage, cancellationToken);
+        return session;
+    }
+
+    private async Task<AgentSession> RunPreCompletionPipelineAsync(
+        AgentSession session,
+        AgentTurnCallbacks? callbacks,
+        PreCompletionOptions options,
+        CancellationToken cancellationToken)
+    {
+        var messageIdsBefore = session.Messages.Select(message => message.Id).ToHashSet(StringComparer.Ordinal);
+        session = await preCompletionPipeline.RunAsync(session, options, cancellationToken);
+        return await PersistCompactionAuditsAsync(session, messageIdsBefore, callbacks, cancellationToken);
+    }
+
+    private async Task<AgentSession> PersistCompactionAuditsAsync(
+        AgentSession session,
+        HashSet<string> messageIdsBefore,
+        AgentTurnCallbacks? callbacks,
+        CancellationToken cancellationToken)
+    {
+        var persistedNew = false;
+        foreach (var message in session.Messages)
+        {
+            if (messageIdsBefore.Contains(message.Id))
+            {
+                continue;
+            }
+
+            persistedNew = true;
+            await NotifyMessageAsync(callbacks, message);
+            await PersistMessageAsync(session, message, cancellationToken);
+        }
+
+        if (!persistedNew)
+        {
+            await storage.SaveSessionAsync(session, cancellationToken);
+        }
+
         return session;
     }
 
@@ -172,27 +278,125 @@ public sealed class AgentRuntime(
         }
     }
 
-    private static List<AgentModelMessage> BuildModelMessages(string environmentPrompt, IReadOnlyList<ChatMessage> history)
+    private static bool IsContextLengthError(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            var message = current.Message;
+            if (message.Contains("context_length", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("maximum context", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("too many tokens", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal static List<AgentModelMessage> BuildModelMessages(string environmentPrompt, IReadOnlyList<ChatMessage> history)
     {
         var messages = new List<AgentModelMessage>
         {
             new("system", environmentPrompt)
         };
 
-        foreach (var message in history)
+        for (var index = 0; index < history.Count; index++)
         {
-            messages.Add(message.Role switch
+            var message = history[index];
+            switch (message.Role)
             {
-                MessageRole.User => new AgentModelMessage("user", message.Content),
-                MessageRole.Assistant => new AgentModelMessage("assistant", message.Content),
-                MessageRole.Tool => new AgentModelMessage("tool", message.Content, ExtractToolCallId(message.Content)),
-                MessageRole.Summary => new AgentModelMessage("user", $"History summary: {message.Content}"),
-                _ => new AgentModelMessage("user", message.Content)
-            });
+                case MessageRole.Compaction:
+                    continue;
+                case MessageRole.User:
+                    messages.Add(new AgentModelMessage("user", message.Content));
+                    break;
+                case MessageRole.Assistant:
+                    index = AppendAssistantModelMessages(messages, history, index);
+                    break;
+                case MessageRole.Tool:
+                    messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(message.Content)));
+                    break;
+                case MessageRole.Summary:
+                    messages.Add(new AgentModelMessage("user", $"History summary: {message.Content}"));
+                    break;
+                default:
+                    messages.Add(new AgentModelMessage("user", message.Content));
+                    break;
+            }
         }
 
         return messages;
     }
+
+    private static int AppendAssistantModelMessages(
+        List<AgentModelMessage> messages,
+        IReadOnlyList<ChatMessage> history,
+        int assistantIndex)
+    {
+        var message = history[assistantIndex];
+        var toolCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
+        if (toolCalls is not { Count: > 0 })
+        {
+            messages.Add(new AgentModelMessage("assistant", message.Content, ReasoningContent: message.ReasoningContent));
+            return assistantIndex;
+        }
+
+        var scanIndex = assistantIndex + 1;
+        var toolMessages = new List<ChatMessage>();
+        while (scanIndex < history.Count)
+        {
+            switch (history[scanIndex].Role)
+            {
+                case MessageRole.Tool:
+                    toolMessages.Add(history[scanIndex]);
+                    scanIndex++;
+                    break;
+                case MessageRole.Compaction:
+                    scanIndex++;
+                    break;
+                default:
+                    goto DoneScanning;
+            }
+        }
+
+        DoneScanning:
+        var toolByCallId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
+        foreach (var toolMessage in toolMessages)
+        {
+            var toolCallId = ExtractToolCallId(toolMessage.Content);
+            if (!string.IsNullOrWhiteSpace(toolCallId))
+            {
+                toolByCallId.TryAdd(toolCallId, toolMessage);
+            }
+        }
+
+        messages.Add(new AgentModelMessage("assistant", message.Content, ToolCalls: toolCalls, ReasoningContent: message.ReasoningContent));
+        foreach (var toolCall in toolCalls)
+        {
+            var content = toolByCallId.TryGetValue(toolCall.Id, out var toolMessage)
+                ? toolMessage.Content
+                : "Tool did not run or the result was not recorded.";
+            messages.Add(new AgentModelMessage("tool", content, toolCall.Id));
+        }
+
+        var consumed = new HashSet<string>(toolCalls.Select(call => call.Id), StringComparer.Ordinal);
+        foreach (var toolMessage in toolMessages)
+        {
+            var toolCallId = ExtractToolCallId(toolMessage.Content);
+            if (toolCallId is not null && consumed.Contains(toolCallId))
+            {
+                continue;
+            }
+
+            messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(toolMessage.Content)));
+        }
+
+        return scanIndex - 1;
+    }
+
+    private static string FormatToolResultAsUserContent(string content) =>
+        string.Join(Environment.NewLine, "[Tool output]", content);
 
     public static string FormatToolResult(AgentToolCall call, ToolResult result)
     {

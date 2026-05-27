@@ -26,6 +26,7 @@ public sealed class OpenAiCompatibleChatModelClient(
     public async Task<AgentModelResponse> CompleteAsync(
         AgentModelRequest request,
         Func<string, Task>? onTextDelta = null,
+        Func<string, Task>? onReasoningDelta = null,
         CancellationToken cancellationToken = default)
     {
         var apiKey = await credentialStore.GetSecretAsync(ModelSettings.ApiKeySecretName, cancellationToken);
@@ -49,14 +50,14 @@ public sealed class OpenAiCompatibleChatModelClient(
         }
 
         var preferStreaming = settings.Model.EnableStreaming
-            && onTextDelta is not null
+            && (onTextDelta is not null || onReasoningDelta is not null)
             && request.AllowToolCalls;
 
         if (preferStreaming)
         {
             try
             {
-                return await CompleteOpenAiCompatibleAsync(request, apiKey, stream: true, onTextDelta, cancellationToken);
+                return await CompleteOpenAiCompatibleAsync(request, apiKey, stream: true, onTextDelta, onReasoningDelta, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -64,7 +65,7 @@ public sealed class OpenAiCompatibleChatModelClient(
             }
         }
 
-        return await CompleteOpenAiCompatibleAsync(request, apiKey, stream: false, onTextDelta, cancellationToken);
+        return await CompleteOpenAiCompatibleAsync(request, apiKey, stream: false, onTextDelta, onReasoningDelta, cancellationToken);
     }
 
     private async Task<AgentModelResponse> CompleteOpenAiCompatibleAsync(
@@ -72,6 +73,7 @@ public sealed class OpenAiCompatibleChatModelClient(
         string apiKey,
         bool stream,
         Func<string, Task>? onTextDelta,
+        Func<string, Task>? onReasoningDelta,
         CancellationToken cancellationToken)
     {
         var endpoint = settings.Model.Endpoint.TrimEnd('/') + "/chat/completions";
@@ -128,17 +130,11 @@ public sealed class OpenAiCompatibleChatModelClient(
 
             if (stream)
             {
-                return await ParseStreamingResponseAsync(response, onTextDelta, body => responseBody = body, cancellationToken);
+                return await ParseStreamingResponseAsync(response, onTextDelta, onReasoningDelta, body => responseBody = body, cancellationToken);
             }
 
             responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            var nonStreamResult = ParseNonStreamingResponse(responseBody);
-            if (onTextDelta is not null && !string.IsNullOrEmpty(nonStreamResult.Content))
-            {
-                await onTextDelta(nonStreamResult.Content);
-            }
-
-            return nonStreamResult;
+            return await EmitParsedResponseAsync(responseBody, onTextDelta, onReasoningDelta);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -172,8 +168,86 @@ public sealed class OpenAiCompatibleChatModelClient(
             : string.Empty;
 
         var toolCalls = ParseToolCallsFromMessage(message);
-        return new AgentModelResponse(content, toolCalls);
+        var reasoningContent = TryReadReasoningContent(message);
+        return NormalizeAssistantResponse(content, toolCalls, reasoningContent);
     }
+
+    private static async Task<AgentModelResponse> EmitParsedResponseAsync(
+        string responseBody,
+        Func<string, Task>? onTextDelta,
+        Func<string, Task>? onReasoningDelta)
+    {
+        var result = ParseNonStreamingResponse(responseBody);
+        if (onReasoningDelta is not null && !string.IsNullOrEmpty(result.ReasoningContent))
+        {
+            await onReasoningDelta(result.ReasoningContent);
+        }
+
+        if (onTextDelta is not null && !string.IsNullOrEmpty(result.Content))
+        {
+            await onTextDelta(result.Content);
+        }
+
+        return result;
+    }
+
+    private static AgentModelResponse NormalizeAssistantResponse(
+        string content,
+        IReadOnlyList<AgentToolCall> toolCalls,
+        string? reasoningContent)
+    {
+        var (normalizedContent, normalizedReasoning) = SplitEmbeddedThinkingContent(content, reasoningContent);
+        return new AgentModelResponse(normalizedContent, toolCalls, normalizedReasoning);
+    }
+
+    /// <summary>
+    /// Qwen 等模型会把思考链嵌入 content（如 &lt;/redacted_thinking&gt;），而非 reasoning_content 字段。
+    /// </summary>
+    private static (string Content, string? ReasoningContent) SplitEmbeddedThinkingContent(
+        string content,
+        string? reasoningContent)
+    {
+        if (!string.IsNullOrWhiteSpace(reasoningContent))
+        {
+            return (content, reasoningContent);
+        }
+
+        foreach (var endTag in EmbeddedThinkingEndTags)
+        {
+            var index = content.IndexOf(endTag, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+            {
+                continue;
+            }
+
+            var reasoning = content[..index].Trim();
+            var answer = content[(index + endTag.Length)..].Trim();
+            foreach (var startTag in EmbeddedThinkingStartTags)
+            {
+                if (reasoning.StartsWith(startTag, StringComparison.OrdinalIgnoreCase))
+                {
+                    reasoning = reasoning[startTag.Length..].Trim();
+                    break;
+                }
+            }
+
+            return (answer, string.IsNullOrWhiteSpace(reasoning) ? null : reasoning);
+        }
+
+        return (content, null);
+    }
+
+    private static readonly string[] EmbeddedThinkingEndTags =
+    [
+        "\u003c/redacted_thinking\u003e",
+        "\u0060/think\u0060"
+    ];
+
+    private static readonly string[] EmbeddedThinkingStartTags =
+    [
+        "\u003credacted_thinking\u003e",
+        "\u0060think\u0060"
+    ];
 
     private static List<AgentToolCall> ParseToolCallsFromMessage(JsonElement message)
     {
@@ -198,20 +272,50 @@ public sealed class OpenAiCompatibleChatModelClient(
     private static async Task<AgentModelResponse> ParseStreamingResponseAsync(
         HttpResponseMessage response,
         Func<string, Task>? onTextDelta,
+        Func<string, Task>? onReasoningDelta,
         Action<string> setResponseBody,
         CancellationToken cancellationToken)
     {
+        var mediaType = response.Content.Headers.ContentType?.MediaType;
+        if (!string.IsNullOrWhiteSpace(mediaType)
+            && !string.Equals(mediaType, "text/event-stream", StringComparison.OrdinalIgnoreCase))
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            setResponseBody(body);
+            return await EmitParsedResponseAsync(body, onTextDelta, onReasoningDelta);
+        }
+
         var contentBuilder = new StringBuilder();
+        var reasoningBuilder = new StringBuilder();
         var rawBuilder = new StringBuilder();
+        var fallbackBuilder = new StringBuilder();
         var toolCalls = new Dictionary<int, StreamingToolCallState>();
+        var sawSseData = false;
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);
-        while (!reader.EndOfStream)
+        while (true)
         {
-            var line = await reader.ReadLineAsync(cancellationToken);
-            if (line is null || !line.StartsWith("data:", StringComparison.Ordinal))
+            string? line;
+            try
             {
+                using var idleCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                idleCts.CancelAfter(TimeSpan.FromSeconds(90));
+                line = await reader.ReadLineAsync(idleCts.Token);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                break;
+            }
+
+            if (line is null)
+            {
+                break;
+            }
+
+            if (!line.StartsWith("data:", StringComparison.Ordinal))
+            {
+                fallbackBuilder.AppendLine(line);
                 continue;
             }
 
@@ -221,6 +325,7 @@ public sealed class OpenAiCompatibleChatModelClient(
                 continue;
             }
 
+            sawSseData = true;
             rawBuilder.AppendLine(data);
             if (string.Equals(data, "[DONE]", StringComparison.Ordinal))
             {
@@ -235,12 +340,12 @@ public sealed class OpenAiCompatibleChatModelClient(
 
             foreach (var choice in choices.EnumerateArray())
             {
-                if (!choice.TryGetProperty("delta", out var delta) || delta.ValueKind != JsonValueKind.Object)
+                if (!TryGetStreamPayload(choice, out var payload))
                 {
                     continue;
                 }
 
-                if (delta.TryGetProperty("content", out var token) && token.ValueKind == JsonValueKind.String)
+                if (payload.TryGetProperty("content", out var token) && token.ValueKind == JsonValueKind.String)
                 {
                     var tokenText = token.GetString() ?? string.Empty;
                     if (!string.IsNullOrEmpty(tokenText))
@@ -253,7 +358,9 @@ public sealed class OpenAiCompatibleChatModelClient(
                     }
                 }
 
-                if (delta.TryGetProperty("tool_calls", out var deltaToolCalls) && deltaToolCalls.ValueKind == JsonValueKind.Array)
+                await AppendReasoningDelta(payload, reasoningBuilder, onReasoningDelta);
+
+                if (payload.TryGetProperty("tool_calls", out var deltaToolCalls) && deltaToolCalls.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var partial in deltaToolCalls.EnumerateArray())
                     {
@@ -288,6 +395,13 @@ public sealed class OpenAiCompatibleChatModelClient(
             }
         }
 
+        if (!sawSseData && fallbackBuilder.Length > 0)
+        {
+            var body = fallbackBuilder.ToString().Trim();
+            setResponseBody(body);
+            return await EmitParsedResponseAsync(body, onTextDelta, onReasoningDelta);
+        }
+
         setResponseBody(rawBuilder.ToString());
         var normalizedToolCalls = toolCalls
             .OrderBy(item => item.Key)
@@ -302,7 +416,26 @@ public sealed class OpenAiCompatibleChatModelClient(
             })
             .ToArray();
 
-        return new AgentModelResponse(contentBuilder.ToString(), normalizedToolCalls);
+        var reasoningContent = reasoningBuilder.Length == 0 ? null : reasoningBuilder.ToString();
+        return NormalizeAssistantResponse(contentBuilder.ToString(), normalizedToolCalls, reasoningContent);
+    }
+
+    private static bool TryGetStreamPayload(JsonElement choice, out JsonElement payload)
+    {
+        if (choice.TryGetProperty("delta", out var delta) && delta.ValueKind == JsonValueKind.Object)
+        {
+            payload = delta;
+            return true;
+        }
+
+        if (choice.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.Object)
+        {
+            payload = message;
+            return true;
+        }
+
+        payload = default;
+        return false;
     }
 
     private sealed class StreamingToolCallState
@@ -339,7 +472,57 @@ public sealed class OpenAiCompatibleChatModelClient(
             }).ToArray();
         }
 
+        if (string.Equals(message.Role, "assistant", StringComparison.Ordinal)
+            && message.ReasoningContent is not null)
+        {
+            result["reasoning_content"] = message.ReasoningContent;
+        }
+
         return result;
+    }
+
+    private static string? TryReadReasoningContent(JsonElement message)
+    {
+        if (message.TryGetProperty("reasoning_content", out var reasoningContent)
+            && reasoningContent.ValueKind == JsonValueKind.String)
+        {
+            return reasoningContent.GetString();
+        }
+
+        if (message.TryGetProperty("reasoning", out var reasoning) && reasoning.ValueKind == JsonValueKind.String)
+        {
+            return reasoning.GetString();
+        }
+
+        return null;
+    }
+
+    private static async Task AppendReasoningDelta(
+        JsonElement delta,
+        StringBuilder reasoningBuilder,
+        Func<string, Task>? onReasoningDelta)
+    {
+        string? tokenText = null;
+        if (delta.TryGetProperty("reasoning_content", out var reasoningContent)
+            && reasoningContent.ValueKind == JsonValueKind.String)
+        {
+            tokenText = reasoningContent.GetString();
+        }
+        else if (delta.TryGetProperty("reasoning", out var reasoning) && reasoning.ValueKind == JsonValueKind.String)
+        {
+            tokenText = reasoning.GetString();
+        }
+
+        if (string.IsNullOrEmpty(tokenText))
+        {
+            return;
+        }
+
+        reasoningBuilder.Append(tokenText);
+        if (onReasoningDelta is not null)
+        {
+            await onReasoningDelta(tokenText);
+        }
     }
 
     private static object ToOpenAiTool(ToolDefinition tool)

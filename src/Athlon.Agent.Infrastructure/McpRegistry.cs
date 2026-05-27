@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Athlon.Agent.Core;
 using Athlon.Agent.Mcp;
 
@@ -14,7 +15,7 @@ public interface IMcpRegistry
     Task<ToolResult> InvokeAsync(string serverName, string toolName, IReadOnlyDictionary<string, string> args, CancellationToken cancellationToken = default);
 }
 
-public sealed class McpRegistry(IAppLogger logger) : IMcpRegistry, IAsyncDisposable
+public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext workspaceContext) : IMcpRegistry, IAsyncDisposable
 {
     private readonly IAppLogger _logger = logger.ForContext("McpRegistry");
     private readonly ConcurrentDictionary<string, IMcpClient> _clients = new(StringComparer.OrdinalIgnoreCase);
@@ -80,7 +81,7 @@ public sealed class McpRegistry(IAppLogger logger) : IMcpRegistry, IAsyncDisposa
                     try { await existing.DisposeAsync(); } catch { /* ignore */ }
                 }
 
-                var client = CreateClient(name, server);
+                var client = CreateClient(name, server, workspaceContext.RootPath);
                 _clients[name] = client;
                 try
                 {
@@ -116,14 +117,35 @@ public sealed class McpRegistry(IAppLogger logger) : IMcpRegistry, IAsyncDisposa
             var argumentsJson = args.TryGetValue("argumentsJson", out var explicitJson) && !string.IsNullOrWhiteSpace(explicitJson)
                 ? explicitJson
                 : JsonSerializer.Serialize(args);
+            argumentsJson = NormalizeMcpArgumentsJson(serverName, toolName, argumentsJson, workspaceContext.RootPath);
 
             var resultJson = await client.CallToolAsync(toolName, argumentsJson, cancellationToken);
             _statuses[serverName] = client.Status;
+            if (McpResultIsError(resultJson))
+            {
+                return ToolResult.Failure($"MCP tool {toolName} failed.", resultJson);
+            }
+
             return ToolResult.Success($"MCP tool {toolName} returned.", resultJson);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _statuses[serverName] = client.Status with { State = McpConnectionState.Error, LastError = ex.Message };
+            if (ex is TimeoutException && _clients.TryRemove(serverName, out var deadClient))
+            {
+                _tools.TryRemove(serverName, out _);
+                try { await deadClient.DisposeAsync(); } catch { /* ignore */ }
+                _statuses[serverName] = new McpServerStatus(
+                    serverName,
+                    McpConnectionState.Error,
+                    "stdio",
+                    Array.Empty<McpTool>(),
+                    LastError: $"{ex.Message} (MCP process was restarted; refresh MCP servers.)");
+            }
+            else
+            {
+                _statuses[serverName] = client.Status with { State = McpConnectionState.Error, LastError = ex.Message };
+            }
+
             return ToolResult.Failure("MCP tool call failed", ex.Message);
         }
     }
@@ -136,25 +158,86 @@ public sealed class McpRegistry(IAppLogger logger) : IMcpRegistry, IAsyncDisposa
     private static bool IsSupportedTransport(string? transportType) =>
         McpTransportKinds.IsStdio(transportType) || McpTransportKinds.IsStreamableHttp(transportType);
 
-    private static IMcpClient CreateClient(string name, McpServerSettings server)
+    private static string NormalizeMcpArgumentsJson(string serverName, string toolName, string argumentsJson, string? workspaceRoot)
+    {
+        if (!string.Equals(serverName, "qwen-vision", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(toolName, "analyze_image", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(workspaceRoot))
+        {
+            return argumentsJson;
+        }
+
+        try
+        {
+            var node = JsonNode.Parse(argumentsJson) as JsonObject;
+            var image = node?["image"]?.GetValue<string>();
+            if (string.IsNullOrWhiteSpace(image) || Path.IsPathFullyQualified(image))
+            {
+                return argumentsJson;
+            }
+
+            node!["image"] = Path.GetFullPath(Path.Combine(workspaceRoot, image));
+            return node.ToJsonString();
+        }
+        catch
+        {
+            return argumentsJson;
+        }
+    }
+
+    private static bool McpResultIsError(string resultJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(resultJson);
+            return doc.RootElement.TryGetProperty("isError", out var isError)
+                && isError.ValueKind == JsonValueKind.True;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static IMcpClient CreateClient(string name, McpServerSettings server, string? workspaceRoot)
     {
         if (McpTransportKinds.IsStreamableHttp(server.TransportType))
         {
-            return new McpStreamableHttpClient(name, server.Url, server.Headers);
+            return new McpStreamableHttpClient(
+                name,
+                server.Url,
+                server.Headers,
+                defaultTimeout: McpClientDefaults.RequestTimeout);
         }
 
         var startInfo = new ProcessStartInfo
         {
             FileName = server.Command,
             Arguments = server.Args.Count == 0 ? string.Empty : string.Join(" ", server.Args),
-            WorkingDirectory = Environment.CurrentDirectory
+            WorkingDirectory = ResolveWorkingDirectory(server)
         };
         foreach (var (key, value) in server.Env)
         {
             startInfo.Environment[key] = value;
         }
 
-        return new McpStdioClient(name, startInfo);
+        if (!string.IsNullOrWhiteSpace(workspaceRoot)
+            && !startInfo.Environment.ContainsKey("VISION_WORKSPACE"))
+        {
+            startInfo.Environment["VISION_WORKSPACE"] = Path.GetFullPath(workspaceRoot);
+        }
+
+        return new McpStdioClient(name, startInfo, defaultTimeout: McpClientDefaults.RequestTimeout);
+    }
+
+    private static string ResolveWorkingDirectory(McpServerSettings server)
+    {
+        if (!string.IsNullOrWhiteSpace(server.WorkingDirectory))
+        {
+            return Path.GetFullPath(server.WorkingDirectory);
+        }
+
+        return Environment.CurrentDirectory;
     }
 
     public async ValueTask DisposeAsync()

@@ -84,4 +84,31 @@ internal static class McpJsonRpc
 
     public static string BuildPostBody(JsonObject request) =>
         request.ToJsonString(new JsonSerializerOptions { WriteIndented = false });
+
+    public static JsonObject CreateInitializeParams(string? clientName = null) =>
+        new()
+        {
+            ["protocolVersion"] = ProtocolVersion,
+            ["capabilities"] = new JsonObject(),
+            ["clientInfo"] = new JsonObject
+            {
+                ["name"] = clientName ?? "Athlon.Agent",
+                ["version"] = "0"
+            }
+        };
+
+    public static JsonObject CreateNotification(string method, JsonNode? parameters = null)
+    {
+        var notification = new JsonObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["method"] = method
+        };
+        if (parameters is not null)
+        {
+            notification["params"] = parameters;
+        }
+
+        return notification;
+    }
 }

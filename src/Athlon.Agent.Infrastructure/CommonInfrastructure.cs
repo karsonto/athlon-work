@@ -139,7 +139,8 @@ public static class SessionMarkdownWriter
 
         foreach (var message in session.Messages)
         {
-            lines.Add($"## {message.Role} - {message.CreatedAt:u}");
+            var roleLabel = message.Role == MessageRole.Compaction ? "Compaction" : message.Role.ToString();
+            lines.Add($"## {roleLabel} - {message.CreatedAt:u}");
             lines.Add("");
             lines.Add(message.Content);
             lines.Add("");

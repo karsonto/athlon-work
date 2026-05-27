@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -14,6 +16,8 @@ namespace Athlon.Agent.App.ViewModels;
 
 public partial class MainWindowViewModel : ObservableObject, IDisposable
 {
+    private static readonly TimeSpan TurnTimeout = TimeSpan.FromMinutes(10);
+
     private readonly IAgentOrchestrator _orchestrator;
     private readonly IFileStorageService _storage;
     private readonly ICredentialStore _credentialStore;
@@ -22,9 +26,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AppSettings _appSettings;
     private FileSystemWatcher? _workspaceWatcher;
     private CancellationTokenSource? _turnCancellation;
+    private CancellationTokenSource? _turnTimeoutCancellation;
+    private CancellationTokenSource? _turnLinkedCancellation;
     private AgentSession _session = AgentSession.Create("New Chat");
     private ChatMessageViewModel? _streamingAssistantMessage;
     private readonly StringBuilder _streamingTokenBuffer = new();
+    private readonly StringBuilder _streamingReasoningBuffer = new();
     private DispatcherTimer? _streamingFlushTimer;
 
     public MainWindowViewModel(
@@ -48,8 +55,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
         ApplySessionWorkspace();
+        Messages.CollectionChanged += OnMessagesCollectionChanged;
         _ = InitializeAsync();
     }
+
+    public bool HasChatMessages => Messages.Count > 0;
 
     private async Task RefreshMcpRuntimeAsync()
     {
@@ -128,7 +138,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task NewSession()
     {
-        _turnCancellation?.Cancel();
+        CancelTurn();
         await SaveCurrentSessionIfNeededAsync();
         _session = AgentSession.Create("New Chat");
         CurrentSessionTitle = _session.Title;
@@ -139,7 +149,57 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         CurrentPage = "Chat";
         ApplySessionWorkspace();
         await RefreshSessionHistoryAsync();
+        NotifyCommandStatesChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanClearContext))]
+    private async Task ClearContextAsync()
+    {
+        var confirm = MessageBox.Show(
+            "将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录）。\n\n会话 ID、工作区与标题会保留；磁盘上的 transcript 归档不会删除。\n\n下次发送消息时会重新构建系统提示（工作区、工具、技能等）。",
+            "清空上下文",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        CancelTurn();
+        ResetTurnUiState();
+
+        _session = _session.WithMessages(Array.Empty<ChatMessage>());
+        Messages.Clear();
+        StreamingText = string.Empty;
+
+        await _storage.SaveSessionAsync(_session);
+        SettingsStatus = "上下文已清空。";
+        NotifyCommandStatesChanged();
+    }
+
+    private bool CanClearContext() => Messages.Count > 0 && !IsBusy;
+
+    private void OnMessagesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasChatMessages));
+        ClearContextCommand.NotifyCanExecuteChanged();
+    }
+
+    private void ResetTurnUiState()
+    {
+        StopStreamingFlushTimer();
+        FlushStreamingTokens();
+        _streamingTokenBuffer.Clear();
+        _streamingReasoningBuffer.Clear();
+        _streamingAssistantMessage = null;
+        IsBusy = false;
+    }
+
+    private void NotifyCommandStatesChanged()
+    {
         SendCommand.NotifyCanExecuteChanged();
+        ClearContextCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(HasChatMessages));
     }
 
     [RelayCommand]
@@ -150,7 +210,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _turnCancellation?.Cancel();
+        CancelTurn();
         await SaveCurrentSessionIfNeededAsync();
         await LoadSessionInternalAsync(item.Id);
         CurrentPage = "Chat";
@@ -189,6 +249,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         await RefreshSessionHistoryAsync();
         SettingsStatus = "对话已删除。";
+        NotifyCommandStatesChanged();
     }
 
     [RelayCommand(CanExecute = nameof(CanSend))]
@@ -203,7 +264,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ComposerText = string.Empty;
         IsBusy = true;
         StreamingText = string.Empty;
-        _turnCancellation = new CancellationTokenSource();
+        BeginTurnCancellation();
         Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input)));
         RequestScrollToBottom();
         SyncWorkspaceContext();
@@ -227,6 +288,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 }),
                 OnMessage = async message => await RunOnUiAsync(() =>
                 {
+                    if (message.Role == MessageRole.User
+                        && CompactionMessageContent.IsCompressedPlaceholder(message.Content))
+                    {
+                        return;
+                    }
+
+                    if (message.Role == MessageRole.Compaction)
+                    {
+                        ClearStreamingAssistantPlaceholder();
+                        Messages.Add(new ChatMessageViewModel(message));
+                        RequestScrollToBottom();
+                        return;
+                    }
+
                     if (message.Role == MessageRole.Tool)
                     {
                         var toolCallId = ExtractToolCallId(message.Content);
@@ -260,17 +335,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     EnsureStreamingAssistantMessage();
                     _streamingTokenBuffer.Append(token);
                     ScheduleStreamingFlush();
+                }),
+                OnAssistantReasoningDelta = async token => await RunOnUiAsync(() =>
+                {
+                    EnsureStreamingAssistantMessage();
+                    _streamingReasoningBuffer.Append(token);
+                    ScheduleStreamingFlush();
                 })
             };
 
             _session = await Task.Run(
-                async () => await _orchestrator.SendAsync(_session, input, callbacks, _turnCancellation.Token).ConfigureAwait(false),
-                _turnCancellation.Token).ConfigureAwait(true);
+                async () => await _orchestrator.SendAsync(_session, input, callbacks, GetTurnCancellationToken()).ConfigureAwait(false),
+                GetTurnCancellationToken()).ConfigureAwait(true);
             CurrentSessionTitle = _session.Title;
             await SaveCurrentSessionIfNeededAsync();
         }
         catch (OperationCanceledException)
         {
+            var timedOut = IsTurnTimedOut();
             await RunOnUiAsync(() =>
             {
                 FlushStreamingTokens();
@@ -285,7 +367,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     message.MarkToolCancelled();
                 }
 
-                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, "生成已停止。")));
+                var notice = timedOut
+                    ? "本回合已超过 10 分钟，已自动停止。"
+                    : "生成已停止。";
+                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, notice)));
             });
 
             var reloaded = await _storage.LoadSessionAsync(_session.Id);
@@ -309,11 +394,44 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             StopStreamingFlushTimer();
             FlushStreamingTokens();
+            _streamingTokenBuffer.Clear();
+            _streamingReasoningBuffer.Clear();
             _streamingAssistantMessage = null;
             StreamingText = string.Empty;
+            ReconcilePendingToolsFromSession();
             IsBusy = false;
-            SendCommand.NotifyCanExecuteChanged();
+            DisposeTurnCancellation();
+            NotifyCommandStatesChanged();
         }
+    }
+
+    private void BeginTurnCancellation()
+    {
+        DisposeTurnCancellation();
+        _turnCancellation = new CancellationTokenSource();
+        _turnTimeoutCancellation = new CancellationTokenSource(TurnTimeout);
+        _turnLinkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            _turnCancellation.Token,
+            _turnTimeoutCancellation.Token);
+    }
+
+    private CancellationToken GetTurnCancellationToken() =>
+        _turnLinkedCancellation?.Token ?? CancellationToken.None;
+
+    private bool IsTurnTimedOut() =>
+        _turnTimeoutCancellation is { IsCancellationRequested: true }
+        && _turnCancellation is { IsCancellationRequested: false };
+
+    private void CancelTurn() => _turnCancellation?.Cancel();
+
+    private void DisposeTurnCancellation()
+    {
+        _turnLinkedCancellation?.Dispose();
+        _turnTimeoutCancellation?.Dispose();
+        _turnCancellation?.Dispose();
+        _turnLinkedCancellation = null;
+        _turnTimeoutCancellation = null;
+        _turnCancellation = null;
     }
 
     private void EnsureStreamingAssistantMessage()
@@ -332,13 +450,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         StopStreamingFlushTimer();
         _streamingTokenBuffer.Clear();
+        _streamingReasoningBuffer.Clear();
 
         if (_streamingAssistantMessage is null)
         {
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_streamingAssistantMessage.Content))
+        if (string.IsNullOrWhiteSpace(_streamingAssistantMessage.Content)
+            && string.IsNullOrWhiteSpace(_streamingAssistantMessage.ReasoningContent))
         {
             Messages.Remove(_streamingAssistantMessage);
         }
@@ -363,14 +483,30 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void FlushStreamingTokens()
     {
-        if (_streamingTokenBuffer.Length == 0 || _streamingAssistantMessage is null)
+        if (_streamingAssistantMessage is null)
         {
             return;
         }
 
-        _streamingAssistantMessage.AppendStreamingToken(_streamingTokenBuffer.ToString());
-        _streamingTokenBuffer.Clear();
-        RequestScrollToBottom();
+        var didFlush = false;
+        if (_streamingTokenBuffer.Length > 0)
+        {
+            _streamingAssistantMessage.AppendStreamingToken(_streamingTokenBuffer.ToString());
+            _streamingTokenBuffer.Clear();
+            didFlush = true;
+        }
+
+        if (_streamingReasoningBuffer.Length > 0)
+        {
+            _streamingAssistantMessage.AppendStreamingReasoningToken(_streamingReasoningBuffer.ToString());
+            _streamingReasoningBuffer.Clear();
+            didFlush = true;
+        }
+
+        if (didFlush)
+        {
+            RequestScrollToBottom();
+        }
     }
 
     private void RequestScrollToBottom() => ScrollChatToBottom?.Invoke();
@@ -397,6 +533,27 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             message.IsTool && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
     }
 
+    /// <summary>Sync any tool cards still marked running with persisted session tool messages.</summary>
+    private void ReconcilePendingToolsFromSession()
+    {
+        foreach (var message in Messages.Where(static message => message.IsToolRunning).ToList())
+        {
+            if (string.IsNullOrWhiteSpace(message.ToolCallId))
+            {
+                message.MarkToolCancelled();
+                continue;
+            }
+
+            var completed = _session.Messages.LastOrDefault(sessionMessage =>
+                sessionMessage.Role == MessageRole.Tool
+                && string.Equals(ExtractToolCallId(sessionMessage.Content), message.ToolCallId, StringComparison.Ordinal));
+            if (completed is not null)
+            {
+                message.ApplyCompletedTool(completed);
+            }
+        }
+    }
+
     private static string? ExtractToolCallId(string content)
     {
         foreach (var line in content.Replace("\r\n", "\n").Split('\n'))
@@ -408,6 +565,26 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         return null;
+    }
+
+    private static HashSet<string> BuildAnsweredToolCallIds(IReadOnlyList<ChatMessage> messages)
+    {
+        var answered = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var message in messages)
+        {
+            if (message.Role != MessageRole.Tool)
+            {
+                continue;
+            }
+
+            var toolCallId = ExtractToolCallId(message.Content);
+            if (!string.IsNullOrWhiteSpace(toolCallId))
+            {
+                answered.Add(toolCallId);
+            }
+        }
+
+        return answered;
     }
 
     private Task RunOnUiAsync(Action action)
@@ -423,7 +600,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void Stop() => _turnCancellation?.Cancel();
+    private void Stop() => CancelTurn();
 
     [RelayCommand]
     private async Task ConfigureWorkspaceAsync()
@@ -541,14 +718,55 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         StreamingText = string.Empty;
         Messages.Clear();
 
+        var answeredToolCallIds = BuildAnsweredToolCallIds(_session.Messages);
+
         foreach (var message in _session.Messages)
         {
+            if (message.Role == MessageRole.User
+                && CompactionMessageContent.IsCompressedPlaceholder(message.Content))
+            {
+                continue;
+            }
+
+            if (ChatMessageViewModel.IsAssistantToolCallsOnly(message))
+            {
+                continue;
+            }
+
             Messages.Add(new ChatMessageViewModel(message));
+
+            if (message.Role != MessageRole.Assistant)
+            {
+                continue;
+            }
+
+            var pendingCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
+            if (pendingCalls is null)
+            {
+                continue;
+            }
+
+            foreach (var toolCall in pendingCalls)
+            {
+                if (answeredToolCallIds.Contains(toolCall.Id))
+                {
+                    continue;
+                }
+
+                var orphanResult = AgentRuntime.FormatToolResult(
+                    toolCall,
+                    ToolResult.Failure(
+                        "工具未完成",
+                        "上次对话在工具执行时被中断，或 MCP 超时后子进程未返回。请重启应用并在侧边栏刷新 MCP 后重试。"));
+                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.Tool, orphanResult, message.ParentId)));
+                answeredToolCallIds.Add(toolCall.Id);
+            }
         }
 
         ApplySessionWorkspace();
         await RefreshSessionHistoryAsync();
         SettingsStatus = $"已加载对话：{_session.Title}";
+        NotifyCommandStatesChanged();
     }
 
     private static AgentSession DeriveSessionTitle(AgentSession session)
@@ -600,7 +818,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>Cancel in-flight work and release watchers before process exit.</summary>
     public void PrepareForShutdown()
     {
-        try { _turnCancellation?.Cancel(); } catch { /* ignore */ }
+        try { CancelTurn(); } catch { /* ignore */ }
         _workspaceWatcher?.Dispose();
         _workspaceWatcher = null;
         StopStreamingFlushTimer();
@@ -609,7 +827,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         PrepareForShutdown();
-        _turnCancellation?.Dispose();
+        DisposeTurnCancellation();
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();
     }
@@ -637,6 +855,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsChatPage));
         OnPropertyChanged(nameof(IsSettingsPage));
     }
+
+    partial void OnIsBusyChanged(bool value) => ClearContextCommand.NotifyCanExecuteChanged();
 
     partial void OnComposerTextChanged(string value)
     {

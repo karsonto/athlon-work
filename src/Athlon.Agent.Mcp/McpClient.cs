@@ -63,7 +63,7 @@ public sealed class McpStdioClient : IMcpClient
         _startInfo.RedirectStandardError = true;
         _startInfo.UseShellExecute = false;
         _startInfo.CreateNoWindow = true;
-        _defaultTimeout = defaultTimeout ?? TimeSpan.FromSeconds(30);
+        _defaultTimeout = defaultTimeout ?? McpClientDefaults.RequestTimeout;
     }
 
     public string Name { get; }
@@ -82,16 +82,11 @@ public sealed class McpStdioClient : IMcpClient
         _state = McpConnectionState.Connecting;
         try
         {
-            // Minimal initialize payload; servers that need richer capabilities can still accept this.
-            var payload = new JsonObject
-            {
-                ["clientInfo"] = new JsonObject
-                {
-                    ["name"] = clientName ?? "Athlon.Agent",
-                    ["version"] = "0"
-                }
-            };
-            _ = await SendRequestAsync("initialize", payload, cancellationToken);
+            _ = await SendRequestAsync(
+                "initialize",
+                McpJsonRpc.CreateInitializeParams(clientName),
+                cancellationToken);
+            await SendNotificationAsync("notifications/initialized", cancellationToken);
 
             _state = McpConnectionState.Connected;
             _lastError = null;
@@ -223,6 +218,12 @@ public sealed class McpStdioClient : IMcpClient
             {
                 pending.TrySetException(new TimeoutException($"MCP request timed out: {method} (server={Name})"));
             }
+
+            // A timed-out tools/call often leaves the Python MCP server busy; kill it so the next call starts fresh.
+            if (string.Equals(method, "tools/call", StringComparison.Ordinal))
+            {
+                InvalidateProcessAfterFailure($"tools/call timed out after {_defaultTimeout.TotalMinutes:0} min");
+            }
         });
 
         var request = new JsonObject
@@ -252,6 +253,63 @@ public sealed class McpStdioClient : IMcpClient
         }
 
         return await tcs.Task;
+    }
+
+    private async Task SendNotificationAsync(string method, CancellationToken cancellationToken)
+    {
+        var notification = McpJsonRpc.CreateNotification(method);
+        await _writeLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (_stdin is null)
+            {
+                throw new InvalidOperationException($"MCP stdin is not available for '{Name}'.");
+            }
+
+            await _stdin.WriteLineAsync(notification.ToJsonString(new JsonSerializerOptions { WriteIndented = false }));
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    private void InvalidateProcessAfterFailure(string reason)
+    {
+        try
+        {
+            if (_process is { HasExited: false })
+            {
+                _process.Kill(entireProcessTree: true);
+            }
+        }
+        catch
+        {
+            // ignore kill failures
+        }
+
+        try
+        {
+            _process?.Dispose();
+        }
+        catch
+        {
+            // ignore
+        }
+
+        _process = null;
+        _stdin = null;
+        _readLoop = null;
+        _state = McpConnectionState.Error;
+        _lastError = reason;
+
+        foreach (var entry in _pending.ToArray())
+        {
+            if (_pending.TryRemove(entry.Key, out var pending))
+            {
+                pending.TrySetException(new InvalidOperationException($"{reason} (server={Name})"));
+            }
+        }
     }
 
     private async Task ReadLoopAsync(StreamReader stdout, StreamReader stderr, CancellationToken cancellationToken)

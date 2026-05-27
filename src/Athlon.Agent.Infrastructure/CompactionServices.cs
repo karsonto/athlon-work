@@ -1,4 +1,4 @@
-using System.Text.Json;
+using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 
@@ -6,108 +6,222 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class PreCompletionPipeline(
     AppSettings settings,
-    MicrocompactService microcompactService,
-    IAutoCompactService autoCompactService,
+    TruncateArgsService truncateArgsService,
+    IConversationCompactor conversationCompactor,
     IAppLogger logger) : IPreCompletionPipeline
 {
     private readonly IAppLogger _logger = logger.ForContext("PreCompletionPipeline");
 
-    public async Task<AgentSession> RunAsync(AgentSession session, CancellationToken cancellationToken = default)
+    public async Task<AgentSession> RunAsync(
+        AgentSession session,
+        PreCompletionOptions? options = null,
+        CancellationToken cancellationToken = default)
     {
+        options ??= PreCompletionOptions.Default;
         var cfg = settings.ContextCompaction;
-        var messages = session.Messages.ToList();
-        var tokens = ContextTokenEstimator.Estimate(messages);
 
-        var keep = tokens >= cfg.MicrocompactAggressiveTokenThreshold
-            ? cfg.MicrocompactKeepToolMessagesAggressive
-            : cfg.MicrocompactKeepToolMessages;
+        if (options.AllowTruncateArgs)
+        {
+            session = truncateArgsService.ApplyIfNeeded(session, cfg);
+        }
 
-        microcompactService.Apply(messages, keep, cfg.MicrocompactMinContentLength);
-        session = session.WithMessages(messages);
-
-        tokens = ContextTokenEstimator.Estimate(session.Messages);
-        if (tokens < cfg.AutoCompactTokenThreshold)
+        if (!options.AllowConversationCompact)
         {
             return session;
         }
 
-        _logger.Information(
-            "Auto-compacting session {SessionId} at estimated {EstimatedTokens} tokens (threshold {Threshold})",
-            session.Id,
-            tokens,
-            cfg.AutoCompactTokenThreshold);
+        var kind = options.CompactionKind;
 
-        return await autoCompactService.CompactAsync(session, cancellationToken);
+        var compactResult = await conversationCompactor.CompactIfNeededAsync(
+            session,
+            kind,
+            options.ForceConversationCompact,
+            options.EmitCompactionAudit,
+            cancellationToken);
+
+        if (compactResult.Compacted)
+        {
+            _logger.Information(
+                "Conversation compact applied for session {SessionId}",
+                session.Id);
+        }
+
+        return compactResult.Session;
     }
 }
 
-public sealed class AutoCompactService(
+public sealed class ConversationCompactor(
     AppSettings settings,
     IAgentModelClient modelClient,
     IFileStorageService storage,
-    IAppLogger logger) : IAutoCompactService
+    IAppLogger logger) : IConversationCompactor
 {
-    private readonly IAppLogger _logger = logger.ForContext("AutoCompactService");
+    private readonly IAppLogger _logger = logger.ForContext("ConversationCompactor");
 
-    public async Task<AgentSession> CompactAsync(AgentSession session, CancellationToken cancellationToken = default)
+    public async Task<ConversationCompactResult> CompactIfNeededAsync(
+        AgentSession session,
+        CompactionKind kind,
+        bool force,
+        bool emitAudit,
+        CancellationToken cancellationToken = default)
     {
         var cfg = settings.ContextCompaction;
-        var originalCount = session.Messages.Count;
-        var transcriptPath = await storage.SaveTranscriptAsync(session.Id, session.Messages, cancellationToken);
-
-        var conversationJson = JsonSerializer.Serialize(session.Messages, JsonFileStore.JsonLineOptions);
-        if (conversationJson.Length > cfg.MaxConversationCharsForSummary)
+        var filtered = SummaryMessageBuilder.FilterSummaryMessages(session.Messages);
+        if (filtered.Count == 0)
         {
-            conversationJson = conversationJson[^cfg.MaxConversationCharsForSummary..];
+            return new ConversationCompactResult(session, false);
         }
 
-        var summaryRequest = new AgentModelRequest(
-            new[]
-            {
-                new AgentModelMessage("user", "Summarize for continuity:\n" + conversationJson)
-            },
-            Array.Empty<ToolDefinition>(),
-            AllowToolCalls: false,
-            MaxTokens: cfg.SummaryMaxTokens);
+        var estimatedTokens = ContextTokenEstimator.Estimate(filtered);
+        if (!ConversationCutoffPlanner.ShouldCompact(filtered, estimatedTokens, cfg, force))
+        {
+            return new ConversationCompactResult(session, false);
+        }
 
-        var summaryResponse = await modelClient.CompleteAsync(summaryRequest, cancellationToken: cancellationToken);
+        var cutoff = ConversationCutoffPlanner.DetermineCutoffIndex(filtered, estimatedTokens, cfg);
+        cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(filtered, cutoff);
+        if (cutoff <= 0)
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
+        var prefix = filtered.Take(cutoff).ToList();
+        var tail = filtered.Skip(cutoff).ToList();
+        var originalCount = filtered.Count;
+        var tokensBefore = estimatedTokens;
+
+        string? transcriptPath = null;
+        if (cfg.OffloadBeforeCompact)
+        {
+            transcriptPath = await storage.SaveTranscriptAsync(session.Id, session.Messages, cancellationToken);
+        }
+
+        var formatted = ConversationSummaryFormatter.FormatMessages(prefix);
+        if (formatted.Length > cfg.MaxConversationCharsForSummary)
+        {
+            formatted = formatted[^cfg.MaxConversationCharsForSummary..];
+        }
+
+        var prompt = cfg.SummaryPrompt.Replace("{messages}", formatted, StringComparison.Ordinal);
+        var summaryResponse = await modelClient.CompleteAsync(
+            new AgentModelRequest(
+                new[] { new AgentModelMessage("user", prompt) },
+                Array.Empty<ToolDefinition>(),
+                AllowToolCalls: false,
+                MaxTokens: cfg.SummaryMaxTokens),
+            cancellationToken: cancellationToken);
+
         var summary = summaryResponse.Content.Trim();
         if (string.IsNullOrWhiteSpace(summary))
         {
             summary = "(empty summary)";
         }
 
-        var compressedContent = $"[Compressed. Transcript: {transcriptPath}]\n{summary}";
-        var compressedMessage = ChatMessage.Create(MessageRole.User, compressedContent);
-        session = session.WithMessages(new[] { compressedMessage });
-        await storage.AppendConversationMessageAsync(session.Id, compressedMessage, cancellationToken);
+        var summaryMessage = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath);
+        var compactMessages = new List<ChatMessage>();
 
-        var contextSummary = new ContextSummary(
-            Guid.NewGuid().ToString("N"),
-            session.Id,
-            summary,
-            originalCount,
-            DateTimeOffset.UtcNow);
+        var auditKind = kind == CompactionKind.ManualCompact
+            ? CompactionKind.ManualCompact
+            : CompactionKind.ConversationCompact;
 
-        await storage.SaveContextSummaryAsync(contextSummary, cancellationToken);
-        await storage.SaveSessionAsync(session, cancellationToken);
-
-        var afterTokens = ContextTokenEstimator.Estimate(session.Messages);
-        if (afterTokens >= cfg.MicrocompactAggressiveTokenThreshold)
+        if (emitAudit)
         {
-            _logger.Warning(
-                "Session {SessionId} still has high estimated tokens ({EstimatedTokens}) after compact",
-                session.Id,
-                afterTokens);
+            var tokensAfterPreview = ContextTokenEstimator.Estimate(new[] { summaryMessage }.Concat(tail).ToArray());
+            var auditContent = auditKind == CompactionKind.ManualCompact
+                ? CompactionMessageContent.CreateManualCompact(
+                    tokensBefore,
+                    tokensAfterPreview,
+                    originalCount,
+                    transcriptPath ?? string.Empty,
+                    summary)
+                : CompactionMessageContent.CreateConversationCompact(
+                    tokensBefore,
+                    tokensAfterPreview,
+                    originalCount,
+                    transcriptPath,
+                    summary);
+            compactMessages.Add(CompactionMessageContent.CreateCompactionMessage(auditContent));
         }
 
+        compactMessages.Add(summaryMessage);
+        compactMessages.AddRange(tail);
+
+        await storage.SaveContextSummaryAsync(
+            new ContextSummary(
+                Guid.NewGuid().ToString("N"),
+                session.Id,
+                summary,
+                originalCount,
+                DateTimeOffset.UtcNow),
+            cancellationToken);
+
+        session = session.WithMessages(compactMessages);
+
         _logger.Information(
-            "Compacted session {SessionId} from {OriginalCount} messages to 1 (transcript {TranscriptPath})",
+            "Compacted session {SessionId} from {OriginalCount} to {ResultCount} messages (kind {Kind}, force {Force})",
             session.Id,
             originalCount,
-            transcriptPath);
+            session.Messages.Count,
+            auditKind,
+            force);
 
-        return session;
+        return new ConversationCompactResult(session, true);
+    }
+}
+
+public sealed class ToolResultEvictor(
+    AppSettings settings,
+    IFileStorageService storage) : IToolResultEvictor
+{
+    public async Task<string> EvictIfNeededAsync(
+        string sessionId,
+        AgentToolCall toolCall,
+        ToolResult result,
+        string formattedToolContent,
+        CancellationToken cancellationToken = default)
+    {
+        var cfg = settings.ContextCompaction.ToolResultEviction;
+        if (!cfg.Enabled)
+        {
+            return formattedToolContent;
+        }
+
+        if (cfg.ExcludedToolNames.Any(name =>
+                string.Equals(name, toolCall.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            return formattedToolContent;
+        }
+
+        var rawContent = result.Content ?? string.Empty;
+        if (rawContent.Length <= cfg.MaxResultChars)
+        {
+            return formattedToolContent;
+        }
+
+        var path = await storage.SaveEvictedToolResultAsync(sessionId, toolCall.Id, rawContent, cancellationToken);
+        var preview = BuildPreview(rawContent, cfg.PreviewChars);
+        var placeholder = new StringBuilder()
+            .AppendLine($"[Tool result evicted - {rawContent.Length} chars]")
+            .AppendLine($"Archived at: {path}")
+            .AppendLine("Preview:")
+            .Append(preview)
+            .ToString();
+
+        return AgentRuntime.FormatToolResult(
+            toolCall,
+            ToolResult.Success(result.Summary, placeholder));
+    }
+
+    private static string BuildPreview(string content, int previewChars)
+    {
+        if (content.Length <= previewChars * 2)
+        {
+            return content;
+        }
+
+        var head = content[..previewChars];
+        var tail = content[^previewChars..];
+        return head + "\n...\n" + tail;
     }
 }
 

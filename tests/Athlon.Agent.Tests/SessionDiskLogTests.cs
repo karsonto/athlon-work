@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -94,7 +95,7 @@ public sealed class SessionDiskLogTests
             new EmptyToolRouter(),
             new StaticPromptBuilder(),
             new NoOpPreCompletionPipeline(),
-            new NoOpAutoCompactService(),
+            new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
             new NoOpLogger());
 
@@ -123,7 +124,7 @@ public sealed class SessionDiskLogTests
 
     private sealed class CancelOnFirstCallModelClient : IAgentModelClient
     {
-        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, CancellationToken cancellationToken = default) =>
+        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, Func<string, Task>? onReasoningDelta = null, CancellationToken cancellationToken = default) =>
             Task.FromCanceled<AgentModelResponse>(cancellationToken);
     }
 
@@ -142,14 +143,22 @@ public sealed class SessionDiskLogTests
 
     private sealed class NoOpPreCompletionPipeline : IPreCompletionPipeline
     {
-        public Task<AgentSession> RunAsync(AgentSession session, CancellationToken cancellationToken = default) =>
+        public Task<AgentSession> RunAsync(
+            AgentSession session,
+            PreCompletionOptions? options = null,
+            CancellationToken cancellationToken = default) =>
             Task.FromResult(session);
     }
 
-    private sealed class NoOpAutoCompactService : IAutoCompactService
+    private sealed class PassThroughToolResultEvictor : IToolResultEvictor
     {
-        public Task<AgentSession> CompactAsync(AgentSession session, CancellationToken cancellationToken = default) =>
-            Task.FromResult(session);
+        public Task<string> EvictIfNeededAsync(
+            string sessionId,
+            AgentToolCall toolCall,
+            ToolResult result,
+            string formattedToolContent,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(formattedToolContent);
     }
 
     private sealed class NoOpActiveAgentSessionContext : IActiveAgentSessionContext

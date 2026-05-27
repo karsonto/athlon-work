@@ -9,7 +9,8 @@ public sealed record AgentModelMessage(
     string Role,
     string Content,
     string? ToolCallId = null,
-    IReadOnlyList<AgentToolCall>? ToolCalls = null);
+    IReadOnlyList<AgentToolCall>? ToolCalls = null,
+    string? ReasoningContent = null);
 public sealed record AgentToolCall(
     string Id,
     string Name,
@@ -21,11 +22,13 @@ public sealed record AgentModelRequest(
     int? MaxTokens = null);
 public sealed record AgentModelResponse(
     string Content,
-    IReadOnlyList<AgentToolCall> ToolCalls);
+    IReadOnlyList<AgentToolCall> ToolCalls,
+    string? ReasoningContent = null);
 public interface IAgentModelClient
 {
     Task<AgentModelResponse> CompleteAsync(
         AgentModelRequest request,
         Func<string, Task>? onTextDelta = null,
+        Func<string, Task>? onReasoningDelta = null,
         CancellationToken cancellationToken = default);
 }

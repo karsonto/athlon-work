@@ -35,7 +35,7 @@ public sealed class McpStreamableHttpClient : IMcpClient
         Name = name;
         _endpoint = new Uri(endpointUrl, UriKind.Absolute);
         _headers = headers ?? new Dictionary<string, string>();
-        _defaultTimeout = defaultTimeout ?? TimeSpan.FromSeconds(60);
+        _defaultTimeout = defaultTimeout ?? McpClientDefaults.RequestTimeout;
         _httpClient = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: true);
         _httpClient.Timeout = _defaultTimeout;
     }
@@ -54,18 +54,10 @@ public sealed class McpStreamableHttpClient : IMcpClient
         _state = McpConnectionState.Connecting;
         try
         {
-            var payload = new JsonObject
-            {
-                ["protocolVersion"] = McpJsonRpc.ProtocolVersion,
-                ["capabilities"] = new JsonObject(),
-                ["clientInfo"] = new JsonObject
-                {
-                    ["name"] = clientName ?? "Athlon.Agent",
-                    ["version"] = "0"
-                }
-            };
+            var payload = McpJsonRpc.CreateInitializeParams(clientName);
 
             _ = await SendRequestAsync("initialize", payload, cancellationToken);
+            await SendInitializedNotificationAsync(cancellationToken);
             _state = McpConnectionState.Connected;
             _lastError = null;
         }
@@ -170,6 +162,52 @@ public sealed class McpStreamableHttpClient : IMcpClient
             }
 
             return McpJsonRpc.ParseResultFromJsonBody(body, id);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private Task SendInitializedNotificationAsync(CancellationToken cancellationToken) =>
+        SendNotificationAsync("notifications/initialized", cancellationToken);
+
+    private async Task SendNotificationAsync(string method, CancellationToken cancellationToken)
+    {
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(McpStreamableHttpClient));
+        }
+
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            var notificationJson = McpJsonRpc.BuildPostBody(McpJsonRpc.CreateNotification(method));
+            using var request = new HttpRequestMessage(HttpMethod.Post, _endpoint)
+            {
+                Content = new StringContent(notificationJson, Encoding.UTF8, "application/json")
+            };
+
+            request.Headers.TryAddWithoutValidation("Mcp-Protocol-Version", McpJsonRpc.ProtocolVersion);
+            if (!string.IsNullOrWhiteSpace(_sessionId))
+            {
+                request.Headers.TryAddWithoutValidation("Mcp-Session-Id", _sessionId);
+            }
+
+            foreach (var (key, value) in _headers)
+            {
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    request.Headers.TryAddWithoutValidation(key, value);
+                }
+            }
+
+            using var response = await _httpClient.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                throw new HttpRequestException($"MCP notification HTTP {(int)response.StatusCode}: {body}");
+            }
         }
         finally
         {

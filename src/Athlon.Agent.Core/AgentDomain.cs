@@ -11,17 +11,32 @@ public enum MessageRole
     User,
     Assistant,
     Tool,
-    Summary
+    Summary,
+    Compaction
 }
 public sealed record ChatMessage(
     string Id,
     MessageRole Role,
     string Content,
     DateTimeOffset CreatedAt,
-    string? ParentId = null)
+    string? ParentId = null,
+    string? ToolCallsJson = null,
+    string? ReasoningContent = null)
 {
-    public static ChatMessage Create(MessageRole role, string content, string? parentId = null) =>
-        new(Guid.NewGuid().ToString("N"), role, content, DateTimeOffset.UtcNow, parentId);
+    public static ChatMessage Create(
+        MessageRole role,
+        string content,
+        string? parentId = null,
+        IReadOnlyList<AgentToolCall>? toolCalls = null,
+        string? reasoningContent = null) =>
+        new(
+            Guid.NewGuid().ToString("N"),
+            role,
+            content,
+            DateTimeOffset.UtcNow,
+            parentId,
+            AssistantToolCallsCodec.Serialize(toolCalls ?? Array.Empty<AgentToolCall>()),
+            reasoningContent);
 }
 public sealed record AgentSession(
     string Id,

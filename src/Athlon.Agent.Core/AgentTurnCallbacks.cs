@@ -7,4 +7,6 @@ public sealed class AgentTurnCallbacks
     public Func<AgentToolCall, Task>? OnToolStarted { get; init; }
 
     public Func<string, Task>? OnAssistantTextDelta { get; init; }
+
+    public Func<string, Task>? OnAssistantReasoningDelta { get; init; }
 }

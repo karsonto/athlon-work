@@ -56,6 +56,9 @@ public sealed class McpServerSettings
     public Dictionary<string, string> Env { get; set; } = new();
     /// <summary>Optional HTTP headers (e.g. Authorization) for streamable HTTP transport.</summary>
     public Dictionary<string, string> Headers { get; set; } = new();
+
+    /// <summary>Working directory for stdio MCP server process (Claude Desktop <c>cwd</c>).</summary>
+    public string WorkingDirectory { get; set; } = string.Empty;
 }
 public sealed class SkillSettings
 {

@@ -8,16 +8,15 @@ namespace Athlon.Agent.Tests;
 public sealed class CompactionTests
 {
     [Fact]
-    public void ContextCompactionSettings_AutoCompactThreshold_IsEightyPercentOfWindow()
+    public void ContextCompactionSettings_UsesAgentScopeDefaults()
     {
-        var settings = new ContextCompactionSettings
-        {
-            ContextWindowTokens = 256_000,
-            AutoCompactThresholdRatio = 0.80
-        };
+        var settings = new ContextCompactionSettings();
 
-        Assert.Equal(204_800, settings.AutoCompactTokenThreshold);
-        Assert.Equal(128_000, settings.MicrocompactAggressiveTokenThreshold);
+        Assert.Equal(50, settings.TriggerMessages);
+        Assert.Equal(80_000, settings.TriggerTokens);
+        Assert.Equal(20, settings.KeepMessages);
+        Assert.Equal(2_000, settings.TruncateArgs.MaxArgLength);
+        Assert.Equal(80_000, settings.ToolResultEviction.MaxResultChars);
     }
 
     [Fact]
@@ -33,78 +32,92 @@ public sealed class CompactionTests
     }
 
     [Fact]
-    public void MicrocompactService_ClearsOlderToolMessages()
+    public void ConversationCutoffPlanner_FindSafeCutoff_DoesNotSplitToolPair()
     {
-        var service = new MicrocompactService();
-        var messages = Enumerable.Range(0, 10)
-            .Select(_ => ChatMessage.Create(MessageRole.Tool, new string('o', 200)))
-            .ToList();
+        var assistant = ChatMessage.Create(
+            MessageRole.Assistant,
+            string.Empty,
+            toolCalls: new[] { new AgentToolCall("call-1", "file_read", new Dictionary<string, string>()) });
+        var tool = ChatMessage.Create(MessageRole.Tool, "output");
+        var messages = new[] { assistant, tool };
 
-        service.Apply(messages, keepToolMessages: 3);
-
-        for (var i = 0; i < 7; i++)
-        {
-            Assert.Equal(MicrocompactService.ClearedContent, messages[i].Content);
-        }
-
-        for (var i = 7; i < 10; i++)
-        {
-            Assert.Equal(200, messages[i].Content.Length);
-        }
+        var cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(messages, 1);
+        Assert.Equal(0, cutoff);
     }
 
     [Fact]
-    public async Task PreCompletionPipeline_BelowThreshold_OnlyMicrocompacts()
+    public void SummaryMessageBuilder_FiltersOldSummaryMessages()
+    {
+        var summary = SummaryMessageBuilder.CreateSummaryPlaceholder("old summary", null);
+        var user = ChatMessage.Create(MessageRole.User, "hello");
+        var filtered = SummaryMessageBuilder.FilterSummaryMessages(new[] { summary, user });
+
+        Assert.Single(filtered);
+        Assert.Equal("hello", filtered[0].Content);
+    }
+
+    [Fact]
+    public async Task PreCompletionPipeline_BelowThreshold_DoesNotCompact()
     {
         var settings = new AppSettings
         {
             ContextCompaction = new ContextCompactionSettings
             {
-                ContextWindowTokens = 256_000,
-                AutoCompactThresholdRatio = 0.80
+                TriggerMessages = 100,
+                TriggerTokens = 1_000_000
             }
         };
 
-        var messages = Enumerable.Range(0, 10)
-            .Select(_ => ChatMessage.Create(MessageRole.Tool, new string('o', 200)))
-            .ToList();
-        var session = AgentSession.Create("test").WithMessages(messages);
-
-        var autoCompact = new FakeAutoCompactService();
-        var pipeline = new PreCompletionPipeline(settings, new MicrocompactService(), autoCompact, new NoOpLogger());
-
-        var result = await pipeline.RunAsync(session);
-
-        Assert.Equal(0, autoCompact.CallCount);
-        Assert.Equal(MicrocompactService.ClearedContent, result.Messages[0].Content);
-    }
-
-    [Fact]
-    public async Task PreCompletionPipeline_AboveThreshold_TriggersAutoCompact()
-    {
-        var settings = new AppSettings
-        {
-            ContextCompaction = new ContextCompactionSettings
-            {
-                ContextWindowTokens = 256_000,
-                AutoCompactThresholdRatio = 0.80
-            }
-        };
-
-        var largeContent = new string('x', 900_000);
         var session = AgentSession.Create("test")
-            .WithMessages(new[] { ChatMessage.Create(MessageRole.User, largeContent) });
+            .WithMessages(new[] { ChatMessage.Create(MessageRole.User, "hello") });
 
-        var autoCompact = new FakeAutoCompactService();
-        var pipeline = new PreCompletionPipeline(settings, new MicrocompactService(), autoCompact, new NoOpLogger());
+        var compactor = new FakeConversationCompactor(settings);
+        var pipeline = new PreCompletionPipeline(
+            settings,
+            new TruncateArgsService(),
+            compactor,
+            new NoOpLogger());
 
-        await pipeline.RunAsync(session);
+        var result = await pipeline.RunAsync(session, PreCompletionOptions.AgentLoop);
 
-        Assert.Equal(1, autoCompact.CallCount);
+        Assert.Equal(0, compactor.CallCount);
+        Assert.Single(result.Messages);
     }
 
     [Fact]
-    public async Task AutoCompactService_ReplacesMessagesAndWritesTranscript()
+    public async Task PreCompletionPipeline_AboveThreshold_TriggersConversationCompact()
+    {
+        var settings = new AppSettings
+        {
+            ContextCompaction = new ContextCompactionSettings
+            {
+                TriggerMessages = 2,
+                KeepMessages = 1
+            }
+        };
+
+        var session = AgentSession.Create("test")
+            .WithMessages(new[]
+            {
+                ChatMessage.Create(MessageRole.User, "one"),
+                ChatMessage.Create(MessageRole.Assistant, "two"),
+                ChatMessage.Create(MessageRole.User, "three")
+            });
+
+        var compactor = new FakeConversationCompactor(settings);
+        var pipeline = new PreCompletionPipeline(
+            settings,
+            new TruncateArgsService(),
+            compactor,
+            new NoOpLogger());
+
+        await pipeline.RunAsync(session, PreCompletionOptions.AgentLoop);
+
+        Assert.Equal(1, compactor.CallCount);
+    }
+
+    [Fact]
+    public async Task ConversationCompactor_ReplacesPrefixWithSummaryAndTail()
     {
         var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
         var paths = new TestAppPathProvider(root);
@@ -116,6 +129,8 @@ public sealed class CompactionTests
             {
                 ContextCompaction = new ContextCompactionSettings
                 {
+                    TriggerMessages = 2,
+                    KeepMessages = 1,
                     SummaryMaxTokens = 512,
                     MaxConversationCharsForSummary = 10_000
                 }
@@ -130,17 +145,24 @@ public sealed class CompactionTests
                     ChatMessage.Create(MessageRole.Tool, "tool output")
                 });
 
-            var autoCompact = new AutoCompactService(
+            var compactor = new ConversationCompactor(
                 settings,
                 new FakeModelClient("summary text"),
                 storage,
                 new NoOpLogger());
 
-            var result = await autoCompact.CompactAsync(session);
+            var result = await compactor.CompactIfNeededAsync(
+                session,
+                CompactionKind.ConversationCompact,
+                force: false,
+                emitAudit: true);
 
-            Assert.Single(result.Messages);
-            Assert.Contains("Transcript:", result.Messages[0].Content, StringComparison.Ordinal);
-            Assert.Contains("summary text", result.Messages[0].Content, StringComparison.Ordinal);
+            Assert.True(result.Compacted);
+            Assert.Equal(3, result.Session.Messages.Count);
+            Assert.Equal(MessageRole.Compaction, result.Session.Messages[0].Role);
+            Assert.Contains("conversationcompact", result.Session.Messages[0].Content, StringComparison.OrdinalIgnoreCase);
+            Assert.True(SummaryMessageBuilder.IsSummaryMessage(result.Session.Messages[1]));
+            Assert.Equal(MessageRole.Tool, result.Session.Messages[2].Role);
 
             var transcriptDir = Path.Combine(paths.SessionsPath, session.Id, "transcripts");
             Assert.True(Directory.Exists(transcriptDir));
@@ -155,23 +177,83 @@ public sealed class CompactionTests
         }
     }
 
-    private sealed class FakeAutoCompactService : IAutoCompactService
+    [Fact]
+    public void CompactionMessageContent_IsSummaryPlaceholder_DetectsMarker()
+    {
+        var content = $"{ConversationCompactionDefaults.SummaryMessageMarker}\nsummary";
+        Assert.True(CompactionMessageContent.IsSummaryPlaceholder(content));
+    }
+
+    [Fact]
+    public async Task FileStorageService_RoundTripsCompactionMessage()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-rt", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore());
+            var audit = CompactionMessageContent.CreateCompactionMessage(
+                CompactionMessageContent.CreateConversationCompact(100, 80, 3, "fake.jsonl", "summary"));
+            var session = AgentSession.Create("rt").WithMessage(audit);
+            await storage.SaveSessionAsync(session);
+
+            var loaded = await storage.LoadSessionAsync(session.Id);
+            Assert.NotNull(loaded);
+            Assert.Contains(loaded.Messages, message => message.Role == MessageRole.Compaction);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    private sealed class FakeConversationCompactor(AppSettings settings) : IConversationCompactor
     {
         public int CallCount { get; private set; }
 
-        public Task<AgentSession> CompactAsync(AgentSession session, CancellationToken cancellationToken = default)
+        public Task<ConversationCompactResult> CompactIfNeededAsync(
+            AgentSession session,
+            CompactionKind kind,
+            bool force,
+            bool emitAudit,
+            CancellationToken cancellationToken = default)
         {
-            CallCount++;
-            return Task.FromResult(session.WithMessages(new[]
+            var cfg = settings.ContextCompaction;
+
+            if (!ConversationCutoffPlanner.ShouldCompact(
+                    session.Messages,
+                    ContextTokenEstimator.Estimate(session.Messages),
+                    cfg,
+                    force))
             {
-                ChatMessage.Create(MessageRole.User, "[Compressed. Transcript: fake]\nsummary")
-            }));
+                return Task.FromResult(new ConversationCompactResult(session, false));
+            }
+
+            CallCount++;
+            var audit = CompactionMessageContent.CreateCompactionMessage(
+                CompactionMessageContent.CreateConversationCompact(1, 1, session.Messages.Count, "fake.jsonl", "summary"));
+            return Task.FromResult(new ConversationCompactResult(
+                session.WithMessages(new[]
+                {
+                    audit,
+                    SummaryMessageBuilder.CreateSummaryPlaceholder("summary", null)
+                }),
+                true));
         }
     }
 
     private sealed class FakeModelClient(string content) : IAgentModelClient
     {
-        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, CancellationToken cancellationToken = default) =>
+        public Task<AgentModelResponse> CompleteAsync(
+            AgentModelRequest request,
+            Func<string, Task>? onTextDelta = null,
+            Func<string, Task>? onReasoningDelta = null,
+            CancellationToken cancellationToken = default) =>
             Task.FromResult(new AgentModelResponse(content, Array.Empty<AgentToolCall>()));
     }
 
@@ -184,7 +266,7 @@ public sealed class CompactionTests
         public IAppLogger ForContext(string sourceContext) => this;
     }
 
-    private sealed class TestAppPathProvider(string root) : IAppPathProvider
+    internal sealed class TestAppPathProvider(string root) : IAppPathProvider
     {
         public string RootPath { get; } = root;
         public string ConfigPath => Path.Combine(RootPath, "config");

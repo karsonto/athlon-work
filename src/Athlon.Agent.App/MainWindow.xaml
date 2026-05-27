@@ -255,7 +255,50 @@
                         </Style.Triggers>
                     </Style>
                 </Grid.Style>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
+                <!-- Session toolbar -->
+                <Border Grid.Row="0"
+                        Background="{StaticResource Brush.Chrome}"
+                        BorderBrush="{StaticResource Brush.Border}"
+                        BorderThickness="0,0,0,1"
+                        Padding="20,10">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasChatMessages}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{Binding CurrentSessionTitle}"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   Margin="0,0,12,0" />
+                        <Button Grid.Column="1"
+                                Content="清空上下文"
+                                Command="{Binding ClearContextCommand}"
+                                Style="{StaticResource GhostButtonStyle}"
+                                Padding="10,4"
+                                FontSize="12"
+                                MinHeight="28"
+                                ToolTip="清空当前对话在模型中的可见历史；会话与工作区保留，磁盘 transcript 归档不删除。" />
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1" ClipToBounds="True">
                 <!-- Empty state (EmptyConversation) -->
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="720">
                     <StackPanel.Style>
@@ -369,7 +412,7 @@
                                                 <Style TargetType="Border">
                                                     <Setter Property="Visibility" Value="Collapsed" />
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsTool}" Value="True">
+                                                        <DataTrigger Binding="{Binding IsCollapsibleCard}" Value="True">
                                                             <Setter Property="Visibility" Value="Visible" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
@@ -394,7 +437,7 @@
                                                                    VerticalAlignment="Center"
                                                                    Margin="0,0,8,0" />
                                                         <StackPanel Grid.Column="1">
-                                                            <TextBlock Text="工具调用"
+                                                            <TextBlock Text="{Binding CardTitle}"
                                                                        FontSize="12"
                                                                        FontWeight="SemiBold"
                                                                        Foreground="{StaticResource Brush.ToolThinkingText}" />
@@ -494,7 +537,10 @@
                                                             <Setter Property="HorizontalAlignment" Value="Left" />
                                                             <Setter Property="MaxWidth" Value="520" />
                                                         </DataTrigger>
-                                                        <DataTrigger Binding="{Binding IsTool}" Value="True">
+                                                        <DataTrigger Binding="{Binding IsCollapsibleCard}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding IsHiddenPlaceholder}" Value="True">
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
@@ -513,6 +559,83 @@
                                                         </Style>
                                                     </TextBlock.Style>
                                                 </TextBlock>
+                                                <!-- Reasoning block: collapsible thinking-style, default expanded -->
+                                                <Border CornerRadius="16"
+                                                        BorderThickness="1"
+                                                        Background="{StaticResource Brush.ToolThinkingBg}"
+                                                        BorderBrush="{StaticResource Brush.ToolThinkingBorder}"
+                                                        Margin="0,0,0,12"
+                                                        ClipToBounds="True">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasReasoning}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <StackPanel>
+                                                        <Button Command="{Binding ToggleReasoningExpandCommand}"
+                                                                Background="Transparent"
+                                                                BorderThickness="0"
+                                                                Padding="12,10"
+                                                                HorizontalContentAlignment="Stretch"
+                                                                Cursor="Hand">
+                                                            <Grid>
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Text="{Binding ReasoningChevronGlyph}"
+                                                                           Foreground="{StaticResource Brush.ToolThinkingText}"
+                                                                           FontSize="11"
+                                                                           VerticalAlignment="Center"
+                                                                           Margin="0,0,8,0" />
+                                                                <StackPanel Grid.Column="1">
+                                                                    <TextBlock Text="思考过程"
+                                                                               FontSize="12"
+                                                                               FontWeight="SemiBold"
+                                                                               Foreground="{StaticResource Brush.ToolThinkingText}" />
+                                                                    <TextBlock Text="思考中…"
+                                                                               FontSize="11"
+                                                                               Foreground="#86EFAC"
+                                                                               Margin="0,4,0,0">
+                                                                        <TextBlock.Style>
+                                                                            <Style TargetType="TextBlock">
+                                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding IsReasoningStreaming}" Value="True">
+                                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </TextBlock.Style>
+                                                                    </TextBlock>
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </Button>
+                                                        <Border BorderBrush="{StaticResource Brush.ToolThinkingBorder}"
+                                                                BorderThickness="0,1,0,0">
+                                                            <Border.Style>
+                                                                <Style TargetType="Border">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsReasoningExpanded}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Border.Style>
+                                                            <controls:MarkdownMessageView Margin="12,10"
+                                                                                          Markdown="{Binding ReasoningContent}"
+                                                                                          AssistantTone="True"
+                                                                                          MaxContentHeight="272"
+                                                                                          HorizontalAlignment="Stretch" />
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Border>
                                                 <controls:MarkdownMessageView Markdown="{Binding Content}"
                                                                               AssistantTone="{Binding AssistantTone}"
                                                                               MaxContentHeight="0"
@@ -556,6 +679,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
+                </Grid>
             </Grid>
 
             <!-- Settings -->

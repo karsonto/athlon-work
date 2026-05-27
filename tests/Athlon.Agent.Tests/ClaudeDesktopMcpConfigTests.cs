@@ -35,6 +35,27 @@ public sealed class ClaudeDesktopMcpConfigTests
     }
 
     [Fact]
+    public void Parse_ClaudeDesktopFormat_MapsCwdToWorkingDirectory()
+    {
+        const string json = """
+            {
+              "mcpServers": {
+                "qwen-vision": {
+                  "command": "python",
+                  "args": ["mcp_vision_server.py"],
+                  "cwd": "C:/servers/qwen-vision"
+                }
+              }
+            }
+            """;
+
+        Assert.True(ClaudeDesktopMcpConfigMapper.TryParse(json, out var config, out var error), error);
+        var servers = ClaudeDesktopMcpConfigMapper.ToSettingsList(config!);
+        Assert.Single(servers);
+        Assert.Equal("C:/servers/qwen-vision", servers[0].WorkingDirectory);
+    }
+
+    [Fact]
     public void Serialize_ProducesClaudeDesktopShape()
     {
         var config = ClaudeDesktopMcpConfigMapper.FromSettingsList(new[]

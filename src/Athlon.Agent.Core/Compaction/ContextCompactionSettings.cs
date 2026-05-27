@@ -6,25 +6,76 @@ public sealed class ContextCompactionSettings
 {
     public int ContextWindowTokens { get; set; } = 256_000;
 
-    public double AutoCompactThresholdRatio { get; set; } = 0.80;
+    public int TriggerMessages { get; set; } = 50;
 
-    public double MicrocompactAggressiveRatio { get; set; } = 0.50;
+    public int TriggerTokens { get; set; } = 80_000;
 
-    public int MicrocompactKeepToolMessages { get; set; } = 5;
+    public int KeepMessages { get; set; } = 20;
 
-    public int MicrocompactKeepToolMessagesAggressive { get; set; } = 3;
+    public int KeepTokens { get; set; } = 0;
 
-    public int MicrocompactMinContentLength { get; set; } = 100;
+    public bool OffloadBeforeCompact { get; set; } = true;
+
+    public string SummaryPrompt { get; set; } = ConversationCompactionDefaults.DefaultSummaryPrompt;
 
     public int MaxConversationCharsForSummary { get; set; } = 200_000;
 
     public int SummaryMaxTokens { get; set; } = 4_096;
 
-    [JsonIgnore]
-    public int AutoCompactTokenThreshold =>
-        (int)(ContextWindowTokens * AutoCompactThresholdRatio);
+    public TruncateArgsSettings TruncateArgs { get; set; } = new();
 
-    [JsonIgnore]
-    public int MicrocompactAggressiveTokenThreshold =>
-        (int)(ContextWindowTokens * MicrocompactAggressiveRatio);
+    public ToolResultEvictionSettings ToolResultEviction { get; set; } = new();
+
+    // Legacy settings (ignored after migration; kept for deserialization compatibility)
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? AutoCompactThresholdRatio { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? MicrocompactAggressiveRatio { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MicrocompactKeepToolMessages { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MicrocompactKeepToolMessagesAggressive { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MicrocompactMinContentLength { get; set; }
+}
+
+public sealed class TruncateArgsSettings
+{
+    public bool Enabled { get; set; } = true;
+
+    public int TriggerMessages { get; set; } = 25;
+
+    public int TriggerTokens { get; set; } = 40_000;
+
+    public int KeepMessages { get; set; } = 20;
+
+    public int KeepTokens { get; set; } = 0;
+
+    public int MaxArgLength { get; set; } = 2_000;
+
+    public string TruncationText { get; set; } = "...(argument truncated)";
+}
+
+public sealed class ToolResultEvictionSettings
+{
+    public bool Enabled { get; set; } = true;
+
+    public int MaxResultChars { get; set; } = 80_000;
+
+    public int PreviewChars { get; set; } = 2_000;
+
+    public List<string> ExcludedToolNames { get; set; } =
+    [
+        "file_read",
+        "file_write",
+        "file_edit",
+        "grep_files",
+        "glob_files",
+        "file_list",
+        "compress"
+    ];
 }

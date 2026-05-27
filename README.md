@@ -128,12 +128,31 @@ All file tools should respect workspace boundaries through `WorkspaceGuard`. Wri
 
 ## Context Compression
 
-Before each model call, `PreCompletionPipeline` runs:
+Before each model call, `PreCompletionPipeline` runs (AgentScope-style, no hooks):
 
-1. **Microcompact** (always): older `Tool` message bodies are replaced with `[cleared]`; keep the last 5 tool outputs below 50% of the context window, or the last 3 at/above 50%.
-2. **Auto-compact** (when estimated tokens reach 80% of `contextWindowTokens`, default 256K → 204.8K): full history is archived to `sessions/<sessionId>/transcripts/transcript_<unix>.jsonl`, summarized by the model, then replaced with a single user message `[Compressed. Transcript: <path>]\n<summary>`.
+1. **truncateArgs**: truncates oversized string arguments in `ToolCallsJson` on assistant messages outside the keep window (default: trigger at 25 messages / 40k tokens, keep last 20, max arg length 2000). No LLM call.
+2. **conversation compact**: when history reaches the trigger (default: 50 messages / 80k estimated tokens), archives the prefix to `sessions/<sessionId>/transcripts/transcript_<unix>.jsonl`, summarizes it with the model, then replaces the prefix with a compaction audit message plus a summary user placeholder (`__compaction_summary__`) and keeps the tail messages intact. Safe cutoff never splits an assistant/tool pair.
+3. **tool result eviction** (after each tool invoke): if a tool result exceeds 80k characters, the full body is written to `sessions/<sessionId>/evicted/<toolCallId>.txt` and only a head/tail preview is kept in the in-memory tool message. File tools (`file_read`, `file_write`, etc.) are excluded by default.
 
-Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction` (`contextWindowTokens`, `autoCompactThresholdRatio`, `microcompactAggressiveRatio`, etc.).
+On context-length API errors, the runtime forces one conversation compact and retries the model call once.
+
+When compaction runs, the app appends a persisted `Compaction` role message and shows it in chat as a collapsible card. Summary user placeholders are hidden in the UI. Compaction messages are not sent to the model API.
+
+Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
+
+```json
+"contextCompaction": {
+  "contextWindowTokens": 256000,
+  "triggerMessages": 50,
+  "triggerTokens": 80000,
+  "keepMessages": 20,
+  "summaryPrompt": "...",
+  "truncateArgs": { "triggerMessages": 25, "triggerTokens": 40000, "keepMessages": 20, "maxArgLength": 2000 },
+  "toolResultEviction": { "maxResultChars": 80000, "previewChars": 2000 }
+}
+```
+
+Legacy fields (`microcompactKeepToolMessages`, `autoCompactThresholdRatio`, etc.) are ignored after migration.
 
 ## Session Disk Logs
 

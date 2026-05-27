@@ -56,6 +56,7 @@ public interface IFileStorageService
     Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default);
     Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default);
     Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default);
+    Task<string> SaveEvictedToolResultAsync(string sessionId, string toolCallId, string content, CancellationToken cancellationToken = default);
     Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default);
     Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default);

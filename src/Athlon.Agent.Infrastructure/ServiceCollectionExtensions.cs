@@ -51,8 +51,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, GrepFilesTool>();
         services.AddSingleton<IAgentTool, GlobFilesTool>();
         services.AddSingleton<IAgentTool, ExecuteCommandTool>();
-        services.AddSingleton<MicrocompactService>();
-        services.AddSingleton<IAutoCompactService, AutoCompactService>();
+        services.AddSingleton<TruncateArgsService>();
+        services.AddSingleton<IConversationCompactor, ConversationCompactor>();
+        services.AddSingleton<IToolResultEvictor, ToolResultEvictor>();
         services.AddSingleton<IPreCompletionPipeline, PreCompletionPipeline>();
         services.AddSingleton<IAgentTool, CompressAgentTool>();
         return services;

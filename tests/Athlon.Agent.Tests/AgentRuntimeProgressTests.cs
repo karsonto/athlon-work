@@ -24,7 +24,7 @@ public sealed class AgentRuntimeProgressTests
             toolRouter,
             new StaticPromptBuilder(),
             new NoOpPreCompletionPipeline(),
-            new NoOpAutoCompactService(),
+            new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
             new NoOpLogger());
 
@@ -79,7 +79,7 @@ public sealed class AgentRuntimeProgressTests
             new ScriptedToolRouter(),
             new StaticPromptBuilder(),
             new NoOpPreCompletionPipeline(),
-            new NoOpAutoCompactService(),
+            new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
             new NoOpLogger());
 
@@ -118,7 +118,7 @@ public sealed class AgentRuntimeProgressTests
             toolRouter,
             new StaticPromptBuilder(),
             new NoOpPreCompletionPipeline(),
-            new NoOpAutoCompactService(),
+            new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
             new NoOpLogger());
 
@@ -135,7 +135,7 @@ public sealed class AgentRuntimeProgressTests
         var modelClient = new ScriptedModelClient(
             new AgentModelResponse(string.Empty, new[]
             {
-                new AgentToolCall("call-1", "mcp.demo.echo", new Dictionary<string, string> { ["argumentsJson"] = "{\"x\":1}" })
+                new AgentToolCall("call-1", "mcp_demo__echo", new Dictionary<string, string> { ["argumentsJson"] = "{\"x\":1}" })
             }),
             new AgentModelResponse("done", Array.Empty<AgentToolCall>()));
 
@@ -147,7 +147,7 @@ public sealed class AgentRuntimeProgressTests
             composite,
             new StaticPromptBuilder(),
             new NoOpPreCompletionPipeline(),
-            new NoOpAutoCompactService(),
+            new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
             new NoOpLogger());
 
@@ -160,7 +160,7 @@ public sealed class AgentRuntimeProgressTests
     {
         private int _index;
 
-        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, CancellationToken cancellationToken = default)
+        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, Func<string, Task>? onReasoningDelta = null, CancellationToken cancellationToken = default)
         {
             if (_index >= responses.Length)
             {
@@ -175,7 +175,7 @@ public sealed class AgentRuntimeProgressTests
     {
         private bool _done;
 
-        public async Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, CancellationToken cancellationToken = default)
+        public async Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, Func<string, Task>? onReasoningDelta = null, CancellationToken cancellationToken = default)
         {
             if (_done)
             {
@@ -227,7 +227,7 @@ public sealed class AgentRuntimeProgressTests
         public IReadOnlyList<Athlon.Agent.Mcp.McpServerStatus> GetStatuses() => Array.Empty<Athlon.Agent.Mcp.McpServerStatus>();
 
         public IReadOnlyList<ToolDefinition> ListToolDefinitions() =>
-            new[] { new ToolDefinition("mcp.demo.echo", "echo", new Dictionary<string, string> { ["argumentsJson"] = "args" }, Source: "mcp") };
+            new[] { new ToolDefinition("mcp_demo__echo", "echo", new Dictionary<string, string> { ["argumentsJson"] = "args" }, Source: "mcp") };
 
         public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
@@ -245,14 +245,22 @@ public sealed class AgentRuntimeProgressTests
 
     private sealed class NoOpPreCompletionPipeline : IPreCompletionPipeline
     {
-        public Task<AgentSession> RunAsync(AgentSession session, CancellationToken cancellationToken = default) =>
+        public Task<AgentSession> RunAsync(
+            AgentSession session,
+            PreCompletionOptions? options = null,
+            CancellationToken cancellationToken = default) =>
             Task.FromResult(session);
     }
 
-    private sealed class NoOpAutoCompactService : IAutoCompactService
+    private sealed class PassThroughToolResultEvictor : IToolResultEvictor
     {
-        public Task<AgentSession> CompactAsync(AgentSession session, CancellationToken cancellationToken = default) =>
-            Task.FromResult(session);
+        public Task<string> EvictIfNeededAsync(
+            string sessionId,
+            AgentToolCall toolCall,
+            ToolResult result,
+            string formattedToolContent,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(formattedToolContent);
     }
 
     private sealed class NoOpStorage : IFileStorageService
@@ -263,6 +271,7 @@ public sealed class AgentRuntimeProgressTests
         public Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default) => Task.FromResult("/tmp/t.jsonl");
+        public Task<string> SaveEvictedToolResultAsync(string sessionId, string toolCallId, string content, CancellationToken cancellationToken = default) => Task.FromResult("/tmp/evicted.txt");
         public Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<SessionIndexEntry>>(Array.Empty<SessionIndexEntry>());

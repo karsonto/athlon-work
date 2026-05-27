@@ -53,6 +53,19 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         return path;
     }
 
+    public async Task<string> SaveEvictedToolResultAsync(
+        string sessionId,
+        string toolCallId,
+        string content,
+        CancellationToken cancellationToken = default)
+    {
+        var evictedDir = Path.Combine(GetSessionDirectory(sessionId), "evicted");
+        Directory.CreateDirectory(evictedDir);
+        var path = Path.Combine(evictedDir, $"{toolCallId}.txt");
+        await AtomicFile.WriteAllTextAsync(path, content, cancellationToken);
+        return path;
+    }
+
     public async Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
@@ -253,6 +266,7 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         Directory.CreateDirectory(Path.Combine(sessionDir, "tool-calls"));
         Directory.CreateDirectory(Path.Combine(sessionDir, "summaries"));
         Directory.CreateDirectory(Path.Combine(sessionDir, "transcripts"));
+        Directory.CreateDirectory(Path.Combine(sessionDir, "evicted"));
         Directory.CreateDirectory(Path.Combine(sessionDir, "http"));
     }
 

@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Athlon.Agent.Tests" />
+  </ItemGroup>
+
 </Project>

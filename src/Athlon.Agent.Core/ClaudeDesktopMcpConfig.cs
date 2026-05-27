@@ -32,6 +32,9 @@ public sealed class ClaudeDesktopMcpServerEntry
     [JsonPropertyName("headers")]
     public Dictionary<string, string> Headers { get; set; } = new(StringComparer.Ordinal);
 
+    [JsonPropertyName("cwd")]
+    public string Cwd { get; set; } = string.Empty;
+
     /// <summary>Athlon extension: when true, server is kept in config but not started.</summary>
     [JsonPropertyName("disabled")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -59,7 +62,8 @@ public static class ClaudeDesktopMcpConfigMapper
                 Command = entry.Command ?? string.Empty,
                 Args = entry.Args?.ToList() ?? new List<string>(),
                 Env = entry.Env is null ? new Dictionary<string, string>() : new Dictionary<string, string>(entry.Env),
-                Headers = entry.Headers is null ? new Dictionary<string, string>() : new Dictionary<string, string>(entry.Headers)
+                Headers = entry.Headers is null ? new Dictionary<string, string>() : new Dictionary<string, string>(entry.Headers),
+                WorkingDirectory = entry.Cwd ?? string.Empty
             });
         }
 
@@ -86,6 +90,11 @@ public static class ClaudeDesktopMcpConfigMapper
                 Headers = server.Headers is null ? new Dictionary<string, string>() : new Dictionary<string, string>(server.Headers),
                 Disabled = !server.Enabled
             };
+
+            if (!string.IsNullOrWhiteSpace(server.WorkingDirectory))
+            {
+                entry.Cwd = server.WorkingDirectory;
+            }
 
             config.McpServers[server.Name.Trim()] = entry;
         }
