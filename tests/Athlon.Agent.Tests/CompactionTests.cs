@@ -171,7 +171,7 @@ public sealed class CompactionTests
 
     private sealed class FakeModelClient(string content) : IAgentModelClient
     {
-        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, CancellationToken cancellationToken = default) =>
+        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, CancellationToken cancellationToken = default) =>
             Task.FromResult(new AgentModelResponse(content, Array.Empty<AgentToolCall>()));
     }
 

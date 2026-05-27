@@ -68,11 +68,43 @@ public sealed class AgentRuntimeProgressTests
         Assert.StartsWith("ToolCallId: abc-123", text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task SendAsync_UsesModelDeltaWithoutDuplicateFinalPush()
+    {
+        var storage = new NoOpStorage();
+        var modelClient = new DeltaModelClient("hello", ["he", "llo"]);
+        var runtime = new AgentRuntime(
+            modelClient,
+            storage,
+            new ScriptedToolRouter(),
+            new StaticPromptBuilder(),
+            new NoOpPreCompletionPipeline(),
+            new NoOpAutoCompactService(),
+            new NoOpActiveAgentSessionContext(),
+            new NoOpLogger());
+
+        var tokens = new List<string>();
+        var session = AgentSession.Create("delta-test");
+        await runtime.SendAsync(
+            session,
+            "say hello",
+            new AgentTurnCallbacks
+            {
+                OnAssistantTextDelta = token =>
+                {
+                    tokens.Add(token);
+                    return Task.CompletedTask;
+                }
+            });
+
+        Assert.Equal(["he", "llo"], tokens);
+    }
+
     private sealed class ScriptedModelClient(params AgentModelResponse[] responses) : IAgentModelClient
     {
         private int _index;
 
-        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, CancellationToken cancellationToken = default)
+        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, CancellationToken cancellationToken = default)
         {
             if (_index >= responses.Length)
             {
@@ -80,6 +112,30 @@ public sealed class AgentRuntimeProgressTests
             }
 
             return Task.FromResult(responses[_index++]);
+        }
+    }
+
+    private sealed class DeltaModelClient(string content, IReadOnlyList<string> deltas) : IAgentModelClient
+    {
+        private bool _done;
+
+        public async Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, CancellationToken cancellationToken = default)
+        {
+            if (_done)
+            {
+                throw new InvalidOperationException("Only one response expected.");
+            }
+
+            _done = true;
+            if (onTextDelta is not null)
+            {
+                foreach (var delta in deltas)
+                {
+                    await onTextDelta(delta);
+                }
+            }
+
+            return new AgentModelResponse(content, Array.Empty<AgentToolCall>());
         }
     }
 

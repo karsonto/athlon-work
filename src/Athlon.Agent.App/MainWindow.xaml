@@ -587,6 +587,9 @@
                             <TextBox Text="{Binding Settings.Settings.Model.Endpoint, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
                             <TextBlock Text="Model Name" Foreground="{StaticResource Brush.SubtleText}" />
                             <TextBox Text="{Binding Settings.Settings.Model.ModelName, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
+                            <CheckBox IsChecked="{Binding Settings.Settings.Model.EnableStreaming, UpdateSourceTrigger=PropertyChanged}"
+                                      Content="启用流式输出（SSE）"
+                                      Margin="0,0,0,12" />
                             <TextBlock Text="API Key" Foreground="{StaticResource Brush.SubtleText}" />
                             <PasswordBox x:Name="ApiKeyPasswordBox"
                                            PasswordChanged="ApiKeyPasswordBox_OnPasswordChanged"

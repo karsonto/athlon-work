@@ -113,7 +113,10 @@ public sealed record AgentModelResponse(
 
 public interface IAgentModelClient
 {
-    Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, CancellationToken cancellationToken = default);
+    Task<AgentModelResponse> CompleteAsync(
+        AgentModelRequest request,
+        Func<string, Task>? onTextDelta = null,
+        CancellationToken cancellationToken = default);
 }
 
 public interface IAgentEnvironmentPromptBuilder
@@ -227,6 +230,7 @@ public sealed class ModelSettings
     public string Provider { get; set; } = "OpenAI-Compatible";
     public string Endpoint { get; set; } = "https://api.openai.com/v1";
     public string ModelName { get; set; } = "gpt-4.1-mini";
+    public bool EnableStreaming { get; set; } = true;
 
     [JsonPropertyName("ApiKeyCredentialName")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -464,8 +468,6 @@ public sealed class AgentRuntime(
                 var toolCall = new AgentToolCall(Guid.NewGuid().ToString("N"), "file_list", new Dictionary<string, string>());
                 await NotifyToolStartedAsync(callbacks, toolCall);
                 session = await InvokeToolAndPersistAsync(session, userMessage.Id, toolCall, callbacks, cancellationToken);
-                var toolContent = session.Messages[^1].Content;
-                modelMessages.Add(new AgentModelMessage("system", $"Preflight tool result for the user's file listing request:{Environment.NewLine}{toolContent}"));
             }
 
             while (true)
@@ -473,14 +475,12 @@ public sealed class AgentRuntime(
                 session = await preCompletionPipeline.RunAsync(session, cancellationToken);
                 modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
 
-                var response = await modelClient.CompleteAsync(new AgentModelRequest(modelMessages, tools), cancellationToken);
+                var response = await modelClient.CompleteAsync(
+                    new AgentModelRequest(modelMessages, tools),
+                    callbacks?.OnAssistantTextDelta,
+                    cancellationToken);
                 if (response.ToolCalls.Count == 0)
                 {
-                    if (callbacks?.OnAssistantTextDelta is not null && !string.IsNullOrEmpty(response.Content))
-                    {
-                        await callbacks.OnAssistantTextDelta(response.Content);
-                    }
-
                     var assistant = ChatMessage.Create(MessageRole.Assistant, response.Content, userMessage.Id);
                     session = session.WithMessage(assistant);
                     await NotifyMessageAsync(callbacks, assistant);
@@ -587,9 +587,9 @@ public sealed class AgentRuntime(
             {
                 MessageRole.User => new AgentModelMessage("user", message.Content),
                 MessageRole.Assistant => new AgentModelMessage("assistant", message.Content),
-                MessageRole.Tool => new AgentModelMessage("system", $"Previous tool result: {message.Content}"),
-                MessageRole.Summary => new AgentModelMessage("system", $"History summary: {message.Content}"),
-                _ => new AgentModelMessage("system", message.Content)
+                MessageRole.Tool => new AgentModelMessage("tool", message.Content, ExtractToolCallId(message.Content)),
+                MessageRole.Summary => new AgentModelMessage("user", $"History summary: {message.Content}"),
+                _ => new AgentModelMessage("user", message.Content)
             });
         }
 
@@ -616,6 +616,26 @@ public sealed class AgentRuntime(
         return arguments.Count == 0
             ? "(none)"
             : string.Join("; ", arguments.Select(argument => $"{argument.Key}={argument.Value}"));
+    }
+
+    private static string? ExtractToolCallId(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return null;
+        }
+
+        foreach (var line in content.Split(["\r\n", "\n"], StringSplitOptions.None))
+        {
+            const string prefix = "ToolCallId:";
+            if (line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var value = line[prefix.Length..].Trim();
+                return string.IsNullOrWhiteSpace(value) ? null : value;
+            }
+        }
+
+        return null;
     }
 
     private static bool ShouldListWorkspaceFiles(string userInput)

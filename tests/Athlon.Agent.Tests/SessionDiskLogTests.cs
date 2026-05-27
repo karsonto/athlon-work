@@ -123,7 +123,7 @@ public sealed class SessionDiskLogTests
 
     private sealed class CancelOnFirstCallModelClient : IAgentModelClient
     {
-        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, CancellationToken cancellationToken = default) =>
+        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, CancellationToken cancellationToken = default) =>
             Task.FromCanceled<AgentModelResponse>(cancellationToken);
     }
 

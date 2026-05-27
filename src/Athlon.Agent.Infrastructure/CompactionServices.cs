@@ -70,7 +70,7 @@ public sealed class AutoCompactService(
             AllowToolCalls: false,
             MaxTokens: cfg.SummaryMaxTokens);
 
-        var summaryResponse = await modelClient.CompleteAsync(summaryRequest, cancellationToken);
+        var summaryResponse = await modelClient.CompleteAsync(summaryRequest, cancellationToken: cancellationToken);
         var summary = summaryResponse.Content.Trim();
         if (string.IsNullOrWhiteSpace(summary))
         {

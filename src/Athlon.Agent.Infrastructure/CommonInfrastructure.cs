@@ -58,7 +58,7 @@ public interface IJsonFileStore
 {
     Task SaveAsync<T>(string path, T value, CancellationToken cancellationToken = default);
     Task<T?> LoadAsync<T>(string path, CancellationToken cancellationToken = default);
-    Task AppendJsonLineAsync(string path, object value, CancellationToken cancellationToken = default);
+    Task AppendJsonLineAsync(string path, object value, CancellationToken cancellationToken = default, bool prettyPrint = false);
 }
 
 public sealed class JsonFileStore : IJsonFileStore
@@ -70,7 +70,7 @@ public sealed class JsonFileStore : IJsonFileStore
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    /// <summary>Single-line JSON for *.jsonl append logs (http, tool-calls, conversation).</summary>
+    /// <summary>Single-line JSON for machine-friendly append logs (conversation/tool/audit).</summary>
     public static readonly JsonSerializerOptions JsonLineOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = false,
@@ -94,10 +94,11 @@ public sealed class JsonFileStore : IJsonFileStore
         return await JsonSerializer.DeserializeAsync<T>(stream, Options, cancellationToken);
     }
 
-    public async Task AppendJsonLineAsync(string path, object value, CancellationToken cancellationToken = default)
+    public async Task AppendJsonLineAsync(string path, object value, CancellationToken cancellationToken = default, bool prettyPrint = false)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var line = JsonSerializer.Serialize(value, JsonLineOptions) + Environment.NewLine;
+        var options = prettyPrint ? Options : JsonLineOptions;
+        var line = JsonSerializer.Serialize(value, options) + Environment.NewLine;
         await File.AppendAllTextAsync(path, line, cancellationToken);
     }
 }
