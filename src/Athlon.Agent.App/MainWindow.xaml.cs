@@ -1,5 +1,6 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Athlon.Agent.App.ViewModels;
 
 namespace Athlon.Agent.App;
@@ -24,5 +25,20 @@ public partial class MainWindow : Window
         {
             _viewModel.ApiKey = passwordBox.Password;
         }
+    }
+
+    private void ComposerTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
+        {
+            return;
+        }
+
+        if (_viewModel.SendCommand.CanExecute(null))
+        {
+            _viewModel.SendCommand.Execute(null);
+        }
+
+        e.Handled = true;
     }
 }

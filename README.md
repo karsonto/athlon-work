@@ -120,9 +120,20 @@ The agent sends an environment prompt that includes active workspace path and av
 - `file_edit`: replace exact text, with optional `replace_all`.
 - `grep_files`: search file contents in the workspace.
 - `glob_files`: find workspace files by glob pattern.
-- `execute_command`: disabled unless enabled in settings and subject to command permission rules.
+- `execute_command`: enabled by default; subject to command deny-list rules.
 
 All file tools should respect workspace boundaries through `WorkspaceGuard`. Writes and edits create backups through `AtomicFile`.
+
+- `compress`: manually compact conversation context and end the current agent turn.
+
+## Context Compression
+
+Before each model call, `PreCompletionPipeline` runs:
+
+1. **Microcompact** (always): older `Tool` message bodies are replaced with `[cleared]`; keep the last 5 tool outputs below 50% of the context window, or the last 3 at/above 50%.
+2. **Auto-compact** (when estimated tokens reach 80% of `contextWindowTokens`, default 256K → 204.8K): full history is archived to `sessions/<sessionId>/transcripts/transcript_<unix>.jsonl`, summarized by the model, then replaced with a single user message `[Compressed. Transcript: <path>]\n<summary>`.
+
+Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction` (`contextWindowTokens`, `autoCompactThresholdRatio`, `microcompactAggressiveRatio`, etc.).
 
 ## Notes For Future AI Work
 
@@ -138,6 +149,6 @@ All file tools should respect workspace boundaries through `WorkspaceGuard`. Wri
 - Add tests for `AppPathProvider`, workspace guard behavior, and filesystem tools.
 - Implement real MCP server lifecycle: connect, tools/list, tools/call, status updates, and error display.
 - Add command execution confirmation UI before `execute_command` runs.
-- Add context compression and session branch management.
+- Add session branch management.
 - Improve Markdown/code rendering with copy/run/diff actions for code blocks.
 - Add installer icon, version metadata, and optional code signing to the release workflow.

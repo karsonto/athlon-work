@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Serialization;
+using Athlon.Agent.Core.Compaction;
 
 namespace Athlon.Agent.Core;
 
@@ -53,6 +54,12 @@ public sealed record AgentSession(
         Title = title,
         UpdatedAt = DateTimeOffset.UtcNow
     };
+
+    public AgentSession WithMessages(IReadOnlyList<ChatMessage> messages) => this with
+    {
+        UpdatedAt = DateTimeOffset.UtcNow,
+        Messages = messages.ToArray()
+    };
 }
 
 public interface IActiveWorkspaceContext
@@ -96,7 +103,8 @@ public sealed record AgentToolCall(
 public sealed record AgentModelRequest(
     IReadOnlyList<AgentModelMessage> Messages,
     IReadOnlyList<ToolDefinition> Tools,
-    bool AllowToolCalls = true);
+    bool AllowToolCalls = true,
+    int? MaxTokens = null);
 
 public sealed record AgentModelResponse(
     string Content,
@@ -143,6 +151,7 @@ public interface IFileStorageService
     Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default);
     Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default);
     Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default);
+    Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default);
     Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default);
     Task<AppSettings> LoadSettingsAsync(CancellationToken cancellationToken = default);
@@ -178,6 +187,7 @@ public sealed class AppSettings
     public List<SkillSettings> Skills { get; set; } = new();
     public List<WorkspaceSettings> Workspaces { get; set; } = new();
     public UiSettings Ui { get; set; } = new();
+    public ContextCompactionSettings ContextCompaction { get; set; } = new();
 }
 
 public sealed class ModelSettings
@@ -203,7 +213,6 @@ public sealed class LoggingSettings
 
 public sealed class ToolPermissionSettings
 {
-    public bool EnableCommandExecution { get; set; }
     public bool AskBeforeEveryCommand { get; set; } = true;
     public string FileScopePolicy { get; set; } = "AskOutsideWorkspace";
     public List<string> CommandAllowList { get; set; } = new() { "git", "dotnet", "python", "node", "npm" };
@@ -324,7 +333,8 @@ public sealed class AgentEnvironmentPromptBuilder(
         builder.AppendLine("When the user asks what files exist in the workspace or a directory, call file_list before answering.");
         builder.AppendLine("When searching file contents, call grep_files. When finding files by name or extension, call glob_files.");
         builder.AppendLine("For write operations, explain your intent before calling file_write or file_edit.");
-        builder.AppendLine("Command execution may be disabled by settings; only call execute_command when it is necessary.");
+        builder.AppendLine("Use execute_command when a shell command is needed to complete the task.");
+        builder.AppendLine("When context grows large, history is auto-compressed; full transcripts are kept under the session transcripts folder. Call compress to manually compact and end the current turn.");
 
         return builder.ToString();
     }
@@ -347,9 +357,15 @@ public sealed class AgentEnvironmentPromptBuilder(
 
 }
 
-public sealed class AgentRuntime(IAgentModelClient modelClient, IFileStorageService storage, IToolRouter toolRouter, IAgentEnvironmentPromptBuilder promptBuilder, IAppLogger logger) : IAgentRuntime
+public sealed class AgentRuntime(
+    IAgentModelClient modelClient,
+    IFileStorageService storage,
+    IToolRouter toolRouter,
+    IAgentEnvironmentPromptBuilder promptBuilder,
+    IPreCompletionPipeline preCompletionPipeline,
+    IAutoCompactService autoCompactService,
+    IAppLogger logger) : IAgentRuntime
 {
-    private const int MaxToolIterations = 6;
     private readonly IAppLogger _logger = logger.ForContext("AgentRuntime");
 
     public async Task<AgentSession> SendAsync(AgentSession session, string userInput, Func<string, Task>? onToken = null, CancellationToken cancellationToken = default)
@@ -357,7 +373,8 @@ public sealed class AgentRuntime(IAgentModelClient modelClient, IFileStorageServ
         var userMessage = ChatMessage.Create(MessageRole.User, userInput, session.Messages.LastOrDefault()?.Id);
         session = session.WithMessage(userMessage);
         var tools = toolRouter.ListTools();
-        var modelMessages = BuildModelMessages(promptBuilder.Build(session, tools), session.Messages);
+        var environmentPrompt = promptBuilder.Build(session, tools);
+        var modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
 
         if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
         {
@@ -368,8 +385,11 @@ public sealed class AgentRuntime(IAgentModelClient modelClient, IFileStorageServ
             modelMessages.Add(new AgentModelMessage("system", $"Preflight tool result for the user's file listing request:{Environment.NewLine}{content}"));
         }
 
-        for (var iteration = 0; iteration < MaxToolIterations; iteration++)
+        while (true)
         {
+            session = await preCompletionPipeline.RunAsync(session, cancellationToken);
+            modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
+
             var response = await modelClient.CompleteAsync(new AgentModelRequest(modelMessages, tools), cancellationToken);
             if (response.ToolCalls.Count == 0)
             {
@@ -388,17 +408,24 @@ public sealed class AgentRuntime(IAgentModelClient modelClient, IFileStorageServ
             modelMessages.Add(new AgentModelMessage("assistant", response.Content, ToolCalls: response.ToolCalls));
             foreach (var toolCall in response.ToolCalls)
             {
+                if (string.Equals(toolCall.Name, CompressTool.ToolName, StringComparison.OrdinalIgnoreCase))
+                {
+                    session = await autoCompactService.CompactAsync(session, cancellationToken);
+                    var compressedNote = ChatMessage.Create(
+                        MessageRole.Assistant,
+                        "Context compressed. Continue from the summary in the latest user message.",
+                        userMessage.Id);
+                    session = session.WithMessage(compressedNote);
+                    await storage.SaveSessionAsync(session, cancellationToken);
+                    return session;
+                }
+
                 var result = await toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken);
                 var content = FormatToolResult(toolCall, result);
                 session = session.WithMessage(ChatMessage.Create(MessageRole.Tool, content, userMessage.Id));
                 modelMessages.Add(new AgentModelMessage("tool", content, toolCall.Id));
             }
         }
-
-        var limitMessage = ChatMessage.Create(MessageRole.Assistant, "工具调用次数已达到上限，我已停止继续执行。", userMessage.Id);
-        session = session.WithMessage(limitMessage);
-        await storage.SaveSessionAsync(session, cancellationToken);
-        return session;
     }
 
     private static List<AgentModelMessage> BuildModelMessages(string environmentPrompt, IReadOnlyList<ChatMessage> history)
@@ -462,17 +489,7 @@ public sealed class AgentOrchestrator(IAgentRuntime agentRuntime) : IAgentOrches
         agentRuntime.SendAsync(session, userInput, onToken, cancellationToken);
 }
 
-public sealed class ContextCompressionService
+public static class CompressTool
 {
-    public ContextSummary CreateSummary(string sessionId, IReadOnlyList<ChatMessage> messages)
-    {
-        var middle = messages.Skip(2).Take(Math.Max(0, messages.Count - 6)).ToArray();
-        var content = middle.Length == 0
-            ? "No middle history required compression."
-            : string.Join(Environment.NewLine, middle.Select(message => $"- {message.Role}: {Trim(message.Content, 180)}"));
-
-        return new ContextSummary(Guid.NewGuid().ToString("N"), sessionId, content, middle.Length, DateTimeOffset.UtcNow);
-    }
-
-    private static string Trim(string value, int length) => value.Length <= length ? value : value[..length] + "...";
+    public const string ToolName = "compress";
 }

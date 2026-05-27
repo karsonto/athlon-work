@@ -128,7 +128,7 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
             foreach (var skill in _skillCatalog.Skills.OrderBy(skill => skill.Name, StringComparer.Ordinal))
             {
                 var status = disabled.Contains(skill.Name) ? "○" : "●";
-                Skills.Add($"{status} {skill.Name}  ({skill.Description})");
+                Skills.Add($"{status} {skill.Name}");
             }
         }
 

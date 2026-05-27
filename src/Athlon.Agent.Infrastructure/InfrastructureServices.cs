@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -46,7 +47,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, GrepFilesTool>();
         services.AddSingleton<IAgentTool, GlobFilesTool>();
         services.AddSingleton<IAgentTool, ExecuteCommandTool>();
-        services.AddSingleton<ContextCompressionService>();
+        services.AddSingleton<MicrocompactService>();
+        services.AddSingleton<IAutoCompactService, AutoCompactService>();
+        services.AddSingleton<IPreCompletionPipeline, PreCompletionPipeline>();
+        services.AddSingleton<IAgentTool, CompressAgentTool>();
         return services;
     }
 
@@ -116,6 +120,7 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         Directory.CreateDirectory(sessionDir);
         Directory.CreateDirectory(Path.Combine(sessionDir, "tool-calls"));
         Directory.CreateDirectory(Path.Combine(sessionDir, "summaries"));
+        Directory.CreateDirectory(Path.Combine(sessionDir, "transcripts"));
 
         await jsonFileStore.SaveAsync(Path.Combine(sessionDir, "session.json"), session, cancellationToken);
         await AtomicFile.WriteAllTextAsync(Path.Combine(sessionDir, "conversation.md"), SessionMarkdownWriter.WriteConversation(session), cancellationToken);
@@ -128,6 +133,22 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         var summaryDir = Path.Combine(paths.SessionsPath, summary.SessionId, "summaries");
         Directory.CreateDirectory(summaryDir);
         await AtomicFile.WriteAllTextAsync(Path.Combine(summaryDir, $"{summary.Id}.md"), SessionMarkdownWriter.WriteSummary(summary), cancellationToken);
+    }
+
+    public async Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+    {
+        var transcriptDir = GetSessionTranscriptsDirectory(sessionId);
+        Directory.CreateDirectory(transcriptDir);
+        var path = Path.Combine(transcriptDir, $"transcript_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}.jsonl");
+
+        var builder = new StringBuilder();
+        foreach (var message in messages)
+        {
+            builder.AppendLine(JsonSerializer.Serialize(message, JsonFileStore.Options));
+        }
+
+        await AtomicFile.WriteAllTextAsync(path, builder.ToString(), cancellationToken);
+        return path;
     }
 
     public async Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -256,6 +277,9 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
     private string GetSessionDirectory(AgentSession session) => GetSessionDirectory(session.Id);
 
     private string GetSessionDirectory(string sessionId) => Path.Combine(paths.SessionsPath, sessionId);
+
+    private string GetSessionTranscriptsDirectory(string sessionId) =>
+        Path.Combine(GetSessionDirectory(sessionId), "transcripts");
 }
 
 [SupportedOSPlatform("windows")]
@@ -344,6 +368,11 @@ public sealed class OpenAiCompatibleChatModelClient(HttpClient httpClient, IAppL
         {
             payload["tools"] = request.Tools.Select(ToOpenAiTool).ToArray();
             payload["tool_choice"] = "auto";
+        }
+
+        if (request.MaxTokens is > 0)
+        {
+            payload["max_tokens"] = request.MaxTokens.Value;
         }
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint)
@@ -745,7 +774,6 @@ public sealed class ExecuteCommandTool(AppSettings settings, AuditLogService aud
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!settings.ToolPermissions.EnableCommandExecution) return ToolResult.Failure("Command execution disabled", "Enable it in Settings first.");
         if (!ToolArguments.TryGetRequired(invocation, "command", out var command, out var error)) return error;
         if (settings.ToolPermissions.CommandDenyList.Any(deny => command.Contains(deny, StringComparison.OrdinalIgnoreCase))) return ToolResult.Failure("Command denied", command);
 

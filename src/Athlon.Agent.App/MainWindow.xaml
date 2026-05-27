@@ -731,15 +731,17 @@
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <Grid>
-                            <TextBox Text="{Binding ComposerText, UpdateSourceTrigger=PropertyChanged}"
+                            <TextBox x:Name="ComposerTextBox"
+                                     Text="{Binding ComposerText, UpdateSourceTrigger=PropertyChanged}"
                                      MinHeight="56"
                                      BorderThickness="0"
                                      Background="Transparent"
                                      FontSize="15"
                                      AcceptsReturn="True"
                                      TextWrapping="Wrap"
-                                     VerticalScrollBarVisibility="Auto" />
-                            <TextBlock Text="Message Athlon — @ 文件 / 技能，Ctrl+Enter 发送"
+                                     VerticalScrollBarVisibility="Auto"
+                                     PreviewKeyDown="ComposerTextBox_OnPreviewKeyDown" />
+                            <TextBlock Text="Message Athlon — @ 文件 / 技能，Enter 发送"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        Margin="4,14,0,0"
                                        IsHitTestVisible="False"
@@ -757,7 +759,7 @@
                             </TextBlock>
                         </Grid>
                         <Grid Grid.Row="1" Margin="0,12,0,0">
-                            <TextBlock Text="Ctrl+Enter 发送 · Shift+Enter 换行"
+                            <TextBlock Text="Enter 发送 · Shift+Enter 换行"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        FontSize="12"
                                        VerticalAlignment="Center" />
@@ -833,8 +835,6 @@
                 Padding="16">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
-                    <TextBlock Text="上下文" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,16" />
-
                     <TextBlock Text="技能" Foreground="{StaticResource Brush.SubtleText}" FontSize="12" Margin="0,0,0,8" />
                     <Border Background="{StaticResource Brush.Panel}"
                             BorderBrush="{StaticResource Brush.Border}"
