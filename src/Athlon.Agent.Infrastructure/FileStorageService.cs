@@ -263,5 +263,3 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
     private string GetSessionTranscriptsDirectory(string sessionId) =>
         Path.Combine(GetSessionDirectory(sessionId), "transcripts");
 }
-
-[SupportedOSPlatform("windows")]
