@@ -436,7 +436,7 @@ public sealed class AgentRuntime(
         }
     }
 
-    private async Task<AgentSession> SendAsyncCore(
+    private Task<AgentSession> SendAsyncCore(
         AgentSession session,
         string userInput,
         AgentTurnCallbacks? callbacks,
