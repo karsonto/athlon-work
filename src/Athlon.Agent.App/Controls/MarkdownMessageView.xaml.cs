@@ -76,8 +76,15 @@ public partial class MarkdownMessageView : UserControl
 
     private void ApplyMaxHeight()
     {
-        var max = MaxContentHeight > 0 ? MaxContentHeight : 480;
-        HostScroll.MaxHeight = max;
+        if (MaxContentHeight <= 0)
+        {
+            HostScroll.ClearValue(FrameworkElement.MaxHeightProperty);
+            HostScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            return;
+        }
+
+        HostScroll.MaxHeight = MaxContentHeight;
+        HostScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
     }
 
     private void ApplyTheme()

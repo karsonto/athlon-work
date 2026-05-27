@@ -1,6 +1,7 @@
 ﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Athlon.Agent.App.ViewModels;
 
 namespace Athlon.Agent.App;
@@ -16,7 +17,21 @@ public partial class MainWindow : Window
         App.StartupTrace("MainWindow InitializeComponent completed");
         _viewModel = viewModel;
         DataContext = _viewModel;
+        _viewModel.ScrollChatToBottom = ScrollChatToEnd;
+        Loaded += (_, _) => ScrollChatToEnd();
         App.StartupTrace("MainWindow DataContext assigned");
+    }
+
+    private void ScrollChatToEnd()
+    {
+        if (ChatMessagesScrollViewer is null)
+        {
+            return;
+        }
+
+        ChatMessagesScrollViewer.Dispatcher.BeginInvoke(
+            DispatcherPriority.Loaded,
+            () => ChatMessagesScrollViewer.ScrollToEnd());
     }
 
     private void ApiKeyPasswordBox_OnPasswordChanged(object sender, RoutedEventArgs e)

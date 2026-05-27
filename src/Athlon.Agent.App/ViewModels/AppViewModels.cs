@@ -18,6 +18,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         Role = message.Role.ToString();
         Content = message.Content;
         CreatedAt = message.CreatedAt.ToLocalTime().ToString("HH:mm:ss");
+        IsStreaming = false;
         IsUser = message.Role == MessageRole.User;
         IsTool = message.Role == MessageRole.Tool;
         DisplayRole = IsUser ? "您" : IsTool ? "工具" : "Athlon 助手";
@@ -56,11 +57,19 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ToolDetail = string.Empty;
         Content = string.Empty;
         IsExpanded = false;
+        IsStreaming = false;
     }
 
     public string Role { get; private set; }
-    public string Content { get; private set; }
-    public string CreatedAt { get; private set; }
+
+    [ObservableProperty]
+    private string _content = string.Empty;
+
+    [ObservableProperty]
+    private string _createdAt = string.Empty;
+
+    [ObservableProperty]
+    private bool _isStreaming;
     public bool IsUser { get; }
     public bool IsTool { get; }
     public bool AssistantTone => !IsUser;
@@ -92,6 +101,43 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     public static ChatMessageViewModel CreatePendingTool(AgentToolCall toolCall) => new(toolCall);
 
+    public static ChatMessageViewModel CreateStreamingAssistant() =>
+        new(ChatMessage.Create(MessageRole.Assistant, string.Empty))
+        {
+            IsStreaming = true
+        };
+
+    public void AppendStreamingToken(string token)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return;
+        }
+
+        Content += token;
+    }
+
+    public void CompleteStreamingAssistant(ChatMessage message)
+    {
+        Content = message.Content;
+        CreatedAt = message.CreatedAt.ToLocalTime().ToString("HH:mm:ss");
+        IsStreaming = false;
+    }
+
+    public void MarkStreamingCancelled()
+    {
+        if (!IsStreaming)
+        {
+            return;
+        }
+
+        IsStreaming = false;
+        if (string.IsNullOrWhiteSpace(Content))
+        {
+            Content = "（已停止）";
+        }
+    }
+
     public void ApplyCompletedTool(ChatMessage message)
     {
         if (!IsTool)
@@ -101,6 +147,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
         Content = message.Content;
         CreatedAt = message.CreatedAt.ToLocalTime().ToString("HH:mm:ss");
+        IsStreaming = false;
         ParseToolContent(message.Content, out var toolCallId, out var header, out var summary, out var detail);
         if (!string.IsNullOrWhiteSpace(toolCallId))
         {
@@ -443,6 +490,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private FileSystemWatcher? _workspaceWatcher;
     private CancellationTokenSource? _turnCancellation;
     private AgentSession _session = AgentSession.Create("New Chat");
+    private ChatMessageViewModel? _streamingAssistantMessage;
+    private readonly StringBuilder _streamingTokenBuffer = new();
+    private DispatcherTimer? _streamingFlushTimer;
 
     public MainWindowViewModel(
         IAgentOrchestrator orchestrator,
@@ -476,6 +526,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages { get; } = new();
+
+    /// <summary>由 MainWindow 注入，用于流式输出时自动滚到底部。</summary>
+    public Action? ScrollChatToBottom { get; set; }
     public ObservableCollection<SessionHistoryItemViewModel> SessionHistory { get; } = new();
     public ContextSidebarViewModel Sidebar { get; }
     public SettingsViewModel Settings { get; }
@@ -606,7 +659,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         StreamingText = string.Empty;
         _turnCancellation = new CancellationTokenSource();
         Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input)));
+        RequestScrollToBottom();
         SyncWorkspaceContext();
+        await Task.Yield();
+        EnsureStreamingAssistantMessage();
 
         try
         {
@@ -614,12 +670,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 OnToolStarted = async toolCall => await RunOnUiAsync(() =>
                 {
+                    ClearStreamingAssistantPlaceholder();
                     if (FindToolMessage(toolCall.Id) is not null)
                     {
                         return;
                     }
 
                     Messages.Add(ChatMessageViewModel.CreatePendingTool(toolCall));
+                    RequestScrollToBottom();
                 }),
                 OnMessage = async message => await RunOnUiAsync(() =>
                 {
@@ -634,18 +692,34 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                         }
 
                         Messages.Add(new ChatMessageViewModel(message));
+                        RequestScrollToBottom();
                         return;
                     }
 
+                    if (message.Role == MessageRole.Assistant && _streamingAssistantMessage is not null)
+                    {
+                        FlushStreamingTokens();
+                        _streamingAssistantMessage.CompleteStreamingAssistant(message);
+                        _streamingAssistantMessage = null;
+                        RequestScrollToBottom();
+                        return;
+                    }
+
+                    ClearStreamingAssistantPlaceholder();
                     Messages.Add(new ChatMessageViewModel(message));
+                    RequestScrollToBottom();
                 }),
                 OnAssistantTextDelta = async token => await RunOnUiAsync(() =>
                 {
-                    StreamingText += token;
+                    EnsureStreamingAssistantMessage();
+                    _streamingTokenBuffer.Append(token);
+                    ScheduleStreamingFlush();
                 })
             };
 
-            _session = await _orchestrator.SendAsync(_session, input, callbacks, _turnCancellation.Token);
+            _session = await Task.Run(
+                async () => await _orchestrator.SendAsync(_session, input, callbacks, _turnCancellation.Token).ConfigureAwait(false),
+                _turnCancellation.Token).ConfigureAwait(true);
             CurrentSessionTitle = _session.Title;
             await SaveCurrentSessionIfNeededAsync();
         }
@@ -653,6 +727,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             await RunOnUiAsync(() =>
             {
+                FlushStreamingTokens();
+                if (_streamingAssistantMessage is not null)
+                {
+                    _streamingAssistantMessage.MarkStreamingCancelled();
+                    _streamingAssistantMessage = null;
+                }
+
                 foreach (var message in Messages.Where(static message => message.IsToolRunning))
                 {
                     message.MarkToolCancelled();
@@ -671,15 +752,92 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, $"模型调用失败：{ex.Message}")));
+            await RunOnUiAsync(() =>
+            {
+                ClearStreamingAssistantPlaceholder();
+                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, $"模型调用失败：{ex.Message}")));
+            });
             await SaveCurrentSessionIfNeededAsync();
         }
         finally
         {
+            StopStreamingFlushTimer();
+            FlushStreamingTokens();
+            _streamingAssistantMessage = null;
             StreamingText = string.Empty;
             IsBusy = false;
             SendCommand.NotifyCanExecuteChanged();
         }
+    }
+
+    private void EnsureStreamingAssistantMessage()
+    {
+        if (_streamingAssistantMessage is not null)
+        {
+            return;
+        }
+
+        _streamingAssistantMessage = ChatMessageViewModel.CreateStreamingAssistant();
+        Messages.Add(_streamingAssistantMessage);
+        RequestScrollToBottom();
+    }
+
+    private void ClearStreamingAssistantPlaceholder()
+    {
+        StopStreamingFlushTimer();
+        _streamingTokenBuffer.Clear();
+
+        if (_streamingAssistantMessage is null)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_streamingAssistantMessage.Content))
+        {
+            Messages.Remove(_streamingAssistantMessage);
+        }
+
+        _streamingAssistantMessage = null;
+    }
+
+    private void ScheduleStreamingFlush()
+    {
+        if (_streamingFlushTimer is not null)
+        {
+            return;
+        }
+
+        _streamingFlushTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(40)
+        };
+        _streamingFlushTimer.Tick += (_, _) => FlushStreamingTokens();
+        _streamingFlushTimer.Start();
+    }
+
+    private void FlushStreamingTokens()
+    {
+        if (_streamingTokenBuffer.Length == 0 || _streamingAssistantMessage is null)
+        {
+            return;
+        }
+
+        _streamingAssistantMessage.AppendStreamingToken(_streamingTokenBuffer.ToString());
+        _streamingTokenBuffer.Clear();
+        RequestScrollToBottom();
+    }
+
+    private void RequestScrollToBottom() => ScrollChatToBottom?.Invoke();
+
+    private void StopStreamingFlushTimer()
+    {
+        if (_streamingFlushTimer is null)
+        {
+            return;
+        }
+
+        _streamingFlushTimer.Stop();
+        _streamingFlushTimer = null;
     }
 
     private ChatMessageViewModel? FindToolMessage(string? toolCallId)
