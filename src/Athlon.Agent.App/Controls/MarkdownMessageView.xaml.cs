@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -12,6 +13,9 @@ namespace Athlon.Agent.App.Controls;
 /// </summary>
 public partial class MarkdownMessageView : UserControl
 {
+    private ContextMenu? _contextMenu;
+    private bool _documentHooked;
+
     public static readonly DependencyProperty MarkdownProperty =
         DependencyProperty.Register(
             nameof(Markdown),
@@ -36,8 +40,10 @@ public partial class MarkdownMessageView : UserControl
     public MarkdownMessageView()
     {
         InitializeComponent();
-        Loaded += (_, _) => ApplyTheme();
-        ContextMenu = BuildContextMenu();
+        _contextMenu = BuildContextMenu();
+        ContextMenu = _contextMenu;
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     public string Markdown
@@ -204,21 +210,70 @@ public partial class MarkdownMessageView : UserControl
         return trigger;
     }
 
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        ApplyTheme();
+        AttachMarkdownContextMenu();
+        HookMarkdownDocumentChanges();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_documentHooked)
+        {
+            DependencyPropertyDescriptor
+                .FromProperty(FlowDocumentScrollViewer.DocumentProperty, typeof(FlowDocumentScrollViewer))
+                .RemoveValueChanged(MarkdownViewer, OnMarkdownDocumentChanged);
+            _documentHooked = false;
+        }
+    }
+
+    private void AttachMarkdownContextMenu()
+    {
+        if (_contextMenu is null)
+        {
+            return;
+        }
+
+        // MdXaml 构造时会挂系统默认 Copy/SelectAll 菜单，此处统一替换
+        MarkdownViewer.ContextMenu = _contextMenu;
+        ClearFlowDocumentContextMenu();
+    }
+
+    private void HookMarkdownDocumentChanges()
+    {
+        if (_documentHooked)
+        {
+            return;
+        }
+
+        DependencyPropertyDescriptor
+            .FromProperty(FlowDocumentScrollViewer.DocumentProperty, typeof(FlowDocumentScrollViewer))
+            .AddValueChanged(MarkdownViewer, OnMarkdownDocumentChanged);
+        _documentHooked = true;
+        OnMarkdownDocumentChanged(MarkdownViewer, EventArgs.Empty);
+    }
+
+    private void OnMarkdownDocumentChanged(object? sender, EventArgs e) => ClearFlowDocumentContextMenu();
+
+    private void ClearFlowDocumentContextMenu()
+    {
+        if (MarkdownViewer.Document is FlowDocument document)
+        {
+            document.ContextMenu = null;
+        }
+    }
+
     private ContextMenu BuildContextMenu()
     {
         var menu = new ContextMenu
         {
-            Background = Application.Current.FindResource("Brush.Panel") as Brush
-                ?? new SolidColorBrush(Color.FromRgb(39, 39, 42)),
-            BorderBrush = Application.Current.FindResource("Brush.Border") as Brush
-                ?? new SolidColorBrush(Color.FromRgb(63, 63, 70)),
-            Foreground = Application.Current.FindResource("Brush.Text") as Brush
-                ?? Brushes.White,
+            Style = Application.Current.FindResource("MarkdownContextMenuStyle") as Style,
         };
         var copyItem = new MenuItem
         {
             Header = "复制内容",
-            Foreground = menu.Foreground,
+            Style = Application.Current.FindResource("MarkdownContextMenuItemStyle") as Style,
         };
         copyItem.Click += (_, _) =>
         {

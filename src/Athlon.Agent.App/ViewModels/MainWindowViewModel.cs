@@ -12,481 +12,13 @@ using Microsoft.Win32;
 
 namespace Athlon.Agent.App.ViewModels;
 
-public sealed partial class ChatMessageViewModel : ObservableObject
-{
-    public ChatMessageViewModel(ChatMessage message, bool expandTool = false)
-    {
-        Role = message.Role.ToString();
-        Content = message.Content;
-        CreatedAt = message.CreatedAt.ToLocalTime().ToString("HH:mm:ss");
-        IsStreaming = false;
-        IsUser = message.Role == MessageRole.User;
-        IsTool = message.Role == MessageRole.Tool;
-        DisplayRole = IsUser ? "您" : IsTool ? "工具" : "Athlon 助手";
-
-        if (IsTool)
-        {
-            ParseToolContent(message.Content, out var toolCallId, out var header, out var summary, out var detail);
-            ToolCallId = toolCallId;
-            ToolHeader = header;
-            ToolSummary = summary;
-            ToolDetail = detail;
-            IsToolRunning = false;
-            IsExpanded = expandTool;
-        }
-        else
-        {
-            ToolCallId = null;
-            ToolHeader = string.Empty;
-            ToolSummary = string.Empty;
-            ToolDetail = string.Empty;
-            IsToolRunning = false;
-        }
-    }
-
-    private ChatMessageViewModel(AgentToolCall toolCall)
-    {
-        Role = MessageRole.Tool.ToString();
-        ToolCallId = toolCall.Id;
-        IsUser = false;
-        IsTool = true;
-        DisplayRole = "工具";
-        IsToolRunning = true;
-        CreatedAt = DateTimeOffset.Now.ToLocalTime().ToString("HH:mm:ss");
-        ToolHeader = $"Tool `{toolCall.Name}` running...";
-        ToolSummary = FormatArgumentsPreview(toolCall.Arguments);
-        ToolDetail = string.Empty;
-        Content = string.Empty;
-        IsExpanded = false;
-        IsStreaming = false;
-    }
-
-    public string Role { get; private set; }
-
-    [ObservableProperty]
-    private string _content = string.Empty;
-
-    [ObservableProperty]
-    private string _createdAt = string.Empty;
-
-    [ObservableProperty]
-    private bool _isStreaming;
-    public bool IsUser { get; }
-    public bool IsTool { get; }
-    public bool AssistantTone => !IsUser;
-    public string DisplayRole { get; }
-
-    public string? ToolCallId { get; private set; }
-
-    [ObservableProperty]
-    private bool _isToolRunning;
-
-    [ObservableProperty]
-    private string _toolHeader = string.Empty;
-
-    [ObservableProperty]
-    private string _toolSummary = string.Empty;
-
-    [ObservableProperty]
-    private string _toolDetail = string.Empty;
-
-    [ObservableProperty]
-    private bool _isExpanded;
-
-    public string ChevronGlyph => IsExpanded ? "▼" : "▶";
-
-    partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(ChevronGlyph));
-
-    [RelayCommand]
-    private void ToggleToolExpand() => IsExpanded = !IsExpanded;
-
-    public static ChatMessageViewModel CreatePendingTool(AgentToolCall toolCall) => new(toolCall);
-
-    public static ChatMessageViewModel CreateStreamingAssistant() =>
-        new(ChatMessage.Create(MessageRole.Assistant, string.Empty))
-        {
-            IsStreaming = true
-        };
-
-    public void AppendStreamingToken(string token)
-    {
-        if (string.IsNullOrEmpty(token))
-        {
-            return;
-        }
-
-        Content += token;
-    }
-
-    public void CompleteStreamingAssistant(ChatMessage message)
-    {
-        Content = message.Content;
-        CreatedAt = message.CreatedAt.ToLocalTime().ToString("HH:mm:ss");
-        IsStreaming = false;
-    }
-
-    public void MarkStreamingCancelled()
-    {
-        if (!IsStreaming)
-        {
-            return;
-        }
-
-        IsStreaming = false;
-        if (string.IsNullOrWhiteSpace(Content))
-        {
-            Content = "（已停止）";
-        }
-    }
-
-    public void ApplyCompletedTool(ChatMessage message)
-    {
-        if (!IsTool)
-        {
-            return;
-        }
-
-        Content = message.Content;
-        CreatedAt = message.CreatedAt.ToLocalTime().ToString("HH:mm:ss");
-        IsStreaming = false;
-        ParseToolContent(message.Content, out var toolCallId, out var header, out var summary, out var detail);
-        if (!string.IsNullOrWhiteSpace(toolCallId))
-        {
-            ToolCallId = toolCallId;
-        }
-
-        ToolHeader = header;
-        ToolSummary = summary;
-        ToolDetail = detail;
-        IsToolRunning = false;
-    }
-
-    public void MarkToolCancelled()
-    {
-        if (!IsTool || !IsToolRunning)
-        {
-            return;
-        }
-
-        IsToolRunning = false;
-        ToolSummary = "已停止";
-    }
-
-    private static void ParseToolContent(string content, out string? toolCallId, out string header, out string summary, out string detail)
-    {
-        toolCallId = null;
-        var lines = content.Replace("\r\n", "\n").Split('\n');
-        header = "工具调用";
-        summary = string.Empty;
-
-        foreach (var line in lines)
-        {
-            if (line.StartsWith("ToolCallId:", StringComparison.OrdinalIgnoreCase))
-            {
-                toolCallId = line["ToolCallId:".Length..].Trim();
-                continue;
-            }
-
-            if (!string.IsNullOrWhiteSpace(line) && header == "工具调用")
-            {
-                header = line.Trim();
-            }
-
-            if (line.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
-            {
-                summary = line["Summary:".Length..].Trim();
-            }
-        }
-
-        detail = content.Trim();
-    }
-
-    private static string FormatArgumentsPreview(IReadOnlyDictionary<string, string> arguments) =>
-        arguments.Count == 0
-            ? string.Empty
-            : string.Join("; ", arguments.Select(argument => $"{argument.Key}={argument.Value}"));
-}
-
-public sealed class SessionHistoryItemViewModel
-{
-    public SessionHistoryItemViewModel(SessionIndexEntry entry, bool isActive)
-    {
-        Id = entry.Id;
-        Title = string.IsNullOrWhiteSpace(entry.Title) ? "未命名对话" : entry.Title;
-        UpdatedAtText = entry.UpdatedAt.ToLocalTime().ToString("MM-dd HH:mm");
-        IsActive = isActive;
-    }
-
-    public string Id { get; }
-    public string Title { get; }
-    public string UpdatedAtText { get; }
-    public bool IsActive { get; }
-}
-
-public sealed partial class ContextSidebarViewModel : ObservableObject
-{
-    private readonly IAppPathProvider _paths;
-    private readonly IAgentSkillCatalog _skillCatalog;
-
-    public ContextSidebarViewModel(IAppPathProvider paths, IAgentSkillCatalog skillCatalog, AppSettings settings)
-    {
-        _paths = paths;
-        _skillCatalog = skillCatalog;
-        Refresh(settings);
-    }
-
-    public ObservableCollection<string> Skills { get; } = new();
-    public ObservableCollection<string> McpServers { get; } = new();
-    public ObservableCollection<WorkspaceTreeNodeViewModel> WorkspaceTree { get; } = new();
-    public string LocalModelStatus { get; set; } = "Local Model Active";
-
-    public void Refresh(AppSettings settings)
-    {
-        _skillCatalog.Reload();
-        Skills.Clear();
-
-        var disabled = new HashSet<string>(
-            settings.Skills.Where(skill => !skill.Enabled).Select(skill => skill.Name),
-            StringComparer.OrdinalIgnoreCase);
-
-        if (_skillCatalog.Skills.Count == 0)
-        {
-            Skills.Add($"未安装技能 ({_paths.SkillsPath})");
-        }
-        else
-        {
-            foreach (var skill in _skillCatalog.Skills.OrderBy(skill => skill.Name, StringComparer.Ordinal))
-            {
-                var status = disabled.Contains(skill.Name) ? "○" : "●";
-                Skills.Add($"{status} {skill.Name}");
-            }
-        }
-
-        McpServers.Clear();
-        if (settings.McpServers.Count == 0)
-        {
-            McpServers.Add("未配置 MCP 服务器");
-        }
-        else
-        {
-            foreach (var server in settings.McpServers)
-            {
-                var status = server.Enabled ? "●" : "○";
-                var command = string.IsNullOrWhiteSpace(server.Command) ? string.Empty : $"  {server.Command}";
-                McpServers.Add($"{status} {server.Name}{command}");
-            }
-        }
-    }
-
-    public void RefreshWorkspaceTree(string? workspaceRootPath, IReadOnlyList<string> ignorePatterns)
-    {
-        WorkspaceTree.Clear();
-        foreach (var node in WorkspaceTreeNodeViewModel.BuildTree(workspaceRootPath, ignorePatterns))
-        {
-            WorkspaceTree.Add(node);
-        }
-    }
-}
-
-public sealed partial class McpServerItemViewModel : ObservableObject
-{
-    public McpServerItemViewModel(McpServerSettings settings)
-    {
-        Settings = settings;
-    }
-
-    public McpServerSettings Settings { get; }
-
-    public string DisplayInitial => string.IsNullOrWhiteSpace(Name) ? "M" : Name.Trim()[0].ToString().ToUpperInvariant();
-
-    public string Name
-    {
-        get => Settings.Name;
-        set
-        {
-            if (Settings.Name == value)
-            {
-                return;
-            }
-
-            Settings.Name = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(DisplayInitial));
-        }
-    }
-
-    public bool Enabled
-    {
-        get => Settings.Enabled;
-        set
-        {
-            if (Settings.Enabled == value)
-            {
-                return;
-            }
-
-            Settings.Enabled = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(StatusText));
-            OnPropertyChanged(nameof(ToolSummary));
-        }
-    }
-
-    public string Command
-    {
-        get => Settings.Command;
-        set
-        {
-            if (Settings.Command == value)
-            {
-                return;
-            }
-
-            Settings.Command = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(CommandSummary));
-        }
-    }
-
-    public string ArgsText
-    {
-        get => string.Join(" ", Settings.Args);
-        set
-        {
-            Settings.Args.Clear();
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                Settings.Args.AddRange(value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-            }
-
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(CommandSummary));
-        }
-    }
-
-    public string StatusText => Enabled ? "Configured and enabled" : "Configured but disabled";
-
-    public string ToolSummary => Enabled ? "0 tools configured" : "Disabled";
-
-    public string CommandSummary
-    {
-        get
-        {
-            var args = ArgsText;
-            return string.IsNullOrWhiteSpace(args) ? $"command: {Command}" : $"command: {Command} {args}";
-        }
-    }
-}
-
-public sealed partial class SettingsViewModel : ObservableObject
-{
-    public SettingsViewModel(AppSettings settings)
-    {
-        Settings = settings;
-        foreach (var server in Settings.McpServers)
-        {
-            McpServers.Add(new McpServerItemViewModel(server));
-        }
-
-        SelectedMcpServer = McpServers.FirstOrDefault();
-    }
-
-    public AppSettings Settings { get; }
-    public string[] Sections { get; } = { "Models", "MCP", "Skills", "Workspace", "Tool Permissions", "Appearance" };
-    public ObservableCollection<McpServerItemViewModel> McpServers { get; } = new();
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSelectedMcpServer))]
-    [NotifyPropertyChangedFor(nameof(EditableMcpArgs))]
-    private McpServerItemViewModel? selectedMcpServer;
-
-    public bool HasSelectedMcpServer => SelectedMcpServer is not null;
-
-    public SkillSettings EditableSkill
-    {
-        get
-        {
-            if (Settings.Skills.Count == 0)
-            {
-                Settings.Skills.Add(new SkillSettings());
-            }
-
-            return Settings.Skills[0];
-        }
-    }
-
-    public McpServerSettings EditableMcpServer
-    {
-        get
-        {
-            if (SelectedMcpServer is null)
-            {
-                AddMcpServer();
-            }
-
-            return SelectedMcpServer!.Settings;
-        }
-    }
-
-    public string EditableMcpArgs
-    {
-        get => SelectedMcpServer?.ArgsText ?? string.Empty;
-        set
-        {
-            if (SelectedMcpServer is not null)
-            {
-                SelectedMcpServer.ArgsText = value;
-            }
-        }
-    }
-
-    [RelayCommand]
-    private void AddMcpServer()
-    {
-        var nextIndex = Settings.McpServers.Count + 1;
-        var server = new McpServerSettings
-        {
-            Name = $"custom-mcp-{nextIndex}",
-            Command = "npx",
-            Enabled = true
-        };
-        server.Args.Add("-y");
-
-        Settings.McpServers.Add(server);
-        var item = new McpServerItemViewModel(server);
-        McpServers.Add(item);
-        SelectedMcpServer = item;
-    }
-
-    [RelayCommand]
-    private void SelectMcpServer(McpServerItemViewModel server)
-    {
-        SelectedMcpServer = server;
-    }
-
-    public WorkspaceSettings EditableWorkspace
-    {
-        get
-        {
-            if (Settings.Workspaces.Count == 0)
-            {
-                Settings.Workspaces.Add(new WorkspaceSettings());
-            }
-
-            return Settings.Workspaces[0];
-        }
-    }
-
-    internal static void PruneEmptyWorkspaces(AppSettings settings) =>
-        settings.Workspaces.RemoveAll(workspace => string.IsNullOrWhiteSpace(workspace.RootPath));
-}
-
 public partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly IAgentOrchestrator _orchestrator;
     private readonly IFileStorageService _storage;
     private readonly ICredentialStore _credentialStore;
     private readonly IActiveWorkspaceContext _workspaceContext;
+    private readonly IMcpRegistry _mcpRegistry;
     private readonly AppSettings _appSettings;
     private FileSystemWatcher? _workspaceWatcher;
     private CancellationTokenSource? _turnCancellation;
@@ -500,6 +32,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IFileStorageService storage,
         ICredentialStore credentialStore,
         IActiveWorkspaceContext workspaceContext,
+        IMcpRegistry mcpRegistry,
         IAppPathProvider paths,
         IAgentSkillCatalog skillCatalog,
         AppSettings settings)
@@ -508,16 +41,28 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _storage = storage;
         _credentialStore = credentialStore;
         _workspaceContext = workspaceContext;
+        _mcpRegistry = mcpRegistry;
         _appSettings = settings;
-        Settings = new SettingsViewModel(settings);
-        Sidebar = new ContextSidebarViewModel(paths, skillCatalog, settings);
+        Settings = new SettingsViewModel(settings, _mcpRegistry);
+        Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
+        Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
         ApplySessionWorkspace();
         _ = InitializeAsync();
     }
 
+    private async Task RefreshMcpRuntimeAsync()
+    {
+        await _mcpRegistry.RefreshAsync(Settings.Settings.McpServers);
+        Settings.RefreshRuntimeStates();
+        Sidebar.Refresh(Settings.Settings);
+        OnPropertyChanged(nameof(Sidebar));
+    }
+
     public async Task InitializeAsync()
     {
+        await RefreshMcpRuntimeAsync();
+
         await RefreshSessionHistoryAsync();
         var latest = SessionHistory.FirstOrDefault();
         if (latest is not null && _session.Messages.Count == 0)
@@ -920,7 +465,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Settings.Settings.Model.LegacyApiKeyCredentialName = null;
         SettingsViewModel.PruneEmptyWorkspaces(Settings.Settings);
         await _storage.SaveSettingsAsync(Settings.Settings);
-        Sidebar.Refresh(Settings.Settings);
+        await RefreshMcpRuntimeAsync();
         ApplySessionWorkspace();
         OnPropertyChanged(nameof(Sidebar));
         SettingsStatus = $"Saved at {DateTime.Now:HH:mm:ss}";

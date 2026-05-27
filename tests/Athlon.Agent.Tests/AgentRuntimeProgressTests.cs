@@ -128,6 +128,34 @@ public sealed class AgentRuntimeProgressTests
         Assert.True(toolRouter.CapturedOnThreadPool);
     }
 
+    [Fact]
+    public async Task SendAsync_CanRouteMcpToolCallsThroughCompositeRouter()
+    {
+        var storage = new NoOpStorage();
+        var modelClient = new ScriptedModelClient(
+            new AgentModelResponse(string.Empty, new[]
+            {
+                new AgentToolCall("call-1", "mcp.demo.echo", new Dictionary<string, string> { ["argumentsJson"] = "{\"x\":1}" })
+            }),
+            new AgentModelResponse("done", Array.Empty<AgentToolCall>()));
+
+        var registry = new FakeMcpRegistry();
+        var composite = new Athlon.Agent.Infrastructure.CompositeToolRouter(Array.Empty<IAgentTool>(), registry);
+        var runtime = new AgentRuntime(
+            modelClient,
+            storage,
+            composite,
+            new StaticPromptBuilder(),
+            new NoOpPreCompletionPipeline(),
+            new NoOpAutoCompactService(),
+            new NoOpActiveAgentSessionContext(),
+            new NoOpLogger());
+
+        await runtime.SendAsync(AgentSession.Create("mcp-route-test"), "call mcp");
+
+        Assert.Equal(("demo", "echo"), registry.LastInvocation);
+    }
+
     private sealed class ScriptedModelClient(params AgentModelResponse[] responses) : IAgentModelClient
     {
         private int _index;
@@ -189,6 +217,24 @@ public sealed class AgentRuntimeProgressTests
             CapturedThreadId = Environment.CurrentManagedThreadId;
             CapturedOnThreadPool = Thread.CurrentThread.IsThreadPoolThread;
             return Task.FromResult(ToolResult.Success("ok"));
+        }
+    }
+
+    private sealed class FakeMcpRegistry : Athlon.Agent.Infrastructure.IMcpRegistry
+    {
+        public (string server, string tool)? LastInvocation { get; private set; }
+
+        public IReadOnlyList<Athlon.Agent.Mcp.McpServerStatus> GetStatuses() => Array.Empty<Athlon.Agent.Mcp.McpServerStatus>();
+
+        public IReadOnlyList<ToolDefinition> ListToolDefinitions() =>
+            new[] { new ToolDefinition("mcp.demo.echo", "echo", new Dictionary<string, string> { ["argumentsJson"] = "args" }, Source: "mcp") };
+
+        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<ToolResult> InvokeAsync(string serverName, string toolName, IReadOnlyDictionary<string, string> args, CancellationToken cancellationToken = default)
+        {
+            LastInvocation = (serverName, toolName);
+            return Task.FromResult(ToolResult.Success("ok", "{\"ok\":true}"));
         }
     }
 

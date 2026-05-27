@@ -603,47 +603,90 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="Installed MCP Servers" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
+                            <TextBlock Text="Installed MCP Servers" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="配置文件使用 Claude Desktop 格式，保存到 %USERPROFILE%/.athlon-agent/config/mcp.json。stdio 用 command/args；Streamable HTTP 用 type=http 与 url（可选 headers）。"
+                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,0,0,14" />
                             <ItemsControl ItemsSource="{Binding Settings.McpServers}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
                                         <Border Background="#1B1B1E"
                                                 BorderBrush="{StaticResource Brush.Border}"
                                                 BorderThickness="0,0,0,1"
-                                                Padding="0,0,0,12"
-                                                Margin="0,0,0,12">
+                                                Padding="8,10"
+                                                Margin="0,0,0,8">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="46" />
+                                                    <ColumnDefinition Width="44" />
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <Button Grid.ColumnSpan="2"
+
+                                                <Grid Grid.Column="0" Width="40" Height="40" VerticalAlignment="Center">
+                                                    <Border Width="36" Height="36" CornerRadius="10" Background="#3F3F46">
+                                                        <TextBlock Text="{Binding DisplayInitial}"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="15" />
+                                                    </Border>
+                                                    <Ellipse Width="10" Height="10"
+                                                             HorizontalAlignment="Right"
+                                                             VerticalAlignment="Bottom"
+                                                             Margin="0,0,-2,-2"
+                                                             Stroke="#18181B"
+                                                             StrokeThickness="2">
+                                                        <Ellipse.Style>
+                                                            <Style TargetType="Ellipse">
+                                                                <Setter Property="Fill" Value="#71717A" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsStatusHealthy}" Value="True">
+                                                                        <Setter Property="Fill" Value="{StaticResource Brush.Success}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                                                                        <Setter Property="Fill" Value="{StaticResource Brush.Danger}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding ShowStatusDot}" Value="False">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Ellipse.Style>
+                                                    </Ellipse>
+                                                </Grid>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,8,0">
+                                                    <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding ToolSummary}"
+                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               FontSize="12"
+                                                               Margin="0,4,0,0" />
+                                                </StackPanel>
+
+                                                <Button Grid.Column="2"
+                                                        Style="{StaticResource McpIconButtonStyle}"
+                                                        Content="✎"
+                                                        ToolTip="编辑"
                                                         Command="{Binding DataContext.Settings.SelectMcpServerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                         CommandParameter="{Binding}"
-                                                        Background="Transparent"
-                                                        BorderThickness="0"
-                                                        Padding="0"
-                                                        HorizontalContentAlignment="Stretch">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="46" />
-                                                            <ColumnDefinition Width="*" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <Border Width="34" Height="34" CornerRadius="9" Background="#3F3F46" VerticalAlignment="Top">
-                                                            <TextBlock Text="{Binding DisplayInitial}" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                                        </Border>
-                                                        <StackPanel Grid.Column="1">
-                                                            <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
-                                                            <TextBlock Text="{Binding ToolSummary}" Foreground="#86EFAC" Margin="0,4,0,0" />
-                                                            <TextBlock Text="{Binding CommandSummary}" Foreground="{StaticResource Brush.SubtleText}" TextTrimming="CharacterEllipsis" Margin="0,4,0,0" />
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </Button>
-                                                <CheckBox Grid.Column="2"
+                                                        VerticalAlignment="Center" />
+                                                <Button Grid.Column="3"
+                                                        Style="{StaticResource McpIconButtonStyle}"
+                                                        Content="🗑"
+                                                        ToolTip="删除"
+                                                        Command="{Binding DataContext.Settings.DeleteMcpServerCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        VerticalAlignment="Center"
+                                                        Margin="4,0,0,0" />
+                                                <CheckBox Grid.Column="4"
+                                                          Style="{StaticResource McpToggleSwitchStyle}"
                                                           IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}"
-                                                          VerticalAlignment="Top"
-                                                          Margin="12,4,0,0" />
+                                                          VerticalAlignment="Center"
+                                                          Margin="12,0,0,0" />
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -665,7 +708,11 @@
                                     <TextBox Text="{Binding Settings.SelectedMcpServer.Command, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
                                     <TextBlock Text="Args" Foreground="{StaticResource Brush.SubtleText}" />
                                     <TextBox Text="{Binding Settings.EditableMcpArgs, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
-                                    <CheckBox Content="Enabled" IsChecked="{Binding Settings.SelectedMcpServer.Enabled, UpdateSourceTrigger=PropertyChanged}" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="启用" Foreground="{StaticResource Brush.SubtleText}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                        <CheckBox Style="{StaticResource McpToggleSwitchStyle}"
+                                                  IsChecked="{Binding Settings.SelectedMcpServer.Enabled, UpdateSourceTrigger=PropertyChanged}" />
+                                    </StackPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

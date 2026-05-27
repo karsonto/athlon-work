@@ -153,7 +153,7 @@ HTTP log lines include timestamp, endpoint, purpose (`chat-completion` or `conte
 ## Notes For Future AI Work
 
 - Prefer extending `AgentRuntime`, `AgentEnvironmentPromptBuilder`, and tool classes instead of adding model logic to the WPF layer.
-- Keep UI logic in `Athlon.Agent.App/ViewModels/AppViewModels.cs` following the existing MVVM pattern.
+- Keep UI logic in focused files under `Athlon.Agent.App/ViewModels/` following the existing MVVM pattern.
 - Keep persistence file-based unless there is a strong product reason to introduce a database.
 - Do not reintroduce `%LocalAppData%` or `AthlonAgent` for default app data. Use `IAppPathProvider` (folder name: `.athlon-agent` under the user profile).
 - Before editing `.pen` design files, use the Pencil MCP tools only.
