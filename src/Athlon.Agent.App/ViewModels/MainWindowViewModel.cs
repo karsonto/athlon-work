@@ -801,6 +801,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         var replacement = AtCompletionItems[SelectedAtCompletionIndex].InsertText;
+        if (!replacement.EndsWith(' '))
+        {
+            replacement += " ";
+        }
         ComposerText = ComposerText[..atStart] + replacement + ComposerText[atEndExclusive..];
         newCaretIndex = atStart + replacement.Length;
         CloseAtCompletion();
