@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Athlon.Agent.Core;
@@ -81,11 +80,32 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                     try { await existing.DisposeAsync(); } catch { /* ignore */ }
                 }
 
-                var client = CreateClient(name, server, workspaceContext.RootPath);
+                IMcpClient client;
+                try
+                {
+                    client = await McpSdkClientFactory.ConnectAsync(
+                        name,
+                        server,
+                        workspaceContext.RootPath,
+                        clientName: "Athlon.Agent",
+                        cancellationToken);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _logger.Warning("MCP connect failed for {Server}: {Message}", name, ex.Message);
+                    _tools[name] = Array.Empty<McpTool>();
+                    _statuses[name] = new McpServerStatus(
+                        name,
+                        McpConnectionState.Error,
+                        ResolveTransportLabel(server),
+                        Array.Empty<McpTool>(),
+                        LastError: ex.Message);
+                    continue;
+                }
+
                 _clients[name] = client;
                 try
                 {
-                    await client.InitializeAsync(clientName: "Athlon.Agent", cancellationToken);
                     var tools = await client.ListToolsAsync(cancellationToken);
                     _tools[name] = tools;
                     _statuses[name] = client.Status with { Tools = tools.ToArray() };
@@ -199,46 +219,8 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         }
     }
 
-    private static IMcpClient CreateClient(string name, McpServerSettings server, string? workspaceRoot)
-    {
-        if (McpTransportKinds.IsStreamableHttp(server.TransportType))
-        {
-            return new McpStreamableHttpClient(
-                name,
-                server.Url,
-                server.Headers,
-                defaultTimeout: McpClientDefaults.RequestTimeout);
-        }
-
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = server.Command,
-            Arguments = server.Args.Count == 0 ? string.Empty : string.Join(" ", server.Args),
-            WorkingDirectory = ResolveWorkingDirectory(server)
-        };
-        foreach (var (key, value) in server.Env)
-        {
-            startInfo.Environment[key] = value;
-        }
-
-        if (!string.IsNullOrWhiteSpace(workspaceRoot)
-            && !startInfo.Environment.ContainsKey("VISION_WORKSPACE"))
-        {
-            startInfo.Environment["VISION_WORKSPACE"] = Path.GetFullPath(workspaceRoot);
-        }
-
-        return new McpStdioClient(name, startInfo, defaultTimeout: McpClientDefaults.RequestTimeout);
-    }
-
-    private static string ResolveWorkingDirectory(McpServerSettings server)
-    {
-        if (!string.IsNullOrWhiteSpace(server.WorkingDirectory))
-        {
-            return Path.GetFullPath(server.WorkingDirectory);
-        }
-
-        return Environment.CurrentDirectory;
-    }
+    private static string ResolveTransportLabel(McpServerSettings server) =>
+        McpTransportKinds.IsStreamableHttp(server.TransportType) ? "streamable-http" : "stdio";
 
     public async ValueTask DisposeAsync()
     {
