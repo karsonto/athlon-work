@@ -8,7 +8,7 @@
         MinWidth="720"
         MinHeight="480"
         WindowStartupLocation="CenterOwner"
-        Background="#101012">
+        Style="{StaticResource PreviewWindowStyle}">
     <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -18,13 +18,9 @@
         <Grid Grid.Row="0" Margin="0,0,0,12">
             <StackPanel>
                 <TextBlock Text="HTML 预览"
-                           FontSize="16"
-                           FontWeight="SemiBold"
-                           Foreground="#F4F4F5" />
+                           Style="{StaticResource PreviewWindowTitleStyle}" />
                 <TextBlock Text="已在沙箱环境中渲染，不会影响当前页面"
-                           FontSize="12"
-                           Foreground="#A1A1AA"
-                           Margin="0,4,0,0" />
+                           Style="{StaticResource PreviewWindowSubtitleStyle}" />
             </StackPanel>
             <Button Content="×"
                     Width="40"
@@ -37,11 +33,7 @@
         </Grid>
 
         <Border Grid.Row="1"
-                Background="White"
-                CornerRadius="16"
-                BorderBrush="#3F3F46"
-                BorderThickness="1"
-                Padding="12">
+                Style="{StaticResource PreviewContentFrameStyle}">
             <wv2:WebView2 x:Name="PreviewWebView" />
         </Border>
     </Grid>

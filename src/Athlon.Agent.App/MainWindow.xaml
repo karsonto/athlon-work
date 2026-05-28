@@ -229,11 +229,7 @@
                                         <Button Grid.Column="0"
                                                 Command="{Binding DataContext.LoadSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding}"
-                                                Background="Transparent"
-                                                BorderThickness="0"
-                                                Padding="12,10,4,10"
-                                                HorizontalContentAlignment="Stretch"
-                                                Cursor="Hand">
+                                                Style="{StaticResource SessionHistoryButtonStyle}">
                                             <StackPanel>
                                                 <TextBlock Text="{Binding Title}"
                                                            FontSize="13"
@@ -256,10 +252,8 @@
                                                 Padding="0"
                                                 FontSize="16"
                                                 Foreground="{StaticResource Brush.SubtleText}"
-                                                Background="Transparent"
-                                                BorderThickness="0"
                                                 VerticalAlignment="Center"
-                                                Cursor="Hand" />
+                                                Style="{StaticResource SessionDeleteButtonStyle}" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -1226,76 +1220,24 @@
                                 <DataTemplate>
                                     <StackPanel Margin="0,3">
                                         <Button Command="{Binding ToggleExpandedCommand}"
-                                                HorizontalContentAlignment="Stretch"
-                                                Background="Transparent"
-                                                BorderThickness="0"
-                                                Padding="0"
-                                                Cursor="Hand">
-                                            <Button.Template>
-                                                <ControlTemplate TargetType="Button">
-                                                    <Border x:Name="Root"
-                                                            Background="{TemplateBinding Background}"
-                                                            CornerRadius="8"
-                                                            Padding="6,5">
-                                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                                          VerticalAlignment="Center" />
-                                                    </Border>
-                                                    <ControlTemplate.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter TargetName="Root" Property="Background" Value="#2A2A2D" />
-                                                        </Trigger>
-                                                        <Trigger Property="IsPressed" Value="True">
-                                                            <Setter TargetName="Root" Property="Background" Value="#33333A" />
-                                                        </Trigger>
-                                                    </ControlTemplate.Triggers>
-                                                </ControlTemplate>
-                                            </Button.Template>
+                                                Style="{StaticResource McpSidebarItemButtonStyle}">
                                             <Grid>
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0">
-                                                    <Ellipse.Style>
-                                                        <Style TargetType="Ellipse">
-                                                            <Setter Property="Fill" Value="#FBBF24" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsDisabled}" Value="True">
-                                                                    <Setter Property="Fill" Value="{StaticResource Brush.Danger}" />
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding IsHealthy}" Value="True">
-                                                                    <Setter Property="Fill" Value="{StaticResource Brush.Success}" />
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding IsWarning}" Value="True">
-                                                                    <Setter Property="Fill" Value="#FBBF24" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Ellipse.Style>
-                                                </Ellipse>
+                                                <Ellipse Width="8"
+                                                         Height="8"
+                                                         VerticalAlignment="Center"
+                                                         Margin="0,0,8,0"
+                                                         Style="{StaticResource McpStatusIndicatorStyle}" />
                                                 <StackPanel Grid.Column="1">
                                                     <TextBlock Text="{Binding Name}"
                                                                FontSize="13"
                                                                FontWeight="SemiBold"
-                                                               TextTrimming="CharacterEllipsis">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="#FBBF24" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsDisabled}" Value="True">
-                                                                        <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding IsHealthy}" Value="True">
-                                                                        <Setter Property="Foreground" Value="{StaticResource Brush.Success}" />
-                                                                    </DataTrigger>
-                                                                    <DataTrigger Binding="{Binding IsWarning}" Value="True">
-                                                                        <Setter Property="Foreground" Value="#FBBF24" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Style="{StaticResource McpStatusNameStyle}" />
                                                     <TextBlock Text="{Binding Summary}"
                                                                Foreground="{StaticResource Brush.SubtleText}"
                                                                FontSize="11"
@@ -1375,91 +1317,7 @@
                                   Foreground="{StaticResource Brush.Text}"
                                   MouseDoubleClick="WorkspaceTree_OnMouseDoubleClick">
                             <TreeView.ItemContainerStyle>
-                                <Style TargetType="TreeViewItem">
-                                    <Setter Property="IsExpanded" Value="False" />
-                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
-                                    <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="BorderBrush" Value="Transparent" />
-                                    <Setter Property="Padding" Value="0" />
-                                    <Setter Property="Margin" Value="0,1" />
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="TreeViewItem">
-                                                <StackPanel>
-                                                    <Border x:Name="ItemBorder"
-                                                            Background="{TemplateBinding Background}"
-                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                            BorderThickness="1"
-                                                            CornerRadius="8"
-                                                            Padding="6,4">
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="Auto" />
-                                                                <ColumnDefinition Width="*" />
-                                                            </Grid.ColumnDefinitions>
-                                                            <ToggleButton x:Name="Expander"
-                                                                          Width="14"
-                                                                          Height="14"
-                                                                          Margin="0,0,4,0"
-                                                                          IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"
-                                                                          ClickMode="Press"
-                                                                          Background="Transparent"
-                                                                          BorderThickness="0"
-                                                                          Foreground="{StaticResource Brush.SubtleText}"
-                                                                          Visibility="Hidden">
-                                                                <TextBlock Text="▸"
-                                                                           FontSize="10"
-                                                                           HorizontalAlignment="Center"
-                                                                           VerticalAlignment="Center" />
-                                                            </ToggleButton>
-                                                            <ContentPresenter Grid.Column="1"
-                                                                              x:Name="PART_Header"
-                                                                              ContentSource="Header"
-                                                                              HorizontalAlignment="Stretch"
-                                                                              VerticalAlignment="Center" />
-                                                        </Grid>
-                                                    </Border>
-                                                    <ItemsPresenter x:Name="ItemsHost" Margin="18,2,0,0" />
-                                                </StackPanel>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="HasItems" Value="True">
-                                                        <Setter TargetName="Expander" Property="Visibility" Value="Visible" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsExpanded" Value="False">
-                                                        <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsExpanded" Value="True">
-                                                        <Setter TargetName="Expander" Property="RenderTransform">
-                                                            <Setter.Value>
-                                                                <RotateTransform Angle="90" CenterX="7" CenterY="7" />
-                                                            </Setter.Value>
-                                                        </Setter>
-                                                    </Trigger>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter TargetName="ItemBorder" Property="Background" Value="#2A2A2D" />
-                                                    </Trigger>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter TargetName="ItemBorder" Property="Background" Value="#1E3A5F" />
-                                                        <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#2F5C8E" />
-                                                        <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
-                                                    </Trigger>
-                                                    <MultiTrigger>
-                                                        <MultiTrigger.Conditions>
-                                                            <Condition Property="IsSelected" Value="True" />
-                                                            <Condition Property="IsSelectionActive" Value="False" />
-                                                        </MultiTrigger.Conditions>
-                                                        <Setter TargetName="ItemBorder" Property="Background" Value="#243A55" />
-                                                        <Setter TargetName="ItemBorder" Property="BorderBrush" Value="#2F5C8E" />
-                                                        <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
-                                                    </MultiTrigger>
-                                                    <Trigger Property="IsEnabled" Value="False">
-                                                        <Setter Property="Foreground" Value="{StaticResource Brush.SubtleText}" />
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
+                                <Style TargetType="TreeViewItem" BasedOn="{StaticResource WorkspaceTreeViewItemStyle}" />
                             </TreeView.ItemContainerStyle>
                             <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
@@ -1476,17 +1334,10 @@
         </Border>
         </Grid>
 
-        <!-- 复制提示：对齐 report/html bg-slate-900 + text-white -->
         <Border Panel.ZIndex="100"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
-                Margin="0,20,20,0"
-                Padding="16,12"
-                CornerRadius="16"
-                Background="#0F172A"
-                BorderBrush="#334155"
-                BorderThickness="1"
-                IsHitTestVisible="False">
+                Margin="0,20,20,0">
             <Border.Effect>
                 <DropShadowEffect Color="#000000"
                                   Opacity="0.45"
@@ -1495,7 +1346,7 @@
                                   Direction="270" />
             </Border.Effect>
             <Border.Style>
-                <Style TargetType="Border">
+                <Style TargetType="Border" BasedOn="{StaticResource ToastNoticeStyle}">
                     <Setter Property="Visibility" Value="Collapsed" />
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding IsCopyNoticeVisible}" Value="True">
@@ -1505,8 +1356,7 @@
                 </Style>
             </Border.Style>
             <TextBlock Text="{Binding CopyNotice}"
-                       Foreground="#FFFFFF"
-                       FontSize="13" />
+                       Style="{StaticResource ToastNoticeTextStyle}" />
         </Border>
     </Grid>
 </Window>

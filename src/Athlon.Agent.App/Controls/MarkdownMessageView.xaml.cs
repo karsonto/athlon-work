@@ -3,6 +3,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Windows;
 using MdXaml;
 
 namespace Athlon.Agent.App.Controls;
@@ -14,6 +16,7 @@ namespace Athlon.Agent.App.Controls;
 public partial class MarkdownMessageView : UserControl
 {
     private ContextMenu? _contextMenu;
+    private MenuItem? _previewHtmlMenuItem;
     private bool _documentHooked;
 
     public static readonly DependencyProperty MarkdownProperty =
@@ -98,7 +101,7 @@ public partial class MarkdownMessageView : UserControl
         ApplyMaxHeight();
 
         var textBrush = AssistantTone
-            ? Application.Current.FindResource("Brush.Text") as Brush ?? Brushes.White
+            ? FlowDocumentThemeNormalizer.ResolveBrush("Brush.Text") ?? Brushes.White
             : new SolidColorBrush(Color.FromRgb(239, 246, 255));
 
         MarkdownViewer.Foreground = textBrush;
@@ -117,13 +120,18 @@ public partial class MarkdownMessageView : UserControl
             }
         };
 
-        var inlineCodeBackground = new SolidColorBrush(Color.FromRgb(39, 39, 42));
-        var codeBlockBackground = new SolidColorBrush(Color.FromRgb(2, 6, 23));
-        var codeForeground = new SolidColorBrush(Color.FromRgb(241, 245, 249));
-        var codeBorder = new SolidColorBrush(Color.FromRgb(30, 41, 59));
-        var tableBackground = new SolidColorBrush(Color.FromRgb(32, 32, 35));
-        var tableHeaderBackground = new SolidColorBrush(Color.FromRgb(39, 39, 42));
-        var tableBorder = new SolidColorBrush(Color.FromRgb(82, 82, 91));
+        var inlineCodeBackground = FlowDocumentThemeNormalizer.ResolveBrush("Brush.CodeBackgroundAlt")
+            ?? new SolidColorBrush(Color.FromRgb(39, 39, 42));
+        var codeBlockBackground = FlowDocumentThemeNormalizer.ResolveBrush("Brush.CodeBackground")
+            ?? new SolidColorBrush(Color.FromRgb(32, 32, 35));
+        var codeForeground = FlowDocumentThemeNormalizer.ResolveBrush("Brush.CodeForeground")
+            ?? new SolidColorBrush(Color.FromRgb(241, 245, 249));
+        var codeBorder = FlowDocumentThemeNormalizer.ResolveBrush("Brush.CodeBorder")
+            ?? new SolidColorBrush(Color.FromRgb(30, 41, 59));
+        var tableBackground = codeBlockBackground;
+        var tableHeaderBackground = inlineCodeBackground;
+        var tableBorder = FlowDocumentThemeNormalizer.ResolveBrush("Brush.TableBorder")
+            ?? new SolidColorBrush(Color.FromRgb(82, 82, 91));
 
         var paragraphStyle = new Style(typeof(Paragraph))
         {
@@ -265,7 +273,6 @@ public partial class MarkdownMessageView : UserControl
             return;
         }
 
-        // MdXaml/FlowDocument 会在文档重建后恢复默认菜单，此处统一替换为应用菜单。
         MarkdownViewer.ContextMenu = _contextMenu;
         ApplyFlowDocumentContextMenu();
     }
@@ -291,6 +298,7 @@ public partial class MarkdownMessageView : UserControl
         if (MarkdownViewer.Document is FlowDocument document)
         {
             document.ContextMenu = _contextMenu;
+            FlowDocumentThemeNormalizer.Normalize(document, _contextMenu);
         }
     }
 
@@ -300,6 +308,23 @@ public partial class MarkdownMessageView : UserControl
         {
             Style = Application.Current.FindResource("MarkdownContextMenuStyle") as Style,
         };
+        menu.Opened += (_, _) => UpdatePreviewHtmlMenuVisibility();
+
+        _previewHtmlMenuItem = new MenuItem
+        {
+            Header = "预览 HTML",
+            Style = Application.Current.FindResource("MarkdownContextMenuItemStyle") as Style,
+            Visibility = Visibility.Collapsed,
+        };
+        _previewHtmlMenuItem.Click += (_, _) =>
+        {
+            if (HtmlContentDetector.LooksLikeHtml(Markdown))
+            {
+                HtmlPreviewWindow.Show(Markdown, Window.GetWindow(this));
+            }
+        };
+        menu.Items.Add(_previewHtmlMenuItem);
+
         var copyItem = new MenuItem
         {
             Header = "复制内容",
@@ -318,5 +343,15 @@ public partial class MarkdownMessageView : UserControl
         };
         menu.Items.Add(copyItem);
         return menu;
+    }
+
+    private void UpdatePreviewHtmlMenuVisibility()
+    {
+        if (_previewHtmlMenuItem is not null)
+        {
+            _previewHtmlMenuItem.Visibility = HtmlContentDetector.LooksLikeHtml(Markdown)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
     }
 }
