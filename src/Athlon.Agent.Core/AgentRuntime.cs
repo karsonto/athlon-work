@@ -399,7 +399,7 @@ public sealed class AgentRuntime(
     {
         return arguments.Count == 0
             ? "(none)"
-            : string.Join("; ", arguments.Select(argument => $"{argument.Key}={argument.Value}"));
+            : string.Join(Environment.NewLine, arguments.Select(argument => $"{argument.Key}={argument.Value}"));
     }
 
     private static string? ExtractToolCallId(string? content)

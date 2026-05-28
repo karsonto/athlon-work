@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
+        xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Athlon Agent"
@@ -405,15 +406,31 @@
                                                 ClipToBounds="True"
                                                 CornerRadius="16"
                                                 BorderThickness="1"
-                                                BorderBrush="{StaticResource Brush.ToolThinkingBorder}"
-                                                Background="{StaticResource Brush.ToolThinkingBg}"
                                                 Margin="0,0,0,0">
                                             <Border.Style>
                                                 <Style TargetType="Border">
                                                     <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.ToolThinkingBorder}" />
+                                                    <Setter Property="Background" Value="{StaticResource Brush.ToolThinkingBg}" />
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsCollapsibleCard}" Value="True">
                                                             <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Running}">
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.ToolThinkingBorder}" />
+                                                            <Setter Property="Background" Value="{StaticResource Brush.ToolThinkingBg}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Succeeded}">
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.ToolSuccessBorder}" />
+                                                            <Setter Property="Background" Value="{StaticResource Brush.ToolSuccessBg}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Failed}">
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.ToolFailureBorder}" />
+                                                            <Setter Property="Background" Value="{StaticResource Brush.ToolFailureBg}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Cancelled}">
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.ToolFailureBorder}" />
+                                                            <Setter Property="Background" Value="{StaticResource Brush.ToolFailureBg}" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -446,11 +463,29 @@
                                                                        Foreground="#C4B5FD"
                                                                        TextTrimming="CharacterEllipsis"
                                                                        Margin="0,2,0,0" />
+                                                            <TextBlock Text="{Binding ToolArgumentsText}"
+                                                                       FontSize="11"
+                                                                       FontFamily="Consolas"
+                                                                       Foreground="{StaticResource Brush.Text}"
+                                                                       TextWrapping="Wrap"
+                                                                       Margin="0,6,0,0"
+                                                                       MaxHeight="160">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding HasToolArguments}" Value="True">
+                                                                                <Setter Property="Visibility" Value="Visible" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
                                                             <TextBlock Text="{Binding ToolSummary}"
                                                                        FontSize="11"
                                                                        Foreground="{StaticResource Brush.SubtleText}"
-                                                                       TextTrimming="CharacterEllipsis"
-                                                                       Margin="0,2,0,0">
+                                                                       TextWrapping="Wrap"
+                                                                       Margin="0,4,0,0">
                                                                 <TextBlock.Style>
                                                                     <Style TargetType="TextBlock">
                                                                         <Style.Triggers>
@@ -461,16 +496,29 @@
                                                                     </Style>
                                                                 </TextBlock.Style>
                                                             </TextBlock>
-                                                            <TextBlock Text="执行中…"
+                                                            <TextBlock Text="{Binding ToolStatusLabel}"
                                                                        FontSize="11"
-                                                                       Foreground="#86EFAC"
+                                                                       FontWeight="SemiBold"
                                                                        Margin="0,4,0,0">
                                                                 <TextBlock.Style>
                                                                     <Style TargetType="TextBlock">
                                                                         <Setter Property="Visibility" Value="Collapsed" />
+                                                                        <Setter Property="Foreground" Value="#C4B5FD" />
                                                                         <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding IsToolRunning}" Value="True">
+                                                                            <DataTrigger Binding="{Binding ShowToolStatusLabel}" Value="True">
                                                                                 <Setter Property="Visibility" Value="Visible" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Running}">
+                                                                                <Setter Property="Foreground" Value="#86EFAC" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Succeeded}">
+                                                                                <Setter Property="Foreground" Value="{StaticResource Brush.ToolSuccessText}" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Failed}">
+                                                                                <Setter Property="Foreground" Value="{StaticResource Brush.ToolFailureText}" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Cancelled}">
+                                                                                <Setter Property="Foreground" Value="{StaticResource Brush.ToolFailureText}" />
                                                                             </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>

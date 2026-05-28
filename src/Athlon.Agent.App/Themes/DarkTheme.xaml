@@ -22,6 +22,12 @@
     <SolidColorBrush x:Key="Brush.ToolThinkingBorder" Color="#6D28D9" />
     <SolidColorBrush x:Key="Brush.ToolThinkingBg" Color="#1E1B2E" />
     <SolidColorBrush x:Key="Brush.ToolThinkingText" Color="#DDD6FE" />
+    <SolidColorBrush x:Key="Brush.ToolSuccessBorder" Color="#059669" />
+    <SolidColorBrush x:Key="Brush.ToolSuccessBg" Color="#142A22" />
+    <SolidColorBrush x:Key="Brush.ToolSuccessText" Color="#6EE7B7" />
+    <SolidColorBrush x:Key="Brush.ToolFailureBorder" Color="#E11D48" />
+    <SolidColorBrush x:Key="Brush.ToolFailureBg" Color="#2A1418" />
+    <SolidColorBrush x:Key="Brush.ToolFailureText" Color="#FDA4AF" />
     <SolidColorBrush x:Key="Brush.IconBadgeStart" Color="#0284C7" />
     <SolidColorBrush x:Key="Brush.IconBadgeEnd" Color="#7DD3FC" />
 
