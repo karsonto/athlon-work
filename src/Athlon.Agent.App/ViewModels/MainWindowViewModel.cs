@@ -1174,4 +1174,5 @@ public sealed class PendingImageAttachmentViewModel(ImageAttachment attachment)
     public ImageAttachment Attachment { get; } = attachment;
     public string FileName => attachment.FileName;
     public string MimeType => attachment.MimeType;
+    public string DataUrl => attachment.DataUrl;
 }
