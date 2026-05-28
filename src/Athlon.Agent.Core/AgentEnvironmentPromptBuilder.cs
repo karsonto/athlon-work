@@ -17,6 +17,7 @@ public sealed class AgentEnvironmentPromptBuilder(
 
         builder.AppendLine("You are Athlon Agent, a Windows desktop coding agent.");
         builder.AppendLine("Use the provided function tools when you need to inspect or modify workspace files. Do not guess file contents.");
+        builder.AppendLine("Think through the user's goal, constraints, and risks before calling tools or making changes. Share concise reasoning when it helps the user follow your approach.");
         builder.AppendLine();
         AppendHostEnvironment(builder);
         builder.AppendLine();
@@ -34,22 +35,31 @@ public sealed class AgentEnvironmentPromptBuilder(
             builder.AppendLine($"Workspace root: {workspace.RootPath}");
             builder.AppendLine("Workspace contents are intentionally not embedded in this prompt because they change often.");
             builder.AppendLine("Use file_list to fetch a live directory listing when needed.");
+            builder.AppendLine();
+            AppendPlanningGuidance(builder);
         }
 
         builder.AppendLine();
         builder.AppendLine("Available native tools:");
-        foreach (var tool in tools)
+        foreach (var tool in tools.Where(tool => !IsMcpTool(tool)))
         {
             builder.AppendLine($"- {tool.Name}: {tool.Description}");
         }
 
-        var mcpServers = settings.McpServers.Count == 0
-            ? "No MCP servers configured."
-            : string.Join(Environment.NewLine, settings.McpServers.Select(server => $"- {(server.Enabled ? "enabled" : "disabled")} {server.Name}: {server.Command} {string.Join(" ", server.Args)}"));
-
         builder.AppendLine();
-        builder.AppendLine("MCP server status:");
-        builder.AppendLine(mcpServers);
+        builder.AppendLine("Available MCP tools:");
+        var mcpTools = tools.Where(IsMcpTool).ToArray();
+        if (mcpTools.Length == 0)
+        {
+            builder.AppendLine("none (no enabled MCP servers with tools).");
+        }
+        else
+        {
+            foreach (var tool in mcpTools)
+            {
+                builder.AppendLine($"- {tool.Name}: {tool.Description}");
+            }
+        }
 
         var skills = skillsProvider.GetSkills();
         builder.AppendLine();
@@ -81,6 +91,15 @@ public sealed class AgentEnvironmentPromptBuilder(
         return builder.ToString();
     }
 
+    private static void AppendPlanningGuidance(StringBuilder builder)
+    {
+        builder.AppendLine("Planning for multi-step or long-running tasks:");
+        builder.AppendLine("- Before broad edits, use file_write to create or refresh plan.md at the workspace root.");
+        builder.AppendLine("- plan.md should list ordered steps with clear status (e.g. [ ] / [x]), scope, and acceptance criteria.");
+        builder.AppendLine("- Execute one step at a time according to plan.md; after each completed step, update plan.md promptly before starting the next.");
+        builder.AppendLine("- If scope changes, revise plan.md first, then continue execution.");
+    }
+
     private void AppendHostEnvironment(StringBuilder builder)
     {
         builder.AppendLine("Host environment (current Windows user session):");
@@ -110,5 +129,8 @@ public sealed class AgentEnvironmentPromptBuilder(
 
         return settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath));
     }
+
+    private static bool IsMcpTool(ToolDefinition tool) =>
+        string.Equals(tool.Source, "mcp", StringComparison.OrdinalIgnoreCase);
 
 }
