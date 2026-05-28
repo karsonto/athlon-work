@@ -142,6 +142,11 @@ public static class SessionMarkdownWriter
             var roleLabel = message.Role == MessageRole.Compaction ? "Compaction" : message.Role.ToString();
             lines.Add($"## {roleLabel} - {message.CreatedAt:u}");
             lines.Add("");
+            if (message.ImageAttachments is { Count: > 0 })
+            {
+                lines.Add($"附图: {string.Join(", ", message.ImageAttachments.Select(image => image.FileName))}");
+                lines.Add("");
+            }
             lines.Add(message.Content);
             lines.Add("");
         }

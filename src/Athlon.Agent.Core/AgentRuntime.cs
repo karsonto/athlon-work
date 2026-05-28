@@ -21,13 +21,14 @@ public sealed class AgentRuntime(
     public async Task<AgentSession> SendAsync(
         AgentSession session,
         string userInput,
+        IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
         CancellationToken cancellationToken = default)
     {
         activeSessionContext.SetSession(session.Id);
         try
         {
-            return await SendAsyncCore(session, userInput, callbacks, cancellationToken);
+            return await SendAsyncCore(session, userInput, imageAttachments, callbacks, cancellationToken);
         }
         finally
         {
@@ -38,19 +39,25 @@ public sealed class AgentRuntime(
     private Task<AgentSession> SendAsyncCore(
         AgentSession session,
         string userInput,
+        IReadOnlyList<ImageAttachment>? imageAttachments,
         AgentTurnCallbacks? callbacks,
         CancellationToken cancellationToken) =>
-        SendAsyncTurnAsync(session, userInput, callbacks, cancellationToken);
+        SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, cancellationToken);
 
     private async Task<AgentSession> SendAsyncTurnAsync(
         AgentSession session,
         string userInput,
+        IReadOnlyList<ImageAttachment>? imageAttachments,
         AgentTurnCallbacks? callbacks,
         CancellationToken cancellationToken)
     {
         try
         {
-            var userMessage = ChatMessage.Create(MessageRole.User, userInput, session.Messages.LastOrDefault()?.Id);
+            var userMessage = ChatMessage.Create(
+                MessageRole.User,
+                userInput,
+                session.Messages.LastOrDefault()?.Id,
+                imageAttachments: imageAttachments);
             session = session.WithMessage(userMessage);
             await PersistMessageAsync(session, userMessage, cancellationToken);
 
@@ -291,7 +298,7 @@ public sealed class AgentRuntime(
                 case MessageRole.Compaction:
                     continue;
                 case MessageRole.User:
-                    messages.Add(new AgentModelMessage("user", message.Content));
+                    messages.Add(new AgentModelMessage("user", BuildUserContent(message)));
                     break;
                 case MessageRole.Assistant:
                     index = AppendAssistantModelMessages(messages, history, index);
@@ -380,6 +387,37 @@ public sealed class AgentRuntime(
     private static string FormatToolResultAsUserContent(string content) =>
         string.Join(Environment.NewLine, "[Tool output]", content);
 
+    private static object BuildUserContent(ChatMessage message)
+    {
+        if (message.ImageAttachments is not { Count: > 0 })
+        {
+            return message.Content;
+        }
+
+        var parts = new List<object>
+        {
+            new Dictionary<string, object?>
+            {
+                ["type"] = "text",
+                ["text"] = message.Content
+            }
+        };
+
+        foreach (var image in message.ImageAttachments)
+        {
+            parts.Add(new Dictionary<string, object?>
+            {
+                ["type"] = "image_url",
+                ["image_url"] = new Dictionary<string, object?>
+                {
+                    ["url"] = image.DataUrl
+                }
+            });
+        }
+
+        return parts;
+    }
+
     public static string FormatToolResult(AgentToolCall call, ToolResult result)
     {
         var status = result.Succeeded ? "succeeded" : "failed";
@@ -438,7 +476,8 @@ public sealed class AgentOrchestrator(IAgentRuntime agentRuntime) : IAgentOrches
     public Task<AgentSession> SendAsync(
         AgentSession session,
         string userInput,
+        IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
         CancellationToken cancellationToken = default) =>
-        agentRuntime.SendAsync(session, userInput, callbacks, cancellationToken);
+        agentRuntime.SendAsync(session, userInput, imageAttachments, callbacks, cancellationToken);
 }

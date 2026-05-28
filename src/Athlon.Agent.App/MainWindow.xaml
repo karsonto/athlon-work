@@ -684,6 +684,24 @@
                                                         </Border>
                                                     </StackPanel>
                                                 </Border>
+                                                <TextBlock Text="{Binding UserAttachmentSummary}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource Brush.SubtleText}"
+                                                           Margin="0,0,0,8">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding UserAttachmentSummary}" Value="">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
                                                 <controls:MarkdownMessageView Markdown="{Binding Content}"
                                                                               AssistantTone="{Binding AssistantTone}"
                                                                               MaxContentHeight="0"
@@ -960,6 +978,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="*" MinHeight="56" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <Grid>
                             <TextBox x:Name="ComposerTextBox"
@@ -1039,11 +1058,65 @@
                                 </ListBox>
                             </Border>
                         </Popup>
-                        <Grid Grid.Row="1" Margin="0,12,0,0">
+                        <Border Grid.Row="1"
+                                Margin="0,10,0,0"
+                                Background="{StaticResource Brush.PanelAlt}"
+                                BorderBrush="{StaticResource Brush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="8,6">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasPendingImages}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <StackPanel>
+                                <TextBlock Text="待发送图片"
+                                           FontSize="11"
+                                           Foreground="{StaticResource Brush.SubtleText}"
+                                           Margin="0,0,0,6" />
+                                <ItemsControl ItemsSource="{Binding PendingImageAttachments}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,2,0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding FileName}" TextTrimming="CharacterEllipsis" FontSize="12" />
+                                                <Button Grid.Column="1"
+                                                        Content="移除"
+                                                        Command="{Binding DataContext.RemovePendingImageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Style="{StaticResource GhostButtonStyle}"
+                                                        Padding="6,2"
+                                                        FontSize="10"
+                                                        MinHeight="20"
+                                                        Margin="8,0,0,0" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Border>
+                        <Grid Grid.Row="2" Margin="0,12,0,0">
                             <TextBlock Text="Enter 发送 · Shift+Enter 换行"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        FontSize="12"
                                        VerticalAlignment="Center" />
+                            <Button Content="上传图片"
+                                    Command="{Binding SelectImagesCommand}"
+                                    Style="{StaticResource GhostButtonStyle}"
+                                    Padding="10,4"
+                                    FontSize="12"
+                                    MinHeight="26"
+                                    HorizontalAlignment="Left"
+                                    Margin="140,0,0,0" />
                             <Grid HorizontalAlignment="Right">
                                 <!-- 发送中显示停止，空闲时显示发送（对齐 report/html Composer isSending） -->
                                 <Button Command="{Binding StopCommand}"

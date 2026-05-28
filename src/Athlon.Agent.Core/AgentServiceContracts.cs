@@ -45,6 +45,7 @@ public interface IAgentRuntime
     Task<AgentSession> SendAsync(
         AgentSession session,
         string userInput,
+        IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
         CancellationToken cancellationToken = default);
 }
@@ -82,6 +83,14 @@ public interface IAgentOrchestrator
     Task<AgentSession> SendAsync(
         AgentSession session,
         string userInput,
+        IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IImageAttachmentReader
+{
+    Task<IReadOnlyList<ImageAttachment>> ReadImagesAsync(
+        IReadOnlyList<string> filePaths,
         CancellationToken cancellationToken = default);
 }

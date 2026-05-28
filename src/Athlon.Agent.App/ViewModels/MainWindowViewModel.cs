@@ -26,6 +26,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IMcpRegistry _mcpRegistry;
     private readonly AppSettings _appSettings;
     private readonly IAgentSkillCatalog _skillCatalog;
+    private readonly IImageAttachmentReader _imageAttachmentReader;
     private FileSystemWatcher? _workspaceWatcher;
     private CancellationTokenSource? _turnCancellation;
     private CancellationTokenSource? _turnTimeoutCancellation;
@@ -42,6 +43,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ICredentialStore credentialStore,
         IActiveWorkspaceContext workspaceContext,
         IMcpRegistry mcpRegistry,
+        IImageAttachmentReader imageAttachmentReader,
         IAppPathProvider paths,
         IAgentSkillCatalog skillCatalog,
         AppSettings settings)
@@ -51,6 +53,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _credentialStore = credentialStore;
         _workspaceContext = workspaceContext;
         _mcpRegistry = mcpRegistry;
+        _imageAttachmentReader = imageAttachmentReader;
         _appSettings = settings;
         _skillCatalog = skillCatalog;
         Settings = new SettingsViewModel(settings, _mcpRegistry);
@@ -59,6 +62,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
         ApplySessionWorkspace();
         Messages.CollectionChanged += OnMessagesCollectionChanged;
+        PendingImageAttachments.CollectionChanged += OnPendingImagesChanged;
         _ = InitializeAsync();
     }
 
@@ -141,6 +145,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private const int MaxCompletionItems = 30;
 
     public ObservableCollection<AtCompletionItemViewModel> AtCompletionItems { get; } = new();
+    public ObservableCollection<PendingImageAttachmentViewModel> PendingImageAttachments { get; } = new();
+    public bool HasPendingImages => PendingImageAttachments.Count > 0;
 
     public bool IsChatPage => CurrentPage == "Chat";
     public bool IsSettingsPage => CurrentPage == "Settings";
@@ -159,6 +165,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _session = AgentSession.Create("New Chat");
         CurrentSessionTitle = _session.Title;
         ComposerText = string.Empty;
+        PendingImageAttachments.Clear();
         StreamingText = string.Empty;
         IsBusy = false;
         Messages.Clear();
@@ -187,6 +194,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _session = _session.WithMessages(Array.Empty<ChatMessage>());
         Messages.Clear();
         StreamingText = string.Empty;
+        PendingImageAttachments.Clear();
 
         await _storage.SaveSessionAsync(_session);
         SettingsStatus = "上下文已清空。";
@@ -199,6 +207,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(HasChatMessages));
         ClearContextCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnPendingImagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasPendingImages));
+        SendCommand.NotifyCanExecuteChanged();
     }
 
     private void ResetTurnUiState()
@@ -257,6 +271,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _session = AgentSession.Create("New Chat");
             CurrentSessionTitle = _session.Title;
             ComposerText = string.Empty;
+            PendingImageAttachments.Clear();
             StreamingText = string.Empty;
             Messages.Clear();
             ApplySessionWorkspace();
@@ -268,20 +283,59 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         NotifyCommandStatesChanged();
     }
 
+    [RelayCommand]
+    private async Task SelectImagesAsync()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "选择图片",
+            Multiselect = true,
+            Filter = "Image Files|*.png;*.jpg;*.jpeg;*.webp;*.gif"
+        };
+
+        if (dialog.ShowDialog() != true || dialog.FileNames.Length == 0)
+        {
+            return;
+        }
+
+        var images = await _imageAttachmentReader.ReadImagesAsync(dialog.FileNames);
+        foreach (var image in images)
+        {
+            if (PendingImageAttachments.Any(existing => string.Equals(existing.DataUrl, image.DataUrl, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            PendingImageAttachments.Add(new PendingImageAttachmentViewModel(image));
+        }
+    }
+
+    [RelayCommand]
+    private void RemovePendingImage(PendingImageAttachmentViewModel? image)
+    {
+        if (image is null)
+        {
+            return;
+        }
+
+        PendingImageAttachments.Remove(image);
+    }
+
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {
-        if (string.IsNullOrWhiteSpace(ComposerText))
+        if (string.IsNullOrWhiteSpace(ComposerText) && PendingImageAttachments.Count == 0)
         {
             return;
         }
 
         var input = ComposerText.Trim();
+        var imageAttachments = PendingImageAttachments.Select(item => item.Attachment).ToArray();
         ComposerText = string.Empty;
         IsBusy = true;
         StreamingText = string.Empty;
         BeginTurnCancellation();
-        Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input)));
+        Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments)));
         RequestScrollToBottom();
         SyncWorkspaceContext();
         await Task.Yield();
@@ -361,9 +415,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             };
 
             _session = await Task.Run(
-                async () => await _orchestrator.SendAsync(_session, input, callbacks, GetTurnCancellationToken()).ConfigureAwait(false),
+                async () => await _orchestrator.SendAsync(_session, input, imageAttachments, callbacks, GetTurnCancellationToken()).ConfigureAwait(false),
                 GetTurnCancellationToken()).ConfigureAwait(true);
             CurrentSessionTitle = _session.Title;
+            PendingImageAttachments.Clear();
             await SaveCurrentSessionIfNeededAsync();
         }
         catch (OperationCanceledException)
@@ -677,7 +732,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         });
     }
 
-    private bool CanSend() => !IsBusy;
+    private bool CanSend() => !IsBusy && (!string.IsNullOrWhiteSpace(ComposerText) || PendingImageAttachments.Count > 0);
 
     public void UpdateAtCompletion(string composerText, int caretIndex)
     {
@@ -825,6 +880,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _session = loaded;
         CurrentSessionTitle = _session.Title;
         ComposerText = string.Empty;
+        PendingImageAttachments.Clear();
         StreamingText = string.Empty;
         Messages.Clear();
 
@@ -1112,3 +1168,10 @@ public sealed record AtCompletionItemViewModel(
     string SecondaryText,
     string InsertText,
     string MatchText);
+
+public sealed class PendingImageAttachmentViewModel(ImageAttachment attachment)
+{
+    public ImageAttachment Attachment { get; } = attachment;
+    public string FileName => attachment.FileName;
+    public string MimeType => attachment.MimeType;
+}

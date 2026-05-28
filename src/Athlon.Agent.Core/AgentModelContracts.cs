@@ -7,7 +7,7 @@ namespace Athlon.Agent.Core;
 
 public sealed record AgentModelMessage(
     string Role,
-    string Content,
+    object Content,
     string? ToolCallId = null,
     IReadOnlyList<AgentToolCall>? ToolCalls = null,
     string? ReasoningContent = null);

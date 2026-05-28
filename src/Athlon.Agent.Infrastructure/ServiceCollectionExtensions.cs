@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
         services.AddSingleton<IAgentRuntime, AgentRuntime>();
         services.AddSingleton<IAgentEnvironmentPromptBuilder, AgentEnvironmentPromptBuilder>();
+        services.AddSingleton<IImageAttachmentReader, ImageAttachmentReader>();
         services.AddSingleton<IMcpRegistry, McpRegistry>();
         services.AddSingleton<IToolRouter, CompositeToolRouter>();
         services.AddSingleton<IActiveWorkspaceContext, ActiveWorkspaceContext>();

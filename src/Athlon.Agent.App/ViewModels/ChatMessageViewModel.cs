@@ -18,6 +18,9 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsUser = message.Role == MessageRole.User;
         IsTool = message.Role == MessageRole.Tool;
         IsCompaction = message.Role == MessageRole.Compaction;
+        UserAttachmentSummary = message.ImageAttachments is { Count: > 0 }
+            ? $"已附图片 {message.ImageAttachments.Count} 张"
+            : string.Empty;
         IsHiddenPlaceholder = IsUser && (CompactionMessageContent.IsSummaryPlaceholder(message.Content)
             || SummaryMessageBuilder.IsSummaryMessage(message))
             || IsAssistantToolCallsOnly(message);
@@ -116,6 +119,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public bool IsUser { get; }
     public bool IsTool { get; }
     public bool IsCompaction { get; }
+    public string UserAttachmentSummary { get; }
     public bool IsCollapsibleCard => IsTool || IsCompaction;
     public bool IsHiddenPlaceholder { get; }
     public bool AssistantTone => !IsUser;

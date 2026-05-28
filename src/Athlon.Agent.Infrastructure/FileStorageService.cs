@@ -83,7 +83,8 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
                 id = message.Id,
                 role = message.Role.ToString(),
                 parentId = message.ParentId,
-                content = message.Content
+                content = message.Content,
+                imageAttachments = message.ImageAttachments
             },
             cancellationToken);
     }

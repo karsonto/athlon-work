@@ -14,6 +14,12 @@ public enum MessageRole
     Summary,
     Compaction
 }
+
+public sealed record ImageAttachment(
+    string FileName,
+    string MimeType,
+    string DataUrl);
+
 public sealed record ChatMessage(
     string Id,
     MessageRole Role,
@@ -21,14 +27,16 @@ public sealed record ChatMessage(
     DateTimeOffset CreatedAt,
     string? ParentId = null,
     string? ToolCallsJson = null,
-    string? ReasoningContent = null)
+    string? ReasoningContent = null,
+    IReadOnlyList<ImageAttachment>? ImageAttachments = null)
 {
     public static ChatMessage Create(
         MessageRole role,
         string content,
         string? parentId = null,
         IReadOnlyList<AgentToolCall>? toolCalls = null,
-        string? reasoningContent = null) =>
+        string? reasoningContent = null,
+        IReadOnlyList<ImageAttachment>? imageAttachments = null) =>
         new(
             Guid.NewGuid().ToString("N"),
             role,
@@ -36,7 +44,8 @@ public sealed record ChatMessage(
             DateTimeOffset.UtcNow,
             parentId,
             AssistantToolCallsCodec.Serialize(toolCalls ?? Array.Empty<AgentToolCall>()),
-            reasoningContent);
+            reasoningContent,
+            imageAttachments);
 }
 public sealed record AgentSession(
     string Id,
