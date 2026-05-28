@@ -27,7 +27,7 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
     }
 
     public ObservableCollection<string> Skills { get; } = new();
-    public ObservableCollection<string> McpServers { get; } = new();
+    public ObservableCollection<McpSidebarServerViewModel> McpServers { get; } = new();
     public ObservableCollection<WorkspaceTreeNodeViewModel> WorkspaceTree { get; } = new();
     public string LocalModelStatus { get; set; } = "Local Model Active";
 
@@ -53,27 +53,27 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
             }
         }
 
+        var expandedServers = McpServers
+            .Where(server => server.IsExpanded)
+            .Select(server => server.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         McpServers.Clear();
         if (settings.McpServers.Count == 0)
         {
-            McpServers.Add("未配置 MCP 服务器");
+            McpServers.Add(new McpSidebarServerViewModel("未配置 MCP 服务器", enabled: false, status: null));
         }
         else
         {
             var statuses = _mcpRegistry.GetStatuses().ToDictionary(status => status.Name, StringComparer.OrdinalIgnoreCase);
             foreach (var server in settings.McpServers)
             {
-                var status = server.Enabled ? "●" : "○";
-                var command = string.IsNullOrWhiteSpace(server.Command) ? string.Empty : $"  {server.Command}";
-                if (server.Enabled && statuses.TryGetValue(server.Name, out var runtime))
-                {
-                    var runtimeText = McpRuntimeStatusText.SidebarSummary(runtime);
-                    McpServers.Add($"{status} {server.Name}  {runtimeText}");
-                }
-                else
-                {
-                    McpServers.Add($"{status} {server.Name}{command}");
-                }
+                statuses.TryGetValue(server.Name, out var runtime);
+                McpServers.Add(new McpSidebarServerViewModel(
+                    server.Name,
+                    server.Enabled,
+                    runtime,
+                    expandedServers.Contains(server.Name)));
             }
         }
     }

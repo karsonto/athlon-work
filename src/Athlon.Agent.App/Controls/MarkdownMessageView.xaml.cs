@@ -121,6 +121,9 @@ public partial class MarkdownMessageView : UserControl
         var codeBlockBackground = new SolidColorBrush(Color.FromRgb(2, 6, 23));
         var codeForeground = new SolidColorBrush(Color.FromRgb(241, 245, 249));
         var codeBorder = new SolidColorBrush(Color.FromRgb(30, 41, 59));
+        var tableBackground = new SolidColorBrush(Color.FromRgb(32, 32, 35));
+        var tableHeaderBackground = new SolidColorBrush(Color.FromRgb(39, 39, 42));
+        var tableBorder = new SolidColorBrush(Color.FromRgb(82, 82, 91));
 
         var paragraphStyle = new Style(typeof(Paragraph))
         {
@@ -142,6 +145,33 @@ public partial class MarkdownMessageView : UserControl
         var runStyle = new Style(typeof(Run));
         AddTagStyle(runStyle, "CodeSpan", inlineCodeBackground, codeForeground);
         style.Resources.Add(typeof(Run), runStyle);
+
+        var tableStyle = new Style(typeof(Table))
+        {
+            Setters =
+            {
+                new Setter(Table.CellSpacingProperty, 0d),
+                new Setter(Block.MarginProperty, new Thickness(0, 8, 0, 8)),
+            }
+        };
+        style.Resources.Add(typeof(Table), tableStyle);
+
+        var tableCellStyle = new Style(typeof(TableCell))
+        {
+            Setters =
+            {
+                new Setter(TableCell.BackgroundProperty, tableBackground),
+                new Setter(TableCell.BorderBrushProperty, tableBorder),
+                new Setter(TableCell.BorderThicknessProperty, new Thickness(1)),
+                new Setter(TableCell.PaddingProperty, new Thickness(8, 5, 8, 5)),
+                new Setter(TextElement.ForegroundProperty, textBrush),
+            }
+        };
+        tableCellStyle.Triggers.Add(CreateTagTrigger(
+            "TableHeader",
+            new Setter(TableCell.BackgroundProperty, tableHeaderBackground),
+            new Setter(TextElement.FontWeightProperty, FontWeights.SemiBold)));
+        style.Resources.Add(typeof(TableCell), tableCellStyle);
 
         return style;
     }
@@ -235,9 +265,9 @@ public partial class MarkdownMessageView : UserControl
             return;
         }
 
-        // MdXaml 构造时会挂系统默认 Copy/SelectAll 菜单，此处统一替换
+        // MdXaml/FlowDocument 会在文档重建后恢复默认菜单，此处统一替换为应用菜单。
         MarkdownViewer.ContextMenu = _contextMenu;
-        ClearFlowDocumentContextMenu();
+        ApplyFlowDocumentContextMenu();
     }
 
     private void HookMarkdownDocumentChanges()
@@ -254,13 +284,13 @@ public partial class MarkdownMessageView : UserControl
         OnMarkdownDocumentChanged(MarkdownViewer, EventArgs.Empty);
     }
 
-    private void OnMarkdownDocumentChanged(object? sender, EventArgs e) => ClearFlowDocumentContextMenu();
+    private void OnMarkdownDocumentChanged(object? sender, EventArgs e) => ApplyFlowDocumentContextMenu();
 
-    private void ClearFlowDocumentContextMenu()
+    private void ApplyFlowDocumentContextMenu()
     {
         if (MarkdownViewer.Document is FlowDocument document)
         {
-            document.ContextMenu = null;
+            document.ContextMenu = _contextMenu;
         }
     }
 

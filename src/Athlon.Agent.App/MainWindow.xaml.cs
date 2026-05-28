@@ -20,7 +20,54 @@ public partial class MainWindow : Window
         DataContext = _viewModel;
         _viewModel.ScrollChatToBottom = ScrollChatToEnd;
         Loaded += (_, _) => ScrollChatToEnd();
+        StateChanged += (_, _) => UpdateMaximizeRestoreButton();
+        UpdateMaximizeRestoreButton();
         App.StartupTrace("MainWindow DataContext assigned");
+    }
+
+    private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2)
+        {
+            ToggleWindowState();
+            return;
+        }
+
+        if (e.ButtonState == MouseButtonState.Pressed)
+        {
+            DragMove();
+        }
+    }
+
+    private void MinimizeButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    private void MaximizeRestoreButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        ToggleWindowState();
+    }
+
+    private void CloseButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private void ToggleWindowState()
+    {
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    private void UpdateMaximizeRestoreButton()
+    {
+        if (MaximizeRestoreButton is null)
+        {
+            return;
+        }
+
+        MaximizeRestoreButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
+        MaximizeRestoreButton.ToolTip = WindowState == WindowState.Maximized ? "还原" : "最大化";
     }
 
     private void ScrollChatToEnd()
