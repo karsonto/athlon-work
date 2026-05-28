@@ -84,7 +84,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ToolDetail = string.Empty;
         Content = string.Empty;
         ReasoningContent = string.Empty;
-        IsExpanded = true;
+        IsExpanded = false;
         IsStreaming = false;
         IsReasoningStreaming = false;
     }

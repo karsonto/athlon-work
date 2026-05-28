@@ -971,6 +971,7 @@
                                      AcceptsReturn="True"
                                      TextWrapping="Wrap"
                                      VerticalScrollBarVisibility="Auto"
+                                     TextChanged="ComposerTextBox_OnTextChanged"
                                      PreviewKeyDown="ComposerTextBox_OnPreviewKeyDown" />
                             <TextBlock Text="Message Athlon — @ 文件 / 技能，Enter 发送"
                                        Foreground="{StaticResource Brush.SubtleText}"
@@ -989,6 +990,55 @@
                                 </TextBlock.Style>
                             </TextBlock>
                         </Grid>
+                        <Popup IsOpen="{Binding IsAtCompletionOpen}"
+                               PlacementTarget="{Binding ElementName=ComposerTextBox}"
+                               Placement="Top"
+                               StaysOpen="False"
+                               AllowsTransparency="True">
+                            <Border Background="{StaticResource Brush.Panel}"
+                                    BorderBrush="{StaticResource Brush.Border}"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    Padding="6"
+                                    MinWidth="340"
+                                    MaxWidth="560"
+                                    MaxHeight="240">
+                                <ListBox x:Name="AtCompletionListBox"
+                                         ItemsSource="{Binding AtCompletionItems}"
+                                         SelectedIndex="{Binding SelectedAtCompletionIndex}"
+                                         MouseDoubleClick="AtCompletionListBox_OnMouseDoubleClick"
+                                         BorderThickness="0"
+                                         Background="Transparent"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="2,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0"
+                                                        Background="{StaticResource Brush.PanelAlt}"
+                                                        BorderBrush="{StaticResource Brush.Border}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="8"
+                                                        Padding="6,2"
+                                                        Margin="0,0,8,0">
+                                                    <TextBlock Text="{Binding Type}" FontSize="11" Foreground="{StaticResource Brush.SubtleText}" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock Text="{Binding PrimaryText}" FontSize="13" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding SecondaryText}"
+                                                               FontSize="11"
+                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+                        </Popup>
                         <Grid Grid.Row="1" Margin="0,12,0,0">
                             <TextBlock Text="Enter 发送 · Shift+Enter 换行"
                                        Foreground="{StaticResource Brush.SubtleText}"
@@ -1123,10 +1173,11 @@
                         <TreeView ItemsSource="{Binding Sidebar.WorkspaceTree}"
                                   Background="Transparent"
                                   BorderThickness="0"
-                                  FontSize="13">
+                                  FontSize="13"
+                                  MouseDoubleClick="WorkspaceTree_OnMouseDoubleClick">
                             <TreeView.ItemContainerStyle>
                                 <Style TargetType="TreeViewItem">
-                                    <Setter Property="IsExpanded" Value="True" />
+                                    <Setter Property="IsExpanded" Value="False" />
                                     <Setter Property="Padding" Value="2,4" />
                                     <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
                                 </Style>

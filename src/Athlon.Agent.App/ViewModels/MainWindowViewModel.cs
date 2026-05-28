@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -24,6 +25,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IActiveWorkspaceContext _workspaceContext;
     private readonly IMcpRegistry _mcpRegistry;
     private readonly AppSettings _appSettings;
+    private readonly IAgentSkillCatalog _skillCatalog;
     private FileSystemWatcher? _workspaceWatcher;
     private CancellationTokenSource? _turnCancellation;
     private CancellationTokenSource? _turnTimeoutCancellation;
@@ -50,6 +52,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _workspaceContext = workspaceContext;
         _mcpRegistry = mcpRegistry;
         _appSettings = settings;
+        _skillCatalog = skillCatalog;
         Settings = new SettingsViewModel(settings, _mcpRegistry);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
@@ -66,6 +69,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         await _mcpRegistry.RefreshAsync(Settings.Settings.McpServers);
         Settings.RefreshRuntimeStates();
         Sidebar.Refresh(Settings.Settings);
+        RefreshAtCompletionSources();
         OnPropertyChanged(nameof(Sidebar));
     }
 
@@ -125,6 +129,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string activeWorkspaceName = "No workspace";
+
+    [ObservableProperty]
+    private bool isAtCompletionOpen;
+
+    [ObservableProperty]
+    private int selectedAtCompletionIndex = -1;
+
+    private readonly List<AtCompletionItemViewModel> _fileCompletionIndex = new();
+    private readonly List<AtCompletionItemViewModel> _skillCompletionIndex = new();
+    private const int MaxCompletionItems = 30;
+
+    public ObservableCollection<AtCompletionItemViewModel> AtCompletionItems { get; } = new();
 
     public bool IsChatPage => CurrentPage == "Chat";
     public bool IsSettingsPage => CurrentPage == "Settings";
@@ -648,12 +664,106 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SettingsStatus = $"Saved at {DateTime.Now:HH:mm:ss}";
     }
 
+    public void OpenWorkspaceFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo(path)
+        {
+            UseShellExecute = true
+        });
+    }
+
     private bool CanSend() => !IsBusy;
+
+    public void UpdateAtCompletion(string composerText, int caretIndex)
+    {
+        if (!TryGetAtQuery(composerText, caretIndex, out var query))
+        {
+            CloseAtCompletion();
+            return;
+        }
+
+        var sorted = _fileCompletionIndex
+            .Concat(_skillCompletionIndex)
+            .Where(item => MatchesQuery(item.MatchText, query))
+            .OrderBy(item => Rank(item.MatchText, query))
+            .ThenBy(item => item.PrimaryText, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxCompletionItems)
+            .ToArray();
+
+        AtCompletionItems.Clear();
+        foreach (var item in sorted)
+        {
+            AtCompletionItems.Add(item);
+        }
+
+        if (AtCompletionItems.Count == 0)
+        {
+            CloseAtCompletion();
+            return;
+        }
+
+        IsAtCompletionOpen = true;
+        if (SelectedAtCompletionIndex < 0 || SelectedAtCompletionIndex >= AtCompletionItems.Count)
+        {
+            SelectedAtCompletionIndex = 0;
+        }
+    }
+
+    public void MoveAtCompletionSelection(int delta)
+    {
+        if (!IsAtCompletionOpen || AtCompletionItems.Count == 0)
+        {
+            return;
+        }
+
+        var next = SelectedAtCompletionIndex + delta;
+        if (next < 0)
+        {
+            next = AtCompletionItems.Count - 1;
+        }
+        else if (next >= AtCompletionItems.Count)
+        {
+            next = 0;
+        }
+
+        SelectedAtCompletionIndex = next;
+    }
+
+    public bool TryAcceptAtCompletion(int caretIndex, out int newCaretIndex)
+    {
+        newCaretIndex = caretIndex;
+        if (!IsAtCompletionOpen
+            || SelectedAtCompletionIndex < 0
+            || SelectedAtCompletionIndex >= AtCompletionItems.Count
+            || !TryGetAtQuerySpan(ComposerText, caretIndex, out var atStart, out var atEndExclusive))
+        {
+            return false;
+        }
+
+        var replacement = AtCompletionItems[SelectedAtCompletionIndex].InsertText;
+        ComposerText = ComposerText[..atStart] + replacement + ComposerText[atEndExclusive..];
+        newCaretIndex = atStart + replacement.Length;
+        CloseAtCompletion();
+        return true;
+    }
+
+    public void CloseAtCompletion()
+    {
+        IsAtCompletionOpen = false;
+        SelectedAtCompletionIndex = -1;
+        AtCompletionItems.Clear();
+    }
 
     private void ApplySessionWorkspace()
     {
         SyncWorkspaceContext();
         ActiveWorkspaceName = string.IsNullOrWhiteSpace(_workspaceContext.DisplayName) ? "未配置工作区" : _workspaceContext.DisplayName!;
+        RefreshAtCompletionSources();
         Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
         ConfigureWorkspaceWatcher();
         OnPropertyChanged(nameof(Sidebar));
@@ -812,7 +922,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void WorkspaceChanged(object sender, FileSystemEventArgs e)
     {
         Application.Current.Dispatcher.InvokeAsync(() =>
-            Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns));
+        {
+            RefreshAtCompletionSources();
+            Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
+        });
     }
 
     /// <summary>Cancel in-flight work and release watchers before process exit.</summary>
@@ -864,6 +977,110 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SendCommand.NotifyCanExecuteChanged();
     }
 
+    private void RefreshAtCompletionSources()
+    {
+        _fileCompletionIndex.Clear();
+        _skillCompletionIndex.Clear();
+
+        _skillCatalog.Reload();
+        foreach (var skill in _skillCatalog.Skills)
+        {
+            _skillCompletionIndex.Add(new AtCompletionItemViewModel(
+                Type: "技能",
+                PrimaryText: skill.Name,
+                SecondaryText: skill.SkillId,
+                InsertText: $"@skill:{skill.SkillId}",
+                MatchText: $"{skill.Name} {skill.SkillId}"));
+        }
+
+        if (string.IsNullOrWhiteSpace(_session.ActiveWorkspace) || !Directory.Exists(_session.ActiveWorkspace))
+        {
+            return;
+        }
+
+        var root = Path.GetFullPath(_session.ActiveWorkspace);
+        var ignoredNames = new HashSet<string>(_workspaceContext.IgnorePatterns, StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            {
+                if (ignoredNames.Contains(Path.GetFileName(path)))
+                {
+                    continue;
+                }
+
+                var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+                _fileCompletionIndex.Add(new AtCompletionItemViewModel(
+                    Type: "文件",
+                    PrimaryText: Path.GetFileName(path),
+                    SecondaryText: relative,
+                    InsertText: $"@{relative}",
+                    MatchText: $"{relative} {Path.GetFileName(path)}"));
+            }
+        }
+        catch
+        {
+            // Keep whatever was indexed successfully.
+        }
+    }
+
+    private static bool TryGetAtQuery(string text, int caretIndex, out string query)
+    {
+        query = string.Empty;
+        if (!TryGetAtQuerySpan(text, caretIndex, out var atStart, out var atEndExclusive))
+        {
+            return false;
+        }
+
+        query = text[(atStart + 1)..atEndExclusive];
+        return true;
+    }
+
+    private static bool TryGetAtQuerySpan(string text, int caretIndex, out int atStart, out int atEndExclusive)
+    {
+        atStart = -1;
+        atEndExclusive = -1;
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var safeCaret = Math.Clamp(caretIndex, 0, text.Length);
+        var index = safeCaret - 1;
+        while (index >= 0)
+        {
+            var c = text[index];
+            if (char.IsWhiteSpace(c))
+            {
+                break;
+            }
+
+            if (c == '@')
+            {
+                atStart = index;
+                atEndExclusive = safeCaret;
+                return true;
+            }
+
+            index--;
+        }
+
+        return false;
+    }
+
+    private static bool MatchesQuery(string haystack, string query) =>
+        string.IsNullOrWhiteSpace(query) || haystack.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    private static int Rank(string haystack, string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return 0;
+        }
+
+        return haystack.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 0 : 1;
+    }
+
     public void ShowCopyNotice(string message)
     {
         CopyNotice = message;
@@ -888,3 +1105,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 }
+
+public sealed record AtCompletionItemViewModel(
+    string Type,
+    string PrimaryText,
+    string SecondaryText,
+    string InsertText,
+    string MatchText);
