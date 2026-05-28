@@ -24,6 +24,7 @@ public sealed class ModelSettings
     public string Endpoint { get; set; } = "https://api.openai.com/v1";
     public string ModelName { get; set; } = "gpt-4.1-mini";
     public bool EnableStreaming { get; set; } = true;
+    public int StreamingIdleTimeoutSeconds { get; set; } = 90;
 
     [JsonPropertyName("ApiKeyCredentialName")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]

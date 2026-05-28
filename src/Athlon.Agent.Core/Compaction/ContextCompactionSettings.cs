@@ -75,7 +75,6 @@ public sealed class ToolResultEvictionSettings
         "file_edit",
         "grep_files",
         "glob_files",
-        "file_list",
-        "compress"
+        "file_list"
     ];
 }

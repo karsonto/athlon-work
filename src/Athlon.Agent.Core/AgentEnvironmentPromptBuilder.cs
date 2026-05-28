@@ -81,12 +81,14 @@ public sealed class AgentEnvironmentPromptBuilder(
 
         builder.AppendLine();
         builder.AppendLine("When answering questions about files, call file_read first if the content is needed.");
+        builder.AppendLine("file_read returns lines as N|content for display only. For file_edit, old_text must be the exact on-disk substring without the N| prefix.");
         builder.AppendLine("When the user asks what files exist in the workspace or a directory, call file_list before answering.");
         builder.AppendLine("When searching file contents, call grep_files. When finding files by name or extension, call glob_files.");
         builder.AppendLine("For write operations, explain your intent before calling file_write or file_edit.");
+        builder.AppendLine("For file_edit, copy old_text from the real file content (same indentation and line endings). Do not paste grep path:line: prefixes.");
         builder.AppendLine("Use execute_command when a shell command is needed to complete the task.");
         builder.AppendLine("On Windows, execute commands with cmd/cmd.exe semantics; do not use PowerShell syntax or PowerShell-specific commands.");
-        builder.AppendLine("When context grows large, history is auto-compressed; full transcripts are kept under the session transcripts folder. Call compress to manually compact and end the current turn.");
+        builder.AppendLine("When context grows large, history is auto-compressed; full transcripts are kept under the session transcripts folder.");
 
         return builder.ToString();
     }

@@ -49,9 +49,7 @@ public sealed class OpenAiCompatibleChatModelClient(
             throw new InvalidOperationException("模型 API Key 未配置。请在 Settings > Model 中输入 API Key 并保存，或设置环境变量 OPENAI_API_KEY。");
         }
 
-        var preferStreaming = settings.Model.EnableStreaming
-            && (onTextDelta is not null || onReasoningDelta is not null)
-            && request.AllowToolCalls;
+        var preferStreaming = settings.Model.EnableStreaming;
 
         if (preferStreaming)
         {
@@ -61,7 +59,10 @@ public sealed class OpenAiCompatibleChatModelClient(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.Warning("Streaming completion failed, fallback to non-stream mode: {Message}", ex.Message);
+                _logger.Warning(
+                    "Streaming completion failed, fallback to non-stream mode: {Message} (AllowToolCalls={AllowToolCalls})",
+                    ex.Message,
+                    request.AllowToolCalls);
             }
         }
 
@@ -269,7 +270,7 @@ public sealed class OpenAiCompatibleChatModelClient(
         return toolCalls;
     }
 
-    private static async Task<AgentModelResponse> ParseStreamingResponseAsync(
+    private async Task<AgentModelResponse> ParseStreamingResponseAsync(
         HttpResponseMessage response,
         Func<string, Task>? onTextDelta,
         Func<string, Task>? onReasoningDelta,
@@ -291,6 +292,7 @@ public sealed class OpenAiCompatibleChatModelClient(
         var fallbackBuilder = new StringBuilder();
         var toolCalls = new Dictionary<int, StreamingToolCallState>();
         var sawSseData = false;
+        var idleTimeoutSeconds = Math.Max(1, settings.Model.StreamingIdleTimeoutSeconds);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream);
@@ -300,11 +302,14 @@ public sealed class OpenAiCompatibleChatModelClient(
             try
             {
                 using var idleCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                idleCts.CancelAfter(TimeSpan.FromSeconds(90));
+                idleCts.CancelAfter(TimeSpan.FromSeconds(idleTimeoutSeconds));
                 line = await reader.ReadLineAsync(idleCts.Token);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
+                _logger.Information(
+                    "Streaming read idle timeout reached ({IdleTimeoutSeconds}s), finishing with partial content.",
+                    idleTimeoutSeconds);
                 break;
             }
 
@@ -397,6 +402,7 @@ public sealed class OpenAiCompatibleChatModelClient(
 
         if (!sawSseData && fallbackBuilder.Length > 0)
         {
+            _logger.Warning("Streaming response did not contain SSE data lines, fallback to JSON body parsing.");
             var body = fallbackBuilder.ToString().Trim();
             setResponseBody(body);
             return await EmitParsedResponseAsync(body, onTextDelta, onReasoningDelta);

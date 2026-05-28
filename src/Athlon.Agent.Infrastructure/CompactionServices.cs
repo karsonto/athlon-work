@@ -224,15 +224,3 @@ public sealed class ToolResultEvictor(
         return head + "\n...\n" + tail;
     }
 }
-
-public sealed class CompressAgentTool : IAgentTool
-{
-    public ToolDefinition Definition { get; } = new(
-        Core.CompressTool.ToolName,
-        "Manually compress conversation context.",
-        new Dictionary<string, string>(),
-        RequiresApproval: false);
-
-    public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
-        Task.FromResult(ToolResult.Success("Compressing..."));
-}

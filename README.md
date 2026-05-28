@@ -117,14 +117,12 @@ The agent sends an environment prompt that includes active workspace path and av
 - `file_list`: list current workspace files and directories.
 - `file_read`: read file content with line numbers and optional range parameters.
 - `file_write`: create or overwrite files after workspace guard validation.
-- `file_edit`: replace exact text, with optional `replace_all`.
+- `file_edit`: replace exact on-disk text (auto-strips accidental `file_read` line prefixes); optional `replace_all`.
 - `grep_files`: search file contents in the workspace.
 - `glob_files`: find workspace files by glob pattern.
 - `execute_command`: enabled by default; subject to command deny-list rules.
 
 All file tools should respect workspace boundaries through `WorkspaceGuard`. Writes and edits create backups through `AtomicFile`.
-
-- `compress`: manually compact conversation context and end the current agent turn.
 
 ## Context Compression
 

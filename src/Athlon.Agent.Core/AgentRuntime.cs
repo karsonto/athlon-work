@@ -110,24 +110,6 @@ public sealed class AgentRuntime(
                 foreach (var toolCall in response.ToolCalls)
                 {
                     await NotifyToolStartedAsync(callbacks, toolCall);
-
-                    if (string.Equals(toolCall.Name, CompressTool.ToolName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        session = await RunPreCompletionPipelineAsync(
-                            session,
-                            callbacks,
-                            PreCompletionOptions.ManualForceCompact,
-                            cancellationToken);
-                        var compressedNote = ChatMessage.Create(
-                            MessageRole.Assistant,
-                            "Context compressed. Continue from the summary in the latest user message.",
-                            userMessage.Id);
-                        session = session.WithMessage(compressedNote);
-                        await NotifyMessageAsync(callbacks, compressedNote);
-                        await PersistMessageAsync(session, compressedNote, cancellationToken);
-                        return session;
-                    }
-
                     session = await InvokeToolAndPersistAsync(session, userMessage.Id, toolCall, callbacks, cancellationToken);
                 }
             }

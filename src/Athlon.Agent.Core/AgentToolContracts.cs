@@ -43,7 +43,3 @@ public sealed class ToolRouter(IEnumerable<IAgentTool> tools) : IToolRouter
         return tool.InvokeAsync(invocation, cancellationToken);
     }
 }
-public static class CompressTool
-{
-    public const string ToolName = "compress";
-}

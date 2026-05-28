@@ -17,7 +17,7 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit) : 
 {
     public ToolDefinition Definition { get; } = new(
         "file_read",
-        "Read workspace file content with line numbers. Supports pagination via offset/limit or start_line/end_line.",
+        "Read workspace file content with line numbers (N|line) for display. Do not use those prefixes in file_edit old_text.",
         new Dictionary<string, string>
         {
             ["path"] = "File path",

@@ -202,6 +202,175 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
         Assert.Equal("Final text", tokens[0]);
     }
 
+    [Fact]
+    public async Task CompleteAsync_WhenStreamingFails_FallsBackToNonStreaming()
+    {
+        var callCount = 0;
+        var streamFlags = new List<bool>();
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            callCount++;
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var json = JsonDocument.Parse(body);
+            streamFlags.Add(json.RootElement.GetProperty("stream").GetBoolean());
+
+            if (callCount == 1)
+            {
+                throw new HttpRequestException("stream failed");
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"choices\":[{\"message\":{\"content\":\"fallback-ok\"}}]}", Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = CreateClient(handler, enableStreaming: true);
+        var tokens = new List<string>();
+        var result = await client.CompleteAsync(
+            new AgentModelRequest(new[] { new AgentModelMessage("user", "hi") }, Array.Empty<ToolDefinition>()),
+            token =>
+            {
+                tokens.Add(token);
+                return Task.CompletedTask;
+            });
+
+        Assert.Equal("fallback-ok", result.Content);
+        Assert.Equal(new[] { true, false }, streamFlags);
+        Assert.Single(tokens);
+        Assert.Equal("fallback-ok", tokens[0]);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_StreamRequested_WithNonSseContentType_FallsBackToJsonParsing()
+    {
+        var streamFlags = new List<bool>();
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var json = JsonDocument.Parse(body);
+            streamFlags.Add(json.RootElement.GetProperty("stream").GetBoolean());
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"choices\":[{\"message\":{\"content\":\"json-ok\"}}]}", Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = CreateClient(handler, enableStreaming: true);
+        var result = await client.CompleteAsync(
+            new AgentModelRequest(new[] { new AgentModelMessage("user", "hi") }, Array.Empty<ToolDefinition>()),
+            _ => Task.CompletedTask);
+
+        Assert.Equal("json-ok", result.Content);
+        Assert.Single(streamFlags);
+        Assert.True(streamFlags[0]);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_StreamRequested_WithoutSseDataLines_UsesFallbackBodyParsing()
+    {
+        var body = "{\"choices\":[{\"message\":{\"content\":\"fallback-body\"}}]}\n";
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            var http = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(body, Encoding.UTF8)
+            };
+            http.Content.Headers.ContentType = new MediaTypeHeaderValue("text/event-stream");
+            return http;
+        });
+
+        var client = CreateClient(handler, enableStreaming: true);
+        var result = await client.CompleteAsync(
+            new AgentModelRequest(new[] { new AgentModelMessage("user", "hi") }, Array.Empty<ToolDefinition>()),
+            _ => Task.CompletedTask);
+
+        Assert.Equal("fallback-body", result.Content);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_WhenAllowToolCallsFalse_StillUsesStreaming()
+    {
+        var streamFlags = new List<bool>();
+        var response = string.Join(
+            "\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"sum\"}}]}",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"mary\"}}]}",
+            "data: [DONE]",
+            string.Empty);
+
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var json = JsonDocument.Parse(body);
+            streamFlags.Add(json.RootElement.GetProperty("stream").GetBoolean());
+
+            var http = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(response, Encoding.UTF8)
+            };
+            http.Content.Headers.ContentType = new MediaTypeHeaderValue("text/event-stream");
+            return http;
+        });
+
+        var client = CreateClient(handler, enableStreaming: true);
+        var deltas = new StringBuilder();
+        var result = await client.CompleteAsync(
+            new AgentModelRequest(
+                new[] { new AgentModelMessage("user", "summarize") },
+                Array.Empty<ToolDefinition>(),
+                AllowToolCalls: false,
+                MaxTokens: 64),
+            token =>
+            {
+                deltas.Append(token);
+                return Task.CompletedTask;
+            });
+
+        Assert.Equal("summary", result.Content);
+        Assert.Equal("summary", deltas.ToString());
+        Assert.Single(streamFlags);
+        Assert.True(streamFlags[0]);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_CompactionLikeRequest_UsesStreamingWithoutDeltaCallbacks()
+    {
+        var streamFlags = new List<bool>();
+        var response = string.Join(
+            "\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"compact\"}}]}",
+            "data: [DONE]",
+            string.Empty);
+
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            var body = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var json = JsonDocument.Parse(body);
+            streamFlags.Add(json.RootElement.GetProperty("stream").GetBoolean());
+
+            var http = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(response, Encoding.UTF8)
+            };
+            http.Content.Headers.ContentType = new MediaTypeHeaderValue("text/event-stream");
+            return http;
+        });
+
+        var client = CreateClient(handler, enableStreaming: true);
+        var result = await client.CompleteAsync(
+            new AgentModelRequest(
+                new[] { new AgentModelMessage("user", "summary prompt") },
+                Array.Empty<ToolDefinition>(),
+                AllowToolCalls: false,
+                MaxTokens: 64));
+
+        Assert.Equal("compact", result.Content);
+        Assert.Single(streamFlags);
+        Assert.True(streamFlags[0]);
+    }
+
     private static OpenAiCompatibleChatModelClient CreateClient(HttpMessageHandler handler, bool enableStreaming)
     {
         var settings = new AppSettings

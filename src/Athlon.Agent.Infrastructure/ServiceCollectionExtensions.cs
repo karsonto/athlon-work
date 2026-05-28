@@ -33,7 +33,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ICredentialStore, DpapiCredentialStore>();
         services.AddSingleton<IAppLogger>(logger);
         services.AddSingleton<IFileStorageService, FileStorageService>();
-        services.AddHttpClient<IAgentModelClient, OpenAiCompatibleChatModelClient>();
+        services.AddHttpClient<IAgentModelClient, OpenAiCompatibleChatModelClient>(
+            static client => client.Timeout = TimeSpan.FromMinutes(10));
         services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
         services.AddSingleton<IAgentRuntime, AgentRuntime>();
         services.AddSingleton<IAgentEnvironmentPromptBuilder, AgentEnvironmentPromptBuilder>();
@@ -55,7 +56,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IConversationCompactor, ConversationCompactor>();
         services.AddSingleton<IToolResultEvictor, ToolResultEvictor>();
         services.AddSingleton<IPreCompletionPipeline, PreCompletionPipeline>();
-        services.AddSingleton<IAgentTool, CompressAgentTool>();
         return services;
     }
 

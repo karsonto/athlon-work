@@ -15,7 +15,17 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool
 {
-    public ToolDefinition Definition { get; } = new("file_edit", "Replace text in a workspace file with backup. old_text must be unique unless replace_all is true.", new Dictionary<string, string> { ["path"] = "File path", ["old_text"] = "Unique text", ["new_text"] = "Replacement", ["replace_all"] = "Optional true to replace all occurrences" }, RequiresApproval: true);
+    public ToolDefinition Definition { get; } = new(
+        "file_edit",
+        "Replace exact text in a workspace file (with backup). old_text must match disk content exactly — not file_read's N|line prefixes.",
+        new Dictionary<string, string>
+        {
+            ["path"] = "File path",
+            ["old_text"] = "Exact substring from the file (no line-number prefixes)",
+            ["new_text"] = "Replacement",
+            ["replace_all"] = "Optional true to replace all occurrences"
+        },
+        RequiresApproval: true);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
@@ -27,19 +37,33 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         if (!guard.IsInsideWorkspace(fullPath)) return ToolResult.Failure("Outside workspace", fullPath);
         var content = await File.ReadAllTextAsync(fullPath, cancellationToken);
         var replaceAll = invocation.Arguments.TryGetValue("replace_all", out var value) && bool.TryParse(value, out var parsed) && parsed;
-        var occurrences = content.Split(oldText).Length - 1;
-        if (occurrences == 0) return ToolResult.Failure("Text not found", "old_text did not match.");
-        if (!replaceAll && occurrences != 1) return ToolResult.Failure("Text is not unique", "old_text must match exactly once unless replace_all is true.");
-        AtomicFile.BackupIfExists(fullPath);
-        var updated = replaceAll ? content.Replace(oldText, newText) : ReplaceFirst(content, oldText, newText);
-        await File.WriteAllTextAsync(fullPath, updated, cancellationToken);
-        await audit.WriteAsync("file_edit", new { path = fullPath, oldChars = oldText.Length, newChars = newText.Length, occurrences = replaceAll ? occurrences : 1 }, cancellationToken);
-        return ToolResult.Success($"Edited {Path.GetFileName(fullPath)} ({(replaceAll ? occurrences : 1)} replacement(s))");
-    }
 
-    private static string ReplaceFirst(string content, string oldText, string newText)
-    {
-        var index = content.IndexOf(oldText, StringComparison.Ordinal);
-        return index < 0 ? content : content[..index] + newText + content[(index + oldText.Length)..];
+        var match = FileEditMatcher.TryMatch(content, oldText, replaceAll);
+        switch (match.Status)
+        {
+            case FileEditMatchStatus.NotFound:
+                return ToolResult.Failure("Text not found", FileEditMatcher.BuildNotFoundMessage(oldText));
+            case FileEditMatchStatus.NotUnique:
+                return ToolResult.Failure(
+                    "Text is not unique",
+                    "old_text must match exactly once unless replace_all is true.");
+        }
+
+        var effectiveNewText = FileEditMatcher.ResolveNewText(oldText, newText, match);
+        AtomicFile.BackupIfExists(fullPath);
+        var updated = FileEditMatcher.ApplyReplace(content, match.MatchedOldText, effectiveNewText, replaceAll);
+        await File.WriteAllTextAsync(fullPath, updated, cancellationToken);
+        await audit.WriteAsync(
+            "file_edit",
+            new
+            {
+                path = fullPath,
+                oldChars = match.MatchedOldText.Length,
+                newChars = effectiveNewText.Length,
+                occurrences = replaceAll ? match.Occurrences : 1,
+                normalized = match.Kind != OldTextCandidateKind.Exact
+            },
+            cancellationToken);
+        return ToolResult.Success($"Edited {Path.GetFileName(fullPath)} ({(replaceAll ? match.Occurrences : 1)} replacement(s))");
     }
 }
