@@ -17,6 +17,9 @@ public sealed class AgentEnvironmentPromptBuilderTests
         var prompt = builder.Build(AgentSession.Create("prompt-test"), Array.Empty<ToolDefinition>());
 
         Assert.Contains("Host environment (current Windows user session):", prompt, StringComparison.Ordinal);
+        Assert.Contains("- Current date/time (local):", prompt, StringComparison.Ordinal);
+        Assert.Contains("- Current date/time (UTC):", prompt, StringComparison.Ordinal);
+        Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", prompt);
         Assert.Contains(@"User: TESTDOMAIN\karson", prompt, StringComparison.Ordinal);
         Assert.Contains($"- Default skills directory: {skillsPath}", prompt, StringComparison.Ordinal);
         Assert.Contains($"- Agent app data: {appDataPath}", prompt, StringComparison.Ordinal);
@@ -81,6 +84,22 @@ public sealed class AgentEnvironmentPromptBuilderTests
         Assert.Contains("Think through the user's goal", prompt, StringComparison.Ordinal);
         Assert.Contains("plan.md", prompt, StringComparison.Ordinal);
         Assert.Contains("Execute one step at a time", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_IncludesMermaidGuidance()
+    {
+        var builder = new AgentEnvironmentPromptBuilder(
+            new AppSettings(),
+            new FixedSkillsProvider(),
+            new FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"));
+
+        var prompt = builder.Build(AgentSession.Create("mermaid-test"), Array.Empty<ToolDefinition>());
+
+        Assert.Contains("Mermaid diagrams in chat:", prompt, StringComparison.Ordinal);
+        Assert.Contains("```mermaid", prompt, StringComparison.Ordinal);
+        Assert.Contains("sequenceDiagram", prompt, StringComparison.Ordinal);
+        Assert.Contains("查看 Mermaid 图表", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

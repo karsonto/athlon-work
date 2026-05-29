@@ -10,7 +10,7 @@ Athlon Agent is a Windows AI Agent prototype built with .NET 8 WPF. The product 
 - Built-in filesystem tools: `file_list`, `file_read`, `file_write`, `file_edit`, `grep_files`, `glob_files`, `execute_command`.
 - File-first persistence for settings, sessions, logs, credentials, and audit records.
 - API key persistence through Windows DPAPI instead of plain JSON.
-- Markdown chat rendering through `MdXaml`.
+- Markdown chat rendering through `MdXaml` (Mermaid blocks stay as code; right-click **查看 Mermaid 图表** opens an offline preview dialog bundled with `mermaid.min.js`).
 - Skill YAML loading and Handlebars rendering foundation.
 - MCP configuration UI and stdio client skeleton.
 - GitHub Actions CI and release packaging for installer exe and portable zip.

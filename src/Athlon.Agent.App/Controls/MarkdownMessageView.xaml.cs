@@ -17,6 +17,7 @@ public partial class MarkdownMessageView : UserControl
 {
     private ContextMenu? _contextMenu;
     private MenuItem? _previewHtmlMenuItem;
+    private MenuItem? _previewMermaidMenuItem;
     private bool _documentHooked;
 
     public static readonly DependencyProperty MarkdownProperty =
@@ -308,7 +309,7 @@ public partial class MarkdownMessageView : UserControl
         {
             Style = Application.Current.FindResource("MarkdownContextMenuStyle") as Style,
         };
-        menu.Opened += (_, _) => UpdatePreviewHtmlMenuVisibility();
+        menu.Opened += (_, _) => UpdatePreviewMenuVisibility();
 
         _previewHtmlMenuItem = new MenuItem
         {
@@ -324,6 +325,16 @@ public partial class MarkdownMessageView : UserControl
             }
         };
         menu.Items.Add(_previewHtmlMenuItem);
+
+        _previewMermaidMenuItem = new MenuItem
+        {
+            Header = "查看 Mermaid 图表",
+            Style = Application.Current.FindResource("MarkdownContextMenuItemStyle") as Style,
+            Visibility = Visibility.Collapsed,
+        };
+        _previewMermaidMenuItem.Click += (_, _) =>
+            MermaidPreviewWindow.Show(Markdown, Window.GetWindow(this));
+        menu.Items.Add(_previewMermaidMenuItem);
 
         var copyItem = new MenuItem
         {
@@ -345,11 +356,18 @@ public partial class MarkdownMessageView : UserControl
         return menu;
     }
 
-    private void UpdatePreviewHtmlMenuVisibility()
+    private void UpdatePreviewMenuVisibility()
     {
         if (_previewHtmlMenuItem is not null)
         {
             _previewHtmlMenuItem.Visibility = HtmlContentDetector.LooksLikeHtml(Markdown)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        if (_previewMermaidMenuItem is not null)
+        {
+            _previewMermaidMenuItem.Visibility = MermaidMarkdownExtractor.ContainsMermaid(Markdown)
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }

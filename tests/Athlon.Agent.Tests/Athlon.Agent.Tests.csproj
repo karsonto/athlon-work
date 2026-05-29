@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Athlon.Agent.App\Athlon.Agent.App.csproj" />
     <ProjectReference Include="..\..\src\Athlon.Agent.Core\Athlon.Agent.Core.csproj" />
     <ProjectReference Include="..\..\src\Athlon.Agent.Infrastructure\Athlon.Agent.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Athlon.Agent.Skills\Athlon.Agent.Skills.csproj" />

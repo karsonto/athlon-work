@@ -89,8 +89,21 @@ public sealed class AgentEnvironmentPromptBuilder(
         builder.AppendLine("Use execute_command when a shell command is needed to complete the task.");
         builder.AppendLine("On Windows, execute commands with cmd/cmd.exe semantics; do not use PowerShell syntax or PowerShell-specific commands.");
         builder.AppendLine("When context grows large, history is auto-compressed; full transcripts are kept under the session transcripts folder.");
+        builder.AppendLine();
+        AppendMermaidGuidance(builder);
 
         return builder.ToString();
+    }
+
+    private static void AppendMermaidGuidance(StringBuilder builder)
+    {
+        builder.AppendLine("Mermaid diagrams in chat:");
+        builder.AppendLine("- When a diagram clarifies the answer better than prose alone, include one or more fenced ```mermaid code blocks (e.g. flowchart, sequenceDiagram, stateDiagram-v2, classDiagram, erDiagram, gantt).");
+        builder.AppendLine("- Prefer Mermaid for: request/API flows, multi-step processes, component or deployment topology, state transitions, timelines, and decision branches.");
+        builder.AppendLine("- Skip diagrams for simple factual answers, short lists, or when the user only wants code/text.");
+        builder.AppendLine("- Keep each diagram focused; use multiple small diagrams instead of one huge chart.");
+        builder.AppendLine("- In Athlon Agent the chat shows Mermaid as source code, not inline graphics. Tell the user they can right-click the message and choose \"查看 Mermaid 图表\" for an offline rendered preview.");
+        builder.AppendLine("- Do not claim an inline image is visible unless you also describe the structure in text.");
     }
 
     private static void AppendPlanningGuidance(StringBuilder builder)
@@ -104,7 +117,12 @@ public sealed class AgentEnvironmentPromptBuilder(
 
     private void AppendHostEnvironment(StringBuilder builder)
     {
+        var now = DateTimeOffset.Now;
+        var localZone = TimeZoneInfo.Local;
+
         builder.AppendLine("Host environment (current Windows user session):");
+        builder.AppendLine($"- Current date/time (local): {now:yyyy-MM-dd HH:mm:ss} ({localZone.DisplayName})");
+        builder.AppendLine($"- Current date/time (UTC): {now.UtcDateTime:yyyy-MM-dd HH:mm:ss}Z");
         builder.AppendLine($"- Platform: {(host.IsWindows ? "Windows" : "non-Windows")}");
         builder.AppendLine($"- OS: {host.OsDescription} ({host.OsVersion})");
         builder.AppendLine($"- User: {host.UserDomainName}\\{host.UserName}");
