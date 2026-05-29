@@ -281,8 +281,7 @@
                                                 Padding="0"
                                                 FontSize="10"
                                                 Foreground="#EF4444"
-                                                VerticalAlignment="Center"
-                                                Style="{StaticResource SessionDeleteButtonStyle}">
+                                                VerticalAlignment="Center">
                                             <Button.Style>
                                                 <Style TargetType="Button" BasedOn="{StaticResource SessionDeleteButtonStyle}">
                                                     <Setter Property="Visibility" Value="Collapsed" />
