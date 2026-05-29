@@ -10,6 +10,7 @@ namespace Athlon.Agent.App.Services;
 /// <summary>Per-session chat UI state (messages + streaming buffers) for parallel turns.</summary>
 public sealed class SessionTurnUiController
 {
+    private static readonly Action NoOpScroll = () => { };
     private static readonly TimeSpan StreamingFlushInterval = TimeSpan.FromMilliseconds(40);
     private static readonly TimeSpan ToolFlushInterval = TimeSpan.FromMilliseconds(16);
 
@@ -25,7 +26,7 @@ public sealed class SessionTurnUiController
     public SessionTurnUiController(Dispatcher dispatcher, Action? requestScroll = null)
     {
         _dispatcher = dispatcher;
-        RequestScroll = requestScroll ?? static () => { };
+        RequestScroll = requestScroll ?? NoOpScroll;
         Messages = new ObservableCollection<ChatMessageViewModel>();
     }
 
