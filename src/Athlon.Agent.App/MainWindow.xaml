@@ -491,24 +491,26 @@
                                                                        Foreground="#C4B5FD"
                                                                        TextTrimming="CharacterEllipsis"
                                                                        Margin="0,2,0,0" />
-                                                            <TextBlock Text="{Binding ToolArgumentsText}"
-                                                                       FontSize="11"
-                                                                       FontFamily="Consolas"
-                                                                       Foreground="{StaticResource Brush.Text}"
-                                                                       TextWrapping="Wrap"
-                                                                       Margin="0,6,0,0"
-                                                                       MaxHeight="160">
-                                                                <TextBlock.Style>
-                                                                    <Style TargetType="TextBlock">
+                                                            <ScrollViewer MaxHeight="160"
+                                                                          Margin="0,6,0,0"
+                                                                          VerticalScrollBarVisibility="Auto"
+                                                                          HorizontalScrollBarVisibility="Auto">
+                                                                <ScrollViewer.Style>
+                                                                    <Style TargetType="ScrollViewer">
                                                                         <Setter Property="Visibility" Value="Collapsed" />
                                                                         <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding HasToolArguments}" Value="True">
+                                                                            <DataTrigger Binding="{Binding ShowToolArgumentsPanel}" Value="True">
                                                                                 <Setter Property="Visibility" Value="Visible" />
                                                                             </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
-                                                                </TextBlock.Style>
-                                                            </TextBlock>
+                                                                </ScrollViewer.Style>
+                                                                <TextBlock Text="{Binding ToolArgumentsText}"
+                                                                           FontSize="11"
+                                                                           FontFamily="Consolas"
+                                                                           Foreground="{StaticResource Brush.Text}"
+                                                                           TextWrapping="Wrap" />
+                                                            </ScrollViewer>
                                                             <TextBlock Text="{Binding ToolSummary}"
                                                                        FontSize="11"
                                                                        Foreground="{StaticResource Brush.SubtleText}"

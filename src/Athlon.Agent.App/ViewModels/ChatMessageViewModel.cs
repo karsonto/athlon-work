@@ -154,18 +154,31 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     [ObservableProperty]
     private bool _isExpanded;
 
-    public bool HasToolArguments => !string.IsNullOrWhiteSpace(ToolArgumentsText);
+    [ObservableProperty]
+    private bool _isToolArgumentsStreaming;
+
+    public bool HasToolArguments => !string.IsNullOrWhiteSpace(ToolArgumentsText)
+        && ToolArgumentsText != "…";
+
+    public bool ShowToolArgumentsPanel => IsToolArgumentsStreaming || HasToolArguments;
 
     public string ChevronGlyph => IsExpanded ? "▼" : "▶";
 
     partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(ChevronGlyph));
 
-    partial void OnToolArgumentsTextChanged(string value) => OnPropertyChanged(nameof(HasToolArguments));
+    partial void OnToolArgumentsTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasToolArguments));
+        OnPropertyChanged(nameof(ShowToolArgumentsPanel));
+    }
+
+    partial void OnIsToolArgumentsStreamingChanged(bool value) => OnPropertyChanged(nameof(ShowToolArgumentsPanel));
 
     partial void OnToolCallStatusChanged(ToolCallDisplayStatus value)
     {
         OnPropertyChanged(nameof(ToolStatusLabel));
         OnPropertyChanged(nameof(ShowToolStatusLabel));
+        OnPropertyChanged(nameof(ShowToolArgumentsPanel));
     }
 
     public bool ShowToolStatusLabel => ToolCallStatus != ToolCallDisplayStatus.None;
@@ -245,10 +258,8 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             ToolHeader = $"Tool `{name}`";
         }
 
-        if (!string.IsNullOrWhiteSpace(argumentsJson))
-        {
-            ToolArgumentsText = argumentsJson;
-        }
+        IsToolArgumentsStreaming = true;
+        ToolArgumentsText = string.IsNullOrEmpty(argumentsJson) ? "…" : argumentsJson;
     }
 
     public void PromoteStreamingToolToRunning(AgentToolCall toolCall)
@@ -263,6 +274,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ToolName = toolCall.Name;
         ToolHeader = $"Tool `{toolCall.Name}`";
         ToolArgumentsText = FormatArgumentsFull(toolCall.Arguments);
+        IsToolArgumentsStreaming = false;
         ToolCallStatus = ToolCallDisplayStatus.Running;
         IsToolRunning = true;
     }
@@ -275,6 +287,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         }
 
         StreamToolIndex = null;
+        IsToolArgumentsStreaming = false;
         ToolCallStatus = ToolCallDisplayStatus.Cancelled;
         ToolSummary = "已停止";
     }

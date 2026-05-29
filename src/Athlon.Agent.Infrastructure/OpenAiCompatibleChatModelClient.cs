@@ -393,20 +393,29 @@ public sealed class OpenAiCompatibleChatModelClient(
                                 state.Name = nameElement.GetString() ?? state.Name;
                             }
 
-                            if (function.TryGetProperty("arguments", out var argsElement) && argsElement.ValueKind == JsonValueKind.String)
+                            if (function.TryGetProperty("arguments", out var argsElement))
                             {
-                                state.Arguments.Append(argsElement.GetString());
+                                switch (argsElement.ValueKind)
+                                {
+                                    case JsonValueKind.String:
+                                        state.Arguments.Append(argsElement.GetString());
+                                        break;
+                                    case JsonValueKind.Object:
+                                    case JsonValueKind.Array:
+                                        state.Arguments.Clear();
+                                        state.Arguments.Append(argsElement.GetRawText());
+                                        break;
+                                }
                             }
                         }
 
-                        if (onToolCallDelta is not null)
-                        {
-                            await onToolCallDelta(new StreamingToolCallDelta(
+                        NotifyToolCallDelta(
+                            onToolCallDelta,
+                            new StreamingToolCallDelta(
                                 index,
                                 state.Id,
                                 state.Name,
                                 state.Arguments.ToString()));
-                        }
                     }
                 }
             }
@@ -436,6 +445,26 @@ public sealed class OpenAiCompatibleChatModelClient(
 
         var reasoningContent = reasoningBuilder.Length == 0 ? null : reasoningBuilder.ToString();
         return NormalizeAssistantResponse(contentBuilder.ToString(), normalizedToolCalls, reasoningContent);
+    }
+
+    private static void NotifyToolCallDelta(Func<StreamingToolCallDelta, Task>? onToolCallDelta, StreamingToolCallDelta delta)
+    {
+        if (onToolCallDelta is null)
+        {
+            return;
+        }
+
+        var task = onToolCallDelta(delta);
+        if (task.IsCompletedSuccessfully)
+        {
+            return;
+        }
+
+        _ = task.ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted,
+            TaskScheduler.Default);
     }
 
     private static bool TryGetStreamPayload(JsonElement choice, out JsonElement payload)

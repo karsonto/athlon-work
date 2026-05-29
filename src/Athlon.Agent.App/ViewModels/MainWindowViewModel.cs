@@ -34,9 +34,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private AgentSession _session = AgentSession.Create("New Chat");
     private ChatMessageViewModel? _streamingAssistantMessage;
     private readonly Dictionary<int, ChatMessageViewModel> _streamingToolMessagesByIndex = new();
+    private readonly Dictionary<int, StreamingToolCallDelta> _pendingToolCallDeltas = new();
     private readonly StringBuilder _streamingTokenBuffer = new();
     private readonly StringBuilder _streamingReasoningBuffer = new();
     private DispatcherTimer? _streamingFlushTimer;
+    private DispatcherTimer? _streamingToolFlushTimer;
 
     public MainWindowViewModel(
         IAgentOrchestrator orchestrator,
@@ -335,6 +337,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ComposerText = string.Empty;
         IsBusy = true;
         StreamingText = string.Empty;
+        _pendingToolCallDeltas.Clear();
         BeginTurnCancellation();
         Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments)));
         RequestScrollToBottom();
@@ -348,12 +351,19 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 OnToolStarted = async toolCall => await RunOnUiAsync(() =>
                 {
+                    FlushStreamingTokens();
+                    FlushStreamingToolDeltas();
                     ClearStreamingAssistantPlaceholder();
                     var existing = FindToolMessage(toolCall.Id);
                     if (existing is not null)
                     {
                         if (existing.ToolCallStatus == ToolCallDisplayStatus.Preparing)
                         {
+                            if (existing.StreamToolIndex is int streamIndex)
+                            {
+                                _pendingToolCallDeltas.Remove(streamIndex);
+                            }
+
                             existing.PromoteStreamingToolToRunning(toolCall);
                             RemoveStreamingToolTracking(existing);
                         }
@@ -367,6 +377,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                             || string.Equals(message.ToolCallId, toolCall.Id, StringComparison.Ordinal)));
                     if (preparing is not null)
                     {
+                        if (preparing.StreamToolIndex is int streamIndex)
+                        {
+                            _pendingToolCallDeltas.Remove(streamIndex);
+                        }
+
                         preparing.PromoteStreamingToolToRunning(toolCall);
                         RemoveStreamingToolTracking(preparing);
                         RequestScrollToBottom();
@@ -376,19 +391,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     Messages.Add(ChatMessageViewModel.CreatePendingTool(toolCall));
                     RequestScrollToBottom();
                 }),
-                OnAssistantToolCallDelta = async delta => await RunOnUiAsync(() =>
+                OnAssistantToolCallDelta = delta =>
                 {
-                    ClearStreamingAssistantPlaceholder();
-                    if (!_streamingToolMessagesByIndex.TryGetValue(delta.Index, out var toolMessage))
+                    _pendingToolCallDeltas[delta.Index] = delta;
+                    return RunOnUiAsync(() =>
                     {
-                        toolMessage = ChatMessageViewModel.CreateStreamingTool(delta.Index);
-                        _streamingToolMessagesByIndex[delta.Index] = toolMessage;
-                        Messages.Add(toolMessage);
-                    }
-
-                    toolMessage.UpdateStreamingToolCall(delta.Id, delta.Name, delta.ArgumentsJson);
-                    RequestScrollToBottom();
-                }),
+                        ClearStreamingAssistantPlaceholder();
+                        ScheduleStreamingToolFlush();
+                    });
+                },
                 OnMessage = async message => await RunOnUiAsync(() =>
                 {
                     if (message.Role == MessageRole.User
@@ -459,7 +470,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             var timedOut = IsTurnTimedOut();
             await RunOnUiAsync(() =>
             {
+                StopStreamingToolFlushTimer();
                 FlushStreamingTokens();
+                FlushStreamingToolDeltas();
                 if (_streamingAssistantMessage is not null)
                 {
                     _streamingAssistantMessage.MarkStreamingCancelled();
@@ -496,6 +509,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             await RunOnUiAsync(() =>
             {
+                StopStreamingToolFlushTimer();
+                FlushStreamingToolDeltas();
                 ClearStreamingAssistantPlaceholder();
                 foreach (var message in _streamingToolMessagesByIndex.Values.ToList())
                 {
@@ -503,6 +518,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 }
 
                 _streamingToolMessagesByIndex.Clear();
+                _pendingToolCallDeltas.Clear();
                 Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, $"模型调用失败：{ex.Message}")));
             });
             await SaveCurrentSessionIfNeededAsync();
@@ -510,9 +526,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         finally
         {
             StopStreamingFlushTimer();
+            StopStreamingToolFlushTimer();
             FlushStreamingTokens();
+            FlushStreamingToolDeltas();
             _streamingTokenBuffer.Clear();
             _streamingReasoningBuffer.Clear();
+            _pendingToolCallDeltas.Clear();
             _streamingAssistantMessage = null;
             _streamingToolMessagesByIndex.Clear();
             StreamingText = string.Empty;
@@ -584,10 +603,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void ClearStreamingAssistantPlaceholder()
     {
-        StopStreamingFlushTimer();
-        _streamingTokenBuffer.Clear();
-        _streamingReasoningBuffer.Clear();
-
         if (_streamingAssistantMessage is null)
         {
             return;
@@ -656,6 +671,59 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _streamingFlushTimer.Stop();
         _streamingFlushTimer = null;
+    }
+
+    private void ScheduleStreamingToolFlush()
+    {
+        if (_streamingToolFlushTimer is not null)
+        {
+            return;
+        }
+
+        _streamingToolFlushTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+        _streamingToolFlushTimer.Tick += (_, _) => FlushStreamingToolDeltas();
+        _streamingToolFlushTimer.Start();
+    }
+
+    private void FlushStreamingToolDeltas()
+    {
+        if (_pendingToolCallDeltas.Count == 0)
+        {
+            return;
+        }
+
+        var didFlush = false;
+        foreach (var (index, delta) in _pendingToolCallDeltas.ToList())
+        {
+            if (!_streamingToolMessagesByIndex.TryGetValue(index, out var toolMessage))
+            {
+                toolMessage = ChatMessageViewModel.CreateStreamingTool(index);
+                _streamingToolMessagesByIndex[index] = toolMessage;
+                Messages.Add(toolMessage);
+            }
+
+            toolMessage.UpdateStreamingToolCall(delta.Id, delta.Name, delta.ArgumentsJson);
+            didFlush = true;
+        }
+
+        if (didFlush)
+        {
+            RequestScrollToBottom();
+        }
+    }
+
+    private void StopStreamingToolFlushTimer()
+    {
+        if (_streamingToolFlushTimer is null)
+        {
+            return;
+        }
+
+        _streamingToolFlushTimer.Stop();
+        _streamingToolFlushTimer = null;
     }
 
     private ChatMessageViewModel? FindToolMessage(string? toolCallId)
