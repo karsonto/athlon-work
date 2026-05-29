@@ -26,6 +26,7 @@ public sealed class AgentRuntimeProgressTests
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
+            new AppSettings(),
             new NoOpLogger());
 
         var events = new List<string>();
@@ -81,6 +82,7 @@ public sealed class AgentRuntimeProgressTests
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
+            new AppSettings(),
             new NoOpLogger());
 
         var tokens = new List<string>();
@@ -120,6 +122,7 @@ public sealed class AgentRuntimeProgressTests
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
+            new AppSettings(),
             new NoOpLogger());
 
         await runtime.SendAsync(AgentSession.Create("thread-test"), "run tool");
@@ -149,6 +152,7 @@ public sealed class AgentRuntimeProgressTests
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
+            new AppSettings(),
             new NoOpLogger());
 
         await runtime.SendAsync(AgentSession.Create("mcp-route-test"), "call mcp");
@@ -277,13 +281,6 @@ public sealed class AgentRuntimeProgressTests
         public Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<SessionIndexEntry>>(Array.Empty<SessionIndexEntry>());
         public Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<AppSettings> LoadSettingsAsync(CancellationToken cancellationToken = default) => Task.FromResult(new AppSettings());
-    }
-
-    private sealed class NoOpActiveAgentSessionContext : IActiveAgentSessionContext
-    {
-        public string? SessionId { get; private set; }
-
-        public void SetSession(string? sessionId) => SessionId = sessionId;
     }
 
     private sealed class NoOpLogger : IAppLogger

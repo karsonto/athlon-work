@@ -2,11 +2,10 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
-using System.Text;
 using System.Windows;
-using System.Windows.Threading;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.App.Services;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -17,9 +16,6 @@ namespace Athlon.Agent.App.ViewModels;
 
 public partial class MainWindowViewModel : ObservableObject, IDisposable
 {
-    private static readonly TimeSpan TurnTimeout = TimeSpan.FromMinutes(30);
-
-    private readonly IAgentOrchestrator _orchestrator;
     private readonly IFileStorageService _storage;
     private readonly ICredentialStore _credentialStore;
     private readonly IActiveWorkspaceContext _workspaceContext;
@@ -27,21 +23,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AppSettings _appSettings;
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly IImageAttachmentReader _imageAttachmentReader;
+    private readonly SessionTurnHost _turnHost;
+    private readonly SessionUiCache _uiCache;
     private FileSystemWatcher? _workspaceWatcher;
-    private CancellationTokenSource? _turnCancellation;
-    private CancellationTokenSource? _turnTimeoutCancellation;
-    private CancellationTokenSource? _turnLinkedCancellation;
     private AgentSession _session = AgentSession.Create("New Chat");
-    private ChatMessageViewModel? _streamingAssistantMessage;
-    private readonly Dictionary<int, ChatMessageViewModel> _streamingToolMessagesByIndex = new();
-    private readonly Dictionary<int, StreamingToolCallDelta> _pendingToolCallDeltas = new();
-    private readonly StringBuilder _streamingTokenBuffer = new();
-    private readonly StringBuilder _streamingReasoningBuffer = new();
-    private DispatcherTimer? _streamingFlushTimer;
-    private DispatcherTimer? _streamingToolFlushTimer;
+    private string _displayedSessionId;
+    private SessionTurnUiController _activeUi;
 
     public MainWindowViewModel(
-        IAgentOrchestrator orchestrator,
         IFileStorageService storage,
         ICredentialStore credentialStore,
         IActiveWorkspaceContext workspaceContext,
@@ -49,22 +38,29 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IImageAttachmentReader imageAttachmentReader,
         IAppPathProvider paths,
         IAgentSkillCatalog skillCatalog,
+        SessionTurnHost turnHost,
+        SessionUiCache uiCache,
         AppSettings settings)
     {
-        _orchestrator = orchestrator;
         _storage = storage;
         _credentialStore = credentialStore;
         _workspaceContext = workspaceContext;
         _mcpRegistry = mcpRegistry;
         _imageAttachmentReader = imageAttachmentReader;
+        _turnHost = turnHost;
+        _uiCache = uiCache;
         _appSettings = settings;
         _skillCatalog = skillCatalog;
+        _displayedSessionId = _session.Id;
+        _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
+        _turnHost.TurnCompleted += OnTurnCompleted;
+        _turnHost.TurnStateChanged += OnTurnStateChanged;
         Settings = new SettingsViewModel(settings, _mcpRegistry);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
         ApplySessionWorkspace();
-        Messages.CollectionChanged += OnMessagesCollectionChanged;
+        _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         PendingImageAttachments.CollectionChanged += OnPendingImagesChanged;
         _ = InitializeAsync();
     }
@@ -92,7 +88,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    public ObservableCollection<ChatMessageViewModel> Messages { get; } = new();
+    public ObservableCollection<ChatMessageViewModel> Messages => _activeUi.Messages;
 
     /// <summary>由 MainWindow 注入，用于流式输出时自动滚到底部。</summary>
     public Action? ScrollChatToBottom { get; set; }
@@ -163,15 +159,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task NewSession()
     {
-        CancelTurn();
         await SaveCurrentSessionIfNeededAsync();
         _session = AgentSession.Create("New Chat");
+        SwitchDisplayedSession(_session);
         CurrentSessionTitle = _session.Title;
         ComposerText = string.Empty;
         PendingImageAttachments.Clear();
         StreamingText = string.Empty;
-        IsBusy = false;
-        Messages.Clear();
+        UpdateDisplayedBusyState();
         CurrentPage = "Chat";
         ApplySessionWorkspace();
         await RefreshSessionHistoryAsync();
@@ -191,11 +186,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        CancelTurn();
-        ResetTurnUiState();
+        if (_turnHost.IsRunning(_displayedSessionId))
+        {
+            _turnHost.Cancel(_displayedSessionId);
+        }
 
         _session = _session.WithMessages(Array.Empty<ChatMessage>());
-        Messages.Clear();
+        _activeUi.Messages.Clear();
         StreamingText = string.Empty;
         PendingImageAttachments.Clear();
 
@@ -218,16 +215,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SendCommand.NotifyCanExecuteChanged();
     }
 
-    private void ResetTurnUiState()
-    {
-        StopStreamingFlushTimer();
-        FlushStreamingTokens();
-        _streamingTokenBuffer.Clear();
-        _streamingReasoningBuffer.Clear();
-        _streamingAssistantMessage = null;
-        IsBusy = false;
-    }
-
     private void NotifyCommandStatesChanged()
     {
         SendCommand.NotifyCanExecuteChanged();
@@ -243,7 +230,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        CancelTurn();
         await SaveCurrentSessionIfNeededAsync();
         await LoadSessionInternalAsync(item.Id);
         CurrentPage = "Chat";
@@ -267,16 +253,22 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        if (_turnHost.IsRunning(item.Id))
+        {
+            _turnHost.Cancel(item.Id);
+        }
+
+        _uiCache.Remove(item.Id);
         await _storage.DeleteSessionAsync(item.Id);
 
         if (string.Equals(_session.Id, item.Id, StringComparison.Ordinal))
         {
             _session = AgentSession.Create("New Chat");
+            SwitchDisplayedSession(_session);
             CurrentSessionTitle = _session.Title;
             ComposerText = string.Empty;
             PendingImageAttachments.Clear();
             StreamingText = string.Empty;
-            Messages.Clear();
             ApplySessionWorkspace();
             CurrentPage = "Chat";
         }
@@ -325,486 +317,85 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand(CanExecute = nameof(CanSend))]
-    private async Task SendAsync()
+    private Task SendAsync()
     {
         if (string.IsNullOrWhiteSpace(ComposerText) && PendingImageAttachments.Count == 0)
         {
-            return;
+            return Task.CompletedTask;
         }
 
         var input = ComposerText.Trim();
         var imageAttachments = PendingImageAttachments.Select(item => item.Attachment).ToArray();
         ComposerText = string.Empty;
-        IsBusy = true;
         StreamingText = string.Empty;
-        _pendingToolCallDeltas.Clear();
-        BeginTurnCancellation();
-        Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments)));
-        RequestScrollToBottom();
         SyncWorkspaceContext();
-        await Task.Yield();
-        EnsureStreamingAssistantMessage();
 
-        try
+        var ui = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
+        ui.AddUserMessage(input, imageAttachments);
+
+        var request = new SessionTurnRequest(_displayedSessionId, _session, input, imageAttachments, ui);
+        if (!_turnHost.TryStart(request, out var error))
         {
-            var callbacks = new AgentTurnCallbacks
-            {
-                OnToolStarted = async toolCall => await RunOnUiAsync(() =>
-                {
-                    FlushStreamingTokens();
-                    FlushStreamingToolDeltas();
-                    ClearStreamingAssistantPlaceholder();
-                    var existing = FindToolMessage(toolCall.Id);
-                    if (existing is not null)
-                    {
-                        if (existing.ToolCallStatus == ToolCallDisplayStatus.Preparing)
-                        {
-                            if (existing.StreamToolIndex is int streamIndex)
-                            {
-                                _pendingToolCallDeltas.Remove(streamIndex);
-                            }
-
-                            existing.PromoteStreamingToolToRunning(toolCall);
-                            RemoveStreamingToolTracking(existing);
-                        }
-
-                        return;
-                    }
-
-                    var preparing = _streamingToolMessagesByIndex.Values.FirstOrDefault(message =>
-                        message.ToolCallStatus == ToolCallDisplayStatus.Preparing
-                        && (string.IsNullOrWhiteSpace(message.ToolCallId)
-                            || string.Equals(message.ToolCallId, toolCall.Id, StringComparison.Ordinal)));
-                    if (preparing is not null)
-                    {
-                        if (preparing.StreamToolIndex is int streamIndex)
-                        {
-                            _pendingToolCallDeltas.Remove(streamIndex);
-                        }
-
-                        preparing.PromoteStreamingToolToRunning(toolCall);
-                        RemoveStreamingToolTracking(preparing);
-                        RequestScrollToBottom();
-                        return;
-                    }
-
-                    Messages.Add(ChatMessageViewModel.CreatePendingTool(toolCall));
-                    RequestScrollToBottom();
-                }),
-                OnAssistantToolCallDelta = delta =>
-                {
-                    _pendingToolCallDeltas[delta.Index] = delta;
-                    return RunOnUiAsync(() =>
-                    {
-                        ClearStreamingAssistantPlaceholder();
-                        ScheduleStreamingToolFlush();
-                    });
-                },
-                OnMessage = async message => await RunOnUiAsync(() =>
-                {
-                    if (message.Role == MessageRole.User
-                        && CompactionMessageContent.IsCompressedPlaceholder(message.Content))
-                    {
-                        return;
-                    }
-
-                    if (message.Role == MessageRole.Compaction)
-                    {
-                        ClearStreamingAssistantPlaceholder();
-                        Messages.Add(new ChatMessageViewModel(message));
-                        RequestScrollToBottom();
-                        return;
-                    }
-
-                    if (message.Role == MessageRole.Tool)
-                    {
-                        var toolCallId = ExtractToolCallId(message.Content);
-                        var existing = FindToolMessage(toolCallId);
-                        if (existing is not null)
-                        {
-                            existing.ApplyCompletedTool(message);
-                            return;
-                        }
-
-                        Messages.Add(new ChatMessageViewModel(message));
-                        RequestScrollToBottom();
-                        return;
-                    }
-
-                    if (message.Role == MessageRole.Assistant && _streamingAssistantMessage is not null)
-                    {
-                        FlushStreamingTokens();
-                        _streamingAssistantMessage.CompleteStreamingAssistant(message);
-                        _streamingAssistantMessage = null;
-                        RequestScrollToBottom();
-                        return;
-                    }
-
-                    ClearStreamingAssistantPlaceholder();
-                    Messages.Add(new ChatMessageViewModel(message));
-                    RequestScrollToBottom();
-                }),
-                OnAssistantTextDelta = async token => await RunOnUiAsync(() =>
-                {
-                    EnsureStreamingAssistantMessage();
-                    _streamingTokenBuffer.Append(token);
-                    ScheduleStreamingFlush();
-                }),
-                OnAssistantReasoningDelta = async token => await RunOnUiAsync(() =>
-                {
-                    EnsureStreamingAssistantMessage();
-                    _streamingReasoningBuffer.Append(token);
-                    ScheduleStreamingFlush();
-                })
-            };
-
-            _session = await Task.Run(
-                async () => await _orchestrator.SendAsync(_session, input, imageAttachments, callbacks, GetTurnCancellationToken()).ConfigureAwait(false),
-                GetTurnCancellationToken()).ConfigureAwait(true);
-            CurrentSessionTitle = _session.Title;
-            PendingImageAttachments.Clear();
-            await SaveCurrentSessionIfNeededAsync();
-        }
-        catch (OperationCanceledException)
-        {
-            var timedOut = IsTurnTimedOut();
-            await RunOnUiAsync(() =>
-            {
-                StopStreamingToolFlushTimer();
-                FlushStreamingTokens();
-                FlushStreamingToolDeltas();
-                if (_streamingAssistantMessage is not null)
-                {
-                    _streamingAssistantMessage.MarkStreamingCancelled();
-                    _streamingAssistantMessage = null;
-                }
-
-                foreach (var message in Messages.Where(static message => message.IsToolRunning))
-                {
-                    message.MarkToolCancelled();
-                }
-
-                foreach (var message in _streamingToolMessagesByIndex.Values.ToList())
-                {
-                    message.MarkStreamingToolCancelled();
-                }
-
-                _streamingToolMessagesByIndex.Clear();
-
-                var notice = timedOut
-                    ? "本回合已超过 10 分钟，已自动停止。"
-                    : "生成已停止。";
-                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, notice)));
-            });
-
-            var reloaded = await _storage.LoadSessionAsync(_session.Id);
-            if (reloaded is not null)
-            {
-                _session = reloaded;
-            }
-
-            await SaveCurrentSessionIfNeededAsync();
-        }
-        catch (Exception ex)
-        {
-            await RunOnUiAsync(() =>
-            {
-                StopStreamingToolFlushTimer();
-                FlushStreamingToolDeltas();
-                ClearStreamingAssistantPlaceholder();
-                foreach (var message in _streamingToolMessagesByIndex.Values.ToList())
-                {
-                    message.MarkStreamingToolCancelled();
-                }
-
-                _streamingToolMessagesByIndex.Clear();
-                _pendingToolCallDeltas.Clear();
-                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, $"模型调用失败：{ex.Message}")));
-            });
-            await SaveCurrentSessionIfNeededAsync();
-        }
-        finally
-        {
-            StopStreamingFlushTimer();
-            StopStreamingToolFlushTimer();
-            FlushStreamingTokens();
-            FlushStreamingToolDeltas();
-            _streamingTokenBuffer.Clear();
-            _streamingReasoningBuffer.Clear();
-            _pendingToolCallDeltas.Clear();
-            _streamingAssistantMessage = null;
-            _streamingToolMessagesByIndex.Clear();
-            StreamingText = string.Empty;
-            ReconcilePendingToolsFromSession();
-            IsBusy = false;
-            DisposeTurnCancellation();
+            SettingsStatus = error ?? "无法开始生成。";
             NotifyCommandStatesChanged();
-        }
-    }
-
-    private void BeginTurnCancellation()
-    {
-        DisposeTurnCancellation();
-        _turnCancellation = new CancellationTokenSource();
-        _turnTimeoutCancellation = new CancellationTokenSource(TurnTimeout);
-        _turnLinkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-            _turnCancellation.Token,
-            _turnTimeoutCancellation.Token);
-    }
-
-    private CancellationToken GetTurnCancellationToken() =>
-        _turnLinkedCancellation?.Token ?? CancellationToken.None;
-
-    private bool IsTurnTimedOut() =>
-        _turnTimeoutCancellation is { IsCancellationRequested: true }
-        && _turnCancellation is { IsCancellationRequested: false };
-
-    private void CancelTurn() => _turnCancellation?.Cancel();
-
-    private void DisposeTurnCancellation()
-    {
-        _turnLinkedCancellation?.Dispose();
-        _turnTimeoutCancellation?.Dispose();
-        _turnCancellation?.Dispose();
-        _turnLinkedCancellation = null;
-        _turnTimeoutCancellation = null;
-        _turnCancellation = null;
-    }
-
-    private void RemoveStreamingToolTracking(ChatMessageViewModel message)
-    {
-        if (message.StreamToolIndex is int index)
-        {
-            _streamingToolMessagesByIndex.Remove(index);
-            return;
+            return Task.CompletedTask;
         }
 
-        foreach (var entry in _streamingToolMessagesByIndex.ToList())
-        {
-            if (ReferenceEquals(entry.Value, message))
-            {
-                _streamingToolMessagesByIndex.Remove(entry.Key);
-                break;
-            }
-        }
-    }
-
-    private void EnsureStreamingAssistantMessage()
-    {
-        if (_streamingAssistantMessage is not null)
-        {
-            return;
-        }
-
-        _streamingAssistantMessage = ChatMessageViewModel.CreateStreamingAssistant();
-        Messages.Add(_streamingAssistantMessage);
-        RequestScrollToBottom();
-    }
-
-    private void ClearStreamingAssistantPlaceholder()
-    {
-        if (_streamingAssistantMessage is null)
-        {
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(_streamingAssistantMessage.Content)
-            && string.IsNullOrWhiteSpace(_streamingAssistantMessage.ReasoningContent))
-        {
-            Messages.Remove(_streamingAssistantMessage);
-        }
-
-        _streamingAssistantMessage = null;
-    }
-
-    private void ScheduleStreamingFlush()
-    {
-        if (_streamingFlushTimer is not null)
-        {
-            return;
-        }
-
-        _streamingFlushTimer = new DispatcherTimer(DispatcherPriority.Background)
-        {
-            Interval = TimeSpan.FromMilliseconds(40)
-        };
-        _streamingFlushTimer.Tick += (_, _) => FlushStreamingTokens();
-        _streamingFlushTimer.Start();
-    }
-
-    private void FlushStreamingTokens()
-    {
-        if (_streamingAssistantMessage is null)
-        {
-            return;
-        }
-
-        var didFlush = false;
-        if (_streamingTokenBuffer.Length > 0)
-        {
-            _streamingAssistantMessage.AppendStreamingToken(_streamingTokenBuffer.ToString());
-            _streamingTokenBuffer.Clear();
-            didFlush = true;
-        }
-
-        if (_streamingReasoningBuffer.Length > 0)
-        {
-            _streamingAssistantMessage.AppendStreamingReasoningToken(_streamingReasoningBuffer.ToString());
-            _streamingReasoningBuffer.Clear();
-            didFlush = true;
-        }
-
-        if (didFlush)
-        {
-            RequestScrollToBottom();
-        }
+        PendingImageAttachments.Clear();
+        UpdateDisplayedBusyState();
+        NotifyCommandStatesChanged();
+        return Task.CompletedTask;
     }
 
     private void RequestScrollToBottom() => ScrollChatToBottom?.Invoke();
 
-    private void StopStreamingFlushTimer()
+    private void SwitchDisplayedSession(AgentSession session)
     {
-        if (_streamingFlushTimer is null)
-        {
-            return;
-        }
-
-        _streamingFlushTimer.Stop();
-        _streamingFlushTimer = null;
+        _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
+        _displayedSessionId = session.Id;
+        _session = session;
+        _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
+        _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
+        OnPropertyChanged(nameof(Messages));
+        OnPropertyChanged(nameof(HasChatMessages));
     }
 
-    private void ScheduleStreamingToolFlush()
+    private void OnTurnStateChanged(object? sender, string sessionId)
     {
-        if (_streamingToolFlushTimer is not null)
+        Application.Current?.Dispatcher.InvokeAsync(() =>
         {
-            return;
-        }
-
-        _streamingToolFlushTimer = new DispatcherTimer(DispatcherPriority.Render)
-        {
-            Interval = TimeSpan.FromMilliseconds(16)
-        };
-        _streamingToolFlushTimer.Tick += (_, _) => FlushStreamingToolDeltas();
-        _streamingToolFlushTimer.Start();
-    }
-
-    private void FlushStreamingToolDeltas()
-    {
-        if (_pendingToolCallDeltas.Count == 0)
-        {
-            return;
-        }
-
-        var didFlush = false;
-        foreach (var (index, delta) in _pendingToolCallDeltas.ToList())
-        {
-            if (!_streamingToolMessagesByIndex.TryGetValue(index, out var toolMessage))
+            if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
             {
-                toolMessage = ChatMessageViewModel.CreateStreamingTool(index);
-                _streamingToolMessagesByIndex[index] = toolMessage;
-                Messages.Add(toolMessage);
+                UpdateDisplayedBusyState();
             }
 
-            toolMessage.UpdateStreamingToolCall(delta.Id, delta.Name, delta.ArgumentsJson);
-            didFlush = true;
-        }
-
-        if (didFlush)
-        {
-            RequestScrollToBottom();
-        }
+            _ = RefreshSessionHistoryAsync();
+        });
     }
 
-    private void StopStreamingToolFlushTimer()
+    private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)
     {
-        if (_streamingToolFlushTimer is null)
+        Application.Current?.Dispatcher.InvokeAsync(async () =>
         {
-            return;
-        }
-
-        _streamingToolFlushTimer.Stop();
-        _streamingToolFlushTimer = null;
-    }
-
-    private ChatMessageViewModel? FindToolMessage(string? toolCallId)
-    {
-        if (string.IsNullOrWhiteSpace(toolCallId))
-        {
-            return null;
-        }
-
-        return Messages.LastOrDefault(message =>
-            message.IsTool && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
-    }
-
-    /// <summary>Sync any tool cards still marked running with persisted session tool messages.</summary>
-    private void ReconcilePendingToolsFromSession()
-    {
-        foreach (var message in Messages.Where(static message => message.IsToolRunning).ToList())
-        {
-            if (string.IsNullOrWhiteSpace(message.ToolCallId))
+            if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
             {
-                message.MarkToolCancelled();
-                continue;
+                _session = e.Session;
+                CurrentSessionTitle = _session.Title;
+                UpdateDisplayedBusyState();
             }
 
-            var completed = _session.Messages.LastOrDefault(sessionMessage =>
-                sessionMessage.Role == MessageRole.Tool
-                && string.Equals(ExtractToolCallId(sessionMessage.Content), message.ToolCallId, StringComparison.Ordinal));
-            if (completed is not null)
-            {
-                message.ApplyCompletedTool(completed);
-            }
-        }
+            await SaveCurrentSessionIfNeededAsync(e.Session);
+            await RefreshSessionHistoryAsync();
+            NotifyCommandStatesChanged();
+        });
     }
 
-    private static string? ExtractToolCallId(string content)
-    {
-        foreach (var line in content.Replace("\r\n", "\n").Split('\n'))
-        {
-            if (line.StartsWith("ToolCallId:", StringComparison.OrdinalIgnoreCase))
-            {
-                return line["ToolCallId:".Length..].Trim();
-            }
-        }
+    private void UpdateDisplayedBusyState() => IsBusy = _turnHost.IsRunning(_displayedSessionId);
 
-        return null;
-    }
-
-    private static HashSet<string> BuildAnsweredToolCallIds(IReadOnlyList<ChatMessage> messages)
-    {
-        var answered = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var message in messages)
-        {
-            if (message.Role != MessageRole.Tool)
-            {
-                continue;
-            }
-
-            var toolCallId = ExtractToolCallId(message.Content);
-            if (!string.IsNullOrWhiteSpace(toolCallId))
-            {
-                answered.Add(toolCallId);
-            }
-        }
-
-        return answered;
-    }
-
-    private Task RunOnUiAsync(Action action)
-    {
-        var dispatcher = Application.Current?.Dispatcher ?? Dispatcher.CurrentDispatcher;
-        if (dispatcher.CheckAccess())
-        {
-            action();
-            return Task.CompletedTask;
-        }
-
-        return dispatcher.InvokeAsync(action).Task;
-    }
+    private void StopSession(string sessionId) => _turnHost.Cancel(sessionId);
 
     [RelayCommand]
-    private void Stop() => CancelTurn();
+    private void Stop() => StopSession(_displayedSessionId);
 
     [RelayCommand]
     private async Task ConfigureWorkspaceAsync()
@@ -865,7 +456,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         });
     }
 
-    private bool CanSend() => !IsBusy && (!string.IsNullOrWhiteSpace(ComposerText) || PendingImageAttachments.Count > 0);
+    private bool CanSend() =>
+        !_turnHost.IsRunning(_displayedSessionId)
+        && (!string.IsNullOrWhiteSpace(ComposerText) || PendingImageAttachments.Count > 0);
 
     public void UpdateAtCompletion(string composerText, int caretIndex)
     {
@@ -979,15 +572,23 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _workspaceContext.SetWorkspace(configured.RootPath, configured.Name, configured.IgnorePatterns);
     }
 
-    private async Task SaveCurrentSessionIfNeededAsync()
+    private async Task SaveCurrentSessionIfNeededAsync() =>
+        await SaveCurrentSessionIfNeededAsync(_session);
+
+    private async Task SaveCurrentSessionIfNeededAsync(AgentSession session)
     {
-        if (_session.Messages.Count == 0)
+        if (session.Messages.Count == 0)
         {
             return;
         }
 
-        _session = DeriveSessionTitle(_session);
-        await _storage.SaveSessionAsync(_session);
+        var toSave = DeriveSessionTitle(session);
+        if (string.Equals(toSave.Id, _displayedSessionId, StringComparison.Ordinal))
+        {
+            _session = toSave;
+        }
+
+        await _storage.SaveSessionAsync(toSave);
         await RefreshSessionHistoryAsync();
     }
 
@@ -997,7 +598,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SessionHistory.Clear();
         foreach (var entry in entries)
         {
-            SessionHistory.Add(new SessionHistoryItemViewModel(entry, entry.Id == _session.Id));
+            SessionHistory.Add(new SessionHistoryItemViewModel(
+                entry,
+                entry.Id == _session.Id,
+                _turnHost.IsRunning(entry.Id),
+                StopSession));
         }
 
         OnPropertyChanged(nameof(HasSessionHistory));
@@ -1014,59 +619,19 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _session = loaded;
+        SwitchDisplayedSession(loaded);
         CurrentSessionTitle = _session.Title;
         ComposerText = string.Empty;
         PendingImageAttachments.Clear();
         StreamingText = string.Empty;
-        Messages.Clear();
 
-        var answeredToolCallIds = BuildAnsweredToolCallIds(_session.Messages);
-
-        foreach (var message in _session.Messages)
+        if (_activeUi.Messages.Count == 0)
         {
-            if (message.Role == MessageRole.User
-                && CompactionMessageContent.IsCompressedPlaceholder(message.Content))
-            {
-                continue;
-            }
-
-            if (ChatMessageViewModel.IsAssistantToolCallsOnly(message))
-            {
-                continue;
-            }
-
-            Messages.Add(new ChatMessageViewModel(message));
-
-            if (message.Role != MessageRole.Assistant)
-            {
-                continue;
-            }
-
-            var pendingCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
-            if (pendingCalls is null)
-            {
-                continue;
-            }
-
-            foreach (var toolCall in pendingCalls)
-            {
-                if (answeredToolCallIds.Contains(toolCall.Id))
-                {
-                    continue;
-                }
-
-                var orphanResult = AgentRuntime.FormatToolResult(
-                    toolCall,
-                    ToolResult.Failure(
-                        "工具未完成",
-                        "上次对话在工具执行时被中断，或 MCP 超时后子进程未返回。请重启应用并在侧边栏刷新 MCP 后重试。"));
-                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.Tool, orphanResult, message.ParentId)));
-                answeredToolCallIds.Add(toolCall.Id);
-            }
+            _activeUi.HydrateFromSession(_session);
         }
 
         ApplySessionWorkspace();
+        UpdateDisplayedBusyState();
         await RefreshSessionHistoryAsync();
         SettingsStatus = $"已加载对话：{_session.Title}";
         NotifyCommandStatesChanged();
@@ -1124,16 +689,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>Cancel in-flight work and release watchers before process exit.</summary>
     public void PrepareForShutdown()
     {
-        try { CancelTurn(); } catch { /* ignore */ }
+        try { _turnHost.CancelAll(); } catch { /* ignore */ }
         _workspaceWatcher?.Dispose();
         _workspaceWatcher = null;
-        StopStreamingFlushTimer();
     }
 
     public void Dispose()
     {
+        _turnHost.TurnCompleted -= OnTurnCompleted;
+        _turnHost.TurnStateChanged -= OnTurnStateChanged;
         PrepareForShutdown();
-        DisposeTurnCancellation();
+        _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();
     }
@@ -1162,7 +728,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsSettingsPage));
     }
 
-    partial void OnIsBusyChanged(bool value) => ClearContextCommand.NotifyCanExecuteChanged();
+    partial void OnIsBusyChanged(bool value)
+    {
+        ClearContextCommand.NotifyCanExecuteChanged();
+        SendCommand.NotifyCanExecuteChanged();
+    }
 
     partial void OnComposerTextChanged(string value)
     {

@@ -5,9 +5,23 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class ActiveAgentSessionContext : IActiveAgentSessionContext
 {
-    public string? SessionId { get; private set; }
+    private static readonly AsyncLocal<string?> AmbientSessionId = new();
 
-    public void SetSession(string? sessionId) => SessionId = sessionId;
+    public string? SessionId => AmbientSessionId.Value;
+
+    public void SetSession(string? sessionId) => AmbientSessionId.Value = sessionId;
+
+    public IDisposable Enter(string sessionId)
+    {
+        var previous = AmbientSessionId.Value;
+        AmbientSessionId.Value = sessionId;
+        return new SessionScope(previous);
+    }
+
+    private sealed class SessionScope(string? previous) : IDisposable
+    {
+        public void Dispose() => AmbientSessionId.Value = previous;
+    }
 }
 
 public sealed class SessionHttpLogService(IAppPathProvider paths, IJsonFileStore jsonFileStore, IAppLogger logger) : ISessionHttpLogService

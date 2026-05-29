@@ -97,6 +97,7 @@ public sealed class SessionDiskLogTests
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
+            new AppSettings(),
             new NoOpLogger());
 
         var session = AgentSession.Create("cancel-persist");
@@ -159,13 +160,6 @@ public sealed class SessionDiskLogTests
             string formattedToolContent,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(formattedToolContent);
-    }
-
-    private sealed class NoOpActiveAgentSessionContext : IActiveAgentSessionContext
-    {
-        public string? SessionId { get; private set; }
-
-        public void SetSession(string? sessionId) => SessionId = sessionId;
     }
 
     private sealed class NoOpLogger : IAppLogger

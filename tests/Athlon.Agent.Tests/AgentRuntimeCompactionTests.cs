@@ -42,6 +42,8 @@ public sealed class AgentRuntimeCompactionTests
 
             new NoOpActiveAgentSessionContext(),
 
+            new AppSettings(),
+
             new NoOpLogger());
 
 
@@ -259,18 +261,6 @@ public sealed class AgentRuntimeCompactionTests
             CancellationToken cancellationToken = default) =>
 
             Task.FromResult(formattedToolContent);
-
-    }
-
-
-
-    private sealed class NoOpActiveAgentSessionContext : IActiveAgentSessionContext
-
-    {
-
-        public string? SessionId { get; private set; }
-
-        public void SetSession(string? sessionId) => SessionId = sessionId;
 
     }
 

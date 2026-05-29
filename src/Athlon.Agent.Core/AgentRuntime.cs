@@ -14,6 +14,7 @@ public sealed class AgentRuntime(
     IPreCompletionPipeline preCompletionPipeline,
     IToolResultEvictor toolResultEvictor,
     IActiveAgentSessionContext activeSessionContext,
+    AppSettings settings,
     IAppLogger logger) : IAgentRuntime
 {
     private readonly IAppLogger _logger = logger.ForContext("AgentRuntime");
@@ -25,15 +26,28 @@ public sealed class AgentRuntime(
         AgentTurnCallbacks? callbacks = null,
         CancellationToken cancellationToken = default)
     {
-        activeSessionContext.SetSession(session.Id);
-        try
+        var ignorePatterns = ResolveIgnorePatterns(session);
+        using var workspaceScope = SessionWorkspaceScope.Enter(session.ActiveWorkspace, ignorePatterns);
+        using var sessionScope = activeSessionContext.Enter(session.Id);
+        return await SendAsyncCore(session, userInput, imageAttachments, callbacks, cancellationToken);
+    }
+
+    private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session)
+    {
+        if (!string.IsNullOrWhiteSpace(session.ActiveWorkspace))
         {
-            return await SendAsyncCore(session, userInput, imageAttachments, callbacks, cancellationToken);
+            var fullPath = Path.GetFullPath(session.ActiveWorkspace);
+            var match = settings.Workspaces.FirstOrDefault(workspace =>
+                !string.IsNullOrWhiteSpace(workspace.RootPath)
+                && string.Equals(Path.GetFullPath(workspace.RootPath), fullPath, StringComparison.OrdinalIgnoreCase));
+            if (match?.IgnorePatterns is { Count: > 0 })
+            {
+                return match.IgnorePatterns;
+            }
         }
-        finally
-        {
-            activeSessionContext.SetSession(null);
-        }
+
+        return settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath))?.IgnorePatterns
+               ?? [".git", "bin", "obj", "node_modules"];
     }
 
     private Task<AgentSession> SendAsyncCore(

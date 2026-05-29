@@ -1,6 +1,7 @@
 ﻿using System.IO;
 using System.Windows;
 using Athlon.Agent.App.Licensing;
+using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
@@ -33,6 +34,8 @@ public partial class App : Application
             StartupTrace("ServiceCollection created");
             services.AddAthlonInfrastructure();
             StartupTrace("Infrastructure registered");
+            services.AddSingleton(_ => new SessionUiCache(System.Windows.Threading.Dispatcher.CurrentDispatcher));
+            services.AddSingleton<SessionTurnHost>();
             services.AddSingleton<MainWindowViewModel>();
             services.AddSingleton<MainWindow>();
             _services = services.BuildServiceProvider();

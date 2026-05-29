@@ -29,14 +29,29 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
         return Path.GetFullPath(rooted);
     }
 
-    public IReadOnlyList<string> GetIgnorePatterns() =>
-        workspaceContext.IgnorePatterns.Count > 0
+    public IReadOnlyList<string> GetIgnorePatterns()
+    {
+        var scoped = SessionWorkspaceScope.CurrentState;
+        if (scoped is not null && scoped.IgnorePatterns.Count > 0)
+        {
+            return scoped.IgnorePatterns;
+        }
+
+        return workspaceContext.IgnorePatterns.Count > 0
             ? workspaceContext.IgnorePatterns
             : settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath))?.IgnorePatterns
               ?? [".git", "bin", "obj", "node_modules"];
+    }
 
     private bool TryGetWorkspaceRoot(out string rootPath)
     {
+        var scoped = SessionWorkspaceScope.CurrentState;
+        if (scoped?.RootPath is { Length: > 0 } scopedRoot)
+        {
+            rootPath = scopedRoot;
+            return true;
+        }
+
         if (!string.IsNullOrWhiteSpace(workspaceContext.RootPath))
         {
             rootPath = workspaceContext.RootPath;

@@ -225,23 +225,76 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <Button Grid.Column="0"
                                                 Command="{Binding DataContext.LoadSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding}"
                                                 Style="{StaticResource SessionHistoryButtonStyle}">
                                             <StackPanel>
-                                                <TextBlock Text="{Binding Title}"
-                                                           FontSize="13"
-                                                           FontWeight="SemiBold"
-                                                           TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="{Binding UpdatedAtText}"
-                                                           FontSize="11"
-                                                           Foreground="{StaticResource Brush.SubtleText}"
-                                                           Margin="0,4,0,0" />
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Ellipse Width="6"
+                                                             Height="6"
+                                                             Margin="0,0,6,0"
+                                                             VerticalAlignment="Center"
+                                                             Fill="#3B82F6">
+                                                        <Ellipse.Style>
+                                                            <Style TargetType="Ellipse">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Ellipse.Style>
+                                                    </Ellipse>
+                                                    <TextBlock Text="{Binding Title}"
+                                                               FontSize="13"
+                                                               FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock Margin="0,4,0,0">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="{Binding UpdatedAtText}" />
+                                                            <Setter Property="FontSize" Value="11" />
+                                                            <Setter Property="Foreground" Value="{StaticResource Brush.SubtleText}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                                    <Setter Property="Text" Value="生成中…" />
+                                                                    <Setter Property="Foreground" Value="#3B82F6" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
                                             </StackPanel>
                                         </Button>
                                         <Button Grid.Column="1"
+                                                Command="{Binding StopSessionCommand}"
+                                                Content="■"
+                                                ToolTip="停止生成"
+                                                Width="28"
+                                                Height="28"
+                                                Margin="0,0,4,0"
+                                                Padding="0"
+                                                FontSize="10"
+                                                Foreground="#EF4444"
+                                                VerticalAlignment="Center"
+                                                Style="{StaticResource SessionDeleteButtonStyle}">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource SessionDeleteButtonStyle}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                        <Button Grid.Column="2"
                                                 Command="{Binding DataContext.DeleteSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                 CommandParameter="{Binding}"
                                                 Content="×"

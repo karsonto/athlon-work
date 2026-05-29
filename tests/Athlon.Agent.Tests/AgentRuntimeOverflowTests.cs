@@ -35,6 +35,7 @@ public sealed class AgentRuntimeOverflowTests
             pipeline,
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
+            new AppSettings(),
             new NoOpLogger());
 
         var session = AgentSession.Create("overflow");
@@ -129,12 +130,6 @@ public sealed class AgentRuntimeOverflowTests
     private sealed class StaticPromptBuilder : IAgentEnvironmentPromptBuilder
     {
         public string Build(AgentSession session, IReadOnlyList<ToolDefinition> tools) => "prompt";
-    }
-
-    private sealed class NoOpActiveAgentSessionContext : IActiveAgentSessionContext
-    {
-        public string? SessionId { get; private set; }
-        public void SetSession(string? sessionId) => SessionId = sessionId;
     }
 
     private sealed class NoOpLogger : IAppLogger

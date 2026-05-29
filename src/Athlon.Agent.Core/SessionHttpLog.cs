@@ -5,6 +5,8 @@ public interface IActiveAgentSessionContext
     string? SessionId { get; }
 
     void SetSession(string? sessionId);
+
+    IDisposable Enter(string sessionId);
 }
 
 public interface ISessionHttpLogService
