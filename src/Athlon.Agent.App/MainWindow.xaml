@@ -491,41 +491,6 @@
                                                                        Foreground="#C4B5FD"
                                                                        TextTrimming="CharacterEllipsis"
                                                                        Margin="0,2,0,0" />
-                                                            <ScrollViewer MaxHeight="160"
-                                                                          Margin="0,6,0,0"
-                                                                          VerticalScrollBarVisibility="Auto"
-                                                                          HorizontalScrollBarVisibility="Auto">
-                                                                <ScrollViewer.Style>
-                                                                    <Style TargetType="ScrollViewer">
-                                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding ShowToolArgumentsPanel}" Value="True">
-                                                                                <Setter Property="Visibility" Value="Visible" />
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </ScrollViewer.Style>
-                                                                <TextBlock Text="{Binding ToolArgumentsText}"
-                                                                           FontSize="11"
-                                                                           FontFamily="Consolas"
-                                                                           Foreground="{StaticResource Brush.Text}"
-                                                                           TextWrapping="Wrap" />
-                                                            </ScrollViewer>
-                                                            <TextBlock Text="{Binding ToolSummary}"
-                                                                       FontSize="11"
-                                                                       Foreground="{StaticResource Brush.SubtleText}"
-                                                                       TextWrapping="Wrap"
-                                                                       Margin="0,4,0,0">
-                                                                <TextBlock.Style>
-                                                                    <Style TargetType="TextBlock">
-                                                                        <Style.Triggers>
-                                                                            <Trigger Property="Text" Value="">
-                                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                                            </Trigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </TextBlock.Style>
-                                                            </TextBlock>
                                                             <TextBlock Text="{Binding ToolStatusLabel}"
                                                                        FontSize="11"
                                                                        FontWeight="SemiBold"
@@ -578,22 +543,47 @@
                                                             </Style.Triggers>
                                                         </Style>
                                                     </Border.Style>
-                                                    <controls:MarkdownMessageView Margin="12,10"
-                                                                                  Markdown="{Binding ToolDetail}"
-                                                                                  AssistantTone="True"
-                                                                                  MaxContentHeight="272"
-                                                                                  HorizontalAlignment="Stretch">
-                                                        <controls:MarkdownMessageView.Style>
-                                                            <Style TargetType="controls:MarkdownMessageView">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </controls:MarkdownMessageView.Style>
-                                                    </controls:MarkdownMessageView>
+                                                    <StackPanel Margin="12,10">
+                                                        <ScrollViewer MaxHeight="160"
+                                                                      VerticalScrollBarVisibility="Auto"
+                                                                      HorizontalScrollBarVisibility="Auto"
+                                                                      Margin="0,0,0,8">
+                                                            <ScrollViewer.Style>
+                                                                <Style TargetType="ScrollViewer">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding ShowToolArgumentsPanel}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </ScrollViewer.Style>
+                                                            <TextBlock Text="{Binding ToolArgumentsText}"
+                                                                       FontSize="11"
+                                                                       FontFamily="Consolas"
+                                                                       Foreground="{StaticResource Brush.Text}"
+                                                                       TextWrapping="Wrap" />
+                                                        </ScrollViewer>
+                                                        <TextBlock Text="{Binding ToolSummary}"
+                                                                   FontSize="11"
+                                                                   Foreground="{StaticResource Brush.SubtleText}"
+                                                                   TextWrapping="Wrap"
+                                                                   Margin="0,0,0,8">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Style.Triggers>
+                                                                        <Trigger Property="Text" Value="">
+                                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                                        </Trigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <controls:MarkdownMessageView Markdown="{Binding ToolDetail}"
+                                                                                      AssistantTone="True"
+                                                                                      MaxContentHeight="272"
+                                                                                      HorizontalAlignment="Stretch" />
+                                                    </StackPanel>
                                                 </Border>
                                             </StackPanel>
                                         </Border>
