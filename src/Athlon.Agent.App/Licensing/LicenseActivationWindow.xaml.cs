@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using Athlon.Agent.Core.Licensing;
 using Microsoft.Win32;

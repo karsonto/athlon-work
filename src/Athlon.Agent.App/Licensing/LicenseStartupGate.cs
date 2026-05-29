@@ -1,3 +1,4 @@
+using System.IO;
 using Athlon.Agent.Core.Licensing;
 using Athlon.Agent.Infrastructure.Licensing;
 
