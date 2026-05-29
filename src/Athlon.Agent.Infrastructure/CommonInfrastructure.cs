@@ -188,11 +188,13 @@ public static class ToolArguments
     {
         if (!TryGetRequired(invocation, ToolPathNormalizer.PathArgumentName, out var raw, out error))
         {
+            path = string.Empty;
             return false;
         }
 
         if (!ToolPathNormalizer.TryNormalizeForFileOperation(raw, out path, out var message))
         {
+            path = string.Empty;
             error = ToolResult.Failure("Invalid path", $"{invocation.ToolName}: {message}");
             return false;
         }
@@ -217,6 +219,7 @@ public static class ToolArguments
 
         if (!ToolPathNormalizer.TryNormalizeForFileOperation(raw, out path, out var message))
         {
+            path = string.Empty;
             error = ToolResult.Failure("Invalid path", $"{invocation.ToolName}: {message}");
             return false;
         }
