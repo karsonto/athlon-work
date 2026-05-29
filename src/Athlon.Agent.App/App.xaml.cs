@@ -16,6 +16,9 @@ public partial class App : Application
     {
         StartupTrace("OnStartup entered");
         base.OnStartup(e);
+        // License activation runs before MainWindow exists; default OnLastWindowClose would
+        // shut down the app when the modal dialog closes.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
         try
         {
             if (!LicenseStartupGate.EnsureLicensed())
@@ -24,8 +27,7 @@ public partial class App : Application
                 return;
             }
 
-            ShutdownMode = ShutdownMode.OnMainWindowClose;
-            StartupTrace("ShutdownMode configured");
+            StartupTrace("License gate passed");
 
             var services = new ServiceCollection();
             StartupTrace("ServiceCollection created");
@@ -39,6 +41,7 @@ public partial class App : Application
             MainWindow = _services.GetRequiredService<MainWindow>();
             StartupTrace("MainWindow resolved");
             MainWindow.Show();
+            ShutdownMode = ShutdownMode.OnMainWindowClose;
             StartupTrace("MainWindow shown");
         }
         catch (Exception exception)
