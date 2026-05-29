@@ -88,7 +88,7 @@ public sealed class SessionTurnHost
         }
     }
 
-    internal void OnRunnerFinished(SessionTurnRunner runner, AgentSession session, bool cancelled, Exception? error)
+    private void OnRunnerFinished(SessionTurnRunner runner, AgentSession session, bool cancelled, Exception? error)
     {
         _runners.TryRemove(runner.SessionId, out _);
         TurnStateChanged?.Invoke(this, runner.SessionId);
