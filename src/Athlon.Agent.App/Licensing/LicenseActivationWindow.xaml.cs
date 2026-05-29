@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Input;
 using Athlon.Agent.Core.Licensing;
 using Microsoft.Win32;
 
@@ -21,6 +22,9 @@ public partial class LicenseActivationWindow : Window
         _validator = validator;
         _store = store;
         _account = account;
+
+        StateChanged += (_, _) => UpdateMaximizeRestoreButton();
+        UpdateMaximizeRestoreButton();
 
         ApplyFailure(initialFailure);
         SamAccountText.Text = $"Sam：{_account.SamAccountName}";
@@ -87,6 +91,43 @@ public partial class LicenseActivationWindow : Window
     {
         DialogResult = false;
         Close();
+    }
+
+    private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2)
+        {
+            ToggleWindowState();
+            return;
+        }
+
+        if (e.ButtonState == MouseButtonState.Pressed)
+        {
+            DragMove();
+        }
+    }
+
+    private void MinimizeButton_OnClick(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState.Minimized;
+
+    private void MaximizeRestoreButton_OnClick(object sender, RoutedEventArgs e) =>
+        ToggleWindowState();
+
+    private void CloseButton_OnClick(object sender, RoutedEventArgs e) =>
+        CancelButton_OnClick(sender, e);
+
+    private void ToggleWindowState() =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void UpdateMaximizeRestoreButton()
+    {
+        if (MaximizeRestoreButton is null)
+        {
+            return;
+        }
+
+        MaximizeRestoreButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
+        MaximizeRestoreButton.ToolTip = WindowState == WindowState.Maximized ? "还原" : "最大化";
     }
 
     private void BrowseButton_OnClick(object sender, RoutedEventArgs e)

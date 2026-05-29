@@ -1,103 +1,166 @@
 <Window x:Class="Athlon.Agent.App.Licensing.LicenseActivationWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="激活 Athlon Agent"
-        Height="520"
+        Height="584"
         Width="640"
         MinHeight="480"
         MinWidth="560"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize"
-        Background="{StaticResource Brush.AppBackground}">
-    <Grid Margin="24">
+        Background="{StaticResource Brush.AppBackground}"
+        WindowStyle="None">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            CornerRadius="0"
+                            GlassFrameThickness="0"
+                            ResizeBorderThickness="8"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+    <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="64" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0"
-                   Text="激活 Athlon Agent"
-                   FontSize="22"
-                   FontWeight="SemiBold"
-                   Foreground="{StaticResource Brush.Text}"
-                   Margin="0,0,0,8" />
-
-        <TextBlock x:Name="ReasonText"
-                   Grid.Row="1"
-                   TextWrapping="Wrap"
-                   Foreground="{StaticResource Brush.SubtleText}"
-                   Margin="0,0,0,12" />
-
-        <Border Grid.Row="2"
-                Background="{StaticResource Brush.Panel}"
+        <Border Grid.Row="0"
+                Background="{StaticResource Brush.Chrome}"
                 BorderBrush="{StaticResource Brush.Border}"
-                BorderThickness="1"
-                CornerRadius="8"
-                Padding="12"
-                Margin="0,0,0,12">
-            <StackPanel>
-                <TextBlock Text="当前 Windows 账号"
-                           Foreground="{StaticResource Brush.SubtleText}"
-                           FontSize="12"
-                           Margin="0,0,0,6" />
-                <TextBlock x:Name="SamAccountText"
-                           Foreground="{StaticResource Brush.Text}"
-                           TextWrapping="Wrap" />
-                <TextBlock x:Name="UpnAccountText"
-                           Foreground="{StaticResource Brush.Text}"
-                           Margin="0,4,0,0"
-                           TextWrapping="Wrap" />
-            </StackPanel>
+                BorderThickness="0,0,0,1"
+                MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
+            <Grid Margin="24,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                    <Border Width="40"
+                            Height="40"
+                            CornerRadius="12"
+                            Background="{StaticResource Brush.IconBadge}"
+                            Margin="0,0,12,0">
+                        <TextBlock Text="A"
+                                   FontSize="18"
+                                   FontWeight="Bold"
+                                   Foreground="#0F172A"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="Athlon Agent"
+                                   FontSize="18"
+                                   FontWeight="SemiBold" />
+                        <TextBlock Text="激活 License"
+                                   FontSize="13"
+                                   Foreground="{StaticResource Brush.SubtleText}"
+                                   Margin="0,2,0,0" />
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Top"
+                            Margin="0,8,0,0"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button Content="−"
+                            ToolTip="最小化"
+                            Click="MinimizeButton_OnClick"
+                            Style="{StaticResource WindowCaptionButtonStyle}" />
+                    <Button x:Name="MaximizeRestoreButton"
+                            Content="□"
+                            ToolTip="最大化"
+                            Click="MaximizeRestoreButton_OnClick"
+                            Style="{StaticResource WindowCaptionButtonStyle}" />
+                    <Button Content="×"
+                            ToolTip="关闭"
+                            Click="CloseButton_OnClick"
+                            Style="{StaticResource WindowCloseCaptionButtonStyle}" />
+                </StackPanel>
+            </Grid>
         </Border>
 
-        <TextBox x:Name="LicenseTextBox"
-                 Grid.Row="3"
-                 AcceptsReturn="True"
-                 TextWrapping="Wrap"
-                 VerticalScrollBarVisibility="Auto"
-                 HorizontalScrollBarVisibility="Auto"
-                 FontFamily="Consolas"
-                 FontSize="12"
-                 Padding="10"
-                 Margin="0,0,0,8" />
+        <Grid Grid.Row="1" Margin="24">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
 
-        <TextBlock x:Name="InlineErrorText"
-                   Grid.Row="4"
-                   TextWrapping="Wrap"
-                   Foreground="{StaticResource Brush.Danger}"
-                   Visibility="Collapsed"
-                   Margin="0,0,0,12" />
+            <TextBlock x:Name="ReasonText"
+                       Grid.Row="0"
+                       TextWrapping="Wrap"
+                       Foreground="{StaticResource Brush.SubtleText}"
+                       Margin="0,0,0,12" />
 
-        <StackPanel Grid.Row="5"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Left"
-                    Margin="0,0,0,16">
-            <Button Content="浏览…"
-                    Width="96"
-                    Margin="0,0,8,0"
-                    Click="BrowseButton_OnClick" />
-            <Button Content="清空"
-                    Width="72"
-                    Click="ClearButton_OnClick" />
-        </StackPanel>
+            <Border Grid.Row="1"
+                    Background="{StaticResource Brush.Panel}"
+                    BorderBrush="{StaticResource Brush.Border}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12"
+                    Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="当前 Windows 账号"
+                               Foreground="{StaticResource Brush.SubtleText}"
+                               FontSize="12"
+                               Margin="0,0,0,6" />
+                    <TextBlock x:Name="SamAccountText"
+                               Foreground="{StaticResource Brush.Text}"
+                               TextWrapping="Wrap" />
+                    <TextBlock x:Name="UpnAccountText"
+                               Foreground="{StaticResource Brush.Text}"
+                               Margin="0,4,0,0"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
 
-        <StackPanel Grid.Row="6"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right">
-            <Button Content="取消"
-                    Width="96"
-                    Margin="0,0,8,0"
-                    IsCancel="True"
-                    Click="CancelButton_OnClick" />
-            <Button Content="确定"
-                    Width="96"
-                    IsDefault="True"
-                    Click="OkButton_OnClick" />
-        </StackPanel>
+            <TextBox x:Name="LicenseTextBox"
+                     Grid.Row="2"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Auto"
+                     FontFamily="Consolas"
+                     FontSize="12"
+                     Padding="10"
+                     Margin="0,0,0,8" />
+
+            <TextBlock x:Name="InlineErrorText"
+                       Grid.Row="3"
+                       TextWrapping="Wrap"
+                       Foreground="{StaticResource Brush.Danger}"
+                       Visibility="Collapsed"
+                       Margin="0,0,0,12" />
+
+            <StackPanel Grid.Row="4"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Left"
+                        Margin="0,0,0,16">
+                <Button Content="浏览…"
+                        Width="96"
+                        Margin="0,0,8,0"
+                        Click="BrowseButton_OnClick" />
+                <Button Content="清空"
+                        Width="72"
+                        Click="ClearButton_OnClick" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="5"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <Button Content="取消"
+                        Width="96"
+                        Margin="0,0,8,0"
+                        IsCancel="True"
+                        Click="CancelButton_OnClick" />
+                <Button Content="确定"
+                        Width="96"
+                        IsDefault="True"
+                        Click="OkButton_OnClick" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>
