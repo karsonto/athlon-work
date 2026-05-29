@@ -34,3 +34,7 @@ logs/
 # OS files
 Thumbs.db
 Desktop.ini
+
+# License signing private key (never commit)
+tools/license/keys/private.pem
+tools/license/.venv/

@@ -6,6 +6,8 @@ using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Licensing;
+using Athlon.Agent.Infrastructure.Licensing;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -27,6 +29,9 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(settings);
         services.AddSingleton<IAppPathProvider>(paths);
+        services.AddSingleton<IAdAccountResolver, FallbackAdAccountResolver>();
+        services.AddSingleton<ILicenseValidator, LicenseValidator>();
+        services.AddSingleton<ILicenseStore, LicenseStore>();
         services.AddSingleton<IAgentHostEnvironment, AgentHostEnvironment>();
         services.AddAthlonSkills();
         services.AddSingleton<IJsonFileStore>(jsonFileStore);

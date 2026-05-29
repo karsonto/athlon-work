@@ -43,13 +43,39 @@ tests/
   release.yml                  Tag-based GitHub Release packaging
 ```
 
+## License (AD-bound)
+
+Athlon Agent requires a signed license bound to the current Windows AD account (Sam `DOMAIN\user` and/or UPN `user@domain.com`). On startup the app verifies signature, expiry, and account match.
+
+**License file locations** (first existing file wins):
+
+1. Next to `Athlon.Agent.App.exe`: `license.lic` (optional IT deployment)
+2. `%USERPROFILE%\.athlon-agent\config\license.lic` (user activation save path)
+
+If validation fails, an activation dialog lets the user paste or import a `.lic` file; on success the license is saved to the user config path.
+
+**Issue licenses** (admin machine with the private key):
+
+```bash
+cd tools/license
+pip install -r requirements.txt
+python generate_keys.py          # first time only; sync public.pem to LicensePublicKey.cs
+python generate_license.py --account "CONTOSO\\jdoe" --days 30 --output license.lic
+```
+
+See [`tools/license/README.md`](tools/license/README.md) for full options (`--expires`, `--sam`, `--upn`).
+
+**Debug skip** (Debug builds only): set environment variable `ATHLON_SKIP_LICENSE=1`.
+
+This is offline signature validation for internal compliance, not DRM.
+
 ## Local Data Path
 
 Runtime data is stored under the current Windows user profile, not `%LocalAppData%`:
 
 ```text
 C:\Users\<UserName>\.athlon-agent\
-  config\        settings JSON
+  config\        settings JSON and license.lic
   skills\        AgentScope-style skill folders (<name>/SKILL.md + resources)
   sessions\      Markdown session history and metadata
   logs\          Serilog logs and startup diagnostics

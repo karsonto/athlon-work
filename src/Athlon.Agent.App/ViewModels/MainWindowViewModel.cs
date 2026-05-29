@@ -17,7 +17,7 @@ namespace Athlon.Agent.App.ViewModels;
 
 public partial class MainWindowViewModel : ObservableObject, IDisposable
 {
-    private static readonly TimeSpan TurnTimeout = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan TurnTimeout = TimeSpan.FromMinutes(30);
 
     private readonly IAgentOrchestrator _orchestrator;
     private readonly IFileStorageService _storage;

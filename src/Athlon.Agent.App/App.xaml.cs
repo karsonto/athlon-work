@@ -1,5 +1,6 @@
 ﻿using System.IO;
 using System.Windows;
+using Athlon.Agent.App.Licensing;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
@@ -17,6 +18,12 @@ public partial class App : Application
         base.OnStartup(e);
         try
         {
+            if (!LicenseStartupGate.EnsureLicensed())
+            {
+                Shutdown(-1);
+                return;
+            }
+
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             StartupTrace("ShutdownMode configured");
 

@@ -40,6 +40,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create desktop shortcut"; GroupDescription: "Additional icons:"
 
+; Optional: place a pre-issued license.lic in publish\ before building the installer.
+; Users can also activate via the in-app dialog (saved under %USERPROFILE%\.athlon-agent\config\).
 [Files]
 Source: "publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
