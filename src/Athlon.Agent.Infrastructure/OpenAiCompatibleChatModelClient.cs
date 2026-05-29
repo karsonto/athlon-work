@@ -27,6 +27,7 @@ public sealed class OpenAiCompatibleChatModelClient(
         AgentModelRequest request,
         Func<string, Task>? onTextDelta = null,
         Func<string, Task>? onReasoningDelta = null,
+        Func<StreamingToolCallDelta, Task>? onToolCallDelta = null,
         CancellationToken cancellationToken = default)
     {
         var apiKey = await credentialStore.GetSecretAsync(ModelSettings.ApiKeySecretName, cancellationToken);
@@ -55,7 +56,7 @@ public sealed class OpenAiCompatibleChatModelClient(
         {
             try
             {
-                return await CompleteOpenAiCompatibleAsync(request, apiKey, stream: true, onTextDelta, onReasoningDelta, cancellationToken);
+                return await CompleteOpenAiCompatibleAsync(request, apiKey, stream: true, onTextDelta, onReasoningDelta, onToolCallDelta, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -66,7 +67,7 @@ public sealed class OpenAiCompatibleChatModelClient(
             }
         }
 
-        return await CompleteOpenAiCompatibleAsync(request, apiKey, stream: false, onTextDelta, onReasoningDelta, cancellationToken);
+        return await CompleteOpenAiCompatibleAsync(request, apiKey, stream: false, onTextDelta, onReasoningDelta, onToolCallDelta, cancellationToken);
     }
 
     private async Task<AgentModelResponse> CompleteOpenAiCompatibleAsync(
@@ -75,6 +76,7 @@ public sealed class OpenAiCompatibleChatModelClient(
         bool stream,
         Func<string, Task>? onTextDelta,
         Func<string, Task>? onReasoningDelta,
+        Func<StreamingToolCallDelta, Task>? onToolCallDelta,
         CancellationToken cancellationToken)
     {
         var endpoint = settings.Model.Endpoint.TrimEnd('/') + "/chat/completions";
@@ -131,7 +133,7 @@ public sealed class OpenAiCompatibleChatModelClient(
 
             if (stream)
             {
-                return await ParseStreamingResponseAsync(response, onTextDelta, onReasoningDelta, body => responseBody = body, cancellationToken);
+                return await ParseStreamingResponseAsync(response, onTextDelta, onReasoningDelta, onToolCallDelta, body => responseBody = body, cancellationToken);
             }
 
             responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -274,6 +276,7 @@ public sealed class OpenAiCompatibleChatModelClient(
         HttpResponseMessage response,
         Func<string, Task>? onTextDelta,
         Func<string, Task>? onReasoningDelta,
+        Func<StreamingToolCallDelta, Task>? onToolCallDelta,
         Action<string> setResponseBody,
         CancellationToken cancellationToken)
     {
@@ -394,6 +397,15 @@ public sealed class OpenAiCompatibleChatModelClient(
                             {
                                 state.Arguments.Append(argsElement.GetString());
                             }
+                        }
+
+                        if (onToolCallDelta is not null)
+                        {
+                            await onToolCallDelta(new StreamingToolCallDelta(
+                                index,
+                                state.Id,
+                                state.Name,
+                                state.Arguments.ToString()));
                         }
                     }
                 }
@@ -571,8 +583,9 @@ public sealed class OpenAiCompatibleChatModelClient(
             return new Dictionary<string, string>();
         }
 
-        return json.RootElement.EnumerateObject().ToDictionary(
+        var arguments = json.RootElement.EnumerateObject().ToDictionary(
             property => property.Name,
             property => property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString() ?? string.Empty : property.Value.GetRawText());
+        return ToolPathNormalizer.NormalizePathArguments(arguments);
     }
 }

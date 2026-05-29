@@ -183,6 +183,47 @@ public static class ToolArguments
 
     public static int GetInt32(ToolInvocation invocation, string name, int defaultValue) =>
         invocation.Arguments.TryGetValue(name, out var value) && int.TryParse(value, out var parsed) ? parsed : defaultValue;
+
+    public static bool TryGetNormalizedPath(ToolInvocation invocation, out string path, out ToolResult error)
+    {
+        if (!TryGetRequired(invocation, ToolPathNormalizer.PathArgumentName, out var raw, out error))
+        {
+            return false;
+        }
+
+        if (!ToolPathNormalizer.TryNormalizeForFileOperation(raw, out path, out var message))
+        {
+            error = ToolResult.Failure("Invalid path", $"{invocation.ToolName}: {message}");
+            return false;
+        }
+
+        error = ToolResult.Success("OK");
+        return true;
+    }
+
+    public static bool TryGetOptionalNormalizedPath(
+        ToolInvocation invocation,
+        out string path,
+        out ToolResult error,
+        string defaultPath = ".")
+    {
+        if (!invocation.Arguments.TryGetValue(ToolPathNormalizer.PathArgumentName, out var raw)
+            || string.IsNullOrWhiteSpace(raw))
+        {
+            path = ToolPathNormalizer.ForModel(defaultPath);
+            error = ToolResult.Success("OK");
+            return true;
+        }
+
+        if (!ToolPathNormalizer.TryNormalizeForFileOperation(raw, out path, out var message))
+        {
+            error = ToolResult.Failure("Invalid path", $"{invocation.ToolName}: {message}");
+            return false;
+        }
+
+        error = ToolResult.Success("OK");
+        return true;
+    }
 }
 
 public static class SensitiveText

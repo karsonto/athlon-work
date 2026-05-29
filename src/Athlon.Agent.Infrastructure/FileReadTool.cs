@@ -20,7 +20,7 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit) : 
         "Read workspace file content with line numbers (N|line) for display. Do not use those prefixes in file_edit old_text.",
         new Dictionary<string, string>
         {
-            ["path"] = "File path",
+            ["path"] = "Workspace-relative file path using forward slashes (/)",
             ["offset"] = "Optional 0-indexed start line. Default: 0",
             ["limit"] = "Optional max lines to return. Default: all lines",
             ["start_line"] = "Optional 1-indexed start line",
@@ -29,7 +29,7 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit) : 
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!ToolArguments.TryGetRequired(invocation, "path", out var path, out var error)) return error;
+        if (!ToolArguments.TryGetNormalizedPath(invocation, out var path, out var error)) return error;
         var fullPath = guard.Normalize(path);
         if (!guard.IsInsideWorkspace(fullPath)) return ToolResult.Failure("Outside workspace", fullPath);
         if (!File.Exists(fullPath)) return ToolResult.Failure("File not found", fullPath);

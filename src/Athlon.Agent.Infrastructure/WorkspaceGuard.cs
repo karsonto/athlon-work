@@ -1,15 +1,4 @@
-using System.Diagnostics;
-using System.Net.Http.Json;
-using System.Runtime.Versioning;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Compaction;
-using Microsoft.Extensions.DependencyInjection;
-using Serilog;
-using Serilog.Core;
-using Serilog.Events;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -35,6 +24,7 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
             throw new InvalidOperationException("工作区尚未设定。请先在侧栏「配置」或设置页指定工作区目录。");
         }
 
+        path = ToolPathNormalizer.ForModel(path);
         var rooted = Path.IsPathRooted(path) ? path : Path.Combine(cwd ?? basePath, path);
         return Path.GetFullPath(rooted);
     }

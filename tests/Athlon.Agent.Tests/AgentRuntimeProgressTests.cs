@@ -160,7 +160,7 @@ public sealed class AgentRuntimeProgressTests
     {
         private int _index;
 
-        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, Func<string, Task>? onReasoningDelta = null, CancellationToken cancellationToken = default)
+        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, Func<string, Task>? onReasoningDelta = null, Func<StreamingToolCallDelta, Task>? onToolCallDelta = null, CancellationToken cancellationToken = default)
         {
             if (_index >= responses.Length)
             {
@@ -175,7 +175,7 @@ public sealed class AgentRuntimeProgressTests
     {
         private bool _done;
 
-        public async Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, Func<string, Task>? onReasoningDelta = null, CancellationToken cancellationToken = default)
+        public async Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, Func<string, Task>? onReasoningDelta = null, Func<StreamingToolCallDelta, Task>? onToolCallDelta = null, CancellationToken cancellationToken = default)
         {
             if (_done)
             {

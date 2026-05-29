@@ -31,6 +31,7 @@ public sealed class AgentEnvironmentPromptBuilder(
         else
         {
             builder.AppendLine("All relative file paths are resolved from the active workspace. Never access files outside the configured workspace.");
+            builder.AppendLine("In file tool arguments (path), always use forward slashes (/), e.g. src/foo.cs — not backslashes (\\), even on Windows.");
             builder.AppendLine($"Active workspace: {workspace.Name}");
             builder.AppendLine($"Workspace root: {workspace.RootPath}");
             builder.AppendLine("Workspace contents are intentionally not embedded in this prompt because they change often.");

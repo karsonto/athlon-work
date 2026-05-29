@@ -128,6 +128,8 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     public string? ToolCallId { get; private set; }
 
+    public int? StreamToolIndex { get; private set; }
+
     [ObservableProperty]
     private bool _isToolRunning;
 
@@ -170,6 +172,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     public string ToolStatusLabel => ToolCallStatus switch
     {
+        ToolCallDisplayStatus.Preparing => "准备中…",
         ToolCallDisplayStatus.Running => "执行中…",
         ToolCallDisplayStatus.Succeeded => "成功",
         ToolCallDisplayStatus.Failed => "失败",
@@ -192,11 +195,89 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     public static ChatMessageViewModel CreatePendingTool(AgentToolCall toolCall) => new(toolCall);
 
+    public static ChatMessageViewModel CreateStreamingTool(int streamIndex) => new(streamIndex);
+
     public static ChatMessageViewModel CreateStreamingAssistant() =>
         new(ChatMessage.Create(MessageRole.Assistant, string.Empty))
         {
             IsStreaming = true
         };
+
+    private ChatMessageViewModel(int streamIndex)
+    {
+        StreamToolIndex = streamIndex;
+        Role = MessageRole.Tool.ToString();
+        IsUser = false;
+        IsTool = true;
+        IsCompaction = false;
+        IsHiddenPlaceholder = false;
+        DisplayRole = "工具";
+        ToolCallStatus = ToolCallDisplayStatus.Preparing;
+        CreatedAt = DateTimeOffset.Now.ToLocalTime().ToString("HH:mm:ss");
+        ToolHeader = "Tool …";
+        ToolSummary = string.Empty;
+        ToolDetail = string.Empty;
+        ToolName = string.Empty;
+        ToolArgumentsText = string.Empty;
+        Content = string.Empty;
+        ReasoningContent = string.Empty;
+        IsExpanded = true;
+        IsStreaming = false;
+        IsReasoningStreaming = false;
+        IsToolRunning = false;
+    }
+
+    public void UpdateStreamingToolCall(string? id, string? name, string argumentsJson)
+    {
+        if (!IsTool || ToolCallStatus != ToolCallDisplayStatus.Preparing)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(id))
+        {
+            ToolCallId = id;
+        }
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            ToolName = name;
+            ToolHeader = $"Tool `{name}`";
+        }
+
+        if (!string.IsNullOrWhiteSpace(argumentsJson))
+        {
+            ToolArgumentsText = argumentsJson;
+        }
+    }
+
+    public void PromoteStreamingToolToRunning(AgentToolCall toolCall)
+    {
+        if (!IsTool)
+        {
+            return;
+        }
+
+        StreamToolIndex = null;
+        ToolCallId = toolCall.Id;
+        ToolName = toolCall.Name;
+        ToolHeader = $"Tool `{toolCall.Name}`";
+        ToolArgumentsText = FormatArgumentsFull(toolCall.Arguments);
+        ToolCallStatus = ToolCallDisplayStatus.Running;
+        IsToolRunning = true;
+    }
+
+    public void MarkStreamingToolCancelled()
+    {
+        if (!IsTool || ToolCallStatus != ToolCallDisplayStatus.Preparing)
+        {
+            return;
+        }
+
+        StreamToolIndex = null;
+        ToolCallStatus = ToolCallDisplayStatus.Cancelled;
+        ToolSummary = "已停止";
+    }
 
     public void AppendStreamingToken(string token)
     {
@@ -410,7 +491,13 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             ? "(无参数)"
             : string.Join(
                 Environment.NewLine,
-                arguments.Select(argument => $"{argument.Key} = {argument.Value}"));
+                arguments.Select(argument =>
+                {
+                    var value = string.Equals(argument.Key, ToolPathNormalizer.PathArgumentName, StringComparison.OrdinalIgnoreCase)
+                        ? ToolPathNormalizer.ForModel(argument.Value)
+                        : argument.Value;
+                    return $"{argument.Key} = {value}";
+                }));
 
     private static string FormatArgumentsFromPersistedLine(string line)
     {

@@ -444,6 +444,10 @@
                                                         <DataTrigger Binding="{Binding IsCollapsibleCard}" Value="True">
                                                             <Setter Property="Visibility" Value="Visible" />
                                                         </DataTrigger>
+                                                        <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Preparing}">
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.ToolThinkingBorder}" />
+                                                            <Setter Property="Background" Value="{StaticResource Brush.ToolThinkingBg}" />
+                                                        </DataTrigger>
                                                         <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Running}">
                                                             <Setter Property="BorderBrush" Value="{StaticResource Brush.ToolThinkingBorder}" />
                                                             <Setter Property="Background" Value="{StaticResource Brush.ToolThinkingBg}" />
@@ -531,6 +535,9 @@
                                                                         <Style.Triggers>
                                                                             <DataTrigger Binding="{Binding ShowToolStatusLabel}" Value="True">
                                                                                 <Setter Property="Visibility" Value="Visible" />
+                                                                            </DataTrigger>
+                                                                            <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Preparing}">
+                                                                                <Setter Property="Foreground" Value="#86EFAC" />
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Running}">
                                                                                 <Setter Property="Foreground" Value="#86EFAC" />

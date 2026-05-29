@@ -206,6 +206,8 @@ public sealed class AgentRuntimeCompactionTests
 
             Func<string, Task>? onReasoningDelta = null,
 
+            Func<StreamingToolCallDelta, Task>? onToolCallDelta = null,
+
             CancellationToken cancellationToken = default) =>
 
             Task.FromResult(new AgentModelResponse(content, Array.Empty<AgentToolCall>()));

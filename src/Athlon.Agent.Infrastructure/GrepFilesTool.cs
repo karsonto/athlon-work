@@ -25,14 +25,14 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
         new Dictionary<string, string>
         {
             ["pattern"] = "Literal text pattern to search for",
-            ["path"] = "Optional directory or file path to search",
+            ["path"] = "Optional directory or file path to search; use forward slashes (/)",
             ["glob"] = "Optional file glob filter, e.g. *.cs"
         });
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
         if (!ToolArguments.TryGetRequired(invocation, "pattern", out var pattern, out var error)) return error;
-        var requestedPath = invocation.Arguments.GetValueOrDefault("path") ?? ".";
+        if (!ToolArguments.TryGetOptionalNormalizedPath(invocation, out var requestedPath, out error)) return error;
         var fullPath = guard.Normalize(requestedPath);
         if (!guard.IsInsideWorkspace(fullPath)) return ToolResult.Failure("Outside workspace", fullPath);
 

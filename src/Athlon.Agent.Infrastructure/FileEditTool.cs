@@ -20,7 +20,7 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         "Replace exact text in a workspace file (with backup). old_text must match disk content exactly — not file_read's N|line prefixes.",
         new Dictionary<string, string>
         {
-            ["path"] = "File path",
+            ["path"] = "Workspace-relative file path using forward slashes (/)",
             ["old_text"] = "Exact substring from the file (no line-number prefixes)",
             ["new_text"] = "Replacement",
             ["replace_all"] = "Optional true to replace all occurrences"
@@ -29,7 +29,7 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!ToolArguments.TryGetRequired(invocation, "path", out var path, out var error)) return error;
+        if (!ToolArguments.TryGetNormalizedPath(invocation, out var path, out var error)) return error;
         if (!ToolArguments.TryGetRequired(invocation, "old_text", out var oldText, out error)) return error;
         if (!ToolArguments.TryGetRequired(invocation, "new_text", out var newText, out error)) return error;
 

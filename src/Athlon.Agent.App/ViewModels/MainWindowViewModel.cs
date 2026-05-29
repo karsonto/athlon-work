@@ -33,6 +33,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _turnLinkedCancellation;
     private AgentSession _session = AgentSession.Create("New Chat");
     private ChatMessageViewModel? _streamingAssistantMessage;
+    private readonly Dictionary<int, ChatMessageViewModel> _streamingToolMessagesByIndex = new();
     private readonly StringBuilder _streamingTokenBuffer = new();
     private readonly StringBuilder _streamingReasoningBuffer = new();
     private DispatcherTimer? _streamingFlushTimer;
@@ -348,12 +349,44 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 OnToolStarted = async toolCall => await RunOnUiAsync(() =>
                 {
                     ClearStreamingAssistantPlaceholder();
-                    if (FindToolMessage(toolCall.Id) is not null)
+                    var existing = FindToolMessage(toolCall.Id);
+                    if (existing is not null)
                     {
+                        if (existing.ToolCallStatus == ToolCallDisplayStatus.Preparing)
+                        {
+                            existing.PromoteStreamingToolToRunning(toolCall);
+                            RemoveStreamingToolTracking(existing);
+                        }
+
+                        return;
+                    }
+
+                    var preparing = _streamingToolMessagesByIndex.Values.FirstOrDefault(message =>
+                        message.ToolCallStatus == ToolCallDisplayStatus.Preparing
+                        && (string.IsNullOrWhiteSpace(message.ToolCallId)
+                            || string.Equals(message.ToolCallId, toolCall.Id, StringComparison.Ordinal)));
+                    if (preparing is not null)
+                    {
+                        preparing.PromoteStreamingToolToRunning(toolCall);
+                        RemoveStreamingToolTracking(preparing);
+                        RequestScrollToBottom();
                         return;
                     }
 
                     Messages.Add(ChatMessageViewModel.CreatePendingTool(toolCall));
+                    RequestScrollToBottom();
+                }),
+                OnAssistantToolCallDelta = async delta => await RunOnUiAsync(() =>
+                {
+                    ClearStreamingAssistantPlaceholder();
+                    if (!_streamingToolMessagesByIndex.TryGetValue(delta.Index, out var toolMessage))
+                    {
+                        toolMessage = ChatMessageViewModel.CreateStreamingTool(delta.Index);
+                        _streamingToolMessagesByIndex[delta.Index] = toolMessage;
+                        Messages.Add(toolMessage);
+                    }
+
+                    toolMessage.UpdateStreamingToolCall(delta.Id, delta.Name, delta.ArgumentsJson);
                     RequestScrollToBottom();
                 }),
                 OnMessage = async message => await RunOnUiAsync(() =>
@@ -438,6 +471,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     message.MarkToolCancelled();
                 }
 
+                foreach (var message in _streamingToolMessagesByIndex.Values.ToList())
+                {
+                    message.MarkStreamingToolCancelled();
+                }
+
+                _streamingToolMessagesByIndex.Clear();
+
                 var notice = timedOut
                     ? "本回合已超过 10 分钟，已自动停止。"
                     : "生成已停止。";
@@ -457,6 +497,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             await RunOnUiAsync(() =>
             {
                 ClearStreamingAssistantPlaceholder();
+                foreach (var message in _streamingToolMessagesByIndex.Values.ToList())
+                {
+                    message.MarkStreamingToolCancelled();
+                }
+
+                _streamingToolMessagesByIndex.Clear();
                 Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, $"模型调用失败：{ex.Message}")));
             });
             await SaveCurrentSessionIfNeededAsync();
@@ -468,6 +514,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _streamingTokenBuffer.Clear();
             _streamingReasoningBuffer.Clear();
             _streamingAssistantMessage = null;
+            _streamingToolMessagesByIndex.Clear();
             StreamingText = string.Empty;
             ReconcilePendingToolsFromSession();
             IsBusy = false;
@@ -503,6 +550,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _turnLinkedCancellation = null;
         _turnTimeoutCancellation = null;
         _turnCancellation = null;
+    }
+
+    private void RemoveStreamingToolTracking(ChatMessageViewModel message)
+    {
+        if (message.StreamToolIndex is int index)
+        {
+            _streamingToolMessagesByIndex.Remove(index);
+            return;
+        }
+
+        foreach (var entry in _streamingToolMessagesByIndex.ToList())
+        {
+            if (ReferenceEquals(entry.Value, message))
+            {
+                _streamingToolMessagesByIndex.Remove(entry.Key);
+                break;
+            }
+        }
     }
 
     private void EnsureStreamingAssistantMessage()

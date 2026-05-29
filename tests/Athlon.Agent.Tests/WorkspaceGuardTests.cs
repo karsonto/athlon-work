@@ -29,6 +29,23 @@ public sealed class WorkspaceGuardTests
     }
 
     [Fact]
+    public void Normalize_AcceptsForwardSlashRelativePaths()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-guard-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, "src"));
+        File.WriteAllText(Path.Combine(workspaceRoot, "src", "demo.txt"), "ok");
+
+        var context = new ActiveWorkspaceContext();
+        context.SetWorkspace(workspaceRoot);
+        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(Path.Combine(root, ".athlon-agent")));
+
+        var fullPath = guard.Normalize("src/demo.txt");
+        Assert.True(File.Exists(fullPath));
+        Assert.True(guard.IsInsideWorkspace(fullPath));
+    }
+
+    [Fact]
     public void IsInsideWorkspace_WithoutConfiguredWorkspace_AllowsAthlonAgentOnly()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-guard-{Guid.NewGuid():N}");

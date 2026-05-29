@@ -142,6 +142,7 @@ public sealed class AgentRuntime(
                 new AgentModelRequest(modelMessages, tools),
                 callbacks?.OnAssistantTextDelta,
                 callbacks?.OnAssistantReasoningDelta,
+                callbacks?.OnAssistantToolCallDelta,
                 cancellationToken);
             return (session, response);
         }
@@ -160,6 +161,7 @@ public sealed class AgentRuntime(
                 new AgentModelRequest(retryMessages, tools),
                 callbacks?.OnAssistantTextDelta,
                 callbacks?.OnAssistantReasoningDelta,
+                callbacks?.OnAssistantToolCallDelta,
                 cancellationToken);
             return (session, response);
         }

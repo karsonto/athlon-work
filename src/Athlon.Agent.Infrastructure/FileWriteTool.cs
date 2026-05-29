@@ -15,11 +15,11 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool
 {
-    public ToolDefinition Definition { get; } = new("file_write", "Create or overwrite a workspace file with backup.", new Dictionary<string, string> { ["path"] = "File path", ["content"] = "New content" }, RequiresApproval: true);
+    public ToolDefinition Definition { get; } = new("file_write", "Create or overwrite a workspace file with backup.", new Dictionary<string, string> { ["path"] = "Workspace-relative file path using forward slashes (/)", ["content"] = "New content" }, RequiresApproval: true);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!ToolArguments.TryGetRequired(invocation, "path", out var path, out var error)) return error;
+        if (!ToolArguments.TryGetNormalizedPath(invocation, out var path, out var error)) return error;
         if (!ToolArguments.TryGetRequired(invocation, "content", out var content, out error)) return error;
 
         var fullPath = guard.Normalize(path);

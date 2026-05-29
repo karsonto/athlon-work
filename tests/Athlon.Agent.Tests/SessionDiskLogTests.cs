@@ -124,7 +124,7 @@ public sealed class SessionDiskLogTests
 
     private sealed class CancelOnFirstCallModelClient : IAgentModelClient
     {
-        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, Func<string, Task>? onReasoningDelta = null, CancellationToken cancellationToken = default) =>
+        public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, Func<string, Task>? onReasoningDelta = null, Func<StreamingToolCallDelta, Task>? onToolCallDelta = null, CancellationToken cancellationToken = default) =>
             Task.FromCanceled<AgentModelResponse>(cancellationToken);
     }
 

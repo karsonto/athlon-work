@@ -10,6 +10,47 @@ namespace Athlon.Agent.Tests;
 public sealed class OpenAiCompatibleChatModelClientStreamingTests
 {
     [Fact]
+    public async Task CompleteAsync_StreamResponse_EmitsToolCallDeltasWhileBuildingArguments()
+    {
+        var response = string.Join(
+            "\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"file_read\",\"arguments\":\"{\\\"path\\\":\\\"a\"}}]}}]}",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\".txt\\\"}\"}}]}}]}",
+            "data: [DONE]",
+            string.Empty);
+
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            var http = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(response, Encoding.UTF8)
+            };
+            http.Content.Headers.ContentType = new MediaTypeHeaderValue("text/event-stream");
+            return http;
+        });
+
+        var client = CreateClient(handler, enableStreaming: true);
+        var deltas = new List<StreamingToolCallDelta>();
+        var result = await client.CompleteAsync(
+            new AgentModelRequest(
+                new[] { new AgentModelMessage("user", "hi") },
+                Array.Empty<ToolDefinition>()),
+            onToolCallDelta: delta =>
+            {
+                deltas.Add(delta);
+                return Task.CompletedTask;
+            });
+
+        Assert.Equal(2, deltas.Count);
+        Assert.Equal("call_1", deltas[0].Id);
+        Assert.Equal("file_read", deltas[0].Name);
+        Assert.Equal("{\"path\":\"a", deltas[0].ArgumentsJson);
+        Assert.Equal("{\"path\":\"a.txt\"}", deltas[1].ArgumentsJson);
+        Assert.Single(result.ToolCalls);
+        Assert.Equal("a.txt", result.ToolCalls[0].Arguments["path"]);
+    }
+
+    [Fact]
     public async Task CompleteAsync_StreamResponse_EmitsDeltasAndBuildsToolCalls()
     {
         var response = string.Join(

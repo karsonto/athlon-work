@@ -53,6 +53,7 @@ public sealed class AgentRuntimeOverflowTests
             AgentModelRequest request,
             Func<string, Task>? onTextDelta = null,
             Func<string, Task>? onReasoningDelta = null,
+            Func<StreamingToolCallDelta, Task>? onToolCallDelta = null,
             CancellationToken cancellationToken = default)
         {
             CallCount++;
