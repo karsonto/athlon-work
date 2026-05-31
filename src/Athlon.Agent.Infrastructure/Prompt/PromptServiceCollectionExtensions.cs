@@ -1,0 +1,22 @@
+using Athlon.Agent.Core;
+using Athlon.Agent.Core.Prompt;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Athlon.Agent.Infrastructure.Prompt;
+
+public static class PromptServiceCollectionExtensions
+{
+    public static IServiceCollection AddAthlonEnvironmentPrompt(this IServiceCollection services)
+    {
+        services.AddSingleton<IEnvironmentPromptSection, BasePersonaSection>();
+        services.AddSingleton<IEnvironmentPromptSection, HostEnvironmentSection>();
+        services.AddSingleton<IEnvironmentPromptSection, WorkspacePolicySection>();
+        services.AddSingleton<IEnvironmentPromptSection, WorkspaceFilesSection>();
+        services.AddSingleton<IEnvironmentPromptSection, ToolsPolicySection>();
+        services.AddSingleton<IEnvironmentPromptSection, SkillsSection>();
+        services.AddSingleton<IEnvironmentPromptSection, ProductGuidanceSection>();
+        services.AddSingleton<ISystemPromptOrchestrator, SystemPromptOrchestrator>();
+        services.AddSingleton<IAgentEnvironmentPromptBuilder, EnvironmentPromptBuilderAdapter>();
+        return services;
+    }
+}

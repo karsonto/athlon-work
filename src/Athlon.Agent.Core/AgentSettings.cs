@@ -15,6 +15,21 @@ public sealed class AppSettings
     public UiSettings Ui { get; set; } = new();
     public LoggingSettings Logging { get; set; } = new();
     public ContextCompactionSettings ContextCompaction { get; set; } = new();
+    public PromptSettings Prompt { get; set; } = new();
+    public PlanSettings Plan { get; set; } = new();
+}
+
+public sealed class PlanSettings
+{
+    public int MaxSubtasks { get; set; } = 20;
+    public string PlanFileName { get; set; } = "plan.md";
+}
+
+public sealed class PromptSettings
+{
+    public int MaxAgentsMdChars { get; set; } = 4000;
+    public int MaxKnowledgeMdChars { get; set; } = 1500;
+    public int MaxKnowledgeCatalogEntries { get; set; } = 50;
 }
 public sealed class ModelSettings
 {

@@ -55,6 +55,13 @@ public sealed class SkillLoadingTests
             Assert.Equal("sample_skill", skills[0].Name);
             Assert.Equal("Sample skill for tests", skills[0].Description);
             Assert.Contains("Follow these steps.", skills[0].SkillContent, StringComparison.Ordinal);
+            Assert.NotNull(repo.GetSkill("sample_skill"));
+            var catalog = new AgentSkillCatalog(repo);
+            catalog.Reload();
+            var byId = catalog.GetSkillById(skills[0].SkillId);
+            Assert.NotNull(byId);
+            Assert.Equal(skills[0].SkillId, byId!.SkillId);
+            Assert.Equal(skills[0].Name, byId.Name);
         }
         finally
         {

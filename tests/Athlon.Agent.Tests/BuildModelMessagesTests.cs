@@ -45,7 +45,7 @@ public sealed class BuildModelMessagesTests
 
         Assert.Equal(3, messages.Count);
         Assert.Equal("user", messages[2].Role);
-        Assert.Contains("[Tool output]", messages[2].Content, StringComparison.Ordinal);
+        Assert.Contains("[Tool output]", messages[2].Content.ToString()!, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public sealed class BuildModelMessagesTests
         Assert.Equal(callA, messages[3].ToolCallId);
         Assert.Equal("tool", messages[4].Role);
         Assert.Equal(callB, messages[4].ToolCallId);
-        Assert.Contains("not recorded", messages[4].Content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("not recorded", messages[4].Content.ToString()!, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -138,6 +138,6 @@ public sealed class BuildModelMessagesTests
         var messages = AgentRuntime.BuildModelMessages("system", history);
 
         Assert.Equal(2, messages.Count);
-        Assert.DoesNotContain(messages, message => message.Content.Contains("microcompact", StringComparison.Ordinal));
+        Assert.DoesNotContain(messages, message => message.Content.ToString()!.Contains("microcompact", StringComparison.Ordinal));
     }
 }

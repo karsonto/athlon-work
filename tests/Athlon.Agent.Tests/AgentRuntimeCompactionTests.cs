@@ -34,7 +34,7 @@ public sealed class AgentRuntimeCompactionTests
 
             new NoOpToolRouter(),
 
-            new StaticPromptBuilder(),
+            PromptTestHelpers.CreateStaticOrchestrator(),
 
             pipeline,
 
@@ -57,6 +57,8 @@ public sealed class AgentRuntimeCompactionTests
             session,
 
             "hello",
+
+            null,
 
             new AgentTurnCallbacks
 

@@ -56,15 +56,13 @@ public sealed class ClearContextTests
                 new ToolDefinition("file_read", "Read a file", new Dictionary<string, string>())
             };
 
-            var builder = new AgentEnvironmentPromptBuilder(
-                settings,
-                new EmptySkillsProvider(),
-                new MinimalHostEnvironment());
+            var builder = PromptTestHelpers.CreateBuilder(new MinimalHostEnvironment(), settings);
 
             var prompt = builder.Build(session, tools);
 
             Assert.Contains($"Workspace root: {workspaceRoot}", prompt, StringComparison.Ordinal);
-            Assert.Contains("- file_read: Read a file", prompt, StringComparison.Ordinal);
+            Assert.Contains("Native tools are provided via function calling", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain("- file_read: Read a file", prompt, StringComparison.Ordinal);
             Assert.Contains("You are Athlon Agent", prompt, StringComparison.Ordinal);
         }
         finally
@@ -74,11 +72,6 @@ public sealed class ClearContextTests
                 Directory.Delete(Path.GetDirectoryName(workspaceRoot)!, true);
             }
         }
-    }
-
-    private sealed class EmptySkillsProvider : IAvailableSkillsProvider
-    {
-        public IReadOnlyList<AvailableSkillInfo> GetSkills() => Array.Empty<AvailableSkillInfo>();
     }
 
     private sealed class MinimalHostEnvironment : IAgentHostEnvironment

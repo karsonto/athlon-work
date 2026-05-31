@@ -5,15 +5,6 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class AvailableSkillsProvider(IAgentSkillCatalog catalog) : IAvailableSkillsProvider
-{
-    public IReadOnlyList<AvailableSkillInfo> GetSkills() =>
-        catalog.Skills
-            .Select(skill => new AvailableSkillInfo(skill.Name, skill.Description, skill.SkillId))
-            .OrderBy(skill => skill.Name, StringComparer.Ordinal)
-            .ToArray();
-}
-
 public static class SkillServiceCollectionExtensions
 {
     public static IServiceCollection AddAthlonSkills(this IServiceCollection services)
@@ -24,7 +15,8 @@ public static class SkillServiceCollectionExtensions
             return new FileSystemSkillRepository(paths.SkillsPath);
         });
         services.AddSingleton<IAgentSkillCatalog, AgentSkillCatalog>();
-        services.AddSingleton<IAvailableSkillsProvider, AvailableSkillsProvider>();
+        services.AddSingleton<ISkillRuntime, SkillRuntime>();
+        services.AddSingleton<IAvailableSkillsProvider>(sp => sp.GetRequiredService<ISkillRuntime>());
         return services;
     }
 }

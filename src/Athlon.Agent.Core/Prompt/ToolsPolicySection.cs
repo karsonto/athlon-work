@@ -1,0 +1,71 @@
+using System.Text;
+
+
+
+namespace Athlon.Agent.Core.Prompt;
+
+
+
+public sealed class ToolsPolicySection : IEnvironmentPromptSection
+
+{
+
+    public int Order => 500;
+
+
+
+    public void Append(StringBuilder builder, EnvironmentPromptContext context)
+
+    {
+
+        builder.AppendLine("Tools:");
+
+        builder.AppendLine(
+            "Native tools are provided via function calling (including create_plan, finish_subtask, get_plan for multi-step work); "
+            + "use each tool's schema. Do not guess file contents.");
+
+        builder.AppendLine();
+
+
+
+        var mcpTools = context.Tools.Where(IsMcpTool).ToArray();
+
+        if (mcpTools.Length > 0)
+
+        {
+
+            builder.AppendLine("Available MCP tools:");
+
+            foreach (var tool in mcpTools)
+
+            {
+
+                builder.AppendLine($"- {tool.Name}: {tool.Description}");
+
+            }
+
+
+
+            builder.AppendLine();
+
+        }
+
+
+
+        builder.AppendLine("For write operations, explain your intent before calling file_write or file_edit.");
+
+        builder.AppendLine("Windows: cmd.exe only, not PowerShell.");
+
+        builder.AppendLine();
+
+    }
+
+
+
+    private static bool IsMcpTool(ToolDefinition tool) =>
+
+        string.Equals(tool.Source, "mcp", StringComparison.OrdinalIgnoreCase);
+
+}
+
+

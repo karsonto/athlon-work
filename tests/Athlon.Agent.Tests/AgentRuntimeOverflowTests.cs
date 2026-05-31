@@ -31,7 +31,7 @@ public sealed class AgentRuntimeOverflowTests
             modelClient,
             new NoOpStorage(),
             new NoOpToolRouter(),
-            new StaticPromptBuilder(),
+            PromptTestHelpers.CreateStaticOrchestrator(),
             pipeline,
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),

@@ -22,6 +22,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IMcpRegistry _mcpRegistry;
     private readonly AppSettings _appSettings;
     private readonly IAgentSkillCatalog _skillCatalog;
+    private readonly ISkillRuntime _skillRuntime;
     private readonly IImageAttachmentReader _imageAttachmentReader;
     private readonly SessionTurnHost _turnHost;
     private readonly SessionUiCache _uiCache;
@@ -38,6 +39,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IImageAttachmentReader imageAttachmentReader,
         IAppPathProvider paths,
         IAgentSkillCatalog skillCatalog,
+        ISkillRuntime skillRuntime,
         SessionTurnHost turnHost,
         SessionUiCache uiCache,
         AppSettings settings)
@@ -51,6 +53,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _uiCache = uiCache;
         _appSettings = settings;
         _skillCatalog = skillCatalog;
+        _skillRuntime = skillRuntime;
         _displayedSessionId = _session.Id;
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
         _turnHost.TurnCompleted += OnTurnCompleted;
@@ -324,7 +327,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return Task.CompletedTask;
         }
 
-        var input = ComposerText.Trim();
+        _skillCatalog.Reload();
+        var input = SkillComposerExpander.Expand(ComposerText.Trim(), _skillRuntime.GetSkills());
         var imageAttachments = PendingImageAttachments.Select(item => item.Attachment).ToArray();
         ComposerText = string.Empty;
         StreamingText = string.Empty;

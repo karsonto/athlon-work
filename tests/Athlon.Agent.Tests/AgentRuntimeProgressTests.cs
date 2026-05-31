@@ -22,7 +22,7 @@ public sealed class AgentRuntimeProgressTests
             modelClient,
             storage,
             toolRouter,
-            new StaticPromptBuilder(),
+            PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
@@ -45,7 +45,7 @@ public sealed class AgentRuntimeProgressTests
             }
         };
 
-        await runtime.SendAsync(session, "run tools", callbacks);
+        await runtime.SendAsync(session, "run tools", null, callbacks);
 
         Assert.Equal(
             new[]
@@ -78,7 +78,7 @@ public sealed class AgentRuntimeProgressTests
             modelClient,
             storage,
             new ScriptedToolRouter(),
-            new StaticPromptBuilder(),
+            PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
@@ -90,6 +90,7 @@ public sealed class AgentRuntimeProgressTests
         await runtime.SendAsync(
             session,
             "say hello",
+            null,
             new AgentTurnCallbacks
             {
                 OnAssistantTextDelta = token =>
@@ -118,7 +119,7 @@ public sealed class AgentRuntimeProgressTests
             modelClient,
             storage,
             toolRouter,
-            new StaticPromptBuilder(),
+            PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
@@ -148,7 +149,7 @@ public sealed class AgentRuntimeProgressTests
             modelClient,
             storage,
             composite,
-            new StaticPromptBuilder(),
+            PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),

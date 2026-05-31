@@ -6,6 +6,8 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
 {
     public bool HasConfiguredWorkspace => TryGetWorkspaceRoot(out _);
 
+    public bool TryGetWorkspaceRoot(out string rootPath) => TryGetWorkspaceRootInternal(out rootPath);
+
     public bool IsInsideWorkspace(string path)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -19,7 +21,7 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
 
     public string Normalize(string path, string? cwd = null)
     {
-        if (!TryGetWorkspaceRoot(out var basePath))
+        if (!TryGetWorkspaceRootInternal(out var basePath))
         {
             throw new InvalidOperationException("工作区尚未设定。请先在侧栏「配置」或设置页指定工作区目录。");
         }
@@ -43,7 +45,7 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
               ?? [".git", "bin", "obj", "node_modules"];
     }
 
-    private bool TryGetWorkspaceRoot(out string rootPath)
+    private bool TryGetWorkspaceRootInternal(out string rootPath)
     {
         var scoped = SessionWorkspaceScope.CurrentState;
         if (scoped?.RootPath is { Length: > 0 } scopedRoot)
@@ -71,7 +73,7 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
 
     private IEnumerable<string> GetAllowedRoots()
     {
-        if (TryGetWorkspaceRoot(out var workspaceRoot))
+        if (TryGetWorkspaceRootInternal(out var workspaceRoot))
         {
             yield return workspaceRoot;
         }

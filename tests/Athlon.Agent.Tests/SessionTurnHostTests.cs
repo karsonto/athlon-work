@@ -99,6 +99,8 @@ public sealed class SessionTurnHostTests
 
     private sealed class NoOpStorage : IFileStorageService
     {
+        public string RootPath { get; } = Path.GetTempPath();
+
         public Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.FromResult<AgentSession?>(null);
         public Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
@@ -107,5 +109,21 @@ public sealed class SessionTurnHostTests
         public Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<SessionIndexEntry>>(Array.Empty<SessionIndexEntry>());
         public Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<AppSettings> LoadSettingsAsync(CancellationToken cancellationToken = default) => Task.FromResult(new AppSettings());
+
+        public Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task<string> SaveTranscriptAsync(
+            string sessionId,
+            IReadOnlyList<ChatMessage> messages,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(string.Empty);
+
+        public Task<string> SaveEvictedToolResultAsync(
+            string sessionId,
+            string toolCallId,
+            string content,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(string.Empty);
     }
 }

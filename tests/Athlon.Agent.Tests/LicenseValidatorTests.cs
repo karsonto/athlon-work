@@ -53,7 +53,7 @@ public sealed class LicenseValidatorTests
             keys,
             DefaultAccount,
             expiresAt: DateTimeOffset.UtcNow.AddDays(30));
-        content = content.Replace('A', 'B', StringComparison.Ordinal);
+        content = content.Replace("A", "B", StringComparison.Ordinal);
 
         var validator = new LicenseValidator(DefaultAccount, keys.PublicKey);
         var result = validator.ValidateContent(content);

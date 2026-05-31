@@ -15,7 +15,11 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class ExecuteCommandTool(AppSettings settings, AuditLogService audit) : IAgentTool
 {
-    public ToolDefinition Definition { get; } = new("execute_command", "Execute a command after explicit user approval.", new Dictionary<string, string> { ["command"] = "Command line", ["cwd"] = "Working directory", ["timeout"] = "Timeout seconds" }, RequiresApproval: true);
+    public ToolDefinition Definition { get; } = new(
+        "execute_command",
+        "Execute a shell command (user approval required). On Windows use cmd.exe semantics, not PowerShell.",
+        new Dictionary<string, string> { ["command"] = "Command line", ["cwd"] = "Working directory", ["timeout"] = "Timeout seconds" },
+        RequiresApproval: true);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {

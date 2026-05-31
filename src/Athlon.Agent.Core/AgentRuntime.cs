@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Core;
 
@@ -10,7 +11,7 @@ public sealed class AgentRuntime(
     IAgentModelClient modelClient,
     IFileStorageService storage,
     IToolRouter toolRouter,
-    IAgentEnvironmentPromptBuilder promptBuilder,
+    ISystemPromptOrchestrator systemPromptOrchestrator,
     IPreCompletionPipeline preCompletionPipeline,
     IToolResultEvictor toolResultEvictor,
     IActiveAgentSessionContext activeSessionContext,
@@ -28,6 +29,7 @@ public sealed class AgentRuntime(
     {
         var ignorePatterns = ResolveIgnorePatterns(session);
         using var workspaceScope = SessionWorkspaceScope.Enter(session.ActiveWorkspace, ignorePatterns);
+        using var skillActivationScope = SessionSkillActivationScope.EnterNewTurn();
         using var sessionScope = activeSessionContext.Enter(session.Id);
         return await SendAsyncCore(session, userInput, imageAttachments, callbacks, cancellationToken);
     }
@@ -76,7 +78,8 @@ public sealed class AgentRuntime(
             await PersistMessageAsync(session, userMessage, cancellationToken);
 
             var tools = toolRouter.ListTools();
-            var environmentPrompt = promptBuilder.Build(session, tools);
+            var frozenPrompt = systemPromptOrchestrator.PrepareForTurn(session, tools);
+            var environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
             var modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
 
             if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
@@ -93,6 +96,7 @@ public sealed class AgentRuntime(
                     callbacks,
                     PreCompletionOptions.AgentLoop,
                     cancellationToken);
+                environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
                 modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
 
                 var (updatedSession, response) = await CompleteWithOverflowRetryAsync(
@@ -127,6 +131,7 @@ public sealed class AgentRuntime(
                 session = session.WithMessage(assistantWithToolCalls);
                 await PersistMessageAsync(session, assistantWithToolCalls, cancellationToken);
 
+                environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
                 modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
                 foreach (var toolCall in response.ToolCalls)
                 {

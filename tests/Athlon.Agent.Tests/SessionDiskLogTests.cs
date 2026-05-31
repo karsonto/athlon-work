@@ -93,7 +93,7 @@ public sealed class SessionDiskLogTests
             modelClient,
             storage,
             new EmptyToolRouter(),
-            new StaticPromptBuilder(),
+            PromptTestHelpers.CreateStaticOrchestrator(),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new NoOpActiveAgentSessionContext(),
@@ -106,7 +106,7 @@ public sealed class SessionDiskLogTests
 
         try
         {
-            await runtime.SendAsync(session, "取消前也要保存", callbacks: null, cts.Token);
+            await runtime.SendAsync(session, "取消前也要保存", null, null, cts.Token);
         }
         catch (OperationCanceledException)
         {

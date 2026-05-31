@@ -6,6 +6,8 @@ public interface IAgentSkillCatalog
 
     AgentSkill? GetSkill(string name);
 
+    AgentSkill? GetSkillById(string skillId);
+
     void Reload();
 }
 
@@ -24,6 +26,9 @@ public sealed class AgentSkillCatalog : IAgentSkillCatalog
 
     public AgentSkill? GetSkill(string name) =>
         _skills.FirstOrDefault(skill => string.Equals(skill.Name, name, StringComparison.Ordinal));
+
+    public AgentSkill? GetSkillById(string skillId) =>
+        _skills.FirstOrDefault(skill => string.Equals(skill.SkillId, skillId, StringComparison.Ordinal));
 
     public void Reload() => _skills = _repository.GetAllSkills();
 }
