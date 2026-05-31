@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Skills;
@@ -26,6 +27,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IImageAttachmentReader _imageAttachmentReader;
     private readonly SessionTurnHost _turnHost;
     private readonly SessionUiCache _uiCache;
+    private readonly IPlanNotebook _planNotebook;
+    private readonly PlanAutoContinueTracker _planAutoContinueTracker;
     private FileSystemWatcher? _workspaceWatcher;
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -42,6 +45,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ISkillRuntime skillRuntime,
         SessionTurnHost turnHost,
         SessionUiCache uiCache,
+        IPlanNotebook planNotebook,
+        PlanAutoContinueTracker planAutoContinueTracker,
         AppSettings settings)
     {
         _storage = storage;
@@ -51,6 +56,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _imageAttachmentReader = imageAttachmentReader;
         _turnHost = turnHost;
         _uiCache = uiCache;
+        _planNotebook = planNotebook;
+        _planAutoContinueTracker = planAutoContinueTracker;
         _appSettings = settings;
         _skillCatalog = skillCatalog;
         _skillRuntime = skillRuntime;
@@ -180,7 +187,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private async Task ClearContextAsync()
     {
         var confirm = MessageBox.Show(
-            "将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录）。\n\n会话 ID、工作区与标题会保留；磁盘上的 transcript 归档不会删除。\n\n下次发送消息时会重新构建系统提示（工作区、工具、技能等）。",
+            "将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录）。\n\n会话 ID、工作区与标题会保留；磁盘上的 transcript 归档不会删除。\n\n同时将清除内存中的计划并删除工作区 plan.md（若存在）。\n\n下次发送消息时会重新构建系统提示（工作区、工具、技能等）。",
             "清空上下文",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
@@ -198,6 +205,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _activeUi.Messages.Clear();
         StreamingText = string.Empty;
         PendingImageAttachments.Clear();
+
+        _planNotebook.Clear(_displayedSessionId);
+        _planAutoContinueTracker.Reset(_displayedSessionId);
 
         await _storage.SaveSessionAsync(_session);
         SettingsStatus = "上下文已清空。";
@@ -328,6 +338,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         _skillCatalog.Reload();
+        _planAutoContinueTracker.Reset(_displayedSessionId);
         var input = SkillComposerExpander.Expand(ComposerText.Trim(), _skillRuntime.GetSkills());
         var imageAttachments = PendingImageAttachments.Select(item => item.Attachment).ToArray();
         ComposerText = string.Empty;
@@ -337,7 +348,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var ui = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
         ui.AddUserMessage(input, imageAttachments);
 
-        var request = new SessionTurnRequest(_displayedSessionId, _session, input, imageAttachments, ui);
+        var request = new SessionTurnRequest(_displayedSessionId, _session, input, imageAttachments, ui, IsAutoContinue: false);
         if (!_turnHost.TryStart(request, out var error))
         {
             SettingsStatus = error ?? "无法开始生成。";
@@ -390,8 +401,79 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             await SaveCurrentSessionIfNeededAsync(e.Session);
             await RefreshSessionHistoryAsync();
+            TrySchedulePlanAutoContinue(e);
             NotifyCommandStatesChanged();
         });
+    }
+
+    private void TrySchedulePlanAutoContinue(SessionTurnCompletedEventArgs e)
+    {
+        var planSettings = _appSettings.Plan;
+        var plan = _planNotebook.GetCurrent(e.SessionId);
+        var completedRounds = _planAutoContinueTracker.Get(e.SessionId);
+
+        if (PlanAutoContinuePolicy.ShouldScheduleContinue(
+                planSettings.AutoContinueEnabled,
+                completedRounds,
+                planSettings.MaxAutoContinueRounds,
+                e.Cancelled,
+                e.TimedOut,
+                e.Error,
+                plan))
+        {
+            var input = PlanAutoContinueDefaults.ContinueUserMessage.Trim();
+            var ui = _uiCache.GetOrCreate(e.SessionId, RequestScrollToBottom);
+            ui.AddUserMessage(input, Array.Empty<ImageAttachment>());
+
+            var request = new SessionTurnRequest(
+                e.SessionId,
+                e.Session,
+                input,
+                Array.Empty<ImageAttachment>(),
+                ui,
+                IsAutoContinue: true);
+
+            if (_turnHost.TryStart(request, out var error))
+            {
+                _planAutoContinueTracker.Increment(e.SessionId);
+                if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
+                {
+                    UpdateDisplayedBusyState();
+                }
+            }
+            else if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
+            {
+                SettingsStatus = error ?? "无法自动继续生成。";
+            }
+
+            return;
+        }
+
+        if (!planSettings.AutoContinueEnabled
+            || plan is null
+            || !PlanProgress.HasInProgressSubtask(plan)
+            || e.Error is not null
+            || (e.Cancelled && !e.TimedOut))
+        {
+            return;
+        }
+
+        if (completedRounds < planSettings.MaxAutoContinueRounds)
+        {
+            return;
+        }
+
+        if (!string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var uiDisplayed = _uiCache.GetOrCreate(e.SessionId, RequestScrollToBottom);
+        uiDisplayed.Messages.Add(
+            new ChatMessageViewModel(
+                ChatMessage.Create(
+                    MessageRole.System,
+                    $"已达自动续轮上限（{planSettings.MaxAutoContinueRounds} 次），请手动发送消息继续或调整 settings.json 中的 Plan.MaxAutoContinueRounds。")));
     }
 
     private void UpdateDisplayedBusyState() => IsBusy = _turnHost.IsRunning(_displayedSessionId);

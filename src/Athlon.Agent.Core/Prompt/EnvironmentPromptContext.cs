@@ -18,5 +18,9 @@ public sealed class EnvironmentPromptContext
 
     public required PromptSettings PromptSettings { get; init; }
 
+    public bool PlanAutoContinueEnabled { get; init; }
+
+    public int PlanMaxSubtasks { get; init; } = 20;
+
     public bool HasWorkspace => !string.IsNullOrWhiteSpace(WorkspaceRoot);
 }

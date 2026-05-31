@@ -9,4 +9,6 @@ public interface IPlanNotebook
     PlanOperationResult FinishSubtask(string sessionId, int subtaskIndex, string outcome);
 
     string GetPlanMarkdown(string sessionId, bool detailed = true);
+
+    void Clear(string sessionId);
 }

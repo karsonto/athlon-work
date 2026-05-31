@@ -84,7 +84,12 @@ public sealed class SessionTurnUiController
         });
     }
 
-    public void FinalizeTurn(AgentSession session, bool cancelled, bool timedOut, string? errorMessage = null)
+    public void FinalizeTurn(
+        AgentSession session,
+        bool cancelled,
+        bool timedOut,
+        int turnTimeoutMinutes,
+        string? errorMessage = null)
     {
         RunOnUiSync(() =>
         {
@@ -115,7 +120,7 @@ public sealed class SessionTurnUiController
                 }
 
                 var notice = timedOut
-                    ? "本回合已超过 30 分钟，已自动停止。"
+                    ? $"本回合已超过 {turnTimeoutMinutes} 分钟，已自动停止。"
                     : "生成已停止。";
                 Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, notice)));
             }

@@ -85,6 +85,36 @@ C:\Users\<UserName>\.athlon-agent\
 
 The path is provided by `AppPathProvider` in `src/Athlon.Agent.Infrastructure/CommonInfrastructure.cs`. Keep new persistence code behind `IAppPathProvider` instead of hardcoding paths.
 
+### Agent turn timeout
+
+In `config/settings.json`, optional `AgentTurn.TimeoutMinutes` controls how long a single user message may run (agent tool loop included). Default is **30**; values are clamped to **1–180**. Example for a two-hour run:
+
+```json
+{
+  "AgentTurn": {
+    "TimeoutMinutes": 120
+  }
+}
+```
+
+Changes apply on the next send after saving or editing the file (restart the app if settings were only changed on disk while running).
+
+### Plan auto-continue
+
+When a turn ends (including turn timeout) and the session plan still has an **in-progress** subtask, Athlon may automatically start another turn with a continue instruction. User **Stop** does not trigger auto-continue. **Clear context** clears the in-memory plan and deletes `plan.md` in the active workspace.
+
+```json
+{
+  "Plan": {
+    "AutoContinueEnabled": true,
+    "MaxAutoContinueRounds": 20,
+    "MaxSubtasks": 20
+  }
+}
+```
+
+Long-running work should use `create_plan` with granular subtasks (see system prompt / README). `MaxAutoContinueRounds` limits how many automatic continue turns run after a single manual user message.
+
 ## Run
 
 ```powershell

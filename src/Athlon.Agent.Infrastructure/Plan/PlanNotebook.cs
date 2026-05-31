@@ -136,20 +136,44 @@ public sealed class PlanNotebook(AppSettings settings, WorkspaceGuard workspaceG
         return PlanMarkdownFormatter.ToMarkdown(plan, detailed);
     }
 
+    public void Clear(string sessionId)
+    {
+        if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            _plans.TryRemove(sessionId, out _);
+        }
+
+        if (TryGetPlanFilePath(out var path) && File.Exists(path))
+        {
+            File.Delete(path);
+        }
+    }
+
     private string SyncPlanFile(AgentPlan plan)
     {
-        if (!workspaceGuard.TryGetWorkspaceRoot(out var rootPath))
+        if (!TryGetPlanFilePath(out var path))
         {
             return "not_written";
+        }
+
+        var markdown = PlanMarkdownFormatter.ToMarkdown(plan, detailed: true);
+        File.WriteAllText(path, markdown + Environment.NewLine);
+        return path;
+    }
+
+    private bool TryGetPlanFilePath(out string path)
+    {
+        path = string.Empty;
+        if (!workspaceGuard.TryGetWorkspaceRoot(out var rootPath))
+        {
+            return false;
         }
 
         var fileName = string.IsNullOrWhiteSpace(settings.Plan.PlanFileName)
             ? "plan.md"
             : settings.Plan.PlanFileName;
-        var path = Path.Combine(rootPath, fileName);
-        var markdown = PlanMarkdownFormatter.ToMarkdown(plan, detailed: true);
-        File.WriteAllText(path, markdown + Environment.NewLine);
-        return path;
+        path = Path.Combine(rootPath, fileName);
+        return true;
     }
 
     private static string AppendSyncNote(string syncResult) =>

@@ -8,7 +8,8 @@ public sealed record SessionTurnRequest(
     AgentSession Session,
     string UserInput,
     IReadOnlyList<ImageAttachment> ImageAttachments,
-    SessionTurnUiController Ui);
+    SessionTurnUiController Ui,
+    bool IsAutoContinue = false);
 
 public enum SessionTurnState
 {
@@ -16,28 +17,37 @@ public enum SessionTurnState
     Running
 }
 
-public sealed class SessionTurnCompletedEventArgs(string sessionId, AgentSession session, bool cancelled, Exception? error)
+public sealed class SessionTurnCompletedEventArgs(
+    string sessionId,
+    AgentSession session,
+    bool cancelled,
+    bool timedOut,
+    bool isAutoContinue,
+    Exception? error)
 {
     public string SessionId { get; } = sessionId;
     public AgentSession Session { get; } = session;
     public bool Cancelled { get; } = cancelled;
+    public bool TimedOut { get; } = timedOut;
+    public bool IsAutoContinue { get; } = isAutoContinue;
     public Exception? Error { get; } = error;
 }
 
 public sealed class SessionTurnHost
 {
     public const int MaxConcurrentTurns = 3;
-    private static readonly TimeSpan TurnTimeout = TimeSpan.FromMinutes(30);
 
     private readonly IAgentOrchestrator _orchestrator;
     private readonly IFileStorageService _storage;
+    private readonly AppSettings _settings;
     private readonly ConcurrentDictionary<string, SessionTurnRunner> _runners = new(StringComparer.Ordinal);
     private readonly object _startGate = new();
 
-    public SessionTurnHost(IAgentOrchestrator orchestrator, IFileStorageService storage)
+    public SessionTurnHost(IAgentOrchestrator orchestrator, IFileStorageService storage, AppSettings settings)
     {
         _orchestrator = orchestrator;
         _storage = storage;
+        _settings = settings;
     }
 
     public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
@@ -60,7 +70,9 @@ public sealed class SessionTurnHost
                 return false;
             }
 
-            var runner = new SessionTurnRunner(this, request, TurnTimeout);
+            var timeout = _settings.AgentTurn.ResolveTurnTimeout();
+            var timeoutMinutes = _settings.AgentTurn.ResolveTurnTimeoutMinutes();
+            var runner = new SessionTurnRunner(this, request, timeout, timeoutMinutes);
             _runners[request.SessionId] = runner;
             TurnStateChanged?.Invoke(this, request.SessionId);
             runner.Start();
@@ -88,11 +100,24 @@ public sealed class SessionTurnHost
         }
     }
 
-    private void OnRunnerFinished(SessionTurnRunner runner, AgentSession session, bool cancelled, Exception? error)
+    private void OnRunnerFinished(
+        SessionTurnRunner runner,
+        AgentSession session,
+        bool cancelled,
+        bool timedOut,
+        Exception? error)
     {
         _runners.TryRemove(runner.SessionId, out _);
         TurnStateChanged?.Invoke(this, runner.SessionId);
-        TurnCompleted?.Invoke(this, new SessionTurnCompletedEventArgs(runner.SessionId, session, cancelled, error));
+        TurnCompleted?.Invoke(
+            this,
+            new SessionTurnCompletedEventArgs(
+                runner.SessionId,
+                session,
+                cancelled,
+                timedOut,
+                runner.IsAutoContinue,
+                error));
     }
 
     private sealed class SessionTurnRunner
@@ -100,20 +125,24 @@ public sealed class SessionTurnHost
         private readonly SessionTurnHost _host;
         private readonly SessionTurnRequest _request;
         private readonly TimeSpan _timeout;
+        private readonly int _timeoutMinutes;
         private CancellationTokenSource? _cancellation;
         private CancellationTokenSource? _timeoutCancellation;
         private CancellationTokenSource? _linked;
         private AgentSession _session;
 
-        public SessionTurnRunner(SessionTurnHost host, SessionTurnRequest request, TimeSpan timeout)
+        public SessionTurnRunner(SessionTurnHost host, SessionTurnRequest request, TimeSpan timeout, int timeoutMinutes)
         {
             _host = host;
             _request = request;
             _timeout = timeout;
+            _timeoutMinutes = timeoutMinutes;
             _session = request.Session;
         }
 
         public string SessionId => _request.SessionId;
+
+        public bool IsAutoContinue => _request.IsAutoContinue;
 
         public void Start()
         {
@@ -167,11 +196,12 @@ public sealed class SessionTurnHost
                     _session,
                     cancelled,
                     timedOut,
+                    _timeoutMinutes,
                     error is null ? null : $"模型调用失败：{error.Message}");
                 _linked?.Dispose();
                 _timeoutCancellation?.Dispose();
                 _cancellation?.Dispose();
-                _host.OnRunnerFinished(this, _session, cancelled, error);
+                _host.OnRunnerFinished(this, _session, cancelled, timedOut, error);
             }
         }
     }

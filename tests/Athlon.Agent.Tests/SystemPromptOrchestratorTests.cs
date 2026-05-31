@@ -1,5 +1,6 @@
 using System.Text;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
@@ -75,6 +76,26 @@ public sealed class SystemPromptOrchestratorTests
 
         Assert.StartsWith(frozen.Text.TrimEnd(), iteration.TrimEnd(), StringComparison.Ordinal);
         Assert.Contains("PRE_REASONING_MARKER", iteration, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PrepareForTurn_IncludesGranularPlanningAndAutoContinueGuidance()
+    {
+        var host = new PromptTestHelpers.FakeHostEnvironment(
+            @"C:\Users\test\.athlon-agent\skills",
+            @"C:\Users\test\.athlon-agent");
+        var settings = new AppSettings
+        {
+            Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = @"C:\work\demo" } },
+            Plan = new PlanSettings { AutoContinueEnabled = true, MaxSubtasks = 12 }
+        };
+        var orchestrator = PromptTestHelpers.CreateOrchestrator(host, settings);
+        var prompt = orchestrator.PrepareForTurn(AgentSession.Create("plan-guidance"), Array.Empty<ToolDefinition>()).Text;
+
+        Assert.Contains("granular subtasks", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("up to 12", prompt, StringComparison.Ordinal);
+        Assert.Contains("auto-send a continue instruction", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("long tasks require create_plan with granular subtasks", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

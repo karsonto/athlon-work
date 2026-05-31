@@ -10,7 +10,7 @@ public sealed class SessionTurnHostTests
     public async Task TryStart_RejectsFourthConcurrentTurn()
     {
         var dispatcher = await StartStaDispatcherAsync();
-        var host = new SessionTurnHost(new SlowOrchestrator(TimeSpan.FromSeconds(2)), new NoOpStorage());
+        var host = CreateHost(new SlowOrchestrator(TimeSpan.FromSeconds(2)));
         var sessions = Enumerable.Range(0, 4).Select(_ => AgentSession.Create(Guid.NewGuid().ToString("N"))).ToArray();
 
         Assert.True(TryStart(host, dispatcher, sessions[0], out _));
@@ -27,7 +27,7 @@ public sealed class SessionTurnHostTests
     public async Task TryStart_RejectsSecondTurnOnSameSession()
     {
         var dispatcher = await StartStaDispatcherAsync();
-        var host = new SessionTurnHost(new SlowOrchestrator(TimeSpan.FromSeconds(2)), new NoOpStorage());
+        var host = CreateHost(new SlowOrchestrator(TimeSpan.FromSeconds(2)));
         var session = AgentSession.Create("same");
 
         Assert.True(TryStart(host, dispatcher, session, out _));
@@ -41,7 +41,7 @@ public sealed class SessionTurnHostTests
     public async Task Cancel_OnlyStopsTargetSession()
     {
         var dispatcher = await StartStaDispatcherAsync();
-        var host = new SessionTurnHost(new SlowOrchestrator(TimeSpan.FromSeconds(5)), new NoOpStorage());
+        var host = CreateHost(new SlowOrchestrator(TimeSpan.FromSeconds(5)));
         var sessionA = AgentSession.Create("a");
         var sessionB = AgentSession.Create("b");
 
@@ -59,6 +59,9 @@ public sealed class SessionTurnHostTests
         host.CancelAll();
         await Task.Delay(200);
     }
+
+    private static SessionTurnHost CreateHost(IAgentOrchestrator orchestrator) =>
+        new(orchestrator, new NoOpStorage(), new AppSettings());
 
     private static bool TryStart(SessionTurnHost host, Dispatcher dispatcher, AgentSession session, out string? error)
     {

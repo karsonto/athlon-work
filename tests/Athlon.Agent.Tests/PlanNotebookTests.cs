@@ -79,6 +79,41 @@ public sealed class PlanNotebookTests
     }
 
     [Fact]
+    public void Clear_RemovesMemoryPlanAndDeletesPlanMd()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-plan-clear", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            using var _ = SessionWorkspaceScope.Enter(root);
+            var settings = new AppSettings
+            {
+                Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = root } }
+            };
+            var notebook = new PlanNotebook(settings, CreateWorkspaceGuard(settings));
+            notebook.CreatePlan(
+                "s1",
+                new CreatePlanRequest("Demo", "D", "O", [new SubTaskInput("Step", null, null)]));
+
+            var planPath = Path.Combine(root, "plan.md");
+            Assert.True(File.Exists(planPath));
+
+            notebook.Clear("s1");
+
+            Assert.Null(notebook.GetCurrent("s1"));
+            Assert.False(File.Exists(planPath));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
     public void CreatePlan_SyncsPlanMd_WhenWorkspaceConfigured()
     {
         var root = Path.Combine(Path.GetTempPath(), "athlon-plan-ws", Guid.NewGuid().ToString("N"));

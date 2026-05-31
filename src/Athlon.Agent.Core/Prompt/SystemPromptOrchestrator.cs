@@ -65,7 +65,9 @@ public sealed class SystemPromptOrchestrator(
             Tools = tools,
             SkillsDirectory = host.SkillsDirectory,
             Host = host,
-            PromptSettings = settings.Prompt
+            PromptSettings = settings.Prompt,
+            PlanAutoContinueEnabled = settings.Plan.AutoContinueEnabled,
+            PlanMaxSubtasks = settings.Plan.MaxSubtasks
         };
     }
 

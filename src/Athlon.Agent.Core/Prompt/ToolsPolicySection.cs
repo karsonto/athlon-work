@@ -22,7 +22,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
         builder.AppendLine(
             "Native tools are provided via function calling (including create_plan, finish_subtask, get_plan for multi-step work); "
-            + "use each tool's schema. Do not guess file contents.");
+            + "long tasks require create_plan with granular subtasks. Use each tool's schema. Do not guess file contents.");
 
         builder.AppendLine();
 

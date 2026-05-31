@@ -43,7 +43,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAppLogger>(logger);
         services.AddSingleton<IFileStorageService, FileStorageService>();
         services.AddHttpClient<IAgentModelClient, OpenAiCompatibleChatModelClient>(
-            static client => client.Timeout = TimeSpan.FromMinutes(10));
+            static client => client.Timeout = TimeSpan.FromMinutes(AgentTurnSettingsExtensions.MaxTimeoutMinutes));
         services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
         services.AddSingleton<IAgentRuntime, AgentRuntime>();
         services.AddSingleton<IImageAttachmentReader, ImageAttachmentReader>();
