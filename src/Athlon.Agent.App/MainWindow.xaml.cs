@@ -26,6 +26,7 @@ public partial class MainWindow : Window
         _viewModel.ContextSidebarLayoutChanged += (_, _) => Dispatcher.Invoke(ApplyContextSidebarLayout);
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         Loaded += OnMainWindowLoaded;
+        Closing += OnMainWindowClosing;
         StateChanged += (_, _) => UpdateMaximizeRestoreButton();
         UpdateMaximizeRestoreButton();
         App.StartupTrace("MainWindow DataContext assigned");
@@ -35,7 +36,18 @@ public partial class MainWindow : Window
     {
         ApplyNavigationSidebarLayout();
         ApplyContextSidebarLayout();
+        ApplyEditorPaneLayout();
         ScrollChatToEnd();
+    }
+
+    private void OnMainWindowClosing(object? sender, CancelEventArgs e)
+    {
+        if (_viewModel.ConfirmCloseEditorTabs())
+        {
+            return;
+        }
+
+        e.Cancel = true;
     }
 
     private void ApplyNavigationSidebarLayout()
@@ -69,6 +81,49 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(MainWindowViewModel.HasChatMessages))
         {
             Dispatcher.Invoke(ApplyContextSidebarLayout);
+        }
+
+        if (e.PropertyName == nameof(MainWindowViewModel.HasOpenEditorTabs))
+        {
+            Dispatcher.Invoke(ApplyEditorPaneLayout);
+        }
+    }
+
+    private void ApplyEditorPaneLayout()
+    {
+        if (EditorPaneColumn is null || EditorPaneHost is null || EditorChatSplitter is null)
+        {
+            return;
+        }
+
+        if (!_viewModel.HasOpenEditorTabs)
+        {
+            EditorPaneColumn.MinWidth = 0;
+            EditorPaneColumn.MaxWidth = double.PositiveInfinity;
+            EditorPaneColumn.Width = new GridLength(0);
+            EditorPaneHost.Visibility = Visibility.Collapsed;
+            EditorChatSplitter.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        EditorPaneColumn.MinWidth = MainWindowViewModel.EditorPaneMinWidth;
+        EditorPaneColumn.MaxWidth = MainWindowViewModel.EditorPaneMaxWidth;
+        EditorPaneColumn.Width = new GridLength(_viewModel.EditorPaneWidth);
+        EditorPaneHost.Visibility = Visibility.Visible;
+        EditorChatSplitter.Visibility = Visibility.Visible;
+    }
+
+    private void EditorChatSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        if (EditorPaneColumn is null || !_viewModel.HasOpenEditorTabs)
+        {
+            return;
+        }
+
+        var width = EditorPaneColumn.ActualWidth;
+        if (width >= MainWindowViewModel.EditorPaneMinWidth)
+        {
+            _viewModel.UpdateEditorPaneWidth(width);
         }
     }
 
@@ -321,7 +376,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        _viewModel.OpenWorkspaceFile(node.FullPath);
+        if (_viewModel.OpenWorkspaceTreeNodeInEditorCommand.CanExecute(node))
+        {
+            _viewModel.OpenWorkspaceTreeNodeInEditorCommand.Execute(node);
+        }
+
         e.Handled = true;
     }
 

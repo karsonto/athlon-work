@@ -2,7 +2,9 @@
 using System.Windows;
 using Athlon.Agent.App.Licensing;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
+using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +19,7 @@ public partial class App : Application
     {
         StartupTrace("OnStartup entered");
         base.OnStartup(e);
+        AppThemeManager.Apply(AppThemeKind.Dark);
         // License activation runs before MainWindow exists; default OnLastWindowClose would
         // shut down the app when the modal dialog closes.
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
@@ -41,6 +44,10 @@ public partial class App : Application
             services.AddSingleton<MainWindow>();
             _services = services.BuildServiceProvider();
             StartupTrace("ServiceProvider built");
+
+            var settings = _services.GetRequiredService<AppSettings>();
+            AppThemeManager.ApplyFromSettings(settings.Ui);
+            StartupTrace($"Theme applied: {AppThemeManager.CurrentKind}");
 
             MainWindow = _services.GetRequiredService<MainWindow>();
             StartupTrace("MainWindow resolved");

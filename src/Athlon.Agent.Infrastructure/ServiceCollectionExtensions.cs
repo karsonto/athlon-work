@@ -53,6 +53,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IActiveAgentSessionContext, ActiveAgentSessionContext>();
         services.AddSingleton<ISessionHttpLogService, SessionHttpLogService>();
         services.AddSingleton<WorkspaceGuard>();
+        services.AddSingleton<WorkspaceFileEditorService>();
         services.AddSingleton<AuditLogService>();
         services.AddSingleton<IAgentTool, FileListTool>();
         services.AddSingleton<IAgentTool, FileReadTool>();

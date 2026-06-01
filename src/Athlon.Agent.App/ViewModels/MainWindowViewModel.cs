@@ -48,6 +48,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SessionUiCache uiCache,
         IPlanNotebook planNotebook,
         PlanAutoContinueTracker planAutoContinueTracker,
+        WorkspaceFileEditorService workspaceFileEditorService,
         AppSettings settings)
     {
         _storage = storage;
@@ -70,6 +71,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
+        FileEditor = new FileEditorViewModel(workspaceFileEditorService);
+        FileEditor.Tabs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasOpenEditorTabs));
+        FileEditor.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(FileEditorViewModel.ActiveDocument) or nameof(FileEditorViewModel.HasOpenTabs))
+            {
+                OnPropertyChanged(nameof(HasOpenEditorTabs));
+            }
+        };
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
         _appSettings.Ui.ContextSidebarWidth = Math.Clamp(
             _appSettings.Ui.ContextSidebarWidth,
@@ -87,6 +97,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (_appSettings.Ui.NavigationSidebarWidth < NavigationSidebarMinWidth)
         {
             _appSettings.Ui.NavigationSidebarWidth = NavigationSidebarDefaultWidth;
+        }
+
+        _appSettings.Ui.EditorPaneWidth = Math.Clamp(
+            _appSettings.Ui.EditorPaneWidth,
+            EditorPaneMinWidth,
+            EditorPaneMaxWidth);
+        if (_appSettings.Ui.EditorPaneWidth < EditorPaneMinWidth)
+        {
+            _appSettings.Ui.EditorPaneWidth = EditorPaneDefaultWidth;
         }
 
         ApplySessionWorkspace();
@@ -127,6 +146,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public bool HasQueuedTurns => QueuedTurns.Count > 0;
     public ContextSidebarViewModel Sidebar { get; }
     public SettingsViewModel Settings { get; }
+    public FileEditorViewModel FileEditor { get; }
+
+    public bool HasOpenEditorTabs => FileEditor.HasOpenTabs;
 
     public const double ContextSidebarMinWidth = 220;
     public const double ContextSidebarMaxWidth = 560;
@@ -135,6 +157,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public const double NavigationSidebarMinWidth = 180;
     public const double NavigationSidebarMaxWidth = 480;
     public const double NavigationSidebarDefaultWidth = 220;
+
+    public const double EditorPaneMinWidth = 280;
+    public const double EditorPaneMaxWidth = 1200;
+    public const double EditorPaneDefaultWidth = 480;
+
+    public double EditorPaneWidth =>
+        Math.Clamp(_appSettings.Ui.EditorPaneWidth, EditorPaneMinWidth, EditorPaneMaxWidth);
 
     public event EventHandler? ContextSidebarLayoutChanged;
 
@@ -493,7 +522,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             var queueId = Guid.NewGuid().ToString("N");
             _turnHost.Enqueue(new QueuedTurnPayload(queueId, _displayedSessionId, input, imageAttachments, ui));
             GetQueuedTurnsFor(_displayedSessionId).Add(
-                new QueuedTurnViewModel(queueId, QueuedTurnViewModel.BuildPreview(input), imageAttachments.Length));
+                QueuedTurnViewModel.Create(queueId, input, imageAttachments));
             NotifyQueuedTurnsChanged();
             SettingsStatus = "已加入排队";
             NotifyCommandStatesChanged();
@@ -609,7 +638,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _turnHost.RequeueFront(payload);
         GetQueuedTurnsFor(e.SessionId).Insert(
             0,
-            new QueuedTurnViewModel(payload.QueueId, QueuedTurnViewModel.BuildPreview(payload.UserInput), payload.ImageAttachments.Count));
+            QueuedTurnViewModel.Create(payload.QueueId, payload.UserInput, payload.ImageAttachments));
         NotifyQueuedTurnsChanged();
         if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
         {
@@ -753,17 +782,54 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SettingsStatus = $"Saved at {DateTime.Now:HH:mm:ss}";
     }
 
-    public void OpenWorkspaceFile(string path)
+    public Task OpenWorkspaceFileInEditorAsync(string path) =>
+        FileEditor.OpenFileAsync(path, _session.ActiveWorkspace);
+
+    [RelayCommand(CanExecute = nameof(CanOpenWorkspaceTreeNodeInEditor))]
+    private async Task OpenWorkspaceTreeNodeInEditorAsync(WorkspaceTreeNodeViewModel? node)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        if (!CanOpenWorkspaceTreeNodeInEditor(node) || node is null || string.IsNullOrWhiteSpace(node.FullPath))
         {
             return;
         }
 
-        Process.Start(new ProcessStartInfo(path)
+        await OpenWorkspaceFileInEditorAsync(node.FullPath).ConfigureAwait(true);
+    }
+
+    private bool CanOpenWorkspaceTreeNodeInEditor(WorkspaceTreeNodeViewModel? node) =>
+        node is not null
+        && !node.IsPlaceholder
+        && !node.IsExpanderPlaceholder
+        && !node.IsDirectory
+        && !string.IsNullOrWhiteSpace(node.FullPath);
+
+    [RelayCommand]
+    private async Task SaveActiveEditorAsync()
+    {
+        if (FileEditor.ActiveDocument is null)
         {
-            UseShellExecute = true
-        });
+            return;
+        }
+
+        await FileEditor.SaveDocumentAsync(FileEditor.ActiveDocument).ConfigureAwait(true);
+    }
+
+    [RelayCommand]
+    private void CloseEditorTab(EditorDocumentViewModel? document) =>
+        FileEditor.CloseTabCommand.Execute(document);
+
+    public bool ConfirmCloseEditorTabs() => FileEditor.TryCloseAllTabs();
+
+    public void UpdateEditorPaneWidth(double width)
+    {
+        var clamped = Math.Clamp(width, EditorPaneMinWidth, EditorPaneMaxWidth);
+        if (Math.Abs(_appSettings.Ui.EditorPaneWidth - clamped) < 0.5)
+        {
+            return;
+        }
+
+        _appSettings.Ui.EditorPaneWidth = clamped;
+        SchedulePersistUiLayout();
     }
 
     [RelayCommand(CanExecute = nameof(CanDeleteWorkspaceItem))]
@@ -1154,6 +1220,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         Application.Current.Dispatcher.InvokeAsync(() =>
         {
+            if (!string.IsNullOrWhiteSpace(e.FullPath))
+            {
+                FileEditor.HandleExternalFileChange(e.FullPath);
+            }
+
             RefreshAtCompletionSources();
             Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
         });
@@ -1378,4 +1449,6 @@ public sealed class PendingImageAttachmentViewModel(ImageAttachment attachment)
     public string FileName => attachment.FileName;
     public string MimeType => attachment.MimeType;
     public string DataUrl => attachment.DataUrl;
+    public System.Windows.Media.ImageSource? Thumbnail =>
+        Services.ImageAttachmentUi.TryCreateThumbnail(attachment.DataUrl);
 }

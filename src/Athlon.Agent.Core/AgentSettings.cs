@@ -122,4 +122,5 @@ public sealed class UiSettings
     public bool ContextSidebarVisible { get; set; } = true;
     public double ContextSidebarWidth { get; set; } = 300;
     public double NavigationSidebarWidth { get; set; } = 220;
+    public double EditorPaneWidth { get; set; } = 480;
 }

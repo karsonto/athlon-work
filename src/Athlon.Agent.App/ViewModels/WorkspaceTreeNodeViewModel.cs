@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using Athlon.Agent.App.Services;
 
 namespace Athlon.Agent.App.ViewModels;
 
@@ -14,7 +15,7 @@ public sealed class WorkspaceTreeNodeViewModel
         IsDirectory = isDirectory;
         IsPlaceholder = isPlaceholder;
         IsExpanderPlaceholder = isExpanderPlaceholder;
-        Icon = isPlaceholder && !isExpanderPlaceholder ? "○" : isDirectory ? "📁" : "📄";
+        IconKind = WorkspaceFileIconResolver.Resolve(name, fullPath, isDirectory, isPlaceholder && !isExpanderPlaceholder);
         Children = new ObservableCollection<WorkspaceTreeNodeViewModel>();
     }
 
@@ -23,7 +24,7 @@ public sealed class WorkspaceTreeNodeViewModel
     public bool IsDirectory { get; }
     public bool IsPlaceholder { get; }
     public bool IsExpanderPlaceholder { get; }
-    public string Icon { get; }
+    public WorkspaceFileIconKind IconKind { get; }
     public bool IsExpanded { get; set; }
     public ObservableCollection<WorkspaceTreeNodeViewModel> Children { get; }
 

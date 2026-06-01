@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:app="clr-namespace:Athlon.Agent.App"
         xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
@@ -19,6 +20,7 @@
         WindowStartupLocation="CenterScreen">
     <Window.InputBindings>
         <KeyBinding Key="B" Modifiers="Control+Alt" Command="{Binding ToggleContextSidebarCommand}" />
+        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveActiveEditorCommand}" />
     </Window.InputBindings>
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0"
@@ -178,13 +180,21 @@
                                                                FontSize="12"
                                                                TextWrapping="Wrap"
                                                                TextTrimming="CharacterEllipsis"
-                                                               MaxHeight="40" />
-                                                    <TextBlock Text="{Binding ImageCount, StringFormat='📎 {0} 张图片'}"
-                                                               FontSize="10"
-                                                               Foreground="{StaticResource Brush.SubtleText}"
-                                                               Margin="0,4,0,0">
+                                                               MaxHeight="40">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding PreviewText}" Value="">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                    <ItemsControl ItemsSource="{Binding ImageItems}"
+                                                                  Margin="0,6,0,0">
+                                                        <ItemsControl.Style>
+                                                            <Style TargetType="ItemsControl">
                                                                 <Setter Property="Visibility" Value="Collapsed" />
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding HasImages}" Value="True">
@@ -192,8 +202,51 @@
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
+                                                        </ItemsControl.Style>
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <StackPanel Orientation="Horizontal" />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate DataType="{x:Type vm:QueuedTurnImageViewModel}">
+                                                                <Border Width="44"
+                                                                        Height="44"
+                                                                        CornerRadius="8"
+                                                                        BorderBrush="{StaticResource Brush.Border}"
+                                                                        BorderThickness="1"
+                                                                        Background="{StaticResource Brush.PanelAlt}"
+                                                                        Margin="0,0,6,0"
+                                                                        ToolTip="{Binding FileName}">
+                                                                    <Grid>
+                                                                        <Image Source="{Binding Thumbnail}"
+                                                                               Stretch="UniformToFill"
+                                                                               Margin="2" />
+                                                                        <TextBlock Text="{Binding FileName}"
+                                                                                   FontSize="8"
+                                                                                   TextTrimming="CharacterEllipsis"
+                                                                                   MaxWidth="40"
+                                                                                   HorizontalAlignment="Center"
+                                                                                   VerticalAlignment="Bottom"
+                                                                                   Margin="2"
+                                                                                   Foreground="{StaticResource Brush.SubtleText}"
+                                                                                   TextAlignment="Center">
+                                                                            <TextBlock.Style>
+                                                                                <Style TargetType="TextBlock">
+                                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                                    <Style.Triggers>
+                                                                                        <DataTrigger Binding="{Binding Thumbnail}" Value="{x:Null}">
+                                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                                        </DataTrigger>
+                                                                                    </Style.Triggers>
+                                                                                </Style>
+                                                                            </TextBlock.Style>
+                                                                        </TextBlock>
+                                                                    </Grid>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
                                                 </StackPanel>
                                                 <Button Grid.Column="1"
                                                         Content="×"
@@ -452,10 +505,6 @@
 
         <!-- Main column: chat / settings + composer + footer -->
         <Grid Grid.Row="1" Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
 
             <!-- Chat -->
             <Grid Grid.Row="0"
@@ -471,31 +520,88 @@
                         </Style.Triggers>
                     </Style>
                 </Grid.Style>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="EditorPaneColumn" Width="0" MinWidth="0" MaxWidth="1200" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border x:Name="EditorPaneHost"
+                        Grid.Column="0"
+                        Background="{StaticResource Brush.AppBackground}"
+                        BorderThickness="0"
+                        Visibility="Collapsed">
+                    <controls:FileEditorView DataContext="{Binding FileEditor}" />
+                </Border>
+
+                <GridSplitter x:Name="EditorChatSplitter"
+                              Grid.Column="0"
+                              Width="8"
+                              HorizontalAlignment="Right"
+                              VerticalAlignment="Stretch"
+                              ResizeDirection="Columns"
+                              ResizeBehavior="CurrentAndNext"
+                              ShowsPreview="False"
+                              Background="#01FFFFFF"
+                              Cursor="SizeWE"
+                              Panel.ZIndex="2"
+                              Visibility="Collapsed"
+                              DragCompleted="EditorChatSplitter_OnDragCompleted">
+                    <GridSplitter.Style>
+                        <Style TargetType="GridSplitter">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="GridSplitter">
+                                        <Border x:Name="Track"
+                                                Background="Transparent"
+                                                Width="8"
+                                                HorizontalAlignment="Stretch">
+                                            <Border x:Name="Line"
+                                                    Width="1"
+                                                    HorizontalAlignment="Right"
+                                                    Background="{StaticResource Brush.Border}"
+                                                    Opacity="0.6" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Line" Property="Background" Value="{StaticResource Brush.Accent}" />
+                                                <Setter TargetName="Line" Property="Opacity" Value="1" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </GridSplitter.Style>
+                </GridSplitter>
+
+                <Grid Grid.Column="1" ClipToBounds="True">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Session toolbar -->
+                <!-- Session toolbar (height matches FileEditorView tab strip) -->
                 <Border Grid.Row="0"
+                        Height="{x:Static app:AppLayoutMetrics.SplitPaneHeaderHeight}"
                         Background="{StaticResource Brush.Chrome}"
                         BorderBrush="{StaticResource Brush.Border}"
                         BorderThickness="0,0,0,1">
                     <Border.Style>
                         <Style TargetType="Border">
                             <Setter Property="Visibility" Value="Collapsed" />
-                            <Setter Property="Padding" Value="20,10,28,10" />
+                            <Setter Property="Padding" Value="20,0,28,0" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding HasChatMessages}" Value="True">
                                     <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsContextSidebarVisible}" Value="False">
-                                    <Setter Property="Padding" Value="20,10,20,10" />
+                                    <Setter Property="Padding" Value="20,0,20,0" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </Border.Style>
-                    <Grid>
+                    <Grid VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
@@ -967,6 +1073,271 @@
                     </ItemsControl>
                 </ScrollViewer>
                 </Grid>
+
+            <!-- Composer (report/html Composer hero/dock) -->
+            <Border Grid.Row="2"
+                    Panel.ZIndex="20"
+                    Background="{StaticResource Brush.Chrome}"
+                    BorderBrush="{StaticResource Brush.Border}"
+                    BorderThickness="0,1,0,0"
+                    Padding="20,16"
+                    ClipToBounds="True">
+                <Border MaxWidth="900"
+                        HorizontalAlignment="Stretch"
+                        Background="{StaticResource Brush.Composer}"
+                        BorderBrush="{StaticResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="28"
+                        Padding="16,14">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" MinHeight="56" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <ScrollViewer Grid.Row="0"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Disabled"
+                                          Margin="0,0,0,6">
+                                <ScrollViewer.Style>
+                                    <Style TargetType="ScrollViewer">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasPendingImages}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ScrollViewer.Style>
+                                <ItemsControl ItemsSource="{Binding PendingImageAttachments}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource Brush.PanelAlt}"
+                                                    BorderBrush="{StaticResource Brush.Border}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="12"
+                                                    Margin="0,0,8,0"
+                                                    Padding="6,4">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0"
+                                                            Width="40"
+                                                            Height="40"
+                                                            CornerRadius="8"
+                                                            BorderBrush="{StaticResource Brush.Border}"
+                                                            BorderThickness="1"
+                                                            Background="{StaticResource Brush.Panel}"
+                                                            Margin="0,0,8,0">
+                                                        <Grid>
+                                                            <Image Source="{Binding Thumbnail}"
+                                                                   Stretch="UniformToFill"
+                                                                   Margin="2" />
+                                                            <TextBlock Text="{Binding FileName}"
+                                                                       FontSize="8"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       MaxWidth="36"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"
+                                                                       Foreground="{StaticResource Brush.SubtleText}"
+                                                                       TextAlignment="Center">
+                                                                <TextBlock.Style>
+                                                                    <Style TargetType="TextBlock">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                        <Style.Triggers>
+                                                                            <DataTrigger Binding="{Binding Thumbnail}" Value="{x:Null}">
+                                                                                <Setter Property="Visibility" Value="Visible" />
+                                                                            </DataTrigger>
+                                                                        </Style.Triggers>
+                                                                    </Style>
+                                                                </TextBlock.Style>
+                                                            </TextBlock>
+                                                        </Grid>
+                                                    </Border>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding FileName}"
+                                                               FontSize="12"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               MaxWidth="180"
+                                                               VerticalAlignment="Center" />
+                                                    <Button Grid.Column="2"
+                                                            Content="×"
+                                                            Command="{Binding DataContext.RemovePendingImageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"
+                                                            Background="Transparent"
+                                                            BorderThickness="0"
+                                                            Foreground="{StaticResource Brush.SubtleText}"
+                                                            FontSize="12"
+                                                            Padding="4,0,0,0"
+                                                            Margin="6,0,0,0"
+                                                            Cursor="Hand"
+                                                            VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                            <TextBox x:Name="ComposerTextBox"
+                                     Grid.Row="1"
+                                     Text="{Binding ComposerText, UpdateSourceTrigger=PropertyChanged}"
+                                     MinHeight="56"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     FontSize="15"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     TextChanged="ComposerTextBox_OnTextChanged"
+                                     PreviewKeyDown="ComposerTextBox_OnPreviewKeyDown" />
+                            <TextBlock Text="Message Athlon — @ 文件 / 技能，Enter 发送"
+                                       Grid.Row="1"
+                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       Margin="4,14,0,0"
+                                       IsHitTestVisible="False"
+                                       FontSize="15">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsComposerEmpty}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                        <Popup IsOpen="{Binding IsAtCompletionOpen}"
+                               PlacementTarget="{Binding ElementName=ComposerTextBox}"
+                               Placement="Top"
+                               StaysOpen="False"
+                               AllowsTransparency="True">
+                            <Border Background="{StaticResource Brush.Panel}"
+                                    BorderBrush="{StaticResource Brush.Border}"
+                                    BorderThickness="1"
+                                    CornerRadius="10"
+                                    Padding="6"
+                                    MinWidth="340"
+                                    MaxWidth="560"
+                                    MaxHeight="240">
+                                <ListBox x:Name="AtCompletionListBox"
+                                         ItemsSource="{Binding AtCompletionItems}"
+                                         SelectedIndex="{Binding SelectedAtCompletionIndex}"
+                                         MouseDoubleClick="AtCompletionListBox_OnMouseDoubleClick"
+                                         BorderThickness="0"
+                                         Background="Transparent"
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="2,4">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0"
+                                                        BorderThickness="1"
+                                                        CornerRadius="8"
+                                                        Padding="6,2"
+                                                        Margin="0,0,8,0">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="{StaticResource Brush.AtCompletionFileBadgeBg}" />
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.AtCompletionFileBadgeBorder}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Type}" Value="技能">
+                                                                    <Setter Property="Background" Value="{StaticResource Brush.AtCompletionSkillBadgeBg}" />
+                                                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.AtCompletionSkillBadgeBorder}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock Text="{Binding Type}" FontSize="11">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{StaticResource Brush.AtCompletionFileBadgeText}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Type}" Value="技能">
+                                                                        <Setter Property="Foreground" Value="{StaticResource Brush.AtCompletionSkillBadgeText}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Border>
+                                                <StackPanel Grid.Column="1">
+                                                    <TextBlock Text="{Binding PrimaryText}" FontSize="13" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding SecondaryText}"
+                                                               FontSize="11"
+                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Border>
+                        </Popup>
+                        <Grid Grid.Row="1" Margin="0,12,0,0">
+                            <Button Command="{Binding SelectImagesCommand}"
+                                    Style="{StaticResource ComposerIconButtonStyle}"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Width="24"
+                                    Height="24"
+                                    FontSize="18"
+                                    FontWeight="SemiBold"
+                                    ToolTip="上传图片"
+                                    Foreground="{StaticResource Brush.SubtleText}">
+                                <TextBlock Text="+"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Margin="0,-2,0,0" />
+                            </Button>
+                            <TextBlock Text="Enter 发送 · Shift+Enter 换行"
+                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       FontSize="12"
+                                       Margin="34,0,0,0"
+                                       VerticalAlignment="Center" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Command="{Binding StopCommand}"
+                                        ToolTip="暂停当前回复"
+                                        Margin="0,0,8,0">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource DangerCircleButtonStyle}">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                    <TextBlock Text="■" FontSize="12" />
+                                </Button>
+                                <Button Command="{Binding SendCommand}"
+                                        ToolTip="发送（生成中将加入排队）"
+                                        Style="{StaticResource PrimaryCircleButtonStyle}">
+                                    <TextBlock Text="➤" FontSize="14" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+            </Border>
+                </Grid>
             </Grid>
 
             <!-- Settings -->
@@ -1197,245 +1568,6 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <!-- Composer (report/html Composer hero/dock) -->
-            <Border Grid.Row="1"
-                    Panel.ZIndex="20"
-                    Background="{StaticResource Brush.Chrome}"
-                    BorderBrush="{StaticResource Brush.Border}"
-                    BorderThickness="0,1,0,0"
-                    Padding="20,16"
-                    ClipToBounds="True">
-                <Border.Style>
-                    <Style TargetType="Border">
-                        <Setter Property="Visibility" Value="Collapsed" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsChatPage}" Value="True">
-                                <Setter Property="Visibility" Value="Visible" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Border.Style>
-                <Border MaxWidth="900"
-                        HorizontalAlignment="Stretch"
-                        Background="{StaticResource Brush.Composer}"
-                        BorderBrush="{StaticResource Brush.Border}"
-                        BorderThickness="1"
-                        CornerRadius="28"
-                        Padding="16,14">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*" MinHeight="56" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-                            <ScrollViewer Grid.Row="0"
-                                          HorizontalScrollBarVisibility="Auto"
-                                          VerticalScrollBarVisibility="Disabled"
-                                          Margin="0,0,0,6">
-                                <ScrollViewer.Style>
-                                    <Style TargetType="ScrollViewer">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding HasPendingImages}" Value="True">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </ScrollViewer.Style>
-                                <ItemsControl ItemsSource="{Binding PendingImageAttachments}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel Orientation="Horizontal" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Background="{StaticResource Brush.PanelAlt}"
-                                                    BorderBrush="{StaticResource Brush.Border}"
-                                                    BorderThickness="1"
-                                                    CornerRadius="12"
-                                                    Margin="0,0,8,0"
-                                                    Padding="10,4">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="Auto" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBlock Text="{Binding FileName}"
-                                                               FontSize="12"
-                                                               TextTrimming="CharacterEllipsis"
-                                                               MaxWidth="220"
-                                                               VerticalAlignment="Center" />
-                                                    <Button Grid.Column="1"
-                                                            Content="×"
-                                                            Command="{Binding DataContext.RemovePendingImageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding}"
-                                                            Background="Transparent"
-                                                            BorderThickness="0"
-                                                            Foreground="{StaticResource Brush.SubtleText}"
-                                                            FontSize="12"
-                                                            Padding="4,0,0,0"
-                                                            Margin="6,0,0,0"
-                                                            Cursor="Hand"
-                                                            VerticalAlignment="Center" />
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                            <TextBox x:Name="ComposerTextBox"
-                                     Grid.Row="1"
-                                     Text="{Binding ComposerText, UpdateSourceTrigger=PropertyChanged}"
-                                     MinHeight="56"
-                                     BorderThickness="0"
-                                     Background="Transparent"
-                                     FontSize="15"
-                                     AcceptsReturn="True"
-                                     TextWrapping="Wrap"
-                                     VerticalScrollBarVisibility="Auto"
-                                     TextChanged="ComposerTextBox_OnTextChanged"
-                                     PreviewKeyDown="ComposerTextBox_OnPreviewKeyDown" />
-                            <TextBlock Text="Message Athlon — @ 文件 / 技能，Enter 发送"
-                                       Grid.Row="1"
-                                       Foreground="{StaticResource Brush.SubtleText}"
-                                       Margin="4,14,0,0"
-                                       IsHitTestVisible="False"
-                                       FontSize="15">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsComposerEmpty}" Value="True">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Grid>
-                        <Popup IsOpen="{Binding IsAtCompletionOpen}"
-                               PlacementTarget="{Binding ElementName=ComposerTextBox}"
-                               Placement="Top"
-                               StaysOpen="False"
-                               AllowsTransparency="True">
-                            <Border Background="{StaticResource Brush.Panel}"
-                                    BorderBrush="{StaticResource Brush.Border}"
-                                    BorderThickness="1"
-                                    CornerRadius="10"
-                                    Padding="6"
-                                    MinWidth="340"
-                                    MaxWidth="560"
-                                    MaxHeight="240">
-                                <ListBox x:Name="AtCompletionListBox"
-                                         ItemsSource="{Binding AtCompletionItems}"
-                                         SelectedIndex="{Binding SelectedAtCompletionIndex}"
-                                         MouseDoubleClick="AtCompletionListBox_OnMouseDoubleClick"
-                                         BorderThickness="0"
-                                         Background="Transparent"
-                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="2,4">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0"
-                                                        BorderThickness="1"
-                                                        CornerRadius="8"
-                                                        Padding="6,2"
-                                                        Margin="0,0,8,0">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{StaticResource Brush.AtCompletionFileBadgeBg}" />
-                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.AtCompletionFileBadgeBorder}" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Type}" Value="技能">
-                                                                    <Setter Property="Background" Value="{StaticResource Brush.AtCompletionSkillBadgeBg}" />
-                                                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.AtCompletionSkillBadgeBorder}" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <TextBlock Text="{Binding Type}" FontSize="11">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="{StaticResource Brush.AtCompletionFileBadgeText}" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding Type}" Value="技能">
-                                                                        <Setter Property="Foreground" Value="{StaticResource Brush.AtCompletionSkillBadgeText}" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </Border>
-                                                <StackPanel Grid.Column="1">
-                                                    <TextBlock Text="{Binding PrimaryText}" FontSize="13" FontWeight="SemiBold" />
-                                                    <TextBlock Text="{Binding SecondaryText}"
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource Brush.SubtleText}"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                            </Border>
-                        </Popup>
-                        <Grid Grid.Row="1" Margin="0,12,0,0">
-                            <Button Command="{Binding SelectImagesCommand}"
-                                    Style="{StaticResource ComposerIconButtonStyle}"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    Width="24"
-                                    Height="24"
-                                    FontSize="18"
-                                    FontWeight="SemiBold"
-                                    ToolTip="上传图片"
-                                    Foreground="{StaticResource Brush.SubtleText}">
-                                <TextBlock Text="+"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           Margin="0,-2,0,0" />
-                            </Button>
-                            <TextBlock Text="Enter 发送 · Shift+Enter 换行"
-                                       Foreground="{StaticResource Brush.SubtleText}"
-                                       FontSize="12"
-                                       Margin="34,0,0,0"
-                                       VerticalAlignment="Center" />
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                                <Button Command="{Binding StopCommand}"
-                                        ToolTip="暂停当前回复"
-                                        Margin="0,0,8,0">
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource DangerCircleButtonStyle}">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsBusy}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                    <TextBlock Text="■" FontSize="12" />
-                                </Button>
-                                <Button Command="{Binding SendCommand}"
-                                        ToolTip="发送（生成中将加入排队）"
-                                        Style="{StaticResource PrimaryCircleButtonStyle}">
-                                    <TextBlock Text="➤" FontSize="14" />
-                                </Button>
-                            </StackPanel>
-                        </Grid>
-                    </Grid>
-                </Border>
-            </Border>
-
         </Grid>
 
         <!-- 底部状态栏（主区域右侧） -->
@@ -1640,6 +1772,10 @@
                                     <Setter Property="ContextMenu">
                                         <Setter.Value>
                                             <ContextMenu Style="{StaticResource MarkdownContextMenuStyle}">
+                                                <MenuItem Header="在编辑器中打开"
+                                                          Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                                          Command="{Binding DataContext.OpenWorkspaceTreeNodeInEditorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                                 <MenuItem Header="删除"
                                                           Style="{StaticResource MarkdownContextMenuItemStyle}"
                                                           Command="{Binding DataContext.DeleteWorkspaceItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -1658,7 +1794,8 @@
                             <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="{Binding Icon}" Margin="0,0,6,0" />
+                                        <controls:WorkspaceFileIcon Kind="{Binding IconKind}"
+                                                                    Margin="0,0,6,0" />
                                         <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </HierarchicalDataTemplate>
