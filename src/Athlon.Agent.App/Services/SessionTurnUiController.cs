@@ -84,8 +84,45 @@ public sealed class SessionTurnUiController
         });
     }
 
+    public SessionTurnEndSnapshot CaptureEndSnapshot(
+        AgentSession session,
+        bool wasCancelled,
+        bool timedOut,
+        string? errorMessage)
+    {
+        SessionTurnEndSnapshot? snapshot = null;
+        RunOnUiSync(() =>
+        {
+            FlushStreamingTokens();
+            FlushStreamingToolDeltas();
+
+            var assistantContent = _streamingAssistantMessage?.Content;
+            if (_streamingTokenBuffer.Length > 0)
+            {
+                assistantContent = (assistantContent ?? string.Empty) + _streamingTokenBuffer;
+            }
+
+            var assistantReasoning = _streamingAssistantMessage?.ReasoningContent;
+            if (_streamingReasoningBuffer.Length > 0)
+            {
+                assistantReasoning = (assistantReasoning ?? string.Empty) + _streamingReasoningBuffer;
+            }
+
+            snapshot = new SessionTurnEndSnapshot(
+                string.IsNullOrWhiteSpace(assistantContent) ? null : assistantContent,
+                string.IsNullOrWhiteSpace(assistantReasoning) ? null : assistantReasoning,
+                CollectIncompleteToolCalls(session),
+                wasCancelled,
+                timedOut,
+                errorMessage);
+        });
+
+        return snapshot!;
+    }
+
     public void FinalizeTurn(
         AgentSession session,
+        IReadOnlyList<ChatMessage> persistedTurnMessages,
         bool cancelled,
         bool timedOut,
         int turnTimeoutMinutes,
@@ -118,11 +155,6 @@ public sealed class SessionTurnUiController
                 {
                     message.MarkStreamingToolCancelled();
                 }
-
-                var notice = timedOut
-                    ? $"本回合已超过 {turnTimeoutMinutes} 分钟，已自动停止。"
-                    : "生成已停止。";
-                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, notice)));
             }
             else if (!string.IsNullOrWhiteSpace(errorMessage))
             {
@@ -131,13 +163,12 @@ public sealed class SessionTurnUiController
                 {
                     message.MarkStreamingToolCancelled();
                 }
-
-                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, errorMessage)));
             }
 
             _streamingAssistantMessage = null;
             _streamingToolMessagesByIndex.Clear();
             ReconcilePendingToolsFromSession(session);
+            ApplyPersistedTurnMessages(persistedTurnMessages, timedOut, turnTimeoutMinutes, errorMessage);
         });
     }
 
@@ -442,6 +473,105 @@ public sealed class SessionTurnUiController
                 _streamingToolMessagesByIndex.Remove(entry.Key);
                 break;
             }
+        }
+    }
+
+    private IReadOnlyList<AgentToolCall> CollectIncompleteToolCalls(AgentSession session)
+    {
+        var answered = BuildAnsweredToolCallIds(session.Messages);
+        var incomplete = new Dictionary<string, AgentToolCall>(StringComparer.Ordinal);
+
+        foreach (var delta in _pendingToolCallDeltas.Values.OrderBy(item => item.Index))
+        {
+            if (string.IsNullOrWhiteSpace(delta.Id) || answered.Contains(delta.Id))
+            {
+                continue;
+            }
+
+            incomplete[delta.Id] = new AgentToolCall(
+                delta.Id,
+                delta.Name ?? string.Empty,
+                ToolCallArgumentsParser.ParseJson(delta.ArgumentsJson));
+        }
+
+        foreach (var message in Messages)
+        {
+            if (!message.IsTool || string.IsNullOrWhiteSpace(message.ToolCallId))
+            {
+                continue;
+            }
+
+            if (answered.Contains(message.ToolCallId) || incomplete.ContainsKey(message.ToolCallId))
+            {
+                continue;
+            }
+
+            if (message.ToolCallStatus is ToolCallDisplayStatus.Preparing
+                or ToolCallDisplayStatus.Running
+                or ToolCallDisplayStatus.Cancelled)
+            {
+                incomplete[message.ToolCallId] = new AgentToolCall(
+                    message.ToolCallId,
+                    string.IsNullOrWhiteSpace(message.ToolName) ? "unknown" : message.ToolName,
+                    new Dictionary<string, string>());
+            }
+        }
+
+        return incomplete.Values.ToList();
+    }
+
+    private void ApplyPersistedTurnMessages(
+        IReadOnlyList<ChatMessage> persistedTurnMessages,
+        bool timedOut,
+        int turnTimeoutMinutes,
+        string? errorMessage)
+    {
+        foreach (var message in persistedTurnMessages)
+        {
+            if (message.Role == MessageRole.Tool)
+            {
+                var toolCallId = ExtractToolCallId(message.Content);
+                var existing = FindToolMessage(toolCallId);
+                if (existing is not null)
+                {
+                    existing.ApplyCompletedTool(message);
+                    continue;
+                }
+            }
+
+            if (message.Role == MessageRole.Assistant)
+            {
+                if (_streamingAssistantMessage is not null)
+                {
+                    _streamingAssistantMessage.CompleteStreamingAssistant(message);
+                    _streamingAssistantMessage = null;
+                    continue;
+                }
+
+                if (ChatMessageViewModel.IsAssistantToolCallsOnly(message))
+                {
+                    continue;
+                }
+            }
+
+            Messages.Add(new ChatMessageViewModel(message));
+        }
+
+        if (persistedTurnMessages.Any(static message => message.Role == MessageRole.System))
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.System, errorMessage)));
+            return;
+        }
+
+        if (timedOut)
+        {
+            Messages.Add(new ChatMessageViewModel(
+                ChatMessage.Create(MessageRole.System, $"本回合已超过 {turnTimeoutMinutes} 分钟，已自动停止。")));
         }
     }
 

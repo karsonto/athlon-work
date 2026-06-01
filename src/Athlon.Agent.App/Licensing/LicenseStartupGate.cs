@@ -39,9 +39,7 @@ public static class LicenseStartupGate
         }
 
         var initialFailure = lastResult
-            ?? LicenseValidationResult.Fail(
-                LicenseFailureCode.Missing,
-                LicenseFailureMessages.Describe(LicenseFailureCode.Missing));
+            ?? LicenseValidationResult.Fail(LicenseFailureCode.Missing, string.Empty);
 
         var window = new LicenseActivationWindow(validator, store, account, initialFailure);
         return window.ShowDialog() == true;

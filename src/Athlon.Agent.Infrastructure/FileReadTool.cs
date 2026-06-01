@@ -1,62 +1,74 @@
-using System.Diagnostics;
-using System.Net.Http.Json;
-using System.Runtime.Versioning;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Compaction;
-using Microsoft.Extensions.DependencyInjection;
-using Serilog;
-using Serilog.Core;
-using Serilog.Events;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool
+public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, AppSettings settings) : IAgentTool
 {
     public ToolDefinition Definition { get; } = new(
         "file_read",
-        "Read workspace file content with line numbers (N|line) for display. Do not use those prefixes in file_edit old_text.",
+        "Read workspace file content with line numbers (N|line) for display. Large files require offset/limit; "
+            + "use grep_files to locate content first. Do not use N| prefixes in file_edit old_text.",
         new Dictionary<string, string>
         {
             ["path"] = ToolPathDescriptions.WorkspaceRelativePath,
             ["offset"] = "Optional 0-indexed start line. Default: 0",
-            ["limit"] = "Optional max lines to return. Default: all lines",
+            ["limit"] = $"Optional max lines (default {FileReadSettingsDefaults.DefaultLineLimit}, max {FileReadSettingsDefaults.MaxLinesPerCall})",
             ["start_line"] = "Optional 1-indexed start line",
-            ["end_line"] = "Optional 1-indexed end line"
+            ["end_line"] = "Optional 1-indexed end line (inclusive)"
         });
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!ToolArguments.TryGetNormalizedPath(invocation, out var path, out var error)) return error;
-        var fullPath = guard.Normalize(path);
-        if (!guard.IsInsideWorkspace(fullPath)) return ToolResult.Failure("Outside workspace", fullPath);
-        if (!File.Exists(fullPath)) return ToolResult.Failure("File not found", fullPath);
-        var lines = await File.ReadAllLinesAsync(fullPath, cancellationToken);
-        var selected = SelectLines(lines, invocation).ToArray();
-        await audit.WriteAsync("file_read", new { path = fullPath, lines = lines.Length }, cancellationToken);
-        return ToolResult.Success($"Read {selected.Length} of {lines.Length} lines from {Path.GetFileName(fullPath)}", string.Join(Environment.NewLine, selected));
-    }
-
-    private static IEnumerable<string> SelectLines(string[] lines, ToolInvocation invocation)
-    {
-        var offset = ToolArguments.GetInt32(invocation, "offset", 0);
-        var limit = ToolArguments.GetInt32(invocation, "limit", 0);
-        var startLine = ToolArguments.GetInt32(invocation, "start_line", 0);
-        var endLine = ToolArguments.GetInt32(invocation, "end_line", 0);
-
-        if (startLine > 0)
+        if (!ToolArguments.TryGetNormalizedPath(invocation, out var path, out var error))
         {
-            offset = Math.Max(0, startLine - 1);
-            limit = endLine >= startLine ? endLine - startLine + 1 : 0;
+            return error;
         }
 
-        var selected = lines
-            .Skip(Math.Max(0, offset))
-            .Take(limit <= 0 ? 500 : Math.Min(limit, 500))
-            .Select((line, index) => $"{offset + index + 1}|{line}");
+        var fullPath = guard.Normalize(path);
+        if (!guard.IsInsideWorkspace(fullPath))
+        {
+            return ToolResult.Failure("Outside workspace", fullPath);
+        }
 
-        return selected;
+        if (!File.Exists(fullPath))
+        {
+            return ToolResult.Failure("File not found", fullPath);
+        }
+
+        var fileRead = settings.FileRead;
+        var fileInfo = new FileInfo(fullPath);
+        if (fileInfo.Length > fileRead.MaxFileBytes)
+        {
+            return ToolResult.Failure(
+                $"File exceeds {fileRead.MaxFileBytes} bytes — use grep_files to search, or read with offset/limit in smaller chunks",
+                fullPath);
+        }
+
+        var selection = FileReadLineReader.ResolveSelection(invocation, fileRead);
+        var read = await FileReadLineReader.ReadAsync(fullPath, selection, fileRead, cancellationToken);
+        await audit.WriteAsync(
+            "file_read",
+            new
+            {
+                path = fullPath,
+                totalLines = read.TotalLines,
+                linesReturned = read.LinesReturned,
+                offset = read.Offset,
+                truncated = read.Truncated
+            },
+            cancellationToken);
+
+        var summary = FileReadLineReader.BuildSummary(Path.GetFileName(fullPath), read);
+        var content = read.LinesReturned == 0 && string.IsNullOrEmpty(read.Body)
+            ? "(no lines in range)"
+            : read.Body;
+
+        return ToolResult.Success(summary, content);
     }
+}
+
+internal static class FileReadSettingsDefaults
+{
+    public const int DefaultLineLimit = 500;
+    public const int MaxLinesPerCall = 2_000;
 }

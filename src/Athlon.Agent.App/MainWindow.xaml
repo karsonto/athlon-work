@@ -768,7 +768,7 @@
                                                                 </Style>
                                                             </TextBlock.Style>
                                                         </TextBlock>
-                                                        <controls:MarkdownMessageView Markdown="{Binding ToolDetail}"
+                                                        <controls:MarkdownMessageView Markdown="{Binding ToolDetailDisplay}"
                                                                                       AssistantTone="True"
                                                                                       MaxContentHeight="272"
                                                                                       HorizontalAlignment="Stretch" />

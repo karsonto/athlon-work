@@ -36,18 +36,30 @@ public partial class LicenseActivationWindow : Window
     private void ApplyFailure(LicenseValidationResult failure)
     {
         var headline = LicenseFailureMessages.Describe(failure.FailureCode);
-        ReasonText.Text = string.IsNullOrWhiteSpace(failure.Message)
-            ? headline
-            : $"{headline}{Environment.NewLine}{failure.Message}";
+        var detail = failure.Message?.Trim();
 
-        if (string.IsNullOrWhiteSpace(failure.Message) || failure.Message == headline)
+        ReasonText.Text = ShouldAppendDetail(failure.FailureCode, headline, detail)
+            ? $"{headline}{Environment.NewLine}{detail}"
+            : headline;
+
+        ShowInlineError(null);
+    }
+
+    private static bool ShouldAppendDetail(
+        LicenseFailureCode code,
+        string headline,
+        string? detail)
+    {
+        if (code == LicenseFailureCode.Missing
+            || string.IsNullOrEmpty(detail)
+            || string.Equals(detail, headline, StringComparison.Ordinal))
         {
-            ShowInlineError(null);
+            return false;
         }
-        else
-        {
-            ShowInlineError(failure.Message);
-        }
+
+        var core = detail.TrimEnd('。');
+        return string.IsNullOrEmpty(core)
+            || !headline.Contains(core, StringComparison.Ordinal);
     }
 
     private void ShowInlineError(string? message)

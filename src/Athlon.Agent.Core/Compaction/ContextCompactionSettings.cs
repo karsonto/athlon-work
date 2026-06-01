@@ -70,7 +70,6 @@ public sealed class ToolResultEvictionSettings
 
     public List<string> ExcludedToolNames { get; set; } =
     [
-        "file_read",
         "file_write",
         "file_edit",
         "grep_files",

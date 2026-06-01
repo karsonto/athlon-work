@@ -59,13 +59,54 @@ public sealed class ToolResultEvictorTests
     {
         var settings = new AppSettings();
         var evictor = new ToolResultEvictor(settings, new NoOpStorage());
-        var toolCall = new AgentToolCall("call-2", "file_read", new Dictionary<string, string>());
+        var toolCall = new AgentToolCall("call-2", "file_write", new Dictionary<string, string>());
         var result = ToolResult.Success("done", new string('a', 500));
         var formatted = AgentRuntime.FormatToolResult(toolCall, result);
 
         var output = await evictor.EvictIfNeededAsync("session-2", toolCall, result, formatted);
 
         Assert.Equal(formatted, output);
+    }
+
+    [Fact]
+    public async Task EvictIfNeeded_EvictsLargeFileReadResults()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-evict-read", Guid.NewGuid().ToString("N"));
+        var paths = new CompactionTests.TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var settings = new AppSettings
+            {
+                ContextCompaction = new ContextCompactionSettings
+                {
+                    ToolResultEviction = new ToolResultEvictionSettings
+                    {
+                        MaxResultChars = 100,
+                        PreviewChars = 20
+                    }
+                }
+            };
+
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore());
+            var evictor = new ToolResultEvictor(settings, storage);
+            var toolCall = new AgentToolCall("call-read", "file_read", new Dictionary<string, string>());
+            var result = ToolResult.Success("read", new string('r', 500));
+            var formatted = AgentRuntime.FormatToolResult(toolCall, result);
+
+            var output = await evictor.EvictIfNeededAsync("session-read", toolCall, result, formatted);
+
+            Assert.Contains("[Tool result evicted", output, StringComparison.Ordinal);
+            Assert.Contains("Archived at:", output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
     }
 
     private sealed class NoOpStorage : IFileStorageService

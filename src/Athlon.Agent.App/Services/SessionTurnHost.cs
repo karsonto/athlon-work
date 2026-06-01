@@ -285,12 +285,29 @@ public sealed class SessionTurnHost
             }
             finally
             {
+                var errorMessage = error is null ? null : $"模型调用失败：{error.Message}";
+                var persistedTurnMessages = Array.Empty<ChatMessage>();
+                if (cancelled || timedOut || error is not null)
+                {
+                    var snapshot = _request.Ui.CaptureEndSnapshot(_session, cancelled, timedOut, errorMessage);
+                    var reconcileResult = SessionTurnReconciler.Reconcile(_session, snapshot);
+                    _session = reconcileResult.Session;
+                    persistedTurnMessages = reconcileResult.PersistedMessages;
+                    foreach (var message in persistedTurnMessages)
+                    {
+                        await _host._storage.AppendConversationMessageAsync(_session.Id, message).ConfigureAwait(false);
+                    }
+
+                    await _host._storage.SaveSessionAsync(_session).ConfigureAwait(false);
+                }
+
                 _request.Ui.FinalizeTurn(
                     _session,
+                    persistedTurnMessages,
                     cancelled,
                     timedOut,
                     _timeoutMinutes,
-                    error is null ? null : $"模型调用失败：{error.Message}");
+                    errorMessage);
                 _linked?.Dispose();
                 _timeoutCancellation?.Dispose();
                 _cancellation?.Dispose();

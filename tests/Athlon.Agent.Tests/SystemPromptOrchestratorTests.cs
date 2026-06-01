@@ -27,6 +27,7 @@ public sealed class SystemPromptOrchestratorTests
             new HostEnvironmentSection(),
             new WorkspacePolicySection(),
             new WorkspaceFilesSection(),
+            new FileToolsPolicySection(),
             new ToolsPolicySection(),
             new SkillsSection(settings, catalog),
             new ProductGuidanceSection()

@@ -7,6 +7,9 @@ namespace Athlon.Agent.App.ViewModels;
 
 public sealed partial class ChatMessageViewModel : ObservableObject
 {
+    public const int MaxToolDetailDisplayChars = 16_384;
+    private const int ToolDetailPreviewChars = 4_096;
+
     public ChatMessageViewModel(ChatMessage message, bool expandTool = false)
     {
         Role = message.Role.ToString();
@@ -39,7 +42,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             ToolName = toolName;
             ToolHeader = header;
             ToolSummary = summary;
-            ToolDetail = detail;
+            AssignToolDetail(detail);
             ToolArgumentsText = argumentsText;
             ToolCallStatus = status;
             IsToolRunning = false;
@@ -51,7 +54,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             ToolCallId = null;
             ToolHeader = header;
             ToolSummary = summary;
-            ToolDetail = detail;
+            AssignToolDetail(detail);
             IsToolRunning = false;
             IsExpanded = expandTool;
         }
@@ -61,6 +64,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             ToolHeader = string.Empty;
             ToolSummary = string.Empty;
             ToolDetail = string.Empty;
+            ToolDetailDisplay = string.Empty;
             ToolName = string.Empty;
             ToolArgumentsText = string.Empty;
             ToolCallStatus = ToolCallDisplayStatus.None;
@@ -85,6 +89,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ToolArgumentsText = FormatArgumentsFull(toolCall.Arguments);
         ToolSummary = string.Empty;
         ToolDetail = string.Empty;
+        ToolDetailDisplay = string.Empty;
         Content = string.Empty;
         ReasoningContent = string.Empty;
         IsExpanded = false;
@@ -141,6 +146,9 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     [ObservableProperty]
     private string _toolDetail = string.Empty;
+
+    [ObservableProperty]
+    private string _toolDetailDisplay = string.Empty;
 
     [ObservableProperty]
     private string _toolName = string.Empty;
@@ -230,6 +238,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ToolHeader = "Tool …";
         ToolSummary = string.Empty;
         ToolDetail = string.Empty;
+        ToolDetailDisplay = string.Empty;
         ToolName = string.Empty;
         ToolArgumentsText = string.Empty;
         Content = string.Empty;
@@ -360,7 +369,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
         ToolHeader = header;
         ToolSummary = summary;
-        ToolDetail = detail;
+        AssignToolDetail(detail);
         if (!string.IsNullOrWhiteSpace(argumentsText))
         {
             ToolArgumentsText = argumentsText;
@@ -380,6 +389,24 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsToolRunning = false;
         ToolCallStatus = ToolCallDisplayStatus.Cancelled;
         ToolSummary = "已停止";
+    }
+
+    private void AssignToolDetail(string detail)
+    {
+        ToolDetail = detail;
+        ToolDetailDisplay = TruncateToolDetailForDisplay(detail);
+    }
+
+    internal static string TruncateToolDetailForDisplay(string detail)
+    {
+        if (detail.Length <= MaxToolDetailDisplayChars)
+        {
+            return detail;
+        }
+
+        return detail[..ToolDetailPreviewChars]
+               + "\n\n... [display truncated — full tool output may be archived] ...\n\n"
+               + detail[^ToolDetailPreviewChars..];
     }
 
     private static void ParseToolContent(

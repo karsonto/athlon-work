@@ -12,6 +12,7 @@ public static class PromptServiceCollectionExtensions
         services.AddSingleton<IEnvironmentPromptSection, HostEnvironmentSection>();
         services.AddSingleton<IEnvironmentPromptSection, WorkspacePolicySection>();
         services.AddSingleton<IEnvironmentPromptSection, WorkspaceFilesSection>();
+        services.AddSingleton<IEnvironmentPromptSection, FileToolsPolicySection>();
         services.AddSingleton<IEnvironmentPromptSection, ToolsPolicySection>();
         services.AddSingleton<IEnvironmentPromptSection, SkillsSection>();
         services.AddSingleton<IEnvironmentPromptSection, ProductGuidanceSection>();

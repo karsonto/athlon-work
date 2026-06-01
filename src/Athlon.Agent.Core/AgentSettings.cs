@@ -19,6 +19,17 @@ public sealed class AppSettings
     public PlanSettings Plan { get; set; } = new();
     public AgentTurnSettings AgentTurn { get; set; } = new();
     public WorkspaceIgnoreSettings WorkspaceIgnore { get; set; } = new();
+    public FileReadSettings FileRead { get; set; } = new();
+}
+
+public sealed class FileReadSettings
+{
+    public long MaxFileBytes { get; set; } = 2 * 1024 * 1024;
+    public int DefaultLineLimit { get; set; } = 500;
+    public int MaxLinesPerCall { get; set; } = 2_000;
+    public int MaxResponseChars { get; set; } = 32_768;
+    public int MaxLineChars { get; set; } = 1_024;
+    public bool CountTotalLines { get; set; } = true;
 }
 
 public sealed class WorkspaceIgnoreSettings

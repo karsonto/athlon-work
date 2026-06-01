@@ -331,6 +331,9 @@ public sealed class AgentRuntime(
                 case MessageRole.Summary:
                     messages.Add(new AgentModelMessage("user", $"History summary: {message.Content}"));
                     break;
+                case MessageRole.System:
+                    messages.Add(new AgentModelMessage("user", message.Content));
+                    break;
                 default:
                     messages.Add(new AgentModelMessage("user", message.Content));
                     break;
