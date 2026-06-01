@@ -96,6 +96,8 @@
 
     <Style x:Key="PreviewWindowStyle" TargetType="Window">
         <Setter Property="Background" Value="{StaticResource Brush.AppBackground}" />
+        <Setter Property="WindowStyle" Value="None" />
+        <Setter Property="ResizeMode" Value="CanResize" />
     </Style>
 
     <Style x:Key="PreviewWindowTitleStyle" TargetType="TextBlock">

@@ -71,8 +71,7 @@
                 </StackPanel>
                 <StackPanel Grid.Column="1"
                             Orientation="Horizontal"
-                            VerticalAlignment="Top"
-                            Margin="0,8,0,0"
+                            VerticalAlignment="Center"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Content="−"
                             ToolTip="最小化"
@@ -1638,6 +1637,16 @@
                                 <Style TargetType="TreeViewItem" BasedOn="{StaticResource WorkspaceTreeViewItemStyle}">
                                     <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
                                     <EventSetter Event="Expanded" Handler="WorkspaceTreeItem_OnExpanded" />
+                                    <Setter Property="ContextMenu">
+                                        <Setter.Value>
+                                            <ContextMenu Style="{StaticResource MarkdownContextMenuStyle}">
+                                                <MenuItem Header="删除"
+                                                          Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                                          Command="{Binding DataContext.DeleteWorkspaceItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                            </ContextMenu>
+                                        </Setter.Value>
+                                    </Setter>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsExpanderPlaceholder}" Value="True">
                                             <Setter Property="Visibility" Value="Collapsed" />

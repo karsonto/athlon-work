@@ -766,6 +766,104 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         });
     }
 
+    [RelayCommand(CanExecute = nameof(CanDeleteWorkspaceItem))]
+    private void DeleteWorkspaceItem(WorkspaceTreeNodeViewModel? node)
+    {
+        if (!CanDeleteWorkspaceItem(node) || node is null || string.IsNullOrWhiteSpace(node.FullPath))
+        {
+            return;
+        }
+
+        var path = Path.GetFullPath(node.FullPath);
+        var kind = node.IsDirectory ? "文件夹" : "文件";
+        var prompt = node.IsDirectory
+            ? $"确定删除{kind}「{node.Name}」及其全部内容吗？此操作无法撤销。"
+            : $"确定删除{kind}「{node.Name}」吗？此操作无法撤销。";
+
+        if (MessageBox.Show(prompt, "删除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            if (node.IsDirectory)
+            {
+                if (Directory.Exists(path))
+                {
+                    Directory.Delete(path, recursive: true);
+                }
+            }
+            else if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+            else
+            {
+                SettingsStatus = "目标不存在或已被删除。";
+                Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
+                return;
+            }
+
+            RefreshAtCompletionSources();
+            Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
+            SettingsStatus = $"已删除{kind}「{node.Name}」。";
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                $"无法删除「{node.Name}」：{exception.Message}",
+                "删除失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            SettingsStatus = $"删除失败：{exception.Message}";
+        }
+    }
+
+    private bool CanDeleteWorkspaceItem(WorkspaceTreeNodeViewModel? node) =>
+        node is not null
+        && !node.IsPlaceholder
+        && !node.IsExpanderPlaceholder
+        && !string.IsNullOrWhiteSpace(node.FullPath)
+        && TryGetActiveWorkspaceRoot(out var root)
+        && IsPathUnderWorkspace(root, node.FullPath)
+        && !IsWorkspaceRootPath(root, node.FullPath);
+
+    private bool TryGetActiveWorkspaceRoot(out string root)
+    {
+        root = string.Empty;
+        if (string.IsNullOrWhiteSpace(_session.ActiveWorkspace) || !Directory.Exists(_session.ActiveWorkspace))
+        {
+            return false;
+        }
+
+        root = Path.GetFullPath(_session.ActiveWorkspace);
+        return true;
+    }
+
+    private static bool IsWorkspaceRootPath(string workspaceRoot, string targetPath)
+    {
+        var root = NormalizeDirectoryPath(workspaceRoot);
+        var target = NormalizeDirectoryPath(targetPath);
+        return string.Equals(root, target, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPathUnderWorkspace(string workspaceRoot, string targetPath)
+    {
+        var root = NormalizeDirectoryPath(workspaceRoot);
+        var target = Path.GetFullPath(targetPath);
+        if (string.Equals(root, target, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var rootPrefix = root + Path.DirectorySeparatorChar;
+        return target.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeDirectoryPath(string path) =>
+        Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
     private bool CanSend() =>
         !string.IsNullOrWhiteSpace(ComposerText) || PendingImageAttachments.Count > 0;
 

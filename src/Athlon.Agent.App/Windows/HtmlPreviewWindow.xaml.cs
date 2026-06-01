@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Input;
 using Athlon.Agent.App.Services;
 using Microsoft.Web.WebView2.Core;
 
@@ -38,6 +39,8 @@ public partial class HtmlPreviewWindow : Window
         };
         window.ShowDialog();
     }
+
+    private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
 
     private void CloseButton_OnClick(object sender, RoutedEventArgs e) => Close();
 }
