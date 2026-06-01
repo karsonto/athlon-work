@@ -414,7 +414,8 @@
                               Padding="24,20,24,28"
                               VerticalScrollBarVisibility="Auto"
                               ClipToBounds="True"
-                              CanContentScroll="False">
+                              CanContentScroll="False"
+                              ScrollChanged="ChatMessagesScrollViewer_OnScrollChanged">
                     <ScrollViewer.Style>
                         <Style TargetType="ScrollViewer">
                             <Setter Property="Visibility" Value="Visible" />

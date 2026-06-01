@@ -10,6 +10,9 @@ namespace Athlon.Agent.App;
 public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
+    private const double AutoScrollBottomThreshold = 48;
+    private bool _autoScrollEnabled = true;
+    private bool _isProgrammaticScroll;
 
     public MainWindow(MainWindowViewModel viewModel)
     {
@@ -77,9 +80,40 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!_autoScrollEnabled)
+        {
+            return;
+        }
+
         ChatMessagesScrollViewer.Dispatcher.BeginInvoke(
             DispatcherPriority.Loaded,
-            () => ChatMessagesScrollViewer.ScrollToEnd());
+            () =>
+            {
+                _isProgrammaticScroll = true;
+                ChatMessagesScrollViewer.ScrollToEnd();
+                _isProgrammaticScroll = false;
+            });
+    }
+
+    private void ChatMessagesScrollViewer_OnScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (sender is not ScrollViewer viewer)
+        {
+            return;
+        }
+
+        if (_isProgrammaticScroll)
+        {
+            return;
+        }
+
+        _autoScrollEnabled = IsNearBottom(viewer);
+    }
+
+    private static bool IsNearBottom(ScrollViewer viewer)
+    {
+        var distanceFromBottom = viewer.ScrollableHeight - viewer.VerticalOffset;
+        return distanceFromBottom <= AutoScrollBottomThreshold;
     }
 
     private void ApiKeyPasswordBox_OnPasswordChanged(object sender, RoutedEventArgs e)
