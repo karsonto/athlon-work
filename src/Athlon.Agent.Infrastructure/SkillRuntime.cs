@@ -55,7 +55,7 @@ public sealed class SkillRuntime(IAgentSkillCatalog catalog, AppSettings setting
         {
             var available = string.Join(", ", GetSkills().Select(s => s.SkillId));
             throw new ArgumentException(
-                $"Skill not found: '{skillId}'. Please check the skill ID. Available: {available}");
+                $"Skill not found: '{skillId}'. Please check the skill name. Available: {available}");
         }
 
         if (IsDisabled(skill.Name))
@@ -99,7 +99,6 @@ public sealed class SkillRuntime(IAgentSkillCatalog catalog, AppSettings setting
         result.AppendLine();
         result.AppendLine($"Name: {skill.Name}");
         result.AppendLine($"Description: {skill.Description}");
-        result.AppendLine($"Source: {skill.Source}");
         result.AppendLine();
         result.AppendLine("Content:");
         result.AppendLine("---");

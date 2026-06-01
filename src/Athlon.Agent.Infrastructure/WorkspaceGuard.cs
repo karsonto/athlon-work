@@ -27,6 +27,7 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
         }
 
         path = ToolPathNormalizer.ForModel(path);
+        path = ToolPathNormalizer.ResolveRelativeToWorkspaceRoot(path, basePath);
         var rooted = Path.IsPathRooted(path) ? path : Path.Combine(cwd ?? basePath, path);
         return Path.GetFullPath(rooted);
     }

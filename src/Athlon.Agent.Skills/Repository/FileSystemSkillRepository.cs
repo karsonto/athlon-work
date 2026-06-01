@@ -6,9 +6,8 @@ namespace Athlon.Agent.Skills.Repository;
 public sealed class FileSystemSkillRepository : IAgentSkillRepository
 {
     private readonly string _baseDir;
-    private readonly string _source;
 
-    public FileSystemSkillRepository(string baseDir, string? source = null)
+    public FileSystemSkillRepository(string baseDir)
     {
         if (string.IsNullOrWhiteSpace(baseDir))
         {
@@ -17,10 +16,7 @@ public sealed class FileSystemSkillRepository : IAgentSkillRepository
 
         _baseDir = Path.GetFullPath(baseDir);
         Directory.CreateDirectory(_baseDir);
-        _source = source ?? BuildDefaultSource();
     }
-
-    public string Source => _source;
 
     public AgentSkill? GetSkill(string name)
     {
@@ -29,22 +25,15 @@ public sealed class FileSystemSkillRepository : IAgentSkillRepository
             return null;
         }
 
-        return SkillFileSystemHelper.LoadSkill(_baseDir, name, _source);
+        return SkillFileSystemHelper.LoadSkill(_baseDir, name);
     }
 
     public IReadOnlyList<string> GetAllSkillNames() => SkillFileSystemHelper.GetAllSkillNames(_baseDir);
 
-    public IReadOnlyList<AgentSkill> GetAllSkills() => SkillFileSystemHelper.GetAllSkills(_baseDir, _source);
+    public IReadOnlyList<AgentSkill> GetAllSkills() => SkillFileSystemHelper.GetAllSkills(_baseDir);
 
     public bool SkillExists(string skillName) => SkillFileSystemHelper.SkillExists(_baseDir, skillName);
 
     public AgentSkillRepositoryInfo GetRepositoryInfo() =>
         new("filesystem", _baseDir, writeable: false);
-
-    private string BuildDefaultSource()
-    {
-        var fileName = Path.GetFileName(_baseDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        var parent = Directory.GetParent(_baseDir)?.Name;
-        return parent is null or "" ? fileName : $"{parent}_{fileName}";
-    }
 }

@@ -43,7 +43,7 @@ public static partial class SkillComposerExpander
             }
             else
             {
-                warnings.Add($"Unknown skill-id '{skillId}' in @skill reference; install or enable the skill first.");
+                warnings.Add($"Unknown skill '{skillId}' in @skill reference; install or enable the skill first.");
             }
         }
 

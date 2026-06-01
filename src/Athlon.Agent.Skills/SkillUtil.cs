@@ -3,15 +3,8 @@ namespace Athlon.Agent.Skills;
 public static class SkillUtil
 {
     public const string SkillFileName = "SKILL.md";
-    private const string DefaultSource = "custom";
 
-    public static AgentSkill CreateFrom(string skillMd, IReadOnlyDictionary<string, string>? resources = null) =>
-        CreateFrom(skillMd, resources, DefaultSource);
-
-    public static AgentSkill CreateFrom(
-        string skillMd,
-        IReadOnlyDictionary<string, string>? resources,
-        string? source)
+    public static AgentSkill CreateFrom(string skillMd, IReadOnlyDictionary<string, string>? resources = null)
     {
         var parsed = MarkdownSkillParser.Parse(skillMd);
         var metadata = parsed.Metadata.ToDictionary(static pair => pair.Key, static pair => pair.Value);
@@ -36,6 +29,6 @@ public static class SkillUtil
         metadata["name"] = name;
         metadata["description"] = description;
 
-        return new AgentSkill(metadata, parsed.Content, resources ?? new Dictionary<string, string>(), source ?? DefaultSource);
+        return new AgentSkill(metadata, parsed.Content, resources ?? new Dictionary<string, string>());
     }
 }

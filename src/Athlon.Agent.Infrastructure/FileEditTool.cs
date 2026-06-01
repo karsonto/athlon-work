@@ -20,7 +20,7 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         "Replace exact text in a workspace file (with backup). old_text must match disk content exactly — not file_read's N|line prefixes.",
         new Dictionary<string, string>
         {
-            ["path"] = "Workspace-relative file path using forward slashes (/)",
+            ["path"] = ToolPathDescriptions.WorkspaceRelativePath,
             ["old_text"] = "Exact substring from the file (no line-number prefixes)",
             ["new_text"] = "Replacement",
             ["replace_all"] = "Optional true to replace all occurrences"

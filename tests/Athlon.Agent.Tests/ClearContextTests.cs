@@ -61,6 +61,7 @@ public sealed class ClearContextTests
             var prompt = builder.Build(session, tools);
 
             Assert.Contains($"Workspace root: {workspaceRoot}", prompt, StringComparison.Ordinal);
+            Assert.Contains("not a path prefix", prompt, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Native tools are provided via function calling", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("- file_read: Read a file", prompt, StringComparison.Ordinal);
             Assert.Contains("You are Athlon Agent", prompt, StringComparison.Ordinal);

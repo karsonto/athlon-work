@@ -15,8 +15,7 @@ public sealed class SkillXmlPromptRendererTests
                 ["description"] = "Demo & test"
             },
             "Body",
-            resources: null,
-            source: "custom");
+            resources: null);
 
         var builder = new StringBuilder();
         SkillXmlPromptRenderer.AppendSkillPrompt(builder, [skill]);
@@ -26,7 +25,7 @@ public sealed class SkillXmlPromptRendererTests
         Assert.Contains("<skill>", text, StringComparison.Ordinal);
         Assert.Contains("<name>demo_skill</name>", text, StringComparison.Ordinal);
         Assert.Contains("<description>Demo &amp; test</description>", text, StringComparison.Ordinal);
-        Assert.Contains("<skill-id>demo_skill_custom</skill-id>", text, StringComparison.Ordinal);
+        Assert.Contains("<skill-id>demo_skill</skill-id>", text, StringComparison.Ordinal);
         Assert.Contains("load_skill_through_path", text, StringComparison.Ordinal);
     }
 

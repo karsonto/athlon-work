@@ -25,7 +25,7 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
         new Dictionary<string, string>
         {
             ["pattern"] = "Literal text pattern to search for",
-            ["path"] = "Optional directory or file path to search; use forward slashes (/)",
+            ["path"] = ToolPathDescriptions.OptionalWorkspaceRelativeDirectory,
             ["glob"] = "Optional file glob filter, e.g. *.cs"
         });
 

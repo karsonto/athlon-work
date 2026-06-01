@@ -18,7 +18,7 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
     public ToolDefinition Definition { get; } = new(
         "file_list",
         "List files in the active workspace or a workspace subdirectory.",
-        new Dictionary<string, string> { ["path"] = "Optional workspace-relative directory; use forward slashes (/)" });
+        new Dictionary<string, string> { ["path"] = ToolPathDescriptions.OptionalWorkspaceRelativeDirectory });
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {

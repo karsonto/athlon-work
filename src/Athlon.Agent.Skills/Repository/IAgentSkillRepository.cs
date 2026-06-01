@@ -18,6 +18,4 @@ public interface IAgentSkillRepository
     bool SkillExists(string skillName);
 
     AgentSkillRepositoryInfo GetRepositoryInfo();
-
-    string Source { get; }
 }

@@ -18,7 +18,7 @@ public static class SkillXmlPromptRenderer
         builder.AppendLine();
         builder.AppendLine("<usage>");
         builder.AppendLine("Skills provide specialized capabilities. Use them when they match the current task.");
-        builder.AppendLine("Load skill: load_skill_through_path(skillId=\"<skill-id>\", path=\"SKILL.md\")");
+        builder.AppendLine("Load skill: load_skill_through_path(skillId=\"<skill-name>\", path=\"SKILL.md\")");
         builder.AppendLine("Load resources with the same tool and a relative path (e.g. references/guide.md).");
         builder.AppendLine("Do not use '.', './', absolute paths, or the skills directory root as path.");
         builder.AppendLine("</usage>");

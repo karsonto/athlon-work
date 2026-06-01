@@ -1116,13 +1116,34 @@
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
                                                 <Border Grid.Column="0"
-                                                        Background="{StaticResource Brush.PanelAlt}"
-                                                        BorderBrush="{StaticResource Brush.Border}"
                                                         BorderThickness="1"
                                                         CornerRadius="8"
                                                         Padding="6,2"
                                                         Margin="0,0,8,0">
-                                                    <TextBlock Text="{Binding Type}" FontSize="11" Foreground="{StaticResource Brush.SubtleText}" />
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="{StaticResource Brush.AtCompletionFileBadgeBg}" />
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.AtCompletionFileBadgeBorder}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Type}" Value="技能">
+                                                                    <Setter Property="Background" Value="{StaticResource Brush.AtCompletionSkillBadgeBg}" />
+                                                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.AtCompletionSkillBadgeBorder}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock Text="{Binding Type}" FontSize="11">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{StaticResource Brush.AtCompletionFileBadgeText}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Type}" Value="技能">
+                                                                        <Setter Property="Foreground" Value="{StaticResource Brush.AtCompletionSkillBadgeText}" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
                                                 </Border>
                                                 <StackPanel Grid.Column="1">
                                                     <TextBlock Text="{Binding PrimaryText}" FontSize="13" FontWeight="SemiBold" />

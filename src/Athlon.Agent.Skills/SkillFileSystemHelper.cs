@@ -7,15 +7,15 @@ namespace Athlon.Agent.Skills;
 /// </summary>
 public static class SkillFileSystemHelper
 {
-    public static AgentSkill LoadSkill(string baseDir, string skillName, string source)
+    public static AgentSkill LoadSkill(string baseDir, string skillName)
     {
         var skillDir = FindSkillDirectoryByName(baseDir, skillName)
             ?? throw new ArgumentException($"Skill directory does not exist for skill name: {skillName}");
 
-        return LoadSkillFromDirectory(skillDir, source);
+        return LoadSkillFromDirectory(skillDir);
     }
 
-    public static AgentSkill LoadSkillFromDirectory(string skillDir, string source)
+    public static AgentSkill LoadSkillFromDirectory(string skillDir)
     {
         if (!Directory.Exists(skillDir))
         {
@@ -30,7 +30,7 @@ public static class SkillFileSystemHelper
 
         var skillMdContent = File.ReadAllText(skillFile, Encoding.UTF8);
         var resources = LoadResources(skillDir, skillFile);
-        return SkillUtil.CreateFrom(skillMdContent, resources, source);
+        return SkillUtil.CreateFrom(skillMdContent, resources);
     }
 
     public static IReadOnlyList<string> GetAllSkillNames(string baseDir)
@@ -59,7 +59,7 @@ public static class SkillFileSystemHelper
         return skillNames;
     }
 
-    public static IReadOnlyList<AgentSkill> GetAllSkills(string baseDir, string source)
+    public static IReadOnlyList<AgentSkill> GetAllSkills(string baseDir)
     {
         if (!Directory.Exists(baseDir))
         {
@@ -76,7 +76,7 @@ public static class SkillFileSystemHelper
 
             try
             {
-                skills.Add(LoadSkillFromDirectory(dir, source));
+                skills.Add(LoadSkillFromDirectory(dir));
             }
             catch (Exception)
             {

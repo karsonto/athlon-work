@@ -8,7 +8,7 @@ namespace Athlon.Agent.Tests;
 public sealed class SkillRuntimeTests
 {
     [Fact]
-    public void AgentSkillCatalog_GetSkillById_MatchesNameAndSource()
+    public void AgentSkillCatalog_GetSkillById_MatchesName()
     {
         var root = CreateSkillRoot("by-id-skill", "demo_skill", "Demo", "Body.");
         try
@@ -154,7 +154,7 @@ public sealed class SkillRuntimeTests
 
             Assert.Contains("## Available Skills", prompt, StringComparison.Ordinal);
             Assert.Contains("<available_skills>", prompt, StringComparison.Ordinal);
-            Assert.Contains("<skill-id>demo_skill_", prompt, StringComparison.Ordinal);
+            Assert.Contains("<skill-id>demo_skill</skill-id>", prompt, StringComparison.Ordinal);
             Assert.Contains("load_skill_through_path", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("- file_read:", prompt, StringComparison.Ordinal);
         }
@@ -168,22 +168,22 @@ public sealed class SkillRuntimeTests
     public void SkillComposerExpander_ExpandsKnownSkillReference()
     {
         var expanded = SkillComposerExpander.Expand(
-            "Please use @skill:demo_skill_custom for this task.",
-            [new AvailableSkillInfo("demo_skill", "Demo", "demo_skill_custom")]);
+            "Please use @skill:demo_skill for this task.",
+            [new AvailableSkillInfo("demo_skill", "Demo", "demo_skill")]);
 
-        Assert.Contains("[Skill reference: demo_skill_custom]", expanded, StringComparison.Ordinal);
-        Assert.Contains("load_skill_through_path(skillId=\"demo_skill_custom\"", expanded, StringComparison.Ordinal);
-        Assert.Contains("@skill:demo_skill_custom", expanded, StringComparison.Ordinal);
+        Assert.Contains("[Skill reference: demo_skill]", expanded, StringComparison.Ordinal);
+        Assert.Contains("load_skill_through_path(skillId=\"demo_skill\"", expanded, StringComparison.Ordinal);
+        Assert.Contains("@skill:demo_skill", expanded, StringComparison.Ordinal);
     }
 
     [Fact]
     public void SkillComposerExpander_AppendsWarningForUnknownSkill()
     {
         var expanded = SkillComposerExpander.Expand(
-            "@skill:missing_custom",
+            "@skill:missing_skill",
             Array.Empty<AvailableSkillInfo>());
 
-        Assert.Contains("Unknown skill-id 'missing_custom'", expanded, StringComparison.Ordinal);
+        Assert.Contains("Unknown skill 'missing_skill'", expanded, StringComparison.Ordinal);
     }
 
     private static string CreateSkillRoot(string folderName, string name, string description, string body)

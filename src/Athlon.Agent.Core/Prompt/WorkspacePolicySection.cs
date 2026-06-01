@@ -19,7 +19,9 @@ public sealed class WorkspacePolicySection : IEnvironmentPromptSection
 
         builder.AppendLine("All relative file paths are resolved from the active workspace. Never access files outside the configured workspace.");
         builder.AppendLine("In file tool arguments (path), always use forward slashes (/), e.g. src/foo.cs — not backslashes (\\), even on Windows.");
-        builder.AppendLine($"Active workspace: {context.WorkspaceName}");
+        builder.AppendLine("Paths are relative to Workspace root below — not cwd, not a parent directory, and not an absolute path.");
+        builder.AppendLine($"Correct: src/foo.cs. Wrong: {context.WorkspaceName}/src/foo.cs or the full Workspace root path in path.");
+        builder.AppendLine($"Active workspace label: {context.WorkspaceName} (not a path prefix — do not include in file tool path).");
         builder.AppendLine($"Workspace root: {context.WorkspaceRoot}");
         builder.AppendLine("Workspace contents are intentionally not embedded in this prompt because they change often.");
         builder.AppendLine("Use file_list to fetch a live directory listing when needed.");

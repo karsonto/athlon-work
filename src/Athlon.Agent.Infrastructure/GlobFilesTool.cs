@@ -21,7 +21,7 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
         new Dictionary<string, string>
         {
             ["pattern"] = "Glob pattern, e.g. **/*.cs",
-            ["path"] = "Optional base directory; use forward slashes (/)"
+            ["path"] = ToolPathDescriptions.OptionalWorkspaceRelativeDirectory
         });
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)

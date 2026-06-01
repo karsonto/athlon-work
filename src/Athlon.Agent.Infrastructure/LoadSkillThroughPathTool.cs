@@ -40,7 +40,7 @@ public sealed class LoadSkillThroughPathTool(ISkillRuntime skillRuntime) : IAgen
 
         return new ToolDefinition(
             "load_skill_through_path",
-            "Load and activate a skill resource by its ID and resource path.\n\n"
+            "Load and activate a skill resource by name and resource path.\n\n"
             + "**Functionality:**\n"
             + "1. Activates the specified skill\n"
             + "2. Returns the requested resource content\n\n"
@@ -48,10 +48,10 @@ public sealed class LoadSkillThroughPathTool(ISkillRuntime skillRuntime) : IAgen
             + "- Use path=\"SKILL.md\" to load the skill's markdown documentation.\n"
             + "- Use exact resource paths such as \"references/guide.md\".\n"
             + "- Do not use '.', './', directories only, or absolute paths.\n\n"
-            + $"**Available skill IDs:** {skillIdList}",
+            + $"**Available skill names:** {skillIdList}",
             new Dictionary<string, string>
             {
-                ["skillId"] = "The unique identifier of the skill (see Available skill IDs in the description).",
+                ["skillId"] = "The skill name from SKILL.md frontmatter (see Available skill names in the description).",
                 ["path"] = "Relative resource path within the skill. Use 'SKILL.md' for full instructions."
             });
     }

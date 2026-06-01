@@ -46,6 +46,62 @@ public sealed class WorkspaceGuardTests
     }
 
     [Fact]
+    public void Normalize_StripsMistakenWorkspaceFolderPrefix()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-guard-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "athlon-work");
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, "src"));
+        File.WriteAllText(Path.Combine(workspaceRoot, "src", "demo.txt"), "ok");
+
+        var context = new ActiveWorkspaceContext();
+        context.SetWorkspace(workspaceRoot);
+        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(Path.Combine(root, ".athlon-agent")));
+
+        var fullPath = guard.Normalize("athlon-work/src/demo.txt");
+        Assert.Equal(Path.Combine(workspaceRoot, "src", "demo.txt"), fullPath);
+        Assert.True(File.Exists(fullPath));
+        Assert.False(Directory.Exists(Path.Combine(workspaceRoot, "athlon-work")));
+    }
+
+    [Fact]
+    public async Task FileWriteTool_WritesToCorrectPath_WhenModelPrefixesWorkspaceFolderName()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-guard-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "athlon-work");
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, "src"));
+
+        var context = new ActiveWorkspaceContext();
+        context.SetWorkspace(workspaceRoot);
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(appDataRoot);
+        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+        var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+        var tool = new FileWriteTool(guard, audit);
+
+        try
+        {
+            var result = await tool.InvokeAsync(
+                new ToolInvocation(
+                    "file_write",
+                    new Dictionary<string, string>
+                    {
+                        ["path"] = "athlon-work/src/new.txt",
+                        ["content"] = "hello"
+                    }));
+
+            Assert.True(result.Succeeded, result.Error);
+            var expected = Path.Combine(workspaceRoot, "src", "new.txt");
+            Assert.True(File.Exists(expected));
+            Assert.Equal("hello", await File.ReadAllTextAsync(expected));
+            Assert.False(File.Exists(Path.Combine(workspaceRoot, "athlon-work", "src", "new.txt")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void IsInsideWorkspace_WithoutConfiguredWorkspace_AllowsAthlonAgentOnly()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-guard-{Guid.NewGuid():N}");
@@ -74,5 +130,14 @@ public sealed class WorkspaceGuardTests
 
         public string ResolveSkillPath(string path) =>
             Path.IsPathRooted(path) ? path : Path.Combine(SkillsPath, path);
+    }
+
+    private sealed class NoOpLogger : IAppLogger
+    {
+        public void Debug(string messageTemplate, params object[] values) { }
+        public void Information(string messageTemplate, params object[] values) { }
+        public void Warning(string messageTemplate, params object[] values) { }
+        public void Error(Exception exception, string messageTemplate, params object[] values) { }
+        public IAppLogger ForContext(string sourceContext) => this;
     }
 }

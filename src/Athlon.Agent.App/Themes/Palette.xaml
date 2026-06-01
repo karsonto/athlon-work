@@ -46,6 +46,13 @@
     <SolidColorBrush x:Key="Brush.SelectionInactive" Color="#243A55" />
     <SolidColorBrush x:Key="Brush.SelectionBorder" Color="#2F5C8E" />
 
+    <SolidColorBrush x:Key="Brush.AtCompletionSkillBadgeBg" Color="#1E1B2E" />
+    <SolidColorBrush x:Key="Brush.AtCompletionSkillBadgeBorder" Color="#6D28D9" />
+    <SolidColorBrush x:Key="Brush.AtCompletionSkillBadgeText" Color="#DDD6FE" />
+    <SolidColorBrush x:Key="Brush.AtCompletionFileBadgeBg" Color="#2A2A2D" />
+    <SolidColorBrush x:Key="Brush.AtCompletionFileBadgeBorder" Color="#3F3F46" />
+    <SolidColorBrush x:Key="Brush.AtCompletionFileBadgeText" Color="#A1A1AA" />
+
     <!-- Code / markdown -->
     <SolidColorBrush x:Key="Brush.CodeBackground" Color="#202023" />
     <SolidColorBrush x:Key="Brush.CodeBackgroundAlt" Color="#27272A" />

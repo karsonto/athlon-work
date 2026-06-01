@@ -8,8 +8,7 @@ public sealed class AgentSkill
     public AgentSkill(
         IReadOnlyDictionary<string, object> metadata,
         string skillContent,
-        IReadOnlyDictionary<string, string> resources,
-        string source)
+        IReadOnlyDictionary<string, string> resources)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(skillContent);
 
@@ -27,7 +26,6 @@ public sealed class AgentSkill
         Resources = resources is null
             ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(resources, StringComparer.OrdinalIgnoreCase);
-        Source = string.IsNullOrWhiteSpace(source) ? "custom" : source;
     }
 
     public IReadOnlyDictionary<string, object> Metadata { get; }
@@ -40,9 +38,7 @@ public sealed class AgentSkill
 
     public IReadOnlyDictionary<string, string> Resources { get; }
 
-    public string Source { get; }
-
-    public string SkillId => $"{Name}_{Source}";
+    public string SkillId => Name;
 
     public string? GetResource(string resourcePath) =>
         Resources.TryGetValue(resourcePath, out var content) ? content : null;

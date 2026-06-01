@@ -51,4 +51,37 @@ public sealed class ToolPathNormalizerTests
         Assert.True(ToolPathNormalizer.TryNormalizeForFileOperation(@"src\a\b.txt", out var path, out _));
         Assert.Equal("src/a/b.txt", path);
     }
+
+    [Fact]
+    public void ResolveRelativeToWorkspaceRoot_StripsWorkspaceFolderPrefix()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-work");
+        var result = ToolPathNormalizer.ResolveRelativeToWorkspaceRoot("athlon-work/src/foo.cs", root);
+        Assert.Equal("src/foo.cs", result);
+    }
+
+    [Fact]
+    public void ResolveRelativeToWorkspaceRoot_StripsAbsolutePathUnderRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-work");
+        var absolute = Path.Combine(root, "src", "foo.cs");
+        var result = ToolPathNormalizer.ResolveRelativeToWorkspaceRoot(absolute, root);
+        Assert.Equal("src/foo.cs", result);
+    }
+
+    [Fact]
+    public void ResolveRelativeToWorkspaceRoot_LeavesNormalRelativePathUnchanged()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-work");
+        Assert.Equal("src/foo.cs", ToolPathNormalizer.ResolveRelativeToWorkspaceRoot("src/foo.cs", root));
+    }
+
+    [Fact]
+    public void ResolveRelativeToWorkspaceRoot_StripsForwardSlashRootPrefix()
+    {
+        var root = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "work", "demo"));
+        var rootForward = root.Replace('\\', '/');
+        var result = ToolPathNormalizer.ResolveRelativeToWorkspaceRoot($"{rootForward}/src/foo.cs", root);
+        Assert.Equal("src/foo.cs", result);
+    }
 }
