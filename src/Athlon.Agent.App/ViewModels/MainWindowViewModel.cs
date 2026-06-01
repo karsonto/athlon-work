@@ -644,7 +644,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (!string.IsNullOrWhiteSpace(_session.ActiveWorkspace))
         {
-            _workspaceContext.SetWorkspace(_session.ActiveWorkspace);
+            var activeRoot = Path.GetFullPath(_session.ActiveWorkspace);
+            var match = _appSettings.Workspaces.FirstOrDefault(workspace =>
+                !string.IsNullOrWhiteSpace(workspace.RootPath)
+                && string.Equals(Path.GetFullPath(workspace.RootPath), activeRoot, StringComparison.OrdinalIgnoreCase));
+            _workspaceContext.SetWorkspace(activeRoot, match?.Name, ResolveIgnorePatterns(match));
             return;
         }
 
@@ -655,8 +659,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _workspaceContext.SetWorkspace(configured.RootPath, configured.Name, configured.IgnorePatterns);
+        _workspaceContext.SetWorkspace(configured.RootPath, configured.Name, ResolveIgnorePatterns(configured));
     }
+
+    private IReadOnlyList<string> ResolveIgnorePatterns(WorkspaceSettings? workspace) =>
+        WorkspaceIgnoreResolver.Resolve(
+            workspacePatterns: workspace?.IgnorePatterns,
+            globalPatterns: _appSettings.WorkspaceIgnore.DirectoryNames);
 
     private async Task SaveCurrentSessionIfNeededAsync() =>
         await SaveCurrentSessionIfNeededAsync(_session);

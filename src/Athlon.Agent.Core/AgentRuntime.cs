@@ -42,14 +42,15 @@ public sealed class AgentRuntime(
             var match = settings.Workspaces.FirstOrDefault(workspace =>
                 !string.IsNullOrWhiteSpace(workspace.RootPath)
                 && string.Equals(Path.GetFullPath(workspace.RootPath), fullPath, StringComparison.OrdinalIgnoreCase));
-            if (match?.IgnorePatterns is { Count: > 0 })
-            {
-                return match.IgnorePatterns;
-            }
+            return WorkspaceIgnoreResolver.Resolve(
+                workspacePatterns: match?.IgnorePatterns,
+                globalPatterns: settings.WorkspaceIgnore.DirectoryNames);
         }
 
-        return settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath))?.IgnorePatterns
-               ?? [".git", "bin", "obj", "node_modules"];
+        var configuredWorkspace = settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath));
+        return WorkspaceIgnoreResolver.Resolve(
+            workspacePatterns: configuredWorkspace?.IgnorePatterns,
+            globalPatterns: settings.WorkspaceIgnore.DirectoryNames);
     }
 
     private Task<AgentSession> SendAsyncCore(

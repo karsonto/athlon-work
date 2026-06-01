@@ -43,7 +43,7 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
             ? new[] { fullPath }
             : Directory.Exists(fullPath)
                 ? Directory.EnumerateFiles(fullPath, glob, SearchOption.AllDirectories)
-                    .Where(file => !ShouldIgnore(file, ignorePatterns))
+                    .Where(file => !WorkspacePathFilter.ShouldIgnorePath(file, ignorePatterns))
                     .Take(MaxFilesToScan)
                 : Array.Empty<string>();
 
@@ -102,16 +102,4 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
             : ToolResult.Success($"Found {matches.Count} matches", string.Join(Environment.NewLine, matches));
     }
 
-    private static bool ShouldIgnore(string fullPath, IReadOnlyList<string> ignorePatterns)
-    {
-        foreach (var segment in fullPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
-        {
-            if (ignorePatterns.Any(pattern => string.Equals(pattern, segment, StringComparison.OrdinalIgnoreCase)))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
 }

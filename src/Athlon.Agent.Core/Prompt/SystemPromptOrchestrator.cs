@@ -61,7 +61,9 @@ public sealed class SystemPromptOrchestrator(
             Session = session,
             WorkspaceRoot = workspace?.RootPath,
             WorkspaceName = workspace?.Name,
-            IgnorePatterns = workspace?.IgnorePatterns ?? [".git", "bin", "obj", "node_modules"],
+            IgnorePatterns = WorkspaceIgnoreResolver.Resolve(
+                workspacePatterns: workspace?.IgnorePatterns,
+                globalPatterns: settings.WorkspaceIgnore.DirectoryNames),
             Tools = tools,
             SkillsDirectory = host.SkillsDirectory,
             Host = host,
@@ -98,9 +100,9 @@ public sealed class SystemPromptOrchestrator(
             {
                 Name = Path.GetFileName(rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
                 RootPath = rootPath,
-                IgnorePatterns = match?.IgnorePatterns is { Count: > 0 } patterns
-                    ? patterns
-                    : [".git", "bin", "obj", "node_modules"]
+                IgnorePatterns = WorkspaceIgnoreResolver.Resolve(
+                    workspacePatterns: match?.IgnorePatterns,
+                    globalPatterns: settings.WorkspaceIgnore.DirectoryNames)
             };
         }
 

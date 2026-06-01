@@ -146,4 +146,24 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     internal static void PruneEmptyWorkspaces(AppSettings settings) =>
         settings.Workspaces.RemoveAll(workspace => string.IsNullOrWhiteSpace(workspace.RootPath));
+
+    public string IgnoreDirectoriesText
+    {
+        get => string.Join(Environment.NewLine, Settings.WorkspaceIgnore.DirectoryNames);
+        set => Settings.WorkspaceIgnore.DirectoryNames = ParseIgnoreDirectoryLines(value);
+    }
+
+    private static List<string> ParseIgnoreDirectoryLines(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
+        return text
+            .Split(['\r', '\n', ',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 }

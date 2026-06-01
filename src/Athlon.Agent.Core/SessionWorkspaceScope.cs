@@ -7,8 +7,6 @@ public sealed class SessionWorkspaceScope : IDisposable
 {
     private static readonly AsyncLocal<SessionWorkspaceState?> Current = new();
 
-    private static readonly string[] DefaultIgnorePatterns = [".git", "bin", "obj", "node_modules", ".vs", "artifacts", "publish"];
-
     private readonly SessionWorkspaceState? _previous;
 
     private SessionWorkspaceScope(string? rootPath, IReadOnlyList<string> ignorePatterns)
@@ -23,7 +21,7 @@ public sealed class SessionWorkspaceScope : IDisposable
     {
         var patterns = ignorePatterns is { Count: > 0 }
             ? ignorePatterns
-            : DefaultIgnorePatterns;
+            : WorkspaceIgnoreDefaults.BuiltIn;
         return new SessionWorkspaceScope(rootPath, patterns);
     }
 

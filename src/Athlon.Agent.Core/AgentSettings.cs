@@ -18,6 +18,16 @@ public sealed class AppSettings
     public PromptSettings Prompt { get; set; } = new();
     public PlanSettings Plan { get; set; } = new();
     public AgentTurnSettings AgentTurn { get; set; } = new();
+    public WorkspaceIgnoreSettings WorkspaceIgnore { get; set; } = new();
+}
+
+public sealed class WorkspaceIgnoreSettings
+{
+    /// <summary>
+    /// Directory names skipped by grep_files, glob_files, file_list, and the workspace tree.
+    /// Per-workspace <see cref="WorkspaceSettings.IgnorePatterns"/> overrides this when non-empty.
+    /// </summary>
+    public List<string> DirectoryNames { get; set; } = WorkspaceIgnoreDefaults.CreateMutableDefaultList();
 }
 
 public sealed class PlanSettings
@@ -91,7 +101,8 @@ public sealed class WorkspaceSettings
 {
     public string Name { get; set; } = string.Empty;
     public string RootPath { get; set; } = string.Empty;
-    public List<string> IgnorePatterns { get; set; } = new() { ".git", "bin", "obj", "node_modules" };
+    /// <summary>When empty, inherits <see cref="AppSettings.WorkspaceIgnore"/>.</summary>
+    public List<string> IgnorePatterns { get; set; } = new();
 }
 public sealed class UiSettings
 {

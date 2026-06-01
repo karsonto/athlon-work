@@ -40,7 +40,7 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
 
         var ignorePatterns = guard.GetIgnorePatterns();
         var files = Directory.EnumerateFileSystemEntries(fullPath, "*", SearchOption.TopDirectoryOnly)
-            .Where(path => !ignorePatterns.Any(pattern => string.Equals(Path.GetFileName(path), pattern, StringComparison.OrdinalIgnoreCase)))
+            .Where(path => !WorkspacePathFilter.ShouldIgnoreEntryName(Path.GetFileName(path), ignorePatterns))
             .OrderBy(path => Directory.Exists(path) ? 0 : 1)
             .ThenBy(Path.GetFileName)
             .Take(200)

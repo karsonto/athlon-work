@@ -40,10 +40,22 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
             return scoped.IgnorePatterns;
         }
 
-        return workspaceContext.IgnorePatterns.Count > 0
-            ? workspaceContext.IgnorePatterns
-            : settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath))?.IgnorePatterns
-              ?? [".git", "bin", "obj", "node_modules"];
+        if (workspaceContext.RootPath is not null && workspaceContext.IgnorePatterns is { Count: > 0 })
+        {
+            return workspaceContext.IgnorePatterns;
+        }
+
+        WorkspaceSettings? configuredWorkspace = null;
+        if (TryGetWorkspaceRootInternal(out var workspaceRoot))
+        {
+            configuredWorkspace = settings.Workspaces.FirstOrDefault(workspace =>
+                !string.IsNullOrWhiteSpace(workspace.RootPath)
+                && string.Equals(Path.GetFullPath(workspace.RootPath), workspaceRoot, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return WorkspaceIgnoreResolver.Resolve(
+            workspacePatterns: configuredWorkspace?.IgnorePatterns,
+            globalPatterns: settings.WorkspaceIgnore.DirectoryNames);
     }
 
     private bool TryGetWorkspaceRootInternal(out string rootPath)

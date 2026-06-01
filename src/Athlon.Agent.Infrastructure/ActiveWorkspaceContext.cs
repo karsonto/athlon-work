@@ -15,11 +15,9 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class ActiveWorkspaceContext : IActiveWorkspaceContext
 {
-    private static readonly string[] DefaultIgnorePatterns = [".git", "bin", "obj", "node_modules", ".vs", "artifacts", "publish"];
-
     public string? RootPath { get; private set; }
     public string? DisplayName { get; private set; }
-    public IReadOnlyList<string> IgnorePatterns { get; private set; } = DefaultIgnorePatterns;
+    public IReadOnlyList<string> IgnorePatterns { get; private set; } = WorkspaceIgnoreDefaults.BuiltIn;
 
     public void SetWorkspace(string? rootPath, string? displayName = null, IReadOnlyList<string>? ignorePatterns = null)
     {
@@ -27,12 +25,14 @@ public sealed class ActiveWorkspaceContext : IActiveWorkspaceContext
         {
             RootPath = null;
             DisplayName = null;
-            IgnorePatterns = DefaultIgnorePatterns;
+            IgnorePatterns = WorkspaceIgnoreDefaults.BuiltIn;
             return;
         }
 
         RootPath = Path.GetFullPath(rootPath);
         DisplayName = displayName ?? Path.GetFileName(RootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        IgnorePatterns = ignorePatterns ?? DefaultIgnorePatterns;
+        IgnorePatterns = ignorePatterns is { Count: > 0 }
+            ? ignorePatterns
+            : WorkspaceIgnoreDefaults.BuiltIn;
     }
 }

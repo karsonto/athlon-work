@@ -34,7 +34,9 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
 
         var searchPattern = pattern.Contains('/') || pattern.Contains('\\') ? Path.GetFileName(pattern) : pattern;
         var recursive = pattern.Contains("**", StringComparison.Ordinal);
+        var ignorePatterns = guard.GetIgnorePatterns();
         var matches = Directory.EnumerateFileSystemEntries(fullPath, searchPattern.Replace("**", "*"), recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)
+            .Where(path => !WorkspacePathFilter.ShouldIgnorePath(path, ignorePatterns))
             .Take(200)
             .Select(path => Directory.Exists(path)
                 ? $"{Path.GetRelativePath(fullPath, path)}/"
