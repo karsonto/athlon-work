@@ -8,6 +8,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Athlon Agent"
+        Icon="/Assets/app-icon.ico"
         Height="768"
         Width="1366"
         MinHeight="720"
@@ -49,9 +50,11 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
-                    <Border Width="40" Height="40" CornerRadius="12" Background="{StaticResource Brush.IconBadge}" Margin="0,0,12,0">
-                        <TextBlock Text="A" FontSize="18" FontWeight="Bold" Foreground="#0F172A" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
+                    <Image Source="/Assets/app-icon-48.png"
+                           Width="40"
+                           Height="40"
+                           Margin="0,0,12,0"
+                           RenderOptions.BitmapScalingMode="HighQuality" />
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="Athlon Agent" FontSize="18" FontWeight="SemiBold" />
                         <TextBlock Text="AI 编程助手" FontSize="13" Foreground="{StaticResource Brush.SubtleText}" Margin="0,2,0,0" />
@@ -392,9 +395,12 @@
                             </Style.Triggers>
                         </Style>
                     </StackPanel.Style>
-                    <Border Width="48" Height="48" CornerRadius="14" Background="{StaticResource Brush.IconBadge}" HorizontalAlignment="Center" Margin="0,0,0,20">
-                        <TextBlock Text="A" FontSize="22" FontWeight="Bold" Foreground="#0F172A" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    </Border>
+                    <Image Source="/Assets/app-icon-64.png"
+                           Width="48"
+                           Height="48"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,20"
+                           RenderOptions.BitmapScalingMode="HighQuality" />
                     <TextBlock Text="Start chatting with Athlon"
                                FontSize="26"
                                FontWeight="SemiBold"
@@ -449,14 +455,14 @@
                                         </Style>
                                     </StackPanel.Style>
 
-                                    <Border Width="40"
-                                            Height="40"
-                                            CornerRadius="12"
-                                            Background="{StaticResource Brush.IconBadge}"
-                                            Margin="0,0,12,0"
-                                            VerticalAlignment="Top">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
+                                    <Image Source="/Assets/app-icon-48.png"
+                                           Width="40"
+                                           Height="40"
+                                           Margin="0,0,12,0"
+                                           VerticalAlignment="Top"
+                                           RenderOptions.BitmapScalingMode="HighQuality">
+                                        <Image.Style>
+                                            <Style TargetType="Image">
                                                 <Setter Property="Visibility" Value="Visible" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsUser}" Value="True">
@@ -464,9 +470,8 @@
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
-                                        </Border.Style>
-                                        <TextBlock Text="A" FontWeight="Bold" Foreground="#0F172A" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    </Border>
+                                        </Image.Style>
+                                    </Image>
 
                                     <StackPanel Orientation="Vertical"
                                                 MaxWidth="680"

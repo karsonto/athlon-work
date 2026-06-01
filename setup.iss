@@ -28,6 +28,7 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 PrivilegesRequired=admin
 WizardStyle=modern
+SetupIconFile=src\Athlon.Agent.App\Assets\app-icon.ico
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}

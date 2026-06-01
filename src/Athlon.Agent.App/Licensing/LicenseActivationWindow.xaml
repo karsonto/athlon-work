@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="激活 Athlon Agent"
+        Icon="/Assets/app-icon.ico"
         Height="584"
         Width="640"
         MinHeight="480"
@@ -35,18 +36,11 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
-                    <Border Width="40"
-                            Height="40"
-                            CornerRadius="12"
-                            Background="{StaticResource Brush.IconBadge}"
-                            Margin="0,0,12,0">
-                        <TextBlock Text="A"
-                                   FontSize="18"
-                                   FontWeight="Bold"
-                                   Foreground="#0F172A"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center" />
-                    </Border>
+                    <Image Source="/Assets/app-icon-48.png"
+                           Width="40"
+                           Height="40"
+                           Margin="0,0,12,0"
+                           RenderOptions.BitmapScalingMode="HighQuality" />
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="Athlon Agent"
                                    FontSize="18"
