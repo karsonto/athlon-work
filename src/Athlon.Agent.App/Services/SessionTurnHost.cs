@@ -286,7 +286,7 @@ public sealed class SessionTurnHost
             finally
             {
                 var errorMessage = error is null ? null : $"模型调用失败：{error.Message}";
-                var persistedTurnMessages = Array.Empty<ChatMessage>();
+                IReadOnlyList<ChatMessage> persistedTurnMessages = Array.Empty<ChatMessage>();
                 if (cancelled || timedOut || error is not null)
                 {
                     var snapshot = _request.Ui.CaptureEndSnapshot(_session, cancelled, timedOut, errorMessage);
