@@ -22,10 +22,71 @@ public partial class MainWindow : Window
         _viewModel = viewModel;
         DataContext = _viewModel;
         _viewModel.ScrollChatToBottom = ScrollChatToEnd;
-        Loaded += (_, _) => ScrollChatToEnd();
+        _viewModel.ContextSidebarLayoutChanged += (_, _) => Dispatcher.Invoke(ApplyContextSidebarLayout);
+        Loaded += OnMainWindowLoaded;
         StateChanged += (_, _) => UpdateMaximizeRestoreButton();
         UpdateMaximizeRestoreButton();
         App.StartupTrace("MainWindow DataContext assigned");
+    }
+
+    private void OnMainWindowLoaded(object sender, RoutedEventArgs e)
+    {
+        ApplyContextSidebarLayout();
+        ScrollChatToEnd();
+    }
+
+    private void ApplyContextSidebarLayout()
+    {
+        if (ContextSidebarColumn is null || ContextSidebarPanel is null || ContextSidebarSplitter is null)
+        {
+            return;
+        }
+
+        if (_viewModel.IsContextSidebarVisible)
+        {
+            ContextSidebarColumn.MinWidth = MainWindowViewModel.ContextSidebarMinWidth;
+            ContextSidebarColumn.MaxWidth = MainWindowViewModel.ContextSidebarMaxWidth;
+            ContextSidebarColumn.Width = new GridLength(_viewModel.ContextSidebarWidth);
+            ContextSidebarPanel.Visibility = Visibility.Visible;
+            ContextSidebarSplitter.Visibility = Visibility.Visible;
+            if (ContextSidebarCollapsedRail is not null)
+            {
+                ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
+            }
+        }
+        else
+        {
+            ContextSidebarColumn.MinWidth = 0;
+            ContextSidebarColumn.MaxWidth = double.PositiveInfinity;
+            ContextSidebarColumn.Width = new GridLength(0);
+            ContextSidebarPanel.Visibility = Visibility.Collapsed;
+            ContextSidebarSplitter.Visibility = Visibility.Collapsed;
+            if (ContextSidebarCollapsedRail is not null)
+            {
+                ContextSidebarCollapsedRail.Visibility = Visibility.Visible;
+            }
+        }
+    }
+
+    private void ContextSidebarSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        if (!_viewModel.IsContextSidebarVisible || ContextSidebarColumn is null)
+        {
+            return;
+        }
+
+        var width = ContextSidebarColumn.ActualWidth;
+        if (width < MainWindowViewModel.ContextSidebarCollapseDragThreshold)
+        {
+            _viewModel.SetContextSidebarVisible(false);
+            _ = _viewModel.PersistUiLayoutForSidebarAsync();
+            return;
+        }
+
+        if (width >= MainWindowViewModel.ContextSidebarMinWidth)
+        {
+            _viewModel.UpdateContextSidebarWidth(width);
+        }
     }
 
     private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)

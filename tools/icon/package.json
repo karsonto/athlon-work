@@ -1,0 +1,12 @@
+{
+  "name": "athlon-icon-gen",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node generate-icons.mjs"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "png-to-ico": "^2.1.8"
+  }
+}

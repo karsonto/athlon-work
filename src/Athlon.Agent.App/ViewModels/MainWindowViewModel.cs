@@ -71,6 +71,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
+        _appSettings.Ui.ContextSidebarWidth = Math.Clamp(
+            _appSettings.Ui.ContextSidebarWidth,
+            ContextSidebarMinWidth,
+            ContextSidebarMaxWidth);
+        if (_appSettings.Ui.ContextSidebarWidth < ContextSidebarMinWidth)
+        {
+            _appSettings.Ui.ContextSidebarWidth = ContextSidebarDefaultWidth;
+        }
+
         ApplySessionWorkspace();
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         PendingImageAttachments.CollectionChanged += OnPendingImagesChanged;
@@ -110,7 +119,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public ContextSidebarViewModel Sidebar { get; }
     public SettingsViewModel Settings { get; }
 
+    public const double ContextSidebarMinWidth = 220;
+    public const double ContextSidebarMaxWidth = 560;
+    public const double ContextSidebarDefaultWidth = 300;
+
+    public event EventHandler? ContextSidebarLayoutChanged;
+
+    public bool IsContextSidebarVisible => _appSettings.Ui.ContextSidebarVisible;
+
+    public double ContextSidebarWidth =>
+        Math.Clamp(_appSettings.Ui.ContextSidebarWidth, ContextSidebarMinWidth, ContextSidebarMaxWidth);
+
+    public string ContextSidebarToggleToolTip =>
+        IsContextSidebarVisible ? "关闭右侧栏 (Ctrl+Alt+B)" : "打开右侧栏 (Ctrl+Alt+B)";
+
+    public const double ContextSidebarCollapseDragThreshold = 200;
+
     private CancellationTokenSource? _copyNoticeCts;
+    private CancellationTokenSource? _uiLayoutSaveCts;
 
     [ObservableProperty]
     private string copyNotice = string.Empty;
@@ -171,6 +197,81 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (string.Equals(page, "Settings", StringComparison.Ordinal))
         {
             Settings.SyncSkillsFromCatalog();
+        }
+    }
+
+    [RelayCommand]
+    private async Task ToggleContextSidebarAsync()
+    {
+        SetContextSidebarVisible(!_appSettings.Ui.ContextSidebarVisible);
+        await PersistUiLayoutAsync();
+    }
+
+    public void SetContextSidebarVisible(bool visible)
+    {
+        var ui = _appSettings.Ui;
+        if (ui.ContextSidebarVisible == visible)
+        {
+            return;
+        }
+
+        ui.ContextSidebarVisible = visible;
+        if (visible && ui.ContextSidebarWidth < ContextSidebarMinWidth)
+        {
+            ui.ContextSidebarWidth = ContextSidebarDefaultWidth;
+        }
+
+        NotifyContextSidebarLayoutChanged();
+    }
+
+    public void UpdateContextSidebarWidth(double width)
+    {
+        if (!_appSettings.Ui.ContextSidebarVisible)
+        {
+            return;
+        }
+
+        var clamped = Math.Clamp(width, ContextSidebarMinWidth, ContextSidebarMaxWidth);
+        if (Math.Abs(_appSettings.Ui.ContextSidebarWidth - clamped) < 0.5)
+        {
+            return;
+        }
+
+        _appSettings.Ui.ContextSidebarWidth = clamped;
+        SchedulePersistUiLayout();
+    }
+
+    private void NotifyContextSidebarLayoutChanged()
+    {
+        OnPropertyChanged(nameof(IsContextSidebarVisible));
+        OnPropertyChanged(nameof(ContextSidebarWidth));
+        OnPropertyChanged(nameof(ContextSidebarToggleToolTip));
+        ContextSidebarLayoutChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private Task PersistUiLayoutAsync() => _storage.SaveSettingsAsync(_appSettings);
+
+    public Task PersistUiLayoutForSidebarAsync() => PersistUiLayoutAsync();
+
+    private void SchedulePersistUiLayout()
+    {
+        _uiLayoutSaveCts?.Cancel();
+        _uiLayoutSaveCts?.Dispose();
+        _uiLayoutSaveCts = new CancellationTokenSource();
+        var token = _uiLayoutSaveCts.Token;
+        _ = PersistUiLayoutDebouncedAsync(token);
+    }
+
+    private async Task PersistUiLayoutDebouncedAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(400, cancellationToken);
+            await _storage.SaveSettingsAsync(_appSettings);
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer width change.
         }
     }
 
@@ -938,6 +1039,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         try { _turnHost.CancelAll(); } catch { /* ignore */ }
         _workspaceWatcher?.Dispose();
         _workspaceWatcher = null;
+        try
+        {
+            _uiLayoutSaveCts?.Cancel();
+            _storage.SaveSettingsAsync(_appSettings).GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // Best-effort persist of sidebar layout on exit.
+        }
     }
 
     public void Dispose()
@@ -948,6 +1058,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();
+        _uiLayoutSaveCts?.Cancel();
+        _uiLayoutSaveCts?.Dispose();
     }
 
     private bool EnsureCurrentApiKeySecret(AppSettings settings)

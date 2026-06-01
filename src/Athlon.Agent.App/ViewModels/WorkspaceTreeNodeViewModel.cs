@@ -80,7 +80,7 @@ public sealed class WorkspaceTreeNodeViewModel
         return node;
     }
 
-    public static ObservableCollection<WorkspaceTreeNodeViewModel> BuildTree(string? rootPath, IReadOnlyCollection<string> ignorePatterns, int maxDepth = 5, int maxNodes = 500)
+    public static ObservableCollection<WorkspaceTreeNodeViewModel> BuildTree(string? rootPath, IReadOnlyCollection<string> ignorePatterns, int maxDepth = 5, int maxNodes = 2000)
     {
         var tree = new ObservableCollection<WorkspaceTreeNodeViewModel>();
         if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
