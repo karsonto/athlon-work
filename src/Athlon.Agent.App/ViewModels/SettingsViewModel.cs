@@ -1,36 +1,44 @@
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Text;
-using System.Windows;
-using System.Windows.Threading;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Mcp;
 using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Win32;
 
 namespace Athlon.Agent.App.ViewModels;
 
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly IMcpRegistry _mcpRegistry;
+    private readonly IAgentSkillCatalog _skillCatalog;
+    private readonly IAppPathProvider _paths;
 
-    public SettingsViewModel(AppSettings settings, IMcpRegistry mcpRegistry)
+    public SettingsViewModel(
+        AppSettings settings,
+        IMcpRegistry mcpRegistry,
+        IAgentSkillCatalog skillCatalog,
+        IAppPathProvider paths)
     {
         Settings = settings;
         _mcpRegistry = mcpRegistry;
+        _skillCatalog = skillCatalog;
+        _paths = paths;
         foreach (var server in Settings.McpServers)
         {
             McpServers.Add(new McpServerItemViewModel(server, _mcpRegistry, OnMcpServerEnabledChanged));
         }
 
         SelectedMcpServer = McpServers.FirstOrDefault();
+        SyncSkillsFromCatalog();
     }
 
     public event EventHandler? McpConfigurationChanged;
+    public event EventHandler? SkillConfigurationChanged;
 
     private void OnMcpServerEnabledChanged() => McpConfigurationChanged?.Invoke(this, EventArgs.Empty);
+
+    private void OnSkillEnabledChanged() => SkillConfigurationChanged?.Invoke(this, EventArgs.Empty);
 
     internal void RefreshRuntimeStates()
     {
@@ -40,9 +48,30 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
     }
 
+    public void SyncSkillsFromCatalog()
+    {
+        _skillCatalog.Reload();
+        var installed = _skillCatalog.Skills;
+        var installedNames = installed.Select(skill => skill.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var merged = SkillSettingsMerger.Merge(_paths.SkillsPath, installed, Settings.Skills);
+        Settings.Skills.Clear();
+        Settings.Skills.AddRange(merged);
+
+        Skills.Clear();
+        foreach (var settings in merged.OrderBy(skill => skill.Name, StringComparer.Ordinal))
+        {
+            var description = installed.FirstOrDefault(skill =>
+                string.Equals(skill.Name, settings.Name, StringComparison.OrdinalIgnoreCase))?.Description
+                ?? string.Empty;
+            var isInstalled = installedNames.Contains(settings.Name);
+            Skills.Add(new SkillItemViewModel(settings, description, isInstalled, OnSkillEnabledChanged));
+        }
+    }
+
     public AppSettings Settings { get; }
     public string[] Sections { get; } = { "Models", "MCP", "Skills", "Workspace", "Tool Permissions", "Appearance" };
     public ObservableCollection<McpServerItemViewModel> McpServers { get; } = new();
+    public ObservableCollection<SkillItemViewModel> Skills { get; } = new();
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelectedMcpServer))]
@@ -50,19 +79,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     private McpServerItemViewModel? selectedMcpServer;
 
     public bool HasSelectedMcpServer => SelectedMcpServer is not null;
-
-    public SkillSettings EditableSkill
-    {
-        get
-        {
-            if (Settings.Skills.Count == 0)
-            {
-                Settings.Skills.Add(new SkillSettings());
-            }
-
-            return Settings.Skills[0];
-        }
-    }
 
     public McpServerSettings EditableMcpServer
     {

@@ -90,6 +90,37 @@ public static class SkillFileSystemHelper
     public static bool SkillExists(string baseDir, string skillName) =>
         !string.IsNullOrWhiteSpace(skillName) && FindSkillDirectoryByName(baseDir, skillName) is not null;
 
+    public static IReadOnlyDictionary<string, string> GetSkillNameToFolderMap(string baseDir)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!Directory.Exists(baseDir))
+        {
+            return map;
+        }
+
+        foreach (var dir in Directory.EnumerateDirectories(baseDir))
+        {
+            if (!HasSkillFile(dir))
+            {
+                continue;
+            }
+
+            var name = ReadSkillName(dir);
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                continue;
+            }
+
+            var folderName = Path.GetFileName(dir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (!string.IsNullOrWhiteSpace(folderName))
+            {
+                map[name] = folderName;
+            }
+        }
+
+        return map;
+    }
+
     public static bool HasSkillFile(string dir)
     {
         if (!Directory.Exists(dir))

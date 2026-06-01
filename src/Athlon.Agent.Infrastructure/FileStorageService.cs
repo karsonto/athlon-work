@@ -209,7 +209,7 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         await jsonFileStore.SaveAsync(Path.Combine(paths.ConfigPath, "settings.json"), settings, cancellationToken);
         await jsonFileStore.SaveAsync(Path.Combine(paths.ConfigPath, "models.json"), settings.Model, cancellationToken);
         await McpConfigFileService.SaveServersAsync(paths, settings.McpServers, cancellationToken);
-        await jsonFileStore.SaveAsync(Path.Combine(paths.ConfigPath, "skills.json"), settings.Skills, cancellationToken);
+        await SkillConfigFileService.SaveSkillsAsync(paths, settings.Skills, cancellationToken);
         await jsonFileStore.SaveAsync(Path.Combine(paths.ConfigPath, "workspaces.json"), settings.Workspaces, cancellationToken);
         await jsonFileStore.SaveAsync(Path.Combine(paths.ConfigPath, "logging.json"), settings.Logging, cancellationToken);
     }
@@ -235,6 +235,12 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         if (mcpServers.Count > 0)
         {
             settings.McpServers = mcpServers;
+        }
+
+        var skills = await SkillConfigFileService.LoadSkillsAsync(paths, cancellationToken);
+        if (skills.Count > 0)
+        {
+            settings.Skills = skills;
         }
 
         return settings;

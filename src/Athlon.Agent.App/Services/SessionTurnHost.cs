@@ -41,6 +41,7 @@ public sealed class SessionTurnHost
     private readonly IFileStorageService _storage;
     private readonly AppSettings _settings;
     private readonly ConcurrentDictionary<string, SessionTurnRunner> _runners = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Queue<QueuedTurnPayload>> _queues = new(StringComparer.Ordinal);
     private readonly object _startGate = new();
 
     public SessionTurnHost(IAgentOrchestrator orchestrator, IFileStorageService storage, AppSettings settings)
@@ -83,6 +84,98 @@ public sealed class SessionTurnHost
     public bool IsRunning(string sessionId) => _runners.ContainsKey(sessionId);
 
     public IReadOnlyCollection<string> RunningSessionIds => _runners.Keys.ToArray();
+
+    public void Enqueue(QueuedTurnPayload payload)
+    {
+        lock (_startGate)
+        {
+            var queue = _queues.GetOrAdd(payload.SessionId, _ => new Queue<QueuedTurnPayload>());
+            queue.Enqueue(payload);
+        }
+    }
+
+    public bool TryDequeue(string sessionId, out QueuedTurnPayload? payload)
+    {
+        lock (_startGate)
+        {
+            if (!_queues.TryGetValue(sessionId, out var queue) || queue.Count == 0)
+            {
+                payload = null;
+                return false;
+            }
+
+            payload = queue.Dequeue();
+            if (queue.Count == 0)
+            {
+                _queues.TryRemove(sessionId, out _);
+            }
+
+            return true;
+        }
+    }
+
+    public void RequeueFront(QueuedTurnPayload payload)
+    {
+        lock (_startGate)
+        {
+            var queue = _queues.GetOrAdd(payload.SessionId, _ => new Queue<QueuedTurnPayload>());
+            var items = queue.ToList();
+            queue.Clear();
+            queue.Enqueue(payload);
+            foreach (var item in items)
+            {
+                queue.Enqueue(item);
+            }
+        }
+    }
+
+    public bool Remove(string sessionId, string queueId)
+    {
+        lock (_startGate)
+        {
+            if (!_queues.TryGetValue(sessionId, out var queue) || queue.Count == 0)
+            {
+                return false;
+            }
+
+            var items = queue.Where(item => !string.Equals(item.QueueId, queueId, StringComparison.Ordinal)).ToList();
+            if (items.Count == queue.Count)
+            {
+                return false;
+            }
+
+            queue.Clear();
+            foreach (var item in items)
+            {
+                queue.Enqueue(item);
+            }
+
+            if (queue.Count == 0)
+            {
+                _queues.TryRemove(sessionId, out _);
+            }
+
+            return true;
+        }
+    }
+
+    public void ClearQueue(string sessionId)
+    {
+        lock (_startGate)
+        {
+            _queues.TryRemove(sessionId, out _);
+        }
+    }
+
+    public int GetQueueCount(string sessionId)
+    {
+        lock (_startGate)
+        {
+            return _queues.TryGetValue(sessionId, out var queue) ? queue.Count : 0;
+        }
+    }
+
+    public bool HasQueuedTurns(string sessionId) => GetQueueCount(sessionId) > 0;
 
     public void Cancel(string sessionId)
     {

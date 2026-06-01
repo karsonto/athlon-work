@@ -29,6 +29,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly SessionUiCache _uiCache;
     private readonly IPlanNotebook _planNotebook;
     private readonly PlanAutoContinueTracker _planAutoContinueTracker;
+    private readonly Dictionary<string, ObservableCollection<QueuedTurnViewModel>> _queuedTurnsBySession = new(StringComparer.Ordinal);
     private FileSystemWatcher? _workspaceWatcher;
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -65,8 +66,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
         _turnHost.TurnCompleted += OnTurnCompleted;
         _turnHost.TurnStateChanged += OnTurnStateChanged;
-        Settings = new SettingsViewModel(settings, _mcpRegistry);
+        Settings = new SettingsViewModel(settings, _mcpRegistry, skillCatalog, paths);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
+        Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
         ApplySessionWorkspace();
@@ -91,7 +93,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         await RefreshMcpRuntimeAsync();
 
         await RefreshSessionHistoryAsync();
-        var latest = SessionHistory.FirstOrDefault();
+        var latest = GetFirstAgentRecord();
         if (latest is not null && _session.Messages.Count == 0)
         {
             await LoadSessionInternalAsync(latest.Id);
@@ -102,7 +104,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     /// <summary>由 MainWindow 注入，用于流式输出时自动滚到底部。</summary>
     public Action? ScrollChatToBottom { get; set; }
-    public ObservableCollection<SessionHistoryItemViewModel> SessionHistory { get; } = new();
+    public ObservableCollection<AgentRecordGroupViewModel> AgentRecordGroups { get; } = new();
+    public ObservableCollection<QueuedTurnViewModel> QueuedTurns => GetQueuedTurnsFor(_displayedSessionId);
+    public bool HasQueuedTurns => QueuedTurns.Count > 0;
     public ContextSidebarViewModel Sidebar { get; }
     public SettingsViewModel Settings { get; }
 
@@ -164,6 +168,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void Navigate(string page)
     {
         CurrentPage = page;
+        if (string.Equals(page, "Settings", StringComparison.Ordinal))
+        {
+            Settings.SyncSkillsFromCatalog();
+        }
     }
 
     [RelayCommand]
@@ -271,6 +279,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _turnHost.Cancel(item.Id);
         }
 
+        _turnHost.ClearQueue(item.Id);
+        _queuedTurnsBySession.Remove(item.Id);
+
         _uiCache.Remove(item.Id);
         await _storage.DeleteSessionAsync(item.Id);
 
@@ -346,8 +357,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SyncWorkspaceContext();
 
         var ui = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
-        ui.AddUserMessage(input, imageAttachments);
+        PendingImageAttachments.Clear();
 
+        if (_turnHost.IsRunning(_displayedSessionId))
+        {
+            var queueId = Guid.NewGuid().ToString("N");
+            _turnHost.Enqueue(new QueuedTurnPayload(queueId, _displayedSessionId, input, imageAttachments, ui));
+            GetQueuedTurnsFor(_displayedSessionId).Add(
+                new QueuedTurnViewModel(queueId, QueuedTurnViewModel.BuildPreview(input), imageAttachments.Length));
+            NotifyQueuedTurnsChanged();
+            SettingsStatus = "已加入排队";
+            NotifyCommandStatesChanged();
+            return Task.CompletedTask;
+        }
+
+        ui.AddUserMessage(input, imageAttachments);
         var request = new SessionTurnRequest(_displayedSessionId, _session, input, imageAttachments, ui, IsAutoContinue: false);
         if (!_turnHost.TryStart(request, out var error))
         {
@@ -356,10 +380,24 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return Task.CompletedTask;
         }
 
-        PendingImageAttachments.Clear();
         UpdateDisplayedBusyState();
         NotifyCommandStatesChanged();
         return Task.CompletedTask;
+    }
+
+    [RelayCommand]
+    private void RemoveQueuedTurn(QueuedTurnViewModel? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        if (_turnHost.Remove(_displayedSessionId, item.QueueId))
+        {
+            GetQueuedTurnsFor(_displayedSessionId).Remove(item);
+            NotifyQueuedTurnsChanged();
+        }
     }
 
     private void RequestScrollToBottom() => ScrollChatToBottom?.Invoke();
@@ -373,6 +411,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         OnPropertyChanged(nameof(Messages));
         OnPropertyChanged(nameof(HasChatMessages));
+        NotifyQueuedTurnsChanged();
+        UpdateDisplayedBusyState();
     }
 
     private void OnTurnStateChanged(object? sender, string sessionId)
@@ -401,13 +441,62 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             await SaveCurrentSessionIfNeededAsync(e.Session);
             await RefreshSessionHistoryAsync();
-            TrySchedulePlanAutoContinue(e);
+            if (!TryProcessNextQueuedTurn(e))
+            {
+                TrySchedulePlanAutoContinue(e);
+            }
+
             NotifyCommandStatesChanged();
         });
     }
 
+    private bool TryProcessNextQueuedTurn(SessionTurnCompletedEventArgs e)
+    {
+        if (!_turnHost.TryDequeue(e.SessionId, out var payload) || payload is null)
+        {
+            return false;
+        }
+
+        RemoveQueuedTurnFromUi(e.SessionId, payload.QueueId);
+        payload.Ui.AddUserMessage(payload.UserInput, payload.ImageAttachments);
+        var request = new SessionTurnRequest(
+            e.SessionId,
+            e.Session,
+            payload.UserInput,
+            payload.ImageAttachments,
+            payload.Ui,
+            IsAutoContinue: false);
+
+        if (_turnHost.TryStart(request, out var error))
+        {
+            if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
+            {
+                UpdateDisplayedBusyState();
+            }
+
+            return true;
+        }
+
+        _turnHost.RequeueFront(payload);
+        GetQueuedTurnsFor(e.SessionId).Insert(
+            0,
+            new QueuedTurnViewModel(payload.QueueId, QueuedTurnViewModel.BuildPreview(payload.UserInput), payload.ImageAttachments.Count));
+        NotifyQueuedTurnsChanged();
+        if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
+        {
+            SettingsStatus = error ?? "无法开始下一条排队消息。";
+        }
+
+        return true;
+    }
+
     private void TrySchedulePlanAutoContinue(SessionTurnCompletedEventArgs e)
     {
+        if (_turnHost.HasQueuedTurns(e.SessionId))
+        {
+            return;
+        }
+
         var planSettings = _appSettings.Plan;
         var plan = _planNotebook.GetCurrent(e.SessionId);
         var completedRounds = _planAutoContinueTracker.Get(e.SessionId);
@@ -478,7 +567,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void UpdateDisplayedBusyState() => IsBusy = _turnHost.IsRunning(_displayedSessionId);
 
-    private void StopSession(string sessionId) => _turnHost.Cancel(sessionId);
+    private void StopSession(string sessionId)
+    {
+        _turnHost.Cancel(sessionId);
+        _turnHost.ClearQueue(sessionId);
+        ClearQueuedTurnsUi(sessionId);
+    }
 
     [RelayCommand]
     private void Stop() => StopSession(_displayedSessionId);
@@ -522,6 +616,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         Settings.Settings.Model.LegacyApiKeyCredentialName = null;
         SettingsViewModel.PruneEmptyWorkspaces(Settings.Settings);
+        Settings.SyncSkillsFromCatalog();
         await _storage.SaveSettingsAsync(Settings.Settings);
         await RefreshMcpRuntimeAsync();
         ApplySessionWorkspace();
@@ -543,8 +638,48 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     private bool CanSend() =>
-        !_turnHost.IsRunning(_displayedSessionId)
-        && (!string.IsNullOrWhiteSpace(ComposerText) || PendingImageAttachments.Count > 0);
+        !string.IsNullOrWhiteSpace(ComposerText) || PendingImageAttachments.Count > 0;
+
+    private ObservableCollection<QueuedTurnViewModel> GetQueuedTurnsFor(string sessionId)
+    {
+        if (!_queuedTurnsBySession.TryGetValue(sessionId, out var collection))
+        {
+            collection = new ObservableCollection<QueuedTurnViewModel>();
+            _queuedTurnsBySession[sessionId] = collection;
+        }
+
+        return collection;
+    }
+
+    private void RemoveQueuedTurnFromUi(string sessionId, string queueId)
+    {
+        var collection = GetQueuedTurnsFor(sessionId);
+        var item = collection.FirstOrDefault(turn => string.Equals(turn.QueueId, queueId, StringComparison.Ordinal));
+        if (item is not null)
+        {
+            collection.Remove(item);
+        }
+
+        if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+        {
+            NotifyQueuedTurnsChanged();
+        }
+    }
+
+    private void ClearQueuedTurnsUi(string sessionId)
+    {
+        GetQueuedTurnsFor(sessionId).Clear();
+        if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+        {
+            NotifyQueuedTurnsChanged();
+        }
+    }
+
+    private void NotifyQueuedTurnsChanged()
+    {
+        OnPropertyChanged(nameof(QueuedTurns));
+        OnPropertyChanged(nameof(HasQueuedTurns));
+    }
 
     public void UpdateAtCompletion(string composerText, int caretIndex)
     {
@@ -690,20 +825,36 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private async Task RefreshSessionHistoryAsync()
     {
         var entries = await _storage.ListSessionsAsync();
-        SessionHistory.Clear();
-        foreach (var entry in entries)
+        AgentRecordGroups.Clear();
+        foreach (var group in AgentRecordGrouping.Build(
+                     entries,
+                     _session.Id,
+                     _turnHost.IsRunning,
+                     StopSession))
         {
-            SessionHistory.Add(new SessionHistoryItemViewModel(
-                entry,
-                entry.Id == _session.Id,
-                _turnHost.IsRunning(entry.Id),
-                StopSession));
+            if (group.Items.Count > 0)
+            {
+                AgentRecordGroups.Add(group);
+            }
         }
 
-        OnPropertyChanged(nameof(HasSessionHistory));
+        OnPropertyChanged(nameof(HasAgentRecords));
     }
 
-    public bool HasSessionHistory => SessionHistory.Count > 0;
+    public bool HasAgentRecords => AgentRecordGroups.Count > 0;
+
+    private SessionHistoryItemViewModel? GetFirstAgentRecord()
+    {
+        foreach (var group in AgentRecordGroups)
+        {
+            if (group.Items.Count > 0)
+            {
+                return group.Items[0];
+            }
+        }
+
+        return null;
+    }
 
     private async Task LoadSessionInternalAsync(string sessionId)
     {
@@ -821,6 +972,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsChatPage));
         OnPropertyChanged(nameof(IsSettingsPage));
+        if (string.Equals(value, "Settings", StringComparison.Ordinal))
+        {
+            Settings.SyncSkillsFromCatalog();
+        }
+    }
+
+    private void OnSkillConfigurationChanged()
+    {
+        _skillCatalog.Reload();
+        Sidebar.Refresh(_appSettings);
+        RefreshAtCompletionSources();
+        OnPropertyChanged(nameof(Sidebar));
     }
 
     partial void OnIsBusyChanged(bool value)

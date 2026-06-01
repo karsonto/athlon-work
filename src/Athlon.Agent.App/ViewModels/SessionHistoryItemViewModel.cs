@@ -15,7 +15,7 @@ public sealed partial class SessionHistoryItemViewModel : ObservableObject
         Action<string>? stopSession)
     {
         Id = entry.Id;
-        Title = string.IsNullOrWhiteSpace(entry.Title) ? "未命名对话" : entry.Title;
+        Title = string.IsNullOrWhiteSpace(entry.Title) ? "未命名 Agent" : entry.Title;
         UpdatedAtText = entry.UpdatedAt.ToLocalTime().ToString("MM-dd HH:mm");
         IsActive = isActive;
         IsRunning = isRunning;

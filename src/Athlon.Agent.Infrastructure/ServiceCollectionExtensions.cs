@@ -94,6 +94,12 @@ public static class ServiceCollectionExtensions
             settings.McpServers = mcpServers;
         }
 
+        var skills = SkillConfigFileService.LoadSkills(paths);
+        if (skills.Count > 0)
+        {
+            settings.Skills = skills;
+        }
+
         return settings;
     }
 }

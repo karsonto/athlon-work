@@ -128,6 +128,87 @@
                     </Grid>
                 </Border>
 
+                <Border DockPanel.Dock="Bottom"
+                        Background="{StaticResource Brush.PanelAlt}"
+                        BorderBrush="{StaticResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="6"
+                        Padding="8,6"
+                        Margin="0,6,0,0">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasQueuedTurns}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel>
+                        <TextBlock Text="排队中"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource Brush.SubtleText}"
+                                   Margin="0,0,0,6" />
+                        <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding QueuedTurns}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:QueuedTurnViewModel}">
+                                        <Border Background="{StaticResource Brush.Panel}"
+                                                BorderBrush="{StaticResource Brush.Border}"
+                                                BorderThickness="1"
+                                                CornerRadius="8"
+                                                Padding="8,6"
+                                                Margin="0,0,0,6">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="{Binding PreviewText}"
+                                                               FontSize="12"
+                                                               TextWrapping="Wrap"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               MaxHeight="40" />
+                                                    <TextBlock Text="{Binding ImageCount, StringFormat='📎 {0} 张图片'}"
+                                                               FontSize="10"
+                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               Margin="0,4,0,0">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding HasImages}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                                <Button Grid.Column="1"
+                                                        Content="×"
+                                                        Command="{Binding DataContext.RemoveQueuedTurnCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip="从队列移除"
+                                                        Width="24"
+                                                        Height="24"
+                                                        Padding="0"
+                                                        FontSize="14"
+                                                        Foreground="{StaticResource Brush.SubtleText}"
+                                                        VerticalAlignment="Top"
+                                                        Style="{StaticResource SessionDeleteButtonStyle}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
                 <TextBlock DockPanel.Dock="Top"
                            Text="对话"
                            FontSize="11"
@@ -173,13 +254,13 @@
                 </StackPanel>
 
                 <TextBlock DockPanel.Dock="Top"
-                           Text="历史记录"
+                           Text="Agent 记录"
                            FontSize="11"
                            FontWeight="Medium"
                            Foreground="{StaticResource Brush.SubtleText}"
                            Margin="8,12,0,6" />
                 <TextBlock DockPanel.Dock="Top"
-                           Text="暂无历史记录"
+                           Text="暂无 Agent 记录"
                            FontSize="12"
                            Foreground="{StaticResource Brush.SubtleText}"
                            Margin="8,0,0,12">
@@ -187,7 +268,7 @@
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed" />
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding HasSessionHistory}" Value="False">
+                                <DataTrigger Binding="{Binding HasAgentRecords}" Value="False">
                                     <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
                             </Style.Triggers>
@@ -199,118 +280,162 @@
                         <Style TargetType="ScrollViewer">
                             <Setter Property="Visibility" Value="Visible" />
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding HasSessionHistory}" Value="False">
+                                <DataTrigger Binding="{Binding HasAgentRecords}" Value="False">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </ScrollViewer.Style>
-                    <ItemsControl ItemsSource="{Binding SessionHistory}">
+                    <ItemsControl ItemsSource="{Binding AgentRecordGroups}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Margin="0,0,0,6"
-                                        Padding="0"
-                                        CornerRadius="12"
-                                        BorderThickness="1">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Setter Property="Background" Value="{StaticResource Brush.Panel}" />
-                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.Border}" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                                    <Setter Property="Background" Value="{StaticResource Brush.NavActiveBg}" />
-                                                    <Setter Property="BorderBrush" Value="#3B82F6" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Button Grid.Column="0"
-                                                Command="{Binding DataContext.LoadSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}"
-                                                Style="{StaticResource SessionHistoryButtonStyle}">
-                                            <StackPanel>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <Ellipse Width="6"
-                                                             Height="6"
-                                                             Margin="0,0,6,0"
-                                                             VerticalAlignment="Center"
-                                                             Fill="#3B82F6">
-                                                        <Ellipse.Style>
-                                                            <Style TargetType="Ellipse">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Ellipse.Style>
-                                                    </Ellipse>
-                                                    <TextBlock Text="{Binding Title}"
-                                                               FontSize="13"
-                                                               FontWeight="SemiBold"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-                                                <TextBlock Margin="0,4,0,0">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Text" Value="{Binding UpdatedAtText}" />
-                                                            <Setter Property="FontSize" Value="11" />
-                                                            <Setter Property="Foreground" Value="{StaticResource Brush.SubtleText}" />
+                            <DataTemplate DataType="{x:Type vm:AgentRecordGroupViewModel}">
+                                <StackPanel Margin="0,0,0,4">
+                                    <Button Command="{Binding ToggleExpandedCommand}"
+                                            Style="{StaticResource AgentRecordGroupHeaderStyle}">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding ExpandGlyph}"
+                                                       FontSize="10"
+                                                       Margin="0,0,6,0"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Title}"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding Items.Count}"
+                                                       FontSize="10"
+                                                       Foreground="{StaticResource Brush.SubtleText}"
+                                                       Margin="8,0,0,0"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Button>
+                                    <ItemsControl ItemsSource="{Binding Items}" Margin="0,0,0,4">
+                                        <ItemsControl.Style>
+                                            <Style TargetType="ItemsControl">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsExpanded}" Value="False">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </ItemsControl.Style>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:SessionHistoryItemViewModel}">
+                                                <Border Margin="0,0,0,6"
+                                                        Padding="0"
+                                                        CornerRadius="12"
+                                                        BorderThickness="1">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="{StaticResource Brush.Panel}" />
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.Border}" />
                                                             <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                                                    <Setter Property="Text" Value="生成中…" />
-                                                                    <Setter Property="Foreground" Value="#3B82F6" />
+                                                                <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                                    <Setter Property="Background" Value="{StaticResource Brush.NavActiveBg}" />
+                                                                    <Setter Property="BorderBrush" Value="#3B82F6" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                            </StackPanel>
-                                        </Button>
-                                        <Button Grid.Column="1"
-                                                Command="{Binding StopSessionCommand}"
-                                                Content="■"
-                                                ToolTip="停止生成"
-                                                Width="28"
-                                                Height="28"
-                                                Margin="0,0,4,0"
-                                                Padding="0"
-                                                FontSize="10"
-                                                Foreground="#EF4444"
-                                                VerticalAlignment="Center">
-                                            <Button.Style>
-                                                <Style TargetType="Button" BasedOn="{StaticResource SessionDeleteButtonStyle}">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Button.Style>
-                                        </Button>
-                                        <Button Grid.Column="2"
-                                                Command="{Binding DataContext.DeleteSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}"
-                                                Content="×"
-                                                ToolTip="删除"
-                                                Width="32"
-                                                Height="32"
-                                                Margin="4,0,6,0"
-                                                Padding="0"
-                                                FontSize="16"
-                                                Foreground="{StaticResource Brush.SubtleText}"
-                                                VerticalAlignment="Center"
-                                                Style="{StaticResource SessionDeleteButtonStyle}" />
-                                    </Grid>
-                                </Border>
+                                                    </Border.Style>
+                                                    <Grid>
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <Button Grid.Column="0"
+                                                                Command="{Binding DataContext.LoadSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"
+                                                                Style="{StaticResource SessionHistoryButtonStyle}">
+                                                            <StackPanel>
+                                                                <StackPanel Orientation="Horizontal">
+                                                                    <Ellipse Width="6"
+                                                                             Height="6"
+                                                                             Margin="0,0,6,0"
+                                                                             VerticalAlignment="Center"
+                                                                             Fill="#3B82F6">
+                                                                        <Ellipse.Style>
+                                                                            <Style TargetType="Ellipse">
+                                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </Ellipse.Style>
+                                                                    </Ellipse>
+                                                                    <TextBlock Text="{Binding Title}"
+                                                                               FontSize="13"
+                                                                               FontWeight="SemiBold"
+                                                                               TextTrimming="CharacterEllipsis" />
+                                                                </StackPanel>
+                                                                <TextBlock Margin="0,4,0,0">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock">
+                                                                            <Setter Property="Text" Value="{Binding UpdatedAtText}" />
+                                                                            <Setter Property="FontSize" Value="11" />
+                                                                            <Setter Property="Foreground" Value="{StaticResource Brush.SubtleText}" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                                                    <Setter Property="Text" Value="生成中…" />
+                                                                                    <Setter Property="Foreground" Value="#3B82F6" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                            </StackPanel>
+                                                        </Button>
+                                                        <Button Grid.Column="1"
+                                                                Command="{Binding StopSessionCommand}"
+                                                                Content="■"
+                                                                ToolTip="停止生成"
+                                                                Width="28"
+                                                                Height="28"
+                                                                Margin="0,0,4,0"
+                                                                Padding="0"
+                                                                FontSize="10"
+                                                                Foreground="#EF4444"
+                                                                VerticalAlignment="Center">
+                                                            <Button.Style>
+                                                                <Style TargetType="Button" BasedOn="{StaticResource SessionDeleteButtonStyle}">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </Button.Style>
+                                                        </Button>
+                                                        <Button Grid.Column="2"
+                                                                Command="{Binding DataContext.DeleteSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"
+                                                                Content="×"
+                                                                ToolTip="删除"
+                                                                Width="32"
+                                                                Height="32"
+                                                                Margin="4,0,6,0"
+                                                                Padding="0"
+                                                                FontSize="16"
+                                                                Foreground="{StaticResource Brush.SubtleText}"
+                                                                VerticalAlignment="Center"
+                                                                Style="{StaticResource SessionDeleteButtonStyle}" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -969,22 +1094,80 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="Skills" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
-                            <TextBlock Text="技能从 ~/.athlon-agent/skills 自动加载。每个技能一个子目录，入口文件为 SKILL.md（YAML frontmatter 含 name、description）。"
+                            <TextBlock Text="Installed Skills" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="技能从 %USERPROFILE%/.athlon-agent/skills 自动加载；此页面控制每个技能是否启用。关闭后不会出现在系统提示与 @skill 补全中。保存设置后写入 skills.json。"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12"
-                                       Margin="0,0,0,12" />
-                            <TextBlock Text="示例目录结构："
-                                       Foreground="{StaticResource Brush.SubtleText}"
-                                       FontSize="12"
-                                       Margin="0,0,0,4" />
-                            <TextBlock FontFamily="Consolas"
-                                       FontSize="12"
-                                       Foreground="{StaticResource Brush.SubtleText}"
-                                       TextWrapping="Wrap"
-                                       Margin="0,0,0,12"
-                                       Text="skills/&#10;  my-skill/&#10;    SKILL.md&#10;    scripts/&#10;    references/" />
+                                       Margin="0,0,0,14" />
+                            <ItemsControl ItemsSource="{Binding Settings.Skills}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:SkillItemViewModel}">
+                                        <Border Background="#1B1B1E"
+                                                BorderBrush="{StaticResource Brush.Border}"
+                                                BorderThickness="0,0,0,1"
+                                                Padding="8,10"
+                                                Margin="0,0,0,8">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsInstalled}" Value="False">
+                                                            <Setter Property="Opacity" Value="0.55" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="44" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0"
+                                                        Width="36"
+                                                        Height="36"
+                                                        CornerRadius="10"
+                                                        Background="#3F3F46"
+                                                        VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DisplayInitial}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               FontWeight="SemiBold"
+                                                               FontSize="15" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,8,0">
+                                                    <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Description}"
+                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               FontSize="12"
+                                                               Margin="0,4,0,0"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding StatusText}"
+                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               FontSize="11"
+                                                               Margin="0,2,0,0">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsInstalled}" Value="False">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                                <CheckBox Grid.Column="2"
+                                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                                          IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                                          VerticalAlignment="Center"
+                                                          Margin="12,0,0,0" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                     </Border>
 
@@ -1207,10 +1390,10 @@
                                        FontSize="12"
                                        Margin="34,0,0,0"
                                        VerticalAlignment="Center" />
-                            <Grid HorizontalAlignment="Right">
-                                <!-- 发送中显示停止，空闲时显示发送（对齐 report/html Composer isSending） -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button Command="{Binding StopCommand}"
-                                        ToolTip="暂停当前回复">
+                                        ToolTip="暂停当前回复"
+                                        Margin="0,0,8,0">
                                     <Button.Style>
                                         <Style TargetType="Button" BasedOn="{StaticResource DangerCircleButtonStyle}">
                                             <Setter Property="Visibility" Value="Collapsed" />
@@ -1224,20 +1407,11 @@
                                     <TextBlock Text="■" FontSize="12" />
                                 </Button>
                                 <Button Command="{Binding SendCommand}"
-                                        ToolTip="发送">
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource PrimaryCircleButtonStyle}">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsBusy}" Value="True">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
+                                        ToolTip="发送（生成中将加入排队）"
+                                        Style="{StaticResource PrimaryCircleButtonStyle}">
                                     <TextBlock Text="➤" FontSize="14" />
                                 </Button>
-                            </Grid>
+                            </StackPanel>
                         </Grid>
                     </Grid>
                 </Border>
