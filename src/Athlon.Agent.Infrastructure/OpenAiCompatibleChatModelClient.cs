@@ -147,18 +147,28 @@ public sealed class OpenAiCompatibleChatModelClient(
         finally
         {
             sw.Stop();
-            await sessionHttpLog.LogInteractionAsync(
-                sessionId,
-                new SessionHttpInteractionLog(
-                    DateTimeOffset.UtcNow,
-                    endpoint,
-                    purpose,
-                    statusCode,
-                    payload,
-                    responseBody,
-                    error,
-                    sw.ElapsedMilliseconds),
-                CancellationToken.None);
+            try
+            {
+                await sessionHttpLog.LogInteractionAsync(
+                    sessionId,
+                    new SessionHttpInteractionLog(
+                        DateTimeOffset.UtcNow,
+                        endpoint,
+                        purpose,
+                        statusCode,
+                        payload,
+                        responseBody,
+                        error,
+                        sw.ElapsedMilliseconds),
+                    CancellationToken.None);
+            }
+            catch (Exception logEx) when (logEx is not OperationCanceledException)
+            {
+                _logger.Warning(
+                    "Failed to write HTTP interaction log for session {SessionId}: {Message}",
+                    sessionId ?? "(none)",
+                    logEx.Message);
+            }
         }
     }
 

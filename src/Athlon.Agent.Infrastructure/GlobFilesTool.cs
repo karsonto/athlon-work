@@ -20,7 +20,7 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
         "Find workspace files matching a glob pattern.",
         new Dictionary<string, string>
         {
-            ["pattern"] = "Glob pattern, e.g. **/*.cs",
+            ["pattern"] = "Glob pattern (supports ** and {a,b} extensions), e.g. **/*.cs or **/*.{png,jpg}",
             ["path"] = ToolPathDescriptions.OptionalWorkspaceRelativeDirectory
         });
 
@@ -32,12 +32,8 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
         if (!guard.IsInsideWorkspace(fullPath)) return ToolResult.Failure("Outside workspace", fullPath);
         if (!Directory.Exists(fullPath)) return ToolResult.Failure("Directory not found", fullPath);
 
-        var searchPattern = pattern.Contains('/') || pattern.Contains('\\') ? Path.GetFileName(pattern) : pattern;
-        var recursive = pattern.Contains("**", StringComparison.Ordinal);
         var ignorePatterns = guard.GetIgnorePatterns();
-        var matches = Directory.EnumerateFileSystemEntries(fullPath, searchPattern.Replace("**", "*"), recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly)
-            .Where(path => !WorkspacePathFilter.ShouldIgnorePath(path, ignorePatterns))
-            .Take(200)
+        var matches = GlobPatternHelper.EnumerateMatches(fullPath, pattern, ignorePatterns)
             .Select(path => Directory.Exists(path)
                 ? $"{Path.GetRelativePath(fullPath, path)}/"
                 : $"{Path.GetRelativePath(fullPath, path)} ({new FileInfo(path).Length} bytes)")

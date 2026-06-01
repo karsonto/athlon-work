@@ -54,7 +54,11 @@ public sealed class SessionHttpLogService(IAppPathProvider paths, IJsonFileStore
             error = entry.Error
         };
 
-        await jsonFileStore.AppendJsonLineAsync(path, record, cancellationToken, prettyPrint: true);
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            await jsonFileStore.AppendJsonLineAsync(path, record, cancellationToken, prettyPrint: true);
+        }
+
         _logger.Information(
             "HTTP {Purpose} logged for session {SessionId} status={StatusCode} duration={DurationMs}ms",
             entry.Purpose,

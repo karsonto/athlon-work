@@ -15,19 +15,27 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths, IJsonFileStore jsonFileStore) : IFileStorageService
 {
+    private static readonly SemaphoreSlim IndexLock = new(1, 1);
     private readonly IAppLogger _logger = logger.ForContext("Storage");
 
     public string RootPath => paths.RootPath;
 
     public async Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default)
     {
-        EnsureSessionLogDirectories(session.Id);
-        var sessionDir = GetSessionDirectory(session);
+        using (await SessionWriteLock.AcquireAsync(session.Id, cancellationToken).ConfigureAwait(false))
+        {
+            EnsureSessionLogDirectories(session.Id);
+            var sessionDir = GetSessionDirectory(session);
 
-        await jsonFileStore.SaveAsync(Path.Combine(sessionDir, "session.json"), session, cancellationToken);
-        await AtomicFile.WriteAllTextAsync(Path.Combine(sessionDir, "conversation.md"), SessionMarkdownWriter.WriteConversation(session), cancellationToken);
+            await jsonFileStore.SaveAsync(Path.Combine(sessionDir, "session.json"), session, cancellationToken);
+            await AtomicFile.WriteAllTextAsync(
+                Path.Combine(sessionDir, "conversation.md"),
+                SessionMarkdownWriter.WriteConversation(session),
+                cancellationToken);
+            _logger.Information("Session persisted to {SessionDir}", sessionDir);
+        }
+
         await RefreshIndexAsync(cancellationToken);
-        _logger.Information("Session persisted to {SessionDir}", sessionDir);
     }
 
     public async Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default)
@@ -39,18 +47,21 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
 
     public async Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
     {
-        var transcriptDir = GetSessionTranscriptsDirectory(sessionId);
-        Directory.CreateDirectory(transcriptDir);
-        var path = Path.Combine(transcriptDir, $"transcript_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}.jsonl");
-
-        var builder = new StringBuilder();
-        foreach (var message in messages)
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
         {
-            builder.AppendLine(JsonSerializer.Serialize(message, JsonFileStore.JsonLineOptions));
-        }
+            var transcriptDir = GetSessionTranscriptsDirectory(sessionId);
+            Directory.CreateDirectory(transcriptDir);
+            var path = Path.Combine(transcriptDir, $"transcript_{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}.jsonl");
 
-        await AtomicFile.WriteAllTextAsync(path, builder.ToString(), cancellationToken);
-        return path;
+            var builder = new StringBuilder();
+            foreach (var message in messages)
+            {
+                builder.AppendLine(JsonSerializer.Serialize(message, JsonFileStore.JsonLineOptions));
+            }
+
+            await AtomicFile.WriteAllTextAsync(path, builder.ToString(), cancellationToken);
+            return path;
+        }
     }
 
     public async Task<string> SaveEvictedToolResultAsync(
@@ -59,11 +70,14 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         string content,
         CancellationToken cancellationToken = default)
     {
-        var evictedDir = Path.Combine(GetSessionDirectory(sessionId), "evicted");
-        Directory.CreateDirectory(evictedDir);
-        var path = Path.Combine(evictedDir, $"{toolCallId}.txt");
-        await AtomicFile.WriteAllTextAsync(path, content, cancellationToken);
-        return path;
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            var evictedDir = Path.Combine(GetSessionDirectory(sessionId), "evicted");
+            Directory.CreateDirectory(evictedDir);
+            var path = Path.Combine(evictedDir, $"{toolCallId}.txt");
+            await AtomicFile.WriteAllTextAsync(path, content, cancellationToken);
+            return path;
+        }
     }
 
     public async Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
@@ -73,20 +87,23 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
             return;
         }
 
-        EnsureSessionLogDirectories(sessionId);
-        var path = Path.Combine(GetSessionDirectory(sessionId), "conversation.jsonl");
-        await jsonFileStore.AppendJsonLineAsync(
-            path,
-            new
-            {
-                time = message.CreatedAt,
-                id = message.Id,
-                role = message.Role.ToString(),
-                parentId = message.ParentId,
-                content = message.Content,
-                imageAttachments = message.ImageAttachments
-            },
-            cancellationToken);
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            EnsureSessionLogDirectories(sessionId);
+            var path = Path.Combine(GetSessionDirectory(sessionId), "conversation.jsonl");
+            await jsonFileStore.AppendJsonLineAsync(
+                path,
+                new
+                {
+                    time = message.CreatedAt,
+                    id = message.Id,
+                    role = message.Role.ToString(),
+                    parentId = message.ParentId,
+                    content = message.Content,
+                    imageAttachments = message.ImageAttachments
+                },
+                cancellationToken);
+        }
     }
 
     public async Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default)
@@ -96,23 +113,26 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
             return;
         }
 
-        EnsureSessionLogDirectories(sessionId);
-        var path = Path.Combine(GetSessionDirectory(sessionId), "tool-calls", "calls.jsonl");
-        await jsonFileStore.AppendJsonLineAsync(
-            path,
-            new
-            {
-                time = entry.Timestamp,
-                toolCallId = entry.ToolCallId,
-                toolName = entry.ToolName,
-                arguments = entry.Arguments,
-                succeeded = entry.Succeeded,
-                summary = entry.Summary,
-                content = HttpLogSanitizer.Truncate(entry.Content),
-                error = entry.Error,
-                durationMs = entry.DurationMs
-            },
-            cancellationToken);
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            EnsureSessionLogDirectories(sessionId);
+            var path = Path.Combine(GetSessionDirectory(sessionId), "tool-calls", "calls.jsonl");
+            await jsonFileStore.AppendJsonLineAsync(
+                path,
+                new
+                {
+                    time = entry.Timestamp,
+                    toolCallId = entry.ToolCallId,
+                    toolName = entry.ToolName,
+                    arguments = entry.Arguments,
+                    succeeded = entry.Succeeded,
+                    summary = entry.Summary,
+                    content = HttpLogSanitizer.Truncate(entry.Content),
+                    error = entry.Error,
+                    durationMs = entry.DurationMs
+                },
+                cancellationToken);
+        }
     }
 
     public async Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -261,9 +281,17 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
 
     private async Task RefreshIndexAsync(CancellationToken cancellationToken)
     {
-        var index = await ListSessionsAsync(cancellationToken);
-        Directory.CreateDirectory(paths.SessionsPath);
-        await jsonFileStore.SaveAsync(Path.Combine(paths.SessionsPath, "index.json"), index, cancellationToken);
+        await IndexLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var index = await ListSessionsAsync(cancellationToken);
+            Directory.CreateDirectory(paths.SessionsPath);
+            await jsonFileStore.SaveAsync(Path.Combine(paths.SessionsPath, "index.json"), index, cancellationToken);
+        }
+        finally
+        {
+            IndexLock.Release();
+        }
     }
 
     private void EnsureSessionLogDirectories(string sessionId)

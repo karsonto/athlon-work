@@ -80,7 +80,9 @@ public sealed class JsonFileStore : IJsonFileStore
     public Task SaveAsync<T>(string path, T value, CancellationToken cancellationToken = default)
     {
         var json = JsonSerializer.Serialize(value, Options);
-        return AtomicFile.WriteAllTextAsync(path, json, cancellationToken);
+        return FileIoRetry.RunAsync(
+            () => AtomicFile.WriteAllTextAsync(path, json, cancellationToken),
+            cancellationToken);
     }
 
     public async Task<T?> LoadAsync<T>(string path, CancellationToken cancellationToken = default)
@@ -99,17 +101,24 @@ public sealed class JsonFileStore : IJsonFileStore
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var options = prettyPrint ? Options : JsonLineOptions;
         var line = JsonSerializer.Serialize(value, options) + Environment.NewLine;
-        await File.AppendAllTextAsync(path, line, cancellationToken);
+        await FileIoRetry.RunAsync(
+            async () => await File.AppendAllTextAsync(path, line, cancellationToken).ConfigureAwait(false),
+            cancellationToken);
     }
 }
 
 public static class AtomicFile
 {
-    public static async Task WriteAllTextAsync(string path, string content, CancellationToken cancellationToken = default)
+    public static Task WriteAllTextAsync(string path, string content, CancellationToken cancellationToken = default) =>
+        FileIoRetry.RunAsync(
+            () => WriteAllTextCoreAsync(path, content, cancellationToken),
+            cancellationToken);
+
+    private static async Task WriteAllTextCoreAsync(string path, string content, CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + ".tmp";
-        await File.WriteAllTextAsync(temp, content, cancellationToken);
+        await File.WriteAllTextAsync(temp, content, cancellationToken).ConfigureAwait(false);
         BackupIfExists(path);
         File.Move(temp, path, true);
     }

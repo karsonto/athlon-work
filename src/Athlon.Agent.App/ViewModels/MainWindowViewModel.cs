@@ -80,6 +80,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _appSettings.Ui.ContextSidebarWidth = ContextSidebarDefaultWidth;
         }
 
+        _appSettings.Ui.NavigationSidebarWidth = Math.Clamp(
+            _appSettings.Ui.NavigationSidebarWidth,
+            NavigationSidebarMinWidth,
+            NavigationSidebarMaxWidth);
+        if (_appSettings.Ui.NavigationSidebarWidth < NavigationSidebarMinWidth)
+        {
+            _appSettings.Ui.NavigationSidebarWidth = NavigationSidebarDefaultWidth;
+        }
+
         ApplySessionWorkspace();
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         PendingImageAttachments.CollectionChanged += OnPendingImagesChanged;
@@ -123,7 +132,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public const double ContextSidebarMaxWidth = 560;
     public const double ContextSidebarDefaultWidth = 300;
 
+    public const double NavigationSidebarMinWidth = 180;
+    public const double NavigationSidebarMaxWidth = 480;
+    public const double NavigationSidebarDefaultWidth = 220;
+
     public event EventHandler? ContextSidebarLayoutChanged;
+
+    public double NavigationSidebarWidth =>
+        Math.Clamp(_appSettings.Ui.NavigationSidebarWidth, NavigationSidebarMinWidth, NavigationSidebarMaxWidth);
 
     public bool IsContextSidebarVisible => _appSettings.Ui.ContextSidebarVisible;
 
@@ -238,6 +254,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         _appSettings.Ui.ContextSidebarWidth = clamped;
+        SchedulePersistUiLayout();
+    }
+
+    public void UpdateNavigationSidebarWidth(double width)
+    {
+        var clamped = Math.Clamp(width, NavigationSidebarMinWidth, NavigationSidebarMaxWidth);
+        if (Math.Abs(_appSettings.Ui.NavigationSidebarWidth - clamped) < 0.5)
+        {
+            return;
+        }
+
+        _appSettings.Ui.NavigationSidebarWidth = clamped;
         SchedulePersistUiLayout();
     }
 

@@ -5,13 +5,16 @@ namespace Athlon.Agent.App.ViewModels;
 
 public sealed class WorkspaceTreeNodeViewModel
 {
-    private WorkspaceTreeNodeViewModel(string name, string? fullPath, bool isDirectory, bool isPlaceholder)
+    private bool _childrenLoaded;
+
+    private WorkspaceTreeNodeViewModel(string name, string? fullPath, bool isDirectory, bool isPlaceholder, bool isExpanderPlaceholder = false)
     {
         Name = name;
         FullPath = fullPath;
         IsDirectory = isDirectory;
         IsPlaceholder = isPlaceholder;
-        Icon = isPlaceholder ? "○" : isDirectory ? "📁" : "📄";
+        IsExpanderPlaceholder = isExpanderPlaceholder;
+        Icon = isPlaceholder && !isExpanderPlaceholder ? "○" : isDirectory ? "📁" : "📄";
         Children = new ObservableCollection<WorkspaceTreeNodeViewModel>();
     }
 
@@ -19,68 +22,68 @@ public sealed class WorkspaceTreeNodeViewModel
     public string? FullPath { get; }
     public bool IsDirectory { get; }
     public bool IsPlaceholder { get; }
+    public bool IsExpanderPlaceholder { get; }
     public string Icon { get; }
+    public bool IsExpanded { get; set; }
     public ObservableCollection<WorkspaceTreeNodeViewModel> Children { get; }
 
     public static WorkspaceTreeNodeViewModel Placeholder(string message) =>
         new(message, null, false, true);
 
-    public static WorkspaceTreeNodeViewModel? FromDirectory(string directoryPath, IReadOnlyCollection<string> ignorePatterns, int depth, int maxDepth, ref int nodeCount, int maxNodes)
+    private static WorkspaceTreeNodeViewModel ExpanderPlaceholder() =>
+        new(string.Empty, null, false, true, isExpanderPlaceholder: true);
+
+    public void EnsureChildrenLoaded(IReadOnlyCollection<string> ignorePatterns, int maxEntries = 2000)
     {
-        if (nodeCount >= maxNodes || depth > maxDepth)
+        if (_childrenLoaded || IsPlaceholder || !IsDirectory || string.IsNullOrWhiteSpace(FullPath))
         {
-            return null;
+            return;
         }
 
-        var name = Path.GetFileName(directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            name = directoryPath;
-        }
-
-        var node = new WorkspaceTreeNodeViewModel(name, directoryPath, true, false);
-        nodeCount++;
+        _childrenLoaded = true;
+        Children.Clear();
 
         IEnumerable<string> entries;
         try
         {
-            entries = Directory.EnumerateFileSystemEntries(directoryPath)
+            entries = Directory.EnumerateFileSystemEntries(FullPath)
                 .Where(path => !ShouldIgnore(path, ignorePatterns))
                 .OrderBy(path => Directory.Exists(path) ? 0 : 1)
                 .ThenBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase);
         }
         catch
         {
-            return node;
+            return;
         }
 
+        var count = 0;
         foreach (var entry in entries)
         {
-            if (nodeCount >= maxNodes)
+            if (count >= maxEntries)
             {
-                node.Children.Add(Placeholder("…"));
+                Children.Add(Placeholder("…"));
                 break;
             }
 
+            count++;
             if (Directory.Exists(entry))
             {
-                var childDirectory = FromDirectory(entry, ignorePatterns, depth + 1, maxDepth, ref nodeCount, maxNodes);
-                if (childDirectory is not null)
+                var child = CreateDirectoryNode(entry);
+                if (DirectoryMayHaveChildren(entry, ignorePatterns))
                 {
-                    node.Children.Add(childDirectory);
+                    child.Children.Add(ExpanderPlaceholder());
                 }
+
+                Children.Add(child);
             }
             else
             {
-                node.Children.Add(new WorkspaceTreeNodeViewModel(Path.GetFileName(entry), entry, false, false));
-                nodeCount++;
+                Children.Add(new WorkspaceTreeNodeViewModel(Path.GetFileName(entry), entry, false, false));
             }
         }
-
-        return node;
     }
 
-    public static ObservableCollection<WorkspaceTreeNodeViewModel> BuildTree(string? rootPath, IReadOnlyCollection<string> ignorePatterns, int maxDepth = 5, int maxNodes = 2000)
+    public static ObservableCollection<WorkspaceTreeNodeViewModel> BuildTree(string? rootPath, IReadOnlyCollection<string> ignorePatterns)
     {
         var tree = new ObservableCollection<WorkspaceTreeNodeViewModel>();
         if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
@@ -89,14 +92,42 @@ public sealed class WorkspaceTreeNodeViewModel
             return tree;
         }
 
-        var nodeCount = 0;
-        var root = FromDirectory(Path.GetFullPath(rootPath), ignorePatterns, 0, maxDepth, ref nodeCount, maxNodes);
-        if (root is not null)
+        var root = CreateDirectoryNode(Path.GetFullPath(rootPath));
+        root.IsExpanded = true;
+        root.EnsureChildrenLoaded(ignorePatterns);
+        tree.Add(root);
+        return tree;
+    }
+
+    private static WorkspaceTreeNodeViewModel CreateDirectoryNode(string directoryPath)
+    {
+        var name = Path.GetFileName(directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(name))
         {
-            tree.Add(root);
+            name = directoryPath;
         }
 
-        return tree;
+        return new WorkspaceTreeNodeViewModel(name, directoryPath, true, false);
+    }
+
+    private static bool DirectoryMayHaveChildren(string directoryPath, IReadOnlyCollection<string> ignorePatterns)
+    {
+        try
+        {
+            foreach (var entry in Directory.EnumerateFileSystemEntries(directoryPath))
+            {
+                if (!ShouldIgnore(entry, ignorePatterns))
+                {
+                    return true;
+                }
+            }
+        }
+        catch
+        {
+            return false;
+        }
+
+        return false;
     }
 
     private static bool ShouldIgnore(string path, IReadOnlyCollection<string> ignorePatterns)

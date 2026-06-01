@@ -78,12 +78,18 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
         }
     }
 
+    private IReadOnlyList<string> _workspaceIgnorePatterns = Array.Empty<string>();
+
     public void RefreshWorkspaceTree(string? workspaceRootPath, IReadOnlyList<string> ignorePatterns)
     {
+        _workspaceIgnorePatterns = ignorePatterns;
         WorkspaceTree.Clear();
         foreach (var node in WorkspaceTreeNodeViewModel.BuildTree(workspaceRootPath, ignorePatterns))
         {
             WorkspaceTree.Add(node);
         }
     }
+
+    public void ExpandWorkspaceTreeNode(WorkspaceTreeNodeViewModel node) =>
+        node.EnsureChildrenLoaded(_workspaceIgnorePatterns);
 }

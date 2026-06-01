@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using System.ComponentModel;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -23,6 +24,7 @@ public partial class MainWindow : Window
         DataContext = _viewModel;
         _viewModel.ScrollChatToBottom = ScrollChatToEnd;
         _viewModel.ContextSidebarLayoutChanged += (_, _) => Dispatcher.Invoke(ApplyContextSidebarLayout);
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         Loaded += OnMainWindowLoaded;
         StateChanged += (_, _) => UpdateMaximizeRestoreButton();
         UpdateMaximizeRestoreButton();
@@ -31,8 +33,43 @@ public partial class MainWindow : Window
 
     private void OnMainWindowLoaded(object sender, RoutedEventArgs e)
     {
+        ApplyNavigationSidebarLayout();
         ApplyContextSidebarLayout();
         ScrollChatToEnd();
+    }
+
+    private void ApplyNavigationSidebarLayout()
+    {
+        if (NavigationSidebarColumn is null)
+        {
+            return;
+        }
+
+        NavigationSidebarColumn.MinWidth = MainWindowViewModel.NavigationSidebarMinWidth;
+        NavigationSidebarColumn.MaxWidth = MainWindowViewModel.NavigationSidebarMaxWidth;
+        NavigationSidebarColumn.Width = new GridLength(_viewModel.NavigationSidebarWidth);
+    }
+
+    private void NavigationSidebarSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        if (NavigationSidebarColumn is null)
+        {
+            return;
+        }
+
+        var width = NavigationSidebarColumn.ActualWidth;
+        if (width >= MainWindowViewModel.NavigationSidebarMinWidth)
+        {
+            _viewModel.UpdateNavigationSidebarWidth(width);
+        }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.HasChatMessages))
+        {
+            Dispatcher.Invoke(ApplyContextSidebarLayout);
+        }
     }
 
     private void ApplyContextSidebarLayout()
@@ -63,7 +100,9 @@ public partial class MainWindow : Window
             ContextSidebarSplitter.Visibility = Visibility.Collapsed;
             if (ContextSidebarCollapsedRail is not null)
             {
-                ContextSidebarCollapsedRail.Visibility = Visibility.Visible;
+                ContextSidebarCollapsedRail.Visibility = _viewModel.HasChatMessages
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
             }
         }
     }
@@ -254,6 +293,16 @@ public partial class MainWindow : Window
         ComposerTextBox.CaretIndex = newCaretIndex;
     }
 
+    private void WorkspaceTreeItem_OnExpanded(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TreeViewItem { DataContext: WorkspaceTreeNodeViewModel node })
+        {
+            return;
+        }
+
+        _viewModel.Sidebar.ExpandWorkspaceTreeNode(node);
+    }
+
     private void WorkspaceTree_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is not DependencyObject source)
@@ -267,7 +316,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (node.IsPlaceholder || node.IsDirectory || string.IsNullOrWhiteSpace(node.FullPath))
+        if (node.IsPlaceholder || node.IsExpanderPlaceholder || node.IsDirectory || string.IsNullOrWhiteSpace(node.FullPath))
         {
             return;
         }

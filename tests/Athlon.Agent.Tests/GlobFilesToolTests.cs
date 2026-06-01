@@ -6,6 +6,37 @@ namespace Athlon.Agent.Tests;
 public sealed class GlobFilesToolTests
 {
     [Fact]
+    public async Task InvokeAsync_MatchesBraceExtensionPattern()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-glob-brace-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(workspaceRoot);
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "屏幕截图 测试.png"), "content");
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var result = await tool.InvokeAsync(new ToolInvocation("glob_files", new Dictionary<string, string>
+            {
+                ["pattern"] = "**/*.{png,jpg,jpeg}"
+            }));
+
+            Assert.True(result.Succeeded);
+            Assert.NotNull(result.Content);
+            Assert.Contains(".png", result.Content!, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("No matching files found", result.Content!, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task InvokeAsync_SkipsIgnoredDirectories()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-glob-{Guid.NewGuid():N}");

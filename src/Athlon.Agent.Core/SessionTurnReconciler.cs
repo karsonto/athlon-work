@@ -120,7 +120,7 @@ public static class SessionTurnReconciler
     {
         if (!string.IsNullOrWhiteSpace(snapshot.ErrorMessage))
         {
-            return $"模型调用失败：{snapshot.ErrorMessage}";
+            return snapshot.ErrorMessage;
         }
 
         if (snapshot.TimedOut)

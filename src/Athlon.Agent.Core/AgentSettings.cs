@@ -121,4 +121,5 @@ public sealed class UiSettings
     public double FontSize { get; set; } = 14;
     public bool ContextSidebarVisible { get; set; } = true;
     public double ContextSidebarWidth { get; set; } = 300;
+    public double NavigationSidebarWidth { get; set; } = 220;
 }

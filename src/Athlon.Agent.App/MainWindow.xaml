@@ -35,7 +35,10 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220" />
+            <ColumnDefinition x:Name="NavigationSidebarColumn"
+                              Width="220"
+                              MinWidth="180"
+                              MaxWidth="480" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition x:Name="ContextSidebarColumn"
                               Width="300"
@@ -92,9 +95,8 @@
         <Border Grid.Row="1"
                 Grid.Column="0"
                 Background="{StaticResource Brush.Chrome}"
-                BorderBrush="{StaticResource Brush.Border}"
-                BorderThickness="0,0,1,0"
-                Padding="16">
+                BorderThickness="0"
+                Padding="16,16,24,16">
             <DockPanel LastChildFill="True">
                 <!-- 须 Dock=Bottom 且排在 Fill 子元素之前；历史列表 ScrollViewer 放最后 -->
                 <Border DockPanel.Dock="Bottom"
@@ -479,14 +481,17 @@
                 <Border Grid.Row="0"
                         Background="{StaticResource Brush.Chrome}"
                         BorderBrush="{StaticResource Brush.Border}"
-                        BorderThickness="0,0,0,1"
-                        Padding="20,10">
+                        BorderThickness="0,0,0,1">
                     <Border.Style>
                         <Style TargetType="Border">
                             <Setter Property="Visibility" Value="Collapsed" />
+                            <Setter Property="Padding" Value="20,10,28,10" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding HasChatMessages}" Value="True">
                                     <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsContextSidebarVisible}" Value="False">
+                                    <Setter Property="Padding" Value="20,10,20,10" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -502,14 +507,23 @@
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
                                    Margin="0,0,12,0" />
-                        <Button Grid.Column="1"
-                                Content="清空上下文"
-                                Command="{Binding ClearContextCommand}"
-                                Style="{StaticResource GhostButtonStyle}"
-                                Padding="10,4"
-                                FontSize="12"
-                                MinHeight="28"
-                                ToolTip="清空当前对话在模型中的可见历史；会话与工作区保留，磁盘 transcript 归档不删除。" />
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <Button Content="清空上下文"
+                                    Command="{Binding ClearContextCommand}"
+                                    Style="{StaticResource GhostButtonStyle}"
+                                    Padding="12,4"
+                                    FontSize="12"
+                                    MinHeight="28"
+                                    ToolTip="清空当前对话在模型中的可见历史；会话与工作区保留，磁盘 transcript 归档不删除。" />
+                            <Button Command="{Binding ToggleContextSidebarCommand}"
+                                    Style="{StaticResource RightSidebarToggleButtonStyle}"
+                                    Margin="8,0,0,0"
+                                    ToolTip="{Binding ContextSidebarToggleToolTip}">
+                                <controls:RightSidebarToggleIcon IsPanelOpen="{Binding IsContextSidebarVisible}" />
+                            </Button>
+                        </StackPanel>
                     </Grid>
                 </Border>
 
@@ -1477,29 +1491,8 @@
                 Grid.Row="1"
                 Grid.Column="2"
                 Background="{StaticResource Brush.Chrome}"
-                BorderBrush="{StaticResource Brush.Border}"
-                BorderThickness="1,0,0,0">
-            <DockPanel LastChildFill="True">
-                <Border DockPanel.Dock="Top"
-                        BorderBrush="{StaticResource Brush.Border}"
-                        BorderThickness="0,0,0,1"
-                        Padding="12,8,8,8">
-                    <Grid>
-                        <TextBlock Text="上下文"
-                                   FontSize="12"
-                                   FontWeight="SemiBold"
-                                   Foreground="{StaticResource Brush.SubtleText}"
-                                   VerticalAlignment="Center" />
-                        <Button Command="{Binding ToggleContextSidebarCommand}"
-                                Style="{StaticResource RightSidebarToggleButtonStyle}"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center"
-                                ToolTip="{Binding ContextSidebarToggleToolTip}">
-                            <controls:RightSidebarToggleIcon IsPanelOpen="{Binding IsContextSidebarVisible}" />
-                        </Button>
-                    </Grid>
-                </Border>
-                <Grid Margin="16,12,16,16">
+                BorderThickness="0">
+            <Grid Margin="16,16,16,16">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -1637,9 +1630,21 @@
                                   BorderThickness="0"
                                   FontSize="13"
                                   Foreground="{StaticResource Brush.Text}"
+                                  VerticalAlignment="Stretch"
+                                  ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                   MouseDoubleClick="WorkspaceTree_OnMouseDoubleClick">
                             <TreeView.ItemContainerStyle>
-                                <Style TargetType="TreeViewItem" BasedOn="{StaticResource WorkspaceTreeViewItemStyle}" />
+                                <Style TargetType="TreeViewItem" BasedOn="{StaticResource WorkspaceTreeViewItemStyle}">
+                                    <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                    <EventSetter Event="Expanded" Handler="WorkspaceTreeItem_OnExpanded" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsExpanderPlaceholder}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Setter Property="Height" Value="0" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
                             </TreeView.ItemContainerStyle>
                             <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
@@ -1652,20 +1657,60 @@
                         </TreeView>
                     </Border>
                 </Grid>
-                </Grid>
-            </DockPanel>
+            </Grid>
         </Border>
+
+        <GridSplitter x:Name="NavigationSidebarSplitter"
+                      Grid.Row="1"
+                      Grid.Column="0"
+                      Width="8"
+                      HorizontalAlignment="Right"
+                      VerticalAlignment="Stretch"
+                      ResizeDirection="Columns"
+                      ResizeBehavior="CurrentAndNext"
+                      ShowsPreview="False"
+                      Background="#01FFFFFF"
+                      Cursor="SizeWE"
+                      Panel.ZIndex="3"
+                      DragCompleted="NavigationSidebarSplitter_OnDragCompleted">
+            <GridSplitter.Style>
+                <Style TargetType="GridSplitter">
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="GridSplitter">
+                                <Border x:Name="Track"
+                                        Background="Transparent"
+                                        Width="8"
+                                        HorizontalAlignment="Stretch">
+                                    <Border x:Name="Line"
+                                            Width="1"
+                                            HorizontalAlignment="Right"
+                                            Background="{StaticResource Brush.Border}"
+                                            Opacity="0.6" />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Line" Property="Background" Value="{StaticResource Brush.Accent}" />
+                                        <Setter TargetName="Line" Property="Opacity" Value="1" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </GridSplitter.Style>
+        </GridSplitter>
 
         <GridSplitter x:Name="ContextSidebarSplitter"
                       Grid.Row="1"
-                      Grid.Column="2"
-                      Width="6"
-                      HorizontalAlignment="Left"
+                      Grid.Column="1"
+                      Width="8"
+                      HorizontalAlignment="Right"
                       VerticalAlignment="Stretch"
                       ResizeDirection="Columns"
-                      ResizeBehavior="PreviousAndNext"
-                      ShowsPreview="True"
-                      Background="Transparent"
+                      ResizeBehavior="CurrentAndNext"
+                      ShowsPreview="False"
+                      Background="#01FFFFFF"
                       Cursor="SizeWE"
                       Panel.ZIndex="3"
                       DragCompleted="ContextSidebarSplitter_OnDragCompleted">
@@ -1676,11 +1721,11 @@
                             <ControlTemplate TargetType="GridSplitter">
                                 <Border x:Name="Track"
                                         Background="Transparent"
-                                        Width="6"
-                                        HorizontalAlignment="Center">
+                                        Width="8"
+                                        HorizontalAlignment="Stretch">
                                     <Border x:Name="Line"
                                             Width="1"
-                                            HorizontalAlignment="Center"
+                                            HorizontalAlignment="Right"
                                             Background="{StaticResource Brush.Border}"
                                             Opacity="0.6" />
                                 </Border>

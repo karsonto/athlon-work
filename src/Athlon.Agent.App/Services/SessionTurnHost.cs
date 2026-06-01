@@ -285,7 +285,7 @@ public sealed class SessionTurnHost
             }
             finally
             {
-                var errorMessage = error is null ? null : $"模型调用失败：{error.Message}";
+                var errorMessage = error is null ? null : TurnFailureMessages.FormatModelCallFailure(error);
                 IReadOnlyList<ChatMessage> persistedTurnMessages = Array.Empty<ChatMessage>();
                 if (cancelled || timedOut || error is not null)
                 {

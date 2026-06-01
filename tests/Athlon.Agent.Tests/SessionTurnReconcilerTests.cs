@@ -82,6 +82,27 @@ public sealed class SessionTurnReconcilerTests
     }
 
     [Fact]
+    public void Reconcile_ModelError_DoesNotDuplicateFailurePrefix()
+    {
+        var session = AgentSession.Create("test");
+        session = session.WithMessage(ChatMessage.Create(MessageRole.User, "continue"));
+
+        var snapshot = new SessionTurnEndSnapshot(
+            null,
+            null,
+            Array.Empty<AgentToolCall>(),
+            WasCancelled: false,
+            TimedOut: false,
+            ErrorMessage: "模型调用失败：无法写入或读取「C:\\tmp\\session.json」：Access denied.");
+
+        var result = SessionTurnReconciler.Reconcile(session, snapshot);
+        var notice = Assert.Single(result.PersistedMessages, message => message.Role == MessageRole.System);
+
+        Assert.Equal(snapshot.ErrorMessage, notice.Content);
+        Assert.DoesNotContain("模型调用失败：模型调用失败", notice.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildModelMessages_IncludesPersistedSystemNotice()
     {
         var session = AgentSession.Create("test");
