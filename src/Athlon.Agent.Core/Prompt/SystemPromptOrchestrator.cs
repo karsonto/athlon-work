@@ -102,7 +102,7 @@ public sealed class SystemPromptOrchestrator(
                 RootPath = rootPath,
                 IgnorePatterns = WorkspaceIgnoreResolver.Resolve(
                     workspacePatterns: match?.IgnorePatterns,
-                    globalPatterns: settings.WorkspaceIgnore.DirectoryNames)
+                    globalPatterns: settings.WorkspaceIgnore.DirectoryNames).ToList()
             };
         }
 
