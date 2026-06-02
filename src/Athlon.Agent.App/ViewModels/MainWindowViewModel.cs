@@ -108,6 +108,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _appSettings.Ui.EditorPaneWidth = EditorPaneDefaultWidth;
         }
 
+        _appSettings.Ui.ComposerHeight = Math.Clamp(
+            _appSettings.Ui.ComposerHeight,
+            ComposerMinHeight,
+            ComposerMaxHeight);
+        if (_appSettings.Ui.ComposerHeight < ComposerMinHeight)
+        {
+            _appSettings.Ui.ComposerHeight = ComposerDefaultHeight;
+        }
+
         ApplySessionWorkspace();
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         PendingImageAttachments.CollectionChanged += OnPendingImagesChanged;
@@ -162,6 +171,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public const double EditorPaneMaxWidth = 1200;
     public const double EditorPaneDefaultWidth = 480;
 
+    public const double ComposerMinHeight = 120;
+    public const double ComposerMaxHeight = 420;
+    public const double ComposerDefaultHeight = 168;
+
     public double EditorPaneWidth =>
         Math.Clamp(_appSettings.Ui.EditorPaneWidth, EditorPaneMinWidth, EditorPaneMaxWidth);
 
@@ -169,6 +182,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public double NavigationSidebarWidth =>
         Math.Clamp(_appSettings.Ui.NavigationSidebarWidth, NavigationSidebarMinWidth, NavigationSidebarMaxWidth);
+
+    public double ComposerHeight =>
+        Math.Clamp(_appSettings.Ui.ComposerHeight, ComposerMinHeight, ComposerMaxHeight);
 
     public bool IsContextSidebarVisible => _appSettings.Ui.ContextSidebarVisible;
 
@@ -295,6 +311,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         _appSettings.Ui.NavigationSidebarWidth = clamped;
+        SchedulePersistUiLayout();
+    }
+
+    public void UpdateComposerHeight(double height)
+    {
+        var clamped = Math.Clamp(height, ComposerMinHeight, ComposerMaxHeight);
+        if (Math.Abs(_appSettings.Ui.ComposerHeight - clamped) < 0.5)
+        {
+            return;
+        }
+
+        _appSettings.Ui.ComposerHeight = clamped;
         SchedulePersistUiLayout();
     }
 

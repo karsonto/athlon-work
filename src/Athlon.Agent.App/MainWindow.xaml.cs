@@ -37,6 +37,7 @@ public partial class MainWindow : Window
         ApplyNavigationSidebarLayout();
         ApplyContextSidebarLayout();
         ApplyEditorPaneLayout();
+        ApplyComposerLayout();
         ScrollChatToEnd();
     }
 
@@ -124,6 +125,32 @@ public partial class MainWindow : Window
         if (width >= MainWindowViewModel.EditorPaneMinWidth)
         {
             _viewModel.UpdateEditorPaneWidth(width);
+        }
+    }
+
+    private void ApplyComposerLayout()
+    {
+        if (ComposerRow is null)
+        {
+            return;
+        }
+
+        ComposerRow.MinHeight = MainWindowViewModel.ComposerMinHeight;
+        ComposerRow.MaxHeight = MainWindowViewModel.ComposerMaxHeight;
+        ComposerRow.Height = new GridLength(_viewModel.ComposerHeight);
+    }
+
+    private void ComposerSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        if (ComposerRow is null)
+        {
+            return;
+        }
+
+        var height = ComposerRow.ActualHeight;
+        if (height >= MainWindowViewModel.ComposerMinHeight)
+        {
+            _viewModel.UpdateComposerHeight(height);
         }
     }
 

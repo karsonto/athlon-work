@@ -123,4 +123,5 @@ public sealed class UiSettings
     public double ContextSidebarWidth { get; set; } = 300;
     public double NavigationSidebarWidth { get; set; } = 220;
     public double EditorPaneWidth { get; set; } = 480;
+    public double ComposerHeight { get; set; } = 168;
 }

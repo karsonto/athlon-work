@@ -578,7 +578,11 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="8" />
+                    <RowDefinition x:Name="ComposerRow"
+                                   Height="168"
+                                   MinHeight="120"
+                                   MaxHeight="420" />
                 </Grid.RowDefinitions>
 
                 <!-- Session toolbar (height matches FileEditorView tab strip) -->
@@ -1074,8 +1078,48 @@
                 </ScrollViewer>
                 </Grid>
 
+                <GridSplitter x:Name="ComposerSplitter"
+                              Grid.Row="2"
+                              Height="8"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Center"
+                              ResizeDirection="Rows"
+                              ResizeBehavior="PreviousAndNext"
+                              ShowsPreview="False"
+                              Background="#01FFFFFF"
+                              Cursor="SizeNS"
+                              Panel.ZIndex="2"
+                              DragCompleted="ComposerSplitter_OnDragCompleted">
+                    <GridSplitter.Style>
+                        <Style TargetType="GridSplitter">
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="GridSplitter">
+                                        <Border x:Name="Track"
+                                                Background="Transparent"
+                                                Height="8"
+                                                VerticalAlignment="Stretch">
+                                            <Border x:Name="Line"
+                                                    Height="1"
+                                                    VerticalAlignment="Top"
+                                                    Background="{StaticResource Brush.Border}"
+                                                    Opacity="0.6" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Line" Property="Background" Value="{StaticResource Brush.Accent}" />
+                                                <Setter TargetName="Line" Property="Opacity" Value="1" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </GridSplitter.Style>
+                </GridSplitter>
+
             <!-- Composer (report/html Composer hero/dock) -->
-            <Border Grid.Row="2"
+            <Border Grid.Row="3"
                     Panel.ZIndex="20"
                     Background="{StaticResource Brush.Chrome}"
                     BorderBrush="{StaticResource Brush.Border}"
