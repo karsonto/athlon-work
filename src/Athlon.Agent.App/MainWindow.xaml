@@ -178,6 +178,7 @@
                                                 <StackPanel Grid.Column="0">
                                                     <TextBlock Text="{Binding PreviewText}"
                                                                FontSize="12"
+                                                               Foreground="{StaticResource Brush.Text}"
                                                                TextWrapping="Wrap"
                                                                TextTrimming="CharacterEllipsis"
                                                                MaxHeight="40">
