@@ -197,7 +197,7 @@ public sealed class SessionTurnUiController
         Messages.Clear();
         var answeredToolCallIds = BuildAnsweredToolCallIds(session.Messages);
 
-        foreach (var message in session.Messages)
+        foreach (var message in ChatTimelineOrder.OrderForDisplay(session.Messages))
         {
             if (ShouldHideMessageFromChat(message))
             {

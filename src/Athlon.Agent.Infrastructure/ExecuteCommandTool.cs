@@ -36,6 +36,13 @@ public sealed class ExecuteCommandTool(
         }
 
         var cwd = invocation.Arguments.GetValueOrDefault("cwd") ?? Environment.CurrentDirectory;
+        if (!Directory.Exists(cwd))
+        {
+            return ToolResult.Failure(
+                "Invalid working directory",
+                $"Working directory does not exist: {cwd}");
+        }
+
         var timeoutSeconds = Math.Clamp(
             ToolArguments.GetInt32(invocation, "timeout", DefaultTimeoutSeconds),
             1,
@@ -50,10 +57,14 @@ public sealed class ExecuteCommandTool(
             CreateNoWindow = true
         };
 
-        using var process = Process.Start(startInfo);
-        if (process is null)
+        Process process;
+        try
         {
-            return ToolResult.Failure("Failed to start process", "Process.Start returned null.");
+            process = Process.Start(startInfo) ?? throw new InvalidOperationException("Process.Start returned null.");
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return ToolResult.Failure("Failed to start process", ex.Message);
         }
 
         processRegistry.Register(process);

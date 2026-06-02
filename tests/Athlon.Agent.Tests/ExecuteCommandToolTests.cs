@@ -53,6 +53,24 @@ public sealed class ExecuteCommandToolTests
     }
 
     [Fact]
+    public async Task InvokeAsync_InvalidWorkingDirectory_ReturnsFailureWithoutThrowing()
+    {
+        var tool = CreateTool();
+        var missingDir = Path.Combine(Path.GetTempPath(), "athlon-missing-cwd-" + Guid.NewGuid().ToString("N"));
+        var result = await tool.InvokeAsync(new ToolInvocation(
+            "execute_command",
+            new Dictionary<string, string>
+            {
+                ["command"] = "echo hello",
+                ["cwd"] = missingDir
+            }));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("working directory", result.Summary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(missingDir, result.Error ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task InvokeAsync_DeniedCommand_ReturnsFailure()
     {
         var tool = CreateTool();
@@ -77,6 +95,6 @@ public sealed class ExecuteCommandToolTests
         paths.EnsureCreated();
         var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
         var audit = new AuditLogService(logger, paths, new JsonFileStore());
-        return new ExecuteCommandTool(new AppSettings(), audit);
+        return new ExecuteCommandTool(new AppSettings(), audit, new ExecuteCommandProcessRegistry());
     }
 }

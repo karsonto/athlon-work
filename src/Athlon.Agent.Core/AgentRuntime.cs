@@ -201,9 +201,24 @@ public sealed class AgentRuntime(
         CancellationToken cancellationToken)
     {
         var sw = Stopwatch.StartNew();
-        var result = await Task.Run(
-            () => toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken),
-            cancellationToken);
+        ToolResult result;
+        try
+        {
+            result = await Task.Run(
+                    () => toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Tool {ToolName} threw; returning failure to the model", toolCall.Name);
+            result = ToolResult.Failure("Tool invocation failed", ex.Message, sw.Elapsed);
+        }
+
         sw.Stop();
 
         await storage.AppendToolCallLogAsync(
