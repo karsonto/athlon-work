@@ -87,12 +87,22 @@ The path is provided by `AppPathProvider` in `src/Athlon.Agent.Infrastructure/Co
 
 ### Agent turn timeout
 
-In `config/settings.json`, optional `AgentTurn.TimeoutMinutes` controls how long a single user message may run (agent tool loop included). Default is **30**; values are clamped to **1–180**. Example for a two-hour run:
+In `config/settings.json`, optional `AgentTurn.TimeoutMinutes` controls how long a single user message may run (agent tool loop included). Default is **30**; positive values are clamped to **1–180**. Set **`0`** to disable the turn timeout (no automatic stop for long agent loops). Example for a two-hour run:
 
 ```json
 {
   "AgentTurn": {
     "TimeoutMinutes": 120
+  }
+}
+```
+
+Unlimited turn (only user **Stop** ends the run):
+
+```json
+{
+  "AgentTurn": {
+    "TimeoutMinutes": 0
   }
 }
 ```
@@ -176,7 +186,7 @@ The agent sends an environment prompt that includes active workspace path and av
 - `file_edit`: replace exact on-disk text (auto-strips accidental `file_read` line prefixes); optional `replace_all`.
 - `grep_files`: search file contents in the workspace.
 - `glob_files`: find workspace files by glob pattern.
-- `execute_command`: enabled by default; subject to command deny-list rules.
+- `execute_command`: runs via `cmd.exe /c`; default wait **3600s (1 hour)**, max **3600s** (`timeout` argument). Command timeout returns a tool failure and does **not** stop the agent turn. User **Stop** kills the command process tree. Subject to command deny-list rules. For runs longer than one hour, split work or raise `AgentTurn.TimeoutMinutes` / set it to `0` when appropriate.
 
 All file tools should respect workspace boundaries through `WorkspaceGuard`. Writes and edits create backups through `AtomicFile`.
 

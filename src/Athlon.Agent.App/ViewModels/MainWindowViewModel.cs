@@ -29,6 +29,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly SessionUiCache _uiCache;
     private readonly IPlanNotebook _planNotebook;
     private readonly PlanAutoContinueTracker _planAutoContinueTracker;
+    private readonly ApplicationShutdownService _shutdownService;
     private readonly Dictionary<string, ObservableCollection<QueuedTurnViewModel>> _queuedTurnsBySession = new(StringComparer.Ordinal);
     private FileSystemWatcher? _workspaceWatcher;
     private AgentSession _session = AgentSession.Create("New Chat");
@@ -49,6 +50,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IPlanNotebook planNotebook,
         PlanAutoContinueTracker planAutoContinueTracker,
         WorkspaceFileEditorService workspaceFileEditorService,
+        ApplicationShutdownService shutdownService,
         AppSettings settings)
     {
         _storage = storage;
@@ -60,6 +62,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _uiCache = uiCache;
         _planNotebook = planNotebook;
         _planAutoContinueTracker = planAutoContinueTracker;
+        _shutdownService = shutdownService;
         _appSettings = settings;
         _skillCatalog = skillCatalog;
         _skillRuntime = skillRuntime;
@@ -218,6 +221,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private bool isBusy;
+
+    [ObservableProperty]
+    private string shutdownStatusText = "正在关闭…";
 
     [ObservableProperty]
     private string currentPage = "Chat";
@@ -1261,21 +1267,23 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         });
     }
 
-    /// <summary>Cancel in-flight work and release watchers before process exit.</summary>
-    public void PrepareForShutdown()
+    public bool HasPendingShutdownWork => _turnHost.HasActiveWork;
+
+    public async Task ShutdownAsync(
+        IProgress<string>? progress = null,
+        CancellationToken cancellationToken = default)
     {
-        try { _turnHost.CancelAll(); } catch { /* ignore */ }
+        _uiLayoutSaveCts?.Cancel();
         _workspaceWatcher?.Dispose();
         _workspaceWatcher = null;
-        try
-        {
-            _uiLayoutSaveCts?.Cancel();
-            _storage.SaveSettingsAsync(_appSettings).GetAwaiter().GetResult();
-        }
-        catch
-        {
-            // Best-effort persist of sidebar layout on exit.
-        }
+
+        await _shutdownService.ShutdownAsync(progress, cancellationToken: cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Legacy entry point; prefer <see cref="ShutdownAsync"/>.</summary>
+    public void PrepareForShutdown()
+    {
+        ShutdownAsync().GetAwaiter().GetResult();
     }
 
     public void Dispose()

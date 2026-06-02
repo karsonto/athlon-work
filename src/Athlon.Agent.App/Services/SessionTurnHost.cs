@@ -193,6 +193,46 @@ public sealed class SessionTurnHost
         }
     }
 
+    public bool HasActiveWork
+    {
+        get
+        {
+            if (!_runners.IsEmpty)
+            {
+                return true;
+            }
+
+            lock (_startGate)
+            {
+                return _queues.Values.Any(queue => queue.Count > 0);
+            }
+        }
+    }
+
+    public void ClearAllQueues()
+    {
+        lock (_startGate)
+        {
+            _queues.Clear();
+        }
+    }
+
+    public async Task ShutdownAsync(TimeSpan waitTimeout, CancellationToken cancellationToken = default)
+    {
+        CancelAll();
+        ClearAllQueues();
+
+        var tasks = _runners.Values.Select(runner => runner.Completion).ToArray();
+        if (tasks.Length == 0)
+        {
+            return;
+        }
+
+        await Task
+            .WhenAny(Task.WhenAll(tasks), Task.Delay(waitTimeout, cancellationToken))
+            .ConfigureAwait(false);
+    }
+
     private void OnRunnerFinished(
         SessionTurnRunner runner,
         AgentSession session,
@@ -217,14 +257,15 @@ public sealed class SessionTurnHost
     {
         private readonly SessionTurnHost _host;
         private readonly SessionTurnRequest _request;
-        private readonly TimeSpan _timeout;
+        private readonly TimeSpan? _timeout;
         private readonly int _timeoutMinutes;
         private CancellationTokenSource? _cancellation;
         private CancellationTokenSource? _timeoutCancellation;
         private CancellationTokenSource? _linked;
         private AgentSession _session;
+        private Task? _runTask;
 
-        public SessionTurnRunner(SessionTurnHost host, SessionTurnRequest request, TimeSpan timeout, int timeoutMinutes)
+        public SessionTurnRunner(SessionTurnHost host, SessionTurnRequest request, TimeSpan? timeout, int timeoutMinutes)
         {
             _host = host;
             _request = request;
@@ -237,12 +278,18 @@ public sealed class SessionTurnHost
 
         public bool IsAutoContinue => _request.IsAutoContinue;
 
+        public Task Completion => _runTask ?? Task.CompletedTask;
+
         public void Start()
         {
             _cancellation = new CancellationTokenSource();
-            _timeoutCancellation = new CancellationTokenSource(_timeout);
-            _linked = CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token, _timeoutCancellation.Token);
-            _ = RunAsync();
+            if (_timeout is { } timeout)
+            {
+                _timeoutCancellation = new CancellationTokenSource(timeout);
+                _linked = CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token, _timeoutCancellation.Token);
+            }
+
+            _runTask = RunAsync();
         }
 
         public void Cancel() => _cancellation?.Cancel();
@@ -257,12 +304,13 @@ public sealed class SessionTurnHost
             {
                 _request.Ui.ResetForTurn();
                 var callbacks = _request.Ui.BuildCallbacks();
+                var turnToken = _linked?.Token ?? _cancellation!.Token;
                 _session = await _host._orchestrator.SendAsync(
                     _session,
                     _request.UserInput,
                     _request.ImageAttachments,
                     callbacks,
-                    _linked!.Token).ConfigureAwait(false);
+                    turnToken).ConfigureAwait(false);
                 await _host._storage.SaveSessionAsync(_session).ConfigureAwait(false);
             }
             catch (OperationCanceledException)

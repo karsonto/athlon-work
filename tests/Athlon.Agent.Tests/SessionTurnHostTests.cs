@@ -133,6 +133,35 @@ public sealed class SessionTurnHostTests
         await Task.Delay(200);
     }
 
+    [Fact]
+    public async Task ShutdownAsync_WhenRunnerCancelled_ClearsRunners()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var host = CreateHost(new SlowOrchestrator(TimeSpan.FromSeconds(30)));
+        var session = AgentSession.Create("shutdown");
+
+        Assert.True(TryStart(host, dispatcher, session, out _));
+        Assert.True(host.HasActiveWork);
+
+        await host.ShutdownAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(300);
+
+        Assert.False(host.IsRunning(session.Id));
+    }
+
+    [Fact]
+    public async Task HasActiveWork_WhenQueueHasItems_ReturnsTrueUntilCleared()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var host = CreateHost(new SlowOrchestrator(TimeSpan.FromMilliseconds(1)));
+
+        host.Enqueue(CreatePayload(dispatcher, "queued-session", "hello"));
+        Assert.True(host.HasActiveWork);
+
+        host.ClearAllQueues();
+        Assert.False(host.HasActiveWork);
+    }
+
     private static SessionTurnHost CreateHost(IAgentOrchestrator orchestrator) =>
         new(orchestrator, new NoOpStorage(), new AppSettings());
 

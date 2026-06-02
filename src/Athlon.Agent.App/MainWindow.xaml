@@ -1958,5 +1958,27 @@
             <TextBlock Text="{Binding CopyNotice}"
                        Style="{StaticResource ToastNoticeTextStyle}" />
         </Border>
+
+        <Border x:Name="ShutdownOverlay"
+                Panel.ZIndex="200"
+                Visibility="Collapsed"
+                Background="#CC101012">
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        MaxWidth="420">
+                <TextBlock Text="正在关闭…"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource Brush.SubtleText}"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,12" />
+                <TextBlock Text="{Binding ShutdownStatusText}"
+                           FontSize="14"
+                           Foreground="{StaticResource Brush.SubtleText}"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center" />
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

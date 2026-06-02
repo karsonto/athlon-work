@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     private const double AutoScrollBottomThreshold = 48;
     private bool _autoScrollEnabled = true;
     private bool _isProgrammaticScroll;
+    private bool _shutdownInProgress;
 
     public MainWindow(MainWindowViewModel viewModel)
     {
@@ -41,14 +42,53 @@ public partial class MainWindow : Window
         ScrollChatToEnd();
     }
 
-    private void OnMainWindowClosing(object? sender, CancelEventArgs e)
+    private async void OnMainWindowClosing(object? sender, CancelEventArgs e)
     {
-        if (_viewModel.ConfirmCloseEditorTabs())
+        if (_shutdownInProgress)
         {
             return;
         }
 
+        if (!_viewModel.ConfirmCloseEditorTabs())
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        if (_viewModel.HasPendingShutdownWork)
+        {
+            var confirm = MessageBox.Show(
+                this,
+                "有对话正在生成或消息排队中，退出将停止所有任务。确定退出？",
+                "退出 Athlon Agent",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes)
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+
         e.Cancel = true;
+        ShutdownOverlay.Visibility = Visibility.Visible;
+        IsEnabled = false;
+
+        try
+        {
+            var progress = new Progress<string>(status =>
+            {
+                Dispatcher.Invoke(() => _viewModel.ShutdownStatusText = status);
+            });
+            await _viewModel.ShutdownAsync(progress).ConfigureAwait(true);
+        }
+        catch
+        {
+            // Proceed with exit even if cleanup fails.
+        }
+
+        _shutdownInProgress = true;
+        Application.Current.Shutdown();
     }
 
     private void ApplyNavigationSidebarLayout()

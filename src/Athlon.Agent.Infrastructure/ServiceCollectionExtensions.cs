@@ -43,7 +43,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAppLogger>(logger);
         services.AddSingleton<IFileStorageService, FileStorageService>();
         services.AddHttpClient<IAgentModelClient, OpenAiCompatibleChatModelClient>(
-            static client => client.Timeout = TimeSpan.FromMinutes(AgentTurnSettingsExtensions.MaxTimeoutMinutes));
+            static client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
         services.AddSingleton<IAgentRuntime, AgentRuntime>();
         services.AddSingleton<IImageAttachmentReader, ImageAttachmentReader>();
@@ -55,6 +55,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<WorkspaceGuard>();
         services.AddSingleton<WorkspaceFileEditorService>();
         services.AddSingleton<AuditLogService>();
+        services.AddSingleton<ExecuteCommandProcessRegistry>();
         services.AddSingleton<IAgentTool, FileListTool>();
         services.AddSingleton<IAgentTool, FileReadTool>();
         services.AddSingleton<IAgentTool, FileWriteTool>();

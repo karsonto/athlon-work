@@ -40,6 +40,7 @@ public partial class App : Application
             services.AddSingleton(_ => new SessionUiCache(System.Windows.Threading.Dispatcher.CurrentDispatcher));
             services.AddSingleton<PlanAutoContinueTracker>();
             services.AddSingleton<SessionTurnHost>();
+            services.AddSingleton<ApplicationShutdownService>();
             services.AddSingleton<MainWindowViewModel>();
             services.AddSingleton<MainWindow>();
             _services = services.BuildServiceProvider();
@@ -72,14 +73,13 @@ public partial class App : Application
         StartupTrace($"OnExit {e.ApplicationExitCode}");
         try
         {
-            if (_services?.GetService<MainWindowViewModel>() is { } viewModel)
+            if (!ApplicationShutdownState.IsCompleted
+                && _services?.GetService<ApplicationShutdownService>() is { } shutdownService)
             {
-                viewModel.PrepareForShutdown();
-            }
-
-            if (_services?.GetService<IMcpRegistry>() is IAsyncDisposable mcpRegistry)
-            {
-                mcpRegistry.DisposeAsync().AsTask().ConfigureAwait(false).GetAwaiter().GetResult();
+                shutdownService
+                    .ShutdownAsync(progress: null, turnWaitTimeout: ApplicationShutdownService.DefaultTurnWaitTimeout)
+                    .GetAwaiter()
+                    .GetResult();
             }
         }
         catch (Exception ex)
