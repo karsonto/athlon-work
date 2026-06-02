@@ -32,6 +32,31 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public void ConversationCutoffPlanner_AdjustCutoff_KeepsLatestUserMessageInTail()
+    {
+        var messages = new[]
+        {
+            ChatMessage.Create(MessageRole.User, "first"),
+            ChatMessage.Create(MessageRole.Assistant, "reply-1"),
+            ChatMessage.Create(MessageRole.User, "latest question"),
+            ChatMessage.Create(MessageRole.Assistant, "thinking", toolCalls: new[] { new AgentToolCall("c1", "file_read", new Dictionary<string, string>()) }),
+            ChatMessage.Create(MessageRole.Tool, "tool output"),
+        };
+
+        var cutoff = ConversationCutoffPlanner.DetermineCutoffIndex(
+            messages,
+            ContextTokenEstimator.Estimate(messages),
+            new ContextCompactionSettings { KeepMessages = 2 });
+        cutoff = ConversationCutoffPlanner.AdjustCutoffToRetainRecentUserInput(messages, cutoff);
+        cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(messages, cutoff);
+
+        var tail = messages.Skip(cutoff).Select(message => message.Content).ToArray();
+        Assert.Contains("latest question", tail);
+        Assert.Contains("tool output", tail);
+        Assert.DoesNotContain("first", tail);
+    }
+
+    [Fact]
     public void ConversationCutoffPlanner_FindSafeCutoff_DoesNotSplitToolPair()
     {
         var assistant = ChatMessage.Create(
@@ -140,6 +165,8 @@ public sealed class CompactionTests
             var session = AgentSession.Create("compact-session")
                 .WithMessages(new[]
                 {
+                    ChatMessage.Create(MessageRole.User, "old"),
+                    ChatMessage.Create(MessageRole.Assistant, "earlier"),
                     ChatMessage.Create(MessageRole.User, "hello"),
                     ChatMessage.Create(MessageRole.Assistant, "hi"),
                     ChatMessage.Create(MessageRole.Tool, "tool output")
@@ -162,7 +189,8 @@ public sealed class CompactionTests
             Assert.Equal(MessageRole.Compaction, result.Session.Messages[0].Role);
             Assert.Contains("conversationcompact", result.Session.Messages[0].Content, StringComparison.OrdinalIgnoreCase);
             Assert.True(SummaryMessageBuilder.IsSummaryMessage(result.Session.Messages[1]));
-            Assert.Equal(MessageRole.Tool, result.Session.Messages[2].Role);
+            Assert.Equal(MessageRole.Tool, result.Session.Messages[^1].Role);
+            Assert.Contains(result.Session.Messages.Skip(2), message => message.Content == "hello");
 
             var transcriptDir = Path.Combine(paths.SessionsPath, session.Id, "transcripts");
             Assert.True(Directory.Exists(transcriptDir));

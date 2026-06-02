@@ -36,6 +36,20 @@ public static class ConversationCutoffPlanner
         return DetermineCutoffByMessages(messages, settings.KeepMessages);
     }
 
+    /// <summary>
+    /// Pulls the cutoff earlier so the latest real user message and all following messages remain in the tail.
+    /// </summary>
+    public static int AdjustCutoffToRetainRecentUserInput(IReadOnlyList<ChatMessage> messages, int cutoffIndex)
+    {
+        var lastUserIndex = FindLastRealUserMessageIndex(messages);
+        if (lastUserIndex < 0)
+        {
+            return cutoffIndex;
+        }
+
+        return Math.Min(cutoffIndex, lastUserIndex);
+    }
+
     public static int FindSafeCutoffPoint(IReadOnlyList<ChatMessage> messages, int cutoffIndex)
     {
         if (cutoffIndex <= 0 || cutoffIndex >= messages.Count)
@@ -99,6 +113,20 @@ public static class ConversationCutoffPlanner
         }
 
         return cutoff;
+    }
+
+    private static int FindLastRealUserMessageIndex(IReadOnlyList<ChatMessage> messages)
+    {
+        for (var i = messages.Count - 1; i >= 0; i--)
+        {
+            var message = messages[i];
+            if (message.Role == MessageRole.User && !SummaryMessageBuilder.IsSummaryMessage(message))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     private static int EstimateMessageTokens(ChatMessage message) =>

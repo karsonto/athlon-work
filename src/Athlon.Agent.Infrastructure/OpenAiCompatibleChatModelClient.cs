@@ -137,7 +137,7 @@ public sealed class OpenAiCompatibleChatModelClient(
             }
 
             responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
-            return await EmitParsedResponseAsync(responseBody, onTextDelta, onReasoningDelta);
+            return await EmitParsedResponseAsync(responseBody, onTextDelta, onReasoningDelta, onToolCallDelta);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -188,7 +188,8 @@ public sealed class OpenAiCompatibleChatModelClient(
     private static async Task<AgentModelResponse> EmitParsedResponseAsync(
         string responseBody,
         Func<string, Task>? onTextDelta,
-        Func<string, Task>? onReasoningDelta)
+        Func<string, Task>? onReasoningDelta,
+        Func<StreamingToolCallDelta, Task>? onToolCallDelta = null)
     {
         var result = ParseNonStreamingResponse(responseBody);
         if (onReasoningDelta is not null && !string.IsNullOrEmpty(result.ReasoningContent))
@@ -199,6 +200,16 @@ public sealed class OpenAiCompatibleChatModelClient(
         if (onTextDelta is not null && !string.IsNullOrEmpty(result.Content))
         {
             await onTextDelta(result.Content);
+        }
+
+        if (onToolCallDelta is not null)
+        {
+            for (var index = 0; index < result.ToolCalls.Count; index++)
+            {
+                var call = result.ToolCalls[index];
+                var argumentsJson = JsonSerializer.Serialize(call.Arguments);
+                await onToolCallDelta(new StreamingToolCallDelta(index, call.Id, call.Name, argumentsJson));
+            }
         }
 
         return result;
@@ -296,7 +307,7 @@ public sealed class OpenAiCompatibleChatModelClient(
         {
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             setResponseBody(body);
-            return await EmitParsedResponseAsync(body, onTextDelta, onReasoningDelta);
+            return await EmitParsedResponseAsync(body, onTextDelta, onReasoningDelta, onToolCallDelta);
         }
 
         var contentBuilder = new StringBuilder();
@@ -419,13 +430,14 @@ public sealed class OpenAiCompatibleChatModelClient(
                             }
                         }
 
-                        NotifyToolCallDelta(
+                        await NotifyToolCallDeltaAsync(
                             onToolCallDelta,
                             new StreamingToolCallDelta(
                                 index,
                                 state.Id,
                                 state.Name,
-                                state.Arguments.ToString()));
+                                state.Arguments.ToString()),
+                            cancellationToken);
                     }
                 }
             }
@@ -436,7 +448,7 @@ public sealed class OpenAiCompatibleChatModelClient(
             _logger.Warning("Streaming response did not contain SSE data lines, fallback to JSON body parsing.");
             var body = fallbackBuilder.ToString().Trim();
             setResponseBody(body);
-            return await EmitParsedResponseAsync(body, onTextDelta, onReasoningDelta);
+            return await EmitParsedResponseAsync(body, onTextDelta, onReasoningDelta, onToolCallDelta);
         }
 
         setResponseBody(rawBuilder.ToString());
@@ -457,24 +469,18 @@ public sealed class OpenAiCompatibleChatModelClient(
         return NormalizeAssistantResponse(contentBuilder.ToString(), normalizedToolCalls, reasoningContent);
     }
 
-    private static void NotifyToolCallDelta(Func<StreamingToolCallDelta, Task>? onToolCallDelta, StreamingToolCallDelta delta)
+    private static async Task NotifyToolCallDeltaAsync(
+        Func<StreamingToolCallDelta, Task>? onToolCallDelta,
+        StreamingToolCallDelta delta,
+        CancellationToken cancellationToken)
     {
         if (onToolCallDelta is null)
         {
             return;
         }
 
-        var task = onToolCallDelta(delta);
-        if (task.IsCompletedSuccessfully)
-        {
-            return;
-        }
-
-        _ = task.ContinueWith(
-            static t => _ = t.Exception,
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted,
-            TaskScheduler.Default);
+        await onToolCallDelta(delta).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private static bool TryGetStreamPayload(JsonElement choice, out JsonElement payload)

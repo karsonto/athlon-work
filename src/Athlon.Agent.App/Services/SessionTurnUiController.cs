@@ -34,19 +34,19 @@ public sealed class SessionTurnUiController
 
     public Action RequestScroll { get; set; }
 
-    public AgentTurnCallbacks BuildCallbacks() => new()
+    public AgentTurnCallbacks BuildCallbacks(Func<AgentSession>? getSession = null) => new()
     {
         OnToolStarted = async toolCall => await RunOnUiAsync(() => HandleToolStarted(toolCall)),
-        OnAssistantToolCallDelta = delta =>
+        OnAssistantToolCallDelta = async delta =>
         {
             _pendingToolCallDeltas[delta.Index] = delta;
-            return RunOnUiAsync(() =>
+            await RunOnUiAsync(() =>
             {
                 ClearStreamingAssistantPlaceholder();
-                ScheduleStreamingToolFlush();
+                FlushStreamingToolDeltas();
             });
         },
-        OnMessage = async message => await RunOnUiAsync(() => HandleMessage(message)),
+        OnMessage = async message => await RunOnUiAsync(() => HandleMessage(message, getSession?.Invoke())),
         OnAssistantTextDelta = async token => await RunOnUiAsync(() =>
         {
             EnsureStreamingAssistantMessage();
@@ -172,57 +172,57 @@ public sealed class SessionTurnUiController
         });
     }
 
-    public void HydrateFromSession(AgentSession session)
+    public void HydrateFromSession(AgentSession session) =>
+        RunOnUiSync(() => PopulateMessagesFromSession(session));
+
+    private void PopulateMessagesFromSession(AgentSession session)
     {
-        RunOnUiSync(() =>
+        Messages.Clear();
+        var answeredToolCallIds = BuildAnsweredToolCallIds(session.Messages);
+
+        foreach (var message in session.Messages)
         {
-            Messages.Clear();
-            var answeredToolCallIds = BuildAnsweredToolCallIds(session.Messages);
-
-            foreach (var message in session.Messages)
+            if (ShouldHideMessageFromChat(message))
             {
-                if (message.Role == MessageRole.User
-                    && CompactionMessageContent.IsCompressedPlaceholder(message.Content))
-                {
-                    continue;
-                }
-
-                if (ChatMessageViewModel.IsAssistantToolCallsOnly(message))
-                {
-                    continue;
-                }
-
-                Messages.Add(new ChatMessageViewModel(message));
-
-                if (message.Role != MessageRole.Assistant)
-                {
-                    continue;
-                }
-
-                var pendingCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
-                if (pendingCalls is null)
-                {
-                    continue;
-                }
-
-                foreach (var toolCall in pendingCalls)
-                {
-                    if (answeredToolCallIds.Contains(toolCall.Id))
-                    {
-                        continue;
-                    }
-
-                    var orphanResult = AgentRuntime.FormatToolResult(
-                        toolCall,
-                        ToolResult.Failure(
-                            "工具未完成",
-                            "上次对话在工具执行时被中断，或 MCP 超时后子进程未返回。请重启应用并在侧边栏刷新 MCP 后重试。"));
-                    Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.Tool, orphanResult, message.ParentId)));
-                    answeredToolCallIds.Add(toolCall.Id);
-                }
+                continue;
             }
-        });
+
+            Messages.Add(new ChatMessageViewModel(message));
+
+            if (message.Role != MessageRole.Assistant)
+            {
+                continue;
+            }
+
+            var pendingCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
+            if (pendingCalls is null)
+            {
+                continue;
+            }
+
+            foreach (var toolCall in pendingCalls)
+            {
+                if (answeredToolCallIds.Contains(toolCall.Id))
+                {
+                    continue;
+                }
+
+                var orphanResult = AgentRuntime.FormatToolResult(
+                    toolCall,
+                    ToolResult.Failure(
+                        "工具未完成",
+                        "上次对话在工具执行时被中断，或 MCP 超时后子进程未返回。请重启应用并在侧边栏刷新 MCP 后重试。"));
+                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.Tool, orphanResult, message.ParentId)));
+                answeredToolCallIds.Add(toolCall.Id);
+            }
+        }
+
+        RequestScroll();
     }
+
+    private static bool ShouldHideMessageFromChat(ChatMessage message) =>
+        message.Role == MessageRole.User && SummaryMessageBuilder.IsSummaryMessage(message)
+        || ChatMessageViewModel.IsAssistantToolCallsOnly(message);
 
     private void HandleToolStarted(AgentToolCall toolCall)
     {
@@ -267,19 +267,34 @@ public sealed class SessionTurnUiController
         RequestScroll();
     }
 
-    private void HandleMessage(ChatMessage message)
+    private void HandleMessage(ChatMessage message, AgentSession? session)
     {
-        if (message.Role == MessageRole.User
-            && CompactionMessageContent.IsCompressedPlaceholder(message.Content))
+        if (ShouldHideMessageFromChat(message))
         {
+            if (session is not null
+                && message.Role == MessageRole.User
+                && SummaryMessageBuilder.IsSummaryMessage(message))
+            {
+                ClearStreamingAssistantPlaceholder();
+                PopulateMessagesFromSession(session);
+            }
+
             return;
         }
 
         if (message.Role == MessageRole.Compaction)
         {
             ClearStreamingAssistantPlaceholder();
-            Messages.Add(new ChatMessageViewModel(message));
-            RequestScroll();
+            if (session is not null)
+            {
+                PopulateMessagesFromSession(session);
+            }
+            else
+            {
+                Messages.Add(new ChatMessageViewModel(message));
+                RequestScroll();
+            }
+
             return;
         }
 

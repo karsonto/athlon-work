@@ -303,7 +303,7 @@ public sealed class SessionTurnHost
             try
             {
                 _request.Ui.ResetForTurn();
-                var callbacks = _request.Ui.BuildCallbacks();
+                var callbacks = _request.Ui.BuildCallbacks(() => _session);
                 var turnToken = _linked?.Token ?? _cancellation!.Token;
                 _session = await _host._orchestrator.SendAsync(
                     _session,

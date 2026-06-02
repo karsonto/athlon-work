@@ -79,6 +79,7 @@ public sealed class ConversationCompactor(
         }
 
         var cutoff = ConversationCutoffPlanner.DetermineCutoffIndex(filtered, estimatedTokens, cfg);
+        cutoff = ConversationCutoffPlanner.AdjustCutoffToRetainRecentUserInput(filtered, cutoff);
         cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(filtered, cutoff);
         if (cutoff <= 0)
         {
