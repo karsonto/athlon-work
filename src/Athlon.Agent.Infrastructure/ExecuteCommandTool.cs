@@ -112,7 +112,7 @@ public sealed class ExecuteCommandTool(
         var stdoutTask = process.StandardOutput.ReadToEndAsync(userCancelToken);
         var stderrTask = process.StandardError.ReadToEndAsync(userCancelToken);
         var exitTask = process.WaitForExitAsync(userCancelToken);
-        var runTask = Task.WhenAll(stdoutTask, stderrTask, exitTask.AsTask());
+        var runTask = Task.WhenAll(stdoutTask, stderrTask, exitTask);
         var timeoutTask = Task.Delay(Timeout.InfiniteTimeSpan, timeoutCts.Token);
 
         var winner = await Task.WhenAny(runTask, timeoutTask).ConfigureAwait(false);
