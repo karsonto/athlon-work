@@ -70,7 +70,7 @@ public sealed class ConversationCompactor(
             .Where(message => message.Role != MessageRole.Compaction)
             .ToList();
 
-        var estimatedTokens = ContextTokenEstimator.Estimate(conversation);
+        var estimatedTokens = ContextTokenEstimator.Estimate(conversation, cfg.IncludeReasoningInModelContext);
         if (!ConversationCutoffPlanner.ShouldCompact(conversation, estimatedTokens, cfg, force))
         {
             return new ConversationCompactResult(session, false);
@@ -140,7 +140,9 @@ public sealed class ConversationCompactor(
 
         if (emitAudit)
         {
-            var tokensAfterPreview = ContextTokenEstimator.Estimate(new[] { summaryMessage }.Concat(tail).ToArray());
+            var tokensAfterPreview = ContextTokenEstimator.Estimate(
+                new[] { summaryMessage }.Concat(tail).ToArray(),
+                cfg.IncludeReasoningInModelContext);
             var auditContent = auditKind == CompactionKind.ManualCompact
                 ? CompactionMessageContent.CreateManualCompact(
                     tokensBefore,

@@ -92,6 +92,16 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public void ContextTokenEstimator_ExcludesReasoningByDefault()
+    {
+        var message = ChatMessage.Create(MessageRole.Assistant, "answer", reasoningContent: new string('r', 500));
+        var withoutReasoning = ContextTokenEstimator.EstimateMessage(message);
+        var withReasoning = ContextTokenEstimator.EstimateMessage(message, includeReasoningInModelContext: true);
+
+        Assert.True(withReasoning > withoutReasoning);
+    }
+
+    [Fact]
     public void ConversationCutoffPlanner_LongAgentLoop_CompactsWithoutSecondUserMessage()
     {
         var messages = new List<ChatMessage>
@@ -427,7 +437,7 @@ public sealed class CompactionTests
 
             if (!ConversationCutoffPlanner.ShouldCompact(
                     conversation,
-                    ContextTokenEstimator.Estimate(conversation),
+                    ContextTokenEstimator.Estimate(conversation, cfg.IncludeReasoningInModelContext),
                     cfg,
                     force))
             {

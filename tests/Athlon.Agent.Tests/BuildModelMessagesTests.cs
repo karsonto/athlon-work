@@ -111,7 +111,7 @@ public sealed class BuildModelMessagesTests
     }
 
     [Fact]
-    public void BuildModelMessages_AssistantWithReasoningContent_PassesThrough()
+    public void BuildModelMessages_AssistantWithReasoningContent_OmittedByDefault()
     {
         var history = new[]
         {
@@ -120,6 +120,22 @@ public sealed class BuildModelMessagesTests
         };
 
         var messages = AgentRuntime.BuildModelMessages("system", history);
+
+        Assert.Equal(3, messages.Count);
+        Assert.Equal("assistant", messages[2].Role);
+        Assert.Null(messages[2].ReasoningContent);
+    }
+
+    [Fact]
+    public void BuildModelMessages_AssistantWithReasoningContent_PassesThroughWhenEnabled()
+    {
+        var history = new[]
+        {
+            ChatMessage.Create(MessageRole.User, "question"),
+            ChatMessage.Create(MessageRole.Assistant, "answer", reasoningContent: "thinking chain")
+        };
+
+        var messages = AgentRuntime.BuildModelMessages("system", history, includeReasoningInModelContext: true);
 
         Assert.Equal(3, messages.Count);
         Assert.Equal("assistant", messages[2].Role);

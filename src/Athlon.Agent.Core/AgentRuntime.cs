@@ -81,7 +81,7 @@ public sealed class AgentRuntime(
             var tools = toolRouter.ListTools();
             var frozenPrompt = systemPromptOrchestrator.PrepareForTurn(session, tools);
             var environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
-            var modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
+            var modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
 
             if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
             {
@@ -98,7 +98,7 @@ public sealed class AgentRuntime(
                     PreCompletionOptions.AgentLoop,
                     cancellationToken);
                 environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
-                modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
+                modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
 
                 var (updatedSession, response) = await CompleteWithOverflowRetryAsync(
                     session,
@@ -134,7 +134,7 @@ public sealed class AgentRuntime(
                 await PersistMessageAsync(session, assistantWithToolCalls, cancellationToken);
 
                 environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
-                modelMessages = BuildModelMessages(environmentPrompt, session.Messages);
+                modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
                 foreach (var toolCall in response.ToolCalls)
                 {
                     await NotifyToolStartedAsync(callbacks, toolCall);
@@ -182,7 +182,7 @@ public sealed class AgentRuntime(
                 frozenPrompt,
                 session,
                 tools);
-            var retryMessages = BuildModelMessages(environmentPrompt, session.Messages);
+            var retryMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
             var response = await modelClient.CompleteAsync(
                 new AgentModelRequest(retryMessages, tools),
                 callbacks?.OnAssistantTextDelta,
@@ -371,7 +371,13 @@ public sealed class AgentRuntime(
         return false;
     }
 
-    internal static List<AgentModelMessage> BuildModelMessages(string environmentPrompt, IReadOnlyList<ChatMessage> history)
+    private List<AgentModelMessage> BuildModelMessagesForSession(string environmentPrompt, IReadOnlyList<ChatMessage> history) =>
+        BuildModelMessages(environmentPrompt, history, settings.ContextCompaction.IncludeReasoningInModelContext);
+
+    internal static List<AgentModelMessage> BuildModelMessages(
+        string environmentPrompt,
+        IReadOnlyList<ChatMessage> history,
+        bool includeReasoningInModelContext = false)
     {
         var messages = new List<AgentModelMessage>
         {
@@ -389,7 +395,7 @@ public sealed class AgentRuntime(
                     messages.Add(new AgentModelMessage("user", BuildUserContent(message)));
                     break;
                 case MessageRole.Assistant:
-                    index = AppendAssistantModelMessages(messages, history, index);
+                    index = AppendAssistantModelMessages(messages, history, index, includeReasoningInModelContext);
                     break;
                 case MessageRole.Tool:
                     messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(message.Content)));
@@ -412,13 +418,15 @@ public sealed class AgentRuntime(
     private static int AppendAssistantModelMessages(
         List<AgentModelMessage> messages,
         IReadOnlyList<ChatMessage> history,
-        int assistantIndex)
+        int assistantIndex,
+        bool includeReasoningInModelContext)
     {
         var message = history[assistantIndex];
+        var reasoningContent = includeReasoningInModelContext ? message.ReasoningContent : null;
         var toolCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
         if (toolCalls is not { Count: > 0 })
         {
-            messages.Add(new AgentModelMessage("assistant", message.Content, ReasoningContent: message.ReasoningContent));
+            messages.Add(new AgentModelMessage("assistant", message.Content, ReasoningContent: reasoningContent));
             return assistantIndex;
         }
 
@@ -451,7 +459,7 @@ public sealed class AgentRuntime(
             }
         }
 
-        messages.Add(new AgentModelMessage("assistant", message.Content, ToolCalls: toolCalls, ReasoningContent: message.ReasoningContent));
+        messages.Add(new AgentModelMessage("assistant", message.Content, ToolCalls: toolCalls, ReasoningContent: reasoningContent));
         foreach (var toolCall in toolCalls)
         {
             var content = toolByCallId.TryGetValue(toolCall.Id, out var toolMessage)

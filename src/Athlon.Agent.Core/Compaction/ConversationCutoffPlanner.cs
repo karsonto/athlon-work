@@ -70,7 +70,7 @@ public static class ConversationCutoffPlanner
         ContextCompactionSettings settings)
     {
         var rawCutoff = settings.KeepTokens > 0
-            ? FindTokenBasedCutoff(messages, estimatedTokens, settings.KeepTokens)
+            ? FindTokenBasedCutoff(messages, estimatedTokens, settings.KeepTokens, settings.IncludeReasoningInModelContext)
             : FindMessageBasedCutoff(messages, settings.KeepMessages);
 
         return FindSafeCutoffPoint(messages, rawCutoff);
@@ -78,14 +78,15 @@ public static class ConversationCutoffPlanner
 
     public static int DetermineTruncateArgsCutoff(
         IReadOnlyList<ChatMessage> messages,
-        TruncateArgsSettings settings)
+        TruncateArgsSettings settings,
+        bool includeReasoningInModelContext = false)
     {
         if (settings.KeepTokens > 0)
         {
             var tokensKept = 0;
             for (var i = messages.Count - 1; i >= 0; i--)
             {
-                var messageTokens = ContextTokenEstimator.EstimateMessage(messages[i]);
+                var messageTokens = ContextTokenEstimator.EstimateMessage(messages[i], includeReasoningInModelContext);
                 if (tokensKept + messageTokens > settings.KeepTokens)
                 {
                     return i + 1;
@@ -168,7 +169,8 @@ public static class ConversationCutoffPlanner
     private static int FindTokenBasedCutoff(
         IReadOnlyList<ChatMessage> messages,
         int totalTokens,
-        int keepTokens)
+        int keepTokens,
+        bool includeReasoningInModelContext)
     {
         if (totalTokens <= keepTokens)
         {
@@ -185,7 +187,7 @@ public static class ConversationCutoffPlanner
         for (var iteration = 0; iteration < maxIter && left < right; iteration++)
         {
             var mid = (left + right) / 2;
-            if (ContextTokenEstimator.EstimateSuffix(messages, mid) <= keepTokens)
+            if (ContextTokenEstimator.EstimateSuffix(messages, mid, includeReasoningInModelContext) <= keepTokens)
             {
                 candidate = mid;
                 right = mid;

@@ -212,6 +212,7 @@ Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
   "triggerMessages": 50,
   "triggerTokens": 80000,
   "keepMessages": 20,
+  "includeReasoningInModelContext": false,
   "summaryPrompt": "...",
   "truncateArgs": { "triggerMessages": 25, "triggerTokens": 40000, "keepMessages": 20, "maxArgLength": 2000 },
   "toolResultEviction": { "maxResultChars": 80000, "previewChars": 2000 }
@@ -219,6 +220,8 @@ Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
 ```
 
 Compaction triggers when message count **or** estimated tokens reach thresholds. The effective token threshold is `max(triggerTokens, contextWindowTokens * compactTriggerRatio)` (default ratio **0.7**). When a session has an active plan, compaction injects a plan snapshot and incomplete subtasks into the summarization prompt and into the persisted summary placeholder for the model.
+
+By default, `includeReasoningInModelContext` is **false**: assistant thinking chains are shown in the UI and saved to `conversation.jsonl`, but are **not** sent back in API history (saves tokens). Set to `true` only if your model requires historical `reasoning_content`.
 
 Legacy fields (`microcompactKeepToolMessages`, `autoCompactThresholdRatio`, etc.) are ignored after migration.
 

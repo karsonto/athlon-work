@@ -22,6 +22,12 @@ public sealed class ContextCompactionSettings
 
     public bool OffloadBeforeCompact { get; set; } = true;
 
+    /// <summary>
+    /// When false (default), assistant <c>ReasoningContent</c> is omitted from API history and excluded from compaction token estimates.
+    /// UI and <c>conversation.jsonl</c> still persist reasoning for display.
+    /// </summary>
+    public bool IncludeReasoningInModelContext { get; set; }
+
     public string SummaryPrompt { get; set; } = ConversationCompactionDefaults.DefaultSummaryPrompt;
 
     public int MaxConversationCharsForSummary { get; set; } = 200_000;

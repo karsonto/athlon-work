@@ -11,7 +11,7 @@ public static class ContextTokenEstimator
     private const int ToolCallOverhead = 10;
     private const int ToolResultOverhead = 8;
 
-    public static int Estimate(IReadOnlyList<ChatMessage> messages)
+    public static int Estimate(IReadOnlyList<ChatMessage> messages, bool includeReasoningInModelContext = false)
     {
         if (messages.Count == 0)
         {
@@ -26,13 +26,13 @@ public static class ContextTokenEstimator
                 continue;
             }
 
-            total += EstimateMessage(message);
+            total += EstimateMessage(message, includeReasoningInModelContext);
         }
 
         return total;
     }
 
-    public static int EstimateMessage(ChatMessage message)
+    public static int EstimateMessage(ChatMessage message, bool includeReasoningInModelContext = false)
     {
         if (message.Role == MessageRole.Compaction)
         {
@@ -49,7 +49,11 @@ public static class ContextTokenEstimator
             case MessageRole.System:
             case MessageRole.Summary:
                 tokens += EstimateTextTokens(message.Content);
-                tokens += EstimateTextTokens(message.ReasoningContent);
+                if (includeReasoningInModelContext)
+                {
+                    tokens += EstimateTextTokens(message.ReasoningContent);
+                }
+
                 tokens += EstimateToolCallsTokens(message.ToolCallsJson);
                 break;
             case MessageRole.Tool:
@@ -64,7 +68,10 @@ public static class ContextTokenEstimator
         return tokens;
     }
 
-    public static int EstimateSuffix(IReadOnlyList<ChatMessage> messages, int startIndex)
+    public static int EstimateSuffix(
+        IReadOnlyList<ChatMessage> messages,
+        int startIndex,
+        bool includeReasoningInModelContext = false)
     {
         if (startIndex < 0 || startIndex >= messages.Count)
         {
@@ -74,7 +81,7 @@ public static class ContextTokenEstimator
         var total = 0;
         for (var i = startIndex; i < messages.Count; i++)
         {
-            total += EstimateMessage(messages[i]);
+            total += EstimateMessage(messages[i], includeReasoningInModelContext);
         }
 
         return total;

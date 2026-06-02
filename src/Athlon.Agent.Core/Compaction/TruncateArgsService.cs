@@ -29,13 +29,16 @@ public sealed class TruncateArgsService
             return messages;
         }
 
-        var estimatedTokens = ContextTokenEstimator.Estimate(conversation);
+        var estimatedTokens = ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
         if (!ConversationCutoffPlanner.ShouldTruncateArgs(conversation, estimatedTokens, truncateSettings))
         {
             return messages;
         }
 
-        var cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoff(conversation, truncateSettings);
+        var cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoff(
+            conversation,
+            truncateSettings,
+            settings.IncludeReasoningInModelContext);
         if (cutoff >= conversation.Count)
         {
             return messages;
