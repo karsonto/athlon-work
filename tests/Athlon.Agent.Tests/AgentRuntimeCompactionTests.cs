@@ -49,6 +49,7 @@ public sealed class AgentRuntimeCompactionTests
 
 
         ChatMessage? notified = null;
+        AgentSession? sessionAfterCompact = null;
 
         var session = AgentSession.Create("compaction-notify");
 
@@ -63,6 +64,16 @@ public sealed class AgentRuntimeCompactionTests
             new AgentTurnCallbacks
 
             {
+
+                OnSessionUpdated = updatedSession =>
+
+                {
+
+                    sessionAfterCompact = updatedSession;
+
+                    return Task.CompletedTask;
+
+                },
 
                 OnMessage = message =>
 
@@ -89,6 +100,10 @@ public sealed class AgentRuntimeCompactionTests
         Assert.NotNull(notified);
 
         Assert.Contains("conversationcompact", notified.Content, StringComparison.OrdinalIgnoreCase);
+
+        Assert.NotNull(sessionAfterCompact);
+
+        Assert.Contains(sessionAfterCompact.Messages, message => message.Role == MessageRole.Compaction);
 
         Assert.Contains(storage.PersistedMessages, message => message.Role == MessageRole.Compaction);
 

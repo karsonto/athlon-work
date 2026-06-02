@@ -1,7 +1,8 @@
-using System.Text.Json;
-
 namespace Athlon.Agent.Core.Compaction;
 
+/// <summary>
+/// Cutoff planning aligned with AgentScope <c>ConversationCompactor</c>.
+/// </summary>
 public static class ConversationCutoffPlanner
 {
     public static bool ShouldCompact(
@@ -10,12 +11,35 @@ public static class ConversationCutoffPlanner
         ContextCompactionSettings settings,
         bool force)
     {
-        if (force)
+        if (messages.Count == 0)
         {
-            return messages.Count > 1;
+            return false;
         }
 
-        if (messages.Count >= settings.TriggerMessages)
+        if (force)
+        {
+            return true;
+        }
+
+        if (settings.TriggerMessages > 0 && messages.Count >= settings.TriggerMessages)
+        {
+            return true;
+        }
+
+        return settings.TriggerTokens > 0 && estimatedTokens >= settings.TriggerTokens;
+    }
+
+    public static bool ShouldTruncateArgs(
+        IReadOnlyList<ChatMessage> messages,
+        int estimatedTokens,
+        TruncateArgsSettings settings)
+    {
+        if (!settings.Enabled || messages.Count == 0)
+        {
+            return false;
+        }
+
+        if (settings.TriggerMessages > 0 && messages.Count >= settings.TriggerMessages)
         {
             return true;
         }
@@ -28,26 +52,35 @@ public static class ConversationCutoffPlanner
         int estimatedTokens,
         ContextCompactionSettings settings)
     {
-        if (settings.KeepTokens > 0 && estimatedTokens > settings.KeepTokens)
-        {
-            return DetermineCutoffByTokens(messages, settings.KeepTokens);
-        }
+        var rawCutoff = settings.KeepTokens > 0
+            ? FindTokenBasedCutoff(messages, estimatedTokens, settings.KeepTokens)
+            : FindMessageBasedCutoff(messages, settings.KeepMessages);
 
-        return DetermineCutoffByMessages(messages, settings.KeepMessages);
+        return FindSafeCutoffPoint(messages, rawCutoff);
     }
 
-    /// <summary>
-    /// Pulls the cutoff earlier so the latest real user message and all following messages remain in the tail.
-    /// </summary>
-    public static int AdjustCutoffToRetainRecentUserInput(IReadOnlyList<ChatMessage> messages, int cutoffIndex)
+    public static int DetermineTruncateArgsCutoff(
+        IReadOnlyList<ChatMessage> messages,
+        TruncateArgsSettings settings)
     {
-        var lastUserIndex = FindLastRealUserMessageIndex(messages);
-        if (lastUserIndex < 0)
+        if (settings.KeepTokens > 0)
         {
-            return cutoffIndex;
+            var tokensKept = 0;
+            for (var i = messages.Count - 1; i >= 0; i--)
+            {
+                var messageTokens = ContextTokenEstimator.EstimateMessage(messages[i]);
+                if (tokensKept + messageTokens > settings.KeepTokens)
+                {
+                    return i + 1;
+                }
+
+                tokensKept += messageTokens;
+            }
+
+            return 0;
         }
 
-        return Math.Min(cutoffIndex, lastUserIndex);
+        return Math.Max(0, messages.Count - settings.KeepMessages);
     }
 
     public static int FindSafeCutoffPoint(IReadOnlyList<ChatMessage> messages, int cutoffIndex)
@@ -62,32 +95,47 @@ public static class ConversationCutoffPlanner
             return cutoffIndex;
         }
 
+        var toolCallIds = new List<string>();
+        var scanIndex = cutoffIndex;
+        while (scanIndex < messages.Count && messages[scanIndex].Role == MessageRole.Tool)
+        {
+            var toolCallId = ExtractToolCallId(messages[scanIndex].Content);
+            if (!string.IsNullOrWhiteSpace(toolCallId))
+            {
+                toolCallIds.Add(toolCallId);
+            }
+
+            scanIndex++;
+        }
+
+        if (toolCallIds.Count == 0)
+        {
+            return scanIndex;
+        }
+
         for (var i = cutoffIndex - 1; i >= 0; i--)
         {
-            if (messages[i].Role == MessageRole.Assistant
-                && !string.IsNullOrWhiteSpace(messages[i].ToolCallsJson))
+            if (messages[i].Role != MessageRole.Assistant)
+            {
+                continue;
+            }
+
+            var calls = AssistantToolCallsCodec.Deserialize(messages[i].ToolCallsJson);
+            if (calls is not { Count: > 0 })
+            {
+                continue;
+            }
+
+            if (calls.Any(call => toolCallIds.Contains(call.Id, StringComparer.Ordinal)))
             {
                 return i;
             }
         }
 
-        return cutoffIndex;
+        return scanIndex;
     }
 
-    public static int DetermineTruncateArgsCutoff(
-        IReadOnlyList<ChatMessage> messages,
-        int estimatedTokens,
-        TruncateArgsSettings settings)
-    {
-        if (settings.KeepTokens > 0 && estimatedTokens > settings.KeepTokens)
-        {
-            return DetermineCutoffByTokens(messages, settings.KeepTokens);
-        }
-
-        return DetermineCutoffByMessages(messages, settings.KeepMessages);
-    }
-
-    private static int DetermineCutoffByMessages(IReadOnlyList<ChatMessage> messages, int keepMessages)
+    private static int FindMessageBasedCutoff(IReadOnlyList<ChatMessage> messages, int keepMessages)
     {
         if (keepMessages <= 0 || messages.Count <= keepMessages)
         {
@@ -97,38 +145,60 @@ public static class ConversationCutoffPlanner
         return messages.Count - keepMessages;
     }
 
-    private static int DetermineCutoffByTokens(IReadOnlyList<ChatMessage> messages, int keepTokens)
+    /// <summary>
+    /// Binary search for the earliest index where the suffix fits within <paramref name="keepTokens"/>.
+    /// </summary>
+    private static int FindTokenBasedCutoff(
+        IReadOnlyList<ChatMessage> messages,
+        int totalTokens,
+        int keepTokens)
     {
-        var runningTokens = 0;
-        var cutoff = messages.Count;
-
-        for (var i = messages.Count - 1; i >= 0; i--)
+        if (totalTokens <= keepTokens)
         {
-            runningTokens += EstimateMessageTokens(messages[i]);
-            if (runningTokens >= keepTokens)
+            return 0;
+        }
+
+        var left = 0;
+        var right = messages.Count;
+        var candidate = messages.Count;
+        var maxIter = messages.Count > 0
+            ? (int)Math.Floor(Math.Log2(messages.Count)) + 2
+            : 1;
+
+        for (var iteration = 0; iteration < maxIter && left < right; iteration++)
+        {
+            var mid = (left + right) / 2;
+            if (ContextTokenEstimator.EstimateSuffix(messages, mid) <= keepTokens)
             {
-                cutoff = i;
-                break;
+                candidate = mid;
+                right = mid;
+            }
+            else
+            {
+                left = mid + 1;
             }
         }
 
-        return cutoff;
+        return Math.Min(candidate, messages.Count - 1);
     }
 
-    private static int FindLastRealUserMessageIndex(IReadOnlyList<ChatMessage> messages)
+    private static string? ExtractToolCallId(string? content)
     {
-        for (var i = messages.Count - 1; i >= 0; i--)
+        if (string.IsNullOrWhiteSpace(content))
         {
-            var message = messages[i];
-            if (message.Role == MessageRole.User && !SummaryMessageBuilder.IsSummaryMessage(message))
+            return null;
+        }
+
+        foreach (var line in content.Split(["\r\n", "\n"], StringSplitOptions.None))
+        {
+            const string prefix = "ToolCallId:";
+            if (line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
-                return i;
+                var value = line[prefix.Length..].Trim();
+                return string.IsNullOrWhiteSpace(value) ? null : value;
             }
         }
 
-        return -1;
+        return null;
     }
-
-    private static int EstimateMessageTokens(ChatMessage message) =>
-        Math.Max(1, JsonSerializer.Serialize(message).Length / 4);
 }

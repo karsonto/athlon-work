@@ -7,6 +7,14 @@ using Athlon.Agent.Core.Compaction;
 
 namespace Athlon.Agent.App.Services;
 
+/// <summary>Mutable session handle shared with turn callbacks so compaction sees the latest messages.</summary>
+public sealed class LiveAgentSession
+{
+    public LiveAgentSession(AgentSession value) => Value = value;
+
+    public AgentSession Value { get; set; }
+}
+
 /// <summary>Per-session chat UI state (messages + streaming buffers) for parallel turns.</summary>
 public sealed class SessionTurnUiController
 {
@@ -34,8 +42,17 @@ public sealed class SessionTurnUiController
 
     public Action RequestScroll { get; set; }
 
-    public AgentTurnCallbacks BuildCallbacks(Func<AgentSession>? getSession = null) => new()
+    public AgentTurnCallbacks BuildCallbacks(LiveAgentSession? liveSession = null) => new()
     {
+        OnSessionUpdated = session =>
+        {
+            if (liveSession is not null)
+            {
+                liveSession.Value = session;
+            }
+
+            return Task.CompletedTask;
+        },
         OnToolStarted = async toolCall => await RunOnUiAsync(() => HandleToolStarted(toolCall)),
         OnAssistantToolCallDelta = async delta =>
         {
@@ -46,7 +63,7 @@ public sealed class SessionTurnUiController
                 FlushStreamingToolDeltas();
             });
         },
-        OnMessage = async message => await RunOnUiAsync(() => HandleMessage(message, getSession?.Invoke())),
+        OnMessage = async message => await RunOnUiAsync(() => HandleMessage(message, liveSession?.Value)),
         OnAssistantTextDelta = async token => await RunOnUiAsync(() =>
         {
             EnsureStreamingAssistantMessage();
@@ -289,7 +306,7 @@ public sealed class SessionTurnUiController
             {
                 PopulateMessagesFromSession(session);
             }
-            else
+            else if (!Messages.Any(vm => string.Equals(vm.Role, MessageRole.Compaction.ToString(), StringComparison.Ordinal)))
             {
                 Messages.Add(new ChatMessageViewModel(message));
                 RequestScroll();

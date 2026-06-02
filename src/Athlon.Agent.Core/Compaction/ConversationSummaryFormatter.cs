@@ -20,7 +20,7 @@ public static class ConversationSummaryFormatter
     {
         return message.Role switch
         {
-            MessageRole.User => $"User: {message.Content}",
+            MessageRole.User => $"Human: {message.Content}",
             MessageRole.Assistant => FormatAssistant(message),
             MessageRole.Tool => FormatTool(message),
             _ => $"{message.Role}: {message.Content}"
@@ -29,14 +29,14 @@ public static class ConversationSummaryFormatter
 
     private static string FormatAssistant(ChatMessage message)
     {
-        var parts = new List<string> { $"Assistant: {message.Content}" };
+        var parts = new List<string> { $"AI: {message.Content}" };
 
         var toolCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
         if (toolCalls is { Count: > 0 })
         {
             foreach (var call in toolCalls)
             {
-                parts.Add($"  Tool call: {call.Name}({Truncate(FormatArguments(call.Arguments), MaxToolResultChars)})");
+                parts.Add($"[tool_call: {call.Name}({Truncate(FormatArguments(call.Arguments), MaxToolResultChars)})]");
             }
         }
 
@@ -45,7 +45,7 @@ public static class ConversationSummaryFormatter
 
     private static string FormatTool(ChatMessage message)
     {
-        return $"Tool: {Truncate(message.Content, MaxToolResultChars)}";
+        return $"Tool: [tool_result] {Truncate(message.Content, MaxToolResultChars)}";
     }
 
     private static string FormatArguments(IReadOnlyDictionary<string, string> arguments) =>

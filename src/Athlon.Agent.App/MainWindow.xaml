@@ -1432,6 +1432,13 @@
                             <TextBox Text="{Binding Settings.Settings.Model.Endpoint, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
                             <TextBlock Text="Model Name" Foreground="{StaticResource Brush.SubtleText}" />
                             <TextBox Text="{Binding Settings.Settings.Model.ModelName, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
+                            <TextBlock Text="Max Tokens" Foreground="{StaticResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding Settings.ModelMaxTokensText, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,6,0,6" />
+                            <TextBlock Text="单次回复最大输出 token（留空则使用 API 默认值）。仅影响对话补全，不影响上下文摘要。"
+                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,12" />
                             <CheckBox IsChecked="{Binding Settings.Settings.Model.EnableStreaming, UpdateSourceTrigger=PropertyChanged}"
                                       Content="启用流式输出（SSE）"
                                       Margin="0,0,0,12" />

@@ -20,11 +20,7 @@ public sealed class AgentRuntimeOverflowTests
             }
         };
 
-        var pipeline = new PreCompletionPipeline(
-            settings,
-            new TruncateArgsService(),
-            compactor,
-            new NoOpLogger());
+        var pipeline = new PreCompletionPipeline(compactor, new NoOpLogger());
 
         var modelClient = new OverflowThenSuccessModelClient();
         var runtime = new AgentRuntime(

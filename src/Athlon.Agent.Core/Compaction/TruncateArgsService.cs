@@ -7,40 +7,44 @@ public sealed class TruncateArgsService
 {
     public AgentSession ApplyIfNeeded(AgentSession session, ContextCompactionSettings settings)
     {
+        var updated = ApplyToMessages(session.Messages, settings, out var changed);
+        return changed ? session with { Messages = updated } : session;
+    }
+
+    public IReadOnlyList<ChatMessage> ApplyToMessages(
+        IReadOnlyList<ChatMessage> messages,
+        ContextCompactionSettings settings,
+        out bool changed)
+    {
+        changed = false;
         var truncateSettings = settings.TruncateArgs;
-        if (!truncateSettings.Enabled)
+        if (!truncateSettings.Enabled || messages.Count == 0)
         {
-            return session;
+            return messages;
         }
 
-        var messages = session.Messages;
-        if (messages.Count == 0)
+        var conversation = messages.Where(message => message.Role != MessageRole.Compaction).ToList();
+        if (conversation.Count == 0)
         {
-            return session;
+            return messages;
         }
 
-        var estimatedTokens = ContextTokenEstimator.Estimate(messages);
-        if (!ShouldTruncate(messages, estimatedTokens, truncateSettings))
+        var estimatedTokens = ContextTokenEstimator.Estimate(conversation);
+        if (!ConversationCutoffPlanner.ShouldTruncateArgs(conversation, estimatedTokens, truncateSettings))
         {
-            return session;
+            return messages;
         }
 
-        var cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoff(
-            messages,
-            estimatedTokens,
-            truncateSettings);
-
-        if (cutoff <= 0)
+        var cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoff(conversation, truncateSettings);
+        if (cutoff >= conversation.Count)
         {
-            return session;
+            return messages;
         }
 
-        var updated = new List<ChatMessage>(messages.Count);
-        var changed = false;
-
-        for (var i = 0; i < messages.Count; i++)
+        var updatedConversation = new List<ChatMessage>(conversation.Count);
+        for (var i = 0; i < conversation.Count; i++)
         {
-            var message = messages[i];
+            var message = conversation[i];
             if (i < cutoff
                 && message.Role == MessageRole.Assistant
                 && !string.IsNullOrWhiteSpace(message.ToolCallsJson))
@@ -57,23 +61,23 @@ public sealed class TruncateArgsService
                 }
             }
 
-            updated.Add(message);
+            updatedConversation.Add(message);
         }
 
-        return changed ? session with { Messages = updated } : session;
+        if (!changed)
+        {
+            return messages;
+        }
+
+        return MergeCompactionAudits(messages, updatedConversation);
     }
 
-    private static bool ShouldTruncate(
-        IReadOnlyList<ChatMessage> messages,
-        int estimatedTokens,
-        TruncateArgsSettings settings)
+    internal static IReadOnlyList<ChatMessage> MergeCompactionAudits(
+        IReadOnlyList<ChatMessage> original,
+        IReadOnlyList<ChatMessage> conversation)
     {
-        if (messages.Count >= settings.TriggerMessages)
-        {
-            return true;
-        }
-
-        return settings.TriggerTokens > 0 && estimatedTokens >= settings.TriggerTokens;
+        var audits = original.Where(message => message.Role == MessageRole.Compaction).ToList();
+        return audits.Count == 0 ? conversation : audits.Concat(conversation).ToList();
     }
 
     internal static string TruncateToolCallsJson(

@@ -168,10 +168,28 @@ public sealed partial class SettingsViewModel : ObservableObject
     internal static void PruneEmptyWorkspaces(AppSettings settings) =>
         settings.Workspaces.RemoveAll(workspace => string.IsNullOrWhiteSpace(workspace.RootPath));
 
+    public string ModelMaxTokensText
+    {
+        get => Settings.Model.MaxTokens is > 0
+            ? Settings.Model.MaxTokens.Value.ToString()
+            : string.Empty;
+        set => Settings.Model.MaxTokens = ParseOptionalPositiveInt(value);
+    }
+
     public string IgnoreDirectoriesText
     {
         get => string.Join(Environment.NewLine, Settings.WorkspaceIgnore.DirectoryNames);
         set => Settings.WorkspaceIgnore.DirectoryNames = ParseIgnoreDirectoryLines(value);
+    }
+
+    private static int? ParseOptionalPositiveInt(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        return int.TryParse(text.Trim(), out var value) && value > 0 ? value : null;
     }
 
     private static List<string> ParseIgnoreDirectoryLines(string? text)

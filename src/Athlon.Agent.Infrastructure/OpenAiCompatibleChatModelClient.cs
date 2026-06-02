@@ -94,9 +94,14 @@ public sealed class OpenAiCompatibleChatModelClient(
             payload["tool_choice"] = "auto";
         }
 
-        if (request.MaxTokens is > 0)
+        var maxTokens = request.MaxTokens is > 0
+            ? request.MaxTokens
+            : settings.Model.MaxTokens is > 0
+                ? settings.Model.MaxTokens
+                : null;
+        if (maxTokens is > 0)
         {
-            payload["max_tokens"] = request.MaxTokens.Value;
+            payload["max_tokens"] = maxTokens.Value;
         }
 
         var sessionId = activeSessionContext.SessionId;

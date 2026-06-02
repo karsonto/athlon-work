@@ -62,6 +62,13 @@ public sealed class ModelSettings
     public string Provider { get; set; } = "OpenAI-Compatible";
     public string Endpoint { get; set; } = "https://api.openai.com/v1";
     public string ModelName { get; set; } = "gpt-4.1-mini";
+
+    /// <summary>
+    /// Chat completion <c>max_tokens</c>. When null or 0, the field is omitted and the API default applies.
+    /// Context-summary calls use <see cref="ContextCompactionSettings.SummaryMaxTokens"/> instead.
+    /// </summary>
+    public int? MaxTokens { get; set; }
+
     public bool EnableStreaming { get; set; } = true;
     public int StreamingIdleTimeoutSeconds { get; set; } = 90;
 

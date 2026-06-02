@@ -5,8 +5,6 @@ using Athlon.Agent.Core.Compaction;
 namespace Athlon.Agent.Infrastructure;
 
 public sealed class PreCompletionPipeline(
-    AppSettings settings,
-    TruncateArgsService truncateArgsService,
     IConversationCompactor conversationCompactor,
     IAppLogger logger) : IPreCompletionPipeline
 {
@@ -18,23 +16,15 @@ public sealed class PreCompletionPipeline(
         CancellationToken cancellationToken = default)
     {
         options ??= PreCompletionOptions.Default;
-        var cfg = settings.ContextCompaction;
-
-        if (options.AllowTruncateArgs)
-        {
-            session = truncateArgsService.ApplyIfNeeded(session, cfg);
-        }
 
         if (!options.AllowConversationCompact)
         {
             return session;
         }
 
-        var kind = options.CompactionKind;
-
         var compactResult = await conversationCompactor.CompactIfNeededAsync(
             session,
-            kind,
+            options.CompactionKind,
             options.ForceConversationCompact,
             options.EmitCompactionAudit,
             cancellationToken);
@@ -54,6 +44,7 @@ public sealed class ConversationCompactor(
     AppSettings settings,
     IAgentModelClient modelClient,
     IFileStorageService storage,
+    TruncateArgsService truncateArgsService,
     IAppLogger logger) : IConversationCompactor
 {
     private readonly IAppLogger _logger = logger.ForContext("ConversationCompactor");
@@ -66,29 +57,33 @@ public sealed class ConversationCompactor(
         CancellationToken cancellationToken = default)
     {
         var cfg = settings.ContextCompaction;
-        var filtered = SummaryMessageBuilder.FilterSummaryMessages(session.Messages);
-        if (filtered.Count == 0)
+        var conversation = GetConversationMessages(session.Messages);
+        if (conversation.Count == 0)
         {
             return new ConversationCompactResult(session, false);
         }
 
-        var estimatedTokens = ContextTokenEstimator.Estimate(filtered);
-        if (!ConversationCutoffPlanner.ShouldCompact(filtered, estimatedTokens, cfg, force))
+        conversation = truncateArgsService
+            .ApplyToMessages(conversation, cfg, out _)
+            .Where(message => message.Role != MessageRole.Compaction)
+            .ToList();
+
+        var estimatedTokens = ContextTokenEstimator.Estimate(conversation);
+        if (!ConversationCutoffPlanner.ShouldCompact(conversation, estimatedTokens, cfg, force))
         {
             return new ConversationCompactResult(session, false);
         }
 
-        var cutoff = ConversationCutoffPlanner.DetermineCutoffIndex(filtered, estimatedTokens, cfg);
-        cutoff = ConversationCutoffPlanner.AdjustCutoffToRetainRecentUserInput(filtered, cutoff);
-        cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(filtered, cutoff);
+        var cutoff = ConversationCutoffPlanner.DetermineCutoffIndex(conversation, estimatedTokens, cfg);
         if (cutoff <= 0)
         {
+            _logger.Debug("Compaction triggered but safe cutoff is 0 — skipping");
             return new ConversationCompactResult(session, false);
         }
 
-        var prefix = filtered.Take(cutoff).ToList();
-        var tail = filtered.Skip(cutoff).ToList();
-        var originalCount = filtered.Count;
+        var prefix = SummaryMessageBuilder.FilterSummaryMessages(conversation.Take(cutoff).ToList());
+        var tail = conversation.Skip(cutoff).ToList();
+        var originalCount = conversation.Count;
         var tokensBefore = estimatedTokens;
 
         string? transcriptPath = null;
@@ -104,18 +99,27 @@ public sealed class ConversationCompactor(
         }
 
         var prompt = cfg.SummaryPrompt.Replace("{messages}", formatted, StringComparison.Ordinal);
-        var summaryResponse = await modelClient.CompleteAsync(
-            new AgentModelRequest(
-                new[] { new AgentModelMessage("user", prompt) },
-                Array.Empty<ToolDefinition>(),
-                AllowToolCalls: false,
-                MaxTokens: cfg.SummaryMaxTokens),
-            cancellationToken: cancellationToken);
-
-        var summary = summaryResponse.Content.Trim();
-        if (string.IsNullOrWhiteSpace(summary))
+        string summary;
+        try
         {
-            summary = "(empty summary)";
+            var summaryResponse = await modelClient.CompleteAsync(
+                new AgentModelRequest(
+                    new[] { new AgentModelMessage("user", prompt) },
+                    Array.Empty<ToolDefinition>(),
+                    AllowToolCalls: false,
+                    MaxTokens: cfg.SummaryMaxTokens),
+                cancellationToken: cancellationToken);
+
+            summary = summaryResponse.Content.Trim();
+            if (string.IsNullOrWhiteSpace(summary))
+            {
+                summary = "(Summary unavailable)";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Summarization LLM call failed for session {SessionId}", session.Id);
+            summary = "(Summarization failed: " + ex.Message + ")";
         }
 
         var summaryMessage = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath);
@@ -168,6 +172,9 @@ public sealed class ConversationCompactor(
 
         return new ConversationCompactResult(session, true);
     }
+
+    private static List<ChatMessage> GetConversationMessages(IReadOnlyList<ChatMessage> messages) =>
+        messages.Where(message => message.Role != MessageRole.Compaction).ToList();
 }
 
 public sealed class ToolResultEvictor(

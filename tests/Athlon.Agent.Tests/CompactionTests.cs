@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Infrastructure;
@@ -20,19 +19,43 @@ public sealed class CompactionTests
     }
 
     [Fact]
-    public void ContextTokenEstimator_UsesLengthDividedByFour()
+    public void ContextTokenEstimator_UsesCharsPerTokenHeuristic()
     {
-        var messages = new[]
-        {
-            ChatMessage.Create(MessageRole.User, new string('x', 400))
-        };
+        var message = ChatMessage.Create(MessageRole.User, new string('x', 250));
+        var textTokens = (int)Math.Ceiling(250 / 2.5);
 
-        var jsonLength = JsonSerializer.Serialize(messages).Length;
-        Assert.Equal(jsonLength / 4, ContextTokenEstimator.Estimate(messages));
+        Assert.True(ContextTokenEstimator.EstimateMessage(message) >= textTokens);
+        Assert.Equal(ContextTokenEstimator.EstimateMessage(message), ContextTokenEstimator.Estimate(new[] { message }));
     }
 
     [Fact]
-    public void ConversationCutoffPlanner_AdjustCutoff_KeepsLatestUserMessageInTail()
+    public void ConversationCutoffPlanner_LongAgentLoop_CompactsWithoutSecondUserMessage()
+    {
+        var messages = new List<ChatMessage>
+        {
+            ChatMessage.Create(MessageRole.User, "do the task")
+        };
+
+        for (var i = 0; i < 4; i++)
+        {
+            messages.Add(ChatMessage.Create(
+                MessageRole.Assistant,
+                $"step-{i}",
+                toolCalls: new[] { new AgentToolCall($"c{i}", "file_read", new Dictionary<string, string>()) }));
+            messages.Add(ChatMessage.Create(MessageRole.Tool, $"output-{i}"));
+        }
+
+        var settings = new ContextCompactionSettings { TriggerMessages = 5, KeepMessages = 2 };
+        var estimated = ContextTokenEstimator.Estimate(messages);
+        Assert.True(ConversationCutoffPlanner.ShouldCompact(messages, estimated, settings, force: false));
+
+        var cutoff = ConversationCutoffPlanner.DetermineCutoffIndex(messages, estimated, settings);
+        Assert.True(cutoff > 0);
+        Assert.Equal(2, messages.Count - cutoff);
+    }
+
+    [Fact]
+    public void ConversationCutoffPlanner_KeepTailByMessages()
     {
         var messages = new[]
         {
@@ -47,8 +70,6 @@ public sealed class CompactionTests
             messages,
             ContextTokenEstimator.Estimate(messages),
             new ContextCompactionSettings { KeepMessages = 2 });
-        cutoff = ConversationCutoffPlanner.AdjustCutoffToRetainRecentUserInput(messages, cutoff);
-        cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(messages, cutoff);
 
         var tail = messages.Skip(cutoff).Select(message => message.Content).ToArray();
         Assert.Contains("latest question", tail);
@@ -63,7 +84,7 @@ public sealed class CompactionTests
             MessageRole.Assistant,
             string.Empty,
             toolCalls: new[] { new AgentToolCall("call-1", "file_read", new Dictionary<string, string>()) });
-        var tool = ChatMessage.Create(MessageRole.Tool, "output");
+        var tool = ChatMessage.Create(MessageRole.Tool, "ToolCallId: call-1\noutput");
         var messages = new[] { assistant, tool };
 
         var cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(messages, 1);
@@ -82,6 +103,16 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public void SummaryMessageBuilder_WithTranscript_UsesAgentScopeFormat()
+    {
+        var summary = SummaryMessageBuilder.CreateSummaryPlaceholder("facts", "/tmp/transcript.jsonl");
+        Assert.Contains("conversation that has been summarized", summary.Content, StringComparison.Ordinal);
+        Assert.Contains("/tmp/transcript.jsonl", summary.Content, StringComparison.Ordinal);
+        Assert.Contains("<summary>", summary.Content, StringComparison.Ordinal);
+        Assert.True(SummaryMessageBuilder.IsSummaryMessage(summary));
+    }
+
+    [Fact]
     public async Task PreCompletionPipeline_BelowThreshold_DoesNotCompact()
     {
         var settings = new AppSettings
@@ -97,11 +128,7 @@ public sealed class CompactionTests
             .WithMessages(new[] { ChatMessage.Create(MessageRole.User, "hello") });
 
         var compactor = new FakeConversationCompactor(settings);
-        var pipeline = new PreCompletionPipeline(
-            settings,
-            new TruncateArgsService(),
-            compactor,
-            new NoOpLogger());
+        var pipeline = new PreCompletionPipeline(compactor, new NoOpLogger());
 
         var result = await pipeline.RunAsync(session, PreCompletionOptions.AgentLoop);
 
@@ -130,11 +157,7 @@ public sealed class CompactionTests
             });
 
         var compactor = new FakeConversationCompactor(settings);
-        var pipeline = new PreCompletionPipeline(
-            settings,
-            new TruncateArgsService(),
-            compactor,
-            new NoOpLogger());
+        var pipeline = new PreCompletionPipeline(compactor, new NoOpLogger());
 
         await pipeline.RunAsync(session, PreCompletionOptions.AgentLoop);
 
@@ -169,13 +192,14 @@ public sealed class CompactionTests
                     ChatMessage.Create(MessageRole.Assistant, "earlier"),
                     ChatMessage.Create(MessageRole.User, "hello"),
                     ChatMessage.Create(MessageRole.Assistant, "hi"),
-                    ChatMessage.Create(MessageRole.Tool, "tool output")
+                    ChatMessage.Create(MessageRole.Tool, "ToolCallId: t1\ntool output")
                 });
 
             var compactor = new ConversationCompactor(
                 settings,
                 new FakeModelClient("summary text"),
                 storage,
+                new TruncateArgsService(),
                 new NoOpLogger());
 
             var result = await compactor.CompactIfNeededAsync(
@@ -185,7 +209,7 @@ public sealed class CompactionTests
                 emitAudit: true);
 
             Assert.True(result.Compacted);
-            Assert.Equal(3, result.Session.Messages.Count);
+            Assert.Equal(5, result.Session.Messages.Count);
             Assert.Equal(MessageRole.Compaction, result.Session.Messages[0].Role);
             Assert.Contains("conversationcompact", result.Session.Messages[0].Content, StringComparison.OrdinalIgnoreCase);
             Assert.True(SummaryMessageBuilder.IsSummaryMessage(result.Session.Messages[1]));
@@ -251,11 +275,12 @@ public sealed class CompactionTests
             bool emitAudit,
             CancellationToken cancellationToken = default)
         {
+            var conversation = session.Messages.Where(message => message.Role != MessageRole.Compaction).ToList();
             var cfg = settings.ContextCompaction;
 
             if (!ConversationCutoffPlanner.ShouldCompact(
-                    session.Messages,
-                    ContextTokenEstimator.Estimate(session.Messages),
+                    conversation,
+                    ContextTokenEstimator.Estimate(conversation),
                     cfg,
                     force))
             {
@@ -264,7 +289,7 @@ public sealed class CompactionTests
 
             CallCount++;
             var audit = CompactionMessageContent.CreateCompactionMessage(
-                CompactionMessageContent.CreateConversationCompact(1, 1, session.Messages.Count, "fake.jsonl", "summary"));
+                CompactionMessageContent.CreateConversationCompact(1, 1, conversation.Count, "fake.jsonl", "summary"));
             return Task.FromResult(new ConversationCompactResult(
                 session.WithMessages(new[]
                 {

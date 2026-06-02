@@ -174,6 +174,7 @@ Configure the model in the app Settings view:
 
 - Base URL: OpenAI-compatible endpoint, such as OpenAI, DeepSeek, Ollama, or LM Studio.
 - Model name: chat model identifier.
+- Max tokens: optional `max_tokens` for chat completions (empty = API default). Context summarization uses `contextCompaction.summaryMaxTokens` instead.
 - API key: stored locally with DPAPI under the user profile data path.
 
 The agent sends an environment prompt that includes active workspace path and available tools. It does not inject a static workspace file snapshot; the model should use `file_list`, `grep_files`, or `glob_files` for fresh file information.
@@ -192,15 +193,15 @@ All file tools should respect workspace boundaries through `WorkspaceGuard`. Wri
 
 ## Context Compression
 
-Before each model call, `PreCompletionPipeline` runs (AgentScope-style, no hooks):
+Before each model call, `PreCompletionPipeline` delegates to `ConversationCompactor` (aligned with AgentScope Harness `ConversationCompactor` + `CompactionHook`):
 
-1. **truncateArgs**: truncates oversized string arguments in `ToolCallsJson` on assistant messages outside the keep window (default: trigger at 25 messages / 40k tokens, keep last 20, max arg length 2000). No LLM call.
-2. **conversation compact**: when history reaches the trigger (default: 50 messages / 80k estimated tokens), archives the prefix to `sessions/<sessionId>/transcripts/transcript_<unix>.jsonl`, summarizes it with the model, then replaces the prefix with a compaction audit message plus a summary user placeholder (`__compaction_summary__`) and keeps the tail messages intact. Safe cutoff never splits an assistant/tool pair.
+1. **truncateArgs** (non-LLM, inside compactor): when history reaches the truncate threshold (default: 25 messages / 40k estimated tokens), clips large tool argument strings on assistant messages outside the keep window (default: last 20 messages, max arg length 2000).
+2. **conversation compact**: when history reaches the compact threshold (default: 50 messages / 80k estimated tokens), archives the session to `sessions/<sessionId>/transcripts/transcript_<unix>.jsonl`, summarizes the prefix, then replaces it with an optional `Compaction` audit message plus a summary user placeholder (`__compaction_summary__`) and the preserved tail. Cutoff uses keep windows and never splits assistant/tool pairs. Token estimates use ~2.5 chars/token (AgentScope `TokenCounterUtil` style).
 3. **tool result eviction** (after each tool invoke): if a tool result exceeds 80k characters, the full body is written to `sessions/<sessionId>/evicted/<toolCallId>.txt` and only a head/tail preview is kept in the in-memory tool message. `file_write`, `file_edit`, `grep_files`, `glob_files`, and `file_list` are excluded by default; `file_read` is included so oversized reads do not blow the context window.
 
-On context-length API errors, the runtime forces one conversation compact and retries the model call once.
+On context-length API errors, the runtime forces compaction and retries once, rebuilding the iteration system prompt after compact.
 
-When compaction runs, the app appends a persisted `Compaction` role message and shows it in chat as a collapsible card. Summary user placeholders are hidden in the UI. Compaction messages are not sent to the model API.
+When compaction runs, the app appends a persisted `Compaction` role message and shows it in chat as a collapsible card. Summary placeholders are hidden in the UI but sent to the model as user messages. `Compaction` audit messages are not sent to the model API.
 
 Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
 

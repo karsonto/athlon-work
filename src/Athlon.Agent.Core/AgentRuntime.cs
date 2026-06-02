@@ -105,6 +105,7 @@ public sealed class AgentRuntime(
                     callbacks,
                     modelMessages,
                     tools,
+                    frozenPrompt,
                     environmentPrompt,
                     cancellationToken);
                 session = updatedSession;
@@ -153,6 +154,7 @@ public sealed class AgentRuntime(
         AgentTurnCallbacks? callbacks,
         IReadOnlyList<AgentModelMessage> modelMessages,
         IReadOnlyList<ToolDefinition> tools,
+        FrozenSystemPrompt frozenPrompt,
         string environmentPrompt,
         CancellationToken cancellationToken)
     {
@@ -176,6 +178,10 @@ public sealed class AgentRuntime(
                 PreCompletionOptions.ForceCompact,
                 cancellationToken);
 
+            environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(
+                frozenPrompt,
+                session,
+                tools);
             var retryMessages = BuildModelMessages(environmentPrompt, session.Messages);
             var response = await modelClient.CompleteAsync(
                 new AgentModelRequest(retryMessages, tools),
@@ -246,6 +252,11 @@ public sealed class AgentRuntime(
         AgentTurnCallbacks? callbacks,
         CancellationToken cancellationToken)
     {
+        if (HasCompactionStructureChange(session, messageIdsBefore))
+        {
+            await NotifySessionUpdatedAsync(callbacks, session);
+        }
+
         var persistedNew = false;
         foreach (var message in session.Messages)
         {
@@ -273,6 +284,43 @@ public sealed class AgentRuntime(
         await storage.SaveSessionAsync(session, cancellationToken);
     }
 
+    private static bool HasCompactionStructureChange(AgentSession session, HashSet<string> messageIdsBefore)
+    {
+        var hasNewCompactionAudit = false;
+        var hasNewSummaryPlaceholder = false;
+        foreach (var message in session.Messages)
+        {
+            if (messageIdsBefore.Contains(message.Id))
+            {
+                continue;
+            }
+
+            if (message.Role == MessageRole.Compaction)
+            {
+                hasNewCompactionAudit = true;
+            }
+            else if (SummaryMessageBuilder.IsSummaryMessage(message))
+            {
+                hasNewSummaryPlaceholder = true;
+            }
+        }
+
+        if (hasNewCompactionAudit || hasNewSummaryPlaceholder)
+        {
+            return true;
+        }
+
+        return session.Messages.Count < messageIdsBefore.Count;
+    }
+
+    private static async Task NotifySessionUpdatedAsync(AgentTurnCallbacks? callbacks, AgentSession session)
+    {
+        if (callbacks?.OnSessionUpdated is not null)
+        {
+            await callbacks.OnSessionUpdated(session);
+        }
+    }
+
     private static async Task NotifyMessageAsync(AgentTurnCallbacks? callbacks, ChatMessage message)
     {
         if (callbacks?.OnMessage is not null)
@@ -295,8 +343,11 @@ public sealed class AgentRuntime(
         {
             var message = current.Message;
             if (message.Contains("context_length", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("context length", StringComparison.OrdinalIgnoreCase)
                 || message.Contains("maximum context", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("too many tokens", StringComparison.OrdinalIgnoreCase))
+                || message.Contains("token limit", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("too many tokens", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("exceeds the model's maximum", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

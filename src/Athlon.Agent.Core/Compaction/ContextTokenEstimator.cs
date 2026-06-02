@@ -1,12 +1,116 @@
-using System.Text.Json;
-
 namespace Athlon.Agent.Core.Compaction;
 
+/// <summary>
+/// Character-based token estimation aligned with AgentScope <c>TokenCounterUtil</c>
+/// (mixed English/Chinese, conservative).
+/// </summary>
 public static class ContextTokenEstimator
 {
+    private const double CharsPerToken = 2.5;
+    private const int MessageOverhead = 5;
+    private const int ToolCallOverhead = 10;
+    private const int ToolResultOverhead = 8;
+
     public static int Estimate(IReadOnlyList<ChatMessage> messages)
     {
-        var relevant = messages.Where(message => message.Role != MessageRole.Compaction).ToArray();
-        return Math.Max(0, JsonSerializer.Serialize(relevant).Length / 4);
+        if (messages.Count == 0)
+        {
+            return 0;
+        }
+
+        var total = 0;
+        foreach (var message in messages)
+        {
+            if (message.Role == MessageRole.Compaction)
+            {
+                continue;
+            }
+
+            total += EstimateMessage(message);
+        }
+
+        return total;
+    }
+
+    public static int EstimateMessage(ChatMessage message)
+    {
+        if (message.Role == MessageRole.Compaction)
+        {
+            return 0;
+        }
+
+        var tokens = MessageOverhead;
+        tokens += EstimateTextTokens(message.Role.ToString());
+
+        switch (message.Role)
+        {
+            case MessageRole.User:
+            case MessageRole.Assistant:
+            case MessageRole.System:
+            case MessageRole.Summary:
+                tokens += EstimateTextTokens(message.Content);
+                tokens += EstimateTextTokens(message.ReasoningContent);
+                tokens += EstimateToolCallsTokens(message.ToolCallsJson);
+                break;
+            case MessageRole.Tool:
+                tokens += ToolResultOverhead;
+                tokens += EstimateTextTokens(message.Content);
+                break;
+            default:
+                tokens += EstimateTextTokens(message.Content);
+                break;
+        }
+
+        return tokens;
+    }
+
+    public static int EstimateSuffix(IReadOnlyList<ChatMessage> messages, int startIndex)
+    {
+        if (startIndex < 0 || startIndex >= messages.Count)
+        {
+            return 0;
+        }
+
+        var total = 0;
+        for (var i = startIndex; i < messages.Count; i++)
+        {
+            total += EstimateMessage(messages[i]);
+        }
+
+        return total;
+    }
+
+    private static int EstimateToolCallsTokens(string? toolCallsJson)
+    {
+        var calls = AssistantToolCallsCodec.Deserialize(toolCallsJson);
+        if (calls is not { Count: > 0 })
+        {
+            return 0;
+        }
+
+        var tokens = 0;
+        foreach (var call in calls)
+        {
+            tokens += ToolCallOverhead;
+            tokens += EstimateTextTokens(call.Name);
+            tokens += EstimateTextTokens(call.Id);
+            foreach (var argument in call.Arguments)
+            {
+                tokens += EstimateTextTokens(argument.Key);
+                tokens += EstimateTextTokens(argument.Value);
+            }
+        }
+
+        return tokens;
+    }
+
+    private static int EstimateTextTokens(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return 0;
+        }
+
+        return (int)Math.Ceiling(text.Length / CharsPerToken);
     }
 }
