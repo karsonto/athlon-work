@@ -1122,8 +1122,7 @@
             <Border Grid.Row="3"
                     Panel.ZIndex="20"
                     Background="{StaticResource Brush.Chrome}"
-                    BorderBrush="{StaticResource Brush.Border}"
-                    BorderThickness="0,1,0,0"
+                    BorderThickness="0"
                     Padding="20,16"
                     ClipToBounds="True">
                 <Border MaxWidth="900"
@@ -1430,7 +1429,7 @@
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
                             <TextBlock Text="Installed MCP Servers" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-                            <TextBlock Text="MCP 服务从 %USERPROFILE%/.athlon-agent/config/mcp.json 读取；此页面仅控制每个服务是否启用。新增、删除和命令参数请直接修改 JSON 配置。"
+                            <TextBlock Text="{Binding Settings.McpConfigPath, StringFormat=MCP 服务从 {0} 读取；此页面仅控制每个服务是否启用。新增、删除和命令参数请直接修改 JSON 配置。}"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12"
@@ -1506,30 +1505,8 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="跳过目录" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-                            <TextBlock Text="grep_files、glob_files、file_list 与侧栏工作区树会跳过这些目录名（路径任一段匹配即忽略）。每行一个，也可用逗号分隔。工作区单独配置 IgnorePatterns 时可覆盖此列表。"
-                                       Foreground="{StaticResource Brush.SubtleText}"
-                                       TextWrapping="Wrap"
-                                       FontSize="12"
-                                       Margin="0,0,0,12" />
-                            <TextBox Text="{Binding Settings.IgnoreDirectoriesText, UpdateSourceTrigger=PropertyChanged}"
-                                     AcceptsReturn="True"
-                                     TextWrapping="Wrap"
-                                     MinHeight="120"
-                                     VerticalScrollBarVisibility="Auto"
-                                     FontFamily="Consolas"
-                                     Margin="0,0,0,6" />
-                            <TextBlock Text="默认包含 node_modules、dist、.next、build、bin、obj 等常见构建与依赖目录。"
-                                       Foreground="{StaticResource Brush.SubtleText}"
-                                       TextWrapping="Wrap"
-                                       FontSize="12" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource SettingsCardStyle}">
-                        <StackPanel>
                             <TextBlock Text="Installed Skills" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-                            <TextBlock Text="技能从 %USERPROFILE%/.athlon-agent/skills 自动加载；此页面控制每个技能是否启用。关闭后不会出现在系统提示与 @skill 补全中。保存设置后写入 skills.json。"
+                            <TextBlock Text="{Binding Settings.SkillsSettingsDescription}"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12"
@@ -1605,6 +1582,28 @@
                         </StackPanel>
                     </Border>
 
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="跳过目录" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="grep_files、glob_files、file_list 与侧栏工作区树会跳过这些目录名（路径任一段匹配即忽略）。每行一个，也可用逗号分隔。工作区单独配置 IgnorePatterns 时可覆盖此列表。"
+                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,0,0,12" />
+                            <TextBox Text="{Binding Settings.IgnoreDirectoriesText, UpdateSourceTrigger=PropertyChanged}"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     MinHeight="120"
+                                     VerticalScrollBarVisibility="Auto"
+                                     FontFamily="Consolas"
+                                     Margin="0,0,0,6" />
+                            <TextBlock Text="默认包含 node_modules、dist、.next、build、bin、obj 等常见构建与依赖目录。"
+                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12" />
+                        </StackPanel>
+                    </Border>
+
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,24">
                         <TextBlock Text="{Binding SettingsStatus}" Foreground="{StaticResource Brush.SubtleText}" VerticalAlignment="Center" Margin="0,0,12,0" />
                         <Button Content="保存设置" Command="{Binding SaveSettingsCommand}" Style="{StaticResource GhostButtonStyle}" />
@@ -1631,11 +1630,13 @@
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            FontSize="12" />
-                <TextBlock Text="Logs: %USERPROFILE%/.athlon-agent/logs"
+                <TextBlock Text="{Binding LogsPath, StringFormat=Logs: {0}}"
                            Foreground="{StaticResource Brush.SubtleText}"
                            HorizontalAlignment="Right"
                            VerticalAlignment="Center"
-                           FontSize="12" />
+                           FontSize="12"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding LogsPath}" />
             </Grid>
         </Border>
 

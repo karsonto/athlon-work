@@ -117,6 +117,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _appSettings.Ui.ComposerHeight = ComposerDefaultHeight;
         }
 
+        LogsPath = paths.LogsPath;
+
         ApplySessionWorkspace();
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         PendingImageAttachments.CollectionChanged += OnPendingImagesChanged;
@@ -156,6 +158,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public ContextSidebarViewModel Sidebar { get; }
     public SettingsViewModel Settings { get; }
     public FileEditorViewModel FileEditor { get; }
+    public string LogsPath { get; }
 
     public bool HasOpenEditorTabs => FileEditor.HasOpenTabs;
 
