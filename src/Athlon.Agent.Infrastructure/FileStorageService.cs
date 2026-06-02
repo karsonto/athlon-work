@@ -90,21 +90,62 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
         {
             EnsureSessionLogDirectories(sessionId);
-            var path = Path.Combine(GetSessionDirectory(sessionId), "conversation.jsonl");
-            await jsonFileStore.AppendJsonLineAsync(
-                path,
-                new
-                {
-                    time = message.CreatedAt,
-                    id = message.Id,
-                    role = message.Role.ToString(),
-                    parentId = message.ParentId,
-                    content = message.Content,
-                    imageAttachments = message.ImageAttachments
-                },
-                cancellationToken);
+            var path = GetConversationDisplayPath(sessionId);
+            await jsonFileStore.AppendJsonLineAsync(path, message, cancellationToken);
         }
     }
+
+    public async Task<IReadOnlyList<ChatMessage>> LoadConversationDisplayAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return Array.Empty<ChatMessage>();
+        }
+
+        var path = GetConversationDisplayPath(sessionId);
+        if (!File.Exists(path))
+        {
+            return Array.Empty<ChatMessage>();
+        }
+
+        var byId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
+        foreach (var line in await File.ReadAllLinesAsync(path, cancellationToken).ConfigureAwait(false))
+        {
+            var message = ConversationDisplayLog.TryParseLine(line);
+            if (message is null)
+            {
+                continue;
+            }
+
+            byId[message.Id] = message;
+        }
+
+        return byId.Values.OrderBy(message => message.CreatedAt).ToArray();
+    }
+
+    public async Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            var path = GetConversationDisplayPath(sessionId);
+            if (File.Exists(path))
+            {
+                await FileIoRetry.RunAsync(
+                    () => AtomicFile.WriteAllTextAsync(path, string.Empty, cancellationToken),
+                    cancellationToken);
+            }
+        }
+    }
+
+    private string GetConversationDisplayPath(string sessionId) =>
+        Path.Combine(GetSessionDirectory(sessionId), "conversation.jsonl");
 
     public async Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default)
     {

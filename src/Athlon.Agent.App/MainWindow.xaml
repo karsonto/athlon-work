@@ -912,7 +912,7 @@
                                                         </TextBlock>
                                                         <controls:MarkdownMessageView Markdown="{Binding ToolDetailDisplay}"
                                                                                       AssistantTone="True"
-                                                                                      MaxContentHeight="272"
+                                                                                      MaxContentHeight="0"
                                                                                       HorizontalAlignment="Stretch" />
                                                     </StackPanel>
                                                 </Border>
@@ -1029,7 +1029,7 @@
                                                             <controls:MarkdownMessageView Margin="12,10"
                                                                                           Markdown="{Binding ReasoningContent}"
                                                                                           AssistantTone="True"
-                                                                                          MaxContentHeight="272"
+                                                                                          MaxContentHeight="0"
                                                                                           HorizontalAlignment="Stretch" />
                                                         </Border>
                                                     </StackPanel>

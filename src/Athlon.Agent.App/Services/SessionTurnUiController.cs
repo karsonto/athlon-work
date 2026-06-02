@@ -190,50 +190,80 @@ public sealed class SessionTurnUiController
     }
 
     public void HydrateFromSession(AgentSession session) =>
-        RunOnUiSync(() => PopulateMessagesFromSession(session));
+        RunOnUiSync(() => RebuildDisplayFromMessages(session.Messages));
 
-    private void PopulateMessagesFromSession(AgentSession session)
+    public void HydrateDisplay(AgentSession session, IReadOnlyList<ChatMessage> displayMessages) =>
+        RunOnUiSync(() => RebuildDisplayFromMessages(displayMessages));
+
+    private void RebuildDisplayFromMessages(IReadOnlyList<ChatMessage> displayMessages)
     {
         Messages.Clear();
-        var answeredToolCallIds = BuildAnsweredToolCallIds(session.Messages);
+        var answeredToolCallIds = BuildAnsweredToolCallIds(displayMessages);
 
-        foreach (var message in ChatTimelineOrder.OrderForDisplay(session.Messages))
+        foreach (var message in ChatTimelineOrder.OrderForDisplay(displayMessages))
         {
-            if (ShouldHideMessageFromChat(message))
-            {
-                continue;
-            }
-
-            Messages.Add(new ChatMessageViewModel(message));
-
-            if (message.Role != MessageRole.Assistant)
-            {
-                continue;
-            }
-
-            var pendingCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
-            if (pendingCalls is null)
-            {
-                continue;
-            }
-
-            foreach (var toolCall in pendingCalls)
-            {
-                if (answeredToolCallIds.Contains(toolCall.Id))
-                {
-                    continue;
-                }
-
-                var orphanResult = AgentRuntime.FormatToolResult(
-                    toolCall,
-                    ToolResult.Failure(
-                        "工具未完成",
-                        "上次对话在工具执行时被中断，或 MCP 超时后子进程未返回。请重启应用并在侧边栏刷新 MCP 后重试。"));
-                Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.Tool, orphanResult, message.ParentId)));
-                answeredToolCallIds.Add(toolCall.Id);
-            }
+            AddMessageToDisplay(message, answeredToolCallIds);
         }
 
+        RequestScroll();
+    }
+
+    private void AddMessageToDisplay(ChatMessage message, HashSet<string> answeredToolCallIds)
+    {
+        if (ShouldHideMessageFromChat(message) || ContainsMessageId(message.Id))
+        {
+            return;
+        }
+
+        Messages.Add(new ChatMessageViewModel(message));
+
+        if (message.Role != MessageRole.Assistant)
+        {
+            return;
+        }
+
+        var pendingCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
+        if (pendingCalls is null)
+        {
+            return;
+        }
+
+        foreach (var toolCall in pendingCalls)
+        {
+            if (answeredToolCallIds.Contains(toolCall.Id))
+            {
+                continue;
+            }
+
+            var orphanResult = AgentRuntime.FormatToolResult(
+                toolCall,
+                ToolResult.Failure(
+                    "工具未完成",
+                    "上次对话在工具执行时被中断，或 MCP 超时后子进程未返回。请重启应用并在侧边栏刷新 MCP 后重试。"));
+            var orphanMessage = ChatMessage.Create(MessageRole.Tool, orphanResult, message.ParentId);
+            if (ContainsMessageId(orphanMessage.Id))
+            {
+                continue;
+            }
+
+            Messages.Add(new ChatMessageViewModel(orphanMessage));
+            answeredToolCallIds.Add(toolCall.Id);
+        }
+    }
+
+    private bool ContainsMessageId(string messageId) =>
+        !string.IsNullOrWhiteSpace(messageId)
+        && Messages.Any(message => string.Equals(message.MessageId, messageId, StringComparison.Ordinal));
+
+    private void AppendCompactionNotice(ChatMessage message)
+    {
+        ClearStreamingAssistantPlaceholder();
+        if (ContainsMessageId(message.Id))
+        {
+            return;
+        }
+
+        Messages.Add(new ChatMessageViewModel(message));
         RequestScroll();
     }
 
@@ -284,16 +314,13 @@ public sealed class SessionTurnUiController
         RequestScroll();
     }
 
-    private void HandleMessage(ChatMessage message, AgentSession? session)
+    private void HandleMessage(ChatMessage message, AgentSession? _)
     {
         if (ShouldHideMessageFromChat(message))
         {
-            if (session is not null
-                && message.Role == MessageRole.User
-                && SummaryMessageBuilder.IsSummaryMessage(message))
+            if (message.Role == MessageRole.User && SummaryMessageBuilder.IsSummaryMessage(message))
             {
                 ClearStreamingAssistantPlaceholder();
-                PopulateMessagesFromSession(session);
             }
 
             return;
@@ -301,17 +328,7 @@ public sealed class SessionTurnUiController
 
         if (message.Role == MessageRole.Compaction)
         {
-            ClearStreamingAssistantPlaceholder();
-            if (session is not null)
-            {
-                PopulateMessagesFromSession(session);
-            }
-            else if (!Messages.Any(vm => string.Equals(vm.Role, MessageRole.Compaction.ToString(), StringComparison.Ordinal)))
-            {
-                Messages.Add(new ChatMessageViewModel(message));
-                RequestScroll();
-            }
-
+            AppendCompactionNotice(message);
             return;
         }
 
@@ -325,8 +342,12 @@ public sealed class SessionTurnUiController
                 return;
             }
 
-            Messages.Add(new ChatMessageViewModel(message));
-            RequestScroll();
+            if (!ContainsMessageId(message.Id))
+            {
+                Messages.Add(new ChatMessageViewModel(message));
+                RequestScroll();
+            }
+
             return;
         }
 
@@ -340,8 +361,11 @@ public sealed class SessionTurnUiController
         }
 
         ClearStreamingAssistantPlaceholder();
-        Messages.Add(new ChatMessageViewModel(message));
-        RequestScroll();
+        if (!ContainsMessageId(message.Id))
+        {
+            Messages.Add(new ChatMessageViewModel(message));
+            RequestScroll();
+        }
     }
 
     private void EnsureStreamingAssistantMessage()
@@ -560,6 +584,17 @@ public sealed class SessionTurnUiController
     {
         foreach (var message in persistedTurnMessages)
         {
+            if (message.Role == MessageRole.Compaction)
+            {
+                AppendCompactionNotice(message);
+                continue;
+            }
+
+            if (ShouldHideMessageFromChat(message))
+            {
+                continue;
+            }
+
             if (message.Role == MessageRole.Tool)
             {
                 var toolCallId = ExtractToolCallId(message.Content);
@@ -586,7 +621,10 @@ public sealed class SessionTurnUiController
                 }
             }
 
-            Messages.Add(new ChatMessageViewModel(message));
+            if (!ContainsMessageId(message.Id))
+            {
+                Messages.Add(new ChatMessageViewModel(message));
+            }
         }
 
         if (persistedTurnMessages.Any(static message => message.Role == MessageRole.System))

@@ -12,6 +12,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     public ChatMessageViewModel(ChatMessage message, bool expandTool = false)
     {
+        MessageId = message.Id;
         Role = message.Role.ToString();
         Content = message.Content;
         ReasoningContent = message.ReasoningContent ?? string.Empty;
@@ -53,7 +54,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             ParseCompactionContent(message.Content, out var header, out var summary, out var detail);
             ToolCallId = null;
             ToolHeader = header;
-            ToolSummary = summary;
+            ToolSummary = AppendCompactionDisplayNotice(summary);
             AssignToolDetail(detail);
             IsToolRunning = false;
             IsExpanded = expandTool;
@@ -74,6 +75,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     private ChatMessageViewModel(AgentToolCall toolCall)
     {
+        MessageId = $"pending-tool-{toolCall.Id}";
         Role = MessageRole.Tool.ToString();
         ToolCallId = toolCall.Id;
         ToolName = toolCall.Name;
@@ -92,10 +94,13 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ToolDetailDisplay = string.Empty;
         Content = string.Empty;
         ReasoningContent = string.Empty;
+        UserAttachmentSummary = string.Empty;
         IsExpanded = false;
         IsStreaming = false;
         IsReasoningStreaming = false;
     }
+
+    public string MessageId { get; }
 
     public string Role { get; private set; }
 
@@ -226,6 +231,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     private ChatMessageViewModel(int streamIndex)
     {
+        MessageId = $"stream-tool-{streamIndex}";
         StreamToolIndex = streamIndex;
         Role = MessageRole.Tool.ToString();
         IsUser = false;
@@ -243,6 +249,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ToolArgumentsText = string.Empty;
         Content = string.Empty;
         ReasoningContent = string.Empty;
+        UserAttachmentSummary = string.Empty;
         IsExpanded = false;
         IsStreaming = false;
         IsReasoningStreaming = false;
@@ -397,16 +404,12 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ToolDetailDisplay = TruncateToolDetailForDisplay(detail);
     }
 
-    internal static string TruncateToolDetailForDisplay(string detail)
-    {
-        if (detail.Length <= MaxToolDetailDisplayChars)
-        {
-            return detail;
-        }
+    internal static string TruncateToolDetailForDisplay(string detail) => detail;
 
-        return detail[..ToolDetailPreviewChars]
-               + "\n\n... [display truncated — full tool output may be archived] ...\n\n"
-               + detail[^ToolDetailPreviewChars..];
+    private static string AppendCompactionDisplayNotice(string summary)
+    {
+        const string notice = "以下记录仍完整保留；模型上下文已压缩，新消息基于摘要 + 最近历史。";
+        return string.IsNullOrWhiteSpace(summary) ? notice : $"{summary}\n\n{notice}";
     }
 
     private static void ParseToolContent(

@@ -1,6 +1,7 @@
 using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Plan;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -45,6 +46,7 @@ public sealed class ConversationCompactor(
     IAgentModelClient modelClient,
     IFileStorageService storage,
     TruncateArgsService truncateArgsService,
+    IPlanNotebook planNotebook,
     IAppLogger logger) : IConversationCompactor
 {
     private readonly IAppLogger _logger = logger.ForContext("ConversationCompactor");
@@ -92,13 +94,19 @@ public sealed class ConversationCompactor(
             transcriptPath = await storage.SaveTranscriptAsync(session.Id, session.Messages, cancellationToken);
         }
 
+        var plan = planNotebook.GetCurrent(session.Id);
         var formatted = ConversationSummaryFormatter.FormatMessages(prefix);
         if (formatted.Length > cfg.MaxConversationCharsForSummary)
         {
             formatted = formatted[^cfg.MaxConversationCharsForSummary..];
         }
 
-        var prompt = cfg.SummaryPrompt.Replace("{messages}", formatted, StringComparison.Ordinal);
+        var planAppendix = CompactionPlanContextBuilder.BuildSummaryPromptAppendix(plan);
+        var promptBody = string.IsNullOrWhiteSpace(planAppendix)
+            ? formatted
+            : planAppendix + "\n\n<conversation_history>\n" + formatted + "\n</conversation_history>";
+
+        var prompt = cfg.SummaryPrompt.Replace("{messages}", promptBody, StringComparison.Ordinal);
         string summary;
         try
         {
@@ -122,6 +130,7 @@ public sealed class ConversationCompactor(
             summary = "(Summarization failed: " + ex.Message + ")";
         }
 
+        summary = CompactionPlanContextBuilder.EnrichSummaryText(summary, plan);
         var summaryMessage = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath);
         var compactMessages = new List<ChatMessage>();
 

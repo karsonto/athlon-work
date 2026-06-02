@@ -208,6 +208,7 @@ Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
 ```json
 "contextCompaction": {
   "contextWindowTokens": 256000,
+  "compactTriggerRatio": 0.7,
   "triggerMessages": 50,
   "triggerTokens": 80000,
   "keepMessages": 20,
@@ -216,6 +217,8 @@ Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
   "toolResultEviction": { "maxResultChars": 80000, "previewChars": 2000 }
 }
 ```
+
+Compaction triggers when message count **or** estimated tokens reach thresholds. The effective token threshold is `max(triggerTokens, contextWindowTokens * compactTriggerRatio)` (default ratio **0.7**). When a session has an active plan, compaction injects a plan snapshot and incomplete subtasks into the summarization prompt and into the persisted summary placeholder for the model.
 
 Legacy fields (`microcompactKeepToolMessages`, `autoCompactThresholdRatio`, etc.) are ignored after migration.
 

@@ -185,7 +185,10 @@ public sealed class AgentRuntimeCompactionTests
 
         }
 
+        public Task<IReadOnlyList<ChatMessage>> LoadConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ChatMessage>>(PersistedMessages.ToArray());
 
+        public Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) =>
 

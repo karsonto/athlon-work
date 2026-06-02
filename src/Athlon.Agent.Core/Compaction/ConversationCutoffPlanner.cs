@@ -26,7 +26,24 @@ public static class ConversationCutoffPlanner
             return true;
         }
 
-        return settings.TriggerTokens > 0 && estimatedTokens >= settings.TriggerTokens;
+        var tokenThreshold = ResolveCompactTriggerTokens(settings);
+        return tokenThreshold > 0 && estimatedTokens >= tokenThreshold;
+    }
+
+    /// <summary>
+    /// Effective token threshold: max of fixed <see cref="ContextCompactionSettings.TriggerTokens"/>
+    /// and <see cref="ContextCompactionSettings.ContextWindowTokens"/> × <see cref="ContextCompactionSettings.CompactTriggerRatio"/>.
+    /// </summary>
+    public static int ResolveCompactTriggerTokens(ContextCompactionSettings settings)
+    {
+        var fixedThreshold = Math.Max(0, settings.TriggerTokens);
+        if (settings.ContextWindowTokens <= 0 || settings.CompactTriggerRatio <= 0)
+        {
+            return fixedThreshold;
+        }
+
+        var windowThreshold = (int)Math.Floor(settings.ContextWindowTokens * settings.CompactTriggerRatio);
+        return Math.Max(fixedThreshold, windowThreshold);
     }
 
     public static bool ShouldTruncateArgs(

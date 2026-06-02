@@ -6,6 +6,12 @@ public sealed class ContextCompactionSettings
 {
     public int ContextWindowTokens { get; set; } = 256_000;
 
+    /// <summary>
+    /// When &gt; 0 with <see cref="ContextWindowTokens"/>, compaction also triggers when estimated
+    /// history tokens reach <c>ContextWindowTokens * CompactTriggerRatio</c> (whichever token threshold is higher vs <see cref="TriggerTokens"/>).
+    /// </summary>
+    public double CompactTriggerRatio { get; set; } = 0.7;
+
     public int TriggerMessages { get; set; } = 50;
 
     public int TriggerTokens { get; set; } = 80_000;

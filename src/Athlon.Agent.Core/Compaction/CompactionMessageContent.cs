@@ -19,10 +19,6 @@ public static class CompactionMessageContent
         var summary = string.IsNullOrWhiteSpace(summaryPreview)
             ? $"已将 {originalMessageCount} 条消息压缩为摘要并保留最近上下文。"
             : summaryPreview.Trim();
-        if (summary.Length > 200)
-        {
-            summary = summary[..200] + "...";
-        }
 
         return Build(
             CompactionKind.ConversationCompact,
@@ -65,10 +61,6 @@ public static class CompactionMessageContent
         var summary = string.IsNullOrWhiteSpace(summaryPreview)
             ? $"已将 {originalMessageCount} 条消息压缩为摘要。"
             : summaryPreview.Trim();
-        if (summary.Length > 200)
-        {
-            summary = summary[..200] + "...";
-        }
 
         return Build(
             CompactionKind.AutoCompact,
@@ -91,9 +83,7 @@ public static class CompactionMessageContent
             tokensAfter,
             string.IsNullOrWhiteSpace(summaryPreview)
                 ? $"已手动压缩 {originalMessageCount} 条消息。"
-                : summaryPreview.Trim().Length > 200
-                    ? summaryPreview.Trim()[..200] + "..."
-                    : summaryPreview.Trim(),
+                : summaryPreview.Trim(),
             originalMessageCount: originalMessageCount,
             transcriptPath: transcriptPath);
 

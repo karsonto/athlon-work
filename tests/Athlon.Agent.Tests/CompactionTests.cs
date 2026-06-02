@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -16,6 +17,68 @@ public sealed class CompactionTests
         Assert.Equal(20, settings.KeepMessages);
         Assert.Equal(2_000, settings.TruncateArgs.MaxArgLength);
         Assert.Equal(80_000, settings.ToolResultEviction.MaxResultChars);
+        Assert.Equal(0.7, settings.CompactTriggerRatio);
+    }
+
+    [Fact]
+    public void ResolveCompactTriggerTokens_UsesMaxOfFixedAndWindowRatio()
+    {
+        var settings = new ContextCompactionSettings
+        {
+            TriggerTokens = 80_000,
+            ContextWindowTokens = 200_000,
+            CompactTriggerRatio = 0.7
+        };
+
+        Assert.Equal(140_000, ConversationCutoffPlanner.ResolveCompactTriggerTokens(settings));
+    }
+
+    [Fact]
+    public void ShouldCompact_TriggersAtWindowRatioThreshold()
+    {
+        var settings = new ContextCompactionSettings
+        {
+            TriggerMessages = 0,
+            TriggerTokens = 0,
+            ContextWindowTokens = 100_000,
+            CompactTriggerRatio = 0.7
+        };
+        var messages = new[] { ChatMessage.Create(MessageRole.User, new string('x', 280_000)) };
+
+        Assert.True(ConversationCutoffPlanner.ShouldCompact(
+            messages,
+            ContextTokenEstimator.Estimate(messages),
+            settings,
+            force: false));
+    }
+
+    [Fact]
+    public void CompactionPlanContextBuilder_IncludesIncompleteSubtasks()
+    {
+        var plan = new AgentPlan(
+            "Feature",
+            "Build feature",
+            "Tests pass",
+            new[]
+            {
+                new AgentSubTask("completed-step", "d", "o") { State = SubTaskState.Done },
+                new AgentSubTask("wip", "work in progress", "api exists") { State = SubTaskState.InProgress },
+                new AgentSubTask("later", "later", "later out") { State = SubTaskState.Todo }
+            });
+
+        var appendix = CompactionPlanContextBuilder.BuildSummaryPromptAppendix(plan);
+        Assert.NotNull(appendix);
+        var incompleteIndex = appendix.IndexOf("## Incomplete subtasks", StringComparison.Ordinal);
+        Assert.True(incompleteIndex >= 0);
+        var incompleteSection = appendix[incompleteIndex..];
+        Assert.Contains("wip", incompleteSection, StringComparison.Ordinal);
+        Assert.Contains("later", incompleteSection, StringComparison.Ordinal);
+        Assert.Contains("IN PROGRESS", incompleteSection, StringComparison.Ordinal);
+        Assert.DoesNotContain("completed-step", incompleteSection, StringComparison.Ordinal);
+
+        var enriched = CompactionPlanContextBuilder.EnrichSummaryText("summary body", plan);
+        Assert.Contains("summary body", enriched, StringComparison.Ordinal);
+        Assert.Contains("Active plan snapshot", enriched, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -72,9 +135,9 @@ public sealed class CompactionTests
             new ContextCompactionSettings { KeepMessages = 2 });
 
         var tail = messages.Skip(cutoff).Select(message => message.Content).ToArray();
-        Assert.Contains("latest question", tail);
         Assert.Contains("tool output", tail);
         Assert.DoesNotContain("first", tail);
+        Assert.DoesNotContain("reply-1", tail);
     }
 
     [Fact]
@@ -165,6 +228,76 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public async Task ConversationCompactor_AppendsPlanSnapshotToSummaryPlaceholder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-plan", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var settings = new AppSettings
+            {
+                ContextCompaction = new ContextCompactionSettings
+                {
+                    TriggerMessages = 2,
+                    KeepMessages = 1,
+                    SummaryMaxTokens = 512
+                }
+            };
+
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore());
+            var session = AgentSession.Create("plan-compact")
+                .WithMessages(new[]
+                {
+                    ChatMessage.Create(MessageRole.User, "start"),
+                    ChatMessage.Create(MessageRole.Assistant, "ok"),
+                    ChatMessage.Create(MessageRole.User, "continue")
+                });
+
+            var notebook = new StubPlanNotebook();
+            notebook.SetPlan(
+                session.Id,
+                new AgentPlan(
+                    "Ship feature",
+                    "Implement",
+                    "Merged",
+                    new[]
+                    {
+                        new AgentSubTask("step-a", "a", "a done") { State = SubTaskState.InProgress }
+                    }));
+
+            var compactor = new ConversationCompactor(
+                settings,
+                new FakeModelClient("llm summary"),
+                storage,
+                new TruncateArgsService(),
+                notebook,
+                new NoOpLogger());
+
+            var result = await compactor.CompactIfNeededAsync(
+                session,
+                CompactionKind.ConversationCompact,
+                force: false,
+                emitAudit: true);
+
+            Assert.True(result.Compacted);
+            var summary = result.Session.Messages.First(message => SummaryMessageBuilder.IsSummaryMessage(message));
+            Assert.Contains("llm summary", summary.Content, StringComparison.Ordinal);
+            Assert.Contains("Active plan snapshot", summary.Content, StringComparison.Ordinal);
+            Assert.Contains("step-a", summary.Content, StringComparison.Ordinal);
+            Assert.Contains("IN PROGRESS", summary.Content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ConversationCompactor_ReplacesPrefixWithSummaryAndTail()
     {
         var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
@@ -191,7 +324,10 @@ public sealed class CompactionTests
                     ChatMessage.Create(MessageRole.User, "old"),
                     ChatMessage.Create(MessageRole.Assistant, "earlier"),
                     ChatMessage.Create(MessageRole.User, "hello"),
-                    ChatMessage.Create(MessageRole.Assistant, "hi"),
+                    ChatMessage.Create(
+                        MessageRole.Assistant,
+                        "hi",
+                        toolCalls: new[] { new AgentToolCall("t1", "file_read", new Dictionary<string, string>()) }),
                     ChatMessage.Create(MessageRole.Tool, "ToolCallId: t1\ntool output")
                 });
 
@@ -200,6 +336,7 @@ public sealed class CompactionTests
                 new FakeModelClient("summary text"),
                 storage,
                 new TruncateArgsService(),
+                new NoOpPlanNotebook(),
                 new NoOpLogger());
 
             var result = await compactor.CompactIfNeededAsync(
@@ -209,12 +346,13 @@ public sealed class CompactionTests
                 emitAudit: true);
 
             Assert.True(result.Compacted);
-            Assert.Equal(5, result.Session.Messages.Count);
+            Assert.Equal(4, result.Session.Messages.Count);
             Assert.Equal(MessageRole.Compaction, result.Session.Messages[0].Role);
             Assert.Contains("conversationcompact", result.Session.Messages[0].Content, StringComparison.OrdinalIgnoreCase);
             Assert.True(SummaryMessageBuilder.IsSummaryMessage(result.Session.Messages[1]));
+            Assert.Equal(MessageRole.Assistant, result.Session.Messages[2].Role);
             Assert.Equal(MessageRole.Tool, result.Session.Messages[^1].Role);
-            Assert.Contains(result.Session.Messages.Skip(2), message => message.Content == "hello");
+            Assert.Contains("tool output", result.Session.Messages[^1].Content, StringComparison.Ordinal);
 
             var transcriptDir = Path.Combine(paths.SessionsPath, session.Id, "transcripts");
             Assert.True(Directory.Exists(transcriptDir));
@@ -234,6 +372,15 @@ public sealed class CompactionTests
     {
         var content = $"{ConversationCompactionDefaults.SummaryMessageMarker}\nsummary";
         Assert.True(CompactionMessageContent.IsSummaryPlaceholder(content));
+    }
+
+    [Fact]
+    public void ConversationCompact_PreservesFullSummaryPreview()
+    {
+        var longSummary = new string('x', 400);
+        var content = CompactionMessageContent.CreateConversationCompact(100, 80, 5, "t.jsonl", longSummary);
+        Assert.Contains(longSummary, content, StringComparison.Ordinal);
+        Assert.DoesNotContain("...", content, StringComparison.Ordinal);
     }
 
     [Fact]

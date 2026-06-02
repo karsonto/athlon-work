@@ -67,6 +67,20 @@ public sealed class SessionDiskLogTests
             Assert.Contains("你好", conversationLine);
             Assert.DoesNotContain(@"\u4f60", conversationLine);
 
+            var assistant = ChatMessage.Create(
+                MessageRole.Assistant,
+                "reply",
+                reasoningContent: "thinking",
+                toolCalls: [new AgentToolCall("call-2", "file_read", new Dictionary<string, string>())]);
+            await storage.AppendConversationMessageAsync(session.Id, assistant);
+
+            var loaded = await storage.LoadConversationDisplayAsync(session.Id);
+            Assert.Equal(2, loaded.Count);
+            var loadedAssistant = loaded.Single(message => message.Role == MessageRole.Assistant);
+            Assert.Equal("reply", loadedAssistant.Content);
+            Assert.Equal("thinking", loadedAssistant.ReasoningContent);
+            Assert.Contains("call-2", loadedAssistant.ToolCallsJson, StringComparison.Ordinal);
+
             var toolLine = await File.ReadAllTextAsync(Path.Combine(sessionDir, "tool-calls", "calls.jsonl"));
             Assert.Contains("file_list", toolLine, StringComparison.Ordinal);
             Assert.Contains("call-1", toolLine, StringComparison.Ordinal);

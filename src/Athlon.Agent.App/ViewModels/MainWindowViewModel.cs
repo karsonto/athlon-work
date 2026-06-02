@@ -406,6 +406,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _session = _session.WithMessages(Array.Empty<ChatMessage>());
         _activeUi.Messages.Clear();
+        await _storage.ClearConversationDisplayAsync(_session.Id);
         StreamingText = string.Empty;
         PendingImageAttachments.Clear();
 
@@ -1203,7 +1204,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (_activeUi.Messages.Count == 0)
         {
-            _activeUi.HydrateFromSession(_session);
+            var displayMessages = await _storage.LoadConversationDisplayAsync(sessionId);
+            if (displayMessages.Count > 0)
+            {
+                _activeUi.HydrateDisplay(_session, displayMessages);
+            }
+            else
+            {
+                _activeUi.HydrateFromSession(_session);
+            }
         }
 
         ApplySessionWorkspace();
