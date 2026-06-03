@@ -390,6 +390,29 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public void DynamicCompactionPlan_DoesNotCompactOnStaticMessageCountWhenUtilizationLow()
+    {
+        var settings = new ContextCompactionSettings();
+        var conversation = Enumerable.Range(0, 55)
+            .Select(index => ChatMessage.Create(MessageRole.User, $"m-{index}"))
+            .ToList();
+        var estimated = ContextTokenEstimator.Estimate(conversation);
+        var budget = new ContextBudgetSnapshot(256_000, 8192, 20_000, 200_000, estimated, 0.25);
+
+        Assert.True(ContextPressureEvaluator.MeetsStaticCompactThreshold(conversation, settings));
+        Assert.True(budget.TotalUtilization < settings.DynamicCompaction.TargetUtilization);
+
+        var plan = DynamicCompactionPlan.Create(
+            ContextPressureEvaluator.Evaluate(budget, settings.DynamicCompaction),
+            budget,
+            conversation,
+            settings,
+            force: false);
+
+        Assert.False(plan.ApplyConversationCompact);
+    }
+
+    [Fact]
     public void DynamicCompactionPlan_CompactsWhenTotalWindowNearLimitBeforeStaticHistoryThreshold()
     {
         var settings = new ContextCompactionSettings();

@@ -129,11 +129,6 @@ public static class ContextPressureEvaluator
             return ConversationCutoffPlanner.ShouldCompact(conversation, estimated, settings, force: false);
         }
 
-        if (MeetsStaticCompactThreshold(conversation, settings))
-        {
-            return true;
-        }
-
         return budget.TotalUtilization >= ResolveCompactThreshold(settings.DynamicCompaction);
     }
 

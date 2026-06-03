@@ -167,12 +167,12 @@ All file tools should respect workspace boundaries through `WorkspaceGuard`. Wri
 
 ## Context Compression
 
-Before each model call, `PreCompletionPipeline` runs a **budget-aware parameter adjuster** (when `contextCompaction.dynamicCompaction.enabled` is true). Dynamic mode **raises action thresholds** toward **`targetUtilization` (default 0.80)** so the window fills further before compressing; static message/token thresholds remain a floor. After a full **3-level pass** (truncateArgs → prefix re-evict → LLM compact), history is trimmed to land near **`postCompactionUtilization` (default 0.30 = 30% of the usable window)**.
+Before each model call, `PreCompletionPipeline` runs a **budget-aware parameter adjuster** (when `contextCompaction.dynamicCompaction.enabled` is true). Dynamic mode **raises LLM compact thresholds** toward **`targetUtilization` (default 0.80)** — static message/token compact limits do **not** apply while dynamic mode is on. Truncate/re-evict still honor static floors. After a full **3-level pass**, history lands near **`postCompactionUtilization` (default 0.30)**.
 
 | Pressure | Utilization vs target (default 80%) | Actions |
 |----------|-------------------------------------|---------|
-| Normal | &lt; ~55% absolute | none unless static thresholds fire |
-| Elevated | ~55–72% absolute | none unless static thresholds fire |
+| Normal | &lt; ~55% absolute | none (no LLM compact) |
+| Elevated | ~55–72% absolute | none (no LLM compact) |
 | High | ≥ 72% (= target × 0.90) | truncateArgs + optional prefix re-evict (static keep floor) |
 | Critical | ≥ 80% (= target) | full 3-level pass → ~30% post-compaction |
 | Overflow | API `context_length` error | force compact → ~20% post-compaction + retry once |
