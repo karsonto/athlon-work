@@ -1459,7 +1459,7 @@
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
                             <TextBlock Text="上下文压缩" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-                            <TextBlock Text="每次调用模型前，根据上下文压力自动 truncate、归档工具结果或 LLM 摘要。默认启用动态策略（预算感知，目标窗口利用率约 80%）；静态阈值作为下限。"
+                            <TextBlock Text="每次调用模型前，根据上下文压力自动 truncate、归档工具结果或 LLM 摘要。默认启用动态策略：触发阈值约 80%，完整三级压缩后回落到约 30%。"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12"

@@ -32,12 +32,6 @@ public sealed record DynamicCompactionPlan(
                 MustPreserveAppendix: null);
         }
 
-        var keepTokenBudget = ContextPressureEvaluator.ResolveKeepTokenBudget(
-            budget,
-            pressure,
-            conversation,
-            settings);
-
         var applyTruncate = ContextPressureEvaluator.ShouldApplyTruncateArgs(
             budget,
             conversation,
@@ -56,6 +50,13 @@ public sealed record DynamicCompactionPlan(
             settings,
             pressure,
             force);
+
+        var keepTokenBudget = ContextPressureEvaluator.ResolveKeepTokenBudget(
+            budget,
+            pressure,
+            conversation,
+            settings,
+            applyCompact || force);
 
         string? mustPreserve = null;
         if (dynamic.EnableSemanticCutoff && applyCompact)

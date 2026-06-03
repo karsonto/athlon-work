@@ -42,19 +42,33 @@ public static class ContextPressureEvaluator
     }
 
     /// <summary>
-    /// History keep budget derived from the target window fill minus fixed overhead,
-    /// never below the static keepTokens / keepMessages floor.
+    /// History keep budget after compaction. When a full 3-level pass includes LLM compact (or overflow),
+    /// targets <see cref="DynamicCompactionSettings.PostCompactionUtilization"/> (~30% window).
+    /// Truncate/re-evict-only passes fall back to the static keep floor.
     /// </summary>
     public static int ResolveKeepTokenBudget(
         ContextBudgetSnapshot budget,
         ContextPressureLevel pressure,
         IReadOnlyList<ChatMessage> conversation,
-        ContextCompactionSettings settings)
+        ContextCompactionSettings settings,
+        bool includesConversationCompact)
     {
         var dynamic = settings.DynamicCompaction;
         var staticKeep = ResolveStaticKeepTokenBudget(conversation, settings);
 
-        var keepTargetUtil = ResolveKeepTargetUtilization(pressure, dynamic);
+        if (!dynamic.Enabled)
+        {
+            return staticKeep;
+        }
+
+        if (pressure != ContextPressureLevel.Overflow && !includesConversationCompact)
+        {
+            return Math.Max(staticKeep, 512);
+        }
+
+        var keepTargetUtil = pressure == ContextPressureLevel.Overflow
+            ? dynamic.OverflowPostCompactionUtilization
+            : dynamic.PostCompactionUtilization;
         var targetHistory = (int)Math.Floor(keepTargetUtil * budget.UsablePromptWindow - budget.FixedOverhead);
         var dynamicKeep = Math.Max(512, targetHistory);
 
@@ -141,16 +155,6 @@ public static class ContextPressureEvaluator
         var estimated = ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
         return ConversationCutoffPlanner.ShouldCompact(conversation, estimated, settings, force: false);
     }
-
-    private static double ResolveKeepTargetUtilization(
-        ContextPressureLevel pressure,
-        DynamicCompactionSettings settings) =>
-        pressure switch
-        {
-            ContextPressureLevel.Overflow =>
-                settings.TargetUtilization * settings.OverflowKeepRatio,
-            _ => settings.TargetUtilization
-        };
 
     private static int ResolveStaticKeepTokenBudget(
         IReadOnlyList<ChatMessage> conversation,

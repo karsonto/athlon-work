@@ -167,17 +167,15 @@ All file tools should respect workspace boundaries through `WorkspaceGuard`. Wri
 
 ## Context Compression
 
-Before each model call, `PreCompletionPipeline` runs a **budget-aware parameter adjuster** (when `contextCompaction.dynamicCompaction.enabled` is true). Dynamic mode does **not** define a separate strategy — it keeps the static layers below and auto-tunes their effective triggers and keep windows from a single target: **`targetUtilization` (default 0.80 = 80% of the usable context window)**. System prompt, tools schema, output reservation, and safety margin are subtracted first; the adjuster then decides when to act and how much history to keep so the full prompt stays near that ceiling.
+Before each model call, `PreCompletionPipeline` runs a **budget-aware parameter adjuster** (when `contextCompaction.dynamicCompaction.enabled` is true). Dynamic mode **raises action thresholds** toward **`targetUtilization` (default 0.80)** so the window fills further before compressing; static message/token thresholds remain a floor. After a full **3-level pass** (truncateArgs → prefix re-evict → LLM compact), history is trimmed to land near **`postCompactionUtilization` (default 0.30 = 30% of the usable window)**.
 
-| Pressure | Utilization vs target (default 80%) | Actions (same static layers, adjusted params) |
-|----------|-------------------------------------|------------------------------------------------|
+| Pressure | Utilization vs target (default 80%) | Actions |
+|----------|-------------------------------------|---------|
 | Normal | &lt; ~55% absolute | none unless static thresholds fire |
 | Elevated | ~55–72% absolute | none unless static thresholds fire |
-| High | ≥ 72% (= target × 0.90) | truncateArgs + optional prefix re-evict |
-| Critical | ≥ 80% (= target) | truncateArgs + re-evict + LLM conversation compact |
-| Overflow | API `context_length` error | force compact at target × 0.50 keep + retry once |
-
-Static thresholds always remain a **floor** — dynamic never compacts later than static when history is already long enough. When system/tools overhead is large, budget-aware triggers can act **earlier** so the window still approaches ~80% instead of waiting for message-count limits alone.
+| High | ≥ 72% (= target × 0.90) | truncateArgs + optional prefix re-evict (static keep floor) |
+| Critical | ≥ 80% (= target) | full 3-level pass → ~30% post-compaction |
+| Overflow | API `context_length` error | force compact → ~20% post-compaction + retry once |
 
 When dynamic compaction is disabled, only the static thresholds below apply.
 
@@ -209,10 +207,11 @@ Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
   "dynamicCompaction": {
     "enabled": true,
     "targetUtilization": 0.80,
+    "postCompactionUtilization": 0.30,
     "safetyMarginRatio": 0.08,
     "defaultReservedOutputTokens": 8192,
     "truncateLeadRatio": 0.90,
-    "overflowKeepRatio": 0.50,
+    "overflowPostCompactionUtilization": 0.20,
     "enableSemanticCutoff": true,
     "enableUsageCalibration": true
   }

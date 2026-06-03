@@ -421,13 +421,14 @@ public sealed class CompactionTests
             budget,
             ContextPressureLevel.Critical,
             conversation,
-            settings);
+            settings,
+            includesConversationCompact: true);
 
         Assert.True(keep >= 80_000);
     }
 
     [Fact]
-    public void ResolveKeepTokenBudget_TargetsWindowFillAtEightyPercent()
+    public void ResolveKeepTokenBudget_AfterFullPassTargetsThirtyPercent()
     {
         var settings = new ContextCompactionSettings();
         var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
@@ -435,18 +436,43 @@ public sealed class CompactionTests
 
         var keep = ContextPressureEvaluator.ResolveKeepTokenBudget(
             budget,
-            ContextPressureLevel.High,
+            ContextPressureLevel.Critical,
             conversation,
-            settings);
+            settings,
+            includesConversationCompact: true);
 
         var expected = (int)Math.Floor(
-            settings.DynamicCompaction.TargetUtilization * budget.UsablePromptWindow - budget.FixedOverhead);
+            settings.DynamicCompaction.PostCompactionUtilization * budget.UsablePromptWindow
+            - budget.FixedOverhead);
 
         Assert.Equal(expected, keep);
     }
 
     [Fact]
-    public void ResolveKeepTokenBudget_OverflowUsesReducedTarget()
+    public void ResolveKeepTokenBudget_TruncateOnlyUsesStaticKeepFloor()
+    {
+        var settings = new ContextCompactionSettings();
+        var conversation = Enumerable.Range(0, 25)
+            .Select(index => ChatMessage.Create(MessageRole.User, $"message-{index}"))
+            .ToList();
+        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
+
+        var keep = ContextPressureEvaluator.ResolveKeepTokenBudget(
+            budget,
+            ContextPressureLevel.High,
+            conversation,
+            settings,
+            includesConversationCompact: false);
+
+        var staticKeep = ContextTokenEstimator.EstimateSuffix(
+            conversation,
+            Math.Max(0, conversation.Count - settings.KeepMessages));
+
+        Assert.Equal(Math.Max(staticKeep, 512), keep);
+    }
+
+    [Fact]
+    public void ResolveKeepTokenBudget_OverflowUsesReducedPostCompactionTarget()
     {
         var settings = new ContextCompactionSettings();
         var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
@@ -457,10 +483,11 @@ public sealed class CompactionTests
             budget,
             ContextPressureLevel.Overflow,
             conversation,
-            settings);
+            settings,
+            includesConversationCompact: true);
 
         var expected = (int)Math.Floor(
-            dynamic.TargetUtilization * dynamic.OverflowKeepRatio * budget.UsablePromptWindow
+            dynamic.OverflowPostCompactionUtilization * budget.UsablePromptWindow
             - budget.FixedOverhead);
 
         Assert.Equal(Math.Max(512, expected), keep);
