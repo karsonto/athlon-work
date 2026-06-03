@@ -6,8 +6,6 @@ public interface IConversationCompactor
 {
     Task<ConversationCompactResult> CompactIfNeededAsync(
         AgentSession session,
-        CompactionKind kind,
-        bool force,
-        bool emitAudit,
+        CompactionExecutionRequest request,
         CancellationToken cancellationToken = default);
 }

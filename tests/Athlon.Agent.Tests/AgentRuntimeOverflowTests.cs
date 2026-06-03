@@ -20,19 +20,23 @@ public sealed class AgentRuntimeOverflowTests
             }
         };
 
-        var pipeline = new PreCompletionPipeline(compactor, new NoOpLogger());
+        var pipeline = new PreCompletionPipeline(
+            compactor,
+            new TruncateArgsService(),
+            settings,
+            new NoOpLogger());
 
         var modelClient = new OverflowThenSuccessModelClient();
         var runtime = new AgentRuntime(
             modelClient,
             new NoOpStorage(),
             new NoOpToolRouter(),
-            new NoOpPlanNotebook(),
             PromptTestHelpers.CreateStaticOrchestrator(),
             pipeline,
             new PassThroughToolResultEvictor(),
+            new TokenEstimatorCalibrator(settings),
             new NoOpActiveAgentSessionContext(),
-            new AppSettings(),
+            settings,
             new NoOpLogger());
 
         var session = AgentSession.Create("overflow");
@@ -70,17 +74,15 @@ public sealed class AgentRuntimeOverflowTests
 
         public Task<ConversationCompactResult> CompactIfNeededAsync(
             AgentSession session,
-            CompactionKind kind,
-            bool force,
-            bool emitAudit,
+            CompactionExecutionRequest request,
             CancellationToken cancellationToken = default)
         {
-            if (force)
+            if (request.Force)
             {
                 ForceCallCount++;
             }
 
-            if (!force)
+            if (!request.Force)
             {
                 return Task.FromResult(new ConversationCompactResult(session, false));
             }
@@ -99,36 +101,6 @@ public sealed class AgentRuntimeOverflowTests
             string formattedToolContent,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(formattedToolContent);
-    }
-
-    private sealed class NoOpStorage : IFileStorageService
-    {
-        public string RootPath => "/tmp";
-        public Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.FromResult<AgentSession?>(null);
-        public Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default) => Task.FromResult("/tmp/t.jsonl");
-        public Task<string> SaveEvictedToolResultAsync(string sessionId, string toolCallId, string content, CancellationToken cancellationToken = default) => Task.FromResult("/tmp/evicted.txt");
-        public Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<IReadOnlyList<ChatMessage>> LoadConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<ChatMessage>>(Array.Empty<ChatMessage>());
-        public Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<SessionIndexEntry>>(Array.Empty<SessionIndexEntry>());
-        public Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<AppSettings> LoadSettingsAsync(CancellationToken cancellationToken = default) => Task.FromResult(new AppSettings());
-    }
-
-    private sealed class NoOpToolRouter : IToolRouter
-    {
-        public IReadOnlyList<ToolDefinition> ListTools() => Array.Empty<ToolDefinition>();
-        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
-            Task.FromResult(ToolResult.Success("ok"));
-    }
-
-    private sealed class StaticPromptBuilder : IAgentEnvironmentPromptBuilder
-    {
-        public string Build(AgentSession session, IReadOnlyList<ToolDefinition> tools) => "prompt";
     }
 
     private sealed class NoOpLogger : IAppLogger

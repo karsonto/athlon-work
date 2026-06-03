@@ -28,10 +28,10 @@ public sealed class CompactionAuditDisplayTests
     [Fact]
     public void Parse_LegacyKind_FallsBackToConversationCompact()
     {
-        var content = CompactionMessageContent.CreateCompactionMessage(
+        var message = CompactionMessageContent.CreateCompactionMessage(
             "CompactionKind: conversationcompact\nTokensBefore: 1\nTokensAfter: 1\n\nSummary: legacy");
 
-        var display = CompactionAuditDisplay.Parse(content);
+        var display = CompactionAuditDisplay.Parse(message.Content);
 
         Assert.Equal("③ 对话压缩（LLM 摘要）", display.CardTitle);
     }

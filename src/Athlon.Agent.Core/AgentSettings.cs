@@ -16,7 +16,6 @@ public sealed class AppSettings
     public LoggingSettings Logging { get; set; } = new();
     public ContextCompactionSettings ContextCompaction { get; set; } = new();
     public PromptSettings Prompt { get; set; } = new();
-    public PlanSettings Plan { get; set; } = new();
     public AgentTurnSettings AgentTurn { get; set; } = new();
     public WorkspaceIgnoreSettings WorkspaceIgnore { get; set; } = new();
     public FileReadSettings FileRead { get; set; } = new();
@@ -39,15 +38,6 @@ public sealed class WorkspaceIgnoreSettings
     /// Per-workspace <see cref="WorkspaceSettings.IgnorePatterns"/> overrides this when non-empty.
     /// </summary>
     public List<string> DirectoryNames { get; set; } = WorkspaceIgnoreDefaults.CreateMutableDefaultList();
-}
-
-public sealed class PlanSettings
-{
-    public int MaxSubtasks { get; set; } = 20;
-    public string PlanFileName { get; set; } = "plan.md";
-    public int MinOverviewChars { get; set; } = 200;
-    public int MinSubtaskDescriptionChars { get; set; } = 40;
-    public int MinSubtaskExpectedOutcomeChars { get; set; } = 20;
 }
 
 public sealed class PromptSettings

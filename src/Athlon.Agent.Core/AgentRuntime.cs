@@ -3,7 +3,6 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Core;
@@ -12,10 +11,10 @@ public sealed class AgentRuntime(
     IAgentModelClient modelClient,
     IFileStorageService storage,
     IToolRouter toolRouter,
-    IPlanNotebook planNotebook,
     ISystemPromptOrchestrator systemPromptOrchestrator,
     IPreCompletionPipeline preCompletionPipeline,
     IToolResultEvictor toolResultEvictor,
+    ITokenEstimatorCalibrator tokenEstimatorCalibrator,
     IActiveAgentSessionContext activeSessionContext,
     AppSettings settings,
     IAppLogger logger) : IAgentRuntime
@@ -80,8 +79,7 @@ public sealed class AgentRuntime(
             session = session.WithMessage(userMessage);
             await PersistMessageAsync(session, userMessage, cancellationToken);
 
-            var plan = planNotebook.GetCurrent(session.Id);
-            var tools = PlanToolCatalog.FilterForSession(toolRouter.ListTools(), session.InteractionMode, plan);
+            var tools = toolRouter.ListTools();
             var frozenPrompt = systemPromptOrchestrator.PrepareForTurn(session, tools);
             var environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
             var modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
@@ -99,7 +97,9 @@ public sealed class AgentRuntime(
                     session,
                     callbacks,
                     PreCompletionOptions.AgentLoop,
-                    cancellationToken);
+                    environmentPrompt,
+                    tools,
+                    cancellationToken: cancellationToken);
                 environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
                 modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
 
@@ -169,6 +169,7 @@ public sealed class AgentRuntime(
                 callbacks?.OnAssistantReasoningDelta,
                 callbacks?.OnAssistantToolCallDelta,
                 cancellationToken);
+            ObserveModelUsage(session, environmentPrompt, tools, response);
             return (session, response);
         }
         catch (HttpRequestException ex) when (IsContextLengthError(ex))
@@ -179,6 +180,9 @@ public sealed class AgentRuntime(
                 session,
                 callbacks,
                 PreCompletionOptions.ForceCompact,
+                environmentPrompt,
+                tools,
+                ContextPressureLevel.Overflow,
                 cancellationToken);
 
             environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(
@@ -192,6 +196,7 @@ public sealed class AgentRuntime(
                 callbacks?.OnAssistantReasoningDelta,
                 callbacks?.OnAssistantToolCallDelta,
                 cancellationToken);
+            ObserveModelUsage(session, environmentPrompt, tools, response);
             return (session, response);
         }
     }
@@ -257,11 +262,56 @@ public sealed class AgentRuntime(
         AgentSession session,
         AgentTurnCallbacks? callbacks,
         PreCompletionOptions options,
-        CancellationToken cancellationToken)
+        string environmentPrompt,
+        IReadOnlyList<ToolDefinition> tools,
+        ContextPressureLevel pressureOverride = ContextPressureLevel.Normal,
+        CancellationToken cancellationToken = default)
     {
+        CompactionRuntimeContext? runtimeContext = null;
+        if (settings.ContextCompaction.DynamicCompaction.Enabled)
+        {
+            var multiplier = tokenEstimatorCalibrator.GetMultiplier(session.Id);
+            var budget = ContextBudgetCalculator.Compute(
+                environmentPrompt,
+                tools,
+                session.Messages,
+                settings.ContextCompaction,
+                settings.Model,
+                multiplier);
+            runtimeContext = new CompactionRuntimeContext(
+                budget,
+                environmentPrompt,
+                tools,
+                multiplier,
+                pressureOverride);
+        }
+
         var messageIdsBefore = session.Messages.Select(message => message.Id).ToHashSet(StringComparer.Ordinal);
-        session = await preCompletionPipeline.RunAsync(session, options, cancellationToken);
+        session = await preCompletionPipeline.RunAsync(session, options, runtimeContext, cancellationToken);
         return await PersistCompactionAuditsAsync(session, messageIdsBefore, callbacks, cancellationToken);
+    }
+
+    private void ObserveModelUsage(
+        AgentSession session,
+        string environmentPrompt,
+        IReadOnlyList<ToolDefinition> tools,
+        AgentModelResponse response)
+    {
+        if (response.Usage?.PromptTokens is not > 0)
+        {
+            return;
+        }
+
+        var multiplier = tokenEstimatorCalibrator.GetMultiplier(session.Id);
+        var budget = ContextBudgetCalculator.Compute(
+            environmentPrompt,
+            tools,
+            session.Messages,
+            settings.ContextCompaction,
+            settings.Model,
+            multiplier);
+        var estimatedPromptTokens = budget.FixedOverhead + budget.EstimatedHistory;
+        tokenEstimatorCalibrator.Observe(session.Id, estimatedPromptTokens, response.Usage.PromptTokens);
     }
 
     private async Task<AgentSession> PersistCompactionAuditsAsync(

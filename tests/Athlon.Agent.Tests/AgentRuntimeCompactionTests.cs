@@ -34,13 +34,13 @@ public sealed class AgentRuntimeCompactionTests
 
             new NoOpToolRouter(),
 
-            new NoOpPlanNotebook(),
-
             PromptTestHelpers.CreateStaticOrchestrator(),
 
             pipeline,
 
             new PassThroughToolResultEvictor(),
+
+            new TokenEstimatorCalibrator(new AppSettings()),
 
             new NoOpActiveAgentSessionContext(),
 
@@ -122,6 +122,8 @@ public sealed class AgentRuntimeCompactionTests
             AgentSession session,
 
             PreCompletionOptions? options = null,
+
+            CompactionRuntimeContext? runtimeContext = null,
 
             CancellationToken cancellationToken = default) =>
 

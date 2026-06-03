@@ -1,5 +1,4 @@
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
@@ -13,11 +12,9 @@ internal static class PromptTestHelpers
         IAgentHostEnvironment host,
         AppSettings? settings = null,
         IAgentSkillCatalog? catalog = null,
-        IPlanNotebook? planNotebook = null,
         IEnumerable<IPreReasoningPromptContributor>? preReasoningContributors = null)
     {
         settings ??= new AppSettings();
-        planNotebook ??= new NoOpPlanNotebook();
         catalog ??= new AgentSkillCatalog(new FileSystemSkillRepository(Path.Combine(Path.GetTempPath(), "empty-skills-" + Guid.NewGuid().ToString("N"))));
 
         IEnvironmentPromptSection[] sections =
@@ -25,8 +22,6 @@ internal static class PromptTestHelpers
             new BasePersonaSection(),
             new HostEnvironmentSection(),
             new WorkspacePolicySection(),
-            new PlanModePolicySection(),
-            new PlanExecutionPolicySection(),
             new WorkspaceFilesSection(),
             new FileToolsPolicySection(),
             new ToolsPolicySection(),
@@ -37,7 +32,6 @@ internal static class PromptTestHelpers
         return new SystemPromptOrchestrator(
             settings,
             host,
-            planNotebook,
             sections,
             preReasoningContributors ?? Array.Empty<IPreReasoningPromptContributor>());
     }

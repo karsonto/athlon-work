@@ -5,7 +5,6 @@ using System.IO;
 using System.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Core.Plan;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Skills;
@@ -27,7 +26,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IImageAttachmentReader _imageAttachmentReader;
     private readonly SessionTurnHost _turnHost;
     private readonly SessionUiCache _uiCache;
-    private readonly IPlanNotebook _planNotebook;
     private readonly ApplicationShutdownService _shutdownService;
     private readonly Dictionary<string, ObservableCollection<QueuedTurnViewModel>> _queuedTurnsBySession = new(StringComparer.Ordinal);
     private FileSystemWatcher? _workspaceWatcher;
@@ -46,7 +44,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ISkillRuntime skillRuntime,
         SessionTurnHost turnHost,
         SessionUiCache uiCache,
-        IPlanNotebook planNotebook,
         WorkspaceFileEditorService workspaceFileEditorService,
         ApplicationShutdownService shutdownService,
         AppSettings settings)
@@ -58,7 +55,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _imageAttachmentReader = imageAttachmentReader;
         _turnHost = turnHost;
         _uiCache = uiCache;
-        _planNotebook = planNotebook;
         _shutdownService = shutdownService;
         _appSettings = settings;
         _skillCatalog = skillCatalog;
@@ -70,19 +66,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Settings = new SettingsViewModel(settings, _mcpRegistry, skillCatalog, paths);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
+        Settings.CompactionPreferenceChanged += (_, _) => _ = PersistCompactionPreferenceAsync();
         Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
         FileEditor = new FileEditorViewModel(workspaceFileEditorService);
-        FileEditor.Tabs.CollectionChanged += (_, _) =>
-        {
-            OnPropertyChanged(nameof(HasOpenEditorTabs));
-            NotifyPlanEditorStateChanged();
-        };
+        FileEditor.Tabs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasOpenEditorTabs));
         FileEditor.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(FileEditorViewModel.ActiveDocument) or nameof(FileEditorViewModel.HasOpenTabs))
             {
                 OnPropertyChanged(nameof(HasOpenEditorTabs));
-                NotifyPlanEditorStateChanged();
             }
         };
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
@@ -167,15 +159,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool HasOpenEditorTabs => FileEditor.HasOpenTabs;
 
-    public bool ShowPlanBuildInEditor =>
-        !IsBusy
-        && IsPlanMode
-        && _planNotebook.GetCurrent(_displayedSessionId) is { Phase: PlanPhase.Draft }
-        && IsPlanFileActiveInEditor();
-
-    public string ActivePlanTitle =>
-        _planNotebook.GetCurrent(_displayedSessionId)?.Name ?? "Plan";
-
     public const double ContextSidebarMinWidth = 220;
     public const double ContextSidebarMaxWidth = 560;
     public const double ContextSidebarDefaultWidth = 300;
@@ -259,52 +242,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private int selectedAtCompletionIndex = -1;
-
-    [ObservableProperty]
-    private bool isPlanMode;
-
-    private bool _suppressPlanModeSync;
-
-    partial void OnIsPlanModeChanged(bool value)
-    {
-        if (_suppressPlanModeSync)
-        {
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(_displayedSessionId))
-        {
-            return;
-        }
-
-        var mode = value ? AgentInteractionMode.Plan : AgentInteractionMode.Agent;
-        if (_session.InteractionMode == mode)
-        {
-            return;
-        }
-
-        _session = _session.WithInteractionMode(mode);
-        _ = SaveCurrentSessionIfNeededAsync(_session);
-        UpdatePlanEditorChrome();
-        NotifyPlanEditorStateChanged();
-    }
-
-    private void SyncPlanModeFromSession()
-    {
-        _suppressPlanModeSync = true;
-        IsPlanMode = _session.InteractionMode == AgentInteractionMode.Plan;
-        _suppressPlanModeSync = false;
-    }
-
-    private AgentInteractionMode ResolveLatestInteractionMode(string sessionId, AgentInteractionMode fallback)
-    {
-        if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
-        {
-            return _session.InteractionMode;
-        }
-
-        return fallback;
-    }
 
     private readonly List<AtCompletionItemViewModel> _fileCompletionIndex = new();
     private readonly List<AtCompletionItemViewModel> _skillCompletionIndex = new();
@@ -402,6 +339,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private Task PersistUiLayoutAsync() => _storage.SaveSettingsAsync(_appSettings);
 
+    private async Task PersistCompactionPreferenceAsync()
+    {
+        try
+        {
+            await _storage.SaveSettingsAsync(_appSettings);
+        }
+        catch (Exception ex)
+        {
+            SettingsStatus = $"保存压缩偏好失败: {ex.Message}";
+        }
+    }
+
     public Task PersistUiLayoutForSidebarAsync() => PersistUiLayoutAsync();
 
     private void SchedulePersistUiLayout()
@@ -447,7 +396,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private async Task ClearContextAsync()
     {
         var confirm = MessageBox.Show(
-            "将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录）。\n\n会话 ID、工作区与标题会保留；磁盘上的 transcript 归档不会删除。\n\n同时将清除内存中的计划并删除工作区 plan.md（若存在）。\n\n下次发送消息时会重新构建系统提示（工作区、工具、技能等）。",
+            "将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录）。\n\n会话 ID、工作区与标题会保留；磁盘上的 transcript 归档不会删除。\n\n下次发送消息时会重新构建系统提示（工作区、工具、技能等）。",
             "清空上下文",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
@@ -466,8 +415,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         await _storage.ClearConversationDisplayAsync(_session.Id);
         StreamingText = string.Empty;
         PendingImageAttachments.Clear();
-
-        _planNotebook.Clear(_displayedSessionId);
 
         await _storage.SaveSessionAsync(_session);
         SettingsStatus = "上下文已清空。";
@@ -492,75 +439,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         SendCommand.NotifyCanExecuteChanged();
         ClearContextCommand.NotifyCanExecuteChanged();
-        BuildPlanCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(HasChatMessages));
-        NotifyPlanEditorStateChanged();
-    }
-
-    private void NotifyPlanEditorStateChanged()
-    {
-        OnPropertyChanged(nameof(ShowPlanBuildInEditor));
-        OnPropertyChanged(nameof(ActivePlanTitle));
-        BuildPlanCommand.NotifyCanExecuteChanged();
-    }
-
-    private bool IsPlanFileActiveInEditor()
-    {
-        var planPath = _planNotebook.TryGetPlanFilePath();
-        if (string.IsNullOrWhiteSpace(planPath))
-        {
-            return false;
-        }
-
-        return FileEditor.ActiveDocument is { } active
-            && string.Equals(active.FilePath, planPath, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private bool IsPlanFilePath(string fullPath)
-    {
-        var planPath = _planNotebook.TryGetPlanFilePath();
-        return !string.IsNullOrWhiteSpace(planPath)
-            && string.Equals(Path.GetFullPath(fullPath), Path.GetFullPath(planPath), StringComparison.OrdinalIgnoreCase);
-    }
-
-    private void UpdatePlanEditorChrome()
-    {
-        var planPath = _planNotebook.TryGetPlanFilePath();
-        if (string.IsNullOrWhiteSpace(planPath))
-        {
-            return;
-        }
-
-        var isDraftReview = IsPlanMode
-            && _planNotebook.GetCurrent(_displayedSessionId) is { Phase: PlanPhase.Draft };
-        var document = FileEditor.FindOpenDocument(planPath);
-        if (document is not null)
-        {
-            document.IsReadOnly = isDraftReview;
-        }
-    }
-
-    private async Task TryOpenPlanEditorAsync()
-    {
-        if (!IsPlanMode)
-        {
-            return;
-        }
-
-        if (_planNotebook.GetCurrent(_displayedSessionId) is not { Phase: PlanPhase.Draft })
-        {
-            return;
-        }
-
-        var planPath = _planNotebook.TryGetPlanFilePath();
-        if (string.IsNullOrWhiteSpace(planPath) || !File.Exists(planPath))
-        {
-            return;
-        }
-
-        await FileEditor.OpenFileAsync(planPath, _session.ActiveWorkspace, readOnly: true).ConfigureAwait(true);
-        UpdatePlanEditorChrome();
-        NotifyPlanEditorStateChanged();
     }
 
     [RelayCommand]
@@ -704,53 +583,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         return Task.CompletedTask;
     }
 
-    private bool CanBuildPlan() =>
-        !IsBusy
-        && IsPlanMode
-        && _planNotebook.GetCurrent(_displayedSessionId) is { Phase: PlanPhase.Draft };
-
-    [RelayCommand(CanExecute = nameof(CanBuildPlan))]
-    private Task BuildPlanAsync()
-    {
-        var approveResult = _planNotebook.ApprovePlan(_displayedSessionId);
-        if (!approveResult.Success)
-        {
-            SettingsStatus = approveResult.Message;
-            NotifyCommandStatesChanged();
-            return Task.CompletedTask;
-        }
-
-        _suppressPlanModeSync = true;
-        IsPlanMode = false;
-        _session = _session.WithInteractionMode(AgentInteractionMode.Agent);
-        _suppressPlanModeSync = false;
-
-        var input = PlanExecuteDefaults.ExecuteUserMessage.Trim();
-        var ui = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
-        ui.AddUserMessage(input, Array.Empty<ImageAttachment>());
-
-        var request = new SessionTurnRequest(
-            _displayedSessionId,
-            _session,
-            input,
-            Array.Empty<ImageAttachment>(),
-            ui,
-            IsAutoContinue: false);
-
-        if (!_turnHost.TryStart(request, out var error))
-        {
-            SettingsStatus = error ?? "无法开始执行计划。";
-            NotifyCommandStatesChanged();
-            return Task.CompletedTask;
-        }
-
-        _ = SaveCurrentSessionIfNeededAsync(_session);
-        UpdatePlanEditorChrome();
-        UpdateDisplayedBusyState();
-        NotifyCommandStatesChanged();
-        return Task.CompletedTask;
-    }
-
     [RelayCommand]
     private void RemoveQueuedTurn(QueuedTurnViewModel? item)
     {
@@ -775,7 +607,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _session = session;
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
-        SyncPlanModeFromSession();
         OnPropertyChanged(nameof(Messages));
         OnPropertyChanged(nameof(HasChatMessages));
         NotifyQueuedTurnsChanged();
@@ -799,28 +630,19 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         Application.Current?.Dispatcher.InvokeAsync(async () =>
         {
-            AgentSession sessionToPersist;
             if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
             {
-                sessionToPersist = e.Session.WithInteractionMode(_session.InteractionMode);
-                _session = sessionToPersist;
+                _session = e.Session;
                 CurrentSessionTitle = _session.Title;
                 UpdateDisplayedBusyState();
             }
-            else
-            {
-                sessionToPersist = e.Session;
-            }
 
-            await SaveCurrentSessionIfNeededAsync(sessionToPersist);
+            await SaveCurrentSessionIfNeededAsync(
+                string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal)
+                    ? _session
+                    : e.Session);
             await RefreshSessionHistoryAsync();
             TryProcessNextQueuedTurn(e);
-
-            if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
-            {
-                await TryOpenPlanEditorAsync().ConfigureAwait(true);
-            }
-
             NotifyCommandStatesChanged();
         });
     }
@@ -834,11 +656,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         RemoveQueuedTurnFromUi(e.SessionId, payload.QueueId);
         payload.Ui.AddUserMessage(payload.UserInput, payload.ImageAttachments);
-        var latestMode = ResolveLatestInteractionMode(e.SessionId, e.Session.InteractionMode);
-        var sessionForTurn = e.Session.WithInteractionMode(latestMode);
         var request = new SessionTurnRequest(
             e.SessionId,
-            sessionForTurn,
+            e.Session,
             payload.UserInput,
             payload.ImageAttachments,
             payload.Ui,
@@ -870,7 +690,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void UpdateDisplayedBusyState()
     {
         IsBusy = _turnHost.IsRunning(_displayedSessionId);
-        NotifyPlanEditorStateChanged();
     }
 
     private void StopSession(string sessionId)
@@ -1379,10 +1198,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             if (!string.IsNullOrWhiteSpace(e.FullPath))
             {
                 FileEditor.HandleExternalFileChange(e.FullPath);
-                if (IsPlanFilePath(e.FullPath))
-                {
-                    _ = TryOpenPlanEditorAsync();
-                }
             }
 
             RefreshAtCompletionSources();

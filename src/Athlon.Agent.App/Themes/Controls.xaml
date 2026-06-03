@@ -268,7 +268,7 @@
         </Setter>
     </Style>
 
-    <Style x:Key="PlanToggleSwitchStyle" TargetType="CheckBox">
+    <Style x:Key="CompactionToggleSwitchStyle" TargetType="CheckBox">
         <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
@@ -291,7 +291,7 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Track" Property="Background" Value="{StaticResource Brush.Warning}" />
+                            <Setter TargetName="Track" Property="Background" Value="{StaticResource Brush.Success}" />
                             <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
                             <Setter TargetName="Thumb" Property="Margin" Value="0,0,2,0" />
                         </Trigger>

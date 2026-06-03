@@ -20,10 +20,16 @@ public sealed record AgentModelRequest(
     IReadOnlyList<ToolDefinition> Tools,
     bool AllowToolCalls = true,
     int? MaxTokens = null);
+public sealed record ModelUsage(
+    int? PromptTokens = null,
+    int? CompletionTokens = null,
+    int? TotalTokens = null);
+
 public sealed record AgentModelResponse(
     string Content,
     IReadOnlyList<AgentToolCall> ToolCalls,
-    string? ReasoningContent = null);
+    string? ReasoningContent = null,
+    ModelUsage? Usage = null);
 
 public sealed record StreamingToolCallDelta(
     int Index,

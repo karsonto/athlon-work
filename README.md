@@ -99,32 +99,6 @@ In `config/settings.json`, optional `AgentTurn.TimeoutMinutes` controls how long
 
 Changes apply on the next send after saving or editing the file (restart the app if settings were only changed on disk while running).
 
-### Plan → Build → Execute (Cursor-style)
-
-Use the **Plan** switch in the chat composer (to the right of the image upload button) to enter planning mode. You can switch at any time; the in-flight reply keeps the mode it started with.
-
-| Phase | UI | Tools | Behavior |
-|-------|-----|-------|----------|
-| **Draft** (Plan ON) | Plan switch; **Build** in plan editor when `plan.md` is open | Read-only file tools + `create_plan` / `get_plan` | Research and write a structured plan; no file writes, commands, or `finish_subtask` |
-| **Build** | Click **Build** in the plan editor header | — | Approves the plan, turns off Plan mode, switches to Agent, and automatically sends an execute instruction |
-| **Executing** (Agent + approved plan) | No Build button | Full Agent tools + `get_plan` / `finish_subtask` | Implement subtasks in order; continue manually by sending messages (no auto-continue) |
-
-`create_plan` writes a **Draft** plan (all subtasks `Todo`) and syncs a Cursor-style `plan.md` when a workspace is configured: **Overview**, optional **Architecture** / **Mermaid** / **Testing** / **Out of scope**, and an **Implementation Plan** with per-step **Files**, **Description**, and **Acceptance**. Shallow plans are rejected (minimum overview and subtask detail lengths). After a plan is created or updated, the app opens `plan.md` in the side editor for review (read-only in Plan mode). **Build** in the editor header is required before execution. To revise the plan, stay in Plan mode and call `create_plan` again (resets to Draft).
-
-**Clear context** clears the in-memory plan and deletes `plan.md`. Plan approval state is session memory only; reloading a session with an existing `plan.md` still requires **Build** before execution.
-
-```json
-{
-  "Plan": {
-    "MaxSubtasks": 20,
-    "PlanFileName": "plan.md",
-    "MinOverviewChars": 200,
-    "MinSubtaskDescriptionChars": 40,
-    "MinSubtaskExpectedOutcomeChars": 20
-  }
-}
-```
-
 ## Run
 
 ```powershell
@@ -188,22 +162,34 @@ The agent sends an environment prompt that includes active workspace path and av
 - `grep_files`: search file contents in the workspace.
 - `glob_files`: find workspace files by glob pattern.
 - `execute_command`: runs via `cmd.exe /c`; default wait **3600s (1 hour)**, max **3600s** (`timeout` argument). Command timeout returns a tool failure and does **not** stop the agent turn. User **Stop** kills the command process tree. Subject to command deny-list rules. For runs longer than one hour, split work or raise `AgentTurn.TimeoutMinutes` when a turn cap is configured.
-- **Plan mode only (Draft):** `create_plan` (overview, optional architecture/mermaid/testing/out_of_scope, subtasks with `files[]`), `get_plan` — syncs draft `plan.md`.
-- **After Build (approved plan):** `get_plan`, `finish_subtask` — track and complete subtasks during Agent execution.
 
 All file tools should respect workspace boundaries through `WorkspaceGuard`. Writes and edits create backups through `AtomicFile`.
 
 ## Context Compression
 
-Before each model call, `PreCompletionPipeline` delegates to `ConversationCompactor` (aligned with AgentScope Harness `ConversationCompactor` + `CompactionHook`):
+Before each model call, `PreCompletionPipeline` runs a **dynamic budget-aware** compaction orchestrator (when `contextCompaction.dynamicCompaction.enabled` is true). It estimates the full prompt footprint — system prompt, tools schema, output reservation, safety margin, and conversation history — then applies progressive actions by pressure level:
 
-1. **truncateArgs** (non-LLM, inside compactor): when history reaches the truncate threshold (default: 25 messages / 40k estimated tokens), clips large tool argument strings on assistant messages outside the keep window (default: last 20 messages, max arg length 2000).
-2. **conversation compact**: when history reaches the compact threshold (default: 50 messages / 80k estimated tokens), archives the session to `sessions/<sessionId>/transcripts/transcript_<unix>.jsonl`, summarizes the prefix, then replaces it with an optional `Compaction` audit message plus a summary user placeholder (`__compaction_summary__`) and the preserved tail. Cutoff uses keep windows and never splits assistant/tool pairs. Token estimates use ~2.5 chars/token (AgentScope `TokenCounterUtil` style).
+| Pressure | Utilization (default) | Actions |
+|----------|----------------------|---------|
+| Normal | &lt; 0.55 | none |
+| Elevated | 0.55–0.72 | truncateArgs (dynamic keep suffix) |
+| High | 0.72–0.88 | truncateArgs + prefix re-evict (tighten archived tool previews) |
+| Critical | ≥ 0.88 | truncateArgs + re-evict + LLM conversation compact |
+| Overflow | API `context_length` error | force compact with smaller keep ratio + retry once |
+
+When dynamic compaction is disabled, behavior falls back to the static thresholds below.
+
+Legacy static layers (still used as secondary triggers and when dynamic compaction is off):
+
+1. **truncateArgs** (non-LLM): when history reaches the truncate threshold (default: 25 messages / 40k estimated tokens), clips large tool argument strings on assistant messages outside the keep window (default: last 20 messages, max arg length 2000).
+2. **conversation compact**: when history reaches the compact threshold (default: 50 messages / 80k estimated tokens), archives the session to `sessions/<sessionId>/transcripts/transcript_<unix>.jsonl`, summarizes the prefix, then replaces it with an optional `Compaction` audit message plus a summary user placeholder (`__compaction_summary__`) and the preserved tail. Cutoff uses keep windows and never splits assistant/tool pairs. Semantic cutoff can inject `<must_preserve>` hints into the summary prompt for high-scoring prefix messages (user goals, file paths, write/edit commands).
 3. **tool result eviction** (after each tool invoke): if a tool result exceeds 80k characters, the full body is written to `sessions/<sessionId>/evicted/<toolCallId>.txt` and only a head/tail preview is kept in the in-memory tool message. `file_write`, `file_edit`, `grep_files`, `glob_files`, and `file_list` are excluded by default; `file_read` is included so oversized reads do not blow the context window.
 
-On context-length API errors, the runtime forces compaction and retries once, rebuilding the iteration system prompt after compact.
+On context-length API errors, the runtime forces compaction at **Overflow** pressure and retries once, rebuilding the iteration system prompt after compact.
 
-When compaction runs, the app appends a persisted `Compaction` role message and shows it in chat as a collapsible card. Summary placeholders are hidden in the UI but sent to the model as user messages. `Compaction` audit messages are not sent to the model API.
+When compaction runs, the app appends a persisted `Compaction` role message and shows it in chat as a collapsible card (including pressure level and utilization when available). Summary placeholders are hidden in the UI but sent to the model as user messages. `Compaction` audit messages are not sent to the model API.
+
+API `usage.prompt_tokens` (when returned) feeds a session-level EMA calibrator that adjusts token estimates over time.
 
 Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
 
@@ -217,11 +203,24 @@ Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
   "includeReasoningInModelContext": false,
   "summaryPrompt": "...",
   "truncateArgs": { "triggerMessages": 25, "triggerTokens": 40000, "keepMessages": 20, "maxArgLength": 2000 },
-  "toolResultEviction": { "maxResultChars": 80000, "previewChars": 2000 }
+  "toolResultEviction": { "maxResultChars": 80000, "previewChars": 2000 },
+  "dynamicCompaction": {
+    "enabled": true,
+    "safetyMarginRatio": 0.08,
+    "defaultReservedOutputTokens": 8192,
+    "elevatedUtilization": 0.55,
+    "highUtilization": 0.72,
+    "criticalUtilization": 0.88,
+    "keepRatioElevated": 0.45,
+    "keepRatioCritical": 0.35,
+    "keepRatioOverflow": 0.25,
+    "enableSemanticCutoff": true,
+    "enableUsageCalibration": true
+  }
 }
 ```
 
-Compaction triggers when message count **or** estimated tokens reach thresholds. The effective token threshold is `max(triggerTokens, contextWindowTokens * compactTriggerRatio)` (default ratio **0.7**). When a session has an **approved** plan, compaction injects a plan snapshot and incomplete subtasks into the summarization prompt and into the persisted summary placeholder for the model.
+Compaction triggers when message count **or** estimated utilization/token thresholds are reached. With dynamic compaction enabled, utilization is `estimatedHistory / historyBudget` where history budget subtracts system prompt, tools schema, output reservation, and safety margin from the context window. The static token threshold remains `max(triggerTokens, contextWindowTokens * compactTriggerRatio)` when dynamic compaction is disabled.
 
 By default, `includeReasoningInModelContext` is **false**: assistant thinking chains are shown in the UI and saved to `conversation.jsonl`, but are **not** sent back in API history (saves tokens). Set to `true` only if your model requires historical `reasoning_content`.
 

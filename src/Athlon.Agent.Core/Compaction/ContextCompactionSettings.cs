@@ -38,6 +38,8 @@ public sealed class ContextCompactionSettings
 
     public ToolResultEvictionSettings ToolResultEviction { get; set; } = new();
 
+    public DynamicCompactionSettings DynamicCompaction { get; set; } = new();
+
     // Legacy settings (ignored after migration; kept for deserialization compatibility)
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public double? AutoCompactThresholdRatio { get; set; }

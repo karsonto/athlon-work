@@ -14,7 +14,8 @@ public sealed class TruncateArgsService
     public IReadOnlyList<ChatMessage> ApplyToMessages(
         IReadOnlyList<ChatMessage> messages,
         ContextCompactionSettings settings,
-        out bool changed)
+        out bool changed,
+        int? keepTokenBudgetOverride = null)
     {
         changed = false;
         var truncateSettings = settings.TruncateArgs;
@@ -30,15 +31,21 @@ public sealed class TruncateArgsService
         }
 
         var estimatedTokens = ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
-        if (!ConversationCutoffPlanner.ShouldTruncateArgs(conversation, estimatedTokens, truncateSettings))
+        if (keepTokenBudgetOverride is null or <= 0
+            && !ConversationCutoffPlanner.ShouldTruncateArgs(conversation, estimatedTokens, truncateSettings))
         {
             return messages;
         }
 
-        var cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoff(
-            conversation,
-            truncateSettings,
-            settings.IncludeReasoningInModelContext);
+        var cutoff = keepTokenBudgetOverride is > 0
+            ? ConversationCutoffPlanner.DetermineTruncateArgsCutoffFromKeepBudget(
+                conversation,
+                keepTokenBudgetOverride.Value,
+                settings.IncludeReasoningInModelContext)
+            : ConversationCutoffPlanner.DetermineTruncateArgsCutoff(
+                conversation,
+                truncateSettings,
+                settings.IncludeReasoningInModelContext);
         if (cutoff >= conversation.Count)
         {
             return messages;

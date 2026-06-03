@@ -1,7 +1,31 @@
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Plan;
 
 namespace Athlon.Agent.Tests;
+
+internal sealed class NoOpStorage : IFileStorageService
+{
+    public string RootPath => "/tmp";
+    public Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.FromResult<AgentSession?>(null);
+    public Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default) => Task.FromResult("/tmp/t.jsonl");
+    public Task<string> SaveEvictedToolResultAsync(string sessionId, string toolCallId, string content, CancellationToken cancellationToken = default) => Task.FromResult("/tmp/evicted.txt");
+    public Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<IReadOnlyList<ChatMessage>> LoadConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<ChatMessage>>(Array.Empty<ChatMessage>());
+    public Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<SessionIndexEntry>>(Array.Empty<SessionIndexEntry>());
+    public Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public Task<AppSettings> LoadSettingsAsync(CancellationToken cancellationToken = default) => Task.FromResult(new AppSettings());
+}
+
+internal sealed class NoOpToolRouter : IToolRouter
+{
+    public IReadOnlyList<ToolDefinition> ListTools() => Array.Empty<ToolDefinition>();
+    public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
+        Task.FromResult(ToolResult.Success("ok"));
+}
 
 internal sealed class NoOpActiveAgentSessionContext : IActiveAgentSessionContext
 {
@@ -21,27 +45,5 @@ internal sealed class NoOpActiveAgentSessionContext : IActiveAgentSessionContext
     private sealed class SessionScope(string? previous) : IDisposable
     {
         public void Dispose() => AmbientSessionId.Value = previous;
-    }
-}
-
-internal sealed class NoOpPlanNotebook : IPlanNotebook
-{
-    public AgentPlan? GetCurrent(string sessionId) => null;
-
-    public PlanOperationResult CreatePlan(string sessionId, CreatePlanRequest request) =>
-        new(false, "No plan notebook in test.");
-
-    public PlanOperationResult ApprovePlan(string sessionId) =>
-        new(false, "No plan notebook in test.");
-
-    public PlanOperationResult FinishSubtask(string sessionId, int subtaskIndex, string outcome) =>
-        new(false, "No plan notebook in test.");
-
-    public string GetPlanMarkdown(string sessionId, bool detailed = true) => string.Empty;
-
-    public string? TryGetPlanFilePath() => null;
-
-    public void Clear(string sessionId)
-    {
     }
 }

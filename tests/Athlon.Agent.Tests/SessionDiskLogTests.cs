@@ -107,10 +107,10 @@ public sealed class SessionDiskLogTests
             modelClient,
             storage,
             new EmptyToolRouter(),
-            new NoOpPlanNotebook(),
             PromptTestHelpers.CreateStaticOrchestrator(),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
+            new TokenEstimatorCalibrator(new AppSettings()),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger());
@@ -162,6 +162,7 @@ public sealed class SessionDiskLogTests
         public Task<AgentSession> RunAsync(
             AgentSession session,
             PreCompletionOptions? options = null,
+            CompactionRuntimeContext? runtimeContext = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(session);
     }

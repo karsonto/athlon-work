@@ -11,7 +11,29 @@ public static class ContextTokenEstimator
     private const int ToolCallOverhead = 10;
     private const int ToolResultOverhead = 8;
 
-    public static int Estimate(IReadOnlyList<ChatMessage> messages, bool includeReasoningInModelContext = false)
+    private static int EstimateTextTokens(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return 0;
+        }
+
+        return (int)Math.Ceiling(text.Length / CharsPerToken);
+    }
+
+    /// <summary>Public helper for budget overhead estimation.</summary>
+    public static int EstimateTextTokens(string? text, double calibrationMultiplier)
+    {
+        var tokens = EstimateTextTokens(text);
+        return calibrationMultiplier <= 0 || Math.Abs(calibrationMultiplier - 1.0) < 0.001
+            ? tokens
+            : (int)Math.Ceiling(tokens * calibrationMultiplier);
+    }
+
+    public static int Estimate(
+        IReadOnlyList<ChatMessage> messages,
+        bool includeReasoningInModelContext = false,
+        double calibrationMultiplier = 1.0)
     {
         if (messages.Count == 0)
         {
@@ -29,7 +51,9 @@ public static class ContextTokenEstimator
             total += EstimateMessage(message, includeReasoningInModelContext);
         }
 
-        return total;
+        return calibrationMultiplier <= 0 || Math.Abs(calibrationMultiplier - 1.0) < 0.001
+            ? total
+            : (int)Math.Ceiling(total * calibrationMultiplier);
     }
 
     public static int EstimateMessage(ChatMessage message, bool includeReasoningInModelContext = false)
@@ -109,15 +133,5 @@ public static class ContextTokenEstimator
         }
 
         return tokens;
-    }
-
-    private static int EstimateTextTokens(string? text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return 0;
-        }
-
-        return (int)Math.Ceiling(text.Length / CharsPerToken);
     }
 }

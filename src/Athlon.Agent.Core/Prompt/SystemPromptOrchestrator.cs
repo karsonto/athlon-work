@@ -1,13 +1,10 @@
 using System.Text;
 
-using Athlon.Agent.Core.Plan;
-
 namespace Athlon.Agent.Core.Prompt;
 
 public sealed class SystemPromptOrchestrator(
     AppSettings settings,
     IAgentHostEnvironment host,
-    IPlanNotebook planNotebook,
     IEnumerable<IEnvironmentPromptSection> sections,
     IEnumerable<IPreReasoningPromptContributor> preReasoningContributors) : ISystemPromptOrchestrator
 {
@@ -70,10 +67,7 @@ public sealed class SystemPromptOrchestrator(
             Tools = tools,
             SkillsDirectory = host.SkillsDirectory,
             Host = host,
-            PromptSettings = settings.Prompt,
-            PlanMaxSubtasks = settings.Plan.MaxSubtasks,
-            InteractionMode = session.InteractionMode,
-            ActivePlan = planNotebook.GetCurrent(session.Id)
+            PromptSettings = settings.Prompt
         };
     }
 

@@ -1,6 +1,5 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -50,36 +49,6 @@ public sealed class CompactionTests
             ContextTokenEstimator.Estimate(messages),
             settings,
             force: false));
-    }
-
-    [Fact]
-    public void CompactionPlanContextBuilder_IncludesIncompleteSubtasks()
-    {
-        var plan = new AgentPlan(
-            "Feature",
-            "Build feature",
-            "Tests pass",
-            new[]
-            {
-                new AgentSubTask("completed-step", "Completed step with measurable verification criteria.", "Step marked done in plan.") { State = SubTaskState.Done },
-                new AgentSubTask("wip", "Work in progress on API surface and notebook integration.", "API exists and responds correctly.") { State = SubTaskState.InProgress },
-                new AgentSubTask("later", "Later step for documentation and README updates.", "Docs updated and reviewed.") { State = SubTaskState.Todo }
-            },
-            PlanTestFixtures.Overview());
-
-        var appendix = CompactionPlanContextBuilder.BuildSummaryPromptAppendix(plan);
-        Assert.NotNull(appendix);
-        var incompleteIndex = appendix.IndexOf("## Incomplete subtasks", StringComparison.Ordinal);
-        Assert.True(incompleteIndex >= 0);
-        var incompleteSection = appendix[incompleteIndex..];
-        Assert.Contains("wip", incompleteSection, StringComparison.Ordinal);
-        Assert.Contains("later", incompleteSection, StringComparison.Ordinal);
-        Assert.Contains("IN PROGRESS", incompleteSection, StringComparison.Ordinal);
-        Assert.DoesNotContain("completed-step", incompleteSection, StringComparison.Ordinal);
-
-        var enriched = CompactionPlanContextBuilder.EnrichSummaryText("summary body", plan);
-        Assert.Contains("summary body", enriched, StringComparison.Ordinal);
-        Assert.Contains("Active plan snapshot", enriched, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -202,7 +171,11 @@ public sealed class CompactionTests
             .WithMessages(new[] { ChatMessage.Create(MessageRole.User, "hello") });
 
         var compactor = new FakeConversationCompactor(settings);
-        var pipeline = new PreCompletionPipeline(compactor, new NoOpLogger());
+        var pipeline = new PreCompletionPipeline(
+            compactor,
+            new TruncateArgsService(),
+            settings,
+            new NoOpLogger());
 
         var result = await pipeline.RunAsync(session, PreCompletionOptions.AgentLoop);
 
@@ -231,80 +204,15 @@ public sealed class CompactionTests
             });
 
         var compactor = new FakeConversationCompactor(settings);
-        var pipeline = new PreCompletionPipeline(compactor, new NoOpLogger());
+        var pipeline = new PreCompletionPipeline(
+            compactor,
+            new TruncateArgsService(),
+            settings,
+            new NoOpLogger());
 
         await pipeline.RunAsync(session, PreCompletionOptions.AgentLoop);
 
         Assert.Equal(1, compactor.CallCount);
-    }
-
-    [Fact]
-    public async Task ConversationCompactor_AppendsPlanSnapshotToSummaryPlaceholder()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-plan", Guid.NewGuid().ToString("N"));
-        var paths = new TestAppPathProvider(root);
-        paths.EnsureCreated();
-
-        try
-        {
-            var settings = new AppSettings
-            {
-                ContextCompaction = new ContextCompactionSettings
-                {
-                    TriggerMessages = 2,
-                    KeepMessages = 1,
-                    SummaryMaxTokens = 512
-                }
-            };
-
-            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore());
-            var session = AgentSession.Create("plan-compact")
-                .WithMessages(new[]
-                {
-                    ChatMessage.Create(MessageRole.User, "start"),
-                    ChatMessage.Create(MessageRole.Assistant, "ok"),
-                    ChatMessage.Create(MessageRole.User, "continue")
-                });
-
-            var notebook = new StubPlanNotebook();
-            notebook.SetPlan(
-                session.Id,
-                new AgentPlan(
-                    "Ship feature",
-                    "Implement",
-                    "Merged",
-                    [new AgentSubTask("step-a", "Implement step-a across core and infrastructure layers.", "Step-a acceptance tests pass.") { State = SubTaskState.InProgress }],
-                    PlanTestFixtures.Overview(),
-                    phase: PlanPhase.Approved));
-
-            var compactor = new ConversationCompactor(
-                settings,
-                new FakeModelClient("llm summary"),
-                storage,
-                new TruncateArgsService(),
-                notebook,
-                new NoOpLogger());
-
-            var result = await compactor.CompactIfNeededAsync(
-                session,
-                CompactionKind.ConversationCompact,
-                force: false,
-                emitAudit: true);
-
-            Assert.True(result.Compacted);
-            var summary = result.Session.Messages.First(message => SummaryMessageBuilder.IsSummaryMessage(message));
-            Assert.Contains("llm summary", summary.Content, StringComparison.Ordinal);
-            Assert.Contains("Active plan snapshot", summary.Content, StringComparison.Ordinal);
-            Assert.Contains("step-a", summary.Content, StringComparison.Ordinal);
-            Assert.Contains("IN PROGRESS", summary.Content, StringComparison.Ordinal);
-        }
-        finally
-        {
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, true);
-            }
-        }
     }
 
     [Fact]
@@ -346,14 +254,14 @@ public sealed class CompactionTests
                 new FakeModelClient("summary text"),
                 storage,
                 new TruncateArgsService(),
-                new NoOpPlanNotebook(),
                 new NoOpLogger());
 
             var result = await compactor.CompactIfNeededAsync(
                 session,
-                CompactionKind.ConversationCompact,
-                force: false,
-                emitAudit: true);
+                new CompactionExecutionRequest(
+                    CompactionKind.ConversationCompact,
+                    Force: false,
+                    EmitAudit: true));
 
             Assert.True(result.Compacted);
             Assert.Equal(4, result.Session.Messages.Count);
@@ -394,6 +302,240 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public void ContextBudgetCalculator_IncludesSystemPromptAndToolsInOverhead()
+    {
+        var settings = new ContextCompactionSettings { ContextWindowTokens = 100_000 };
+        var model = new ModelSettings { MaxTokens = 8192 };
+        var tools = new[]
+        {
+            new ToolDefinition("file_read", "Read files", new Dictionary<string, string> { ["path"] = "path" })
+        };
+        var messages = new[] { ChatMessage.Create(MessageRole.User, new string('x', 5000)) };
+
+        var budget = ContextBudgetCalculator.Compute(
+            environmentPrompt: new string('s', 10_000),
+            tools,
+            messages,
+            settings,
+            model);
+
+        Assert.True(budget.FixedOverhead > 0);
+        Assert.True(budget.HistoryBudget < budget.TotalWindow - budget.ReservedOutput);
+        Assert.True(budget.Utilization > 0);
+    }
+
+    [Fact]
+    public void ContextBudgetSnapshot_TotalUtilization_IncludesFixedOverhead()
+    {
+        var budget = new ContextBudgetSnapshot(200_000, 8192, 40_000, 120_000, 50_000, 0.42);
+
+        Assert.Equal(90_000, budget.EstimatedTotalPrompt);
+        Assert.InRange(budget.TotalUtilization, 0.45, 0.48);
+    }
+
+    [Fact]
+    public void ContextPressureEvaluator_MapsTotalWindowUtilizationToLevels()
+    {
+        var dynamic = new DynamicCompactionSettings();
+        var overflowBudget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 90_000, 0.9);
+
+        Assert.Equal(ContextPressureLevel.Overflow, ContextPressureEvaluator.Evaluate(overflowBudget, dynamic, forceOverflow: true));
+
+        var criticalBudget = new ContextBudgetSnapshot(200_000, 8192, 30_000, 100_000, 150_000, 0.9);
+        Assert.Equal(ContextPressureLevel.Critical, ContextPressureEvaluator.Evaluate(criticalBudget, dynamic));
+
+        var elevatedBudget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 90_000, 0.9);
+        Assert.Equal(ContextPressureLevel.Elevated, ContextPressureEvaluator.Evaluate(elevatedBudget, dynamic));
+    }
+
+    [Fact]
+    public void DynamicCompactionPlan_DoesNotTruncateBeforeStaticBaseline()
+    {
+        var settings = new ContextCompactionSettings();
+        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 10_000, 0.1);
+        var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
+
+        var plan = DynamicCompactionPlan.Create(
+            ContextPressureEvaluator.Evaluate(budget, settings.DynamicCompaction),
+            budget,
+            conversation,
+            settings,
+            force: false);
+
+        Assert.False(plan.ApplyTruncateArgs);
+        Assert.False(plan.ApplyConversationCompact);
+    }
+
+    [Fact]
+    public void DynamicCompactionPlan_TruncatesWhenStaticThresholdReached()
+    {
+        var settings = new ContextCompactionSettings();
+        var conversation = Enumerable.Range(0, 30)
+            .Select(index => ChatMessage.Create(MessageRole.User, $"message-{index}"))
+            .ToList();
+        var estimated = ContextTokenEstimator.Estimate(conversation);
+        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 180_000, estimated, 0.2);
+
+        Assert.True(ContextPressureEvaluator.MeetsStaticTruncateThreshold(conversation, settings));
+
+        var plan = DynamicCompactionPlan.Create(
+            ContextPressureEvaluator.Evaluate(budget, settings.DynamicCompaction),
+            budget,
+            conversation,
+            settings,
+            force: false);
+
+        Assert.True(plan.ApplyTruncateArgs);
+        Assert.False(plan.ApplyConversationCompact);
+    }
+
+    [Fact]
+    public void DynamicCompactionPlan_CompactsWhenTotalWindowNearLimitBeforeStaticHistoryThreshold()
+    {
+        var settings = new ContextCompactionSettings();
+        var conversation = new[] { ChatMessage.Create(MessageRole.User, new string('x', 400_000)) };
+        var estimated = ContextTokenEstimator.Estimate(conversation);
+        Assert.False(ContextPressureEvaluator.MeetsStaticCompactThreshold(conversation, settings));
+
+        var budget = new ContextBudgetSnapshot(256_000, 8192, 60_000, 120_000, estimated, 0.9);
+        Assert.True(budget.TotalUtilization >= settings.DynamicCompaction.CriticalUtilization);
+
+        var plan = DynamicCompactionPlan.Create(
+            ContextPressureEvaluator.Evaluate(budget, settings.DynamicCompaction),
+            budget,
+            conversation,
+            settings,
+            force: false);
+
+        Assert.True(plan.ApplyConversationCompact);
+    }
+
+    [Fact]
+    public void ResolveKeepTokenBudget_NeverBelowStaticKeepTokens()
+    {
+        var settings = new ContextCompactionSettings { KeepTokens = 80_000 };
+        var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
+        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
+
+        var keep = ContextPressureEvaluator.ResolveKeepTokenBudget(
+            budget,
+            ContextPressureLevel.Critical,
+            conversation,
+            settings);
+
+        Assert.True(keep >= 80_000);
+    }
+
+    [Fact]
+    public void DynamicCompactionPlan_Elevated_AppliesTruncateOnlyWhenStaticTriggered()
+    {
+        var settings = new ContextCompactionSettings();
+        var conversation = Enumerable.Range(0, 30)
+            .Select(index => ChatMessage.Create(MessageRole.User, $"message-{index}"))
+            .ToList();
+        var estimated = ContextTokenEstimator.Estimate(conversation);
+        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, estimated, 0.6);
+
+        var plan = DynamicCompactionPlan.Create(
+            ContextPressureLevel.Elevated,
+            budget,
+            conversation,
+            settings,
+            force: false);
+
+        Assert.True(plan.ApplyTruncateArgs);
+        Assert.False(plan.ApplyPrefixReEvict);
+        Assert.False(plan.ApplyConversationCompact);
+    }
+
+    [Fact]
+    public void SemanticCutoffPlanner_BuildMustPreserveAppendix_IncludesUserMessages()
+    {
+        var settings = new ContextCompactionSettings();
+        var conversation = new[]
+        {
+            ChatMessage.Create(MessageRole.User, "Implement src/Foo.cs"),
+            ChatMessage.Create(MessageRole.Assistant, "ok"),
+            ChatMessage.Create(MessageRole.User, "latest"),
+            ChatMessage.Create(MessageRole.Assistant, "working")
+        };
+
+        var appendix = SemanticCutoffPlanner.BuildMustPreserveAppendix(conversation, settings, keepTokenBudget: 30);
+
+        Assert.NotNull(appendix);
+        Assert.Contains("<must_preserve>", appendix, StringComparison.Ordinal);
+        Assert.Contains("Foo.cs", appendix, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TokenEstimatorCalibrator_UpdatesMultiplierFromUsage()
+    {
+        var settings = new AppSettings
+        {
+            ContextCompaction = new ContextCompactionSettings
+            {
+                DynamicCompaction = new DynamicCompactionSettings { EnableUsageCalibration = true }
+            }
+        };
+        var calibrator = new TokenEstimatorCalibrator(settings);
+
+        calibrator.Observe("session-1", estimatedPromptTokens: 1000, actualPromptTokens: 2000);
+
+        Assert.True(calibrator.GetMultiplier("session-1") > 1.0);
+    }
+
+    [Fact]
+    public async Task PreCompletionPipeline_DynamicDisabled_UsesLegacyThresholds()
+    {
+        var settings = new AppSettings
+        {
+            ContextCompaction = new ContextCompactionSettings
+            {
+                TriggerMessages = 2,
+                KeepMessages = 1,
+                DynamicCompaction = new DynamicCompactionSettings { Enabled = false }
+            }
+        };
+
+        var session = AgentSession.Create("legacy")
+            .WithMessages(new[]
+            {
+                ChatMessage.Create(MessageRole.User, "one"),
+                ChatMessage.Create(MessageRole.Assistant, "two"),
+                ChatMessage.Create(MessageRole.User, "three")
+            });
+
+        var compactor = new FakeConversationCompactor(settings);
+        var pipeline = new PreCompletionPipeline(
+            compactor,
+            new TruncateArgsService(),
+            settings,
+            new NoOpLogger());
+
+        await pipeline.RunAsync(session, PreCompletionOptions.AgentLoop);
+
+        Assert.Equal(1, compactor.CallCount);
+    }
+
+    [Fact]
+    public void CompactionAuditDisplay_Parse_IncludesPressureAndUtilization()
+    {
+        var content = CompactionMessageContent.CreateConversationCompact(
+            1000,
+            500,
+            12,
+            "transcript.jsonl",
+            "summary body",
+            pressureLevel: ContextPressureLevel.Critical,
+            utilization: 0.91);
+
+        var display = CompactionAuditDisplay.Parse(content);
+
+        Assert.Contains("Critical", display.StrategySubtitle, StringComparison.Ordinal);
+        Assert.Contains("0.91", display.StrategySubtitle, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FileStorageService_RoundTripsCompactionMessage()
     {
         var root = Path.Combine(Path.GetTempPath(), "athlon-compact-rt", Guid.NewGuid().ToString("N"));
@@ -427,9 +569,7 @@ public sealed class CompactionTests
 
         public Task<ConversationCompactResult> CompactIfNeededAsync(
             AgentSession session,
-            CompactionKind kind,
-            bool force,
-            bool emitAudit,
+            CompactionExecutionRequest request,
             CancellationToken cancellationToken = default)
         {
             var conversation = session.Messages.Where(message => message.Role != MessageRole.Compaction).ToList();
@@ -439,7 +579,7 @@ public sealed class CompactionTests
                     conversation,
                     ContextTokenEstimator.Estimate(conversation, cfg.IncludeReasoningInModelContext),
                     cfg,
-                    force))
+                    request.Force))
             {
                 return Task.FromResult(new ConversationCompactResult(session, false));
             }

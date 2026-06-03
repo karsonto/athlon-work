@@ -55,8 +55,7 @@ public sealed record AgentSession(
     string? ActiveWorkspace,
     string? ActiveSkill,
     string? ModelName,
-    IReadOnlyList<ChatMessage> Messages,
-    AgentInteractionMode InteractionMode = AgentInteractionMode.Agent)
+    IReadOnlyList<ChatMessage> Messages)
 {
     public static AgentSession Create(string title = "New chat") =>
         new(
@@ -67,8 +66,7 @@ public sealed record AgentSession(
             null,
             null,
             null,
-            Array.Empty<ChatMessage>(),
-            AgentInteractionMode.Agent);
+            Array.Empty<ChatMessage>());
 
     public AgentSession WithMessage(ChatMessage message) => this with
     {
@@ -92,12 +90,6 @@ public sealed record AgentSession(
     {
         UpdatedAt = DateTimeOffset.UtcNow,
         Messages = messages.ToArray()
-    };
-
-    public AgentSession WithInteractionMode(AgentInteractionMode mode) => this with
-    {
-        InteractionMode = mode,
-        UpdatedAt = DateTimeOffset.UtcNow
     };
 }
 public sealed record ContextSummary(string Id, string SessionId, string Content, int OriginalMessageCount, DateTimeOffset CreatedAt);

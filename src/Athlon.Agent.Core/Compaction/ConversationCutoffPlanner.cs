@@ -67,13 +67,28 @@ public static class ConversationCutoffPlanner
     public static int DetermineCutoffIndex(
         IReadOnlyList<ChatMessage> messages,
         int estimatedTokens,
-        ContextCompactionSettings settings)
+        ContextCompactionSettings settings,
+        int? keepTokenBudgetOverride = null)
     {
-        var rawCutoff = settings.KeepTokens > 0
+        if (keepTokenBudgetOverride is > 0 && settings.DynamicCompaction.EnableSemanticCutoff)
+        {
+            return SemanticCutoffPlanner.DetermineCutoffIndex(messages, settings, keepTokenBudgetOverride.Value);
+        }
+
+        if (keepTokenBudgetOverride is > 0)
+        {
+            var rawCutoff = DetermineTruncateArgsCutoffFromKeepBudget(
+                messages,
+                keepTokenBudgetOverride.Value,
+                settings.IncludeReasoningInModelContext);
+            return FindSafeCutoffPoint(messages, rawCutoff);
+        }
+
+        var rawCutoffIndex = settings.KeepTokens > 0
             ? FindTokenBasedCutoff(messages, estimatedTokens, settings.KeepTokens, settings.IncludeReasoningInModelContext)
             : FindMessageBasedCutoff(messages, settings.KeepMessages);
 
-        return FindSafeCutoffPoint(messages, rawCutoff);
+        return FindSafeCutoffPoint(messages, rawCutoffIndex);
     }
 
     public static int DetermineTruncateArgsCutoff(
@@ -83,22 +98,35 @@ public static class ConversationCutoffPlanner
     {
         if (settings.KeepTokens > 0)
         {
-            var tokensKept = 0;
-            for (var i = messages.Count - 1; i >= 0; i--)
-            {
-                var messageTokens = ContextTokenEstimator.EstimateMessage(messages[i], includeReasoningInModelContext);
-                if (tokensKept + messageTokens > settings.KeepTokens)
-                {
-                    return i + 1;
-                }
-
-                tokensKept += messageTokens;
-            }
-
-            return 0;
+            return DetermineTruncateArgsCutoffFromKeepBudget(messages, settings.KeepTokens, includeReasoningInModelContext);
         }
 
         return Math.Max(0, messages.Count - settings.KeepMessages);
+    }
+
+    public static int DetermineTruncateArgsCutoffFromKeepBudget(
+        IReadOnlyList<ChatMessage> messages,
+        int keepTokenBudget,
+        bool includeReasoningInModelContext = false)
+    {
+        if (keepTokenBudget <= 0 || messages.Count == 0)
+        {
+            return messages.Count;
+        }
+
+        var tokensKept = 0;
+        for (var index = messages.Count - 1; index >= 0; index--)
+        {
+            var messageTokens = ContextTokenEstimator.EstimateMessage(messages[index], includeReasoningInModelContext);
+            if (tokensKept + messageTokens > keepTokenBudget)
+            {
+                return index + 1;
+            }
+
+            tokensKept += messageTokens;
+        }
+
+        return 0;
     }
 
     public static int FindSafeCutoffPoint(IReadOnlyList<ChatMessage> messages, int cutoffIndex)

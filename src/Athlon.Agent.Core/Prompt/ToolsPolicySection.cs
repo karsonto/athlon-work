@@ -1,5 +1,4 @@
 using System.Text;
-using Athlon.Agent.Core.Plan;
 
 namespace Athlon.Agent.Core.Prompt;
 
@@ -10,26 +9,8 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
         builder.AppendLine("Tools:");
-
-        if (context.InteractionMode == AgentInteractionMode.Plan)
-        {
-            builder.AppendLine(
-                "Native tools are provided via function calling (read-only file tools plus create_plan and get_plan for structured planning). "
-                + "create_plan accepts overview, optional architecture/mermaid/testing/out_of_scope, and subtasks with files[] and acceptance criteria. "
-                + "Use each tool's schema. Do not guess file contents.");
-        }
-        else if (context.ActivePlan?.Phase == PlanPhase.Approved)
-        {
-            builder.AppendLine(
-                "Native tools are provided via function calling (including get_plan and finish_subtask for the approved plan). "
-                + "Use each tool's schema. Do not guess file contents.");
-        }
-        else
-        {
-            builder.AppendLine(
-                "Native tools are provided via function calling. Use each tool's schema. Do not guess file contents.");
-        }
-
+        builder.AppendLine(
+            "Native tools are provided via function calling. Use each tool's schema. Do not guess file contents.");
         builder.AppendLine();
 
         var mcpTools = context.Tools.Where(IsMcpTool).ToArray();

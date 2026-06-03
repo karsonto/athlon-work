@@ -35,6 +35,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public event EventHandler? McpConfigurationChanged;
     public event EventHandler? SkillConfigurationChanged;
+    public event EventHandler? CompactionPreferenceChanged;
 
     private void OnMcpServerEnabledChanged() => McpConfigurationChanged?.Invoke(this, EventArgs.Empty);
 
@@ -180,6 +181,22 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         get => string.Join(Environment.NewLine, Settings.WorkspaceIgnore.DirectoryNames);
         set => Settings.WorkspaceIgnore.DirectoryNames = ParseIgnoreDirectoryLines(value);
+    }
+
+    public bool DynamicCompactionEnabled
+    {
+        get => Settings.ContextCompaction.DynamicCompaction.Enabled;
+        set
+        {
+            if (Settings.ContextCompaction.DynamicCompaction.Enabled == value)
+            {
+                return;
+            }
+
+            Settings.ContextCompaction.DynamicCompaction.Enabled = value;
+            OnPropertyChanged();
+            CompactionPreferenceChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private static int? ParseOptionalPositiveInt(string? text)

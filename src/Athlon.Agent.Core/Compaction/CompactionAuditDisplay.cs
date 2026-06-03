@@ -14,6 +14,8 @@ public static class CompactionAuditDisplay
         var legacyKind = string.Empty;
         var strategyToken = string.Empty;
         var layersToken = string.Empty;
+        var pressureToken = string.Empty;
+        var utilizationToken = string.Empty;
         var summary = string.Empty;
 
         foreach (var line in lines)
@@ -36,6 +38,18 @@ public static class CompactionAuditDisplay
                 continue;
             }
 
+            if (line.StartsWith("ContextPressure:", StringComparison.OrdinalIgnoreCase))
+            {
+                pressureToken = line["ContextPressure:".Length..].Trim();
+                continue;
+            }
+
+            if (line.StartsWith("ContextUtilization:", StringComparison.OrdinalIgnoreCase))
+            {
+                utilizationToken = line["ContextUtilization:".Length..].Trim();
+                continue;
+            }
+
             if (line.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
             {
                 summary = line["Summary:".Length..].Trim();
@@ -45,7 +59,7 @@ public static class CompactionAuditDisplay
         var strategy = ResolveStrategy(strategyToken, legacyKind);
         var layers = ParseLayers(layersToken, strategy);
         var cardTitle = GetCardTitle(strategy);
-        var subtitle = BuildStrategySubtitle(strategy, layers);
+        var subtitle = BuildStrategySubtitle(strategy, layers, pressureToken, utilizationToken);
 
         return new CompactionAuditDisplayInfo(
             cardTitle,
@@ -139,17 +153,24 @@ public static class CompactionAuditDisplay
 
     private static string BuildStrategySubtitle(
         CompactionStrategy strategy,
-        IReadOnlyList<CompactionLayer> layers)
+        IReadOnlyList<CompactionLayer> layers,
+        string pressureToken,
+        string utilizationToken)
     {
         var trigger = strategy switch
         {
             CompactionStrategy.ForceCompact => "触发：模型上下文超限后强制压缩",
             CompactionStrategy.ManualCompact => "触发：用户手动压缩",
-            _ => "触发：消息数 / Token 阈值",
+            _ => "触发：动态预算 / 消息数阈值",
         };
 
         var layerText = string.Join(" → ", layers.Select(GetLayerLabel));
-        return $"{trigger} · 层级：{layerText}";
+        var pressureText = string.IsNullOrWhiteSpace(pressureToken) ? null : $"压力 {pressureToken}";
+        var utilizationText = string.IsNullOrWhiteSpace(utilizationToken) ? null : $"利用率 {utilizationToken}";
+        var metrics = string.Join(" · ", new[] { pressureText, utilizationText }.Where(part => !string.IsNullOrWhiteSpace(part)));
+        return string.IsNullOrWhiteSpace(metrics)
+            ? $"{trigger} · 层级：{layerText}"
+            : $"{trigger} · {metrics} · 层级：{layerText}";
     }
 
     private static string GetLayerLabel(CompactionLayer layer) =>

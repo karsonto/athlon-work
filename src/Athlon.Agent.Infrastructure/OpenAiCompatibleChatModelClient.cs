@@ -187,7 +187,8 @@ public sealed class OpenAiCompatibleChatModelClient(
 
         var toolCalls = ParseToolCallsFromMessage(message);
         var reasoningContent = TryReadReasoningContent(message);
-        return NormalizeAssistantResponse(content, toolCalls, reasoningContent);
+        var usage = TryParseUsage(json.RootElement);
+        return NormalizeAssistantResponse(content, toolCalls, reasoningContent, usage);
     }
 
     private static async Task<AgentModelResponse> EmitParsedResponseAsync(
@@ -223,10 +224,36 @@ public sealed class OpenAiCompatibleChatModelClient(
     private static AgentModelResponse NormalizeAssistantResponse(
         string content,
         IReadOnlyList<AgentToolCall> toolCalls,
-        string? reasoningContent)
+        string? reasoningContent,
+        ModelUsage? usage = null)
     {
         var (normalizedContent, normalizedReasoning) = SplitEmbeddedThinkingContent(content, reasoningContent);
-        return new AgentModelResponse(normalizedContent, toolCalls, normalizedReasoning);
+        return new AgentModelResponse(normalizedContent, toolCalls, normalizedReasoning, usage);
+    }
+
+    private static ModelUsage? TryParseUsage(JsonElement root)
+    {
+        if (!root.TryGetProperty("usage", out var usageElement) || usageElement.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        int? promptTokens = usageElement.TryGetProperty("prompt_tokens", out var promptElement)
+                            && promptElement.TryGetInt32(out var promptValue)
+            ? promptValue
+            : null;
+        int? completionTokens = usageElement.TryGetProperty("completion_tokens", out var completionElement)
+                                && completionElement.TryGetInt32(out var completionValue)
+            ? completionValue
+            : null;
+        int? totalTokens = usageElement.TryGetProperty("total_tokens", out var totalElement)
+                           && totalElement.TryGetInt32(out var totalValue)
+            ? totalValue
+            : null;
+
+        return promptTokens is null && completionTokens is null && totalTokens is null
+            ? null
+            : new ModelUsage(promptTokens, completionTokens, totalTokens);
     }
 
     /// <summary>
@@ -320,6 +347,7 @@ public sealed class OpenAiCompatibleChatModelClient(
         var rawBuilder = new StringBuilder();
         var fallbackBuilder = new StringBuilder();
         var toolCalls = new Dictionary<int, StreamingToolCallState>();
+        ModelUsage? usage = null;
         var sawSseData = false;
         var idleTimeoutSeconds = Math.Max(1, settings.Model.StreamingIdleTimeoutSeconds);
 
@@ -367,6 +395,7 @@ public sealed class OpenAiCompatibleChatModelClient(
             }
 
             using var chunk = JsonDocument.Parse(data);
+            usage ??= TryParseUsage(chunk.RootElement);
             if (!chunk.RootElement.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array)
             {
                 continue;
@@ -471,7 +500,7 @@ public sealed class OpenAiCompatibleChatModelClient(
             .ToArray();
 
         var reasoningContent = reasoningBuilder.Length == 0 ? null : reasoningBuilder.ToString();
-        return NormalizeAssistantResponse(contentBuilder.ToString(), normalizedToolCalls, reasoningContent);
+        return NormalizeAssistantResponse(contentBuilder.ToString(), normalizedToolCalls, reasoningContent, usage);
     }
 
     private static async Task NotifyToolCallDeltaAsync(

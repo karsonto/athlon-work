@@ -16,7 +16,9 @@ public static class CompactionMessageContent
         string? transcriptPath,
         string summaryPreview,
         CompactionStrategy strategy = CompactionStrategy.ConversationCompact,
-        IReadOnlyList<CompactionLayer>? layers = null)
+        IReadOnlyList<CompactionLayer>? layers = null,
+        ContextPressureLevel? pressureLevel = null,
+        double? utilization = null)
     {
         var summary = string.IsNullOrWhiteSpace(summaryPreview)
             ? $"已将 {originalMessageCount} 条消息压缩为摘要并保留最近上下文。"
@@ -30,7 +32,9 @@ public static class CompactionMessageContent
             strategy,
             layers,
             originalMessageCount: originalMessageCount,
-            transcriptPath: transcriptPath);
+            transcriptPath: transcriptPath,
+            pressureLevel: pressureLevel,
+            utilization: utilization);
     }
 
     public static bool IsSummaryPlaceholder(string content) =>
@@ -81,7 +85,9 @@ public static class CompactionMessageContent
         int originalMessageCount,
         string transcriptPath,
         string summaryPreview,
-        IReadOnlyList<CompactionLayer>? layers = null) =>
+        IReadOnlyList<CompactionLayer>? layers = null,
+        ContextPressureLevel? pressureLevel = null,
+        double? utilization = null) =>
         Build(
             CompactionKind.ManualCompact,
             tokensBefore,
@@ -92,7 +98,9 @@ public static class CompactionMessageContent
             CompactionStrategy.ManualCompact,
             layers,
             originalMessageCount: originalMessageCount,
-            transcriptPath: transcriptPath);
+            transcriptPath: transcriptPath,
+            pressureLevel: pressureLevel,
+            utilization: utilization);
 
     public static ChatMessage CreateCompactionMessage(string content, string? parentId = null) =>
         ChatMessage.Create(MessageRole.Compaction, content, parentId);
@@ -107,7 +115,9 @@ public static class CompactionMessageContent
         int? clearedToolMessages = null,
         int? keepToolMessages = null,
         int? originalMessageCount = null,
-        string? transcriptPath = null)
+        string? transcriptPath = null,
+        ContextPressureLevel? pressureLevel = null,
+        double? utilization = null)
     {
         var builder = new StringBuilder();
         builder.AppendLine($"CompactionKind: {kind.ToString().ToLowerInvariant()}");
@@ -142,6 +152,16 @@ public static class CompactionMessageContent
         if (!string.IsNullOrWhiteSpace(transcriptPath))
         {
             builder.AppendLine($"TranscriptPath: {transcriptPath}");
+        }
+
+        if (pressureLevel is not null)
+        {
+            builder.AppendLine($"ContextPressure: {pressureLevel}");
+        }
+
+        if (utilization.HasValue)
+        {
+            builder.AppendLine($"ContextUtilization: {utilization.Value:0.###}");
         }
 
         builder.AppendLine();
