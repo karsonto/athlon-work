@@ -6,28 +6,23 @@ namespace Athlon.Agent.Tests;
 public sealed class SessionTurnQueuePolicyTests
 {
     [Fact]
-    public void HasQueuedTurns_BlocksPlanContinueUntilQueueEmpty()
+    public void HasQueuedTurns_ReturnsTrueWhenQueueNotEmpty()
     {
         var host = new SessionTurnHost(new NoOpOrchestrator(), new NoOpStorage(), new AppSettings());
-        var sessionId = "plan-session";
+        var sessionId = "queued-session";
         host.Enqueue(new QueuedTurnPayload("q1", sessionId, "next", Array.Empty<ImageAttachment>(), null!));
 
         Assert.True(host.HasQueuedTurns(sessionId));
-        Assert.False(ShouldSchedulePlanAutoContinue(host, sessionId));
     }
 
     [Fact]
-    public void HasQueuedTurns_AllowsPlanContinueWhenQueueEmpty()
+    public void HasQueuedTurns_ReturnsFalseWhenQueueEmpty()
     {
         var host = new SessionTurnHost(new NoOpOrchestrator(), new NoOpStorage(), new AppSettings());
-        var sessionId = "plan-empty";
+        var sessionId = "empty-session";
 
         Assert.False(host.HasQueuedTurns(sessionId));
-        Assert.True(ShouldSchedulePlanAutoContinue(host, sessionId));
     }
-
-    private static bool ShouldSchedulePlanAutoContinue(SessionTurnHost host, string sessionId) =>
-        !host.HasQueuedTurns(sessionId);
 
     private sealed class NoOpOrchestrator : IAgentOrchestrator
     {

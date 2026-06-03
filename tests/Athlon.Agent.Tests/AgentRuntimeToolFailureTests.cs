@@ -20,6 +20,7 @@ public sealed class AgentRuntimeToolFailureTests
             modelClient,
             storage,
             new ThrowingToolRouter(),
+            new NoOpPlanNotebook(),
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),

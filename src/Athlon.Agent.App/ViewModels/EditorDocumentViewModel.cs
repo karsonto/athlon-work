@@ -8,7 +8,7 @@ public sealed partial class EditorDocumentViewModel : ObservableObject
     private string _content = string.Empty;
     private string _savedContent = string.Empty;
 
-    public EditorDocumentViewModel(string filePath, string content, string? relativePath)
+    public EditorDocumentViewModel(string filePath, string content, string? relativePath, bool isReadOnly = false)
     {
         FilePath = filePath;
         RelativePath = relativePath;
@@ -16,6 +16,7 @@ public sealed partial class EditorDocumentViewModel : ObservableObject
         TabTitle = DisplayName;
         _content = content;
         _savedContent = content;
+        _isReadOnly = isReadOnly;
     }
 
     public string FilePath { get; }
@@ -38,6 +39,9 @@ public sealed partial class EditorDocumentViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isDirty;
+
+    [ObservableProperty]
+    private bool _isReadOnly;
 
     public void MarkSaved(string content)
     {

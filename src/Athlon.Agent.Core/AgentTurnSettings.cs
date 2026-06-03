@@ -3,7 +3,7 @@ namespace Athlon.Agent.Core;
 public sealed class AgentTurnSettings
 {
     /// <summary>
-    /// Single user-message agent loop timeout in minutes. Default 30.
+    /// Single user-message agent loop timeout in minutes. Default 0 (disabled).
     /// Set to <c>0</c> to disable the turn timeout. Positive values are clamped to 1–180.
     /// </summary>
     public int TimeoutMinutes { get; set; } = AgentTurnSettingsExtensions.DefaultTimeoutMinutes;
@@ -13,7 +13,7 @@ public static class AgentTurnSettingsExtensions
 {
     public const int MinTimeoutMinutes = 1;
     public const int MaxTimeoutMinutes = 180;
-    public const int DefaultTimeoutMinutes = 30;
+    public const int DefaultTimeoutMinutes = 0;
 
     public static bool HasTurnTimeout(this AgentTurnSettings? settings) =>
         ResolveTurnTimeout(settings).HasValue;

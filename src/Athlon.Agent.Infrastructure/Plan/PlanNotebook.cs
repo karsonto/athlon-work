@@ -42,14 +42,13 @@ public sealed class PlanNotebook(AppSettings settings, WorkspaceGuard workspaceG
                 input.ExpectedOutcome ?? string.Empty))
             .ToList();
 
-        subtasks[0].State = SubTaskState.InProgress;
-
         var previous = _plans.TryGetValue(sessionId, out var existing) ? existing.Name : null;
         var plan = new AgentPlan(
             request.Name.Trim(),
             request.Description?.Trim() ?? string.Empty,
             request.ExpectedOutcome?.Trim() ?? string.Empty,
-            subtasks);
+            subtasks,
+            PlanPhase.Draft);
 
         _plans[sessionId] = plan;
 
@@ -58,6 +57,47 @@ public sealed class PlanNotebook(AppSettings settings, WorkspaceGuard workspaceG
             : $"The current plan named '{previous}' is replaced by the newly created plan named '{plan.Name}'.";
 
         message += AppendSyncNote(SyncPlanFile(plan));
+        return new PlanOperationResult(true, message);
+    }
+
+    public PlanOperationResult ApprovePlan(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return new PlanOperationResult(false, "No active session.");
+        }
+
+        if (!_plans.TryGetValue(sessionId, out var plan))
+        {
+            return new PlanOperationResult(false, "There is no active plan. Call create_plan first.");
+        }
+
+        if (plan.Phase != PlanPhase.Draft)
+        {
+            return new PlanOperationResult(false, "The plan is already approved.");
+        }
+
+        var subtasks = plan.Subtasks.ToList();
+        if (subtasks.Count == 0)
+        {
+            return new PlanOperationResult(false, "The plan has no subtasks.");
+        }
+
+        foreach (var subtask in subtasks)
+        {
+            if (subtask.State is SubTaskState.InProgress or SubTaskState.Done)
+            {
+                subtask.State = SubTaskState.Todo;
+            }
+        }
+
+        subtasks[0].State = SubTaskState.InProgress;
+        var approved = new AgentPlan(plan.Name, plan.Description, plan.ExpectedOutcome, subtasks, PlanPhase.Approved);
+        _plans[sessionId] = approved;
+
+        var message =
+            $"Plan '{approved.Name}' approved. Subtask (at index 0) named '{subtasks[0].Name}' is now in progress.";
+        message += AppendSyncNote(SyncPlanFile(approved));
         return new PlanOperationResult(true, message);
     }
 
@@ -71,6 +111,13 @@ public sealed class PlanNotebook(AppSettings settings, WorkspaceGuard workspaceG
         if (!_plans.TryGetValue(sessionId, out var plan))
         {
             return new PlanOperationResult(false, "There is no active plan. Call create_plan first.");
+        }
+
+        if (plan.Phase != PlanPhase.Approved)
+        {
+            return new PlanOperationResult(
+                false,
+                "The plan is not approved yet. Review the plan and click Build before calling finish_subtask.");
         }
 
         var subtasks = plan.Subtasks.ToList();
@@ -116,7 +163,12 @@ public sealed class PlanNotebook(AppSettings settings, WorkspaceGuard workspaceG
                 $"Subtask (at index {subtaskIndex}) named '{current.Name}' is marked as done successfully.";
         }
 
-        _plans[sessionId] = new AgentPlan(plan.Name, plan.Description, plan.ExpectedOutcome, subtasks);
+        _plans[sessionId] = new AgentPlan(
+            plan.Name,
+            plan.Description,
+            plan.ExpectedOutcome,
+            subtasks,
+            plan.Phase);
         message += AppendSyncNote(SyncPlanFile(_plans[sessionId]));
         return new PlanOperationResult(true, message);
     }
@@ -135,6 +187,9 @@ public sealed class PlanNotebook(AppSettings settings, WorkspaceGuard workspaceG
 
         return PlanMarkdownFormatter.ToMarkdown(plan, detailed);
     }
+
+    public string? TryGetPlanFilePath() =>
+        TryGetPlanFilePath(out var path) ? path : null;
 
     public void Clear(string sessionId)
     {

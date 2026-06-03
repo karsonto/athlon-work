@@ -5,7 +5,7 @@ namespace Athlon.Agent.Tests;
 public sealed class AgentTurnSettingsTests
 {
     [Theory]
-    [InlineData(null, 30, true)]
+    [InlineData(null, 0, false)]
     [InlineData(0, 0, false)]
     [InlineData(-5, 0, false)]
     [InlineData(30, 30, true)]
@@ -32,11 +32,11 @@ public sealed class AgentTurnSettingsTests
     }
 
     [Fact]
-    public void DefaultSettings_UsesThirtyMinutes()
+    public void DefaultSettings_DisablesTurnTimeout()
     {
         var settings = new AgentTurnSettings();
-        Assert.True(settings.HasTurnTimeout());
-        Assert.Equal(30, settings.ResolveTurnTimeoutMinutes());
-        Assert.Equal(TimeSpan.FromMinutes(30), settings.ResolveTurnTimeout());
+        Assert.False(settings.HasTurnTimeout());
+        Assert.Equal(0, settings.ResolveTurnTimeoutMinutes());
+        Assert.Null(settings.ResolveTurnTimeout());
     }
 }

@@ -31,10 +31,15 @@ internal sealed class NoOpPlanNotebook : IPlanNotebook
     public PlanOperationResult CreatePlan(string sessionId, CreatePlanRequest request) =>
         new(false, "No plan notebook in test.");
 
+    public PlanOperationResult ApprovePlan(string sessionId) =>
+        new(false, "No plan notebook in test.");
+
     public PlanOperationResult FinishSubtask(string sessionId, int subtaskIndex, string outcome) =>
         new(false, "No plan notebook in test.");
 
     public string GetPlanMarkdown(string sessionId, bool detailed = true) => string.Empty;
+
+    public string? TryGetPlanFilePath() => null;
 
     public void Clear(string sessionId)
     {

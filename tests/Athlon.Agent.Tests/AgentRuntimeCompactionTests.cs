@@ -34,6 +34,8 @@ public sealed class AgentRuntimeCompactionTests
 
             new NoOpToolRouter(),
 
+            new NoOpPlanNotebook(),
+
             PromptTestHelpers.CreateStaticOrchestrator(),
 
             pipeline,

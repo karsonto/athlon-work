@@ -12,7 +12,7 @@ public sealed class PlanToolTests
         var sessionId = "plan-tool-session";
         var sessionContext = new ActiveAgentSessionContext();
         using var sessionScope = sessionContext.Enter(sessionId);
-        var router = CreateRouter(sessionContext: sessionContext);
+        var router = CreateRouter(sessionContext: sessionContext).Router;
 
         var create = await router.InvokeAsync(new ToolInvocation(
             "create_plan",
@@ -29,7 +29,7 @@ public sealed class PlanToolTests
         var get = await router.InvokeAsync(new ToolInvocation("get_plan", new Dictionary<string, string>()));
         Assert.True(get.Succeeded);
         Assert.Contains("Ship feature", get.Content ?? string.Empty, StringComparison.Ordinal);
-        Assert.Contains("[WIP]", get.Content ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain("[WIP]", get.Content ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -49,7 +49,7 @@ public sealed class PlanToolTests
             {
                 Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = root } }
             };
-            var router = CreateRouter(settings, root, sessionContext);
+            var (router, notebook) = CreateRouter(settings, root, sessionContext);
 
             await router.InvokeAsync(new ToolInvocation(
                 "create_plan",
@@ -60,6 +60,8 @@ public sealed class PlanToolTests
                     ["expected_outcome"] = "o",
                     ["subtasks"] = """[{"name":"One","description":"","expected_outcome":""},{"name":"Two","description":"","expected_outcome":""}]"""
                 }));
+
+            notebook.ApprovePlan(sessionId);
 
             var finish = await router.InvokeAsync(new ToolInvocation(
                 "finish_subtask",
@@ -80,7 +82,7 @@ public sealed class PlanToolTests
         }
     }
 
-    private static ToolRouter CreateRouter(
+    private static (ToolRouter Router, PlanNotebook Notebook) CreateRouter(
         AppSettings? settings = null,
         string? workspaceRoot = null,
         ActiveAgentSessionContext? sessionContext = null)
@@ -109,7 +111,7 @@ public sealed class PlanToolTests
             new GetPlanTool(notebook, sessionContext)
         ];
 
-        return new ToolRouter(tools);
+        return (new ToolRouter(tools), notebook);
     }
 
     private sealed class TestPathProvider(string rootPath) : IAppPathProvider

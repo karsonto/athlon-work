@@ -1,4 +1,6 @@
 using System.Text;
+using Athlon.Agent.Core;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Core;
@@ -7,11 +9,13 @@ namespace Athlon.Agent.Core;
 public sealed class AgentEnvironmentPromptBuilder(
     AppSettings settings,
     IAgentHostEnvironment host,
+    IPlanNotebook planNotebook,
     IEnumerable<IEnvironmentPromptSection> sections) : IAgentEnvironmentPromptBuilder
 {
     private readonly SystemPromptOrchestrator _orchestrator = new(
         settings,
         host,
+        planNotebook,
         sections,
         Array.Empty<IPreReasoningPromptContributor>());
 

@@ -8,7 +8,7 @@ namespace Athlon.Agent.Tests;
 public sealed class PlanNotebookTests
 {
     [Fact]
-    public void CreatePlan_SetsFirstSubtaskInProgress()
+    public void CreatePlan_KeepsSubtasksTodoAndDraftPhase()
     {
         var notebook = CreateNotebook();
         var result = notebook.CreatePlan(
@@ -22,8 +22,38 @@ public sealed class PlanNotebookTests
         Assert.True(result.Success);
         var plan = notebook.GetCurrent("session-1");
         Assert.NotNull(plan);
+        Assert.Equal(PlanPhase.Draft, plan.Phase);
+        Assert.All(plan.Subtasks, subtask => Assert.Equal(SubTaskState.Todo, subtask.State));
+    }
+
+    [Fact]
+    public void ApprovePlan_ActivatesFirstSubtask()
+    {
+        var notebook = CreateNotebook();
+        notebook.CreatePlan(
+            "session-1",
+            new CreatePlanRequest("Plan", "Desc", "Outcome", [new SubTaskInput("A", null, null), new SubTaskInput("B", null, null)]));
+
+        var approve = notebook.ApprovePlan("session-1");
+        Assert.True(approve.Success);
+
+        var plan = notebook.GetCurrent("session-1");
+        Assert.Equal(PlanPhase.Approved, plan!.Phase);
         Assert.Equal(SubTaskState.InProgress, plan.Subtasks[0].State);
         Assert.Equal(SubTaskState.Todo, plan.Subtasks[1].State);
+    }
+
+    [Fact]
+    public void FinishSubtask_RequiresApprovedPlan()
+    {
+        var notebook = CreateNotebook();
+        notebook.CreatePlan(
+            "session-1",
+            new CreatePlanRequest("Plan", "Desc", "Outcome", [new SubTaskInput("A", null, null), new SubTaskInput("B", null, null)]));
+
+        var fail = notebook.FinishSubtask("session-1", 0, "done early");
+        Assert.False(fail.Success);
+        Assert.Contains("approved", fail.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -37,6 +67,7 @@ public sealed class PlanNotebookTests
                 "Desc",
                 "Outcome",
                 [new SubTaskInput("A", null, null), new SubTaskInput("B", null, null)]));
+        notebook.ApprovePlan("session-1");
 
         var fail = notebook.FinishSubtask("session-1", 1, "done early");
         Assert.False(fail.Success);
@@ -50,6 +81,7 @@ public sealed class PlanNotebookTests
         notebook.CreatePlan(
             "session-1",
             new CreatePlanRequest("Plan", "Desc", "Outcome", [new SubTaskInput("A", null, null), new SubTaskInput("B", null, null)]));
+        notebook.ApprovePlan("session-1");
 
         var ok = notebook.FinishSubtask("session-1", 0, "A completed");
         Assert.True(ok.Success);
@@ -57,6 +89,7 @@ public sealed class PlanNotebookTests
         var plan = notebook.GetCurrent("session-1");
         Assert.Equal(SubTaskState.Done, plan!.Subtasks[0].State);
         Assert.Equal(SubTaskState.InProgress, plan.Subtasks[1].State);
+        Assert.Equal(PlanPhase.Approved, plan.Phase);
     }
 
     [Fact]
@@ -135,11 +168,47 @@ public sealed class PlanNotebookTests
             Assert.True(File.Exists(planPath));
             var content = File.ReadAllText(planPath);
             Assert.Contains("# Plan: Demo", content, StringComparison.Ordinal);
-            Assert.Contains("[WIP]", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("[WIP]", content, StringComparison.Ordinal);
         }
         finally
         {
             Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void TryGetPlanFilePath_ReturnsNullWithoutWorkspace()
+    {
+        var notebook = CreateNotebook();
+        Assert.Null(notebook.TryGetPlanFilePath());
+    }
+
+    [Fact]
+    public void TryGetPlanFilePath_ReturnsPlanMdPathWhenWorkspaceConfigured()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-plan-path", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            using var _ = SessionWorkspaceScope.Enter(root);
+            var settings = new AppSettings
+            {
+                Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = root } }
+            };
+            var notebook = new PlanNotebook(settings, CreateWorkspaceGuard(settings));
+
+            var path = notebook.TryGetPlanFilePath();
+
+            Assert.NotNull(path);
+            Assert.Equal(Path.Combine(root, "plan.md"), path);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
         }
     }
 

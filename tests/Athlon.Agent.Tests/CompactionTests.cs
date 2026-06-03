@@ -275,7 +275,8 @@ public sealed class CompactionTests
                     new[]
                     {
                         new AgentSubTask("step-a", "a", "a done") { State = SubTaskState.InProgress }
-                    }));
+                    },
+                    PlanPhase.Approved));
 
             var compactor = new ConversationCompactor(
                 settings,

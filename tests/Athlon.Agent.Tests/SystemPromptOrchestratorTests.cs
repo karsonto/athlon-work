@@ -26,6 +26,8 @@ public sealed class SystemPromptOrchestratorTests
             new BasePersonaSection(),
             new HostEnvironmentSection(),
             new WorkspacePolicySection(),
+            new PlanModePolicySection(),
+            new PlanExecutionPolicySection(),
             new WorkspaceFilesSection(),
             new FileToolsPolicySection(),
             new ToolsPolicySection(),
@@ -33,8 +35,8 @@ public sealed class SystemPromptOrchestratorTests
             new ProductGuidanceSection()
         ];
 
-        var orchestrator = new SystemPromptOrchestrator(settings, host, sections, Array.Empty<IPreReasoningPromptContributor>());
-        var legacy = new AgentEnvironmentPromptBuilder(settings, host, sections);
+        var orchestrator = new SystemPromptOrchestrator(settings, host, new NoOpPlanNotebook(), sections, Array.Empty<IPreReasoningPromptContributor>());
+        var legacy = new AgentEnvironmentPromptBuilder(settings, host, new NoOpPlanNotebook(), sections);
 
         var session = AgentSession.Create("orchestrator-parity");
         var tools = Array.Empty<ToolDefinition>();
@@ -80,7 +82,25 @@ public sealed class SystemPromptOrchestratorTests
     }
 
     [Fact]
-    public void PrepareForTurn_IncludesGranularPlanningAndAutoContinueGuidance()
+    public void PrepareForTurn_AgentMode_ExcludesPlanGuidance()
+    {
+        var host = new PromptTestHelpers.FakeHostEnvironment(
+            @"C:\Users\test\.athlon-agent\skills",
+            @"C:\Users\test\.athlon-agent");
+        var settings = new AppSettings
+        {
+            Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = @"C:\work\demo" } }
+        };
+        var orchestrator = PromptTestHelpers.CreateOrchestrator(host, settings);
+        var prompt = orchestrator.PrepareForTurn(AgentSession.Create("agent-mode"), Array.Empty<ToolDefinition>()).Text;
+
+        Assert.DoesNotContain("Plan mode (spec-first workflow)", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("create_plan", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("auto-send a continue instruction", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PrepareForTurn_PlanMode_IncludesSpecFirstAndBuildGuidance()
     {
         var host = new PromptTestHelpers.FakeHostEnvironment(
             @"C:\Users\test\.athlon-agent\skills",
@@ -88,15 +108,37 @@ public sealed class SystemPromptOrchestratorTests
         var settings = new AppSettings
         {
             Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = @"C:\work\demo" } },
-            Plan = new PlanSettings { AutoContinueEnabled = true, MaxSubtasks = 12 }
+            Plan = new PlanSettings { MaxSubtasks = 12 }
         };
         var orchestrator = PromptTestHelpers.CreateOrchestrator(host, settings);
-        var prompt = orchestrator.PrepareForTurn(AgentSession.Create("plan-guidance"), Array.Empty<ToolDefinition>()).Text;
+        var session = AgentSession.Create("plan-guidance").WithInteractionMode(AgentInteractionMode.Plan);
+        var prompt = orchestrator.PrepareForTurn(session, Array.Empty<ToolDefinition>()).Text;
 
-        Assert.Contains("granular subtasks", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Plan mode (spec-first workflow)", prompt, StringComparison.Ordinal);
+        Assert.Contains("Research first", prompt, StringComparison.Ordinal);
+        Assert.Contains("create_plan", prompt, StringComparison.Ordinal);
         Assert.Contains("up to 12", prompt, StringComparison.Ordinal);
-        Assert.Contains("auto-send a continue instruction", prompt, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("long tasks require create_plan with granular subtasks", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("click Build", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("auto-send a continue instruction", prompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PrepareForTurn_AgentModeWithApprovedPlan_IncludesExecutionGuidance()
+    {
+        var host = new PromptTestHelpers.FakeHostEnvironment(
+            @"C:\Users\test\.athlon-agent\skills",
+            @"C:\Users\test\.athlon-agent");
+        var notebook = new StubPlanNotebook();
+        var session = AgentSession.Create("exec-guidance");
+        notebook.SetPlan(
+            session.Id,
+            new AgentPlan("Ship", "D", "O", [new AgentSubTask("Step", "d", "o")], PlanPhase.Approved));
+
+        var orchestrator = PromptTestHelpers.CreateOrchestrator(host, planNotebook: notebook);
+        var prompt = orchestrator.PrepareForTurn(session, Array.Empty<ToolDefinition>()).Text;
+
+        Assert.Contains("Approved plan execution", prompt, StringComparison.Ordinal);
+        Assert.Contains("finish_subtask", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

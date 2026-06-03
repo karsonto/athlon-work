@@ -45,8 +45,6 @@ public sealed class PlanSettings
 {
     public int MaxSubtasks { get; set; } = 20;
     public string PlanFileName { get; set; } = "plan.md";
-    public bool AutoContinueEnabled { get; set; } = true;
-    public int MaxAutoContinueRounds { get; set; } = 20;
 }
 
 public sealed class PromptSettings

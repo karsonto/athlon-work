@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Core;
@@ -11,6 +12,7 @@ public sealed class AgentRuntime(
     IAgentModelClient modelClient,
     IFileStorageService storage,
     IToolRouter toolRouter,
+    IPlanNotebook planNotebook,
     ISystemPromptOrchestrator systemPromptOrchestrator,
     IPreCompletionPipeline preCompletionPipeline,
     IToolResultEvictor toolResultEvictor,
@@ -78,7 +80,8 @@ public sealed class AgentRuntime(
             session = session.WithMessage(userMessage);
             await PersistMessageAsync(session, userMessage, cancellationToken);
 
-            var tools = toolRouter.ListTools();
+            var plan = planNotebook.GetCurrent(session.Id);
+            var tools = PlanToolCatalog.FilterForSession(toolRouter.ListTools(), session.InteractionMode, plan);
             var frozenPrompt = systemPromptOrchestrator.PrepareForTurn(session, tools);
             var environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
             var modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);

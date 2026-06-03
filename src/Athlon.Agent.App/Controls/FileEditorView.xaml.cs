@@ -98,10 +98,21 @@ public partial class FileEditorView : UserControl
         var document = _editor?.ActiveDocument;
         if (ReferenceEquals(document, _loadedDocument))
         {
+            ApplyReadOnlyState();
             return;
         }
 
+        if (_loadedDocument is not null)
+        {
+            _loadedDocument.PropertyChanged -= OnActiveDocumentPropertyChanged;
+        }
+
         _loadedDocument = document;
+        if (_loadedDocument is not null)
+        {
+            _loadedDocument.PropertyChanged += OnActiveDocumentPropertyChanged;
+        }
+
         _suppressEditorChange = true;
         try
         {
@@ -113,16 +124,29 @@ public partial class FileEditorView : UserControl
                 return;
             }
 
-            CodeEditor.IsReadOnly = false;
             CodeEditor.Document.Text = document.Content;
             CodeEditor.SyntaxHighlighting = EditorSyntaxHighlighting.Resolve(document.FilePath);
             CodeEditor.TextArea.TextView.Redraw();
             CodeEditor.ScrollToHome();
+            ApplyReadOnlyState();
         }
         finally
         {
             _suppressEditorChange = false;
         }
+    }
+
+    private void OnActiveDocumentPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(EditorDocumentViewModel.IsReadOnly))
+        {
+            ApplyReadOnlyState();
+        }
+    }
+
+    private void ApplyReadOnlyState()
+    {
+        CodeEditor.IsReadOnly = _loadedDocument?.IsReadOnly ?? true;
     }
 
     private void OnCodeEditorTextChanged(object? sender, EventArgs e)

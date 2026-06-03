@@ -37,13 +37,14 @@ public sealed partial class FileEditorViewModel : ObservableObject
 
     public bool HasUnsavedChanges => Tabs.Any(tab => tab.IsDirty);
 
-    public async Task<bool> OpenFileAsync(string path, string? workspaceRoot)
+    public async Task<bool> OpenFileAsync(string path, string? workspaceRoot, bool readOnly = false)
     {
         var fullPath = Path.GetFullPath(path);
         var existing = Tabs.FirstOrDefault(tab =>
             string.Equals(tab.FilePath, fullPath, StringComparison.OrdinalIgnoreCase));
         if (existing is not null)
         {
+            existing.IsReadOnly = readOnly;
             ActiveDocument = existing;
             return true;
         }
@@ -60,10 +61,17 @@ public sealed partial class FileEditorViewModel : ObservableObject
         }
 
         var relative = TryGetRelativePath(workspaceRoot, result.FullPath);
-        var document = new EditorDocumentViewModel(result.FullPath, result.Content, relative);
+        var document = new EditorDocumentViewModel(result.FullPath, result.Content, relative, readOnly);
         Tabs.Add(document);
         ActiveDocument = document;
         return true;
+    }
+
+    public EditorDocumentViewModel? FindOpenDocument(string fullPath)
+    {
+        var normalized = Path.GetFullPath(fullPath);
+        return Tabs.FirstOrDefault(tab =>
+            string.Equals(tab.FilePath, normalized, StringComparison.OrdinalIgnoreCase));
     }
 
     [RelayCommand]

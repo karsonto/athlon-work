@@ -38,7 +38,6 @@ public partial class App : Application
             services.AddAthlonInfrastructure();
             StartupTrace("Infrastructure registered");
             services.AddSingleton(_ => new SessionUiCache(System.Windows.Threading.Dispatcher.CurrentDispatcher));
-            services.AddSingleton<PlanAutoContinueTracker>();
             services.AddSingleton<SessionTurnHost>();
             services.AddSingleton<ApplicationShutdownService>();
             services.AddSingleton<MainWindowViewModel>();

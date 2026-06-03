@@ -107,6 +107,7 @@ public sealed class SessionDiskLogTests
             modelClient,
             storage,
             new EmptyToolRouter(),
+            new NoOpPlanNotebook(),
             PromptTestHelpers.CreateStaticOrchestrator(),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),

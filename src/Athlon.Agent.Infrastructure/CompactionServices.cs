@@ -95,13 +95,16 @@ public sealed class ConversationCompactor(
         }
 
         var plan = planNotebook.GetCurrent(session.Id);
+        var includePlan = plan is { Phase: PlanPhase.Approved };
         var formatted = ConversationSummaryFormatter.FormatMessages(prefix);
         if (formatted.Length > cfg.MaxConversationCharsForSummary)
         {
             formatted = formatted[^cfg.MaxConversationCharsForSummary..];
         }
 
-        var planAppendix = CompactionPlanContextBuilder.BuildSummaryPromptAppendix(plan);
+        var planAppendix = includePlan
+            ? CompactionPlanContextBuilder.BuildSummaryPromptAppendix(plan)
+            : null;
         var promptBody = string.IsNullOrWhiteSpace(planAppendix)
             ? formatted
             : planAppendix + "\n\n<conversation_history>\n" + formatted + "\n</conversation_history>";
@@ -130,7 +133,9 @@ public sealed class ConversationCompactor(
             summary = "(Summarization failed: " + ex.Message + ")";
         }
 
-        summary = CompactionPlanContextBuilder.EnrichSummaryText(summary, plan);
+        summary = includePlan
+            ? CompactionPlanContextBuilder.EnrichSummaryText(summary, plan)
+            : summary;
         var summaryMessage = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath);
         var compactMessages = new List<ChatMessage>();
 

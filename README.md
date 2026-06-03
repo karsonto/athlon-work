@@ -87,7 +87,7 @@ The path is provided by `AppPathProvider` in `src/Athlon.Agent.Infrastructure/Co
 
 ### Agent turn timeout
 
-In `config/settings.json`, optional `AgentTurn.TimeoutMinutes` controls how long a single user message may run (agent tool loop included). Default is **30**; positive values are clamped to **1–180**. Set **`0`** to disable the turn timeout (no automatic stop for long agent loops). Example for a two-hour run:
+In `config/settings.json`, optional `AgentTurn.TimeoutMinutes` controls how long a single user message may run (agent tool loop included). Default is **`0`** (disabled — only user **Stop** ends the run). Positive values are clamped to **1–180**. Example for a two-hour run:
 
 ```json
 {
@@ -97,33 +97,30 @@ In `config/settings.json`, optional `AgentTurn.TimeoutMinutes` controls how long
 }
 ```
 
-Unlimited turn (only user **Stop** ends the run):
-
-```json
-{
-  "AgentTurn": {
-    "TimeoutMinutes": 0
-  }
-}
-```
-
 Changes apply on the next send after saving or editing the file (restart the app if settings were only changed on disk while running).
 
-### Plan auto-continue
+### Plan → Build → Execute (Cursor-style)
 
-When a turn ends (including turn timeout) and the session plan still has an **in-progress** subtask, Athlon may automatically start another turn with a continue instruction. User **Stop** does not trigger auto-continue. **Clear context** clears the in-memory plan and deletes `plan.md` in the active workspace.
+Use the **Plan** switch in the chat composer (to the right of the image upload button) to enter planning mode. You can switch at any time; the in-flight reply keeps the mode it started with.
+
+| Phase | UI | Tools | Behavior |
+|-------|-----|-------|----------|
+| **Draft** (Plan ON) | Plan switch; **Build** in plan editor when `plan.md` is open | Read-only file tools + `create_plan` / `get_plan` | Research and write a structured plan; no file writes, commands, or `finish_subtask` |
+| **Build** | Click **Build** in the plan editor header | — | Approves the plan, turns off Plan mode, switches to Agent, and automatically sends an execute instruction |
+| **Executing** (Agent + approved plan) | No Build button | Full Agent tools + `get_plan` / `finish_subtask` | Implement subtasks in order; continue manually by sending messages (no auto-continue) |
+
+`create_plan` writes a **Draft** plan (all subtasks `Todo`) and syncs `plan.md` when a workspace is configured. After a plan is created or updated, the app opens `plan.md` in the side editor for review (read-only in Plan mode). **Build** in the editor header is required before execution. To revise the plan, stay in Plan mode and call `create_plan` again (resets to Draft).
+
+**Clear context** clears the in-memory plan and deletes `plan.md`. Plan approval state is session memory only; reloading a session with an existing `plan.md` still requires **Build** before execution.
 
 ```json
 {
   "Plan": {
-    "AutoContinueEnabled": true,
-    "MaxAutoContinueRounds": 20,
-    "MaxSubtasks": 20
+    "MaxSubtasks": 20,
+    "PlanFileName": "plan.md"
   }
 }
 ```
-
-Long-running work should use `create_plan` with granular subtasks (see system prompt / README). `MaxAutoContinueRounds` limits how many automatic continue turns run after a single manual user message.
 
 ## Run
 
@@ -187,7 +184,9 @@ The agent sends an environment prompt that includes active workspace path and av
 - `file_edit`: replace exact on-disk text (auto-strips accidental `file_read` line prefixes); optional `replace_all`.
 - `grep_files`: search file contents in the workspace.
 - `glob_files`: find workspace files by glob pattern.
-- `execute_command`: runs via `cmd.exe /c`; default wait **3600s (1 hour)**, max **3600s** (`timeout` argument). Command timeout returns a tool failure and does **not** stop the agent turn. User **Stop** kills the command process tree. Subject to command deny-list rules. For runs longer than one hour, split work or raise `AgentTurn.TimeoutMinutes` / set it to `0` when appropriate.
+- `execute_command`: runs via `cmd.exe /c`; default wait **3600s (1 hour)**, max **3600s** (`timeout` argument). Command timeout returns a tool failure and does **not** stop the agent turn. User **Stop** kills the command process tree. Subject to command deny-list rules. For runs longer than one hour, split work or raise `AgentTurn.TimeoutMinutes` when a turn cap is configured.
+- **Plan mode only (Draft):** `create_plan`, `get_plan` — structured planning; syncs draft `plan.md`.
+- **After Build (approved plan):** `get_plan`, `finish_subtask` — track and complete subtasks during Agent execution.
 
 All file tools should respect workspace boundaries through `WorkspaceGuard`. Writes and edits create backups through `AtomicFile`.
 
@@ -219,7 +218,7 @@ Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
 }
 ```
 
-Compaction triggers when message count **or** estimated tokens reach thresholds. The effective token threshold is `max(triggerTokens, contextWindowTokens * compactTriggerRatio)` (default ratio **0.7**). When a session has an active plan, compaction injects a plan snapshot and incomplete subtasks into the summarization prompt and into the persisted summary placeholder for the model.
+Compaction triggers when message count **or** estimated tokens reach thresholds. The effective token threshold is `max(triggerTokens, contextWindowTokens * compactTriggerRatio)` (default ratio **0.7**). When a session has an **approved** plan, compaction injects a plan snapshot and incomplete subtasks into the summarization prompt and into the persisted summary placeholder for the model.
 
 By default, `includeReasoningInModelContext` is **false**: assistant thinking chains are shown in the UI and saved to `conversation.jsonl`, but are **not** sent back in API history (saves tokens). Set to `true` only if your model requires historical `reasoning_content`.
 

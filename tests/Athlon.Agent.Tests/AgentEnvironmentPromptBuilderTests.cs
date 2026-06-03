@@ -47,7 +47,7 @@ public sealed class AgentEnvironmentPromptBuilderTests
     }
 
     [Fact]
-    public void Build_WithWorkspace_IncludesPlanningGuidance()
+    public void Build_WithWorkspace_AgentMode_ExcludesPlanningGuidance()
     {
         var settings = new AppSettings
         {
@@ -59,10 +59,28 @@ public sealed class AgentEnvironmentPromptBuilderTests
 
         var prompt = builder.Build(AgentSession.Create("plan-test"), Array.Empty<ToolDefinition>());
 
-        Assert.Contains("Think through the user's goal", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Plan mode (spec-first workflow)", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("create_plan", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Build_WithWorkspace_PlanMode_IncludesPlanningGuidance()
+    {
+        var settings = new AppSettings
+        {
+            Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = @"C:\work\demo" } }
+        };
+        var builder = PromptTestHelpers.CreateBuilder(
+            new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
+            settings);
+
+        var prompt = builder.Build(
+            AgentSession.Create("plan-test").WithInteractionMode(AgentInteractionMode.Plan),
+            Array.Empty<ToolDefinition>());
+
+        Assert.Contains("Plan mode (spec-first workflow)", prompt, StringComparison.Ordinal);
         Assert.Contains("create_plan", prompt, StringComparison.Ordinal);
-        Assert.Contains("finish_subtask", prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("use file_write to create or refresh plan.md", prompt, StringComparison.Ordinal);
+        Assert.Contains("click Build", prompt, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

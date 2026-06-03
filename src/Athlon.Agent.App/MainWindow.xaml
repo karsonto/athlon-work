@@ -531,7 +531,58 @@
                         Background="{StaticResource Brush.AppBackground}"
                         BorderThickness="0"
                         Visibility="Collapsed">
-                    <controls:FileEditorView DataContext="{Binding FileEditor}" />
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0"
+                                Height="{x:Static app:AppLayoutMetrics.SplitPaneHeaderHeight}"
+                                Background="{StaticResource Brush.Chrome}"
+                                BorderBrush="{StaticResource Brush.Border}"
+                                BorderThickness="0,0,0,1"
+                                Padding="12,0,12,0">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ShowPlanBuildInEditor}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <Grid VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="Plan"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource Brush.SubtleText}"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0" />
+                                    <TextBlock Text="{Binding ActivePlanTitle}"
+                                               FontSize="13"
+                                               FontWeight="SemiBold"
+                                               VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        Command="{Binding BuildPlanCommand}"
+                                        Content="Build"
+                                        Padding="14,5"
+                                        FontSize="12"
+                                        FontWeight="SemiBold"
+                                        Style="{StaticResource GhostButtonStyle}"
+                                        ToolTip="审阅计划后点击 Build，将切换到 Agent 并开始执行" />
+                            </Grid>
+                        </Border>
+                        <controls:FileEditorView Grid.Row="1"
+                                                 DataContext="{Binding FileEditor}" />
+                    </Grid>
                 </Border>
 
                 <GridSplitter x:Name="EditorChatSplitter"
@@ -1353,25 +1404,35 @@
                             </Border>
                         </Popup>
                         <Grid Grid.Row="1" Margin="0,12,0,0">
-                            <Button Command="{Binding SelectImagesCommand}"
-                                    Style="{StaticResource ComposerIconButtonStyle}"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    Width="24"
-                                    Height="24"
-                                    FontSize="18"
-                                    FontWeight="SemiBold"
-                                    ToolTip="上传图片"
-                                    Foreground="{StaticResource Brush.SubtleText}">
-                                <TextBlock Text="+"
-                                           HorizontalAlignment="Center"
+                            <StackPanel Orientation="Horizontal"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center">
+                                <Button Command="{Binding SelectImagesCommand}"
+                                        Style="{StaticResource ComposerIconButtonStyle}"
+                                        Width="24"
+                                        Height="24"
+                                        FontSize="18"
+                                        FontWeight="SemiBold"
+                                        ToolTip="上传图片"
+                                        Foreground="{StaticResource Brush.SubtleText}">
+                                    <TextBlock Text="+"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Margin="0,-2,0,0" />
+                                </Button>
+                                <CheckBox IsChecked="{Binding IsPlanMode, Mode=TwoWay}"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          Margin="8,0,6,0"
+                                          ToolTip="Plan 模式：先调研并生成可审阅的实现计划。可随时切换；进行中的回复不受影响，下一条消息生效。" />
+                                <TextBlock Text="Plan"
+                                           FontSize="12"
                                            VerticalAlignment="Center"
-                                           Margin="0,-2,0,0" />
-                            </Button>
+                                           Foreground="{StaticResource Brush.SubtleText}" />
+                            </StackPanel>
                             <TextBlock Text="Enter 发送 · Shift+Enter 换行"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        FontSize="12"
-                                       Margin="34,0,0,0"
+                                       Margin="170,0,0,0"
                                        VerticalAlignment="Center" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button Command="{Binding StopCommand}"

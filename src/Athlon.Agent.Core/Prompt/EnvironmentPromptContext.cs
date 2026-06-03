@@ -1,5 +1,7 @@
 namespace Athlon.Agent.Core.Prompt;
 
+using Athlon.Agent.Core.Plan;
+
 public sealed class EnvironmentPromptContext
 {
     public required AgentSession Session { get; init; }
@@ -18,9 +20,11 @@ public sealed class EnvironmentPromptContext
 
     public required PromptSettings PromptSettings { get; init; }
 
-    public bool PlanAutoContinueEnabled { get; init; }
-
     public int PlanMaxSubtasks { get; init; } = 20;
+
+    public AgentInteractionMode InteractionMode { get; init; } = AgentInteractionMode.Agent;
+
+    public AgentPlan? ActivePlan { get; init; }
 
     public bool HasWorkspace => !string.IsNullOrWhiteSpace(WorkspaceRoot);
 }
