@@ -41,44 +41,6 @@ public static class CompactionMessageContent
         content.StartsWith(ConversationCompactionDefaults.SummaryMessageMarker, StringComparison.Ordinal)
         || IsCompressedPlaceholder(content);
 
-    [Obsolete("Microcompact removed; kept for legacy audit parsing.")]
-    public static string CreateMicrocompact(
-        int tokensBefore,
-        int tokensAfter,
-        int clearedToolMessages,
-        int keepToolMessages)
-    {
-        var summary =
-            $"已清理 {clearedToolMessages} 条较早的工具输出，保留最近 {keepToolMessages} 条完整内容。";
-        return Build(
-            CompactionKind.Microcompact,
-            tokensBefore,
-            tokensAfter,
-            summary,
-            clearedToolMessages: clearedToolMessages,
-            keepToolMessages: keepToolMessages);
-    }
-
-    public static string CreateAutoCompact(
-        int tokensBefore,
-        int tokensAfter,
-        int originalMessageCount,
-        string transcriptPath,
-        string summaryPreview)
-    {
-        var summary = string.IsNullOrWhiteSpace(summaryPreview)
-            ? $"已将 {originalMessageCount} 条消息压缩为摘要。"
-            : summaryPreview.Trim();
-
-        return Build(
-            CompactionKind.AutoCompact,
-            tokensBefore,
-            tokensAfter,
-            summary,
-            originalMessageCount: originalMessageCount,
-            transcriptPath: transcriptPath);
-    }
-
     public static string CreateManualCompact(
         int tokensBefore,
         int tokensAfter,
@@ -112,8 +74,6 @@ public static class CompactionMessageContent
         string summary,
         CompactionStrategy? strategy = null,
         IReadOnlyList<CompactionLayer>? layers = null,
-        int? clearedToolMessages = null,
-        int? keepToolMessages = null,
         int? originalMessageCount = null,
         string? transcriptPath = null,
         ContextPressureLevel? pressureLevel = null,
@@ -133,16 +93,6 @@ public static class CompactionMessageContent
 
         builder.AppendLine($"TokensBefore: {tokensBefore}");
         builder.AppendLine($"TokensAfter: {tokensAfter}");
-
-        if (clearedToolMessages.HasValue)
-        {
-            builder.AppendLine($"ClearedToolMessages: {clearedToolMessages.Value}");
-        }
-
-        if (keepToolMessages.HasValue)
-        {
-            builder.AppendLine($"KeepToolMessages: {keepToolMessages.Value}");
-        }
 
         if (originalMessageCount.HasValue)
         {

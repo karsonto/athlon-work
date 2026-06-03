@@ -1371,30 +1371,11 @@
                                                VerticalAlignment="Center"
                                                Margin="0,-2,0,0" />
                                 </Button>
-                                <CheckBox IsChecked="{Binding Settings.DynamicCompactionEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                          Style="{StaticResource CompactionToggleSwitchStyle}"
-                                          Margin="8,0,6,0"
-                                          ToolTip="动态压缩：按窗口利用率递进 truncate / 摘要。关闭则使用固定阈值（静态压缩）。切换后对下一条消息生效，并自动保存偏好。" />
-                                <TextBlock Text="动态"
-                                           FontSize="12"
-                                           FontWeight="SemiBold"
-                                           VerticalAlignment="Center">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="{StaticResource Brush.SubtleText}" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Settings.DynamicCompactionEnabled}" Value="True">
-                                                    <Setter Property="Foreground" Value="{StaticResource Brush.Success}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
                             </StackPanel>
                             <TextBlock Text="Enter 发送 · Shift+Enter 换行"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        FontSize="12"
-                                       Margin="150,0,0,0"
+                                       Margin="32,0,0,0"
                                        VerticalAlignment="Center" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button Command="{Binding StopCommand}"
@@ -1478,24 +1459,21 @@
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
                             <TextBlock Text="上下文压缩" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-                            <TextBlock Text="每次调用模型前，根据上下文压力自动 truncate、归档工具结果或 LLM 摘要。"
+                            <TextBlock Text="每次调用模型前，根据上下文压力自动 truncate、归档工具结果或 LLM 摘要。默认启用动态策略（预算感知，目标窗口利用率约 80%）；静态阈值作为下限。"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12"
-                                       Margin="0,0,0,14" />
-                            <CheckBox IsChecked="{Binding Settings.DynamicCompactionEnabled, UpdateSourceTrigger=PropertyChanged}"
-                                      Content="启用动态压缩（预算感知 + 压力分级）"
-                                      Margin="0,0,0,8" />
+                                       Margin="0,0,0,10" />
                             <TextBlock Foreground="{StaticResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12">
-                                <Run Text="开启：" />
-                                <Run Text="按 system prompt、工具 schema 与对话历史估算窗口利用率，递进压缩。" />
+                                <Run Text="在 " />
+                                <Run Text="{Binding Settings.SettingsConfigPath, Mode=OneWay}" />
+                                <Run Text=" 的 contextCompaction.dynamicCompaction 中配置。设为 " />
+                                <Run Text="&quot;enabled&quot;: false" FontFamily="Consolas" />
+                                <Run Text=" 可切换为纯静态阈值（triggerMessages / triggerTokens 等）。" />
                                 <LineBreak />
-                                <Run Text="关闭：" />
-                                <Run Text="使用固定消息数 / Token 阈值（静态压缩）。" />
-                                <LineBreak />
-                                <Run Text="修改后立即对下一次对话生效；聊天区「动态」开关或此处勾选都会自动保存。" />
+                                <Run Text="修改配置文件后需重启应用生效。" />
                             </TextBlock>
                         </StackPanel>
                     </Border>

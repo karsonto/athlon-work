@@ -167,19 +167,21 @@ All file tools should respect workspace boundaries through `WorkspaceGuard`. Wri
 
 ## Context Compression
 
-Before each model call, `PreCompletionPipeline` runs a **dynamic budget-aware** compaction orchestrator (when `contextCompaction.dynamicCompaction.enabled` is true). It estimates the full prompt footprint — system prompt, tools schema, output reservation, safety margin, and conversation history — then applies progressive actions by pressure level:
+Before each model call, `PreCompletionPipeline` runs a **budget-aware parameter adjuster** (when `contextCompaction.dynamicCompaction.enabled` is true). Dynamic mode does **not** define a separate strategy — it keeps the static layers below and auto-tunes their effective triggers and keep windows from a single target: **`targetUtilization` (default 0.80 = 80% of the usable context window)**. System prompt, tools schema, output reservation, and safety margin are subtracted first; the adjuster then decides when to act and how much history to keep so the full prompt stays near that ceiling.
 
-| Pressure | Utilization (default) | Actions |
-|----------|----------------------|---------|
-| Normal | &lt; 0.55 | none |
-| Elevated | 0.55–0.72 | truncateArgs (dynamic keep suffix) |
-| High | 0.72–0.88 | truncateArgs + prefix re-evict (tighten archived tool previews) |
-| Critical | ≥ 0.88 | truncateArgs + re-evict + LLM conversation compact |
-| Overflow | API `context_length` error | force compact with smaller keep ratio + retry once |
+| Pressure | Utilization vs target (default 80%) | Actions (same static layers, adjusted params) |
+|----------|-------------------------------------|------------------------------------------------|
+| Normal | &lt; ~55% absolute | none unless static thresholds fire |
+| Elevated | ~55–72% absolute | none unless static thresholds fire |
+| High | ≥ 72% (= target × 0.90) | truncateArgs + optional prefix re-evict |
+| Critical | ≥ 80% (= target) | truncateArgs + re-evict + LLM conversation compact |
+| Overflow | API `context_length` error | force compact at target × 0.50 keep + retry once |
 
-When dynamic compaction is disabled, behavior falls back to the static thresholds below.
+Static thresholds always remain a **floor** — dynamic never compacts later than static when history is already long enough. When system/tools overhead is large, budget-aware triggers can act **earlier** so the window still approaches ~80% instead of waiting for message-count limits alone.
 
-Legacy static layers (still used as secondary triggers and when dynamic compaction is off):
+When dynamic compaction is disabled, only the static thresholds below apply.
+
+Static layers:
 
 1. **truncateArgs** (non-LLM): when history reaches the truncate threshold (default: 25 messages / 40k estimated tokens), clips large tool argument strings on assistant messages outside the keep window (default: last 20 messages, max arg length 2000).
 2. **conversation compact**: when history reaches the compact threshold (default: 50 messages / 80k estimated tokens), archives the session to `sessions/<sessionId>/transcripts/transcript_<unix>.jsonl`, summarizes the prefix, then replaces it with an optional `Compaction` audit message plus a summary user placeholder (`__compaction_summary__`) and the preserved tail. Cutoff uses keep windows and never splits assistant/tool pairs. Semantic cutoff can inject `<must_preserve>` hints into the summary prompt for high-scoring prefix messages (user goals, file paths, write/edit commands).
@@ -206,25 +208,20 @@ Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
   "toolResultEviction": { "maxResultChars": 80000, "previewChars": 2000 },
   "dynamicCompaction": {
     "enabled": true,
+    "targetUtilization": 0.80,
     "safetyMarginRatio": 0.08,
     "defaultReservedOutputTokens": 8192,
-    "elevatedUtilization": 0.55,
-    "highUtilization": 0.72,
-    "criticalUtilization": 0.88,
-    "keepRatioElevated": 0.45,
-    "keepRatioCritical": 0.35,
-    "keepRatioOverflow": 0.25,
+    "truncateLeadRatio": 0.90,
+    "overflowKeepRatio": 0.50,
     "enableSemanticCutoff": true,
     "enableUsageCalibration": true
   }
 }
 ```
 
-Compaction triggers when message count **or** estimated utilization/token thresholds are reached. With dynamic compaction enabled, utilization is `estimatedHistory / historyBudget` where history budget subtracts system prompt, tools schema, output reservation, and safety margin from the context window. The static token threshold remains `max(triggerTokens, contextWindowTokens * compactTriggerRatio)` when dynamic compaction is disabled.
+Compaction triggers when message count **or** estimated token thresholds are reached. With dynamic compaction enabled, pressure uses `TotalUtilization = (system + tools + margin + history) / (contextWindow − reservedOutput)`; static thresholds remain the floor. When dynamic compaction is disabled, the compact token threshold is `max(triggerTokens, contextWindowTokens × compactTriggerRatio)`.
 
 By default, `includeReasoningInModelContext` is **false**: assistant thinking chains are shown in the UI and saved to `conversation.jsonl`, but are **not** sent back in API history (saves tokens). Set to `true` only if your model requires historical `reasoning_content`.
-
-Legacy fields (`microcompactKeepToolMessages`, `autoCompactThresholdRatio`, etc.) are ignored after migration.
 
 ## Session Disk Logs
 

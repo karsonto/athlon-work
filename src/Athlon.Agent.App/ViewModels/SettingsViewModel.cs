@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
@@ -35,7 +36,6 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public event EventHandler? McpConfigurationChanged;
     public event EventHandler? SkillConfigurationChanged;
-    public event EventHandler? CompactionPreferenceChanged;
 
     private void OnMcpServerEnabledChanged() => McpConfigurationChanged?.Invoke(this, EventArgs.Empty);
 
@@ -71,6 +71,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public AppSettings Settings { get; }
     public string McpConfigPath => McpConfigFileService.GetPath(_paths);
+    public string SettingsConfigPath => Path.Combine(_paths.ConfigPath, "settings.json");
     public string SkillsDirectoryPath => _paths.SkillsPath;
     public string SkillsConfigPath => SkillConfigFileService.GetPath(_paths);
     public string SkillsSettingsDescription =>
@@ -181,22 +182,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         get => string.Join(Environment.NewLine, Settings.WorkspaceIgnore.DirectoryNames);
         set => Settings.WorkspaceIgnore.DirectoryNames = ParseIgnoreDirectoryLines(value);
-    }
-
-    public bool DynamicCompactionEnabled
-    {
-        get => Settings.ContextCompaction.DynamicCompaction.Enabled;
-        set
-        {
-            if (Settings.ContextCompaction.DynamicCompaction.Enabled == value)
-            {
-                return;
-            }
-
-            Settings.ContextCompaction.DynamicCompaction.Enabled = value;
-            OnPropertyChanged();
-            CompactionPreferenceChanged?.Invoke(this, EventArgs.Empty);
-        }
     }
 
     private static int? ParseOptionalPositiveInt(string? text)

@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace Athlon.Agent.Core.Compaction;
 
 public sealed class ContextCompactionSettings
@@ -39,22 +37,6 @@ public sealed class ContextCompactionSettings
     public ToolResultEvictionSettings ToolResultEviction { get; set; } = new();
 
     public DynamicCompactionSettings DynamicCompaction { get; set; } = new();
-
-    // Legacy settings (ignored after migration; kept for deserialization compatibility)
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public double? AutoCompactThresholdRatio { get; set; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public double? MicrocompactAggressiveRatio { get; set; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? MicrocompactKeepToolMessages { get; set; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? MicrocompactKeepToolMessagesAggressive { get; set; }
-
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public int? MicrocompactMinContentLength { get; set; }
 }
 
 public sealed class TruncateArgsSettings

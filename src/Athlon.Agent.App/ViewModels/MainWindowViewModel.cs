@@ -66,7 +66,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Settings = new SettingsViewModel(settings, _mcpRegistry, skillCatalog, paths);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
-        Settings.CompactionPreferenceChanged += (_, _) => _ = PersistCompactionPreferenceAsync();
         Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
         FileEditor = new FileEditorViewModel(workspaceFileEditorService);
         FileEditor.Tabs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasOpenEditorTabs));
@@ -338,18 +337,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     private Task PersistUiLayoutAsync() => _storage.SaveSettingsAsync(_appSettings);
-
-    private async Task PersistCompactionPreferenceAsync()
-    {
-        try
-        {
-            await _storage.SaveSettingsAsync(_appSettings);
-        }
-        catch (Exception ex)
-        {
-            SettingsStatus = $"保存压缩偏好失败: {ex.Message}";
-        }
-    }
 
     public Task PersistUiLayoutForSidebarAsync() => PersistUiLayoutAsync();
 

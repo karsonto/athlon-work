@@ -2,6 +2,14 @@ namespace Athlon.Agent.Core.Compaction;
 
 public static class ContextPressureEvaluator
 {
+    /// <summary>Utilization at which truncateArgs / prefix re-evict may begin (budget-adjusted).</summary>
+    public static double ResolveTruncateThreshold(DynamicCompactionSettings settings) =>
+        settings.TargetUtilization * settings.TruncateLeadRatio;
+
+    /// <summary>Utilization at which conversation compact may begin (budget-adjusted).</summary>
+    public static double ResolveCompactThreshold(DynamicCompactionSettings settings) =>
+        settings.TargetUtilization;
+
     public static ContextPressureLevel Evaluate(
         ContextBudgetSnapshot budget,
         DynamicCompactionSettings settings,
@@ -12,19 +20,20 @@ public static class ContextPressureEvaluator
             return ContextPressureLevel.Overflow;
         }
 
-        var totalUtilization = budget.TotalUtilization;
+        var utilization = budget.TotalUtilization;
+        var target = settings.TargetUtilization;
 
-        if (totalUtilization >= settings.CriticalUtilization)
+        if (utilization >= target)
         {
             return ContextPressureLevel.Critical;
         }
 
-        if (totalUtilization >= settings.HighUtilization)
+        if (utilization >= ResolveTruncateThreshold(settings))
         {
             return ContextPressureLevel.High;
         }
 
-        if (totalUtilization >= settings.ElevatedUtilization)
+        if (utilization >= target * 0.6875)
         {
             return ContextPressureLevel.Elevated;
         }
@@ -32,26 +41,23 @@ public static class ContextPressureEvaluator
         return ContextPressureLevel.Normal;
     }
 
-    public static double ResolveKeepRatio(ContextPressureLevel pressure, DynamicCompactionSettings settings) =>
-        pressure switch
-        {
-            ContextPressureLevel.Overflow => settings.KeepRatioOverflow,
-            ContextPressureLevel.Critical => settings.KeepRatioCritical,
-            ContextPressureLevel.High => settings.KeepRatioElevated,
-            ContextPressureLevel.Elevated => settings.KeepRatioElevated,
-            _ => settings.KeepRatioElevated
-        };
-
+    /// <summary>
+    /// History keep budget derived from the target window fill minus fixed overhead,
+    /// never below the static keepTokens / keepMessages floor.
+    /// </summary>
     public static int ResolveKeepTokenBudget(
         ContextBudgetSnapshot budget,
         ContextPressureLevel pressure,
         IReadOnlyList<ChatMessage> conversation,
         ContextCompactionSettings settings)
     {
-        var dynamicKeep = Math.Max(
-            512,
-            (int)Math.Floor(budget.HistoryBudget * ResolveKeepRatio(pressure, settings.DynamicCompaction)));
+        var dynamic = settings.DynamicCompaction;
         var staticKeep = ResolveStaticKeepTokenBudget(conversation, settings);
+
+        var keepTargetUtil = ResolveKeepTargetUtilization(pressure, dynamic);
+        var targetHistory = (int)Math.Floor(keepTargetUtil * budget.UsablePromptWindow - budget.FixedOverhead);
+        var dynamicKeep = Math.Max(512, targetHistory);
+
         return Math.Max(dynamicKeep, staticKeep);
     }
 
@@ -72,7 +78,7 @@ public static class ContextPressureEvaluator
             return true;
         }
 
-        return budget.TotalUtilization >= settings.DynamicCompaction.HighUtilization;
+        return budget.TotalUtilization >= ResolveTruncateThreshold(settings.DynamicCompaction);
     }
 
     public static bool ShouldApplyPrefixReEvict(
@@ -88,7 +94,7 @@ public static class ContextPressureEvaluator
         }
 
         return ShouldApplyTruncateArgs(budget, conversation, settings, pressure, force)
-            && budget.TotalUtilization >= settings.DynamicCompaction.HighUtilization;
+            && budget.TotalUtilization >= ResolveTruncateThreshold(settings.DynamicCompaction);
     }
 
     public static bool ShouldCompact(
@@ -114,7 +120,7 @@ public static class ContextPressureEvaluator
             return true;
         }
 
-        return budget.TotalUtilization >= settings.DynamicCompaction.CriticalUtilization;
+        return budget.TotalUtilization >= ResolveCompactThreshold(settings.DynamicCompaction);
     }
 
     public static bool MeetsStaticTruncateThreshold(
@@ -135,6 +141,16 @@ public static class ContextPressureEvaluator
         var estimated = ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
         return ConversationCutoffPlanner.ShouldCompact(conversation, estimated, settings, force: false);
     }
+
+    private static double ResolveKeepTargetUtilization(
+        ContextPressureLevel pressure,
+        DynamicCompactionSettings settings) =>
+        pressure switch
+        {
+            ContextPressureLevel.Overflow =>
+                settings.TargetUtilization * settings.OverflowKeepRatio,
+            _ => settings.TargetUtilization
+        };
 
     private static int ResolveStaticKeepTokenBudget(
         IReadOnlyList<ChatMessage> conversation,

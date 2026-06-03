@@ -398,7 +398,7 @@ public sealed class CompactionTests
         Assert.False(ContextPressureEvaluator.MeetsStaticCompactThreshold(conversation, settings));
 
         var budget = new ContextBudgetSnapshot(256_000, 8192, 60_000, 120_000, estimated, 0.9);
-        Assert.True(budget.TotalUtilization >= settings.DynamicCompaction.CriticalUtilization);
+        Assert.True(budget.TotalUtilization >= settings.DynamicCompaction.TargetUtilization);
 
         var plan = DynamicCompactionPlan.Create(
             ContextPressureEvaluator.Evaluate(budget, settings.DynamicCompaction),
@@ -424,6 +424,46 @@ public sealed class CompactionTests
             settings);
 
         Assert.True(keep >= 80_000);
+    }
+
+    [Fact]
+    public void ResolveKeepTokenBudget_TargetsWindowFillAtEightyPercent()
+    {
+        var settings = new ContextCompactionSettings();
+        var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
+        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
+
+        var keep = ContextPressureEvaluator.ResolveKeepTokenBudget(
+            budget,
+            ContextPressureLevel.High,
+            conversation,
+            settings);
+
+        var expected = (int)Math.Floor(
+            settings.DynamicCompaction.TargetUtilization * budget.UsablePromptWindow - budget.FixedOverhead);
+
+        Assert.Equal(expected, keep);
+    }
+
+    [Fact]
+    public void ResolveKeepTokenBudget_OverflowUsesReducedTarget()
+    {
+        var settings = new ContextCompactionSettings();
+        var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
+        var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
+        var dynamic = settings.DynamicCompaction;
+
+        var keep = ContextPressureEvaluator.ResolveKeepTokenBudget(
+            budget,
+            ContextPressureLevel.Overflow,
+            conversation,
+            settings);
+
+        var expected = (int)Math.Floor(
+            dynamic.TargetUtilization * dynamic.OverflowKeepRatio * budget.UsablePromptWindow
+            - budget.FixedOverhead);
+
+        Assert.Equal(Math.Max(512, expected), keep);
     }
 
     [Fact]
