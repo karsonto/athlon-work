@@ -5,17 +5,40 @@ namespace Athlon.Agent.Infrastructure.Plan;
 
 public sealed class CreatePlanTool(IPlanNotebook planNotebook, IActiveAgentSessionContext sessionContext) : IAgentTool
 {
+    private const string SubtasksExample =
+        """
+        [
+          {
+            "name": "Extend plan schema",
+            "description": "Add overview, architecture, mermaid, and files[] to create_plan in src/Athlon.Agent.Core/Plan and Infrastructure/Plan.",
+            "expected_outcome": "create_plan accepts rich fields; PlanNotebook validates min lengths; plan.md renders Cursor-style sections.",
+            "files": ["src/Athlon.Agent.Core/Plan/AgentPlan.cs", "src/Athlon.Agent.Infrastructure/Plan/CreatePlanTool.cs"]
+          },
+          {
+            "name": "Update prompts and tests",
+            "description": "Refresh PlanModePolicySection with a full example; fix PlanNotebookTests and PlanToolTests fixtures to meet min length.",
+            "expected_outcome": "dotnet test passes for plan-related tests.",
+            "files": ["src/Athlon.Agent.Core/Prompt/PlanModePolicySection.cs", "tests/Athlon.Agent.Tests/PlanNotebookTests.cs"]
+          }
+        ]
+        """;
+
     public ToolDefinition Definition { get; } = new(
         "create_plan",
-        "Create a plan with ordered sub-tasks for multi-step work. Replaces any existing session plan.",
+        "Create a detailed implementation plan (Cursor-style spec). Replaces any existing session plan. "
+        + "Use after researching the codebase. Each subtask needs concrete files and measurable acceptance.",
         new Dictionary<string, string>
         {
-            ["name"] = "Concise plan name (about 10 words or fewer)",
-            ["description"] = "Plan description: constraints, target, measurable outcome",
-            ["expected_outcome"] = "Expected outcome of the full plan",
-            ["subtasks"] =
-                "JSON array of subtask objects with name (required), description, expected_outcome. "
-                + "Example: [{\"name\":\"Step 1\",\"description\":\"...\",\"expected_outcome\":\"...\"}]"
+            ["name"] = "Short plan title",
+            ["description"] = "One-sentence summary for quick reference",
+            ["expected_outcome"] = "Measurable outcome for the entire plan",
+            ["overview"] =
+                "Required Markdown: background, goals, constraints, and key technical decisions (min ~200 chars).",
+            ["architecture"] = "Optional Markdown: components, data flow, trade-offs",
+            ["mermaid"] = "Optional Mermaid diagram source (no fences), e.g. flowchart or stateDiagram-v2",
+            ["testing_strategy"] = "Optional Markdown: how to verify the work",
+            ["out_of_scope"] = "Optional Markdown: what this plan explicitly excludes",
+            ["subtasks"] = "JSON array: name, description, expected_outcome, optional files[]. Example: " + SubtasksExample
         });
 
     public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
@@ -43,6 +66,11 @@ public sealed class CreatePlanTool(IPlanNotebook planNotebook, IActiveAgentSessi
             return Task.FromResult(error);
         }
 
+        if (!ToolArguments.TryGetRequired(invocation, "overview", out var overview, out error))
+        {
+            return Task.FromResult(error);
+        }
+
         if (!ToolArguments.TryGetRequired(invocation, "subtasks", out var subtasksJson, out error))
         {
             return Task.FromResult(error);
@@ -53,9 +81,23 @@ public sealed class CreatePlanTool(IPlanNotebook planNotebook, IActiveAgentSessi
             return Task.FromResult(ToolResult.Failure("Invalid subtasks", parseError));
         }
 
+        invocation.Arguments.TryGetValue("architecture", out var architecture);
+        invocation.Arguments.TryGetValue("mermaid", out var mermaid);
+        invocation.Arguments.TryGetValue("testing_strategy", out var testingStrategy);
+        invocation.Arguments.TryGetValue("out_of_scope", out var outOfScope);
+
         var result = planNotebook.CreatePlan(
             sessionId,
-            new CreatePlanRequest(name, description, expectedOutcome, subtasks));
+            new CreatePlanRequest(
+                name,
+                description,
+                expectedOutcome,
+                overview,
+                subtasks,
+                architecture,
+                mermaid,
+                testingStrategy,
+                outOfScope));
 
         return Task.FromResult(
             result.Success

@@ -66,7 +66,7 @@ public sealed class ConversationCompactor(
         }
 
         conversation = truncateArgsService
-            .ApplyToMessages(conversation, cfg, out _)
+            .ApplyToMessages(conversation, cfg, out var truncateArgsApplied)
             .Where(message => message.Role != MessageRole.Compaction)
             .ToList();
 
@@ -142,6 +142,16 @@ public sealed class ConversationCompactor(
         var auditKind = kind == CompactionKind.ManualCompact
             ? CompactionKind.ManualCompact
             : CompactionKind.ConversationCompact;
+        var strategy = force
+            ? CompactionStrategy.ForceCompact
+            : kind == CompactionKind.ManualCompact
+                ? CompactionStrategy.ManualCompact
+                : CompactionStrategy.ConversationCompact;
+        var layers = new List<CompactionLayer> { CompactionLayer.ConversationCompact };
+        if (truncateArgsApplied)
+        {
+            layers.Insert(0, CompactionLayer.TruncateArgs);
+        }
 
         if (emitAudit)
         {
@@ -154,13 +164,16 @@ public sealed class ConversationCompactor(
                     tokensAfterPreview,
                     originalCount,
                     transcriptPath ?? string.Empty,
-                    summary)
+                    summary,
+                    layers)
                 : CompactionMessageContent.CreateConversationCompact(
                     tokensBefore,
                     tokensAfterPreview,
                     originalCount,
                     transcriptPath,
-                    summary);
+                    summary,
+                    strategy,
+                    layers);
             compactMessages.Add(CompactionMessageContent.CreateCompactionMessage(auditContent));
         }
 

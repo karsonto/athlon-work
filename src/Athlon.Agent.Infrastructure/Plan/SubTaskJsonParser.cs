@@ -44,7 +44,8 @@ internal static class SubTaskJsonParser
                 parsed.Add(new SubTaskInput(
                     item.Name.Trim(),
                     item.Description?.Trim(),
-                    item.ExpectedOutcome?.Trim() ?? item.Expected_Outcome?.Trim()));
+                    item.ExpectedOutcome?.Trim() ?? item.Expected_Outcome?.Trim(),
+                    NormalizeFiles(item.Files)));
             }
 
             subtasks = parsed;
@@ -57,6 +58,15 @@ internal static class SubTaskJsonParser
         }
     }
 
+    private static IReadOnlyList<string>? NormalizeFiles(IReadOnlyList<string>? files) =>
+        files is null or { Count: 0 }
+            ? null
+            : files
+                .Where(file => !string.IsNullOrWhiteSpace(file))
+                .Select(file => file.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
     private sealed class SubTaskJsonDto
     {
         public string? Name { get; set; }
@@ -67,5 +77,7 @@ internal static class SubTaskJsonParser
 
         [JsonPropertyName("expectedOutcome")]
         public string? Expected_Outcome { get; set; }
+
+        public List<string>? Files { get; set; }
     }
 }

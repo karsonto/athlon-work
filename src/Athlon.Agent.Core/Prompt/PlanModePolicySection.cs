@@ -31,12 +31,18 @@ public sealed class PlanModePolicySection : IEnvironmentPromptSection
         builder.AppendLine(
             "- Clarify when needed: if requirements are ambiguous, ask the user focused questions before locking the plan.");
         builder.AppendLine(
-            $"- Create structured plan: call create_plan with ordered, granular subtasks (up to {context.PlanMaxSubtasks}). "
-            + "Each subtask must be the smallest verifiable unit with concrete paths, types, commands, and acceptance criteria.");
+            $"- Create a detailed plan: call create_plan with ordered subtasks (up to {context.PlanMaxSubtasks}). "
+            + "Provide overview (Markdown), optional architecture/mermaid/testing/out_of_scope, and subtasks with concrete repo-relative files and measurable expected_outcome.");
         builder.AppendLine("- Do not hand-write plan.md with file_write; plan tools sync it automatically.");
         builder.AppendLine("- Use get_plan to review the current draft plan and subtask states.");
         builder.AppendLine(
             "- Do not call finish_subtask in Plan mode. Do not implement the feature — tell the user to review the plan in the editor and click Build to execute.");
+        builder.AppendLine();
+        builder.AppendLine("create_plan document shape (Cursor-style):");
+        builder.AppendLine("- overview: background, goals, constraints, key decisions (required, substantive Markdown).");
+        builder.AppendLine("- architecture / mermaid: use for multi-step or cross-cutting work; mermaid for flows or state.");
+        builder.AppendLine("- Each subtask: name (short), description (what to change and how), expected_outcome (verifiable), files[] (paths you will touch).");
+        builder.AppendLine("- Do not submit placeholder subtasks (empty description, \"TBD\", or one-word acceptance).");
         builder.AppendLine();
         builder.AppendLine("After the plan is ready:");
         builder.AppendLine(

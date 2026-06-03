@@ -61,10 +61,11 @@ public sealed class CompactionTests
             "Tests pass",
             new[]
             {
-                new AgentSubTask("completed-step", "d", "o") { State = SubTaskState.Done },
-                new AgentSubTask("wip", "work in progress", "api exists") { State = SubTaskState.InProgress },
-                new AgentSubTask("later", "later", "later out") { State = SubTaskState.Todo }
-            });
+                new AgentSubTask("completed-step", "Completed step with measurable verification criteria.", "Step marked done in plan.") { State = SubTaskState.Done },
+                new AgentSubTask("wip", "Work in progress on API surface and notebook integration.", "API exists and responds correctly.") { State = SubTaskState.InProgress },
+                new AgentSubTask("later", "Later step for documentation and README updates.", "Docs updated and reviewed.") { State = SubTaskState.Todo }
+            },
+            PlanTestFixtures.Overview());
 
         var appendix = CompactionPlanContextBuilder.BuildSummaryPromptAppendix(plan);
         Assert.NotNull(appendix);
@@ -272,11 +273,9 @@ public sealed class CompactionTests
                     "Ship feature",
                     "Implement",
                     "Merged",
-                    new[]
-                    {
-                        new AgentSubTask("step-a", "a", "a done") { State = SubTaskState.InProgress }
-                    },
-                    PlanPhase.Approved));
+                    [new AgentSubTask("step-a", "Implement step-a across core and infrastructure layers.", "Step-a acceptance tests pass.") { State = SubTaskState.InProgress }],
+                    PlanTestFixtures.Overview(),
+                    phase: PlanPhase.Approved));
 
             var compactor = new ConversationCompactor(
                 settings,

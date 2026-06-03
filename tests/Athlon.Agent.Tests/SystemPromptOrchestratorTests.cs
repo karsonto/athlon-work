@@ -132,7 +132,7 @@ public sealed class SystemPromptOrchestratorTests
         var session = AgentSession.Create("exec-guidance");
         notebook.SetPlan(
             session.Id,
-            new AgentPlan("Ship", "D", "O", [new AgentSubTask("Step", "d", "o")], PlanPhase.Approved));
+            PlanTestFixtures.SampleAgentPlan(PlanPhase.Approved));
 
         var orchestrator = PromptTestHelpers.CreateOrchestrator(host, planNotebook: notebook);
         var prompt = orchestrator.PrepareForTurn(session, Array.Empty<ToolDefinition>()).Text;

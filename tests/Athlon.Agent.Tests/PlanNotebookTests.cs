@@ -11,13 +11,7 @@ public sealed class PlanNotebookTests
     public void CreatePlan_KeepsSubtasksTodoAndDraftPhase()
     {
         var notebook = CreateNotebook();
-        var result = notebook.CreatePlan(
-            "session-1",
-            new CreatePlanRequest(
-                "Fix bug",
-                "Fix the reported bug",
-                "Tests pass",
-                [new SubTaskInput("Repro", "Reproduce", "Steps documented"), new SubTaskInput("Fix", "Patch", "Bug fixed")]));
+        var result = notebook.CreatePlan("session-1", PlanTestFixtures.SampleRequest("Fix bug", 2));
 
         Assert.True(result.Success);
         var plan = notebook.GetCurrent("session-1");
@@ -27,12 +21,38 @@ public sealed class PlanNotebookTests
     }
 
     [Fact]
+    public void CreatePlan_RejectsShortOverview()
+    {
+        var notebook = CreateNotebook();
+        var result = notebook.CreatePlan(
+            "s",
+            PlanTestFixtures.SampleRequest(overview: "too short"));
+
+        Assert.False(result.Success);
+        Assert.Contains("overview", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void CreatePlan_RejectsShortSubtaskDescription()
+    {
+        var notebook = CreateNotebook();
+        var request = new CreatePlanRequest(
+            "P",
+            PlanTestFixtures.ShortSummary,
+            PlanTestFixtures.PlanOutcome,
+            PlanTestFixtures.Overview(),
+            [new SubTaskInput("A", "short", "measurable acceptance criteria here ok")]);
+
+        var result = notebook.CreatePlan("s", request);
+        Assert.False(result.Success);
+        Assert.Contains("description", result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ApprovePlan_ActivatesFirstSubtask()
     {
         var notebook = CreateNotebook();
-        notebook.CreatePlan(
-            "session-1",
-            new CreatePlanRequest("Plan", "Desc", "Outcome", [new SubTaskInput("A", null, null), new SubTaskInput("B", null, null)]));
+        notebook.CreatePlan("session-1", PlanTestFixtures.SampleRequest());
 
         var approve = notebook.ApprovePlan("session-1");
         Assert.True(approve.Success);
@@ -47,9 +67,7 @@ public sealed class PlanNotebookTests
     public void FinishSubtask_RequiresApprovedPlan()
     {
         var notebook = CreateNotebook();
-        notebook.CreatePlan(
-            "session-1",
-            new CreatePlanRequest("Plan", "Desc", "Outcome", [new SubTaskInput("A", null, null), new SubTaskInput("B", null, null)]));
+        notebook.CreatePlan("session-1", PlanTestFixtures.SampleRequest());
 
         var fail = notebook.FinishSubtask("session-1", 0, "done early");
         Assert.False(fail.Success);
@@ -60,13 +78,7 @@ public sealed class PlanNotebookTests
     public void FinishSubtask_RequiresPreviousDone()
     {
         var notebook = CreateNotebook();
-        notebook.CreatePlan(
-            "session-1",
-            new CreatePlanRequest(
-                "Plan",
-                "Desc",
-                "Outcome",
-                [new SubTaskInput("A", null, null), new SubTaskInput("B", null, null)]));
+        notebook.CreatePlan("session-1", PlanTestFixtures.SampleRequest());
         notebook.ApprovePlan("session-1");
 
         var fail = notebook.FinishSubtask("session-1", 1, "done early");
@@ -78,9 +90,7 @@ public sealed class PlanNotebookTests
     public void FinishSubtask_ActivatesNextSubtask()
     {
         var notebook = CreateNotebook();
-        notebook.CreatePlan(
-            "session-1",
-            new CreatePlanRequest("Plan", "Desc", "Outcome", [new SubTaskInput("A", null, null), new SubTaskInput("B", null, null)]));
+        notebook.CreatePlan("session-1", PlanTestFixtures.SampleRequest());
         notebook.ApprovePlan("session-1");
 
         var ok = notebook.FinishSubtask("session-1", 0, "A completed");
@@ -97,9 +107,9 @@ public sealed class PlanNotebookTests
     {
         var settings = new AppSettings { Plan = new PlanSettings { MaxSubtasks = 2 } };
         var notebook = new PlanNotebook(settings, CreateWorkspaceGuard(settings));
-        var subtasks = Enumerable.Range(0, 3).Select(i => new SubTaskInput($"S{i}", null, null)).ToArray();
+        var request = PlanTestFixtures.SampleRequest(subtaskCount: 3);
 
-        var result = notebook.CreatePlan("s", new CreatePlanRequest("P", "D", "O", subtasks));
+        var result = notebook.CreatePlan("s", request);
         Assert.False(result.Success);
         Assert.Contains("maximum", result.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -109,6 +119,31 @@ public sealed class PlanNotebookTests
     {
         var notebook = CreateNotebook();
         Assert.Contains("create_plan", notebook.GetPlanMarkdown("missing"), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void GetPlanMarkdown_IncludesSectionsAndFiles()
+    {
+        var notebook = CreateNotebook();
+        var request = new CreatePlanRequest(
+            "Rich plan",
+            PlanTestFixtures.ShortSummary,
+            PlanTestFixtures.PlanOutcome,
+            PlanTestFixtures.Overview(),
+            [PlanTestFixtures.Subtask("Wire schema", "details", "src/A.cs", "src/B.cs")],
+            Architecture: "Layered: Core, Infrastructure, App.",
+            Mermaid: "stateDiagram-v2\n  [*] --> Draft\n  Draft --> Approved",
+            TestingStrategy: "Run dotnet test.",
+            OutOfScope: "Packaging changes.");
+        notebook.CreatePlan("s", request);
+
+        var markdown = notebook.GetPlanMarkdown("s");
+        Assert.Contains("## Overview", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Architecture", markdown, StringComparison.Ordinal);
+        Assert.Contains("```mermaid", markdown, StringComparison.Ordinal);
+        Assert.Contains("## Testing Strategy", markdown, StringComparison.Ordinal);
+        Assert.Contains("**Files:**", markdown, StringComparison.Ordinal);
+        Assert.Contains("`src/A.cs`", markdown, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -125,9 +160,7 @@ public sealed class PlanNotebookTests
                 Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = root } }
             };
             var notebook = new PlanNotebook(settings, CreateWorkspaceGuard(settings));
-            notebook.CreatePlan(
-                "s1",
-                new CreatePlanRequest("Demo", "D", "O", [new SubTaskInput("Step", null, null)]));
+            notebook.CreatePlan("s1", PlanTestFixtures.SampleRequest("Demo", 1));
 
             var planPath = Path.Combine(root, "plan.md");
             Assert.True(File.Exists(planPath));
@@ -160,14 +193,13 @@ public sealed class PlanNotebookTests
                 Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = root } }
             };
             var notebook = new PlanNotebook(settings, CreateWorkspaceGuard(settings));
-            notebook.CreatePlan(
-                "s1",
-                new CreatePlanRequest("Demo", "D", "O", [new SubTaskInput("Step", null, null)]));
+            notebook.CreatePlan("s1", PlanTestFixtures.SampleRequest("Demo", 1));
 
             var planPath = Path.Combine(root, "plan.md");
             Assert.True(File.Exists(planPath));
             var content = File.ReadAllText(planPath);
             Assert.Contains("# Plan: Demo", content, StringComparison.Ordinal);
+            Assert.Contains("## Overview", content, StringComparison.Ordinal);
             Assert.DoesNotContain("[WIP]", content, StringComparison.Ordinal);
         }
         finally

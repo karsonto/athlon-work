@@ -18,38 +18,14 @@ public sealed class PlanNotebook(AppSettings settings, WorkspaceGuard workspaceG
             return new PlanOperationResult(false, "No active session.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.Name))
+        var validationError = PlanValidation.ValidateCreateRequest(request, settings.Plan);
+        if (validationError is not null)
         {
-            return new PlanOperationResult(false, "Plan name is required.");
+            return validationError;
         }
-
-        if (request.Subtasks.Count == 0)
-        {
-            return new PlanOperationResult(false, "At least one subtask is required.");
-        }
-
-        if (request.Subtasks.Count > settings.Plan.MaxSubtasks)
-        {
-            return new PlanOperationResult(
-                false,
-                $"Cannot create plan: {request.Subtasks.Count} subtasks exceeds the maximum of {settings.Plan.MaxSubtasks}.");
-        }
-
-        var subtasks = request.Subtasks
-            .Select(input => new AgentSubTask(
-                input.Name,
-                input.Description ?? string.Empty,
-                input.ExpectedOutcome ?? string.Empty))
-            .ToList();
 
         var previous = _plans.TryGetValue(sessionId, out var existing) ? existing.Name : null;
-        var plan = new AgentPlan(
-            request.Name.Trim(),
-            request.Description?.Trim() ?? string.Empty,
-            request.ExpectedOutcome?.Trim() ?? string.Empty,
-            subtasks,
-            PlanPhase.Draft);
-
+        var plan = PlanValidation.ToPlan(request);
         _plans[sessionId] = plan;
 
         var message = previous is null
@@ -92,7 +68,7 @@ public sealed class PlanNotebook(AppSettings settings, WorkspaceGuard workspaceG
         }
 
         subtasks[0].State = SubTaskState.InProgress;
-        var approved = new AgentPlan(plan.Name, plan.Description, plan.ExpectedOutcome, subtasks, PlanPhase.Approved);
+        var approved = plan.WithSubtasks(subtasks, PlanPhase.Approved);
         _plans[sessionId] = approved;
 
         var message =
@@ -163,12 +139,7 @@ public sealed class PlanNotebook(AppSettings settings, WorkspaceGuard workspaceG
                 $"Subtask (at index {subtaskIndex}) named '{current.Name}' is marked as done successfully.";
         }
 
-        _plans[sessionId] = new AgentPlan(
-            plan.Name,
-            plan.Description,
-            plan.ExpectedOutcome,
-            subtasks,
-            plan.Phase);
+        _plans[sessionId] = plan.WithSubtasks(subtasks);
         message += AppendSyncNote(SyncPlanFile(_plans[sessionId]));
         return new PlanOperationResult(true, message);
     }

@@ -109,7 +109,7 @@ Use the **Plan** switch in the chat composer (to the right of the image upload b
 | **Build** | Click **Build** in the plan editor header | — | Approves the plan, turns off Plan mode, switches to Agent, and automatically sends an execute instruction |
 | **Executing** (Agent + approved plan) | No Build button | Full Agent tools + `get_plan` / `finish_subtask` | Implement subtasks in order; continue manually by sending messages (no auto-continue) |
 
-`create_plan` writes a **Draft** plan (all subtasks `Todo`) and syncs `plan.md` when a workspace is configured. After a plan is created or updated, the app opens `plan.md` in the side editor for review (read-only in Plan mode). **Build** in the editor header is required before execution. To revise the plan, stay in Plan mode and call `create_plan` again (resets to Draft).
+`create_plan` writes a **Draft** plan (all subtasks `Todo`) and syncs a Cursor-style `plan.md` when a workspace is configured: **Overview**, optional **Architecture** / **Mermaid** / **Testing** / **Out of scope**, and an **Implementation Plan** with per-step **Files**, **Description**, and **Acceptance**. Shallow plans are rejected (minimum overview and subtask detail lengths). After a plan is created or updated, the app opens `plan.md` in the side editor for review (read-only in Plan mode). **Build** in the editor header is required before execution. To revise the plan, stay in Plan mode and call `create_plan` again (resets to Draft).
 
 **Clear context** clears the in-memory plan and deletes `plan.md`. Plan approval state is session memory only; reloading a session with an existing `plan.md` still requires **Build** before execution.
 
@@ -117,7 +117,10 @@ Use the **Plan** switch in the chat composer (to the right of the image upload b
 {
   "Plan": {
     "MaxSubtasks": 20,
-    "PlanFileName": "plan.md"
+    "PlanFileName": "plan.md",
+    "MinOverviewChars": 200,
+    "MinSubtaskDescriptionChars": 40,
+    "MinSubtaskExpectedOutcomeChars": 20
   }
 }
 ```
@@ -185,7 +188,7 @@ The agent sends an environment prompt that includes active workspace path and av
 - `grep_files`: search file contents in the workspace.
 - `glob_files`: find workspace files by glob pattern.
 - `execute_command`: runs via `cmd.exe /c`; default wait **3600s (1 hour)**, max **3600s** (`timeout` argument). Command timeout returns a tool failure and does **not** stop the agent turn. User **Stop** kills the command process tree. Subject to command deny-list rules. For runs longer than one hour, split work or raise `AgentTurn.TimeoutMinutes` when a turn cap is configured.
-- **Plan mode only (Draft):** `create_plan`, `get_plan` — structured planning; syncs draft `plan.md`.
+- **Plan mode only (Draft):** `create_plan` (overview, optional architecture/mermaid/testing/out_of_scope, subtasks with `files[]`), `get_plan` — syncs draft `plan.md`.
 - **After Build (approved plan):** `get_plan`, `finish_subtask` — track and complete subtasks during Agent execution.
 
 All file tools should respect workspace boundaries through `WorkspaceGuard`. Writes and edits create backups through `AtomicFile`.

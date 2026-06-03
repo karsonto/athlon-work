@@ -45,6 +45,9 @@ public sealed class PlanSettings
 {
     public int MaxSubtasks { get; set; } = 20;
     public string PlanFileName { get; set; } = "plan.md";
+    public int MinOverviewChars { get; set; } = 200;
+    public int MinSubtaskDescriptionChars { get; set; } = 40;
+    public int MinSubtaskExpectedOutcomeChars { get; set; } = 20;
 }
 
 public sealed class PromptSettings

@@ -51,11 +51,12 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         }
         else if (IsCompaction)
         {
-            ParseCompactionContent(message.Content, out var header, out var summary, out var detail);
+            var display = CompactionAuditDisplay.Parse(message.Content);
             ToolCallId = null;
-            ToolHeader = header;
-            ToolSummary = AppendCompactionDisplayNotice(summary);
-            AssignToolDetail(detail);
+            CompactionCardTitle = display.CardTitle;
+            ToolHeader = display.StrategySubtitle;
+            ToolSummary = AppendCompactionDisplayNotice(display.Summary);
+            AssignToolDetail(display.Detail);
             IsToolRunning = false;
             IsExpanded = expandTool;
         }
@@ -133,7 +134,10 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public bool IsCollapsibleCard => IsTool || IsCompaction;
     public bool IsHiddenPlaceholder { get; }
     public bool AssistantTone => !IsUser;
-    public string CardTitle => IsCompaction ? "上下文压缩" : "工具调用";
+    public string CompactionCardTitle { get; } = string.Empty;
+    public string CardTitle => IsCompaction
+        ? (string.IsNullOrWhiteSpace(CompactionCardTitle) ? "上下文压缩" : CompactionCardTitle)
+        : "工具调用";
     public string DisplayRole { get; }
 
     public string? ToolCallId { get; private set; }
@@ -459,6 +463,10 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         }
 
         detail = content.Trim();
+        if (detail.Contains("[Tool result evicted", StringComparison.OrdinalIgnoreCase))
+        {
+            header = $"① 工具结果归档 · {header}";
+        }
     }
 
     private static string TryParseToolName(string header)
@@ -488,39 +496,6 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         }
 
         return ToolCallDisplayStatus.Succeeded;
-    }
-
-    private static void ParseCompactionContent(string content, out string header, out string summary, out string detail)
-    {
-        var lines = content.Replace("\r\n", "\n").Split('\n');
-        header = "上下文压缩";
-        summary = string.Empty;
-        var kind = string.Empty;
-
-        foreach (var line in lines)
-        {
-            if (line.StartsWith("CompactionKind:", StringComparison.OrdinalIgnoreCase))
-            {
-                kind = line["CompactionKind:".Length..].Trim();
-                continue;
-            }
-
-            if (line.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
-            {
-                summary = line["Summary:".Length..].Trim();
-            }
-        }
-
-        header = kind switch
-        {
-            "microcompact" => "微压缩 · 清理较早工具输出",
-            "autocompact" => "自动压缩 · 对话摘要",
-            "conversationcompact" => "对话压缩 · 摘要 + 保留尾部",
-            "manualcompact" => "手动压缩 · 对话摘要",
-            _ => header
-        };
-
-        detail = content.Trim();
     }
 
     public static bool IsAssistantToolCallsOnly(ChatMessage message) =>

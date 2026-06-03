@@ -9,34 +9,74 @@ public static class PlanMarkdownFormatter
         var builder = new StringBuilder();
         builder.AppendLine($"# Plan: {plan.Name}");
         builder.AppendLine();
-        builder.AppendLine($"**Description:** {plan.Description}");
-        builder.AppendLine($"**Expected outcome:** {plan.ExpectedOutcome}");
-        builder.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(plan.Description))
+        {
+            builder.AppendLine($"> {plan.Description.Trim()}");
+            builder.AppendLine();
+        }
+
+        AppendSection(builder, "Overview", plan.Overview);
+        AppendSection(builder, "Architecture", plan.Architecture);
+        AppendMermaidSection(builder, plan.Mermaid);
+        AppendSection(builder, "Testing Strategy", plan.TestingStrategy);
+        AppendSection(builder, "Out of Scope", plan.OutOfScope);
+
+        if (!string.IsNullOrWhiteSpace(plan.ExpectedOutcome))
+        {
+            AppendSection(builder, "Expected Outcome", plan.ExpectedOutcome);
+        }
 
         if (plan.Subtasks.Count == 0)
         {
-            builder.AppendLine("_No subtasks._");
+            builder.AppendLine("_No implementation steps._");
             return builder.ToString().TrimEnd();
         }
 
-        builder.AppendLine("## Subtasks");
+        builder.AppendLine("---");
+        builder.AppendLine();
+        builder.AppendLine(detailed ? "## Implementation Plan" : "## Subtasks");
         builder.AppendLine();
 
         for (var index = 0; index < plan.Subtasks.Count; index++)
         {
             var subtask = plan.Subtasks[index];
-            if (detailed)
-            {
-                builder.AppendLine(FormatSubtaskDetailed(index, subtask));
-                builder.AppendLine();
-            }
-            else
-            {
-                builder.AppendLine(FormatSubtaskOneLine(subtask));
-            }
+            builder.AppendLine(
+                detailed
+                    ? FormatSubtaskDetailed(index, subtask)
+                    : FormatSubtaskOneLine(subtask));
+            builder.AppendLine();
         }
 
         return builder.ToString().TrimEnd();
+    }
+
+    private static void AppendSection(StringBuilder builder, string title, string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return;
+        }
+
+        builder.AppendLine($"## {title}");
+        builder.AppendLine();
+        builder.AppendLine(body.Trim());
+        builder.AppendLine();
+    }
+
+    private static void AppendMermaidSection(StringBuilder builder, string? mermaid)
+    {
+        if (string.IsNullOrWhiteSpace(mermaid))
+        {
+            return;
+        }
+
+        builder.AppendLine("## Architecture Diagram");
+        builder.AppendLine();
+        builder.AppendLine("```mermaid");
+        builder.AppendLine(mermaid.Trim());
+        builder.AppendLine("```");
+        builder.AppendLine();
     }
 
     private static string FormatSubtaskOneLine(AgentSubTask subtask)
@@ -56,13 +96,20 @@ public static class PlanMarkdownFormatter
     private static string FormatSubtaskDetailed(int index, AgentSubTask subtask)
     {
         var builder = new StringBuilder();
-        builder.AppendLine($"### {index}. {FormatSubtaskOneLine(subtask)}");
-        builder.AppendLine($"- Description: {subtask.Description}");
-        builder.AppendLine($"- Expected outcome: {subtask.ExpectedOutcome}");
-        builder.AppendLine($"- State: {subtask.State}");
+        builder.AppendLine($"### {index + 1}. {FormatSubtaskOneLine(subtask)}");
+
+        if (subtask.Files.Count > 0)
+        {
+            builder.AppendLine("- **Files:** " + string.Join(", ", subtask.Files.Select(file => $"`{file}`")));
+        }
+
+        builder.AppendLine($"- **Description:** {subtask.Description}");
+        builder.AppendLine($"- **Acceptance:** {subtask.ExpectedOutcome}");
+        builder.AppendLine($"- **State:** {subtask.State}");
+
         if (!string.IsNullOrWhiteSpace(subtask.Outcome))
         {
-            builder.AppendLine($"- Outcome: {subtask.Outcome}");
+            builder.AppendLine($"- **Outcome:** {subtask.Outcome}");
         }
 
         return builder.ToString().TrimEnd();

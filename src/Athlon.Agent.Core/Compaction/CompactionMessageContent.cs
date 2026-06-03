@@ -14,7 +14,9 @@ public static class CompactionMessageContent
         int tokensAfter,
         int originalMessageCount,
         string? transcriptPath,
-        string summaryPreview)
+        string summaryPreview,
+        CompactionStrategy strategy = CompactionStrategy.ConversationCompact,
+        IReadOnlyList<CompactionLayer>? layers = null)
     {
         var summary = string.IsNullOrWhiteSpace(summaryPreview)
             ? $"已将 {originalMessageCount} 条消息压缩为摘要并保留最近上下文。"
@@ -25,6 +27,8 @@ public static class CompactionMessageContent
             tokensBefore,
             tokensAfter,
             summary,
+            strategy,
+            layers,
             originalMessageCount: originalMessageCount,
             transcriptPath: transcriptPath);
     }
@@ -76,7 +80,8 @@ public static class CompactionMessageContent
         int tokensAfter,
         int originalMessageCount,
         string transcriptPath,
-        string summaryPreview) =>
+        string summaryPreview,
+        IReadOnlyList<CompactionLayer>? layers = null) =>
         Build(
             CompactionKind.ManualCompact,
             tokensBefore,
@@ -84,6 +89,8 @@ public static class CompactionMessageContent
             string.IsNullOrWhiteSpace(summaryPreview)
                 ? $"已手动压缩 {originalMessageCount} 条消息。"
                 : summaryPreview.Trim(),
+            CompactionStrategy.ManualCompact,
+            layers,
             originalMessageCount: originalMessageCount,
             transcriptPath: transcriptPath);
 
@@ -95,6 +102,8 @@ public static class CompactionMessageContent
         int tokensBefore,
         int tokensAfter,
         string summary,
+        CompactionStrategy? strategy = null,
+        IReadOnlyList<CompactionLayer>? layers = null,
         int? clearedToolMessages = null,
         int? keepToolMessages = null,
         int? originalMessageCount = null,
@@ -102,6 +111,16 @@ public static class CompactionMessageContent
     {
         var builder = new StringBuilder();
         builder.AppendLine($"CompactionKind: {kind.ToString().ToLowerInvariant()}");
+        if (strategy is not null)
+        {
+            builder.AppendLine($"CompactionStrategy: {CompactionAuditDisplay.FormatStrategy(strategy.Value)}");
+        }
+
+        if (layers is { Count: > 0 })
+        {
+            builder.AppendLine($"CompactionLayers: {CompactionAuditDisplay.FormatLayers(layers)}");
+        }
+
         builder.AppendLine($"TokensBefore: {tokensBefore}");
         builder.AppendLine($"TokensAfter: {tokensAfter}");
 

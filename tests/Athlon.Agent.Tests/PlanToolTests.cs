@@ -19,9 +19,14 @@ public sealed class PlanToolTests
             new Dictionary<string, string>
             {
                 ["name"] = "Ship feature",
-                ["description"] = "Implement MVP",
-                ["expected_outcome"] = "Feature shipped",
-                ["subtasks"] = """[{"name":"Design","description":"d","expected_outcome":"o"},{"name":"Build","description":"b","expected_outcome":"o2"}]"""
+                ["description"] = PlanTestFixtures.ShortSummary,
+                ["expected_outcome"] = PlanTestFixtures.PlanOutcome,
+                ["overview"] = PlanTestFixtures.Overview(),
+                ["architecture"] = "Core holds models; Infrastructure holds tools.",
+                ["subtasks"] =
+                    """
+                    [{"name":"Design","description":"Define AgentPlan fields and PlanMarkdownFormatter sections for Cursor-style output.","expected_outcome":"plan.md shows Overview, Architecture, and Implementation Plan.","files":["src/Athlon.Agent.Core/Plan/AgentPlan.cs"]},{"name":"Build","description":"Wire CreatePlanTool parameters and validation in PlanNotebook.","expected_outcome":"create_plan rejects shallow subtasks.","files":["src/Athlon.Agent.Infrastructure/Plan/CreatePlanTool.cs"]}]
+                    """
             }));
 
         Assert.True(create.Succeeded);
@@ -29,6 +34,7 @@ public sealed class PlanToolTests
         var get = await router.InvokeAsync(new ToolInvocation("get_plan", new Dictionary<string, string>()));
         Assert.True(get.Succeeded);
         Assert.Contains("Ship feature", get.Content ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("## Overview", get.Content ?? string.Empty, StringComparison.Ordinal);
         Assert.DoesNotContain("[WIP]", get.Content ?? string.Empty, StringComparison.Ordinal);
     }
 
@@ -56,9 +62,13 @@ public sealed class PlanToolTests
                 new Dictionary<string, string>
                 {
                     ["name"] = "Two step",
-                    ["description"] = "d",
-                    ["expected_outcome"] = "o",
-                    ["subtasks"] = """[{"name":"One","description":"","expected_outcome":""},{"name":"Two","description":"","expected_outcome":""}]"""
+                    ["description"] = PlanTestFixtures.ShortSummary,
+                    ["expected_outcome"] = PlanTestFixtures.PlanOutcome,
+                    ["overview"] = PlanTestFixtures.Overview(),
+                    ["subtasks"] =
+                        """
+                        [{"name":"One","description":"First implementation step with concrete file updates and tests.","expected_outcome":"Step one verified in plan.md and tests.","files":["src/a.cs"]},{"name":"Two","description":"Second implementation step completing integration and docs.","expected_outcome":"Step two verified end-to-end.","files":["src/b.cs"]}]
+                        """
                 }));
 
             notebook.ApprovePlan(sessionId);

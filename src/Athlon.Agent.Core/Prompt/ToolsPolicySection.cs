@@ -15,6 +15,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
         {
             builder.AppendLine(
                 "Native tools are provided via function calling (read-only file tools plus create_plan and get_plan for structured planning). "
+                + "create_plan accepts overview, optional architecture/mermaid/testing/out_of_scope, and subtasks with files[] and acceptance criteria. "
                 + "Use each tool's schema. Do not guess file contents.");
         }
         else if (context.ActivePlan?.Phase == PlanPhase.Approved)

@@ -41,7 +41,7 @@ public sealed class PlanToolCatalogTests
     [Fact]
     public void FilterForSession_AgentModeWithApprovedPlan_IncludesExecutionPlanTools()
     {
-        var plan = new AgentPlan("P", "D", "O", [new AgentSubTask("A", "", "")], PlanPhase.Approved);
+        var plan = PlanTestFixtures.SampleAgentPlan(PlanPhase.Approved);
         var filtered = PlanToolCatalog.FilterForSession(SampleTools, AgentInteractionMode.Agent, plan);
 
         Assert.Contains(filtered, tool => tool.Name == PlanToolCatalog.GetPlan);
@@ -52,7 +52,7 @@ public sealed class PlanToolCatalogTests
     [Fact]
     public void FilterForSession_AgentModeWithDraftPlan_ExcludesPlanTools()
     {
-        var plan = new AgentPlan("P", "D", "O", [new AgentSubTask("A", "", "")], PlanPhase.Draft);
+        var plan = PlanTestFixtures.SampleAgentPlan(PlanPhase.Draft);
         var filtered = PlanToolCatalog.FilterForSession(SampleTools, AgentInteractionMode.Agent, plan);
 
         Assert.DoesNotContain(filtered, tool => PlanToolCatalog.IsPlanTool(tool.Name));

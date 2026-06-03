@@ -1421,13 +1421,24 @@
                                                Margin="0,-2,0,0" />
                                 </Button>
                                 <CheckBox IsChecked="{Binding IsPlanMode, Mode=TwoWay}"
-                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          Style="{StaticResource PlanToggleSwitchStyle}"
                                           Margin="8,0,6,0"
                                           ToolTip="Plan 模式：先调研并生成可审阅的实现计划。可随时切换；进行中的回复不受影响，下一条消息生效。" />
                                 <TextBlock Text="Plan"
                                            FontSize="12"
-                                           VerticalAlignment="Center"
-                                           Foreground="{StaticResource Brush.SubtleText}" />
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource Brush.SubtleText}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPlanMode}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource Brush.Warning}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
                             <TextBlock Text="Enter 发送 · Shift+Enter 换行"
                                        Foreground="{StaticResource Brush.SubtleText}"
