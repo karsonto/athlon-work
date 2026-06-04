@@ -4,6 +4,8 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Athlon.Agent.App.Controls;
+using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 
 namespace Athlon.Agent.App;
@@ -15,6 +17,8 @@ public partial class MainWindow : Window
     private bool _autoScrollEnabled = true;
     private bool _isProgrammaticScroll;
     private bool _shutdownInProgress;
+    private bool _chatPointerDown;
+    private bool _chatScrollLockedByUser;
 
     public MainWindow(MainWindowViewModel viewModel)
     {
@@ -26,6 +30,7 @@ public partial class MainWindow : Window
         _viewModel.ScrollChatToBottom = ScrollChatToEnd;
         _viewModel.ContextSidebarLayoutChanged += (_, _) => Dispatcher.Invoke(ApplyContextSidebarLayout);
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        MarkdownMessageView.ContentInteractionChanged += (_, _) => UpdateChatScrollLock();
         Loaded += OnMainWindowLoaded;
         Closing += OnMainWindowClosing;
         StateChanged += (_, _) => UpdateMaximizeRestoreButton();
@@ -302,7 +307,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!_autoScrollEnabled)
+        if (!_autoScrollEnabled || ShouldSuppressChatAutoScroll())
         {
             return;
         }
@@ -317,6 +322,35 @@ public partial class MainWindow : Window
             });
     }
 
+    private void ChatMessagesScrollViewer_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _chatPointerDown = true;
+    }
+
+    private void ChatMessagesScrollViewer_OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _chatPointerDown = false;
+        UpdateChatScrollLock();
+    }
+
+    private void UpdateChatScrollLock()
+    {
+        _chatScrollLockedByUser = ChatScrollHelper.HasTextSelection(ChatMessagesScrollViewer);
+        if (_chatScrollLockedByUser)
+        {
+            _autoScrollEnabled = false;
+            return;
+        }
+
+        if (ChatMessagesScrollViewer is not null && IsNearBottom(ChatMessagesScrollViewer))
+        {
+            _autoScrollEnabled = true;
+        }
+    }
+
+    private bool ShouldSuppressChatAutoScroll() =>
+        _chatPointerDown || _chatScrollLockedByUser || ChatScrollHelper.HasTextSelection(ChatMessagesScrollViewer);
+
     private void ChatMessagesScrollViewer_OnScrollChanged(object sender, ScrollChangedEventArgs e)
     {
         if (sender is not ScrollViewer viewer)
@@ -325,6 +359,11 @@ public partial class MainWindow : Window
         }
 
         if (_isProgrammaticScroll)
+        {
+            return;
+        }
+
+        if (ShouldSuppressChatAutoScroll())
         {
             return;
         }

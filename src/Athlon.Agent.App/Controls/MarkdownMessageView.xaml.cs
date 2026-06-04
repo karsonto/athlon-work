@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Windows;
 using MdXaml;
@@ -15,10 +16,14 @@ namespace Athlon.Agent.App.Controls;
 /// </summary>
 public partial class MarkdownMessageView : UserControl
 {
+    /// <summary>Raised when markdown text selection changes (used to pause chat auto-scroll).</summary>
+    public static event EventHandler? ContentInteractionChanged;
+
     private ContextMenu? _contextMenu;
     private MenuItem? _previewHtmlMenuItem;
     private MenuItem? _previewMermaidMenuItem;
     private bool _documentHooked;
+    private TextSelection? _textSelection;
 
     public static readonly DependencyProperty MarkdownProperty =
         DependencyProperty.Register(
@@ -254,6 +259,7 @@ public partial class MarkdownMessageView : UserControl
         ApplyTheme();
         AttachMarkdownContextMenu();
         HookMarkdownDocumentChanges();
+        AttachSelectionHandler();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -265,6 +271,8 @@ public partial class MarkdownMessageView : UserControl
                 .RemoveValueChanged(MarkdownViewer, OnMarkdownDocumentChanged);
             _documentHooked = false;
         }
+
+        DetachSelectionHandler();
     }
 
     private void AttachMarkdownContextMenu()
@@ -292,7 +300,11 @@ public partial class MarkdownMessageView : UserControl
         OnMarkdownDocumentChanged(MarkdownViewer, EventArgs.Empty);
     }
 
-    private void OnMarkdownDocumentChanged(object? sender, EventArgs e) => ApplyFlowDocumentContextMenu();
+    private void OnMarkdownDocumentChanged(object? sender, EventArgs e)
+    {
+        ApplyFlowDocumentContextMenu();
+        AttachSelectionHandler();
+    }
 
     private void ApplyFlowDocumentContextMenu()
     {
@@ -302,6 +314,59 @@ public partial class MarkdownMessageView : UserControl
             FlowDocumentThemeNormalizer.Normalize(document, _contextMenu);
         }
     }
+
+    private void AttachSelectionHandler()
+    {
+        DetachSelectionHandler();
+        if (MarkdownViewer.Document is null)
+        {
+            return;
+        }
+
+        if (TrySubscribeToSelection())
+        {
+            return;
+        }
+
+        // Document is set before FlowDocumentScrollViewer.Selection is initialized.
+        MarkdownViewer.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, DeferredAttachSelectionHandler);
+    }
+
+    private void DeferredAttachSelectionHandler()
+    {
+        if (MarkdownViewer.Document is null || _textSelection is not null)
+        {
+            return;
+        }
+
+        TrySubscribeToSelection();
+    }
+
+    private bool TrySubscribeToSelection()
+    {
+        _textSelection = MarkdownViewer.Selection;
+        if (_textSelection is null)
+        {
+            return false;
+        }
+
+        _textSelection.Changed += OnTextSelectionChanged;
+        return true;
+    }
+
+    private void DetachSelectionHandler()
+    {
+        if (_textSelection is null)
+        {
+            return;
+        }
+
+        _textSelection.Changed -= OnTextSelectionChanged;
+        _textSelection = null;
+    }
+
+    private void OnTextSelectionChanged(object? sender, EventArgs e) =>
+        ContentInteractionChanged?.Invoke(null, EventArgs.Empty);
 
     private ContextMenu BuildContextMenu()
     {

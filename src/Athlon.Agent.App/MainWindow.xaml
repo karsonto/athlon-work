@@ -97,7 +97,7 @@
                 Grid.Column="0"
                 Background="{StaticResource Brush.Chrome}"
                 BorderThickness="0"
-                Padding="16,16,24,16">
+                Padding="16,16,20,16">
             <DockPanel LastChildFill="True">
                 <!-- 须 Dock=Bottom 且排在 Fill 子元素之前；历史列表 ScrollViewer 放最后 -->
                 <Border DockPanel.Dock="Bottom"
@@ -538,50 +538,18 @@
 
                 <GridSplitter x:Name="EditorChatSplitter"
                               Grid.Column="0"
-                              Width="8"
-                              HorizontalAlignment="Right"
-                              VerticalAlignment="Stretch"
+                              Style="{StaticResource LayoutColumnSplitterStyle}"
                               ResizeDirection="Columns"
                               ResizeBehavior="CurrentAndNext"
-                              ShowsPreview="False"
-                              Background="#01FFFFFF"
-                              Cursor="SizeWE"
                               Panel.ZIndex="2"
                               Visibility="Collapsed"
-                              DragCompleted="EditorChatSplitter_OnDragCompleted">
-                    <GridSplitter.Style>
-                        <Style TargetType="GridSplitter">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="GridSplitter">
-                                        <Border x:Name="Track"
-                                                Background="Transparent"
-                                                Width="8"
-                                                HorizontalAlignment="Stretch">
-                                            <Border x:Name="Line"
-                                                    Width="1"
-                                                    HorizontalAlignment="Right"
-                                                    Background="{StaticResource Brush.Border}"
-                                                    Opacity="0.6" />
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Line" Property="Background" Value="{StaticResource Brush.Accent}" />
-                                                <Setter TargetName="Line" Property="Opacity" Value="1" />
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </GridSplitter.Style>
-                </GridSplitter>
+                              DragCompleted="EditorChatSplitter_OnDragCompleted" />
 
                 <Grid Grid.Column="1" ClipToBounds="True">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="8" />
+                    <RowDefinition Height="12" />
                     <RowDefinition x:Name="ComposerRow"
                                    Height="168"
                                    MinHeight="120"
@@ -674,10 +642,13 @@
 
                 <!-- Messages (ChatPane bubbles) -->
                 <ScrollViewer x:Name="ChatMessagesScrollViewer"
-                              Padding="24,20,24,28"
-                              VerticalScrollBarVisibility="Auto"
+                              Padding="24,20,20,28"
+                              VerticalScrollBarVisibility="Visible"
                               ClipToBounds="True"
                               CanContentScroll="False"
+                              PanningMode="None"
+                              PreviewMouseLeftButtonDown="ChatMessagesScrollViewer_OnPreviewMouseLeftButtonDown"
+                              PreviewMouseLeftButtonUp="ChatMessagesScrollViewer_OnPreviewMouseLeftButtonUp"
                               ScrollChanged="ChatMessagesScrollViewer_OnScrollChanged">
                     <ScrollViewer.Style>
                         <Style TargetType="ScrollViewer">
@@ -1101,43 +1072,11 @@
 
                 <GridSplitter x:Name="ComposerSplitter"
                               Grid.Row="2"
-                              Height="8"
-                              HorizontalAlignment="Stretch"
-                              VerticalAlignment="Center"
+                              Style="{StaticResource LayoutRowSplitterStyle}"
                               ResizeDirection="Rows"
                               ResizeBehavior="PreviousAndNext"
-                              ShowsPreview="False"
-                              Background="#01FFFFFF"
-                              Cursor="SizeNS"
                               Panel.ZIndex="2"
-                              DragCompleted="ComposerSplitter_OnDragCompleted">
-                    <GridSplitter.Style>
-                        <Style TargetType="GridSplitter">
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="GridSplitter">
-                                        <Border x:Name="Track"
-                                                Background="Transparent"
-                                                Height="8"
-                                                VerticalAlignment="Stretch">
-                                            <Border x:Name="Line"
-                                                    Height="1"
-                                                    VerticalAlignment="Top"
-                                                    Background="{StaticResource Brush.Border}"
-                                                    Opacity="0.6" />
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Line" Property="Background" Value="{StaticResource Brush.Accent}" />
-                                                <Setter TargetName="Line" Property="Opacity" Value="1" />
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </GridSplitter.Style>
-                </GridSplitter>
+                              DragCompleted="ComposerSplitter_OnDragCompleted" />
 
             <!-- Composer (report/html Composer hero/dock) -->
             <Border Grid.Row="3"
@@ -1906,84 +1845,20 @@
         <GridSplitter x:Name="NavigationSidebarSplitter"
                       Grid.Row="1"
                       Grid.Column="0"
-                      Width="8"
-                      HorizontalAlignment="Right"
-                      VerticalAlignment="Stretch"
+                      Style="{StaticResource LayoutColumnSplitterStyle}"
                       ResizeDirection="Columns"
                       ResizeBehavior="CurrentAndNext"
-                      ShowsPreview="False"
-                      Background="#01FFFFFF"
-                      Cursor="SizeWE"
                       Panel.ZIndex="3"
-                      DragCompleted="NavigationSidebarSplitter_OnDragCompleted">
-            <GridSplitter.Style>
-                <Style TargetType="GridSplitter">
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="GridSplitter">
-                                <Border x:Name="Track"
-                                        Background="Transparent"
-                                        Width="8"
-                                        HorizontalAlignment="Stretch">
-                                    <Border x:Name="Line"
-                                            Width="1"
-                                            HorizontalAlignment="Right"
-                                            Background="{StaticResource Brush.Border}"
-                                            Opacity="0.6" />
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Line" Property="Background" Value="{StaticResource Brush.Accent}" />
-                                        <Setter TargetName="Line" Property="Opacity" Value="1" />
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
-            </GridSplitter.Style>
-        </GridSplitter>
+                      DragCompleted="NavigationSidebarSplitter_OnDragCompleted" />
 
         <GridSplitter x:Name="ContextSidebarSplitter"
                       Grid.Row="1"
                       Grid.Column="1"
-                      Width="8"
-                      HorizontalAlignment="Right"
-                      VerticalAlignment="Stretch"
+                      Style="{StaticResource LayoutColumnSplitterStyle}"
                       ResizeDirection="Columns"
                       ResizeBehavior="CurrentAndNext"
-                      ShowsPreview="False"
-                      Background="#01FFFFFF"
-                      Cursor="SizeWE"
                       Panel.ZIndex="3"
-                      DragCompleted="ContextSidebarSplitter_OnDragCompleted">
-            <GridSplitter.Style>
-                <Style TargetType="GridSplitter">
-                    <Setter Property="Template">
-                        <Setter.Value>
-                            <ControlTemplate TargetType="GridSplitter">
-                                <Border x:Name="Track"
-                                        Background="Transparent"
-                                        Width="8"
-                                        HorizontalAlignment="Stretch">
-                                    <Border x:Name="Line"
-                                            Width="1"
-                                            HorizontalAlignment="Right"
-                                            Background="{StaticResource Brush.Border}"
-                                            Opacity="0.6" />
-                                </Border>
-                                <ControlTemplate.Triggers>
-                                    <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter TargetName="Line" Property="Background" Value="{StaticResource Brush.Accent}" />
-                                        <Setter TargetName="Line" Property="Opacity" Value="1" />
-                                    </Trigger>
-                                </ControlTemplate.Triggers>
-                            </ControlTemplate>
-                        </Setter.Value>
-                    </Setter>
-                </Style>
-            </GridSplitter.Style>
-        </GridSplitter>
+                      DragCompleted="ContextSidebarSplitter_OnDragCompleted" />
         </Grid>
 
         <Border Panel.ZIndex="100"
