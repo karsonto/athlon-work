@@ -13,7 +13,6 @@ public sealed class SkillsSection(AppSettings settings, IAgentSkillCatalog catal
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
-        catalog.Reload();
         var skills = SkillFilter.GetEnabledSkills(catalog, settings);
         builder.AppendLine();
 

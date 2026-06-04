@@ -4,7 +4,11 @@ public static class SkillUtil
 {
     public const string SkillFileName = "SKILL.md";
 
-    public static AgentSkill CreateFrom(string skillMd, IReadOnlyDictionary<string, string>? resources = null)
+    public static AgentSkill CreateFrom(
+        string skillMd,
+        IReadOnlyDictionary<string, string>? resources = null,
+        IReadOnlyList<string>? resourcePaths = null,
+        string? skillDirectory = null)
     {
         var parsed = MarkdownSkillParser.Parse(skillMd);
         var metadata = parsed.Metadata.ToDictionary(static pair => pair.Key, static pair => pair.Value);
@@ -29,6 +33,11 @@ public static class SkillUtil
         metadata["name"] = name;
         metadata["description"] = description;
 
-        return new AgentSkill(metadata, parsed.Content, resources ?? new Dictionary<string, string>());
+        return new AgentSkill(
+            metadata,
+            parsed.Content,
+            resources ?? new Dictionary<string, string>(),
+            resourcePaths,
+            skillDirectory);
     }
 }

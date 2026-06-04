@@ -25,9 +25,10 @@ public sealed class SkillRuntime(IAgentSkillCatalog catalog, AppSettings setting
             return BuildSkillMarkdownResponse(skillId, skill);
         }
 
-        if (!skill.Resources.TryGetValue(normalizedPath, out var resourceContent))
+        if (!TryResolveResourceContent(skill, normalizedPath, out var resourceContent))
         {
-            throw new ArgumentException(BuildResourceNotFoundMessage(skillId, normalizedPath, skill.Resources.Keys));
+            throw new ArgumentException(
+                BuildResourceNotFoundMessage(skillId, normalizedPath, skill.ResourcePaths));
         }
 
         Activate(skillId);
@@ -71,6 +72,23 @@ public sealed class SkillRuntime(IAgentSkillCatalog catalog, AppSettings setting
             !skill.Enabled
             && !string.IsNullOrWhiteSpace(skill.Name)
             && string.Equals(skill.Name, skillName, StringComparison.OrdinalIgnoreCase));
+
+    private static bool TryResolveResourceContent(AgentSkill skill, string normalizedPath, out string content)
+    {
+        if (skill.Resources.TryGetValue(normalizedPath, out content!))
+        {
+            return true;
+        }
+
+        if (skill.SupportsLazyResourceLoad
+            && SkillFileSystemHelper.TryReadResourceFile(skill.SkillDirectory!, normalizedPath, out content))
+        {
+            return true;
+        }
+
+        content = string.Empty;
+        return false;
+    }
 
     private static string NormalizeResourcePath(string path)
     {

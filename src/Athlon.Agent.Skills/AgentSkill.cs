@@ -8,7 +8,9 @@ public sealed class AgentSkill
     public AgentSkill(
         IReadOnlyDictionary<string, object> metadata,
         string skillContent,
-        IReadOnlyDictionary<string, string> resources)
+        IReadOnlyDictionary<string, string>? resources = null,
+        IReadOnlyList<string>? resourcePaths = null,
+        string? skillDirectory = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(skillContent);
 
@@ -26,6 +28,8 @@ public sealed class AgentSkill
         Resources = resources is null
             ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(resources, StringComparer.OrdinalIgnoreCase);
+        ResourcePaths = resourcePaths ?? Array.Empty<string>();
+        SkillDirectory = skillDirectory;
     }
 
     public IReadOnlyDictionary<string, object> Metadata { get; }
@@ -36,9 +40,19 @@ public sealed class AgentSkill
 
     public string SkillContent { get; }
 
+    /// <summary>In-memory resource payloads (optional; catalog loads metadata-only by default).</summary>
     public IReadOnlyDictionary<string, string> Resources { get; }
 
+    /// <summary>Relative resource paths under <see cref="SkillDirectory"/> (listed without reading file contents).</summary>
+    public IReadOnlyList<string> ResourcePaths { get; }
+
+    /// <summary>Skill folder on disk; used to load resources on demand.</summary>
+    public string? SkillDirectory { get; }
+
     public string SkillId => Name;
+
+    public bool SupportsLazyResourceLoad =>
+        !string.IsNullOrWhiteSpace(SkillDirectory) && Directory.Exists(SkillDirectory);
 
     public string? GetResource(string resourcePath) =>
         Resources.TryGetValue(resourcePath, out var content) ? content : null;

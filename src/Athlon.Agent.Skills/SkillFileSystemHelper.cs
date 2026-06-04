@@ -15,7 +15,13 @@ public static class SkillFileSystemHelper
         return LoadSkillFromDirectory(skillDir);
     }
 
-    public static AgentSkill LoadSkillFromDirectory(string skillDir)
+    public static AgentSkill LoadSkillFromDirectory(string skillDir) =>
+        LoadSkillFromDirectory(skillDir, loadResourceContents: false);
+
+    public static AgentSkill LoadSkillFromDirectoryWithResources(string skillDir) =>
+        LoadSkillFromDirectory(skillDir, loadResourceContents: true);
+
+    private static AgentSkill LoadSkillFromDirectory(string skillDir, bool loadResourceContents)
     {
         if (!Directory.Exists(skillDir))
         {
@@ -29,8 +35,54 @@ public static class SkillFileSystemHelper
         }
 
         var skillMdContent = File.ReadAllText(skillFile, Encoding.UTF8);
-        var resources = LoadResources(skillDir, skillFile);
-        return SkillUtil.CreateFrom(skillMdContent, resources);
+        var resourcePaths = ListResourcePaths(skillDir, skillFile);
+        if (loadResourceContents)
+        {
+            var resources = LoadResources(skillDir, skillFile);
+            return SkillUtil.CreateFrom(skillMdContent, resources, resourcePaths, skillDir);
+        }
+
+        return SkillUtil.CreateFrom(skillMdContent, resourcePaths: resourcePaths, skillDirectory: skillDir);
+    }
+
+    public static bool TryReadResourceFile(string skillDirectory, string relativePath, out string content)
+    {
+        content = string.Empty;
+        if (string.IsNullOrWhiteSpace(skillDirectory) || string.IsNullOrWhiteSpace(relativePath))
+        {
+            return false;
+        }
+
+        var skillRoot = Path.GetFullPath(skillDirectory);
+        var normalized = relativePath.Trim().Replace('\\', '/');
+        var fullPath = Path.GetFullPath(Path.Combine(skillRoot, normalized));
+        if (!fullPath.StartsWith(skillRoot, StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(fullPath))
+        {
+            return false;
+        }
+
+        var skillFile = Path.Combine(skillRoot, SkillUtil.SkillFileName);
+        if (!IsValidResource(fullPath, skillFile))
+        {
+            return false;
+        }
+
+        try
+        {
+            content = File.ReadAllText(fullPath, Encoding.UTF8);
+            return true;
+        }
+        catch (DecoderFallbackException)
+        {
+            var bytes = File.ReadAllBytes(fullPath);
+            content = "base64:" + Convert.ToBase64String(bytes);
+            return true;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
     }
 
     public static IReadOnlyList<string> GetAllSkillNames(string baseDir)
@@ -196,6 +248,39 @@ public static class SkillFileSystemHelper
         catch
         {
             return null;
+        }
+    }
+
+    private static IReadOnlyList<string> ListResourcePaths(string skillDir, string skillFile)
+    {
+        var paths = new List<string>();
+        CollectResourcePaths(skillDir, skillDir, skillFile, paths);
+        return paths;
+    }
+
+    private static void CollectResourcePaths(
+        string currentDir,
+        string skillDir,
+        string skillFile,
+        List<string> paths)
+    {
+        foreach (var entry in Directory.EnumerateFileSystemEntries(currentDir))
+        {
+            if (Directory.Exists(entry))
+            {
+                var dirName = Path.GetFileName(entry);
+                if (!dirName.StartsWith(".", StringComparison.Ordinal))
+                {
+                    CollectResourcePaths(entry, skillDir, skillFile, paths);
+                }
+
+                continue;
+            }
+
+            if (IsValidResource(entry, skillFile))
+            {
+                paths.Add(Path.GetRelativePath(skillDir, entry).Replace('\\', '/'));
+            }
         }
     }
 
