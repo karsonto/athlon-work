@@ -14,7 +14,7 @@ public static class AgentRecordGrouping
         Func<string, bool> isRunning,
         Action<string>? stopSession)
     {
-        var today = DateTime.Today;
+        var today = AppTimeZone.Today;
         var last7Start = today.AddDays(-7);
 
         var todayGroup = new AgentRecordGroupViewModel(TodayKey, "今天", isExpandedByDefault: true);
@@ -29,7 +29,7 @@ public static class AgentRecordGrouping
                 isRunning(entry.Id),
                 stopSession);
 
-            var localDate = entry.UpdatedAt.ToLocalTime().Date;
+            var localDate = AppTimeZone.ToChinaDate(entry.UpdatedAt);
             if (localDate == today)
             {
                 todayGroup.Items.Add(item);

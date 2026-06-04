@@ -94,7 +94,7 @@ public partial class App : Application
     {
         var paths = new AppPathProvider();
         paths.EnsureCreated();
-        File.AppendAllText(Path.Combine(paths.LogsPath, "startup.log"), $"{DateTimeOffset.Now:O} {message}{Environment.NewLine}");
+        File.AppendAllText(Path.Combine(paths.LogsPath, "startup.log"), $"{AppTimeZone.Now:O} {message}{Environment.NewLine}");
     }
 }
 

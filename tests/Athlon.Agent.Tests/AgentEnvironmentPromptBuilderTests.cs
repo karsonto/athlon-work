@@ -16,7 +16,10 @@ public sealed class AgentEnvironmentPromptBuilderTests
         var prompt = builder.Build(AgentSession.Create("prompt-test"), Array.Empty<ToolDefinition>());
 
         Assert.Contains("Host: Win", prompt, StringComparison.Ordinal);
+        Assert.Contains("UTC+8", prompt, StringComparison.Ordinal);
         Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", prompt);
+        Assert.Contains("Encoding and locale:", prompt, StringComparison.Ordinal);
+        Assert.Contains("UTF-8", prompt, StringComparison.Ordinal);
         Assert.Contains(@"TESTDOMAIN\karson", prompt, StringComparison.Ordinal);
         Assert.Contains($"skills={skillsPath}", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain($"none installed under {skillsPath}", prompt, StringComparison.Ordinal);

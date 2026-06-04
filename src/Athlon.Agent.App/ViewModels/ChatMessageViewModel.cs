@@ -17,7 +17,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         Content = message.Content;
         ReasoningContent = message.ReasoningContent ?? string.Empty;
         IsReasoningExpanded = true;
-        CreatedAt = message.CreatedAt.ToLocalTime().ToString("HH:mm:ss");
+        CreatedAt = AppTimeZone.ToChina(message.CreatedAt).ToString("HH:mm:ss");
         IsStreaming = false;
         IsUser = message.Role == MessageRole.User;
         IsTool = message.Role == MessageRole.Tool;
@@ -87,7 +87,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         DisplayRole = "工具";
         IsToolRunning = true;
         ToolCallStatus = ToolCallDisplayStatus.Running;
-        CreatedAt = DateTimeOffset.Now.ToLocalTime().ToString("HH:mm:ss");
+        CreatedAt = AppTimeZone.Now.ToString("HH:mm:ss");
         ToolHeader = $"Tool `{toolCall.Name}`";
         ToolArgumentsText = FormatArgumentsFull(toolCall.Arguments);
         ToolSummary = string.Empty;
@@ -244,7 +244,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsHiddenPlaceholder = false;
         DisplayRole = "工具";
         ToolCallStatus = ToolCallDisplayStatus.Preparing;
-        CreatedAt = DateTimeOffset.Now.ToLocalTime().ToString("HH:mm:ss");
+        CreatedAt = AppTimeZone.Now.ToString("HH:mm:ss");
         ToolHeader = "Tool …";
         ToolSummary = string.Empty;
         ToolDetail = string.Empty;
@@ -337,7 +337,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     {
         Content = message.Content;
         ReasoningContent = message.ReasoningContent ?? ReasoningContent;
-        CreatedAt = message.CreatedAt.ToLocalTime().ToString("HH:mm:ss");
+        CreatedAt = AppTimeZone.ToChina(message.CreatedAt).ToString("HH:mm:ss");
         IsStreaming = false;
         IsReasoningStreaming = false;
     }
@@ -365,7 +365,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         }
 
         Content = message.Content;
-        CreatedAt = message.CreatedAt.ToLocalTime().ToString("HH:mm:ss");
+        CreatedAt = AppTimeZone.ToChina(message.CreatedAt).ToString("HH:mm:ss");
         IsStreaming = false;
         ParseToolContent(message.Content, out var toolCallId, out var toolName, out var header, out var summary, out var detail, out var argumentsText, out var status);
         if (!string.IsNullOrWhiteSpace(toolCallId))

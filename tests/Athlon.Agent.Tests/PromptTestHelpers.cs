@@ -21,6 +21,7 @@ internal static class PromptTestHelpers
         [
             new BasePersonaSection(),
             new HostEnvironmentSection(),
+            new EncodingPolicySection(),
             new WorkspacePolicySection(),
             new WorkspaceFilesSection(),
             new FileToolsPolicySection(),

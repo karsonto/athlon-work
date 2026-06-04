@@ -733,7 +733,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         await RefreshMcpRuntimeAsync();
         ApplySessionWorkspace();
         OnPropertyChanged(nameof(Sidebar));
-        SettingsStatus = $"Saved at {DateTime.Now:HH:mm:ss}";
+        SettingsStatus = $"Saved at {AppTimeZone.Now:HH:mm:ss}";
     }
 
     public Task OpenWorkspaceFileInEditorAsync(string path) =>

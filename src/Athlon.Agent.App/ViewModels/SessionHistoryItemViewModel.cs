@@ -16,7 +16,7 @@ public sealed partial class SessionHistoryItemViewModel : ObservableObject
     {
         Id = entry.Id;
         Title = string.IsNullOrWhiteSpace(entry.Title) ? "未命名 Agent" : entry.Title;
-        UpdatedAtText = entry.UpdatedAt.ToLocalTime().ToString("MM-dd HH:mm");
+        UpdatedAtText = AppTimeZone.ToChina(entry.UpdatedAt).ToString("MM-dd HH:mm");
         IsActive = isActive;
         IsRunning = isRunning;
         _stopSession = stopSession;
