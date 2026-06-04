@@ -8,25 +8,30 @@ namespace Athlon.Agent.Tests;
 public sealed class AppThemeResourceBuilderTests
 {
     [Fact]
-    public void BuildApplicationResources_exposes_brush_keys_at_root()
+    public void ApplyPalette_inserts_brushes_before_control_styles()
     {
         RunOnStaThread(() =>
         {
-            var resources = AppThemeResourceBuilder.BuildApplicationResources(DarkAppThemePalette.Create());
+            var app = new App();
+            var root = (ResourceDictionary)app.Resources;
 
-            Assert.IsType<SolidColorBrush>(resources["Brush.Text"]);
-            Assert.IsType<SolidColorBrush>(resources["Brush.SubtleText"]);
-            Assert.NotNull(resources["Brush.AppBackground"]);
+            AppThemeResourceBuilder.ApplyPalette(root, DarkAppThemePalette.Create().Chrome);
+
+            var palette = AppThemeResourceBuilder.FindPaletteDictionary(root);
+            Assert.NotNull(palette);
+            Assert.Equal(0, root.MergedDictionaries.IndexOf(palette!));
+            Assert.IsType<SolidColorBrush>(palette![AppThemeResourceBuilder.TextBrushKey]);
+            app.Shutdown();
         });
     }
 
     [Fact]
-    public void BuildApplicationResources_allows_textblock_measure_before_main_window()
+    public void ApplyPalette_allows_textblock_measure_before_main_window()
     {
         RunOnStaThread(() =>
         {
-            var app = new Application();
-            app.Resources = AppThemeResourceBuilder.BuildApplicationResources(DarkAppThemePalette.Create());
+            var app = new App();
+            AppThemeManager.Apply(AppThemeKind.Dark);
 
             var textBlock = new TextBlock { Text = "Athlon Agent" };
             textBlock.Measure(new Size(200, 40));

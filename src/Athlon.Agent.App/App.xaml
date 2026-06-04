@@ -1,6 +1,7 @@
 ﻿<Application x:Class="Athlon.Agent.App.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Theme brushes and control styles are applied at startup by AppThemeManager. -->
-    <Application.Resources />
+    <Application.Resources>
+        <ResourceDictionary Source="Themes/Theme.xaml" />
+    </Application.Resources>
 </Application>

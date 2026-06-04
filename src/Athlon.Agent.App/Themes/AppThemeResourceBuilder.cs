@@ -5,27 +5,7 @@ namespace Athlon.Agent.App.Themes;
 
 internal static class AppThemeResourceBuilder
 {
-    private static readonly Uri ControlsUri = new("Themes/Controls.xaml", UriKind.Relative);
-    private static readonly Uri OverlaysUri = new("Themes/Overlays.xaml", UriKind.Relative);
-
-    public static ResourceDictionary BuildApplicationResources(AppThemePalette palette)
-    {
-        // Keep brushes on the root dictionary and merge style XAML underneath it.
-        // StaticResource in Controls/Overlays resolves against the immediate parent;
-        // sibling merged dictionaries (palette + styles as peers) leave Foreground as
-        // UnsetValue and crash the license activation window at startup.
-        var chrome = BuildChromeResources(palette.Chrome);
-
-        var controls = new ResourceDictionary();
-        chrome.MergedDictionaries.Add(controls);
-        controls.Source = ControlsUri;
-
-        var overlays = new ResourceDictionary();
-        chrome.MergedDictionaries.Add(overlays);
-        overlays.Source = OverlaysUri;
-
-        return chrome;
-    }
+    internal const string TextBrushKey = "Brush.Text";
 
     public static ResourceDictionary BuildChromeResources(UiChromeColors c)
     {
@@ -37,7 +17,7 @@ internal static class AppThemeResourceBuilder
             ["Brush.PanelAlt"] = Brush(c.PanelAlt),
             ["Brush.Composer"] = Brush(c.Composer),
             ["Brush.Border"] = Brush(c.Border),
-            ["Brush.Text"] = Brush(c.Text),
+            [TextBrushKey] = Brush(c.Text),
             ["Brush.SubtleText"] = Brush(c.SubtleText),
             ["Brush.DisabledText"] = Brush(c.DisabledText),
             ["Brush.DisabledBackground"] = Brush(c.DisabledBackground),
@@ -94,6 +74,45 @@ internal static class AppThemeResourceBuilder
             ["Brush.IconBadge"] = IconBadgeGradient(c),
         };
         return resources;
+    }
+
+    public static void ApplyPalette(ResourceDictionary root, UiChromeColors chrome)
+    {
+        var palette = FindPaletteDictionary(root) ?? InsertPaletteDictionary(root);
+        CopyPaletteEntries(palette, BuildChromeResources(chrome));
+    }
+
+    internal static ResourceDictionary? FindPaletteDictionary(ResourceDictionary root)
+    {
+        if (root.Contains(TextBrushKey))
+        {
+            return root;
+        }
+
+        foreach (var merged in root.MergedDictionaries)
+        {
+            if (merged.Contains(TextBrushKey))
+            {
+                return merged;
+            }
+        }
+
+        return null;
+    }
+
+    private static ResourceDictionary InsertPaletteDictionary(ResourceDictionary root)
+    {
+        var palette = new ResourceDictionary();
+        root.MergedDictionaries.Insert(0, palette);
+        return palette;
+    }
+
+    private static void CopyPaletteEntries(ResourceDictionary target, ResourceDictionary source)
+    {
+        foreach (var key in source.Keys)
+        {
+            target[key] = source[key];
+        }
     }
 
     private static LinearGradientBrush ChatGradient(UiChromeColors c)

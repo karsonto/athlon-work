@@ -20,9 +20,9 @@ public static class AppThemeManager
             _ => DarkAppThemePalette.Create(),
         };
 
-        if (Application.Current is not null)
+        if (Application.Current?.Resources is ResourceDictionary root)
         {
-            Application.Current.Resources = AppThemeResourceBuilder.BuildApplicationResources(Current);
+            AppThemeResourceBuilder.ApplyPalette(root, Current.Chrome);
         }
 
         ThemeChanged?.Invoke(null, EventArgs.Empty);

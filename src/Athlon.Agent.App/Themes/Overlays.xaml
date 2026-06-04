@@ -2,11 +2,11 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <Style x:Key="MarkdownContextMenuStyle" TargetType="{x:Type ContextMenu}">
-        <Setter Property="Background" Value="{StaticResource Brush.MenuBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource Brush.Border}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.MenuBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="4" />
-        <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ContextMenu}">
@@ -25,7 +25,7 @@
 
     <Style x:Key="MarkdownContextMenuItemStyle" TargetType="{x:Type MenuItem}">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="Padding" Value="12,8" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Template">
@@ -42,10 +42,10 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource Brush.MenuHover}" />
+                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Brush.MenuHover}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Foreground" Value="{StaticResource Brush.DisabledText}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.DisabledText}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -54,16 +54,16 @@
     </Style>
 
     <Style TargetType="{x:Type ContextMenu}">
-        <Setter Property="Background" Value="{StaticResource Brush.MenuBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource Brush.Border}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.MenuBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="4" />
-        <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
     </Style>
 
     <Style TargetType="{x:Type MenuItem}">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="Padding" Value="12,8" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Template">
@@ -79,10 +79,10 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource Brush.MenuHover}" />
+                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Brush.MenuHover}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Foreground" Value="{StaticResource Brush.DisabledText}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.DisabledText}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -91,7 +91,7 @@
     </Style>
 
     <Style x:Key="PreviewWindowStyle" TargetType="Window">
-        <Setter Property="Background" Value="{StaticResource Brush.AppBackground}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.AppBackground}" />
         <Setter Property="WindowStyle" Value="None" />
         <Setter Property="ResizeMode" Value="CanResize" />
     </Style>
@@ -99,19 +99,19 @@
     <Style x:Key="PreviewWindowTitleStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="16" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
     </Style>
 
     <Style x:Key="PreviewWindowSubtitleStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12" />
-        <Setter Property="Foreground" Value="{StaticResource Brush.SubtleText}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
         <Setter Property="Margin" Value="0,4,0,0" />
     </Style>
 
     <Style x:Key="PreviewContentFrameStyle" TargetType="Border">
-        <Setter Property="Background" Value="{StaticResource Brush.PreviewContentBackground}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.PreviewContentBackground}" />
         <Setter Property="CornerRadius" Value="16" />
-        <Setter Property="BorderBrush" Value="{StaticResource Brush.Border}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="12" />
     </Style>
@@ -119,14 +119,14 @@
     <Style x:Key="ToastNoticeStyle" TargetType="Border">
         <Setter Property="Padding" Value="16,12" />
         <Setter Property="CornerRadius" Value="16" />
-        <Setter Property="Background" Value="{StaticResource Brush.ToastBackground}" />
-        <Setter Property="BorderBrush" Value="{StaticResource Brush.ToastBorder}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.ToastBackground}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToastBorder}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="IsHitTestVisible" Value="False" />
     </Style>
 
     <Style x:Key="ToastNoticeTextStyle" TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="FontSize" Value="13" />
     </Style>
 
