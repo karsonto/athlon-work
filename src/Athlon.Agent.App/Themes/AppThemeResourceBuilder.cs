@@ -12,8 +12,18 @@ internal static class AppThemeResourceBuilder
     {
         var merged = new ResourceDictionary();
         merged.MergedDictionaries.Add(BuildChromeResources(palette.Chrome));
-        merged.MergedDictionaries.Add(new ResourceDictionary { Source = ControlsUri });
-        merged.MergedDictionaries.Add(new ResourceDictionary { Source = OverlaysUri });
+
+        // Set Source only after merging into the parent tree. Object initializers
+        // load XAML immediately, before Add() runs, so StaticResource lookups for
+        // Brush.* keys would fail and Foreground would become UnsetValue.
+        var controls = new ResourceDictionary();
+        merged.MergedDictionaries.Add(controls);
+        controls.Source = ControlsUri;
+
+        var overlays = new ResourceDictionary();
+        merged.MergedDictionaries.Add(overlays);
+        overlays.Source = OverlaysUri;
+
         return merged;
     }
 
