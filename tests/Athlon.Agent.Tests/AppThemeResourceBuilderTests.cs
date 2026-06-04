@@ -12,7 +12,7 @@ public sealed class AppThemeResourceBuilderTests
     {
         RunOnStaThread(() =>
         {
-            var app = new App();
+            var app = new global::Athlon.Agent.App.App();
             var root = (ResourceDictionary)app.Resources;
 
             AppThemeResourceBuilder.ApplyPalette(root, DarkAppThemePalette.Create().Chrome);
@@ -30,7 +30,7 @@ public sealed class AppThemeResourceBuilderTests
     {
         RunOnStaThread(() =>
         {
-            var app = new App();
+            var app = new global::Athlon.Agent.App.App();
             AppThemeManager.Apply(AppThemeKind.Dark);
 
             var textBlock = new TextBlock { Text = "Athlon Agent" };

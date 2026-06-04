@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private bool _shutdownInProgress;
     private bool _chatPointerDown;
     private bool _chatScrollLockedByUser;
+    private ScrollViewer? _chatMessagesScrollViewer;
 
     public MainWindow(MainWindowViewModel viewModel)
     {
@@ -44,7 +45,45 @@ public partial class MainWindow : Window
         ApplyContextSidebarLayout();
         ApplyEditorPaneLayout();
         ApplyComposerLayout();
+        AttachChatMessagesScrollViewer();
         ScrollChatToEnd();
+    }
+
+    private void AttachChatMessagesScrollViewer()
+    {
+        if (ChatMessagesList is null)
+        {
+            return;
+        }
+
+        _chatMessagesScrollViewer = FindVisualChild<ScrollViewer>(ChatMessagesList);
+        if (_chatMessagesScrollViewer is null)
+        {
+            return;
+        }
+
+        _chatMessagesScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Visible;
+        _chatMessagesScrollViewer.ScrollChanged += ChatMessagesScrollViewer_OnScrollChanged;
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            var nested = FindVisualChild<T>(child);
+            if (nested is not null)
+            {
+                return nested;
+            }
+        }
+
+        return null;
     }
 
     private async void OnMainWindowClosing(object? sender, CancelEventArgs e)
@@ -302,7 +341,7 @@ public partial class MainWindow : Window
 
     private void ScrollChatToEnd()
     {
-        if (ChatMessagesScrollViewer is null)
+        if (_chatMessagesScrollViewer is null)
         {
             return;
         }
@@ -312,12 +351,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        ChatMessagesScrollViewer.Dispatcher.BeginInvoke(
+        _chatMessagesScrollViewer.Dispatcher.BeginInvoke(
             DispatcherPriority.Loaded,
             () =>
             {
                 _isProgrammaticScroll = true;
-                ChatMessagesScrollViewer.ScrollToEnd();
+                _chatMessagesScrollViewer!.ScrollToEnd();
                 _isProgrammaticScroll = false;
             });
     }
@@ -335,21 +374,23 @@ public partial class MainWindow : Window
 
     private void UpdateChatScrollLock()
     {
-        _chatScrollLockedByUser = ChatScrollHelper.HasTextSelection(ChatMessagesScrollViewer);
+        _chatScrollLockedByUser = ChatScrollHelper.HasTextSelection(ChatMessagesList);
         if (_chatScrollLockedByUser)
         {
             _autoScrollEnabled = false;
             return;
         }
 
-        if (ChatMessagesScrollViewer is not null && IsNearBottom(ChatMessagesScrollViewer))
+        if (_chatMessagesScrollViewer is not null && IsNearBottom(_chatMessagesScrollViewer))
         {
             _autoScrollEnabled = true;
         }
     }
 
     private bool ShouldSuppressChatAutoScroll() =>
-        _chatPointerDown || _chatScrollLockedByUser || ChatScrollHelper.HasTextSelection(ChatMessagesScrollViewer);
+        _chatPointerDown
+        || _chatScrollLockedByUser
+        || ChatScrollHelper.HasTextSelection(ChatMessagesList);
 
     private void ChatMessagesScrollViewer_OnScrollChanged(object sender, ScrollChangedEventArgs e)
     {

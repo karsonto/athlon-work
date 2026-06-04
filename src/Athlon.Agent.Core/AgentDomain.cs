@@ -18,7 +18,8 @@ public enum MessageRole
 public sealed record ImageAttachment(
     string FileName,
     string MimeType,
-    string DataUrl);
+    string? DataUrl = null,
+    string? LocalPath = null);
 
 public sealed record ChatMessage(
     string Id,

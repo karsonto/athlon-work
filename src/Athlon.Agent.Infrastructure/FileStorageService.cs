@@ -122,7 +122,8 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
             byId[message.Id] = message;
         }
 
-        return byId.Values.OrderBy(message => message.CreatedAt).ToArray();
+        var ordered = byId.Values.OrderBy(message => message.CreatedAt).ToArray();
+        return ChatMessageMemorySanitizer.SanitizeMessages(ordered);
     }
 
     public async Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -186,7 +187,8 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         var directPath = Path.Combine(GetSessionDirectory(sessionId), "session.json");
         if (File.Exists(directPath))
         {
-            return await jsonFileStore.LoadAsync<AgentSession>(directPath, cancellationToken);
+            var session = await jsonFileStore.LoadAsync<AgentSession>(directPath, cancellationToken);
+            return session is null ? null : ChatMessageMemorySanitizer.SanitizeSession(session);
         }
 
         if (!Directory.Exists(paths.SessionsPath))
@@ -196,11 +198,14 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
 
         foreach (var file in Directory.EnumerateFiles(paths.SessionsPath, "session.json", SearchOption.AllDirectories))
         {
-            var session = await jsonFileStore.LoadAsync<AgentSession>(file, cancellationToken);
-            if (session is not null && string.Equals(session.Id, sessionId, StringComparison.Ordinal))
+            var indexEntry = SessionJsonIndexReader.TryRead(file);
+            if (indexEntry is null || !string.Equals(indexEntry.Id, sessionId, StringComparison.Ordinal))
             {
-                return session;
+                continue;
             }
+
+            var session = await jsonFileStore.LoadAsync<AgentSession>(file, cancellationToken);
+            return session is null ? null : ChatMessageMemorySanitizer.SanitizeSession(session);
         }
 
         return null;
@@ -213,22 +218,60 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
             return Array.Empty<SessionIndexEntry>();
         }
 
+        var indexPath = Path.Combine(paths.SessionsPath, "index.json");
+        if (File.Exists(indexPath))
+        {
+            var cached = await jsonFileStore.LoadAsync<List<SessionIndexEntry>>(indexPath, cancellationToken);
+            if (cached is { Count: > 0 } && IsSessionIndexFresh(indexPath, cached))
+            {
+                return cached.OrderByDescending(item => item.UpdatedAt).ToArray();
+            }
+        }
+
+        return await RebuildSessionIndexAsync(cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<SessionIndexEntry>> RebuildSessionIndexAsync(CancellationToken cancellationToken)
+    {
         var result = new Dictionary<string, SessionIndexEntry>(StringComparer.Ordinal);
         foreach (var file in Directory.EnumerateFiles(paths.SessionsPath, "session.json", SearchOption.AllDirectories))
         {
-            var session = await jsonFileStore.LoadAsync<AgentSession>(file, cancellationToken);
-            if (session is null)
+            var entry = SessionJsonIndexReader.TryRead(file);
+            if (entry is null)
             {
                 continue;
             }
 
-            if (!result.TryGetValue(session.Id, out var existing) || session.UpdatedAt > existing.UpdatedAt)
+            if (!result.TryGetValue(entry.Id, out var existing) || entry.UpdatedAt > existing.UpdatedAt)
             {
-                result[session.Id] = new SessionIndexEntry(session.Id, session.Title, Path.GetDirectoryName(file)!, session.UpdatedAt);
+                result[entry.Id] = entry;
             }
         }
 
-        return result.Values.OrderByDescending(item => item.UpdatedAt).ToArray();
+        var ordered = result.Values.OrderByDescending(item => item.UpdatedAt).ToArray();
+        Directory.CreateDirectory(paths.SessionsPath);
+        await jsonFileStore.SaveAsync(Path.Combine(paths.SessionsPath, "index.json"), ordered, cancellationToken);
+        return ordered;
+    }
+
+    private static bool IsSessionIndexFresh(string indexPath, IReadOnlyList<SessionIndexEntry> entries)
+    {
+        var indexTime = File.GetLastWriteTimeUtc(indexPath);
+        foreach (var entry in entries)
+        {
+            var sessionJson = Path.Combine(entry.Path, "session.json");
+            if (!File.Exists(sessionJson))
+            {
+                continue;
+            }
+
+            if (File.GetLastWriteTimeUtc(sessionJson) > indexTime)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public async Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -325,9 +368,7 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         await IndexLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var index = await ListSessionsAsync(cancellationToken);
-            Directory.CreateDirectory(paths.SessionsPath);
-            await jsonFileStore.SaveAsync(Path.Combine(paths.SessionsPath, "index.json"), index, cancellationToken);
+            await RebuildSessionIndexAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {

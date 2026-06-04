@@ -10,6 +10,8 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public const int MaxToolDetailDisplayChars = 16_384;
     private const int ToolDetailPreviewChars = 4_096;
 
+    private string _toolDetailFull = string.Empty;
+
     public ChatMessageViewModel(ChatMessage message, bool expandTool = false)
     {
         MessageId = message.Id;
@@ -181,7 +183,11 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     public string ChevronGlyph => IsExpanded ? "▼" : "▶";
 
-    partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(ChevronGlyph));
+    partial void OnIsExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ChevronGlyph));
+        RefreshToolDetailDisplay();
+    }
 
     partial void OnToolArgumentsTextChanged(string value)
     {
@@ -404,11 +410,27 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     private void AssignToolDetail(string detail)
     {
-        ToolDetail = detail;
-        ToolDetailDisplay = TruncateToolDetailForDisplay(detail);
+        _toolDetailFull = detail ?? string.Empty;
+        RefreshToolDetailDisplay();
     }
 
-    internal static string TruncateToolDetailForDisplay(string detail) => detail;
+    private void RefreshToolDetailDisplay()
+    {
+        var limit = IsExpanded ? MaxToolDetailDisplayChars : ToolDetailPreviewChars;
+        var display = TruncateToolDetailForDisplay(_toolDetailFull, limit);
+        ToolDetail = display;
+        ToolDetailDisplay = display;
+    }
+
+    internal static string TruncateToolDetailForDisplay(string detail, int maxChars)
+    {
+        if (string.IsNullOrEmpty(detail) || detail.Length <= maxChars)
+        {
+            return detail;
+        }
+
+        return detail[..maxChars] + "\n…";
+    }
 
     private static string AppendCompactionDisplayNotice(string summary)
     {

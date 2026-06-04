@@ -68,7 +68,7 @@ public sealed class QueuedTurnImageViewModel
     public QueuedTurnImageViewModel(ImageAttachment attachment)
     {
         FileName = attachment.FileName;
-        Thumbnail = ImageAttachmentUi.TryCreateThumbnail(attachment.DataUrl);
+        Thumbnail = ImageAttachmentUi.TryCreateThumbnail(attachment);
     }
 
     public string FileName { get; }

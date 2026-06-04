@@ -24,6 +24,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly ISkillRuntime _skillRuntime;
     private readonly IImageAttachmentReader _imageAttachmentReader;
+    private readonly IImageAttachmentStore _imageAttachmentStore;
+    private readonly IAppPathProvider _paths;
     private readonly SessionTurnHost _turnHost;
     private readonly SessionUiCache _uiCache;
     private readonly ApplicationShutdownService _shutdownService;
@@ -39,6 +41,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IActiveWorkspaceContext workspaceContext,
         IMcpRegistry mcpRegistry,
         IImageAttachmentReader imageAttachmentReader,
+        IImageAttachmentStore imageAttachmentStore,
         IAppPathProvider paths,
         IAgentSkillCatalog skillCatalog,
         ISkillRuntime skillRuntime,
@@ -53,6 +56,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _workspaceContext = workspaceContext;
         _mcpRegistry = mcpRegistry;
         _imageAttachmentReader = imageAttachmentReader;
+        _imageAttachmentStore = imageAttachmentStore;
+        _paths = paths;
         _turnHost = turnHost;
         _uiCache = uiCache;
         _shutdownService = shutdownService;
@@ -506,7 +511,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var images = await _imageAttachmentReader.ReadImagesAsync(dialog.FileNames);
         foreach (var image in images)
         {
-            if (PendingImageAttachments.Any(existing => string.Equals(existing.DataUrl, image.DataUrl, StringComparison.Ordinal)))
+            if (PendingImageAttachments.Any(existing => ImageAttachmentsMatch(existing.Attachment, image)))
             {
                 continue;
             }
@@ -536,7 +541,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _skillCatalog.Reload();
         var input = SkillComposerExpander.Expand(ComposerText.Trim(), _skillRuntime.GetSkills());
-        var imageAttachments = PendingImageAttachments.Select(item => item.Attachment).ToArray();
+        var imageAttachments = PersistPendingImages(_displayedSessionId);
         ComposerText = string.Empty;
         StreamingText = string.Empty;
         SyncWorkspaceContext();
@@ -1120,20 +1125,22 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (_activeUi.Messages.Count == 0)
         {
-            var displayMessages = await _storage.LoadConversationDisplayAsync(sessionId);
-            if (displayMessages.Count > 0)
+            if (_session.Messages.Count > 0)
             {
-                _activeUi.HydrateDisplay(_session, displayMessages);
+                _activeUi.HydrateFromSession(_session);
             }
             else
             {
-                _activeUi.HydrateFromSession(_session);
+                var displayMessages = await _storage.LoadConversationDisplayAsync(sessionId);
+                if (displayMessages.Count > 0)
+                {
+                    _activeUi.HydrateDisplay(_session, displayMessages);
+                }
             }
         }
 
         ApplySessionWorkspace();
         UpdateDisplayedBusyState();
-        await RefreshSessionHistoryAsync();
         SettingsStatus = $"已加载对话：{_session.Title}";
         NotifyCommandStatesChanged();
     }
@@ -1398,6 +1405,44 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             // Superseded by a newer notice.
         }
     }
+
+    private ImageAttachment[] PersistPendingImages(string sessionId)
+    {
+        var persisted = new List<ImageAttachment>(PendingImageAttachments.Count);
+        foreach (var pending in PendingImageAttachments)
+        {
+            persisted.Add(PersistImageAttachment(sessionId, pending.Attachment));
+        }
+
+        return persisted.ToArray();
+    }
+
+    private ImageAttachment PersistImageAttachment(string sessionId, ImageAttachment attachment)
+    {
+        if (!string.IsNullOrWhiteSpace(attachment.DataUrl))
+        {
+            return attachment;
+        }
+
+        if (string.IsNullOrWhiteSpace(attachment.LocalPath))
+        {
+            return attachment;
+        }
+
+        var sessionAttachmentsRoot = Path.Combine(_paths.SessionsPath, sessionId, "attachments");
+        if (attachment.LocalPath.StartsWith(sessionAttachmentsRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            return attachment;
+        }
+
+        return _imageAttachmentStore.SaveFromFile(sessionId, attachment.LocalPath);
+    }
+
+    private static bool ImageAttachmentsMatch(ImageAttachment left, ImageAttachment right) =>
+        (!string.IsNullOrWhiteSpace(left.LocalPath)
+            && string.Equals(left.LocalPath, right.LocalPath, StringComparison.OrdinalIgnoreCase))
+        || (!string.IsNullOrWhiteSpace(left.DataUrl)
+            && string.Equals(left.DataUrl, right.DataUrl, StringComparison.Ordinal));
 }
 
 public sealed record AtCompletionItemViewModel(
@@ -1412,7 +1457,6 @@ public sealed class PendingImageAttachmentViewModel(ImageAttachment attachment)
     public ImageAttachment Attachment { get; } = attachment;
     public string FileName => attachment.FileName;
     public string MimeType => attachment.MimeType;
-    public string DataUrl => attachment.DataUrl;
     public System.Windows.Media.ImageSource? Thumbnail =>
-        Services.ImageAttachmentUi.TryCreateThumbnail(attachment.DataUrl);
+        Services.ImageAttachmentUi.TryCreateThumbnail(attachment);
 }

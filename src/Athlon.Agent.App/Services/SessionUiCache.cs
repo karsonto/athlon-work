@@ -5,7 +5,7 @@ namespace Athlon.Agent.App.Services;
 
 public sealed class SessionUiCache
 {
-    private const int MaxCachedSessions = 10;
+    private const int MaxCachedSessions = 3;
 
     private readonly ConcurrentDictionary<string, SessionTurnUiController> _controllers = new(StringComparer.Ordinal);
     private readonly LinkedList<string> _lru = new();
@@ -31,7 +31,11 @@ public sealed class SessionUiCache
 
     public void Remove(string sessionId)
     {
-        _controllers.TryRemove(sessionId, out _);
+        if (_controllers.TryRemove(sessionId, out var controller))
+        {
+            controller.Release();
+        }
+
         lock (_lruLock)
         {
             _lru.Remove(sessionId);
@@ -48,7 +52,10 @@ public sealed class SessionUiCache
             {
                 var evict = _lru.Last!.Value;
                 _lru.RemoveLast();
-                _controllers.TryRemove(evict, out _);
+                if (_controllers.TryRemove(evict, out var controller))
+                {
+                    controller.Release();
+                }
             }
         }
     }

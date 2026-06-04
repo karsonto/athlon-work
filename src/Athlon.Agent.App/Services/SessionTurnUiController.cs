@@ -101,6 +101,15 @@ public sealed class SessionTurnUiController
         });
     }
 
+    public void Release()
+    {
+        RunOnUiSync(() =>
+        {
+            ResetForTurn();
+            Messages.Clear();
+        });
+    }
+
     public SessionTurnEndSnapshot CaptureEndSnapshot(
         AgentSession session,
         bool wasCancelled,

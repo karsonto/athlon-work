@@ -557,12 +557,18 @@ public sealed class AgentRuntime(
 
         foreach (var image in message.ImageAttachments)
         {
+            var dataUrl = ImageAttachmentDataUrlResolver.ResolveDataUrl(image);
+            if (string.IsNullOrWhiteSpace(dataUrl))
+            {
+                continue;
+            }
+
             parts.Add(new Dictionary<string, object?>
             {
                 ["type"] = "image_url",
                 ["image_url"] = new Dictionary<string, object?>
                 {
-                    ["url"] = image.DataUrl
+                    ["url"] = dataUrl
                 }
             });
         }

@@ -47,12 +47,11 @@ public sealed class ImageAttachmentReader : IImageAttachmentReader
                 continue;
             }
 
-            var bytes = await File.ReadAllBytesAsync(filePath, cancellationToken);
-            var base64 = Convert.ToBase64String(bytes);
             result.Add(new ImageAttachment(
                 Path.GetFileName(filePath),
                 mime,
-                $"data:{mime};base64,{base64}"));
+                DataUrl: null,
+                LocalPath: Path.GetFullPath(filePath)));
         }
 
         return result;

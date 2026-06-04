@@ -273,6 +273,8 @@ public partial class MarkdownMessageView : UserControl
         }
 
         DetachSelectionHandler();
+        MarkdownViewer.Markdown = string.Empty;
+        MarkdownViewer.Document = null;
     }
 
     private void AttachMarkdownContextMenu()

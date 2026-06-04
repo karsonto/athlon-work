@@ -641,32 +641,13 @@
                 </StackPanel>
 
                 <!-- Messages (ChatPane bubbles) -->
-                <ScrollViewer x:Name="ChatMessagesScrollViewer"
-                              Padding="24,20,20,28"
-                              VerticalScrollBarVisibility="Visible"
-                              ClipToBounds="True"
-                              CanContentScroll="False"
-                              PanningMode="None"
-                              PreviewMouseLeftButtonDown="ChatMessagesScrollViewer_OnPreviewMouseLeftButtonDown"
-                              PreviewMouseLeftButtonUp="ChatMessagesScrollViewer_OnPreviewMouseLeftButtonUp"
-                              ScrollChanged="ChatMessagesScrollViewer_OnScrollChanged">
-                    <ScrollViewer.Style>
-                        <Style TargetType="ScrollViewer">
-                            <Setter Property="Visibility" Value="Visible" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Messages.Count}" Value="0">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ScrollViewer.Style>
-                    <ItemsControl ItemsSource="{Binding Messages}">
-                        <ItemsControl.ItemContainerStyle>
-                            <Style TargetType="ContentPresenter">
-                                <Setter Property="HorizontalAlignment" Value="Stretch" />
-                            </Style>
-                        </ItemsControl.ItemContainerStyle>
-                        <ItemsControl.ItemTemplate>
+                <ListBox x:Name="ChatMessagesList"
+                             ItemsSource="{Binding Messages}"
+                             Padding="24,20,20,28"
+                             ClipToBounds="True"
+                             PreviewMouseLeftButtonDown="ChatMessagesScrollViewer_OnPreviewMouseLeftButtonDown"
+                             PreviewMouseLeftButtonUp="ChatMessagesScrollViewer_OnPreviewMouseLeftButtonUp">
+                        <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <!-- 对齐 report/html：用户 justify-end，助手 justify-start -->
                                 <StackPanel Margin="0,0,0,16"
@@ -1065,9 +1046,18 @@
                                     </Border>
                                 </StackPanel>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
+                        </ListBox.ItemTemplate>
+                        <ListBox.Style>
+                            <Style TargetType="ListBox" BasedOn="{StaticResource ChatMessageListBoxStyle}">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Messages.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ListBox.Style>
+                    </ListBox>
                 </Grid>
 
                 <GridSplitter x:Name="ComposerSplitter"
