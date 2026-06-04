@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Core;
 
@@ -19,6 +20,7 @@ public sealed class AppSettings
     public AgentTurnSettings AgentTurn { get; set; } = new();
     public WorkspaceIgnoreSettings WorkspaceIgnore { get; set; } = new();
     public FileReadSettings FileRead { get; set; } = new();
+    public SubAgentSettings SubAgent { get; set; } = new();
 }
 
 public sealed class FileReadSettings

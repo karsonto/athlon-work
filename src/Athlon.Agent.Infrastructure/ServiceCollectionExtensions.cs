@@ -7,8 +7,10 @@ using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Licensing;
+using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Infrastructure.Licensing;
 using Athlon.Agent.Infrastructure.Prompt;
+using Athlon.Agent.Infrastructure.SubAgents;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -63,6 +65,18 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, GlobFilesTool>();
         services.AddSingleton<IAgentTool, ExecuteCommandTool>();
         services.AddSingleton<IAgentTool, LoadSkillThroughPathTool>();
+        services.AddSingleton<Lazy<ChildAgentToolRouter>>(static sp => new Lazy<ChildAgentToolRouter>(() =>
+            new ChildAgentToolRouter(
+                sp.GetServices<IAgentTool>().Where(tool => tool is not IExcludedFromChildAgentToolkit),
+                sp.GetRequiredService<IMcpRegistry>())));
+        services.AddSingleton<SubAgentSystemPromptOrchestrator>();
+        services.AddSingleton<ISubAgentSessionStore, FileSubAgentSessionStore>();
+        if (settings.SubAgent.Enabled)
+        {
+            services.AddSingleton<SubAgentTool>();
+            services.AddSingleton<IAgentTool>(static sp => sp.GetRequiredService<SubAgentTool>());
+        }
+
         services.AddSingleton<TruncateArgsService>();
         services.AddSingleton<ITokenEstimatorCalibrator, TokenEstimatorCalibrator>();
         services.AddSingleton<IConversationCompactor, ConversationCompactor>();

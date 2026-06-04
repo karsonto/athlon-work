@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -36,7 +37,8 @@ public sealed class SessionHttpLogService(IAppPathProvider paths, IJsonFileStore
             return;
         }
 
-        var httpDir = Path.Combine(paths.SessionsPath, sessionId, "http");
+        var sessionDir = AmbientSubAgentStorageScope.ResolveSessionDirectory(paths.SessionsPath, sessionId);
+        var httpDir = Path.Combine(sessionDir, "http");
         Directory.CreateDirectory(httpDir);
         var path = Path.Combine(httpDir, "interactions.jsonl");
 

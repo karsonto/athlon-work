@@ -49,6 +49,7 @@ public partial class App : Application
             AppThemeManager.ApplyFromSettings(settings.Ui);
             StartupTrace($"Theme applied: {AppThemeManager.CurrentKind}");
 
+            StartupTrace("Resolving MainWindow...");
             MainWindow = _services.GetRequiredService<MainWindow>();
             StartupTrace("MainWindow resolved");
             MainWindow.Show();

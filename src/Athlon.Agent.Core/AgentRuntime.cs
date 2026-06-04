@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Core;
 
@@ -79,9 +80,13 @@ public sealed class AgentRuntime(
             session = session.WithMessage(userMessage);
             await PersistMessageAsync(session, userMessage, cancellationToken);
 
-            var tools = toolRouter.ListTools();
-            var frozenPrompt = systemPromptOrchestrator.PrepareForTurn(session, tools);
-            var environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
+            var activeRouter = ResolveToolRouter();
+            var activePrompt = ResolveSystemPromptOrchestrator();
+            var tools = activeRouter.ListTools();
+            var frozenPrompt = activePrompt.PrepareForTurn(session, tools);
+            var environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
+            var modelToolRound = 0;
+            var maxModelToolRounds = AgentLoopOptionsScope.Current?.MaxModelToolRounds;
             var modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
 
             if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
@@ -100,7 +105,7 @@ public sealed class AgentRuntime(
                     environmentPrompt,
                     tools,
                     cancellationToken: cancellationToken);
-                environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
+                environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
                 modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
 
                 var (updatedSession, response) = await CompleteWithOverflowRetryAsync(
@@ -136,7 +141,17 @@ public sealed class AgentRuntime(
                 session = session.WithMessage(assistantWithToolCalls);
                 await PersistMessageAsync(session, assistantWithToolCalls, cancellationToken);
 
-                environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(frozenPrompt, session, tools);
+                modelToolRound++;
+                if (maxModelToolRounds is > 0 && modelToolRound >= maxModelToolRounds)
+                {
+                    _logger.Warning(
+                        "Max model tool rounds ({MaxRounds}) reached for session {SessionId}; stopping without executing pending tools",
+                        maxModelToolRounds,
+                        session.Id);
+                    return session;
+                }
+
+                environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
                 modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
                 foreach (var toolCall in response.ToolCalls)
                 {
@@ -185,7 +200,7 @@ public sealed class AgentRuntime(
                 ContextPressureLevel.Overflow,
                 cancellationToken);
 
-            environmentPrompt = systemPromptOrchestrator.BuildForReasoningIteration(
+            environmentPrompt = ResolveSystemPromptOrchestrator().BuildForReasoningIteration(
                 frozenPrompt,
                 session,
                 tools);
@@ -213,7 +228,7 @@ public sealed class AgentRuntime(
         try
         {
             result = await Task.Run(
-                    () => toolRouter.InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken),
+                    () => ResolveToolRouter().InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken),
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -628,6 +643,11 @@ public sealed class AgentRuntime(
     {
         return terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
     }
+
+    private IToolRouter ResolveToolRouter() => AmbientToolRouterScope.CurrentRouter ?? toolRouter;
+
+    private ISystemPromptOrchestrator ResolveSystemPromptOrchestrator() =>
+        AmbientSystemPromptOrchestratorScope.CurrentOrchestrator ?? systemPromptOrchestrator;
 }
 public sealed class AgentOrchestrator(IAgentRuntime agentRuntime) : IAgentOrchestrator
 {

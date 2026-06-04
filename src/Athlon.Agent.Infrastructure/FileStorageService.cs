@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.SubAgents;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -389,7 +390,8 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
 
     private string GetSessionDirectory(AgentSession session) => GetSessionDirectory(session.Id);
 
-    private string GetSessionDirectory(string sessionId) => Path.Combine(paths.SessionsPath, sessionId);
+    private string GetSessionDirectory(string sessionId) =>
+        AmbientSubAgentStorageScope.ResolveSessionDirectory(paths.SessionsPath, sessionId);
 
     private string GetSessionTranscriptsDirectory(string sessionId) =>
         Path.Combine(GetSessionDirectory(sessionId), "transcripts");

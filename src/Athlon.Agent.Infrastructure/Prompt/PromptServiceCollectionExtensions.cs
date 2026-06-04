@@ -16,7 +16,9 @@ public static class PromptServiceCollectionExtensions
         services.AddSingleton<IEnvironmentPromptSection, FileToolsPolicySection>();
         services.AddSingleton<IEnvironmentPromptSection, ToolsPolicySection>();
         services.AddSingleton<IEnvironmentPromptSection, SkillsSection>();
+        services.AddSingleton<IEnvironmentPromptSection, SubAgentDelegationSection>();
         services.AddSingleton<IEnvironmentPromptSection, ProductGuidanceSection>();
+        services.AddSingleton<IEnvironmentPromptSection, SubAgentPersonaSection>();
         services.AddSingleton<ISystemPromptOrchestrator, SystemPromptOrchestrator>();
         services.AddSingleton<IAgentEnvironmentPromptBuilder, EnvironmentPromptBuilderAdapter>();
         return services;
