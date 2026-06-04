@@ -9,4 +9,8 @@ public static class ToolPathDescriptions
     public const string OptionalWorkspaceRelativeDirectory =
         "Optional directory relative to workspace root (forward slashes). "
         + "Do NOT prefix with the workspace folder name.";
+
+    public const string OptionalWorkspaceRelativeCwd =
+        "Optional working directory relative to workspace root (forward slashes). "
+        + "Defaults to workspace root. Quote paths with spaces or non-ASCII characters in cmd commands.";
 }

@@ -38,17 +38,32 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
             return ToolResult.Failure("Directory not found", fullPath);
         }
 
+        var workspaceRoot = guard.Normalize(".");
         var ignorePatterns = guard.GetIgnorePatterns();
         var files = Directory.EnumerateFileSystemEntries(fullPath, "*", SearchOption.TopDirectoryOnly)
             .Where(path => !WorkspacePathFilter.ShouldIgnoreEntryName(Path.GetFileName(path), ignorePatterns))
             .OrderBy(path => Directory.Exists(path) ? 0 : 1)
-            .ThenBy(Path.GetFileName)
+            .ThenBy(path => ToolPathNormalizer.ForModel(Path.GetRelativePath(workspaceRoot, path)))
             .Take(200)
-            .Select(path => Directory.Exists(path) ? $"[DIR]  {Path.GetFileName(path)}" : $"[FILE] {Path.GetFileName(path)} ({new FileInfo(path).Length} bytes)")
+            .Select(path => FormatEntry(workspaceRoot, path))
             .ToArray();
 
         await audit.WriteAsync("file_list", new { path = fullPath, count = files.Length }, cancellationToken);
         var content = files.Length == 0 ? "(empty directory)" : string.Join(Environment.NewLine, files);
-        return ToolResult.Success($"Listed {files.Length} entries from {Path.GetFileName(fullPath)}", content);
+        var listedDir = ToolPathNormalizer.ForModel(Path.GetRelativePath(workspaceRoot, fullPath));
+        if (string.IsNullOrEmpty(listedDir))
+        {
+            listedDir = ".";
+        }
+
+        return ToolResult.Success($"Listed {files.Length} entries from {listedDir}", content);
+    }
+
+    private static string FormatEntry(string workspaceRoot, string fullPath)
+    {
+        var relative = ToolPathNormalizer.ForModel(Path.GetRelativePath(workspaceRoot, fullPath));
+        return Directory.Exists(fullPath)
+            ? $"[DIR]  {relative}/"
+            : $"[FILE] {relative} ({new FileInfo(fullPath).Length} bytes)";
     }
 }

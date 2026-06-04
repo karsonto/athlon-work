@@ -67,7 +67,6 @@ public sealed class ExecuteCommandToolTests
 
         Assert.False(result.Succeeded);
         Assert.Contains("working directory", result.Summary, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(missingDir, result.Error ?? string.Empty, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -89,12 +88,79 @@ public sealed class ExecuteCommandToolTests
         Assert.Equal(3600, ExecuteCommandTool.MaxTimeoutSeconds);
     }
 
-    private static ExecuteCommandTool CreateTool()
+    [Fact]
+    public async Task InvokeAsync_WithWorkspace_DefaultsCwdToWorkspaceRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-exec-root-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            var tool = CreateTool(root);
+            var result = await tool.InvokeAsync(new ToolInvocation(
+                "execute_command",
+                new Dictionary<string, string> { ["command"] = "cd" }));
+
+            Assert.True(result.Succeeded, result.Error ?? result.Summary);
+            Assert.Contains(Path.GetFileName(root), result.Content, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_WithWorkspace_ResolvesRelativeCwd()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-exec-sub-{Guid.NewGuid():N}");
+        var subDir = Path.Combine(root, "docs", "中文目录");
+        Directory.CreateDirectory(subDir);
+        await File.WriteAllTextAsync(Path.Combine(subDir, "marker.txt"), "ok");
+        try
+        {
+            var tool = CreateTool(root);
+            var result = await tool.InvokeAsync(new ToolInvocation(
+                "execute_command",
+                new Dictionary<string, string>
+                {
+                    ["command"] = "type marker.txt",
+                    ["cwd"] = @"docs\中文目录"
+                }));
+
+            Assert.True(result.Succeeded, result.Error ?? result.Content);
+            Assert.Contains("ok", result.Content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_Utf8Console_ReturnsChineseStdout()
+    {
+        var tool = CreateTool();
+        var result = await tool.InvokeAsync(new ToolInvocation(
+            "execute_command",
+            new Dictionary<string, string> { ["command"] = "echo 你好Athlon" }));
+
+        Assert.True(result.Succeeded, result.Error ?? result.Content);
+        Assert.Contains("你好Athlon", result.Content, StringComparison.Ordinal);
+    }
+
+    private static ExecuteCommandTool CreateTool(string? workspaceRoot = null)
     {
         var paths = new AppPathProvider();
         paths.EnsureCreated();
         var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
         var audit = new AuditLogService(logger, paths, new JsonFileStore());
-        return new ExecuteCommandTool(new AppSettings(), audit, new ExecuteCommandProcessRegistry());
+        var context = new ActiveWorkspaceContext();
+        if (!string.IsNullOrWhiteSpace(workspaceRoot))
+        {
+            context.SetWorkspace(workspaceRoot);
+        }
+
+        var guard = new WorkspaceGuard(context, new AppSettings(), paths);
+        return new ExecuteCommandTool(new AppSettings(), guard, audit, new ExecuteCommandProcessRegistry());
     }
 }

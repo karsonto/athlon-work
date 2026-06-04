@@ -26,7 +26,8 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
         }
 
         builder.AppendLine("For write operations, explain your intent before calling file_write or file_edit.");
-        builder.AppendLine("Windows: cmd.exe only, not PowerShell.");
+        builder.AppendLine("Windows: cmd.exe only, not PowerShell. execute_command defaults cwd to the workspace root; use workspace-relative cwd when needed.");
+        builder.AppendLine("In cmd, quote file paths that contain spaces or non-ASCII characters (e.g. type \"docs/报告.txt\").");
         builder.AppendLine();
     }
 

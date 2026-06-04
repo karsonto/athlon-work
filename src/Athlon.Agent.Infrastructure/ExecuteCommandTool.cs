@@ -5,6 +5,7 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class ExecuteCommandTool(
     AppSettings settings,
+    WorkspaceGuard guard,
     AuditLogService audit,
     ExecuteCommandProcessRegistry processRegistry) : IAgentTool
 {
@@ -14,11 +15,12 @@ public sealed class ExecuteCommandTool(
     public ToolDefinition Definition { get; } = new(
         "execute_command",
         "Execute a shell command (user approval required). On Windows use cmd.exe semantics, not PowerShell. "
+        + "Console I/O uses UTF-8 (chcp 65001). "
         + $"Default timeout {DefaultTimeoutSeconds}s (max {MaxTimeoutSeconds}s); timeout ends only this tool, not the agent turn.",
         new Dictionary<string, string>
         {
-            ["command"] = "Command line",
-            ["cwd"] = "Working directory",
+            ["command"] = "Command line (quote paths that contain spaces or non-ASCII characters)",
+            ["cwd"] = ToolPathDescriptions.OptionalWorkspaceRelativeCwd,
             ["timeout"] = $"Timeout in seconds (default {DefaultTimeoutSeconds}, max {MaxTimeoutSeconds})"
         },
         RequiresApproval: true);
@@ -35,12 +37,9 @@ public sealed class ExecuteCommandTool(
             return ToolResult.Failure("Command denied", command);
         }
 
-        var cwd = invocation.Arguments.GetValueOrDefault("cwd") ?? Environment.CurrentDirectory;
-        if (!Directory.Exists(cwd))
+        if (!ToolArguments.TryResolveWorkingDirectory(invocation, guard, out var cwd, out error))
         {
-            return ToolResult.Failure(
-                "Invalid working directory",
-                $"Working directory does not exist: {cwd}");
+            return error;
         }
 
         var timeoutSeconds = Math.Clamp(
@@ -48,7 +47,7 @@ public sealed class ExecuteCommandTool(
             1,
             MaxTimeoutSeconds);
 
-        var startInfo = new ProcessStartInfo("cmd.exe", "/c " + command)
+        var startInfo = new ProcessStartInfo("cmd.exe", "/c " + WindowsCmdEncoding.WrapCommandForUtf8(command))
         {
             WorkingDirectory = cwd,
             RedirectStandardOutput = true,
@@ -56,6 +55,7 @@ public sealed class ExecuteCommandTool(
             UseShellExecute = false,
             CreateNoWindow = true
         };
+        WindowsCmdEncoding.ApplyTo(startInfo);
 
         Process process;
         try

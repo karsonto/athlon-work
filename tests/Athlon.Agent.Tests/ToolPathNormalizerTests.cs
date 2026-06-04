@@ -26,6 +26,19 @@ public sealed class ToolPathNormalizerTests
         Assert.Equal("line1\r\nline2", normalized["content"]);
     }
 
+    [Fact]
+    public void NormalizePathArguments_NormalizesCwdKey()
+    {
+        var arguments = new Dictionary<string, string>
+        {
+            ["cwd"] = @"docs\中文"
+        };
+
+        var normalized = ToolPathNormalizer.NormalizePathArguments(arguments);
+
+        Assert.Equal("docs/中文", normalized["cwd"]);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]

@@ -7,6 +7,7 @@ namespace Athlon.Agent.Core;
 public static class ToolPathNormalizer
 {
     public const string PathArgumentName = "path";
+    public const string CwdArgumentName = "cwd";
 
     public static string ForModel(string path)
     {
@@ -120,23 +121,39 @@ public static class ToolPathNormalizer
 
     public static IReadOnlyDictionary<string, string> NormalizePathArguments(IReadOnlyDictionary<string, string> arguments)
     {
-        if (!arguments.TryGetValue(PathArgumentName, out var path) || string.IsNullOrWhiteSpace(path))
+        Dictionary<string, string>? copy = null;
+
+        if (TryNormalizeArgument(arguments, PathArgumentName, out var normalizedPath))
         {
-            return arguments;
+            copy ??= new Dictionary<string, string>(arguments, StringComparer.OrdinalIgnoreCase);
+            copy[PathArgumentName] = normalizedPath;
         }
 
-        if (!TryNormalizeForFileOperation(path, out var normalized, out _))
+        if (TryNormalizeArgument(arguments, CwdArgumentName, out var normalizedCwd))
         {
-            return arguments;
+            copy ??= new Dictionary<string, string>(arguments, StringComparer.OrdinalIgnoreCase);
+            copy[CwdArgumentName] = normalizedCwd;
         }
 
-        if (string.Equals(path, normalized, StringComparison.Ordinal))
+        return copy ?? arguments;
+    }
+
+    private static bool TryNormalizeArgument(
+        IReadOnlyDictionary<string, string> arguments,
+        string name,
+        out string normalized)
+    {
+        normalized = string.Empty;
+        if (!arguments.TryGetValue(name, out var raw) || string.IsNullOrWhiteSpace(raw))
         {
-            return arguments;
+            return false;
         }
 
-        var copy = new Dictionary<string, string>(arguments, StringComparer.OrdinalIgnoreCase);
-        copy[PathArgumentName] = normalized;
-        return copy;
+        if (!TryNormalizeForFileOperation(raw, out normalized, out _))
+        {
+            return false;
+        }
+
+        return !string.Equals(raw, normalized, StringComparison.Ordinal);
     }
 }
