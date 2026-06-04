@@ -6,6 +6,35 @@ namespace Athlon.Agent.Tests;
 public sealed class FileListToolTests
 {
     [Fact]
+    public async Task InvokeAsync_MixedLatinCjkFilename_HasNoInsertedSpace()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-list-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var fileName = "GMT沙盒AI演示.mp4";
+        await File.WriteAllBytesAsync(Path.Combine(root, fileName), [0x00]);
+        try
+        {
+            var context = new ActiveWorkspaceContext();
+            context.SetWorkspace(root);
+            var appDataRoot = Path.Combine(Path.GetDirectoryName(root)!, ".athlon-agent-test");
+            Directory.CreateDirectory(appDataRoot);
+            var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+            var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+            var tool = new FileListTool(guard, audit);
+
+            var result = await tool.InvokeAsync(new ToolInvocation("file_list", new Dictionary<string, string>()));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Contains("GMT沙盒AI演示.mp4", result.Content, StringComparison.Ordinal);
+            Assert.DoesNotContain("GMT 沙盒", result.Content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task InvokeAsync_ReturnsWorkspaceRelativePaths()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-list-{Guid.NewGuid():N}");

@@ -49,7 +49,9 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
             .ToArray();
 
         await audit.WriteAsync("file_list", new { path = fullPath, count = files.Length }, cancellationToken);
-        var content = files.Length == 0 ? "(empty directory)" : string.Join(Environment.NewLine, files);
+        var content = files.Length == 0
+            ? "(empty directory)"
+            : string.Join(Environment.NewLine, files) + Environment.NewLine + FileListPathCopyNotice;
         var listedDir = ToolPathNormalizer.ForModel(Path.GetRelativePath(workspaceRoot, fullPath));
         if (string.IsNullOrEmpty(listedDir))
         {
@@ -58,6 +60,9 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
 
         return ToolResult.Success($"Listed {files.Length} entries from {listedDir}", content);
     }
+
+    private const string FileListPathCopyNotice =
+        "(Paths above are exact on-disk names. Copy character-for-character; do not add spaces between English and Chinese in filenames.)";
 
     private static string FormatEntry(string workspaceRoot, string fullPath)
     {
