@@ -27,6 +27,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Athlon.Agent.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="Assets\app-icon.ico" />
     <Resource Include="Assets\app-icon-48.png" />
     <Resource Include="Assets\app-icon-64.png" />
