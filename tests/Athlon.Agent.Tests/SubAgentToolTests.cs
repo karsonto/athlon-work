@@ -221,7 +221,6 @@ public sealed class SubAgentToolTests
         public string UserDomainName => "d";
         public string MachineName => "m";
         public string UserProfilePath => "/u";
-        public string CurrentDirectory => "/c";
         public string SystemDirectory => "/s";
         public string ProcessArchitecture => "x64";
         public string OsArchitecture => "x64";

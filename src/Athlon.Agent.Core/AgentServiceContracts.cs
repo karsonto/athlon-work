@@ -27,7 +27,6 @@ public interface IAgentHostEnvironment
     string UserDomainName { get; }
     string MachineName { get; }
     string UserProfilePath { get; }
-    string CurrentDirectory { get; }
     string SystemDirectory { get; }
     string ProcessArchitecture { get; }
     string OsArchitecture { get; }

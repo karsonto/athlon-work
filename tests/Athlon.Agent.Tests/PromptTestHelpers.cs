@@ -67,7 +67,6 @@ internal static class PromptTestHelpers
         public string UserDomainName => "TESTDOMAIN";
         public string MachineName => "DESKTOP-TEST";
         public string UserProfilePath => @"C:\Users\karson";
-        public string CurrentDirectory => @"C:\Users\karson\athlon-work";
         public string SystemDirectory => @"C:\Windows\system32";
         public string ProcessArchitecture => "X64";
         public string OsArchitecture => "X64";

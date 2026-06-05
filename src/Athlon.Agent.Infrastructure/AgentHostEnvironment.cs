@@ -19,8 +19,6 @@ public sealed class AgentHostEnvironment(IAppPathProvider paths) : IAgentHostEnv
 
     public string UserProfilePath { get; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
-    public string CurrentDirectory { get; } = Environment.CurrentDirectory;
-
     public string SystemDirectory { get; } = Environment.SystemDirectory;
 
     public string ProcessArchitecture { get; } = RuntimeInformation.ProcessArchitecture.ToString();

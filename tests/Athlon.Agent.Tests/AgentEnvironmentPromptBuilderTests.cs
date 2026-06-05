@@ -50,6 +50,23 @@ public sealed class AgentEnvironmentPromptBuilderTests
     }
 
     [Fact]
+    public void Build_WithWorkspace_HostCwdMatchesWorkspaceRoot()
+    {
+        var workspaceRoot = @"C:\work\demo";
+        var settings = new AppSettings
+        {
+            Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = workspaceRoot } }
+        };
+        var builder = PromptTestHelpers.CreateBuilder(
+            new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
+            settings);
+
+        var prompt = builder.Build(AgentSession.Create("cwd-test"), Array.Empty<ToolDefinition>());
+
+        Assert.Contains($"cwd={workspaceRoot}", prompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Build_WithWorkspace_ExcludesPlanningGuidance()
     {
         var settings = new AppSettings

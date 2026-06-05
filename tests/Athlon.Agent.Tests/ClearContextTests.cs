@@ -84,7 +84,6 @@ public sealed class ClearContextTests
         public string UserDomainName => "DOMAIN";
         public string MachineName => "MACHINE";
         public string UserProfilePath => @"C:\Users\user";
-        public string CurrentDirectory => @"C:\work";
         public string SystemDirectory => @"C:\Windows\system32";
         public string ProcessArchitecture => "X64";
         public string OsArchitecture => "X64";

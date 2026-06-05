@@ -11,9 +11,15 @@ public sealed class HostEnvironmentSection : IEnvironmentPromptSection
         var host = context.Host;
         var now = AppTimeZone.Now;
 
-        builder.AppendLine(
-            $"Host: Win {host.OsVersion} | {now:yyyy-MM-dd HH:mm} {AppTimeZone.PromptLabel} | {host.UserDomainName}\\{host.UserName} "
-            + $"| cwd={host.CurrentDirectory} | skills={host.SkillsDirectory}");
+        var hostLine =
+            $"Host: Win {host.OsVersion} | {now:yyyy-MM-dd HH:mm} {AppTimeZone.PromptLabel} | {host.UserDomainName}\\{host.UserName}";
+        if (context.HasWorkspace)
+        {
+            hostLine += $" | cwd={context.WorkspaceRoot}";
+        }
+
+        hostLine += $" | skills={host.SkillsDirectory}";
+        builder.AppendLine(hostLine);
         builder.AppendLine();
     }
 }
