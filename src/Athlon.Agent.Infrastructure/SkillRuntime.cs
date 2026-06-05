@@ -32,7 +32,7 @@ public sealed class SkillRuntime(IAgentSkillCatalog catalog, AppSettings setting
         }
 
         Activate(skillId);
-        return BuildResourceResponse(skillId, normalizedPath, resourceContent);
+        return BuildResourceResponse(skillId, skill, normalizedPath, resourceContent);
     }
 
     public void Activate(string skillId)
@@ -117,6 +117,7 @@ public sealed class SkillRuntime(IAgentSkillCatalog catalog, AppSettings setting
         result.AppendLine();
         result.AppendLine($"Name: {skill.Name}");
         result.AppendLine($"Description: {skill.Description}");
+        AppendFilesRootLine(result, skill);
         result.AppendLine();
         result.AppendLine("Content:");
         result.AppendLine("---");
@@ -125,17 +126,27 @@ public sealed class SkillRuntime(IAgentSkillCatalog catalog, AppSettings setting
         return result.ToString();
     }
 
-    private static string BuildResourceResponse(string skillId, string path, string resourceContent)
+    private static string BuildResourceResponse(string skillId, AgentSkill skill, string path, string resourceContent)
     {
         var result = new StringBuilder();
         result.AppendLine($"Successfully loaded resource from skill: {skillId}");
         result.AppendLine($"Resource path: {path}");
+        AppendFilesRootLine(result, skill);
         result.AppendLine();
         result.AppendLine("Content:");
         result.AppendLine("---");
         result.AppendLine(resourceContent);
         result.AppendLine("---");
         return result.ToString();
+    }
+
+    private static void AppendFilesRootLine(StringBuilder result, AgentSkill skill)
+    {
+        var filesRoot = SkillPathFormatter.FormatFilesRoot(skill);
+        if (filesRoot is not null)
+        {
+            result.AppendLine($"Files root: {filesRoot}");
+        }
     }
 
     private static string BuildResourceNotFoundMessage(

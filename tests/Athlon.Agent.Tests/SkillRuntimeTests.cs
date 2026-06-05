@@ -67,7 +67,9 @@ public sealed class SkillRuntimeTests
             using (SessionSkillActivationScope.EnterNewTurn())
             {
                 var content = runtime.LoadResource(skillId, "SKILL.md");
+                var expectedFilesRoot = ToolPathNormalizer.ForModel(Path.GetFullPath(Path.Combine(root, "load-skill")));
                 Assert.Contains($"Successfully loaded skill: {skillId}", content, StringComparison.Ordinal);
+                Assert.Contains($"Files root: {expectedFilesRoot}", content, StringComparison.Ordinal);
                 Assert.Contains("Instruction body.", content, StringComparison.Ordinal);
                 Assert.True(runtime.IsActive(skillId));
             }
@@ -128,7 +130,9 @@ public sealed class SkillRuntimeTests
                         ["path"] = "SKILL.md"
                     }));
 
+                var expectedFilesRoot = ToolPathNormalizer.ForModel(Path.GetFullPath(Path.Combine(root, "tool-skill")));
                 Assert.True(result.Succeeded);
+                Assert.Contains($"Files root: {expectedFilesRoot}", result.Content, StringComparison.Ordinal);
                 Assert.Contains("Tool instructions.", result.Content, StringComparison.Ordinal);
             }
         }
@@ -156,6 +160,10 @@ public sealed class SkillRuntimeTests
             Assert.Contains("<available_skills>", prompt, StringComparison.Ordinal);
             Assert.Contains("<skill-id>demo_skill</skill-id>", prompt, StringComparison.Ordinal);
             Assert.Contains("load_skill_through_path", prompt, StringComparison.Ordinal);
+            Assert.Contains("<files-root>", prompt, StringComparison.Ordinal);
+            Assert.Contains("## Code Execution", prompt, StringComparison.Ordinal);
+            Assert.Contains("Skill scripts:", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain("skills directory root as path", prompt, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("- file_read:", prompt, StringComparison.Ordinal);
         }
         finally

@@ -47,7 +47,8 @@ public sealed class LoadSkillThroughPathTool(ISkillRuntime skillRuntime) : IAgen
             + "**Path rules:**\n"
             + "- Use path=\"SKILL.md\" to load the skill's markdown documentation.\n"
             + "- Use exact resource paths such as \"references/guide.md\".\n"
-            + "- Do not use '.', './', directories only, or absolute paths.\n\n"
+            + "- Do not use '.', './', directories only, or absolute paths.\n"
+            + "- The response includes Files root when the skill is on disk — use it for execute_command script paths.\n\n"
             + $"**Available skill names:** {skillIdList}",
             new Dictionary<string, string>
             {
