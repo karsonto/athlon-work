@@ -25,7 +25,7 @@ public sealed class WindowsSpeechDictationService : ISpeechDictationService, IDi
         }
 
         var access = await DeviceAccessInformation
-            .CreateFromDeviceClassId(DeviceClass.AudioCapture)
+            .CreateFromDeviceClass(DeviceClass.AudioCapture)
             .RequestAccessAsync()
             .AsTask(cancellationToken)
             .ConfigureAwait(false);
@@ -114,10 +114,7 @@ public sealed class WindowsSpeechDictationService : ISpeechDictationService, IDi
             return null;
         }
 
-        var recognizer = new SpeechRecognizer(new Language(resolvedTag))
-        {
-            UIOptions = { AudibleBeepEnabled = false }
-        };
+        var recognizer = new SpeechRecognizer(new Language(resolvedTag));
 
         recognizer.Constraints.Add(new SpeechRecognitionTopicConstraint(
             SpeechRecognitionScenario.Dictation,
