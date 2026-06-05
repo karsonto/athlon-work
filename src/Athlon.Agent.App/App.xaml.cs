@@ -37,6 +37,8 @@ public partial class App : Application
             StartupTrace("ServiceCollection created");
             services.AddAthlonInfrastructure();
             StartupTrace("Infrastructure registered");
+            services.AddSingleton<ISpeechDictationService, WindowsSpeechDictationService>();
+            services.AddSingleton<SpeechDictationAvailability>();
             services.AddSingleton(_ => new SessionUiCache(System.Windows.Threading.Dispatcher.CurrentDispatcher));
             services.AddSingleton<SessionTurnHost>();
             services.AddSingleton<ApplicationShutdownService>();

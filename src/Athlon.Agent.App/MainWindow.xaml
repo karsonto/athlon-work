@@ -1300,12 +1300,38 @@
                                                VerticalAlignment="Center"
                                                Margin="0,-2,0,0" />
                                 </Button>
+                                <Button Command="{Binding ToggleDictationCommand}"
+                                        Margin="8,0,0,0"
+                                        ToolTip="{Binding DictationToolTip}">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource ComposerIconButtonStyle}">
+                                            <Setter Property="Width" Value="24" />
+                                            <Setter Property="Height" Value="24" />
+                                            <Setter Property="Foreground" Value="{StaticResource Brush.SubtleText}" />
+                                            <Setter Property="Opacity" Value="1" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsDictationAvailable}" Value="False">
+                                                    <Setter Property="Opacity" Value="0.4" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsDictationListening}" Value="True">
+                                                    <Setter Property="Foreground" Value="{StaticResource Brush.Danger}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                    <TextBlock Text="Mic"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Button>
                             </StackPanel>
-                            <TextBlock Text="Enter 发送 · Shift+Enter 换行"
+                            <TextBlock Text="{Binding ComposerHintText}"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        FontSize="12"
-                                       Margin="32,0,0,0"
-                                       VerticalAlignment="Center" />
+                                       Margin="64,0,0,0"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button Command="{Binding StopCommand}"
                                         ToolTip="暂停当前回复"
@@ -1560,6 +1586,27 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="语音听写" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="使用 Windows 内置离线语音识别，将听写结果填入聊天输入框（不自动发送）。需在系统中安装对应语音识别语言包。"
+                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,0,0,12" />
+                            <CheckBox IsChecked="{Binding Settings.Settings.Speech.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                      Content="启用语音听写"
+                                      Margin="0,0,0,12" />
+                            <TextBlock Text="识别语言 (BCP-47)" FontSize="12" Foreground="{StaticResource Brush.SubtleText}" />
+                            <ComboBox SelectedValue="{Binding Settings.SpeechLanguageTag, UpdateSourceTrigger=PropertyChanged}"
+                                      SelectedValuePath="Content"
+                                      Margin="0,6,0,0">
+                                <ComboBoxItem Content="zh-CN" />
+                                <ComboBoxItem Content="en-US" />
+                            </ComboBox>
                         </StackPanel>
                     </Border>
 

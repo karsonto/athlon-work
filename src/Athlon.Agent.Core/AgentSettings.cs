@@ -21,6 +21,15 @@ public sealed class AppSettings
     public WorkspaceIgnoreSettings WorkspaceIgnore { get; set; } = new();
     public FileReadSettings FileRead { get; set; } = new();
     public SubAgentSettings SubAgent { get; set; } = new();
+    public SpeechSettings Speech { get; set; } = new();
+}
+
+public sealed class SpeechSettings
+{
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>BCP-47 language tag for Windows speech recognition, e.g. zh-CN or en-US.</summary>
+    public string LanguageTag { get; set; } = "zh-CN";
 }
 
 public sealed class FileReadSettings

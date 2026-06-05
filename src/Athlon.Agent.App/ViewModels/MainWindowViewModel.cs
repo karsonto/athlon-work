@@ -29,7 +29,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly SessionTurnHost _turnHost;
     private readonly SessionUiCache _uiCache;
     private readonly ApplicationShutdownService _shutdownService;
+    private readonly ISpeechDictationService _speechDictation;
+    private readonly SpeechDictationAvailability _speechDictationAvailability;
     private readonly Dictionary<string, ObservableCollection<QueuedTurnViewModel>> _queuedTurnsBySession = new(StringComparer.Ordinal);
+    private string _dictationBaseText = string.Empty;
+    private string _dictationCommittedText = string.Empty;
+    private string _dictationInterimText = string.Empty;
+    private bool _isUpdatingComposerFromDictation;
     private FileSystemWatcher? _workspaceWatcher;
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -49,6 +55,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SessionUiCache uiCache,
         WorkspaceFileEditorService workspaceFileEditorService,
         ApplicationShutdownService shutdownService,
+        ISpeechDictationService speechDictation,
+        SpeechDictationAvailability speechDictationAvailability,
         AppSettings settings)
     {
         _storage = storage;
@@ -61,6 +69,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _turnHost = turnHost;
         _uiCache = uiCache;
         _shutdownService = shutdownService;
+        _speechDictation = speechDictation;
+        _speechDictationAvailability = speechDictationAvailability;
+        _speechDictation.InterimText += OnDictationInterimText;
+        _speechDictation.FinalText += OnDictationFinalText;
+        _speechDictation.Error += OnDictationError;
         _appSettings = settings;
         _skillCatalog = skillCatalog;
         _skillRuntime = skillRuntime;
@@ -140,6 +153,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public async Task InitializeAsync()
     {
         await RefreshMcpRuntimeAsync();
+        await RefreshDictationAvailabilityAsync();
 
         await RefreshSessionHistoryAsync();
         var latest = GetFirstAgentRecord();
@@ -212,7 +226,32 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string composerText = string.Empty;
 
+    [ObservableProperty]
+    private bool isDictationListening;
+
+    [ObservableProperty]
+    private string dictationStatusText = string.Empty;
+
     public bool IsComposerEmpty => string.IsNullOrWhiteSpace(ComposerText);
+
+    public bool IsDictationAvailable =>
+        _appSettings.Speech.Enabled && _speechDictationAvailability.IsAvailable;
+
+    public string DictationToolTip =>
+        !_appSettings.Speech.Enabled
+            ? "语音听写已在设置中关闭"
+            : !IsDictationAvailable
+                ? _speechDictationAvailability.UnavailableReason
+                : IsDictationListening
+                    ? "正在听写，点击结束"
+                    : "听写输入（离线）";
+
+    public string ComposerHintText =>
+        IsDictationListening
+            ? "正在听写… 点击麦克风结束"
+            : string.IsNullOrWhiteSpace(DictationStatusText)
+                ? "Enter 发送 · Shift+Enter 换行"
+                : DictationStatusText;
 
     [ObservableProperty]
     private string streamingText = string.Empty;
@@ -371,6 +410,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private async Task NewSession()
     {
         await SaveCurrentSessionIfNeededAsync();
+        if (IsDictationListening || _speechDictation.IsListening)
+        {
+            await StopDictationInternalAsync(CancellationToken.None);
+        }
+
         _session = AgentSession.Create("New Chat");
         SwitchDisplayedSession(_session);
         CurrentSessionTitle = _session.Title;
@@ -442,6 +486,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        if (IsDictationListening || _speechDictation.IsListening)
+        {
+            await StopDictationInternalAsync(CancellationToken.None);
+        }
+
         await SaveCurrentSessionIfNeededAsync();
         await LoadSessionInternalAsync(item.Id);
         CurrentPage = "Chat";
@@ -492,6 +541,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SettingsStatus = "对话已删除。";
         NotifyCommandStatesChanged();
     }
+
+    [RelayCommand(CanExecute = nameof(CanToggleDictation))]
+    private async Task ToggleDictationAsync()
+    {
+        if (IsDictationListening)
+        {
+            await StopDictationAsync();
+            return;
+        }
+
+        await StartDictationAsync();
+    }
+
+    private bool CanToggleDictation() => IsDictationAvailable && !IsBusy;
 
     [RelayCommand]
     private async Task SelectImagesAsync()
@@ -736,6 +799,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Settings.SyncSkillsFromCatalog();
         await _storage.SaveSettingsAsync(Settings.Settings);
         await RefreshMcpRuntimeAsync();
+        await RefreshDictationAvailabilityAsync();
         ApplySessionWorkspace();
         OnPropertyChanged(nameof(Sidebar));
         SettingsStatus = $"Saved at {AppTimeZone.Now:HH:mm:ss}";
@@ -1209,6 +1273,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _workspaceWatcher?.Dispose();
         _workspaceWatcher = null;
 
+        if (IsDictationListening || _speechDictation.IsListening)
+        {
+            await StopDictationAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         await _shutdownService.ShutdownAsync(progress, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
@@ -1222,6 +1291,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         _turnHost.TurnCompleted -= OnTurnCompleted;
         _turnHost.TurnStateChanged -= OnTurnStateChanged;
+        _speechDictation.InterimText -= OnDictationInterimText;
+        _speechDictation.FinalText -= OnDictationFinalText;
+        _speechDictation.Error -= OnDictationError;
+        if (_speechDictation is IDisposable disposableDictation)
+        {
+            disposableDictation.Dispose();
+        }
+
         PrepareForShutdown();
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         _copyNoticeCts?.Cancel();
@@ -1270,12 +1347,143 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         ClearContextCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
+        ToggleDictationCommand.NotifyCanExecuteChanged();
     }
+
+    partial void OnIsDictationListeningChanged(bool value)
+    {
+        OnPropertyChanged(nameof(DictationToolTip));
+        OnPropertyChanged(nameof(ComposerHintText));
+        ToggleDictationCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnDictationStatusTextChanged(string value) =>
+        OnPropertyChanged(nameof(ComposerHintText));
 
     partial void OnComposerTextChanged(string value)
     {
         OnPropertyChanged(nameof(IsComposerEmpty));
         SendCommand.NotifyCanExecuteChanged();
+
+        if (_isUpdatingComposerFromDictation || !IsDictationListening)
+        {
+            return;
+        }
+
+        _ = StopDictationAsync();
+    }
+
+    private async Task RefreshDictationAvailabilityAsync()
+    {
+        await _speechDictationAvailability.InitializeAsync().ConfigureAwait(true);
+        OnPropertyChanged(nameof(IsDictationAvailable));
+        OnPropertyChanged(nameof(DictationToolTip));
+        ToggleDictationCommand.NotifyCanExecuteChanged();
+    }
+
+    private async Task StartDictationAsync()
+    {
+        DictationStatusText = string.Empty;
+        _dictationBaseText = ComposerText;
+        _dictationCommittedText = string.Empty;
+        _dictationInterimText = string.Empty;
+        IsDictationListening = true;
+
+        await _speechDictation
+            .StartAsync(_speechDictationAvailability.EffectiveLanguageTag)
+            .ConfigureAwait(true);
+        if (!_speechDictation.IsListening)
+        {
+            IsDictationListening = false;
+            ResetDictationBuffers();
+        }
+    }
+
+    private Task StopDictationAsync(CancellationToken cancellationToken = default) =>
+        StopDictationInternalAsync(cancellationToken);
+
+    private async Task StopDictationInternalAsync(CancellationToken cancellationToken)
+    {
+        if (IsDictationListening || _speechDictation.IsListening)
+        {
+            await _speechDictation.StopAsync(cancellationToken).ConfigureAwait(true);
+        }
+
+        IsDictationListening = false;
+        ResetDictationBuffers();
+        ToggleDictationCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(DictationToolTip));
+    }
+
+    private void OnDictationInterimText(object? sender, string text) =>
+        RunOnUiThread(() => ApplyDictationInterim(text));
+
+    private void OnDictationFinalText(object? sender, string text) =>
+        RunOnUiThread(() => ApplyDictationFinal(text));
+
+    private void OnDictationError(object? sender, string message) =>
+        RunOnUiThread(() =>
+        {
+            DictationStatusText = message;
+            _ = StopDictationInternalAsync(CancellationToken.None);
+        });
+
+    private void ApplyDictationInterim(string text)
+    {
+        if (!IsDictationListening)
+        {
+            return;
+        }
+
+        _dictationInterimText = text;
+        ApplyDictationComposerText();
+    }
+
+    private void ApplyDictationFinal(string text)
+    {
+        if (!IsDictationListening)
+        {
+            return;
+        }
+
+        _dictationCommittedText = SpeechDictationTextMerger.AppendFinalSegment(_dictationCommittedText, text);
+        _dictationInterimText = string.Empty;
+        ApplyDictationComposerText();
+    }
+
+    private void ApplyDictationComposerText()
+    {
+        _isUpdatingComposerFromDictation = true;
+        try
+        {
+            ComposerText = SpeechDictationTextMerger.Compose(
+                _dictationBaseText,
+                _dictationCommittedText,
+                _dictationInterimText);
+        }
+        finally
+        {
+            _isUpdatingComposerFromDictation = false;
+        }
+    }
+
+    private void ResetDictationBuffers()
+    {
+        _dictationBaseText = string.Empty;
+        _dictationCommittedText = string.Empty;
+        _dictationInterimText = string.Empty;
+    }
+
+    private static void RunOnUiThread(Action action)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        dispatcher.InvokeAsync(action);
     }
 
     private void RefreshAtCompletionSources()

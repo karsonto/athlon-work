@@ -178,6 +178,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Settings.Model.MaxTokens = ParseOptionalPositiveInt(value);
     }
 
+    public string SpeechLanguageTag
+    {
+        get => Settings.Speech.LanguageTag;
+        set => Settings.Speech.LanguageTag = string.IsNullOrWhiteSpace(value) ? "zh-CN" : value.Trim();
+    }
+
     public string IgnoreDirectoriesText
     {
         get => string.Join(Environment.NewLine, Settings.WorkspaceIgnore.DirectoryNames);
