@@ -15,6 +15,13 @@ internal static class WindowsCmdEncoding
 
     internal static void ApplyTo(ProcessStartInfo startInfo)
     {
+        // When stdout/stderr are redirected (pipes), Python defaults to the Windows ANSI codepage
+        // (often GBK/CP936 on zh-CN) which cannot encode many Unicode characters (e.g. ✅).
+        // Force UTF-8 for Python so tool output is stable across hosts.
+        startInfo.Environment["PYTHONIOENCODING"] = "utf-8";
+        startInfo.Environment["PYTHONUTF8"] = "1";
+
+        startInfo.StandardInputEncoding = Encoding.UTF8;
         startInfo.StandardOutputEncoding = Encoding.UTF8;
         startInfo.StandardErrorEncoding = Encoding.UTF8;
     }
