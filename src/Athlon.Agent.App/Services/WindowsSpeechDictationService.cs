@@ -24,12 +24,10 @@ public sealed class WindowsSpeechDictationService : ISpeechDictationService, IDi
             return;
         }
 
-        var access = await DeviceAccessInformation
+        var accessStatus = DeviceAccessInformation
             .CreateFromDeviceClass(DeviceClass.AudioCapture)
-            .RequestAccessAsync()
-            .AsTask(cancellationToken)
-            .ConfigureAwait(false);
-        if (access != DeviceAccessStatus.Allowed)
+            .CurrentStatus;
+        if (accessStatus != DeviceAccessStatus.Allowed)
         {
             RaiseError("请在 Windows 设置 → 隐私 → 麦克风中允许桌面应用访问麦克风。");
             return;
