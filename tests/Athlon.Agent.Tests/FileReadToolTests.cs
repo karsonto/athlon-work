@@ -120,6 +120,32 @@ public sealed class FileReadToolTests
         Assert.DoesNotContain("4|d", result.Content, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task InvokeAsync_AllowsAbsolutePathOutsideWorkspace()
+    {
+        await using var env = await FileReadTestEnvironment.CreateAsync();
+        var outsideFile = Path.Combine(Path.GetTempPath(), "athlon-file-read-outside", Guid.NewGuid().ToString("N"), "outside.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(outsideFile)!);
+        await File.WriteAllTextAsync(outsideFile, "outside");
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(
+                new ToolInvocation("file_read", new Dictionary<string, string> { ["path"] = outsideFile }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Contains("outside", result.Content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            var outsideRoot = Path.GetDirectoryName(Path.GetDirectoryName(outsideFile)!)!;
+            if (Directory.Exists(outsideRoot))
+            {
+                Directory.Delete(outsideRoot, recursive: true);
+            }
+        }
+    }
+
     private sealed class FileReadTestEnvironment : IAsyncDisposable
     {
         private readonly string _root;

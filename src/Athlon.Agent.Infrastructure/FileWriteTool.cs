@@ -15,7 +15,7 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool
 {
-    public ToolDefinition Definition { get; } = new("file_write", "Create or overwrite a workspace file with backup.", new Dictionary<string, string> { ["path"] = ToolPathDescriptions.WorkspaceRelativePath, ["content"] = "New content" }, RequiresApproval: true);
+    public ToolDefinition Definition { get; } = new("file_write", "Create or overwrite a file with backup.", new Dictionary<string, string> { ["path"] = ToolPathDescriptions.WorkspaceRelativePath, ["content"] = "New content" }, RequiresApproval: true);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
@@ -23,7 +23,6 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
         if (!ToolArguments.TryGetRequired(invocation, "content", out var content, out error)) return error;
 
         var fullPath = guard.Normalize(path);
-        if (!guard.IsInsideWorkspace(fullPath)) return ToolResult.Failure("Outside workspace", fullPath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         AtomicFile.BackupIfExists(fullPath);
         await File.WriteAllTextAsync(fullPath, content, cancellationToken);

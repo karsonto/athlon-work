@@ -116,6 +116,38 @@ public sealed class WorkspaceGuardTests
         Assert.False(guard.IsInsideWorkspace(Path.Combine(root, "workspace", "a.txt")));
     }
 
+    [Fact]
+    public void Normalize_WithoutConfiguredWorkspace_ResolvesRelativeAndAbsolutePaths()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-guard-{Guid.NewGuid():N}");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        var currentDir = Path.Combine(root, "current");
+        Directory.CreateDirectory(appDataRoot);
+        Directory.CreateDirectory(currentDir);
+        Directory.CreateDirectory(Path.Combine(currentDir, "src"));
+        File.WriteAllText(Path.Combine(currentDir, "src", "demo.txt"), "ok");
+
+        var context = new ActiveWorkspaceContext();
+        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+
+        var originalCwd = Environment.CurrentDirectory;
+        try
+        {
+            Environment.CurrentDirectory = currentDir;
+
+            var fromRelative = guard.Normalize("src/demo.txt");
+            var fromAbsolute = guard.Normalize(Path.Combine(currentDir, "src", "demo.txt"));
+
+            Assert.Equal(Path.Combine(currentDir, "src", "demo.txt"), fromRelative);
+            Assert.Equal(Path.Combine(currentDir, "src", "demo.txt"), fromAbsolute);
+        }
+        finally
+        {
+            Environment.CurrentDirectory = originalCwd;
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private sealed class TestPathProvider(string rootPath) : IAppPathProvider
     {
         public string RootPath { get; } = rootPath;

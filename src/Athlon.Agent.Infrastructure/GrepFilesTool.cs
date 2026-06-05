@@ -21,7 +21,7 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
 
     public ToolDefinition Definition { get; } = new(
         "grep_files",
-        "Search workspace file contents for a literal text pattern.",
+        "Search file contents for a literal text pattern.",
         new Dictionary<string, string>
         {
             ["pattern"] = "Literal text pattern to search for",
@@ -34,7 +34,6 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
         if (!ToolArguments.TryGetRequired(invocation, "pattern", out var pattern, out var error)) return error;
         if (!ToolArguments.TryGetOptionalNormalizedPath(invocation, out var requestedPath, out error)) return error;
         var fullPath = guard.Normalize(requestedPath);
-        if (!guard.IsInsideWorkspace(fullPath)) return ToolResult.Failure("Outside workspace", fullPath);
 
         var glob = invocation.Arguments.GetValueOrDefault("glob") ?? "*";
         var ignorePatterns = guard.GetIgnorePatterns();

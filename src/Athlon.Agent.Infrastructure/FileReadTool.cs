@@ -6,7 +6,7 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, Ap
 {
     public ToolDefinition Definition { get; } = new(
         "file_read",
-        "Read workspace file content with line numbers (N|line) for display. Large files require offset/limit; "
+        "Read file content with line numbers (N|line) for display. Large files require offset/limit; "
             + "use grep_files to locate content first. Do not use N| prefixes in file_edit old_text.",
         new Dictionary<string, string>
         {
@@ -25,11 +25,6 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, Ap
         }
 
         var fullPath = guard.Normalize(path);
-        if (!guard.IsInsideWorkspace(fullPath))
-        {
-            return ToolResult.Failure("Outside workspace", fullPath);
-        }
-
         if (!File.Exists(fullPath))
         {
             return ToolResult.Failure("File not found", fullPath);

@@ -17,7 +17,7 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
 {
     public ToolDefinition Definition { get; } = new(
         "file_edit",
-        "Replace exact text in a workspace file (with backup). old_text must match disk content exactly — not file_read's N|line prefixes.",
+        "Replace exact text in a file (with backup). old_text must match disk content exactly — not file_read's N|line prefixes.",
         new Dictionary<string, string>
         {
             ["path"] = ToolPathDescriptions.WorkspaceRelativePath,
@@ -34,7 +34,6 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         if (!ToolArguments.TryGetRequired(invocation, "new_text", out var newText, out error)) return error;
 
         var fullPath = guard.Normalize(path);
-        if (!guard.IsInsideWorkspace(fullPath)) return ToolResult.Failure("Outside workspace", fullPath);
         var content = await File.ReadAllTextAsync(fullPath, cancellationToken);
         var replaceAll = invocation.Arguments.TryGetValue("replace_all", out var value) && bool.TryParse(value, out var parsed) && parsed;
 

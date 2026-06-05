@@ -63,6 +63,39 @@ public sealed class FileListToolTests
         }
     }
 
+    [Fact]
+    public async Task InvokeAsync_AllowsAbsolutePathOutsideWorkspace()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-list-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var outsideRoot = Path.Combine(root, "outside");
+        Directory.CreateDirectory(workspaceRoot);
+        Directory.CreateDirectory(outsideRoot);
+        await File.WriteAllTextAsync(Path.Combine(outsideRoot, "outside.txt"), "x");
+        try
+        {
+            var context = new ActiveWorkspaceContext();
+            context.SetWorkspace(workspaceRoot);
+            var appDataRoot = Path.Combine(Path.GetDirectoryName(root)!, ".athlon-agent-test");
+            Directory.CreateDirectory(appDataRoot);
+            var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+            var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+            var tool = new FileListTool(guard, audit);
+
+            var result = await tool.InvokeAsync(new ToolInvocation(
+                "file_list",
+                new Dictionary<string, string> { ["path"] = outsideRoot }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Contains("outside.txt", result.Content, StringComparison.Ordinal);
+            Assert.DoesNotContain("Outside workspace", result.Summary, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private sealed class NoOpLogger : IAppLogger
     {
         public void Debug(string messageTemplate, params object[] values) { }

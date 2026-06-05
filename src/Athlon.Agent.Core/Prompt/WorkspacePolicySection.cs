@@ -11,20 +11,20 @@ public sealed class WorkspacePolicySection : IEnvironmentPromptSection
         if (!context.HasWorkspace)
         {
             builder.AppendLine("当前工作区尚未设定。");
-            builder.AppendLine("请让用户通过侧栏「配置」或设置页的 Workspace 指定工作区目录后，再使用 file_list、file_read、file_write、file_edit、grep_files、glob_files 等文件工具。");
-            builder.AppendLine("在工作区未设定前，不要假设任何文件路径，也不要调用访问工作区文件的工具。");
+            builder.AppendLine("文件工具仍可使用：绝对路径将按系统路径解析；相对路径将基于当前进程目录。");
+            builder.AppendLine("如需稳定结果，请先让用户设置 Workspace，或优先使用绝对路径。");
             builder.AppendLine();
             return;
         }
 
-        builder.AppendLine("All relative file paths are resolved from the active workspace. Never access files outside the configured workspace.");
-        builder.AppendLine("In file tool arguments (path), always use forward slashes (/), e.g. src/foo.cs — not backslashes (\\), even on Windows.");
-        builder.AppendLine("Paths are relative to Workspace root below — not a parent directory, and not an absolute path.");
-        builder.AppendLine($"Correct: src/foo.cs. Wrong: {context.WorkspaceName}/src/foo.cs or the full Workspace root path in path.");
-        builder.AppendLine($"Active workspace label: {context.WorkspaceName} (not a path prefix — do not include in file tool path).");
+        builder.AppendLine("Active workspace information:");
+        builder.AppendLine("In file tool arguments (path), prefer forward slashes (/), e.g. src/foo.cs, even on Windows.");
+        builder.AppendLine("Relative paths resolve from the active workspace root below; absolute paths are also allowed.");
+        builder.AppendLine($"When using relative paths, use src/foo.cs. Avoid prefixing with {context.WorkspaceName}/.");
+        builder.AppendLine($"Active workspace label: {context.WorkspaceName} (informational, not a path prefix).");
         builder.AppendLine($"Workspace root: {context.WorkspaceRoot}");
         builder.AppendLine("Workspace contents are intentionally not embedded in this prompt because they change often.");
-        builder.AppendLine("Use file_list to fetch a live directory listing when needed.");
+        builder.AppendLine("Use file_list to fetch a live directory listing when needed; use absolute paths for non-workspace files.");
         builder.AppendLine();
     }
 }

@@ -21,15 +21,22 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
 
     public string Normalize(string path, string? cwd = null)
     {
-        if (!TryGetWorkspaceRootInternal(out var basePath))
+        path = ToolPathNormalizer.ForModel(path);
+
+        if (TryGetWorkspaceRootInternal(out var basePath))
         {
-            throw new InvalidOperationException("工作区尚未设定。请先在侧栏「配置」或设置页指定工作区目录。");
+            path = ToolPathNormalizer.ResolveRelativeToWorkspaceRoot(path, basePath);
+            var rootedFromWorkspace = Path.IsPathRooted(path) ? path : Path.Combine(cwd ?? basePath, path);
+            return Path.GetFullPath(rootedFromWorkspace);
         }
 
-        path = ToolPathNormalizer.ForModel(path);
-        path = ToolPathNormalizer.ResolveRelativeToWorkspaceRoot(path, basePath);
-        var rooted = Path.IsPathRooted(path) ? path : Path.Combine(cwd ?? basePath, path);
-        return Path.GetFullPath(rooted);
+        if (Path.IsPathRooted(path))
+        {
+            return Path.GetFullPath(path);
+        }
+
+        var fallbackBase = string.IsNullOrWhiteSpace(cwd) ? Environment.CurrentDirectory : cwd;
+        return Path.GetFullPath(Path.Combine(fallbackBase, path));
     }
 
     public IReadOnlyList<string> GetIgnorePatterns()

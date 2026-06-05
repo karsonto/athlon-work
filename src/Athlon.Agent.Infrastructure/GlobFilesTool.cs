@@ -17,7 +17,7 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
 {
     public ToolDefinition Definition { get; } = new(
         "glob_files",
-        "Find workspace files matching a glob pattern.",
+        "Find files matching a glob pattern.",
         new Dictionary<string, string>
         {
             ["pattern"] = "Glob pattern (supports ** and {a,b} extensions), e.g. **/*.cs or **/*.{png,jpg}",
@@ -29,7 +29,6 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
         if (!ToolArguments.TryGetRequired(invocation, "pattern", out var pattern, out var error)) return error;
         if (!ToolArguments.TryGetOptionalNormalizedPath(invocation, out var requestedPath, out error)) return error;
         var fullPath = guard.Normalize(requestedPath);
-        if (!guard.IsInsideWorkspace(fullPath)) return ToolResult.Failure("Outside workspace", fullPath);
         if (!Directory.Exists(fullPath)) return ToolResult.Failure("Directory not found", fullPath);
 
         var ignorePatterns = guard.GetIgnorePatterns();

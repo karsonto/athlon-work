@@ -17,7 +17,7 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
 {
     public ToolDefinition Definition { get; } = new(
         "file_list",
-        "List files in the active workspace or a workspace subdirectory.",
+        "List files in a directory.",
         new Dictionary<string, string> { ["path"] = ToolPathDescriptions.OptionalWorkspaceRelativeDirectory });
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
@@ -28,11 +28,6 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
         }
 
         var fullPath = guard.Normalize(requestedPath);
-        if (!guard.IsInsideWorkspace(fullPath))
-        {
-            return ToolResult.Failure("Outside workspace", fullPath);
-        }
-
         if (!Directory.Exists(fullPath))
         {
             return ToolResult.Failure("Directory not found", fullPath);
