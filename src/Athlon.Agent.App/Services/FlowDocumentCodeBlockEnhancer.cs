@@ -330,6 +330,8 @@ public static class FlowDocumentCodeBlockEnhancer
             Background = Brushes.Transparent,
             BorderBrush = codeBorder,
             Foreground = subtleText,
+            Focusable = false,
+            IsTabStop = false,
         };
         copyButton.Click += (_, _) =>
         {
