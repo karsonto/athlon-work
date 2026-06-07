@@ -22,15 +22,17 @@ public partial class MarkdownMessageView : UserControl
     private ContextMenu? _contextMenu;
     private MenuItem? _previewHtmlMenuItem;
     private MenuItem? _previewMermaidMenuItem;
+    private MenuItem? _copyCodeBlockMenuItem;
     private bool _documentHooked;
     private TextSelection? _textSelection;
+    private IReadOnlyList<FencedBlockInfo> _fencedBlocks = Array.Empty<FencedBlockInfo>();
 
     public static readonly DependencyProperty MarkdownProperty =
         DependencyProperty.Register(
             nameof(Markdown),
             typeof(string),
             typeof(MarkdownMessageView),
-            new PropertyMetadata(string.Empty));
+            new PropertyMetadata(string.Empty, OnMarkdownChanged));
 
     public static readonly DependencyProperty AssistantToneProperty =
         DependencyProperty.Register(
@@ -89,6 +91,21 @@ public partial class MarkdownMessageView : UserControl
         }
     }
 
+    private static void OnMarkdownChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is MarkdownMessageView view)
+        {
+            view.RefreshDisplayMarkdown();
+        }
+    }
+
+    private void RefreshDisplayMarkdown()
+    {
+        var source = Markdown ?? string.Empty;
+        _fencedBlocks = MarkdownDisplayNormalizer.ExtractFencedBlocks(source);
+        MarkdownViewer.Markdown = MarkdownDisplayNormalizer.NormalizeForDisplay(source);
+    }
+
     private void ApplyMaxHeight()
     {
         if (MaxContentHeight <= 0)
@@ -144,11 +161,11 @@ public partial class MarkdownMessageView : UserControl
             Setters = { new Setter(TextElement.ForegroundProperty, textBrush) }
         };
         AddTagStyle(paragraphStyle, "CodeSpan", inlineCodeBackground, codeForeground);
-        AddTagStyle(paragraphStyle, "CodeBlock", codeBlockBackground, codeForeground, new Thickness(12), new Thickness(0, 8, 0, 8));
+        AddTagStyle(paragraphStyle, "CodeBlock", codeBlockBackground, codeForeground, new Thickness(12), new Thickness(0, 12, 0, 12));
         style.Resources.Add(typeof(Paragraph), paragraphStyle);
 
         var borderStyle = new Style(typeof(Border));
-        AddTagStyle(borderStyle, "CodeBlock", codeBlockBackground, codeForeground, new Thickness(12), new Thickness(0, 8, 0, 8));
+        AddTagStyle(borderStyle, "CodeBlock", codeBlockBackground, codeForeground, new Thickness(12), new Thickness(0, 12, 0, 12));
         borderStyle.Triggers.Add(CreateTagTrigger(
             "CodeBlock",
             new Setter(Border.BorderBrushProperty, codeBorder),
@@ -187,7 +204,28 @@ public partial class MarkdownMessageView : UserControl
             new Setter(TextElement.FontWeightProperty, FontWeights.SemiBold)));
         style.Resources.Add(typeof(TableCell), tableCellStyle);
 
+        AddSeparatorStyle(style);
+
         return style;
+    }
+
+    private static void AddSeparatorStyle(Style documentStyle)
+    {
+        var borderBrush = FlowDocumentThemeNormalizer.ResolveBrush("Brush.Border")
+            ?? new SolidColorBrush(Color.FromRgb(63, 63, 70));
+
+        var separatorStyle = new Style(typeof(Separator))
+        {
+            Setters =
+            {
+                new Setter(Control.BackgroundProperty, borderBrush),
+                new Setter(Control.HeightProperty, 1d),
+                new Setter(Control.OpacityProperty, 0.6d),
+                new Setter(FrameworkElement.MarginProperty, new Thickness(0)),
+            },
+        };
+
+        documentStyle.Resources.Add(typeof(Separator), separatorStyle);
     }
 
     private static void AddTagStyle(
@@ -257,6 +295,7 @@ public partial class MarkdownMessageView : UserControl
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         ApplyTheme();
+        RefreshDisplayMarkdown();
         AttachMarkdownContextMenu();
         HookMarkdownDocumentChanges();
         AttachSelectionHandler();
@@ -313,7 +352,8 @@ public partial class MarkdownMessageView : UserControl
         if (MarkdownViewer.Document is FlowDocument document)
         {
             document.ContextMenu = _contextMenu;
-            FlowDocumentThemeNormalizer.Normalize(document, _contextMenu);
+            document.Tag = null;
+            FlowDocumentThemeNormalizer.Normalize(document, _contextMenu, _fencedBlocks);
         }
     }
 
@@ -376,7 +416,11 @@ public partial class MarkdownMessageView : UserControl
         {
             Style = Application.Current.FindResource("MarkdownContextMenuStyle") as Style,
         };
-        menu.Opened += (_, _) => UpdatePreviewMenuVisibility();
+        menu.Opened += (_, _) =>
+        {
+            UpdatePreviewMenuVisibility();
+            UpdateCopyCodeBlockMenuVisibility();
+        };
 
         _previewHtmlMenuItem = new MenuItem
         {
@@ -420,6 +464,29 @@ public partial class MarkdownMessageView : UserControl
             }
         };
         menu.Items.Add(copyItem);
+
+        _copyCodeBlockMenuItem = new MenuItem
+        {
+            Header = "复制代码块",
+            Style = Application.Current.FindResource("MarkdownContextMenuItemStyle") as Style,
+            Visibility = Visibility.Collapsed,
+        };
+        _copyCodeBlockMenuItem.Click += (_, _) =>
+        {
+            var cardState = FindContextCodeBlockState();
+            if (cardState is null || string.IsNullOrEmpty(cardState.Text))
+            {
+                return;
+            }
+
+            Clipboard.SetText(cardState.Text);
+            if (Application.Current.MainWindow?.DataContext is ViewModels.MainWindowViewModel vm)
+            {
+                vm.ShowCopyNotice("已复制");
+            }
+        };
+        menu.Items.Add(_copyCodeBlockMenuItem);
+
         return menu;
     }
 
@@ -438,5 +505,36 @@ public partial class MarkdownMessageView : UserControl
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
+    }
+
+    private void UpdateCopyCodeBlockMenuVisibility()
+    {
+        if (_copyCodeBlockMenuItem is null || _contextMenu is null)
+        {
+            return;
+        }
+
+        _copyCodeBlockMenuItem.Visibility = FindContextCodeBlockState() is not null
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+    }
+
+    private CodeBlockCardState? FindContextCodeBlockState()
+    {
+        if (_contextMenu?.PlacementTarget is DependencyObject placementTarget)
+        {
+            var fromPlacement = FlowDocumentCodeBlockEnhancer.FindCardState(placementTarget);
+            if (fromPlacement is not null)
+            {
+                return fromPlacement;
+            }
+        }
+
+        if (MarkdownViewer.Selection is not { IsEmpty: false } selection)
+        {
+            return null;
+        }
+
+        return FlowDocumentCodeBlockEnhancer.FindCardState(selection.Start.Parent as DependencyObject);
     }
 }

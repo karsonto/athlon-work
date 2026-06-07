@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Athlon 上下文压缩：静态 vs 动态</title>
+  <style>
+    :root {
+      --bg: #101012;
+      --panel: #18181b;
+      --panel-alt: #262628;
+      --border: #3f3f46;
+      --text: #f4f4f5;
+      --muted: #a1a1aa;
+      --accent: #2563eb;
+      --accent-soft: #1e3a5f;
+      --success: #10b981;
+      --warning: #fbbf24;
+      --danger: #e11d48;
+      --truncate: #8b5cf6;
+      --evict: #f59e0b;
+      --compact: #3b82f6;
+      --system: #52525b;
+      --history: #38bdf8;
+      --summary: #6ee7b7;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    header {
+      padding: 24px 28px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 { margin: 0 0 8px; font-size: 22px; font-weight: 600; }
+    header p { margin: 0; color: var(--muted); font-size: 14px; max-width: 920px; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      padding: 16px 28px 28px;
+    }
+
+    @media (max-width: 1100px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .card-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .card-head h2 { margin: 0; font-size: 16px; }
+    .badge {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .badge.on { color: #93c5fd; border-color: #2f5c8e; background: var(--accent-soft); }
+
+    .card-body { padding: 16px 18px 18px; }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    button {
+      background: var(--panel-alt);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    button:hover { border-color: #64748b; }
+    button.primary { background: var(--accent); border-color: var(--accent); }
+    input[type="range"] { width: 180px; accent-color: var(--accent); }
+    .slider-label { font-size: 12px; color: var(--muted); min-width: 120px; }
+
+    .meter-wrap { margin-bottom: 14px; }
+    .meter-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .meter {
+      height: 18px;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      transition: width 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+      background: linear-gradient(90deg, #0ea5e9, #2563eb);
+    }
+    .meter-threshold {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--warning);
+      opacity: 0.9;
+      transition: left 0.4s ease;
+    }
+    .meter-threshold.secondary {
+      background: var(--danger);
+      width: 3px;
+    }
+
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 220px;
+    }
+    .msg {
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+      border: 1px solid transparent;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.35s ease, transform 0.35s ease, max-height 0.45s ease, margin 0.45s ease, padding 0.45s ease;
+      max-height: 40px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .msg.visible { opacity: 1; transform: translateY(0); }
+    .msg.removing {
+      opacity: 0;
+      max-height: 0;
+      margin: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      border-width: 0;
+    }
+    .msg.user { background: #1e3a5f; border-color: #2f5c8e; }
+    .msg.assistant { background: #27272a; border-color: #3f3f46; }
+    .msg.tool { background: #1e1b2e; border-color: #6d28d9; color: #ddd6fe; }
+    .msg.summary {
+      background: #142a22;
+      border-color: #059669;
+      color: #6ee7b7;
+      font-weight: 600;
+    }
+    .msg.evicted { background: #2a2418; border-color: #b45309; color: #fcd34d; }
+    .msg.truncated { background: #241f35; border-color: #7c3aed; color: #ddd6fe; }
+
+    .timeline {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .timeline h3 {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .steps { display: flex; flex-direction: column; gap: 6px; }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      opacity: 0.45;
+      transition: opacity 0.35s ease, color 0.35s ease;
+    }
+    .step.active { opacity: 1; color: var(--text); }
+    .step.done { opacity: 0.85; color: #cbd5e1; }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 5px;
+      flex-shrink: 0;
+      background: var(--border);
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+    .step.active .dot { background: var(--accent); box-shadow: 0 0 0 4px rgba(37,99,235,0.25); }
+    .step.done .dot { background: var(--success); }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .legend span::before {
+      content: "";
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      margin-right: 5px;
+      vertical-align: -1px;
+    }
+    .legend .l-user::before { background: #1e3a5f; border: 1px solid #2f5c8e; }
+    .legend .l-tool::before { background: #1e1b2e; border: 1px solid #6d28d9; }
+    .legend .l-summary::before { background: #142a22; border: 1px solid #059669; }
+    .legend .l-evict::before { background: #2a2418; border: 1px solid #b45309; }
+    .legend .l-trunc::before { background: #241f35; border: 1px solid #7c3aed; }
+
+    .footer-note {
+      padding: 0 28px 24px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .footer-note code {
+      background: var(--panel-alt);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #e2e8f0;
+    }
+
+    .pulse {
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.55; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Athlon 上下文压缩：静态 vs 动态（动画对比）</h1>
+    <p>
+      基于 <code>ContextCompactionSettings</code> 默认参数演示。
+      静态模式在固定消息数/Token 阈值触发「一次性 LLM 摘要 + 保留尾部」；
+      动态模式按预算利用率分三级（参数截断 → 工具结果归档 → LLM 摘要），压缩后回落到约 30% 窗口占用。
+    </p>
+  </header>
+
+  <div class="layout">
+    <!-- STATIC -->
+    <section class="card" id="static-card">
+      <div class="card-head">
+        <h2>静态压缩</h2>
+        <span class="badge">dynamicCompaction.enabled = false</span>
+      </div>
+      <div class="card-body">
+        <div class="controls">
+          <button class="primary" id="static-play">▶ 播放演示</button>
+          <button id="static-reset">重置</button>
+          <span class="slider-label">模拟轮次</span>
+          <input type="range" id="static-slider" min="0" max="12" value="0" />
+        </div>
+
+        <div class="meter-wrap">
+          <div class="meter-label">
+            <span>历史 Token 估算</span>
+            <span id="static-meter-text">0 / 80,000（触发阈值）</span>
+          </div>
+          <div class="meter">
+            <div class="meter-fill" id="static-meter-fill"></div>
+            <div class="meter-threshold secondary" id="static-threshold" style="left: 100%"></div>
+          </div>
+        </div>
+
+        <div class="stack" id="static-stack"></div>
+
+        <div class="timeline">
+          <h3>策略时间线</h3>
+          <div class="steps" id="static-steps">
+            <div class="step" data-step="0"><span class="dot"></span><span>累积对话：未达 <code>TriggerTokens=80k</code> 或 <code>TriggerMessages=50</code></span></div>
+            <div class="step" data-step="1"><span class="dot"></span><span>达到静态阈值 → 触发 LLM 对话摘要（无前置截断/归档层级）</span></div>
+            <div class="step" data-step="2"><span class="dot"></span><span>前缀替换为摘要消息，仅保留尾部 <code>KeepMessages=20</code></span></div>
+            <div class="step" data-step="3"><span class="dot"></span><span>Token 计数回落，但保留量由固定条数决定，非预算比例</span></div>
+          </div>
+        </div>
+
+        <div class="legend">
+          <span class="l-user">用户</span>
+          <span class="l-tool">工具输出</span>
+          <span class="l-summary">LLM 摘要</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- DYNAMIC -->
+    <section class="card" id="dynamic-card">
+      <div class="card-head">
+        <h2>动态压缩</h2>
+        <span class="badge on">dynamicCompaction.enabled = true（默认）</span>
+      </div>
+      <div class="card-body">
+        <div class="controls">
+          <button class="primary" id="dynamic-play">▶ 播放演示</button>
+          <button id="dynamic-reset">重置</button>
+          <span class="slider-label">模拟轮次</span>
+          <input type="range" id="dynamic-slider" min="0" max="16" value="0" />
+        </div>
+
+        <div class="meter-wrap">
+          <div class="meter-label">
+            <span>全 Prompt 利用率（history + system/tools）</span>
+            <span id="dynamic-meter-text">0% · 目标带 72% / 80%</span>
+          </div>
+          <div class="meter">
+            <div class="meter-fill" id="dynamic-meter-fill"></div>
+            <div class="meter-threshold" id="dynamic-threshold-trunc" style="left: 72%" title="72% 参数截断/归档"></div>
+            <div class="meter-threshold secondary" id="dynamic-threshold-compact" style="left: 80%" title="80% LLM 摘要"></div>
+          </div>
+        </div>
+
+        <div class="stack" id="dynamic-stack"></div>
+
+        <div class="timeline">
+          <h3>三级递进时间线</h3>
+          <div class="steps" id="dynamic-steps">
+            <div class="step" data-step="0"><span class="dot"></span><span>正常累积，监控 <code>TotalUtilization</code></span></div>
+            <div class="step" data-step="1"><span class="dot"></span><span>≥72%（80%×0.9）→ ① 工具参数截断 <code>truncate_args</code></span></div>
+            <div class="step" data-step="2"><span class="dot"></span><span>≥72% 且压力升高 → ② 前缀工具结果归档 <code>tool_result_eviction</code></span></div>
+            <div class="step" data-step="3"><span class="dot"></span><span>≥80% → ③ LLM 对话摘要 <code>conversation_compact</code></span></div>
+            <div class="step" data-step="4"><span class="dot"></span><span>压缩后目标 ~30%（<code>PostCompactionUtilization</code>），并插入前端「上下文」卡片</span></div>
+          </div>
+        </div>
+
+        <div class="legend">
+          <span class="l-user">用户</span>
+          <span class="l-tool">工具输出</span>
+          <span class="l-trunc">参数截断</span>
+          <span class="l-evict">结果归档预览</span>
+          <span class="l-summary">LLM 摘要</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <p class="footer-note">
+    参数来源：<code>ContextCompactionSettings</code>（TriggerTokens 80k / KeepMessages 20 / CompactTriggerRatio 0.7）与
+    <code>DynamicCompactionSettings</code>（TargetUtilization 80% / TruncateLeadRatio 90% / PostCompactionUtilization 30%）。
+    打开方式：双击本文件或在浏览器地址栏拖入 <code>tools/compaction-comparison.html</code>。
+  </p>
+
+  <script>
+    const CONFIG = {
+      staticTriggerTokens: 80000,
+      staticKeepMessages: 20,
+      dynamicTruncateAt: 0.72,
+      dynamicCompactAt: 0.80,
+      dynamicPostCompact: 0.30,
+      usableWindow: 256000 - 8192,
+      historyBudget: 180000,
+    };
+
+    function makeMessages(count, toolHeavy = false) {
+      const items = [];
+      for (let i = 1; i <= count; i++) {
+        items.push({ type: "user", label: `用户 #${i}：请继续分析模块 ${i}` });
+        items.push({ type: "assistant", label: `助手 #${i}：收到，开始推理…` });
+        if (toolHeavy || i % 2 === 0) {
+          items.push({
+            type: "tool",
+            label: `工具 grep_files #${i}：${"x".repeat(40)}…（大段输出）`,
+            tokens: 6000 + i * 400,
+          });
+        }
+      }
+      return items;
+    }
+
+    function renderStack(container, messages) {
+      container.innerHTML = "";
+      messages.forEach((m, idx) => {
+        const el = document.createElement("div");
+        el.className = `msg ${m.type}`;
+        el.textContent = m.label;
+        el.dataset.idx = String(idx);
+        container.appendChild(el);
+        requestAnimationFrame(() => el.classList.add("visible"));
+      });
+    }
+
+    function animateRemovePrefix(container, removeCount, newHead) {
+      const nodes = [...container.querySelectorAll(".msg")];
+      nodes.slice(0, removeCount).forEach((node, i) => {
+        setTimeout(() => node.classList.add("removing"), i * 60);
+      });
+      const delay = removeCount * 60 + 420;
+      setTimeout(() => {
+        const remain = nodes.slice(removeCount).filter(n => !n.classList.contains("removing"));
+        container.innerHTML = "";
+        if (newHead) {
+          const summary = document.createElement("div");
+          summary.className = "msg summary visible";
+          summary.textContent = newHead;
+          container.appendChild(summary);
+        }
+        remain.forEach((node, i) => {
+          node.classList.remove("removing");
+          node.classList.add("visible");
+          container.appendChild(node);
+          if (i === 0) node.style.marginTop = "0";
+        });
+      }, delay);
+    }
+
+    function setStepActive(container, index) {
+      container.querySelectorAll(".step").forEach(step => {
+        const n = Number(step.dataset.step);
+        step.classList.remove("active", "done");
+        if (n < index) step.classList.add("done");
+        if (n === index) step.classList.add("active");
+      });
+    }
+
+    function setMeter(fillEl, textEl, ratio, text, danger = false) {
+      fillEl.style.width = `${Math.min(100, ratio * 100)}%`;
+      fillEl.style.background = danger
+        ? "linear-gradient(90deg, #f59e0b, #e11d48)"
+        : "linear-gradient(90deg, #0ea5e9, #2563eb)";
+      textEl.textContent = text;
+    }
+
+    // --- STATIC DEMO ---
+    const staticStack = document.getElementById("static-stack");
+    const staticFill = document.getElementById("static-meter-fill");
+    const staticMeterText = document.getElementById("static-meter-text");
+    const staticSteps = document.getElementById("static-steps");
+    const staticSlider = document.getElementById("static-slider");
+    let staticTimer = null;
+
+    const staticScenes = [
+      () => {
+        const msgs = makeMessages(6, true);
+        renderStack(staticStack, msgs);
+        setMeter(staticFill, staticMeterText, 0.42, "33,600 / 80,000（未触发）");
+        setStepActive(staticSteps, 0);
+      },
+      () => {
+        const msgs = makeMessages(10, true);
+        renderStack(staticStack, msgs);
+        setMeter(staticFill, staticMeterText, 0.78, "62,400 / 80,000（接近阈值）");
+        setStepActive(staticSteps, 0);
+      },
+      () => {
+        const msgs = makeMessages(12, true);
+        renderStack(staticStack, msgs);
+        setMeter(staticFill, staticMeterText, 1.0, "84,000 / 80,000（触发！）", true);
+        setStepActive(staticSteps, 1);
+      },
+      () => {
+        const msgs = makeMessages(12, true);
+        renderStack(staticStack, msgs);
+        setMeter(staticFill, staticMeterText, 1.0, "触发 LLM 摘要中…", true);
+        staticFill.classList.add("pulse");
+        setStepActive(staticSteps, 1);
+      },
+      () => {
+        staticFill.classList.remove("pulse");
+        const msgs = makeMessages(12, true);
+        renderStack(staticStack, msgs);
+        const keep = msgs.slice(-CONFIG.staticKeepMessages);
+        animateRemovePrefix(
+          staticStack,
+          msgs.length - CONFIG.staticKeepMessages,
+          "📋 LLM 摘要：前 12 轮对话已压缩为结构化摘要（静态 KeepMessages=20）"
+        );
+        setMeter(staticFill, staticMeterText, 0.36, "28,800 / 80,000（压缩后）");
+        setStepActive(staticSteps, 2);
+      },
+      () => {
+        setMeter(staticFill, staticMeterText, 0.36, "继续对话将再次累积至固定阈值");
+        setStepActive(staticSteps, 3);
+      },
+    ];
+
+    function staticGoTo(index) {
+      const scene = staticScenes[Math.min(index, staticScenes.length - 1)];
+      if (scene) scene();
+      staticSlider.value = String(index);
+    }
+
+    function staticPlay() {
+      clearInterval(staticTimer);
+      let i = 0;
+      staticGoTo(0);
+      staticTimer = setInterval(() => {
+        i++;
+        if (i >= staticScenes.length) {
+          clearInterval(staticTimer);
+          return;
+        }
+        staticGoTo(i);
+      }, 1600);
+    }
+
+    document.getElementById("static-play").onclick = staticPlay;
+    document.getElementById("static-reset").onclick = () => { clearInterval(staticTimer); staticGoTo(0); };
+    staticSlider.oninput = () => staticGoTo(Number(staticSlider.value));
+
+    // --- DYNAMIC DEMO ---
+    const dynamicStack = document.getElementById("dynamic-stack");
+    const dynamicFill = document.getElementById("dynamic-meter-fill");
+    const dynamicMeterText = document.getElementById("dynamic-meter-text");
+    const dynamicSteps = document.getElementById("dynamic-steps");
+    const dynamicSlider = document.getElementById("dynamic-slider");
+    let dynamicTimer = null;
+
+    function mutateDynamicToolMessages(container, mode) {
+      const tools = container.querySelectorAll(".msg.tool");
+      tools.forEach((node, i) => {
+        if (mode === "truncate" && i < 3) {
+          node.className = "msg truncated visible";
+          node.textContent = node.textContent.split("：")[0] + "：{…参数已截断…}";
+        }
+        if (mode === "evict" && i < 2) {
+          node.className = "msg evicted visible";
+          node.textContent = node.textContent.split("：")[0] + "：[已归档] 前 2000 字预览…";
+        }
+      });
+    }
+
+    const dynamicScenes = [
+      () => {
+        renderStack(dynamicStack, makeMessages(5, true));
+        setMeter(dynamicFill, dynamicMeterText, 0.48, "48% · 正常");
+        setStepActive(dynamicSteps, 0);
+      },
+      () => {
+        renderStack(dynamicStack, makeMessages(8, true));
+        setMeter(dynamicFill, dynamicMeterText, 0.66, "66% · 接近预警");
+        setStepActive(dynamicSteps, 0);
+      },
+      () => {
+        renderStack(dynamicStack, makeMessages(9, true));
+        setMeter(dynamicFill, dynamicMeterText, 0.74, "74% · ≥72% 触发 ①", true);
+        mutateDynamicToolMessages(dynamicStack, "truncate");
+        setStepActive(dynamicSteps, 1);
+      },
+      () => {
+        renderStack(dynamicStack, makeMessages(9, true));
+        mutateDynamicToolMessages(dynamicStack, "truncate");
+        mutateDynamicToolMessages(dynamicStack, "evict");
+        setMeter(dynamicFill, dynamicMeterText, 0.77, "77% · ② 前缀工具结果归档", true);
+        setStepActive(dynamicSteps, 2);
+      },
+      () => {
+        renderStack(dynamicStack, makeMessages(10, true));
+        setMeter(dynamicFill, dynamicMeterText, 0.83, "83% · ≥80% 触发 ③ LLM 摘要", true);
+        dynamicFill.classList.add("pulse");
+        setStepActive(dynamicSteps, 3);
+      },
+      () => {
+        dynamicFill.classList.remove("pulse");
+        const msgs = makeMessages(10, true);
+        renderStack(dynamicStack, msgs);
+        const keepCount = 8;
+        animateRemovePrefix(
+          dynamicStack,
+          msgs.length - keepCount,
+          "📋 LLM 摘要 + 语义截断保留关键上下文（目标 ~30% 利用率）"
+        );
+        setMeter(dynamicFill, dynamicMeterText, 0.31, "31% · 压缩后回落（PostCompaction=30%）");
+        setStepActive(dynamicSteps, 4);
+      },
+      () => {
+        setMeter(dynamicFill, dynamicMeterText, 0.38, "38% · 继续对话，按利用率渐进触发");
+        setStepActive(dynamicSteps, 4);
+      },
+    ];
+
+    function dynamicGoTo(index) {
+      const scene = dynamicScenes[Math.min(index, dynamicScenes.length - 1)];
+      if (scene) scene();
+      dynamicSlider.value = String(index);
+    }
+
+    function dynamicPlay() {
+      clearInterval(dynamicTimer);
+      let i = 0;
+      dynamicGoTo(0);
+      dynamicTimer = setInterval(() => {
+        i++;
+        if (i >= dynamicScenes.length) {
+          clearInterval(dynamicTimer);
+          return;
+        }
+        dynamicGoTo(i);
+      }, 1700);
+    }
+
+    document.getElementById("dynamic-play").onclick = dynamicPlay;
+    document.getElementById("dynamic-reset").onclick = () => { clearInterval(dynamicTimer); dynamicGoTo(0); };
+    dynamicSlider.oninput = () => dynamicGoTo(Number(dynamicSlider.value));
+
+    staticGoTo(0);
+    dynamicGoTo(0);
+  </script>
+</body>
+</html>

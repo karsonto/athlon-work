@@ -112,17 +112,16 @@ public sealed class AgentEnvironmentPromptBuilderTests
     }
 
     [Fact]
-    public void Build_IncludesMermaidGuidance()
+    public void Build_OmitsMermaidGuidance()
     {
         var builder = PromptTestHelpers.CreateBuilder(
             new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"));
 
         var prompt = builder.Build(AgentSession.Create("mermaid-test"), Array.Empty<ToolDefinition>());
 
-        Assert.Contains("Mermaid diagrams in chat:", prompt, StringComparison.Ordinal);
-        Assert.Contains("```mermaid", prompt, StringComparison.Ordinal);
-        Assert.Contains("sequenceDiagram", prompt, StringComparison.Ordinal);
-        Assert.Contains("查看 Mermaid 图表", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Mermaid diagrams in chat:", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("```mermaid", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("查看 Mermaid 图表", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

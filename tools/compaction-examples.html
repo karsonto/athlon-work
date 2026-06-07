@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>上下文压缩 — 具体内容示例</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    background: #0d0d0f;
+    color: #e8e8ed;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    padding: 32px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: #9a9aa2; font-size: 13px; margin-bottom: 28px; }
+
+  h2 { font-size: 16px; margin: 28px 0 12px; display: flex; align-items: center; gap: 8px; }
+  h2 .tag {
+    font-size: 10px; padding: 2px 8px; border-radius: 999px;
+    background: #1e1e21; border: 1px solid #2e2e32; color: #9a9aa2;
+  }
+
+  /* ─── 双栏 ─── */
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  @media (max-width: 720px) { .pair { grid-template-columns: 1fr; } }
+
+  .box {
+    background: #161618;
+    border: 1px solid #2e2e32;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .box-head {
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border-bottom: 1px solid #2e2e32;
+    display: flex;
+    justify-content: space-between;
+  }
+  .box-head .badge { font-weight: 400; font-size: 11px; }
+  .box-body {
+    padding: 12px 14px;
+    font-family: "Cascadia Code", "JetBrains Mono", "Consolas", monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  /* ─── 着色 ─── */
+  .c-user { color: #93c5fd; }
+  .c-assistant { color: #e2e8f0; }
+  .c-tool { color: #c4b5fd; }
+  .c-trunc { color: #f97316; }
+  .c-evict { color: #fcd34d; }
+  .c-summary { color: #6ee7b7; }
+  .c-dim { color: #6b7280; }
+  .hl { background: #2a1f10; padding: 0 4px; border-radius: 3px; }
+  .hl-trunc { background: #1f1a3a; padding: 0 4px; border-radius: 3px; }
+
+  .arrow-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #3b82f6;
+    padding: 0 8px;
+    align-self: center;
+  }
+  .pair-wrap { display: flex; align-items: stretch; gap: 8px; }
+  .pair-wrap .pair { flex: 1; }
+
+  .legend {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    margin: 20px 0; font-size: 12px; color: #9a9aa2;
+  }
+  .legend span::before {
+    content: ""; display: inline-block; width: 12px; height: 12px;
+    border-radius: 3px; margin-right: 5px; vertical-align: -2px;
+  }
+  .l-normal::before { background: #1a2744; border: 1px solid #1d4ed8; }
+  .l-trunc::before { background: #1f1a3a; border: 1px solid #7c3aed; }
+  .l-evict::before { background: #2a1f10; border: 1px solid #b45309; }
+
+  .code-ref {
+    margin: 16px 0 8px;
+    font-size: 12px; color: #6b7280;
+  }
+  .code-ref code { background: #1e1e21; padding: 1px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<h1>🧩 上下文压缩：具体内容变化示例</h1>
+<p class="sub">基于源码 <code>TruncateArgsService.cs</code>、<code>PrefixToolResultReEvictor.cs</code>、<code>ConversationSummaryFormatter.cs</code></p>
+
+<div class="legend">
+  <span class="l-normal">正常对话（用户/助手/工具）</span>
+  <span class="l-trunc">① 参数截断后</span>
+  <span class="l-evict">② 工具结果归档后</span>
+</div>
+
+<!-- ============================================================ -->
+<h2>📌 场景 A：正常的工具调用请求 <span class="tag">压缩前</span></h2>
+
+<div class="box">
+  <div class="box-head">
+    <span>助手发出工具调用（ToolCallsJson）</span>
+    <span class="badge c-assistant">MessageRole.Assistant · ToolCallsJson</span>
+  </div>
+  <div class="box-body">{
+  <span class="c-user">"id"</span>: <span class="c-tool">"call_01_abc123"</span>,
+  <span class="c-user">"name"</span>: <span class="c-tool">"file_read"</span>,
+  <span class="c-user">"arguments"</span>: {
+    <span class="c-user">"path"</span>: <span class="c-tool">"src/Athlon.Agent.Core/Compaction/TruncateArgsService.cs"</span>
+  }
+}
+
+{
+  <span class="c-user">"id"</span>: <span class="c-tool">"call_02_def456"</span>,
+  <span class="c-user">"name"</span>: <span class="c-tool">"grep_files"</span>,
+  <span class="c-user">"arguments"</span>: {
+    <span class="c-user">"pattern"</span>: <span class="c-tool">"TruncateArguments"</span>,
+    <span class="c-user">"path"</span>: <span class="c-tool">"src"</span>
+  }
+}</div>
+</div>
+
+<div class="box" style="margin-top:12px;">
+  <div class="box-head">
+    <span>工具返回结果（大量内容）</span>
+    <span class="badge c-tool">MessageRole.Tool · Content ≈ 120,000 字符</span>
+  </div>
+  <div class="box-body"><span class="c-tool">ToolCallId: call_01_abc123</span>
+┌──────────────────────────────────────────────────────┐
+│ 匹配到 47 个结果 …                                    │
+│                                                      │
+│ src/Athlon.Agent.Core/Compaction/TruncateArgsService │
+│ .cs:124:  private static ...                         │
+│ ... 省略中间约 118,000 字符 ...                       │
+│                                                      │
+│ src/Athlon.Agent.Tests/TruncateArgsServiceTests.cs:  │
+│ 42:   var result = TruncateArguments(...);           │
+└──────────────────────────────────────────────────────┘</div>
+</div>
+
+<!-- ============================================================ -->
+<h2>📌 场景 B：① 工具参数截断 <span class="tag">TruncateArgsService.cs</span></h2>
+
+<p class="code-ref">关键代码：<code>TruncateStringArg</code> — 取前 20 字符 + <code>"...(argument truncated)"</code> ｜ <code>MaxArgLength = 2000</code></p>
+
+<div class="pair">
+  <div class="box">
+    <div class="box-head"><span>压缩前（参数完整）<span class="badge c-dim">正常</span></span></div>
+    <div class="box-body"><span class="c-assistant">助手 #8：</span>让我搜索所有接口定义
+<span class="c-assistant">→ ToolCallsJson:</span>
+{
+  <span class="c-user">"id"</span>: <span class="c-tool">"call_08_xyz"</span>,
+  <span class="c-user">"name"</span>: <span class="c-tool">"grep_files"</span>,
+  <span class="c-user">"arguments"</span>: {
+    <span class="c-user">"pattern"</span>: <span class="hl">"interface I[A-Z]\\w+Service"</span>,
+    <span class="c-user">"path"</span>: <span class="c-tool">"src/Athlon.Agent.Core"</span>
+  }
+}
+<span class="c-dim">↑ pattern 参数完整（正常长度）</span></div>
+  </div>
+
+  <div class="box">
+    <div class="box-head"><span>压缩后（参数截断）<span class="badge c-trunc">截断后</span></span></div>
+    <div class="box-body"><span class="c-assistant">助手 #8：</span>让我搜索所有接口定义
+<span class="c-assistant">→ ToolCallsJson:</span>
+{
+  <span class="c-user">"id"</span>: <span class="c-tool">"call_08_xyz"</span>,
+  <span class="c-user">"name"</span>: <span class="c-tool">"grep_files"</span>,
+  <span class="c-user">"arguments"</span>: {
+    <span class="c-user">"pattern"</span>: <span class="hl-trunc">"interface I[A-Z]\\w+...</span><span class="c-trunc">(argument truncated)</span>",
+    <span class="c-user">"path"</span>: <span class="c-tool">"src/Athlon.Agent.Core"</span>
+  }
+}
+<span class="c-dim">↑ 只保留前 20 字符，附截断标记</span></div>
+  </div>
+</div>
+
+<!-- 再来一个更夸张的例子：file_write 参数 -->
+<div class="pair">
+  <div class="box">
+    <div class="box-head"><span>file_write 参数（大量内容）<span class="badge c-dim">正常</span></span></div>
+    <div class="box-body">{
+  <span class="c-user">"name"</span>: <span class="c-tool">"file_write"</span>,
+  <span class="c-user">"arguments"</span>: {
+    <span class="c-user">"path"</span>: <span class="c-tool">"output/report.md"</span>,
+    <span class="c-user">"content"</span>: <span class="hl">"# 分析报告\n\n## 模块 A\n...\n...\n（此处约 8,000 字符）\n...\n...\n## 结论\n通过。"</span>
+  }
+}
+<span class="c-dim">↑ content 参数 8,327 字符 &gt; MaxArgLength=2000</span></div>
+  </div>
+
+  <div class="box">
+    <div class="box-head"><span>截断后 <span class="badge c-trunc">截断后</span></span></div>
+    <div class="box-body">{
+  <span class="c-user">"name"</span>: <span class="c-tool">"file_write"</span>,
+  <span class="c-user">"arguments"</span>: {
+    <span class="c-user">"path"</span>: <span class="c-tool">"output/report.md"</span>,
+    <span class="c-user">"content"</span>: <span class="hl-trunc">"# 分析报告\n\n## 模...</span><span class="c-trunc">(argument truncated)</span>"
+  }
+}
+<span class="c-dim">↑ 只保留前 20 字符，模型知道写过文件但看不到内容</span></div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2>📌 场景 C：② 工具结果归档 <span class="tag">PrefixToolResultReEvictor.cs</span></h2>
+
+<p class="code-ref">关键代码：<code>[Tool result evicted. Preview: ...]</code> ｜ <code>PreviewChars = 2000</code> ｜ <code>MaxResultChars = 80,000</code><br>
+归档阈值：工具内容 ≥ 80,000 字符时，替换为 2,000 字符预览 + 归档标记</p>
+
+<div class="pair">
+  <div class="box">
+    <div class="box-head"><span>完整工具结果 <span class="badge c-dim">正常</span></span></div>
+    <div class="box-body"><span class="c-tool">ToolCallId: call_04_jkl789</span>
+┌─ grep_files 返回 ──────────────────────────┐
+│ 匹配到 152 个结果：                          │
+│                                             │
+│ src/Athlon.Agent.Core/Compaction/           │
+│   TruncateArgsService.cs:10                 │
+│   TruncateArgsService.cs:42                 │
+│   ...                                       │
+│   ... （约 95,000 字符，超过 80,000 阈值）   │
+│   ...                                       │
+│                                             │
+│ src/Athlon.Agent.Tests/TruncateArgsTests.cs │
+│   :18                                       │
+└─────────────────────────────────────────────┘
+<span class="c-dim">↑ 完整内容，占用大量上下文</span></div>
+  </div>
+
+  <div class="box">
+    <div class="box-head"><span>归档后（仅保留预览）<span class="badge c-evict">归档后</span></span></div>
+    <div class="box-body"><span class="c-evict">[Tool result evicted. Original size: ~95,000 chars]</span>
+<span class="c-evict">Preview:</span>
+┌─ grep_files 返回 ──────────────────────────┐
+│ 匹配到 152 个结果：                          │
+│                                             │
+│ src/Athlon.Agent.Core/Compaction/           │
+│   TruncateArgsService.cs:10                 │
+│   TruncateArgsService.cs:42                 │
+│   TruncateArgsService.cs:85                 │
+│   ...                                       │
+<span class="c-dim">                                            </span>
+<span class="c-dim">...（仅保留前 2,000 字预览）...</span>
+<span class="c-dim">                                            </span>
+│ src/Athlon.Agent.Tests/                   │
+│   TruncateArgsTests.cs:18                 │
+└─────────────────────────────────────────────┘</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2>📌 场景 D：③ LLM 摘要（最终压缩）<span class="tag">ConversationSummaryFormatter.cs</span></h2>
+
+<p class="code-ref">
+  将所有历史消息格式化为文本 → 发给 LLM 生成结构化摘要 → 替换原始内容<br>
+  摘要格式：<code>## SESSION INTENT</code> · <code>## SUMMARY</code> · <code>## ARTIFACTS</code> · <code>## NEXT STEPS</code>
+</p>
+
+<div class="pair">
+  <div class="box">
+    <div class="box-head"><span>12 轮对话原始内容 <span class="badge c-dim">压缩前</span></span></div>
+    <div class="box-body"><span class="c-user">Human: 帮我分析项目中的压缩逻辑</span>
+<span class="c-assistant">AI: 好的，我来查看相关源码。</span>
+<span class="c-assistant">[tool_call: glob_files(path=src/Athlon.Agent.Core/Compaction/*.cs ...)]</span>
+<span class="c-tool">[tool_result] 27 files found...</span>
+<span class="c-assistant">AI: 找到了 27 个文件，让我逐一阅读…</span>
+<span class="c-assistant">[tool_call: file_read(path=TruncateArgsService.cs ...)]</span>
+<span class="c-tool">[tool_result] ToolCallId: call_01 ...</span>
+<span class="c-user">Human: 解释一下 TruncateStringArg 方法</span>
+<span class="c-assistant">AI: 该方法...</span>
+<span class="c-assistant">[tool_call: file_read(path=PrefixToolResultReEvictor.cs ...)]</span>
+<span class="c-tool">[tool_result] ToolCallId: call_02 ...</span>
+<span class="c-dim">...（共 12 轮，约 84,000 tokens）...</span></div>
+  </div>
+
+  <div class="box">
+    <div class="box-head"><span>LLM 结构化摘要 <span class="badge c-summary">压缩后</span></span></div>
+    <div class="box-body"><span class="c-summary">📋 LLM 摘要：前 12 轮对话已压缩</span>
+
+<span class="c-summary">## SESSION INTENT</span>
+用户希望分析 Athlon 上下文压缩模块的实现细节，
+重点关注 TruncateArgsService 和 PrefixToolResultReEvictor。
+
+<span class="c-summary">## SUMMARY</span>
+- TruncateArgsService 对 Assistant 角色的 ToolCallsJson
+  中超过 2000 字符的参数做截断，保留前 20 字符
+- PrefixToolResultReEvictor 将已归档的工具结果进一步紧缩
+  预览至 2000 字符
+- 两者均在动态压缩的 High 压力级别 (≥72%) 触发
+
+<span class="c-summary">## ARTIFACTS</span>
+- 阅读了 TruncateArgsService.cs (232 行)
+- 阅读了 PrefixToolResultReEvictor.cs (70 行)
+- 阅读了 ContextPressureEvaluator.cs (174 行)
+
+<span class="c-summary">## NEXT STEPS</span>
+用户可能想进一步了解 ConversationCutoffPlanner 的截断算法</div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2>📌 完整流程回顾：三级递进 <span class="tag">动态压缩完整链路</span></h2>
+
+<div style="display:flex; flex-direction:column; gap:8px; font-size:13px; background:#161618; border:1px solid #2e2e32; border-radius:12px; padding:18px;">
+  <div style="display:flex; align-items:center; gap:12px; padding:8px 12px; background:#0a0a0f; border-radius:8px;">
+    <span style="background:#22c55e; width:10px; height:10px; border-radius:50%; flex-shrink:0;"></span>
+    <span style="color:#9a9aa2; width:80px; flex-shrink:0;">利用率 55%</span>
+    <span style="color:#e2e8f0;">Normal — 正常对话，不做任何操作</span>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px; padding:8px 12px; background:#0a0a0f; border-radius:8px;">
+    <span style="background:#f97316; width:10px; height:10px; border-radius:50%; flex-shrink:0;"></span>
+    <span style="color:#9a9aa2; width:80px; flex-shrink:0;">利用率 74%</span>
+    <span style="color:#e2e8f0;">① <strong style="color:#a78bfa;">参数截断</strong> — 助手 ToolCallsJson 中 &gt;2000 字符的参数 → 保留前 20 字符 + <code style="background:#1f1a3a; padding:0 5px;">...(argument truncated)</code></span>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px; padding:8px 12px; background:#0a0a0f; border-radius:8px;">
+    <span style="background:#f97316; width:10px; height:10px; border-radius:50%; flex-shrink:0;"></span>
+    <span style="color:#9a9aa2; width:80px; flex-shrink:0;">利用率 77%</span>
+    <span style="color:#e2e8f0;">② <strong style="color:#fcd34d;">结果归档</strong> — 前序 Tool 消息中 &gt;80,000 字符的 → <code style="background:#2a1f10; padding:0 5px;">[Tool result evicted. Preview: ...]</code>（保留 2,000 字预览）</span>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px; padding:8px 12px; background:#0a0a0f; border-radius:8px;">
+    <span style="background:#ef4444; width:10px; height:10px; border-radius:50%; flex-shrink:0;"></span>
+    <span style="color:#9a9aa2; width:80px; flex-shrink:0;">利用率 83%</span>
+    <span style="color:#e2e8f0;">③ <strong style="color:#6ee7b7;">LLM 摘要</strong> — 整段历史发给 LLM → 生成结构化摘要 → 替换前缀，保留 ~30% 窗口</span>
+  </div>
+  <div style="display:flex; align-items:center; gap:12px; padding:8px 12px; background:#0a0a0f; border-radius:8px;">
+    <span style="background:#22c55e; width:10px; height:10px; border-radius:50%; flex-shrink:0;"></span>
+    <span style="color:#9a9aa2; width:80px; flex-shrink:0;">利用率 31%</span>
+    <span style="color:#e2e8f0;">✅ 压缩后回落 — 继续对话，监控利用率逐步上升</span>
+  </div>
+</div>
+
+<p style="margin-top:24px; font-size:12px; color:#6b7280;">
+  源码参考：<code>TruncateArgsService.cs:201-209</code> TruncateStringArg ｜
+  <code>PrefixToolResultReEvictor.cs:45-68</code> IsEvictedPlaceholder / TightenPreview ｜
+  <code>ConversationSummaryFormatter.cs:7-48</code> FormatMessages ｜
+  <code>ContextCompactionSettings.cs:42-57</code> TruncateArgsSettings (MaxArgLength=2000) ｜
+  <code>TruncateArgsSettings.cs:59-74</code> ToolResultEvictionSettings (MaxResultChars=80000, PreviewChars=2000)
+</p>
+
+</body>
+</html>

@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Athlon 上下文压缩深度剖析：静态 vs 动态</title>
+  <style>
+    :root {
+      --bg: #0d0d0f;
+      --panel: #161618;
+      --panel-alt: #1e1e21;
+      --border: #2e2e32;
+      --text: #e8e8ed;
+      --muted: #9a9aa2;
+      --accent: #3b82f6;
+      --accent-bg: #1a253f;
+      --success: #22c55e;
+      --warning: #eab308;
+      --danger: #ef4444;
+      --trunc: #a78bfa;
+      --evict: #f97316;
+      --compact: #3b82f6;
+      --summary: #34d399;
+      --user: #1d4ed8;
+      --assistant: #3f3f46;
+      --tool: #4c1d95;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    /* ─── HEADER ─── */
+    header {
+      padding: 28px 32px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    header h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+    header h1 small { font-size: 14px; font-weight: 400; color: var(--muted); margin-left: 12px; }
+    header p { color: var(--muted); font-size: 14px; max-width: 1000px; }
+
+    /* ─── COMPARISON TABLE ─── */
+    .compare-section {
+      padding: 20px 32px 8px;
+    }
+    .compare-section h2 { font-size: 16px; margin-bottom: 12px; color: var(--text); }
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 180px 1fr 1fr;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      font-size: 13px;
+    }
+    .compare-grid .cell {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+    .compare-grid .cell:last-child { border-right: none; }
+    .compare-grid .row-label {
+      background: var(--panel-alt);
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .compare-grid .head-label {
+      background: var(--accent-bg);
+      font-weight: 600;
+      text-align: center;
+    }
+    .compare-grid .head-label.static { color: var(--warning); }
+    .compare-grid .head-label.dynamic { color: var(--success); }
+    .compare-grid .cell.code {
+      font-family: "Cascadia Code", "JetBrains Mono", "Consolas", monospace;
+      font-size: 12px;
+      letter-spacing: -0.02em;
+    }
+    .badge-dynamic { color: var(--success); font-weight: 600; }
+    .badge-static { color: var(--warning); font-weight: 600; }
+    .tag {
+      display: inline-block;
+      font-size: 10px;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+    }
+
+    /* ─── LAYOUT ─── */
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      padding: 16px 32px 28px;
+    }
+    @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .card-head {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .card-head h2 { margin: 0; font-size: 16px; }
+    .card-head .mode-badge {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .card-head .mode-badge.on-dynamic { color: #86efac; border-color: #166534; background: #052e16; }
+    .card-head .mode-badge.off-dynamic { color: #fde68a; border-color: #713f12; background: #291c04; }
+    .card-body { padding: 16px 18px 18px; }
+
+    /* ─── CONTROLS ─── */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    button {
+      background: var(--panel-alt);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    button:hover { border-color: #64748b; }
+    button.primary { background: var(--accent); border-color: var(--accent); }
+    button.primary:hover { background: #2563eb; }
+    input[type="range"] { width: 180px; accent-color: var(--accent); }
+    .slider-label { font-size: 12px; color: var(--muted); min-width: 110px; }
+
+    /* ─── METER ─── */
+    .meter-wrap { margin-bottom: 14px; }
+    .meter-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .meter {
+      height: 20px;
+      background: #0a0a0f;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    .meter-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1), background 0.4s ease;
+      background: linear-gradient(90deg, #0ea5e9, #3b82f6);
+    }
+    .meter-fill.danger { background: linear-gradient(90deg, #eab308, #ef4444) !important; }
+    .meter-threshold {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--warning);
+      opacity: 0.85;
+      transition: left 0.4s ease;
+    }
+    .meter-threshold.danger { background: var(--danger); width: 3px; }
+
+    /* ─── LEVEL INDICATOR ─── */
+    .pressure-level {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+      align-items: center;
+      font-size: 12px;
+    }
+    .level-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background 0.3s;
+    }
+    .level-dot.active { box-shadow: 0 0 0 3px rgba(59,130,246,0.3); }
+    .level-dot.normal { background: #22c55e; }
+    .level-dot.elevated { background: #eab308; }
+    .level-dot.high { background: #f97316; }
+    .level-dot.critical { background: #ef4444; }
+    .level-dot.overflow { background: #dc2626; }
+    .level-label { color: var(--muted); margin-left: 4px; }
+
+    /* ─── MESSAGE STACK ─── */
+    .stack {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-height: 200px;
+      position: relative;
+    }
+    .msg {
+      border-radius: 7px;
+      padding: 5px 10px;
+      font-size: 11px;
+      border: 1px solid transparent;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.35s ease, transform 0.35s ease, max-height 0.45s ease,
+                  margin 0.45s ease, padding 0.45s ease, border 0.3s ease, background 0.3s ease;
+      max-height: 36px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .msg.visible { opacity: 1; transform: translateY(0); }
+    .msg.removing {
+      opacity: 0;
+      max-height: 0;
+      margin: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      border-width: 0;
+      transform: translateX(-20px);
+    }
+    .msg.inserting {
+      opacity: 0;
+      max-height: 0;
+      animation: insertMsg 0.5s ease forwards;
+    }
+    @keyframes insertMsg {
+      to { opacity: 1; max-height: 36px; margin: initial; padding: 5px 10px; }
+    }
+    .msg.user { background: #1a2744; border-color: #1d4ed8; color: #bfdbfe; }
+    .msg.assistant { background: #27272a; border-color: #3f3f46; }
+    .msg.tool { background: #1e1b2e; border-color: #5b21b6; color: #ddd6fe; }
+    .msg.summary {
+      background: #0f2a1f;
+      border-color: #059669;
+      color: #6ee7b7;
+      font-weight: 600;
+    }
+    .msg.evicted { background: #2a1f10; border-color: #b45309; color: #fcd34d; }
+    .msg.truncated { background: #1f1a3a; border-color: #7c3aed; color: #c4b5fd; }
+    .msg .msg-icon { margin-right: 4px; }
+
+    /* ─── TIMELINE ─── */
+    .timeline {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+    .timeline h3 {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .steps { display: flex; flex-direction: column; gap: 5px; }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--muted);
+      opacity: 0.4;
+      transition: opacity 0.35s ease, color 0.35s ease;
+    }
+    .step.active { opacity: 1; color: var(--text); }
+    .step.done { opacity: 0.8; color: #cbd5e1; }
+    .step .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 5px;
+      flex-shrink: 0;
+      background: var(--border);
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+    .step.active .dot { background: var(--accent); box-shadow: 0 0 0 4px rgba(59,130,246,0.25); }
+    .step.done .dot { background: var(--success); }
+    .step code { background: var(--panel-alt); padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+
+    /* ─── LEGEND ─── */
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .legend span::before {
+      content: "";
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+      margin-right: 5px;
+      vertical-align: -1px;
+    }
+    .legend .l-user::before { background: #1a2744; border: 1px solid #1d4ed8; }
+    .legend .l-assistant::before { background: #27272a; border: 1px solid #3f3f46; }
+    .legend .l-tool::before { background: #1e1b2e; border: 1px solid #5b21b6; }
+    .legend .l-summary::before { background: #0f2a1f; border: 1px solid #059669; }
+    .legend .l-evict::before { background: #2a1f10; border: 1px solid #b45309; }
+    .legend .l-trunc::before { background: #1f1a3a; border: 1px solid #7c3aed; }
+
+    .footer-note {
+      padding: 0 32px 24px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .footer-note code {
+      background: var(--panel-alt);
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #e2e8f0;
+    }
+
+    .pulse {
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .glow {
+      box-shadow: 0 0 12px rgba(59,130,246,0.3);
+    }
+
+    /* ─── PRESSURE BAR GRAPH ─── */
+    .pressure-zone {
+      display: flex;
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 6px;
+      background: #0a0a0f;
+      border: 1px solid var(--border);
+    }
+    .pressure-zone .zone {
+      height: 100%;
+      transition: opacity 0.3s;
+    }
+    .zone.normal-z { background: #22c55e; }
+    .zone.elevated-z { background: #eab308; }
+    .zone.high-z { background: #f97316; }
+    .zone.critical-z { background: #ef4444; }
+    .zone.overflow-z { background: #dc2626; }
+    .zone-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .param-table {
+      margin-top: 8px;
+      font-size: 11px;
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .param-table td {
+      padding: 2px 6px;
+      color: var(--muted);
+    }
+    .param-table td:first-child { color: #94a3b8; font-family: monospace; }
+    .param-table td:last-child { text-align: right; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Athlon 上下文压缩：静态 vs 动态 <small>基于源码 ContextCompactionSettings 精确还原</small></h1>
+  <p>
+    <strong>静态模式</strong>：<code>DynamicCompaction.Enabled = false</code> — 在消息数 ≥ <strong>50</strong> 或 Token ≥ <strong>80,000</strong>（或窗口 70%）时
+    触发一次性 LLM 摘要，保留尾部 <strong>20</strong> 条消息。
+    <strong>动态模式</strong>（默认）：<code>Enabled = true</code> — 按预算利用率三级递进：
+    ① 工具参数截断（≥72%）→ ② 前缀工具结果归档 → ③ LLM 对话摘要（≥80%），压缩后回落到 ~<strong>30%</strong> 窗口占用。
+  </p>
+</header>
+
+<!-- 对比表格 -->
+<div class="compare-section">
+  <h2>📊 核心参数对比</h2>
+  <div class="compare-grid">
+    <div class="cell row-label">参数</div>
+    <div class="cell head-label static">⚙️ 静态压缩</div>
+    <div class="cell head-label dynamic">🚀 动态压缩（默认）</div>
+
+    <div class="cell row-label">启用</div>
+    <div class="cell code">DynamicCompaction.Enabled = <span style="color:#f87171">false</span></div>
+    <div class="cell code">DynamicCompaction.Enabled = <span style="color:#4ade80">true</span></div>
+
+    <div class="cell row-label">触发条件</div>
+    <div class="cell">消息数 ≥ <strong>50</strong> 或<br>Token ≥ <strong>80,000</strong> 或<br>窗口 ≥ <strong>70%</strong></div>
+    <div class="cell">利用率 ≥ <strong>72%</strong> → ① 截断<br>利用率 ≥ <strong>72%</strong>+ → ② 归档<br>利用率 ≥ <strong>80%</strong> → ③ 摘要</div>
+
+    <div class="cell row-label">压缩动作</div>
+    <div class="cell">一次性 LLM 摘要<br>（无前置截断/归档）</div>
+    <div class="cell">三级递进：截断 → 归档 → 摘要<br>（逐级加压，避免过早摘要）</div>
+
+    <div class="cell row-label">保留策略</div>
+    <div class="cell code">KeepMessages = <strong>20</strong>（固定条数）<br>KeepTokens = <strong>0</strong></div>
+    <div class="cell code">PostCompactionUtilization = <strong>30%</strong><br>（按预算比例保留，更灵活）</div>
+
+    <div class="cell row-label">语义截断</div>
+    <div class="cell">❌ 无</div>
+    <div class="cell">✅ <code>EnableSemanticCutoff = true</code><br>按消息重要性评分保留</div>
+
+    <div class="cell row-label">溢出处理</div>
+    <div class="cell">触发后强制摘要</div>
+    <div class="cell"><code>OverflowPostCompactUtil = <strong>20%</strong></code><br>溢出时更激进压缩</div>
+
+    <div class="cell row-label">校准</div>
+    <div class="cell">❌ 无</div>
+    <div class="cell">✅ <code>UsageCalibrationAlpha = 0.15</code><br>实际用量反馈校准</div>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- ========== STATIC ========== -->
+  <section class="card" id="static-card">
+    <div class="card-head">
+      <h2>⚙️ 静态压缩</h2>
+      <span class="mode-badge off-dynamic">dynamicCompaction.enabled = false</span>
+    </div>
+    <div class="card-body">
+      <div class="controls">
+        <button class="primary" id="static-play">▶ 播放演示</button>
+        <button id="static-reset">⟲ 重置</button>
+        <span class="slider-label">模拟轮次</span>
+        <input type="range" id="static-slider" min="0" max="5" value="0" />
+      </div>
+
+      <div class="pressure-zone">
+        <div class="zone normal-z" style="flex: 0.7"></div>
+        <div class="zone high-z" style="flex: 0.1"></div>
+        <div class="zone critical-z" style="flex: 0.2"></div>
+      </div>
+
+      <div class="meter-wrap">
+        <div class="meter-label">
+          <span>历史 Token 估算</span>
+          <span id="static-meter-text">0 / 80,000（触发阈值）</span>
+        </div>
+        <div class="meter">
+          <div class="meter-fill" id="static-meter-fill"></div>
+          <div class="meter-threshold danger" id="static-threshold" style="left: 100%"></div>
+        </div>
+      </div>
+
+      <div class="stack" id="static-stack"></div>
+
+      <div class="timeline">
+        <h3>📋 策略时间线</h3>
+        <div class="steps" id="static-steps">
+          <div class="step" data-step="0"><span class="dot"></span><span>正常累积消息 / Token</span></div>
+          <div class="step" data-step="1"><span class="dot"></span><span>达到阈值（消息 ≥50 或 Token ≥80k 或 ≥70% 窗口）→ 触发 LLM 摘要</span></div>
+          <div class="step" data-step="2"><span class="dot"></span><span>前缀替换为摘要，保留尾部 <code>KeepMessages=20</code></span></div>
+          <div class="step" data-step="3"><span class="dot"></span><span>Token 回落，但保留靠固定条数（非预算比例），继续累积等待下次触发</span></div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span class="l-user">用户</span>
+        <span class="l-assistant">助手</span>
+        <span class="l-tool">工具输出</span>
+        <span class="l-summary">LLM 摘要</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== DYNAMIC ========== -->
+  <section class="card" id="dynamic-card">
+    <div class="card-head">
+      <h2>🚀 动态压缩（三级递进）</h2>
+      <span class="mode-badge on-dynamic">dynamicCompaction.enabled = true ✅ 默认</span>
+    </div>
+    <div class="card-body">
+      <div class="controls">
+        <button class="primary" id="dynamic-play">▶ 播放演示</button>
+        <button id="dynamic-reset">⟲ 重置</button>
+        <span class="slider-label">模拟轮次</span>
+        <input type="range" id="dynamic-slider" min="0" max="7" value="0" />
+      </div>
+
+      <div class="pressure-zone">
+        <div class="zone normal-z" style="flex: 0.55"></div>
+        <div class="zone elevated-z" style="flex: 0.17"></div>
+        <div class="zone high-z" style="flex: 0.08"></div>
+        <div class="zone critical-z" style="flex: 0.1"></div>
+        <div class="zone overflow-z" style="flex: 0.1"></div>
+      </div>
+      <div class="zone-label">
+        <span>Normal</span>
+        <span>Elevated (55%)</span>
+        <span>High (72%) ①截断 ②归档</span>
+        <span>Critical (80%) ③摘要</span>
+        <span>Overflow</span>
+      </div>
+
+      <div class="pressure-level" id="dynamic-level">
+        <span class="level-dot normal" id="dyn-level-dot"></span>
+        <span class="level-label" id="dyn-level-text">Normal</span>
+      </div>
+
+      <div class="meter-wrap">
+        <div class="meter-label">
+          <span>全 Prompt 利用率（history + system/tools）</span>
+          <span id="dynamic-meter-text">0%</span>
+        </div>
+        <div class="meter">
+          <div class="meter-fill" id="dynamic-meter-fill"></div>
+          <div class="meter-threshold" id="dyn-thresh-trunc" style="left: 72%" title="72% ① 参数截断 / ② 归档"></div>
+          <div class="meter-threshold danger" id="dyn-thresh-compact" style="left: 80%" title="80% ③ LLM 摘要"></div>
+        </div>
+      </div>
+
+      <div class="stack" id="dynamic-stack"></div>
+
+      <div class="timeline">
+        <h3>📋 三级递进策略时间线</h3>
+        <div class="steps" id="dynamic-steps">
+          <div class="step" data-step="0"><span class="dot"></span><span>正常累积 → 监控 <code>TotalUtilization</code></span></div>
+          <div class="step" data-step="1"><span class="dot"></span><span>① ≥72%（<code>TargetUtilization × TruncateLeadRatio</code>）→ 截断工具参数</span></div>
+          <div class="step" data-step="2"><span class="dot"></span><span>② 压力持续 → 前缀工具结果归档（保留 2,000 字符预览）</span></div>
+          <div class="step" data-step="3"><span class="dot"></span><span>③ ≥80%（<code>TargetUtilization</code>）→ LLM 对话摘要 + 语义截断</span></div>
+          <div class="step" data-step="4"><span class="dot"></span><span>压缩后回落至 ~30%（<code>PostCompactionUtilization</code>）</span></div>
+          <div class="step" data-step="5"><span class="dot"></span><span>继续对话 → 利用率和压力级别动态监测，渐进触发</span></div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span class="l-user">用户</span>
+        <span class="l-assistant">助手</span>
+        <span class="l-tool">工具输出</span>
+        <span class="l-trunc">参数截断</span>
+        <span class="l-evict">结果归档</span>
+        <span class="l-summary">LLM 摘要</span>
+      </div>
+    </div>
+  </section>
+</div>
+
+<p class="footer-note">
+  源码文件：<code>ContextCompactionSettings.cs</code> · <code>DynamicCompactionSettings.cs</code> · <code>ContextPressureEvaluator.cs</code> ·
+  <code>ConversationCutoffPlanner.cs</code> · <code>ContextBudgetCalculator.cs</code> ·
+  <code>SemanticCutoffPlanner.cs</code> · <code>TruncateArgsService.cs</code> ·
+  <code>PrefixToolResultReEvictor.cs</code> · <code>ConversationSummaryFormatter.cs</code>
+</p>
+
+<script>
+// ─── HELPERS ───
+function makeMessages(count, toolHeavy = false) {
+  const items = [];
+  for (let i = 1; i <= count; i++) {
+    items.push({ type: "user", label: `🙋 用户 #${i}：请继续分析模块 ${i}`, css: "user" });
+    items.push({ type: "assistant", label: `🤖 助手 #${i}：收到，开始推理…`, css: "assistant" });
+    if (toolHeavy || i % 2 === 0) {
+      items.push({
+        type: "tool",
+        label: `🔧 grep_files #${i}：匹配到大量结果…（大段输出）`,
+        css: "tool",
+        tokens: 6000 + i * 400,
+      });
+    }
+  }
+  return items;
+}
+
+function renderStack(container, messages) {
+  container.innerHTML = "";
+  messages.forEach((m) => {
+    const el = document.createElement("div");
+    el.className = `msg ${m.css}`;
+    el.textContent = m.label;
+    container.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("visible"));
+  });
+}
+
+function animateRemovePrefix(container, removeCount, newHead) {
+  const nodes = [...container.querySelectorAll(".msg")];
+  nodes.slice(0, removeCount).forEach((node, i) => {
+    setTimeout(() => node.classList.add("removing"), i * 50);
+  });
+  const delay = removeCount * 50 + 400;
+  setTimeout(() => {
+    const remain = nodes.slice(removeCount).filter(n => !n.classList.contains("removing"));
+    container.innerHTML = "";
+    if (newHead) {
+      const summary = document.createElement("div");
+      summary.className = "msg summary visible";
+      summary.textContent = newHead;
+      container.appendChild(summary);
+    }
+    remain.forEach((node) => {
+      node.classList.remove("removing");
+      node.classList.add("visible");
+      container.appendChild(node);
+    });
+  }, delay);
+}
+
+function setStepActive(container, index) {
+  container.querySelectorAll(".step").forEach(step => {
+    const n = Number(step.dataset.step);
+    step.classList.remove("active", "done");
+    if (n < index) step.classList.add("done");
+    if (n === index) step.classList.add("active");
+  });
+}
+
+function setMeter(fillEl, textEl, ratio, text, danger = false) {
+  fillEl.style.width = `${Math.min(100, ratio * 100)}%`;
+  fillEl.classList.toggle("danger", danger);
+  textEl.textContent = text;
+}
+
+function setPressureLevel(dot, textEl, level) {
+  const cls = ["normal","elevated","high","critical","overflow"][level] || "normal";
+  dot.className = `level-dot ${cls} active`;
+  const labels = ["Normal","Elevated","High (预警)","Critical (危险)","Overflow (溢出)"];
+  textEl.textContent = labels[level] || "Normal";
+}
+
+// ─── TOOL MUTATIONS (DYNAMIC) ───
+function mutateTools(container, level) {
+  const tools = [...container.querySelectorAll(".msg.tool")];
+  if (level >= 1) {
+    // Truncate first 3 tools
+    tools.slice(0, 3).forEach((node, i) => {
+      if (!node.classList.contains("evicted")) {
+        node.className = "msg truncated visible";
+        const prefix = node.textContent.split("：")[0];
+        node.textContent = `✂️ ${prefix}：{…参数已截断 2000 字符…}`;
+      }
+    });
+  }
+  if (level >= 2) {
+    // Evict first 2 tools further
+    tools.slice(0, 2).forEach((node) => {
+      node.className = "msg evicted visible";
+      const prefix = node.textContent.split("：")[0].replace("✂️ ", "");
+      node.textContent = `📦 ${prefix}：[已归档] 2000 字预览保留… (MaxResultChars=80k)`;
+    });
+  }
+}
+
+// =====================================================================
+// STATIC DEMO
+// =====================================================================
+const staticStack = document.getElementById("static-stack");
+const staticFill = document.getElementById("static-meter-fill");
+const staticMeterText = document.getElementById("static-meter-text");
+const staticSteps = document.getElementById("static-steps");
+const staticSlider = document.getElementById("static-slider");
+let staticTimer = null;
+const KEEP = 20;
+
+const staticScenes = [
+  // 0: Start
+  () => {
+    const msgs = makeMessages(6, true);
+    renderStack(staticStack, msgs);
+    setMeter(staticFill, staticMeterText, 0.35, "35% · 33,600 / 80,000（未触发）");
+    setStepActive(staticSteps, 0);
+  },
+  // 1: Growing
+  () => {
+    const msgs = makeMessages(10, true);
+    renderStack(staticStack, msgs);
+    setMeter(staticFill, staticMeterText, 0.65, "65% · 52,000 / 80,000（未触发）");
+    setStepActive(staticSteps, 0);
+  },
+  // 2: Near threshold
+  () => {
+    const msgs = makeMessages(14, true);
+    renderStack(staticStack, msgs);
+    setMeter(staticFill, staticMeterText, 0.78, "78% · 62,400 / 80,000（接近阈值）");
+    setStepActive(staticSteps, 0);
+  },
+  // 3: Trigger — token exceed
+  () => {
+    const msgs = makeMessages(16, true);
+    renderStack(staticStack, msgs);
+    setMeter(staticFill, staticMeterText, 1.0, "💥 84,000 ≥ 80,000！触发 LLM 摘要……", true);
+    staticFill.classList.add("pulse");
+    setStepActive(staticSteps, 1);
+  },
+  // 4: Summary applied
+  () => {
+    staticFill.classList.remove("pulse");
+    const msgs = makeMessages(16, true);
+    renderStack(staticStack, msgs);
+    animateRemovePrefix(
+      staticStack,
+      msgs.length - 8,
+      "📋 LLM 摘要：前 14 轮已压缩为结构化摘要（KeepMessages=20，保留尾部 8 条）"
+    );
+    setMeter(staticFill, staticMeterText, 0.30, "30% · 24,000 / 80,000（压缩后回落）");
+    setStepActive(staticSteps, 2);
+  },
+  // 5: Resume
+  () => {
+    setMeter(staticFill, staticMeterText, 0.32, "32% · 继续累积等待下次触发");
+    setStepActive(staticSteps, 3);
+  },
+];
+
+function staticGoTo(index) {
+  const i = Math.min(index, staticScenes.length - 1);
+  staticScenes[i]();
+  staticSlider.value = String(i);
+}
+
+function staticPlay() {
+  clearInterval(staticTimer);
+  staticGoTo(0);
+  let i = 0;
+  staticTimer = setInterval(() => {
+    i++;
+    if (i >= staticScenes.length) { clearInterval(staticTimer); return; }
+    staticGoTo(i);
+  }, 1500);
+}
+
+document.getElementById("static-play").onclick = staticPlay;
+document.getElementById("static-reset").onclick = () => { clearInterval(staticTimer); staticGoTo(0); };
+staticSlider.oninput = () => { clearInterval(staticTimer); staticGoTo(Number(staticSlider.value)); };
+
+// =====================================================================
+// DYNAMIC DEMO
+// =====================================================================
+const dynamicStack = document.getElementById("dynamic-stack");
+const dynamicFill = document.getElementById("dynamic-meter-fill");
+const dynamicMeterText = document.getElementById("dynamic-meter-text");
+const dynamicSteps = document.getElementById("dynamic-steps");
+const dynamicSlider = document.getElementById("dynamic-slider");
+const dynLevelDot = document.getElementById("dyn-level-dot");
+const dynLevelText = document.getElementById("dyn-level-text");
+let dynamicTimer = null;
+
+const dynamicScenes = [
+  // 0: Normal
+  () => {
+    renderStack(dynamicStack, makeMessages(4, true));
+    setMeter(dynamicFill, dynamicMeterText, 0.38, "38% · Normal（未达预警）");
+    setPressureLevel(dynLevelDot, dynLevelText, 0);
+    setStepActive(dynamicSteps, 0);
+  },
+  // 1: Elevated
+  () => {
+    renderStack(dynamicStack, makeMessages(6, true));
+    setMeter(dynamicFill, dynamicMeterText, 0.58, "58% · Elevated（≥55%）");
+    setPressureLevel(dynLevelDot, dynLevelText, 1);
+    setStepActive(dynamicSteps, 0);
+  },
+  // 2: High → truncate triggers
+  () => {
+    renderStack(dynamicStack, makeMessages(8, true));
+    setMeter(dynamicFill, dynamicMeterText, 0.74, "74% · ≥72% → ① 工具参数截断！", true);
+    setPressureLevel(dynLevelDot, dynLevelText, 2);
+    mutateTools(dynamicStack, 1);
+    setStepActive(dynamicSteps, 1);
+  },
+  // 3: Still High → evict also
+  () => {
+    renderStack(dynamicStack, makeMessages(8, true));
+    setMeter(dynamicFill, dynamicMeterText, 0.77, "77% · ② 前缀工具结果归档开始", true);
+    setPressureLevel(dynLevelDot, dynLevelText, 2);
+    mutateTools(dynamicStack, 2);
+    setStepActive(dynamicSteps, 2);
+  },
+  // 4: Critical → LLM compact
+  () => {
+    renderStack(dynamicStack, makeMessages(10, true));
+    setMeter(dynamicFill, dynamicMeterText, 0.83, "83% · ≥80% → ③ LLM 摘要触发！", true);
+    setPressureLevel(dynLevelDot, dynLevelText, 3);
+    dynamicFill.classList.add("pulse");
+    setStepActive(dynamicSteps, 3);
+  },
+  // 5: Post-compaction
+  () => {
+    dynamicFill.classList.remove("pulse");
+    const msgs = makeMessages(10, true);
+    renderStack(dynamicStack, msgs);
+    const keep = 7;
+    animateRemovePrefix(
+      dynamicStack,
+      msgs.length - keep,
+      "📋 LLM 摘要 + 语义截断保留关键上下文（PostCompactionUtilization=30%）"
+    );
+    setMeter(dynamicFill, dynamicMeterText, 0.31, "31% · 压缩后回落 ✅");
+    setPressureLevel(dynLevelDot, dynLevelText, 0);
+    setStepActive(dynamicSteps, 4);
+  },
+  // 6: Resume
+  () => {
+    setMeter(dynamicFill, dynamicMeterText, 0.35, "35% · 继续对话渐进累积");
+    setPressureLevel(dynLevelDot, dynLevelText, 0);
+    setStepActive(dynamicSteps, 5);
+  },
+];
+
+function dynamicGoTo(index) {
+  const i = Math.min(index, dynamicScenes.length - 1);
+  dynamicScenes[i]();
+  dynamicSlider.value = String(i);
+}
+
+function dynamicPlay() {
+  clearInterval(dynamicTimer);
+  dynamicGoTo(0);
+  let i = 0;
+  dynamicTimer = setInterval(() => {
+    i++;
+    if (i >= dynamicScenes.length) { clearInterval(dynamicTimer); return; }
+    dynamicGoTo(i);
+  }, 1700);
+}
+
+document.getElementById("dynamic-play").onclick = dynamicPlay;
+document.getElementById("dynamic-reset").onclick = () => { clearInterval(dynamicTimer); dynamicGoTo(0); };
+dynamicSlider.oninput = () => { clearInterval(dynamicTimer); dynamicGoTo(Number(dynamicSlider.value)); };
+
+// Init
+staticGoTo(0);
+dynamicGoTo(0);
+</script>
+</body>
+</html>

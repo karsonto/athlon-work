@@ -7,19 +7,23 @@ namespace Athlon.Agent.App.Services;
 
 public static class FlowDocumentThemeNormalizer
 {
-    public static void Normalize(FlowDocument document, ContextMenu? contextMenu)
+    public static void Normalize(
+        FlowDocument document,
+        ContextMenu? contextMenu,
+        IReadOnlyList<FencedBlockInfo>? fencedBlocks = null)
     {
         var codeBackground = ResolveBrush("Brush.CodeBackground") ?? new SolidColorBrush(Color.FromRgb(32, 32, 35));
         var codeForeground = ResolveBrush("Brush.CodeForeground") ?? new SolidColorBrush(Color.FromRgb(241, 245, 249));
         NormalizeBlocks(document.Blocks, codeBackground, codeForeground, contextMenu);
+        FlowDocumentCodeBlockEnhancer.Enhance(document, fencedBlocks);
     }
 
     public static Brush? ResolveBrush(string key) =>
-        Application.Current.TryFindResource(key) as Brush;
+        Application.Current?.TryFindResource(key) as Brush;
 
     private static void NormalizeBlocks(BlockCollection blocks, Brush codeBackground, Brush codeForeground, ContextMenu? contextMenu)
     {
-        foreach (var block in blocks)
+        foreach (var block in blocks.ToArray())
         {
             NormalizeTextElementColors(block, codeBackground, codeForeground);
 
@@ -51,6 +55,7 @@ public static class FlowDocumentThemeNormalizer
                     }
                     break;
                 case BlockUIContainer container:
+                    SoftenThematicBreak(container);
                     NormalizeElementColors(container.Child, codeBackground, codeForeground, contextMenu);
                     break;
             }
@@ -159,4 +164,22 @@ public static class FlowDocumentThemeNormalizer
         && solid.Color.B >= 120
         && solid.Color.R <= 80
         && solid.Color.G <= 120;
+
+    private static void SoftenThematicBreak(BlockUIContainer container)
+    {
+        if (container.Tag is not string tag || !tag.StartsWith("Rule", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var borderBrush = ResolveBrush("Brush.Border") ?? new SolidColorBrush(Color.FromRgb(63, 63, 70));
+        container.Child = new Border
+        {
+            Height = 1,
+            Background = borderBrush,
+            Opacity = 0.6,
+            Margin = new Thickness(0, 12, 0, 12),
+        };
+        container.Tag = "RuleNormalized";
+    }
 }

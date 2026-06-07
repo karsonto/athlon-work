@@ -12,7 +12,6 @@
                   HorizontalScrollBarVisibility="Disabled"
                   ClipToBounds="True">
         <mdxam:MarkdownScrollViewer x:Name="MarkdownViewer"
-                                    Markdown="{Binding Markdown, ElementName=Root}"
                                     Background="Transparent"
                                     BorderThickness="0"
                                     Padding="0"
