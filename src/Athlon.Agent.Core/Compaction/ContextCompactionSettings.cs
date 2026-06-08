@@ -2,7 +2,7 @@ namespace Athlon.Agent.Core.Compaction;
 
 public sealed class ContextCompactionSettings
 {
-    public int ContextWindowTokens { get; set; } = 256_000;
+    public int ContextWindowTokens { get; set; } = 65_535;
 
     /// <summary>
     /// When &gt; 0 with <see cref="ContextWindowTokens"/>, compaction also triggers when estimated

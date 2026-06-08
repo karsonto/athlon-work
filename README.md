@@ -195,7 +195,7 @@ Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
 
 ```json
 "contextCompaction": {
-  "contextWindowTokens": 256000,
+  "contextWindowTokens": 65535,
   "compactTriggerRatio": 0.7,
   "triggerMessages": 50,
   "triggerTokens": 80000,
