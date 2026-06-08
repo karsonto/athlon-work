@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Text;
 using System.Windows.Threading;
+using Athlon.Agent.App.Services.Streaming;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
@@ -23,15 +24,14 @@ public sealed class SessionTurnUiController
     private static readonly TimeSpan ToolFlushInterval = TimeSpan.FromMilliseconds(60);
 
     private readonly Dispatcher _dispatcher;
+    private readonly SessionStreamingUiContext _streaming = new();
     private readonly object _bufferLock = new();
     private readonly object _scheduleLock = new();
     private bool _streamingFlushTimerActive;
     private bool _streamingToolFlushTimerActive;
-    private readonly Dictionary<int, ChatMessageViewModel> _streamingToolMessagesByIndex = new();
     private readonly Dictionary<int, StreamingToolCallDelta> _pendingToolCallDeltas = new();
     private readonly StringBuilder _streamingTokenBuffer = new();
     private readonly StringBuilder _streamingReasoningBuffer = new();
-    private ChatMessageViewModel? _streamingAssistantMessage;
     private DispatcherTimer? _streamingFlushTimer;
     private DispatcherTimer? _streamingToolFlushTimer;
 
@@ -40,6 +40,8 @@ public sealed class SessionTurnUiController
         _dispatcher = dispatcher;
         RequestScroll = requestScroll ?? NoOpScroll;
         RequestScrollImmediate = requestScroll ?? NoOpScroll;
+        _streaming.RequestScroll = RequestScroll;
+        _streaming.RequestScrollImmediate = RequestScrollImmediate;
         Messages = new ObservableCollection<ChatMessageViewModel>();
     }
 
@@ -91,6 +93,16 @@ public sealed class SessionTurnUiController
             {
                 _pendingToolCallDeltas[delta.Index] = delta;
             }
+
+            RunOnUiSync(() =>
+            {
+                FlushStreamingTokens();
+                ProcessToolCallDelta(delta);
+                if (IsDisplayed)
+                {
+                    RequestScroll();
+                }
+            });
 
             if (IsDisplayed)
             {
@@ -152,8 +164,7 @@ public sealed class SessionTurnUiController
 
             StopStreamingFlushTimer();
             StopStreamingToolFlushTimer();
-            _streamingAssistantMessage = null;
-            _streamingToolMessagesByIndex.Clear();
+            _streaming.Reset();
         });
     }
 
@@ -187,13 +198,13 @@ public sealed class SessionTurnUiController
                 pendingReasoning = _streamingReasoningBuffer.ToString();
             }
 
-            var assistantContent = _streamingAssistantMessage?.Content;
+            var assistantContent = _streaming.ActiveAssistantBubble?.Content;
             if (pendingTokens.Length > 0)
             {
                 assistantContent = (assistantContent ?? string.Empty) + pendingTokens;
             }
 
-            var assistantReasoning = _streamingAssistantMessage?.ReasoningContent;
+            var assistantReasoning = _streaming.ActiveAssistantBubble?.ReasoningContent;
             if (pendingReasoning.Length > 0)
             {
                 assistantReasoning = (assistantReasoning ?? string.Empty) + pendingReasoning;
@@ -235,10 +246,9 @@ public sealed class SessionTurnUiController
 
             if (cancelled)
             {
-                if (_streamingAssistantMessage is not null)
+                if (_streaming.ActiveAssistantBubble is { } bubble)
                 {
-                    _streamingAssistantMessage.MarkStreamingCancelled();
-                    _streamingAssistantMessage = null;
+                    bubble.MarkStreamingCancelled();
                 }
 
                 foreach (var message in Messages.Where(static message => message.IsToolRunning))
@@ -246,22 +256,21 @@ public sealed class SessionTurnUiController
                     message.MarkToolCancelled();
                 }
 
-                foreach (var message in _streamingToolMessagesByIndex.Values.ToList())
+                foreach (var message in _streaming.ToolBubblesByIndex.Values.ToList())
                 {
                     message.MarkStreamingToolCancelled();
                 }
             }
             else if (!string.IsNullOrWhiteSpace(errorMessage))
             {
-                ClearStreamingAssistantPlaceholder();
-                foreach (var message in _streamingToolMessagesByIndex.Values.ToList())
+                _streaming.Process(new StreamingStreamEvent.ClearEmptyAssistantPlaceholder(), Messages);
+                foreach (var message in _streaming.ToolBubblesByIndex.Values.ToList())
                 {
                     message.MarkStreamingToolCancelled();
                 }
             }
 
-            _streamingAssistantMessage = null;
-            _streamingToolMessagesByIndex.Clear();
+            _streaming.Reset();
             ReconcilePendingToolsFromSession(session);
             ApplyPersistedTurnMessages(persistedTurnMessages, timedOut, turnTimeoutMinutes, errorMessage);
         });
@@ -276,6 +285,7 @@ public sealed class SessionTurnUiController
     private void RebuildDisplayFromMessages(IReadOnlyList<ChatMessage> displayMessages)
     {
         Messages.Clear();
+        _streaming.Reset();
         var answeredToolCallIds = BuildAnsweredToolCallIds(displayMessages);
 
         foreach (var message in ChatTimelineOrder.OrderForDisplay(displayMessages))
@@ -335,7 +345,7 @@ public sealed class SessionTurnUiController
 
     private void AppendCompactionNotice(ChatMessage message)
     {
-        ClearStreamingAssistantPlaceholder();
+        _streaming.Process(new StreamingStreamEvent.ClearEmptyAssistantPlaceholder(), Messages);
         if (ContainsMessageId(message.Id))
         {
             return;
@@ -353,49 +363,22 @@ public sealed class SessionTurnUiController
     {
         FlushStreamingTokens();
         FlushStreamingToolDeltas();
-        ClearStreamingAssistantPlaceholder();
-        var existing = FindToolMessage(toolCall.Id);
-        if (existing is not null)
+        _streaming.Process(new StreamingStreamEvent.ToolExecutionStarted(toolCall), Messages);
+
+        if (toolCall.Id is { Length: > 0 })
         {
-            if (existing.ToolCallStatus == ToolCallDisplayStatus.Preparing)
+            foreach (var entry in _streaming.ToolBubblesByIndex.ToList())
             {
-                if (existing.StreamToolIndex is int streamIndex)
+                if (entry.Value.StreamToolIndex is int streamIndex
+                    && string.Equals(entry.Value.ToolCallId, toolCall.Id, StringComparison.Ordinal))
                 {
                     lock (_bufferLock)
                     {
                         _pendingToolCallDeltas.Remove(streamIndex);
                     }
                 }
-
-                existing.PromoteStreamingToolToRunning(toolCall);
-                RemoveStreamingToolTracking(existing);
             }
-
-            return;
         }
-
-        var preparing = _streamingToolMessagesByIndex.Values.FirstOrDefault(message =>
-            message.ToolCallStatus == ToolCallDisplayStatus.Preparing
-            && (string.IsNullOrWhiteSpace(message.ToolCallId)
-                || string.Equals(message.ToolCallId, toolCall.Id, StringComparison.Ordinal)));
-        if (preparing is not null)
-        {
-            if (preparing.StreamToolIndex is int streamIndex)
-            {
-                lock (_bufferLock)
-                {
-                    _pendingToolCallDeltas.Remove(streamIndex);
-                }
-            }
-
-            preparing.PromoteStreamingToolToRunning(toolCall);
-            RemoveStreamingToolTracking(preparing);
-            RequestScroll();
-            return;
-        }
-
-        Messages.Add(ChatMessageViewModel.CreatePendingTool(toolCall));
-        RequestScroll();
     }
 
     private void HandleMessage(ChatMessage message, AgentSession? _)
@@ -404,7 +387,7 @@ public sealed class SessionTurnUiController
         {
             if (message.Role == MessageRole.User && SummaryMessageBuilder.IsSummaryMessage(message))
             {
-                ClearStreamingAssistantPlaceholder();
+                _streaming.Process(new StreamingStreamEvent.ClearEmptyAssistantPlaceholder(), Messages);
             }
 
             return;
@@ -435,50 +418,19 @@ public sealed class SessionTurnUiController
             return;
         }
 
-        if (message.Role == MessageRole.Assistant && _streamingAssistantMessage is not null)
+        if (message.Role == MessageRole.Assistant && _streaming.ActiveAssistantBubble is not null)
         {
             FlushStreamingTokens();
-            _streamingAssistantMessage.CompleteStreamingAssistant(message);
-            _streamingAssistantMessage = null;
-            RequestScrollImmediate();
+            _streaming.Process(new StreamingStreamEvent.AssistantMessagePersisted(message), Messages);
             return;
         }
 
-        ClearStreamingAssistantPlaceholder();
+        _streaming.Process(new StreamingStreamEvent.ClearEmptyAssistantPlaceholder(), Messages);
         if (!ContainsMessageId(message.Id))
         {
             Messages.Add(new ChatMessageViewModel(message));
             RequestScrollImmediate();
         }
-    }
-
-    private void EnsureStreamingAssistantMessage()
-    {
-        if (_streamingAssistantMessage is not null)
-        {
-            return;
-        }
-
-        _streamingAssistantMessage = ChatMessageViewModel.CreateStreamingAssistant();
-        Messages.Add(_streamingAssistantMessage);
-        RequestScroll();
-    }
-
-    private void ClearStreamingAssistantPlaceholder()
-    {
-        if (_streamingAssistantMessage is null)
-        {
-            return;
-        }
-
-        if (!string.IsNullOrWhiteSpace(_streamingAssistantMessage.Content)
-            || !string.IsNullOrWhiteSpace(_streamingAssistantMessage.ReasoningContent))
-        {
-            return;
-        }
-
-        Messages.Remove(_streamingAssistantMessage);
-        _streamingAssistantMessage = null;
     }
 
     private void FlushBufferedStreamingToUi()
@@ -498,16 +450,13 @@ public sealed class SessionTurnUiController
 
         if (hasTokenBuffer)
         {
-            EnsureStreamingAssistantMessage();
+            FlushStreamingTokens();
         }
 
         if (hasToolDeltas)
         {
-            ClearStreamingAssistantPlaceholder();
+            FlushStreamingToolDeltas();
         }
-
-        FlushStreamingTokens();
-        FlushStreamingToolDeltas();
     }
 
     private void ScheduleStreamingFlush()
@@ -547,23 +496,15 @@ public sealed class SessionTurnUiController
 
     private void FlushStreamingTokens()
     {
-        bool hasContent;
-        lock (_bufferLock)
-        {
-            hasContent = _streamingTokenBuffer.Length > 0 || _streamingReasoningBuffer.Length > 0;
-        }
-
-        if (!hasContent)
-        {
-            return;
-        }
-
-        EnsureStreamingAssistantMessage();
-
         string pendingTokens;
         string pendingReasoning;
         lock (_bufferLock)
         {
+            if (_streamingTokenBuffer.Length == 0 && _streamingReasoningBuffer.Length == 0)
+            {
+                return;
+            }
+
             pendingTokens = _streamingTokenBuffer.ToString();
             pendingReasoning = _streamingReasoningBuffer.ToString();
             if (pendingTokens.Length > 0)
@@ -580,13 +521,13 @@ public sealed class SessionTurnUiController
         var didFlush = false;
         if (pendingTokens.Length > 0)
         {
-            _streamingAssistantMessage.AppendStreamingToken(pendingTokens);
+            _streaming.Process(new StreamingStreamEvent.TextDelta(pendingTokens), Messages);
             didFlush = true;
         }
 
         if (pendingReasoning.Length > 0)
         {
-            _streamingAssistantMessage.AppendStreamingReasoningToken(pendingReasoning);
+            _streaming.Process(new StreamingStreamEvent.ReasoningDelta(pendingReasoning), Messages);
             didFlush = true;
         }
 
@@ -647,11 +588,7 @@ public sealed class SessionTurnUiController
         {
             Interval = ToolFlushInterval
         };
-        _streamingToolFlushTimer.Tick += (_, _) =>
-        {
-            ClearStreamingAssistantPlaceholder();
-            FlushStreamingToolDeltas();
-        };
+        _streamingToolFlushTimer.Tick += (_, _) => FlushStreamingToolDeltas();
         _streamingToolFlushTimer.Start();
     }
 
@@ -669,16 +606,9 @@ public sealed class SessionTurnUiController
         }
 
         var didFlush = false;
-        foreach (var (index, delta) in deltas)
+        foreach (var (_, delta) in deltas)
         {
-            if (!_streamingToolMessagesByIndex.TryGetValue(index, out var toolMessage))
-            {
-                toolMessage = ChatMessageViewModel.CreateStreamingTool(index);
-                _streamingToolMessagesByIndex[index] = toolMessage;
-                Messages.Add(toolMessage);
-            }
-
-            toolMessage.UpdateStreamingToolCall(delta.Id, delta.Name, delta.ArgumentsJson);
+            ProcessToolCallDelta(delta);
             didFlush = true;
         }
 
@@ -686,6 +616,11 @@ public sealed class SessionTurnUiController
         {
             RequestScroll();
         }
+    }
+
+    private void ProcessToolCallDelta(StreamingToolCallDelta delta)
+    {
+        _streaming.Process(new StreamingStreamEvent.ToolCallDelta(delta), Messages);
     }
 
     private void StopStreamingToolFlushTimer()
@@ -717,24 +652,6 @@ public sealed class SessionTurnUiController
 
         return Messages.LastOrDefault(message =>
             message.IsTool && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
-    }
-
-    private void RemoveStreamingToolTracking(ChatMessageViewModel message)
-    {
-        if (message.StreamToolIndex is int index)
-        {
-            _streamingToolMessagesByIndex.Remove(index);
-            return;
-        }
-
-        foreach (var entry in _streamingToolMessagesByIndex.ToList())
-        {
-            if (ReferenceEquals(entry.Value, message))
-            {
-                _streamingToolMessagesByIndex.Remove(entry.Key);
-                break;
-            }
-        }
     }
 
     private IReadOnlyList<AgentToolCall> CollectIncompleteToolCalls(AgentSession session)
@@ -819,11 +736,9 @@ public sealed class SessionTurnUiController
 
             if (message.Role == MessageRole.Assistant)
             {
-                if (_streamingAssistantMessage is not null)
+                if (_streaming.ActiveAssistantBubble is not null)
                 {
-                    _streamingAssistantMessage.CompleteStreamingAssistant(message);
-                    _streamingAssistantMessage = null;
-                    RequestScrollImmediate();
+                    _streaming.Process(new StreamingStreamEvent.AssistantMessagePersisted(message), Messages);
                     continue;
                 }
 

@@ -103,16 +103,15 @@ public sealed class SessionTurnUiControllerDisplayTests
     {
         var dispatcher = await StartStaDispatcherAsync();
         var ui = new SessionTurnUiController(dispatcher);
-        ui.SetDisplayed(true);
+        ui.SetDisplayed(false);
 
         var callbacks = ui.BuildCallbacks();
         await callbacks.OnAssistantToolCallDelta!(new StreamingToolCallDelta(0, "call-1", "read_file", "{\"path\":"));
         await callbacks.OnAssistantToolCallDelta!(new StreamingToolCallDelta(0, "call-1", "read_file", "{\"path\":\"/tmp\"}"));
 
-        var countBeforeFlush = await dispatcher.InvokeAsync(() => ui.Messages.Count);
-        Assert.Equal(0, countBeforeFlush);
+        var countWhileHidden = await dispatcher.InvokeAsync(() => ui.Messages.Count);
+        Assert.Equal(0, countWhileHidden);
 
-        ui.SetDisplayed(false);
         ui.SetDisplayed(true);
 
         var tool = await dispatcher.InvokeAsync(() =>
@@ -124,7 +123,7 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
-    public async Task Interleaved_text_and_tool_deltas_keep_single_assistant_bubble()
+    public async Task Interleaved_text_and_tool_deltas_use_separate_assistant_bubbles_after_tool()
     {
         var dispatcher = await StartStaDispatcherAsync();
         var ui = new SessionTurnUiController(dispatcher);
@@ -146,8 +145,33 @@ public sealed class SessionTurnUiControllerDisplayTests
         var assistants = await dispatcher.InvokeAsync(() =>
             ui.Messages.Where(message => !message.IsUser && !message.IsTool).ToList());
 
-        Assert.Single(assistants);
-        Assert.Contains("hello world", assistants[0].Content, StringComparison.Ordinal);
+        Assert.Equal(2, assistants.Count);
+        Assert.Contains("hello", assistants[0].Content, StringComparison.Ordinal);
+        Assert.Contains(" world", assistants[1].Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Tool_started_then_next_text_uses_new_assistant_bubble()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.SetDisplayed(true);
+
+        var callbacks = ui.BuildCallbacks();
+        await callbacks.OnAssistantTextDelta!("before tool");
+        await callbacks.OnAssistantToolCallDelta!(new StreamingToolCallDelta(0, "call-1", "read_file", "{}"));
+        await callbacks.OnToolStarted!(new AgentToolCall("call-1", "read_file", new Dictionary<string, string>()));
+        await callbacks.OnAssistantTextDelta!("after tool");
+
+        ui.SetDisplayed(false);
+        ui.SetDisplayed(true);
+
+        var assistants = await dispatcher.InvokeAsync(() =>
+            ui.Messages.Where(message => !message.IsUser && !message.IsTool).ToList());
+
+        Assert.Equal(2, assistants.Count);
+        Assert.Contains("before tool", assistants[0].Content, StringComparison.Ordinal);
+        Assert.Contains("after tool", assistants[1].Content, StringComparison.Ordinal);
     }
 
     private static Task<Dispatcher> StartStaDispatcherAsync()

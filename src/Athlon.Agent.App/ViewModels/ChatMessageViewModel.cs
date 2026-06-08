@@ -348,6 +348,12 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsReasoningStreaming = false;
     }
 
+    public void SealStreamingDisplay()
+    {
+        IsStreaming = false;
+        IsReasoningStreaming = false;
+    }
+
     public void MarkStreamingCancelled()
     {
         if (!IsStreaming)
