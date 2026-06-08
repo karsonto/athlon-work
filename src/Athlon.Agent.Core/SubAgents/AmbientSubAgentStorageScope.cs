@@ -21,6 +21,12 @@ public sealed class AmbientSubAgentStorageScope : IDisposable
     public static IDisposable Enter(string parentSessionId, string subSessionId) =>
         new AmbientSubAgentStorageScope(new SubAgentStorageContext(parentSessionId, subSessionId));
 
+    public static bool IsSubAgentSessionPath(string sessionJsonPath)
+    {
+        var parts = sessionJsonPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return parts.Any(part => string.Equals(part, "subagents", StringComparison.OrdinalIgnoreCase));
+    }
+
     public static string ResolveSessionDirectory(string sessionsPath, string sessionId)
     {
         var context = Ambient.Value;

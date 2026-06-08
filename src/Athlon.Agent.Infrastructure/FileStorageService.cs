@@ -199,6 +199,11 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
 
         foreach (var file in Directory.EnumerateFiles(paths.SessionsPath, "session.json", SearchOption.AllDirectories))
         {
+            if (AmbientSubAgentStorageScope.IsSubAgentSessionPath(file))
+            {
+                continue;
+            }
+
             var indexEntry = SessionJsonIndexReader.TryRead(file);
             if (indexEntry is null || !string.Equals(indexEntry.Id, sessionId, StringComparison.Ordinal))
             {
@@ -225,7 +230,7 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
             var cached = await jsonFileStore.LoadAsync<List<SessionIndexEntry>>(indexPath, cancellationToken);
             if (cached is { Count: > 0 } && IsSessionIndexFresh(indexPath, cached))
             {
-                return cached.OrderByDescending(item => item.UpdatedAt).ToArray();
+                return FilterTopLevelSessions(cached);
             }
         }
 
@@ -237,6 +242,11 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         var result = new Dictionary<string, SessionIndexEntry>(StringComparer.Ordinal);
         foreach (var file in Directory.EnumerateFiles(paths.SessionsPath, "session.json", SearchOption.AllDirectories))
         {
+            if (AmbientSubAgentStorageScope.IsSubAgentSessionPath(file))
+            {
+                continue;
+            }
+
             var entry = SessionJsonIndexReader.TryRead(file);
             if (entry is null)
             {
@@ -274,6 +284,12 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
 
         return true;
     }
+
+    private static SessionIndexEntry[] FilterTopLevelSessions(IEnumerable<SessionIndexEntry> entries) =>
+        entries
+            .Where(entry => !AmbientSubAgentStorageScope.IsSubAgentSessionPath(Path.Combine(entry.Path, "session.json")))
+            .OrderByDescending(item => item.UpdatedAt)
+            .ToArray();
 
     public async Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default)
     {

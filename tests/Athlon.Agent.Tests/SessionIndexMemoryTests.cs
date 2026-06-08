@@ -84,6 +84,111 @@ public sealed class SessionIndexMemoryTests
     }
 
     [Fact]
+    public async Task ListSessionsAsync_excludes_subagent_sessions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-index-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
+        var storage = new FileStorageService(logger, paths, new JsonFileStore());
+
+        var parentDir = Path.Combine(paths.SessionsPath, "parent");
+        var subDir = Path.Combine(parentDir, "subagents", "default", "sub-1");
+        Directory.CreateDirectory(parentDir);
+        Directory.CreateDirectory(subDir);
+
+        await WriteSessionJsonAsync(parentDir, "parent", "Parent chat");
+        await WriteSessionJsonAsync(subDir, "sub-1", "Sub-agent");
+
+        try
+        {
+            var sessions = await storage.ListSessionsAsync();
+
+            Assert.Single(sessions);
+            Assert.Equal("parent", sessions[0].Id);
+            Assert.DoesNotContain(sessions, item => item.Id == "sub-1");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ListSessionsAsync_filters_subagent_from_cached_index()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-cache-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
+        var storage = new FileStorageService(logger, paths, new JsonFileStore());
+
+        var parentDir = Path.Combine(paths.SessionsPath, "parent");
+        Directory.CreateDirectory(parentDir);
+        await WriteSessionJsonAsync(parentDir, "parent", "Parent chat");
+
+        var subDir = Path.Combine(parentDir, "subagents", "default", "sub-1");
+        Directory.CreateDirectory(subDir);
+        await WriteSessionJsonAsync(subDir, "sub-1", "Sub-agent");
+
+        var cached = new List<SessionIndexEntry>
+        {
+            new("parent", "Parent chat", parentDir, DateTimeOffset.UtcNow),
+            new("sub-1", "Sub-agent", subDir, DateTimeOffset.UtcNow.AddMinutes(1))
+        };
+        await File.WriteAllTextAsync(
+            Path.Combine(paths.SessionsPath, "index.json"),
+            JsonSerializer.Serialize(cached, JsonFileStore.Options));
+
+        try
+        {
+            var sessions = await storage.ListSessionsAsync();
+
+            Assert.Single(sessions);
+            Assert.Equal("parent", sessions[0].Id);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LoadSessionAsync_does_not_load_subagent_session_by_id()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-load-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
+        var storage = new FileStorageService(logger, paths, new JsonFileStore());
+
+        var parentDir = Path.Combine(paths.SessionsPath, "parent");
+        var subDir = Path.Combine(parentDir, "subagents", "default", "sub-1");
+        Directory.CreateDirectory(subDir);
+        await WriteSessionJsonAsync(subDir, "sub-1", "Sub-agent");
+
+        try
+        {
+            var session = await storage.LoadSessionAsync("sub-1");
+
+            Assert.Null(session);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public void SanitizeSession_strips_data_url_when_local_path_present()
     {
         var attachment = new ImageAttachment(
@@ -98,6 +203,21 @@ public sealed class SessionIndexMemoryTests
 
         Assert.Null(sanitized.Messages[0].ImageAttachments![0].DataUrl);
         Assert.Equal(@"C:\temp\a.png", sanitized.Messages[0].ImageAttachments![0].LocalPath);
+    }
+
+    private static async Task WriteSessionJsonAsync(string sessionDir, string id, string title)
+    {
+        var payload = new
+        {
+            id,
+            title,
+            createdAt = DateTimeOffset.UtcNow,
+            updatedAt = DateTimeOffset.UtcNow,
+            messages = Array.Empty<object>()
+        };
+        await File.WriteAllTextAsync(
+            Path.Combine(sessionDir, "session.json"),
+            JsonSerializer.Serialize(payload, JsonFileStore.Options));
     }
 
     private sealed class TestAppPathProvider(string root) : IAppPathProvider
