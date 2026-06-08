@@ -88,6 +88,8 @@ public sealed class StreamingConversionState
 
     public IReadOnlyCollection<string> StartedReasoningStreams => _startedReasoningStreams;
 
+    public void ClearActiveAssistantStream() => ActiveAssistantStreamId = null;
+
     public void Reset()
     {
         _startedTextStreams.Clear();

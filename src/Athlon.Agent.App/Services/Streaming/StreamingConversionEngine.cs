@@ -144,7 +144,7 @@ public sealed class StreamingConversionEngine
             }
         }
 
-        state.ActiveAssistantStreamId = null;
+        state.ClearActiveAssistantStream();
         return new StreamingConversionResult(state, effects);
     }
 
