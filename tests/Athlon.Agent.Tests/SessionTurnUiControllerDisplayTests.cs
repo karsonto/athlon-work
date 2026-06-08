@@ -123,6 +123,33 @@ public sealed class SessionTurnUiControllerDisplayTests
         Assert.Contains("/tmp", tool.ToolArgumentsText, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Interleaved_text_and_tool_deltas_keep_single_assistant_bubble()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.SetDisplayed(true);
+
+        var callbacks = ui.BuildCallbacks();
+        await callbacks.OnAssistantTextDelta!("hello");
+        ui.SetDisplayed(false);
+        ui.SetDisplayed(true);
+
+        await callbacks.OnAssistantToolCallDelta!(new StreamingToolCallDelta(0, "call-1", "read_file", "{}"));
+        ui.SetDisplayed(false);
+        ui.SetDisplayed(true);
+
+        await callbacks.OnAssistantTextDelta!(" world");
+        ui.SetDisplayed(false);
+        ui.SetDisplayed(true);
+
+        var assistants = await dispatcher.InvokeAsync(() =>
+            ui.Messages.Where(message => !message.IsUser && !message.IsTool).ToList());
+
+        Assert.Single(assistants);
+        Assert.Contains("hello world", assistants[0].Content, StringComparison.Ordinal);
+    }
+
     private static Task<Dispatcher> StartStaDispatcherAsync()
     {
         var tcs = new TaskCompletionSource<Dispatcher>(TaskCreationOptions.RunContinuationsAsynchronously);

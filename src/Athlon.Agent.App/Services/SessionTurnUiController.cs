@@ -471,12 +471,13 @@ public sealed class SessionTurnUiController
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_streamingAssistantMessage.Content)
-            && string.IsNullOrWhiteSpace(_streamingAssistantMessage.ReasoningContent))
+        if (!string.IsNullOrWhiteSpace(_streamingAssistantMessage.Content)
+            || !string.IsNullOrWhiteSpace(_streamingAssistantMessage.ReasoningContent))
         {
-            Messages.Remove(_streamingAssistantMessage);
+            return;
         }
 
+        Messages.Remove(_streamingAssistantMessage);
         _streamingAssistantMessage = null;
     }
 
