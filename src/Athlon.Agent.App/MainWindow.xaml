@@ -980,39 +980,41 @@
                                                                     </Style.Triggers>
                                                                 </Style>
                                                             </Border.Style>
-                                                            <TextBlock Margin="12,10"
-                                                                       Text="{Binding ReasoningContent}"
-                                                                       TextWrapping="Wrap"
-                                                                       FontSize="13"
-                                                                       Foreground="{StaticResource Brush.ToolThinkingText}"
-                                                                       HorizontalAlignment="Stretch">
-                                                                <TextBlock.Style>
-                                                                    <Style TargetType="TextBlock">
-                                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding IsReasoningStreaming}" Value="True">
-                                                                                <Setter Property="Visibility" Value="Visible" />
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </TextBlock.Style>
-                                                            </TextBlock>
-                                                            <controls:MarkdownMessageView Margin="12,10"
-                                                                                          Markdown="{Binding ReasoningContent}"
-                                                                                          AssistantTone="True"
-                                                                                          MaxContentHeight="0"
-                                                                                          HorizontalAlignment="Stretch">
-                                                                <controls:MarkdownMessageView.Style>
-                                                                    <Style TargetType="controls:MarkdownMessageView">
-                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding IsReasoningStreaming}" Value="True">
-                                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </controls:MarkdownMessageView.Style>
-                                                            </controls:MarkdownMessageView>
+                                                            <Grid>
+                                                                <TextBlock Margin="12,10"
+                                                                           Text="{Binding ReasoningContent}"
+                                                                           TextWrapping="Wrap"
+                                                                           FontSize="13"
+                                                                           Foreground="{StaticResource Brush.ToolThinkingText}"
+                                                                           HorizontalAlignment="Stretch">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock">
+                                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsReasoningStreaming}" Value="True">
+                                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                                <controls:MarkdownMessageView Margin="12,10"
+                                                                                              Markdown="{Binding ReasoningContent}"
+                                                                                              AssistantTone="True"
+                                                                                              MaxContentHeight="0"
+                                                                                              HorizontalAlignment="Stretch">
+                                                                    <controls:MarkdownMessageView.Style>
+                                                                        <Style TargetType="controls:MarkdownMessageView">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsReasoningStreaming}" Value="True">
+                                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </controls:MarkdownMessageView.Style>
+                                                                </controls:MarkdownMessageView>
+                                                            </Grid>
                                                         </Border>
                                                     </StackPanel>
                                                 </Border>
