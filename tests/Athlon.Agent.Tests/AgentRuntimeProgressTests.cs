@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.Tests;
 
@@ -34,30 +35,30 @@ public sealed class AgentRuntimeProgressTests
         var session = AgentSession.Create("progress-test");
         var callbacks = new AgentTurnCallbacks
         {
-            OnToolStarted = call =>
+            OnStreamEvent = streamEvent =>
             {
-                events.Add($"start:{call.Id}:{call.Name}");
-                return Task.CompletedTask;
-            },
-            OnMessage = message =>
-            {
-                events.Add($"message:{message.Role}");
+                events.Add(streamEvent switch
+                {
+                    AgentStreamEvent.RunStarted => "run-started",
+                    AgentStreamEvent.ToolCallStart(var id, var name, _) => $"start:{id}:{name}",
+                    AgentStreamEvent.ToolCallResult(var id, _, _) => $"result:{id}",
+                    AgentStreamEvent.TextMessageContent(_, var delta) => $"text:{delta}",
+                    AgentStreamEvent.RunFinished => "run-finished",
+                    _ => streamEvent.GetType().Name
+                });
                 return Task.CompletedTask;
             }
         };
 
         await runtime.SendAsync(session, "run tools", null, callbacks);
 
-        Assert.Equal(
-            new[]
-            {
-                "start:call-1:alpha",
-                "message:Tool",
-                "start:call-2:beta",
-                "message:Tool",
-                "message:Assistant"
-            },
-            events);
+        Assert.Equal("run-started", events[0]);
+        Assert.Contains("start:call-1:alpha", events);
+        Assert.Contains("result:call-1", events);
+        Assert.Contains("start:call-2:beta", events);
+        Assert.Contains("result:call-2", events);
+        Assert.Contains("text:done", events);
+        Assert.Equal("run-finished", events[^1]);
     }
 
     [Fact]
@@ -95,9 +96,13 @@ public sealed class AgentRuntimeProgressTests
             null,
             new AgentTurnCallbacks
             {
-                OnAssistantTextDelta = token =>
+                OnStreamEvent = streamEvent =>
                 {
-                    tokens.Add(token);
+                    if (streamEvent is AgentStreamEvent.TextMessageContent(_, var delta))
+                    {
+                        tokens.Add(delta);
+                    }
+
                     return Task.CompletedTask;
                 }
             });

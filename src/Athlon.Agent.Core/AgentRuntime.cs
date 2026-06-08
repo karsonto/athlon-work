@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.Streaming;
 using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Core;
@@ -88,12 +89,20 @@ public sealed class AgentRuntime(
             var modelToolRound = 0;
             var maxModelToolRounds = AgentLoopOptionsScope.Current?.MaxModelToolRounds;
             var modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
+            var runId = Guid.NewGuid().ToString("N");
+            var streamAdapter = new AgentStreamAdapter(session.Id, runId);
+            await PublishStreamEventsAsync(callbacks, streamAdapter.CreateRunStarted());
 
             if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
             {
                 var toolCall = new AgentToolCall(Guid.NewGuid().ToString("N"), "file_list", new Dictionary<string, string>());
-                await NotifyToolStartedAsync(callbacks, toolCall);
-                session = await InvokeToolAndPersistAsync(session, userMessage.Id, toolCall, callbacks, cancellationToken);
+                session = await InvokeToolAndPersistAsync(
+                    session,
+                    userMessage.Id,
+                    toolCall,
+                    streamAdapter,
+                    callbacks,
+                    cancellationToken);
             }
 
             while (true)
@@ -108,9 +117,12 @@ public sealed class AgentRuntime(
                 environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
                 modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
 
+                var assistantMessageId = Guid.NewGuid().ToString("N");
                 var (updatedSession, response) = await CompleteWithOverflowRetryAsync(
                     session,
                     callbacks,
+                    streamAdapter,
+                    assistantMessageId,
                     modelMessages,
                     tools,
                     frozenPrompt,
@@ -120,19 +132,37 @@ public sealed class AgentRuntime(
 
                 if (response.ToolCalls.Count == 0)
                 {
-                    var assistant = ChatMessage.Create(
+                    if (!streamAdapter.State.HasStartedTextMessage(assistantMessageId)
+                        && !string.IsNullOrEmpty(response.Content))
+                    {
+                        await PublishStreamEventsAsync(
+                            callbacks,
+                            streamAdapter.OnTextDelta(assistantMessageId, response.Content));
+                    }
+
+                    if (!streamAdapter.State.HasStartedReasoningMessage(assistantMessageId)
+                        && !string.IsNullOrEmpty(response.ReasoningContent))
+                    {
+                        await PublishStreamEventsAsync(
+                            callbacks,
+                            streamAdapter.OnReasoningDelta(assistantMessageId, response.ReasoningContent!));
+                    }
+
+                    var assistant = ChatMessage.CreateWithId(
+                        assistantMessageId,
                         MessageRole.Assistant,
                         response.Content,
                         userMessage.Id,
                         reasoningContent: response.ReasoningContent);
                     session = session.WithMessage(assistant);
-                    await NotifyMessageAsync(callbacks, assistant);
                     await PersistMessageAsync(session, assistant, cancellationToken);
+                    await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
                     _logger.Information("Saved session {SessionId} with {MessageCount} messages", session.Id, session.Messages.Count);
                     return session;
                 }
 
-                var assistantWithToolCalls = ChatMessage.Create(
+                var assistantWithToolCalls = ChatMessage.CreateWithId(
+                    assistantMessageId,
                     MessageRole.Assistant,
                     response.Content,
                     userMessage.Id,
@@ -140,6 +170,7 @@ public sealed class AgentRuntime(
                     response.ReasoningContent);
                 session = session.WithMessage(assistantWithToolCalls);
                 await PersistMessageAsync(session, assistantWithToolCalls, cancellationToken);
+                await PublishStreamEventsAsync(callbacks, streamAdapter.OnAssistantRoundCompleted(assistantWithToolCalls));
 
                 modelToolRound++;
                 if (maxModelToolRounds is > 0 && modelToolRound >= maxModelToolRounds)
@@ -148,6 +179,7 @@ public sealed class AgentRuntime(
                         "Max model tool rounds ({MaxRounds}) reached for session {SessionId}; stopping without executing pending tools",
                         maxModelToolRounds,
                         session.Id);
+                    await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
                     return session;
                 }
 
@@ -155,8 +187,13 @@ public sealed class AgentRuntime(
                 modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
                 foreach (var toolCall in response.ToolCalls)
                 {
-                    await NotifyToolStartedAsync(callbacks, toolCall);
-                    session = await InvokeToolAndPersistAsync(session, userMessage.Id, toolCall, callbacks, cancellationToken);
+                    session = await InvokeToolAndPersistAsync(
+                        session,
+                        userMessage.Id,
+                        toolCall,
+                        streamAdapter,
+                        callbacks,
+                        cancellationToken);
                 }
             }
         }
@@ -170,6 +207,8 @@ public sealed class AgentRuntime(
     private async Task<(AgentSession Session, AgentModelResponse Response)> CompleteWithOverflowRetryAsync(
         AgentSession session,
         AgentTurnCallbacks? callbacks,
+        AgentStreamAdapter streamAdapter,
+        string assistantMessageId,
         IReadOnlyList<AgentModelMessage> modelMessages,
         IReadOnlyList<ToolDefinition> tools,
         FrozenSystemPrompt frozenPrompt,
@@ -180,9 +219,9 @@ public sealed class AgentRuntime(
         {
             var response = await modelClient.CompleteAsync(
                 new AgentModelRequest(modelMessages, tools),
-                callbacks?.OnAssistantTextDelta,
-                callbacks?.OnAssistantReasoningDelta,
-                callbacks?.OnAssistantToolCallDelta,
+                token => PublishStreamEventsAsync(callbacks, streamAdapter.OnTextDelta(assistantMessageId, token)),
+                token => PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
+                delta => PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
                 cancellationToken);
             ObserveModelUsage(session, environmentPrompt, tools, response);
             return (session, response);
@@ -207,9 +246,9 @@ public sealed class AgentRuntime(
             var retryMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
             var response = await modelClient.CompleteAsync(
                 new AgentModelRequest(retryMessages, tools),
-                callbacks?.OnAssistantTextDelta,
-                callbacks?.OnAssistantReasoningDelta,
-                callbacks?.OnAssistantToolCallDelta,
+                token => PublishStreamEventsAsync(callbacks, streamAdapter.OnTextDelta(assistantMessageId, token)),
+                token => PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
+                delta => PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
                 cancellationToken);
             ObserveModelUsage(session, environmentPrompt, tools, response);
             return (session, response);
@@ -220,6 +259,7 @@ public sealed class AgentRuntime(
         AgentSession session,
         string? parentMessageId,
         AgentToolCall toolCall,
+        AgentStreamAdapter streamAdapter,
         AgentTurnCallbacks? callbacks,
         CancellationToken cancellationToken)
     {
@@ -268,7 +308,7 @@ public sealed class AgentRuntime(
 
         var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
         session = session.WithMessage(toolMessage);
-        await NotifyMessageAsync(callbacks, toolMessage);
+        await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall));
         await PersistMessageAsync(session, toolMessage, cancellationToken);
         return session;
     }
@@ -349,7 +389,7 @@ public sealed class AgentRuntime(
             }
 
             persistedNew = true;
-            await NotifyMessageAsync(callbacks, message);
+            await PublishStreamEventsAsync(callbacks, [new AgentStreamEvent.ChatMessageAppended(message)]);
             await PersistMessageAsync(session, message, cancellationToken);
         }
 
@@ -404,19 +444,18 @@ public sealed class AgentRuntime(
         }
     }
 
-    private static async Task NotifyMessageAsync(AgentTurnCallbacks? callbacks, ChatMessage message)
+    private static async Task PublishStreamEventsAsync(
+        AgentTurnCallbacks? callbacks,
+        IReadOnlyList<AgentStreamEvent> events)
     {
-        if (callbacks?.OnMessage is not null)
+        if (callbacks?.OnStreamEvent is null || events.Count == 0)
         {
-            await callbacks.OnMessage(message);
+            return;
         }
-    }
 
-    private static async Task NotifyToolStartedAsync(AgentTurnCallbacks? callbacks, AgentToolCall toolCall)
-    {
-        if (callbacks?.OnToolStarted is not null)
+        foreach (var streamEvent in events)
         {
-            await callbacks.OnToolStarted(toolCall);
+            await callbacks.OnStreamEvent(streamEvent);
         }
     }
 

@@ -38,8 +38,25 @@ public sealed record ChatMessage(
         IReadOnlyList<AgentToolCall>? toolCalls = null,
         string? reasoningContent = null,
         IReadOnlyList<ImageAttachment>? imageAttachments = null) =>
-        new(
+        CreateWithId(
             Guid.NewGuid().ToString("N"),
+            role,
+            content,
+            parentId,
+            toolCalls,
+            reasoningContent,
+            imageAttachments);
+
+    public static ChatMessage CreateWithId(
+        string id,
+        MessageRole role,
+        string content,
+        string? parentId = null,
+        IReadOnlyList<AgentToolCall>? toolCalls = null,
+        string? reasoningContent = null,
+        IReadOnlyList<ImageAttachment>? imageAttachments = null) =>
+        new(
+            id,
             role,
             content,
             DateTimeOffset.UtcNow,

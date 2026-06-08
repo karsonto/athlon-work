@@ -1,154 +1,213 @@
 using System.Collections.ObjectModel;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.App.Services.Streaming;
 
 public sealed class SessionStreamingUiContext
 {
-    private readonly StreamingConversionEngine _engine = new();
     private readonly Dictionary<string, ChatMessageViewModel> _assistantBubbles = new(StringComparer.Ordinal);
     private readonly Dictionary<int, ChatMessageViewModel> _toolBubblesByIndex = new();
-
-    public StreamingConversionState State { get; } = new();
+    private readonly Dictionary<string, int> _toolCallIdToIndex = new(StringComparer.Ordinal);
 
     public Action RequestScroll { get; set; } = () => { };
 
     public Action RequestScrollImmediate { get; set; } = () => { };
 
     public ChatMessageViewModel? ActiveAssistantBubble =>
-        State.ActiveAssistantStreamId is { } streamId
-        && _assistantBubbles.TryGetValue(streamId, out var bubble)
-            ? bubble
-            : null;
+        _assistantBubbles.Values.LastOrDefault();
 
     public IReadOnlyDictionary<int, ChatMessageViewModel> ToolBubblesByIndex => _toolBubblesByIndex;
 
-    public void Process(StreamingStreamEvent streamEvent, ObservableCollection<ChatMessageViewModel> messages)
+    public void Process(AgentStreamEvent streamEvent, ObservableCollection<ChatMessageViewModel> messages)
     {
-        var result = _engine.Process(State, streamEvent);
-        ApplyEffects(result.Effects, messages);
-    }
-
-    public void ProcessAll(
-        IEnumerable<StreamingStreamEvent> streamEvents,
-        ObservableCollection<ChatMessageViewModel> messages)
-    {
-        foreach (var streamEvent in streamEvents)
+        switch (streamEvent)
         {
-            Process(streamEvent, messages);
+            case AgentStreamEvent.RunStarted:
+                Reset();
+                break;
+            case AgentStreamEvent.TextMessageStart(var messageId, _):
+                EnsureAssistantBubble(messageId, messages);
+                break;
+            case AgentStreamEvent.TextMessageContent(var messageId, var delta):
+                EnsureAssistantBubble(messageId, messages);
+                GetAssistantBubble(messageId)?.AppendStreamingToken(delta);
+                break;
+            case AgentStreamEvent.TextMessageEnd(var messageId):
+                ReleaseAssistantBubble(messageId, messages);
+                break;
+            case AgentStreamEvent.ReasoningMessageStart(var messageId, _):
+                EnsureAssistantBubble(messageId, messages);
+                break;
+            case AgentStreamEvent.ReasoningMessageContent(var messageId, var delta):
+                EnsureAssistantBubble(messageId, messages);
+                GetAssistantBubble(messageId)?.AppendStreamingReasoningToken(delta);
+                break;
+            case AgentStreamEvent.ReasoningMessageEnd(var messageId):
+                ReleaseAssistantBubble(messageId, messages);
+                break;
+            case AgentStreamEvent.ToolCallStart(var toolCallId, var toolName, var index):
+                if (index is int toolIndex)
+                {
+                    _toolCallIdToIndex[toolCallId] = toolIndex;
+                    EnsureToolBubble(toolIndex, toolCallId, toolName, messages);
+                }
+
+                break;
+            case AgentStreamEvent.ToolCallArgs(var toolCallId, var argsJson):
+                if (_toolCallIdToIndex.TryGetValue(toolCallId, out var argsIndex)
+                    && _toolBubblesByIndex.TryGetValue(argsIndex, out var toolBubble))
+                {
+                    toolBubble.UpdateStreamingToolCall(toolCallId, toolBubble.ToolName, argsJson);
+                }
+
+                RequestScroll();
+                break;
+            case AgentStreamEvent.ToolCallEnd(var toolCallId):
+                if (_toolCallIdToIndex.TryGetValue(toolCallId, out var endIndex)
+                    && _toolBubblesByIndex.TryGetValue(endIndex, out var endedTool))
+                {
+                    endedTool.PromoteStreamingToolToRunning(
+                        new AgentToolCall(
+                            toolCallId,
+                            string.IsNullOrWhiteSpace(endedTool.ToolName) ? "unknown" : endedTool.ToolName,
+                            ToolCallArgumentsParser.ParseJson(endedTool.ToolArgumentsText)));
+                    _toolBubblesByIndex.Remove(endIndex);
+                }
+
+                break;
+            case AgentStreamEvent.ToolCallResult(var toolCallId, var content, var messageId):
+                HandleToolCallResult(toolCallId, content, messageId, messages);
+                break;
+            case AgentStreamEvent.ChatMessageAppended(var message):
+                HandleChatMessageAppended(message, messages);
+                break;
+            case AgentStreamEvent.ClearEmptyAssistantPlaceholder:
+                RemoveEmptyActiveAssistantBubble(messages);
+                break;
+            case AgentStreamEvent.RunFinished:
+                break;
         }
     }
 
     public void Reset()
     {
-        _engine.Process(State, new StreamingStreamEvent.TurnReset());
         _assistantBubbles.Clear();
         _toolBubblesByIndex.Clear();
+        _toolCallIdToIndex.Clear();
     }
 
-    public void FinalizeOpenStreams(ObservableCollection<ChatMessageViewModel> messages)
+    private void HandleChatMessageAppended(ChatMessage message, ObservableCollection<ChatMessageViewModel> messages)
     {
-        Process(new StreamingStreamEvent.TurnFinalize(), messages);
-    }
-
-    private void ApplyEffects(
-        IReadOnlyList<StreamingUiEffect> effects,
-        ObservableCollection<ChatMessageViewModel> messages)
-    {
-        foreach (var effect in effects)
-        {
-            ApplyEffect(effect, messages);
-        }
-    }
-
-    private void ApplyEffect(StreamingUiEffect effect, ObservableCollection<ChatMessageViewModel> messages)
-    {
-        switch (effect)
-        {
-            case StreamingUiEffect.EnsureAssistantBubble(var streamId):
-                EnsureAssistantBubble(streamId, messages);
-                break;
-            case StreamingUiEffect.AppendAssistantText(var streamId, var delta):
-                GetAssistantBubble(streamId)?.AppendStreamingToken(delta);
-                break;
-            case StreamingUiEffect.AppendAssistantReasoning(var streamId, var delta):
-                GetAssistantBubble(streamId)?.AppendStreamingReasoningToken(delta);
-                break;
-            case StreamingUiEffect.SealAssistantBubble(var streamId):
-                GetAssistantBubble(streamId)?.SealStreamingDisplay();
-                break;
-            case StreamingUiEffect.ReleaseAssistantBubbleForToolBoundary(var streamId):
-                ReleaseAssistantBubbleForToolBoundary(streamId, messages);
-                break;
-            case StreamingUiEffect.RemoveEmptyAssistantBubble(var streamId):
-                RemoveEmptyAssistantBubble(streamId, messages);
-                break;
-            case StreamingUiEffect.CompleteAssistantBubble(var streamId, var message):
-                if (GetAssistantBubble(streamId) is { } completed)
-                {
-                    completed.CompleteStreamingAssistant(message);
-                    _assistantBubbles.Remove(streamId);
-                }
-
-                break;
-            case StreamingUiEffect.MarkAssistantBubbleCancelled(var streamId):
-                if (GetAssistantBubble(streamId) is { } cancelled)
-                {
-                    cancelled.MarkStreamingCancelled();
-                    _assistantBubbles.Remove(streamId);
-                }
-
-                break;
-            case StreamingUiEffect.EnsureToolBubble(var index, var toolCallId, var name):
-                EnsureToolBubble(index, toolCallId, name, messages);
-                break;
-            case StreamingUiEffect.UpdateToolBubble(var index, var toolCallId, var name, var argumentsJson):
-                if (_toolBubblesByIndex.TryGetValue(index, out var toolBubble))
-                {
-                    toolBubble.UpdateStreamingToolCall(toolCallId, name, argumentsJson);
-                }
-
-                break;
-            case StreamingUiEffect.PromoteToolBubbleToRunning(var streamIndex, var toolCall):
-                PromoteToolBubbleToRunning(streamIndex, toolCall, messages);
-                break;
-            case StreamingUiEffect.AddPendingToolBubble(var toolCall):
-                messages.Add(ChatMessageViewModel.CreatePendingTool(toolCall));
-                break;
-            case StreamingUiEffect.MarkStreamingToolCancelled(var index):
-                if (_toolBubblesByIndex.TryGetValue(index, out var cancelledTool))
-                {
-                    cancelledTool.MarkStreamingToolCancelled();
-                    _toolBubblesByIndex.Remove(index);
-                }
-
-                break;
-            case StreamingUiEffect.RequestScroll:
-                RequestScroll();
-                break;
-            case StreamingUiEffect.RequestScrollImmediate:
-                RequestScrollImmediate();
-                break;
-        }
-    }
-
-    private void EnsureAssistantBubble(string streamId, ObservableCollection<ChatMessageViewModel> messages)
-    {
-        if (_assistantBubbles.ContainsKey(streamId))
+        if (ChatMessageViewModel.IsAssistantToolCallsOnly(message))
         {
             return;
         }
 
-        var bubble = ChatMessageViewModel.CreateStreamingAssistant();
-        _assistantBubbles[streamId] = bubble;
+        if (message.Role == MessageRole.User && SummaryMessageBuilder.IsSummaryMessage(message))
+        {
+            RemoveEmptyActiveAssistantBubble(messages);
+            return;
+        }
+
+        if (message.Role == MessageRole.Compaction)
+        {
+            RemoveEmptyActiveAssistantBubble(messages);
+            if (!ContainsMessageId(messages, message.Id))
+            {
+                messages.Add(new ChatMessageViewModel(message));
+                RequestScroll();
+            }
+
+            return;
+        }
+
+        if (message.Role == MessageRole.Tool)
+        {
+            var toolCallId = ExtractToolCallId(message.Content);
+            var existing = FindToolMessage(messages, toolCallId);
+            if (existing is not null)
+            {
+                existing.ApplyCompletedTool(message);
+                return;
+            }
+
+            if (!ContainsMessageId(messages, message.Id))
+            {
+                messages.Add(new ChatMessageViewModel(message));
+                RequestScroll();
+            }
+
+            return;
+        }
+
+        if (message.Role == MessageRole.Assistant && ActiveAssistantBubble is not null)
+        {
+            ActiveAssistantBubble.CompleteStreamingAssistant(message);
+            _assistantBubbles.Remove(message.Id);
+            RequestScrollImmediate();
+            return;
+        }
+
+        RemoveEmptyActiveAssistantBubble(messages);
+        if (!ContainsMessageId(messages, message.Id))
+        {
+            messages.Add(new ChatMessageViewModel(message));
+            RequestScrollImmediate();
+        }
+    }
+
+    private void HandleToolCallResult(
+        string toolCallId,
+        string content,
+        string messageId,
+        ObservableCollection<ChatMessageViewModel> messages)
+    {
+        var existing = FindToolMessage(messages, toolCallId);
+        var toolMessage = ChatMessage.CreateWithId(messageId, MessageRole.Tool, content);
+        if (existing is not null)
+        {
+            existing.ApplyCompletedTool(toolMessage);
+            RemoveToolTracking(existing);
+            return;
+        }
+
+        var preparing = _toolBubblesByIndex.Values.FirstOrDefault(message =>
+            message.ToolCallStatus == ToolCallDisplayStatus.Preparing
+            && (string.IsNullOrWhiteSpace(message.ToolCallId)
+                || string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal)));
+        if (preparing is not null)
+        {
+            preparing.ApplyCompletedTool(toolMessage);
+            RemoveToolTracking(preparing);
+            return;
+        }
+
+        if (!ContainsMessageId(messages, messageId))
+        {
+            messages.Add(new ChatMessageViewModel(toolMessage));
+            RequestScroll();
+        }
+    }
+
+    private void EnsureAssistantBubble(string messageId, ObservableCollection<ChatMessageViewModel> messages)
+    {
+        if (_assistantBubbles.ContainsKey(messageId))
+        {
+            return;
+        }
+
+        var bubble = ChatMessageViewModel.CreateStreamingAssistant(messageId);
+        _assistantBubbles[messageId] = bubble;
         messages.Add(bubble);
         RequestScroll();
     }
 
-    private void ReleaseAssistantBubbleForToolBoundary(string streamId, ObservableCollection<ChatMessageViewModel> messages)
+    private void ReleaseAssistantBubble(string messageId, ObservableCollection<ChatMessageViewModel> messages)
     {
-        if (!_assistantBubbles.TryGetValue(streamId, out var bubble))
+        if (!_assistantBubbles.TryGetValue(messageId, out var bubble))
         {
             return;
         }
@@ -162,20 +221,19 @@ public sealed class SessionStreamingUiContext
             bubble.SealStreamingDisplay();
         }
 
-        _assistantBubbles.Remove(streamId);
+        _assistantBubbles.Remove(messageId);
     }
 
-    private void RemoveEmptyAssistantBubble(string streamId, ObservableCollection<ChatMessageViewModel> messages)
+    private void RemoveEmptyActiveAssistantBubble(ObservableCollection<ChatMessageViewModel> messages)
     {
-        if (!_assistantBubbles.TryGetValue(streamId, out var bubble))
+        foreach (var entry in _assistantBubbles.ToList())
         {
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(bubble.Content) && string.IsNullOrWhiteSpace(bubble.ReasoningContent))
-        {
-            messages.Remove(bubble);
-            _assistantBubbles.Remove(streamId);
+            if (string.IsNullOrWhiteSpace(entry.Value.Content)
+                && string.IsNullOrWhiteSpace(entry.Value.ReasoningContent))
+            {
+                messages.Remove(entry.Value);
+                _assistantBubbles.Remove(entry.Key);
+            }
         }
     }
 
@@ -195,49 +253,8 @@ public sealed class SessionStreamingUiContext
         messages.Add(toolBubble);
     }
 
-    private void PromoteToolBubbleToRunning(
-        int? streamIndex,
-        AgentToolCall toolCall,
-        ObservableCollection<ChatMessageViewModel> messages)
-    {
-        var existing = FindToolMessage(messages, toolCall.Id);
-        if (existing is not null)
-        {
-            if (existing.ToolCallStatus == ToolCallDisplayStatus.Preparing)
-            {
-                if (existing.StreamToolIndex is int index)
-                {
-                    _toolBubblesByIndex.Remove(index);
-                }
-
-                existing.PromoteStreamingToolToRunning(toolCall);
-                RemoveStreamingToolTracking(existing);
-            }
-
-            return;
-        }
-
-        var preparing = _toolBubblesByIndex.Values.FirstOrDefault(message =>
-            message.ToolCallStatus == ToolCallDisplayStatus.Preparing
-            && (string.IsNullOrWhiteSpace(message.ToolCallId)
-                || string.Equals(message.ToolCallId, toolCall.Id, StringComparison.Ordinal)));
-        if (preparing is not null)
-        {
-            if (preparing.StreamToolIndex is int index)
-            {
-                _toolBubblesByIndex.Remove(index);
-            }
-
-            preparing.PromoteStreamingToolToRunning(toolCall);
-            RemoveStreamingToolTracking(preparing);
-            return;
-        }
-
-        messages.Add(ChatMessageViewModel.CreatePendingTool(toolCall));
-    }
-
-    private ChatMessageViewModel? GetAssistantBubble(string streamId) =>
-        _assistantBubbles.GetValueOrDefault(streamId);
+    private ChatMessageViewModel? GetAssistantBubble(string messageId) =>
+        _assistantBubbles.GetValueOrDefault(messageId);
 
     private static ChatMessageViewModel? FindToolMessage(
         ObservableCollection<ChatMessageViewModel> messages,
@@ -252,7 +269,11 @@ public sealed class SessionStreamingUiContext
             message.IsTool && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
     }
 
-    private void RemoveStreamingToolTracking(ChatMessageViewModel message)
+    private static bool ContainsMessageId(ObservableCollection<ChatMessageViewModel> messages, string messageId) =>
+        !string.IsNullOrWhiteSpace(messageId)
+        && messages.Any(message => string.Equals(message.MessageId, messageId, StringComparison.Ordinal));
+
+    private void RemoveToolTracking(ChatMessageViewModel message)
     {
         if (message.StreamToolIndex is int index)
         {
@@ -268,5 +289,18 @@ public sealed class SessionStreamingUiContext
                 break;
             }
         }
+    }
+
+    private static string? ExtractToolCallId(string content)
+    {
+        foreach (var line in content.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (line.StartsWith("ToolCallId:", StringComparison.OrdinalIgnoreCase))
+            {
+                return line["ToolCallId:".Length..].Trim();
+            }
+        }
+
+        return null;
     }
 }

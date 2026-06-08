@@ -1,6 +1,6 @@
 using Athlon.Agent.Core;
-
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Streaming;
 
 
 
@@ -77,11 +77,13 @@ public sealed class AgentRuntimeCompactionTests
 
                 },
 
-                OnMessage = message =>
+                OnStreamEvent = streamEvent =>
 
                 {
 
-                    if (message.Role == MessageRole.Compaction)
+                    if (streamEvent is AgentStreamEvent.ChatMessageAppended(var message)
+
+                        && message.Role == MessageRole.Compaction)
 
                     {
 

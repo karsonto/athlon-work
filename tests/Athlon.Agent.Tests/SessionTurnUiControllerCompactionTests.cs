@@ -3,6 +3,7 @@ using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.Tests;
 
@@ -31,7 +32,7 @@ public sealed class SessionTurnUiControllerCompactionTests
 
         var compactionMessage = compactedSession.Messages[0];
         var callbacks = ui.BuildCallbacks(new LiveAgentSession(compactedSession));
-        await callbacks.OnMessage!(compactionMessage);
+        await callbacks.OnStreamEvent!(new AgentStreamEvent.ChatMessageAppended(compactionMessage));
 
         Assert.Equal(4, ui.Messages.Count);
         Assert.Equal(3, ui.Messages.Count(message => !message.IsCompaction));

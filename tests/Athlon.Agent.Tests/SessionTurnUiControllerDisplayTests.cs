@@ -2,11 +2,15 @@ using System.Windows.Threading;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.Tests;
 
 public sealed class SessionTurnUiControllerDisplayTests
 {
+    private const string MessageId1 = "assistant-msg-1";
+    private const string MessageId2 = "assistant-msg-2";
+
     [Fact]
     public async Task HiddenSession_buffers_text_delta_without_adding_messages()
     {
@@ -21,7 +25,7 @@ public sealed class SessionTurnUiControllerDisplayTests
         ui.SetDisplayed(false);
 
         var callbacks = ui.BuildCallbacks();
-        await callbacks.OnAssistantTextDelta!("world");
+        await EmitText(callbacks, MessageId1, "world");
 
         var countWhileHidden = await dispatcher.InvokeAsync(() => ui.Messages.Count);
         Assert.Equal(initialCount, countWhileHidden);
@@ -65,7 +69,7 @@ public sealed class SessionTurnUiControllerDisplayTests
         ui.SetDisplayed(false);
 
         var callbacks = ui.BuildCallbacks();
-        await callbacks.OnAssistantTextDelta!("buffered ");
+        await EmitText(callbacks, MessageId1, "buffered ");
 
         var session = AgentSession.Create("test");
         var snapshot = await dispatcher.InvokeAsync(() =>
@@ -82,8 +86,8 @@ public sealed class SessionTurnUiControllerDisplayTests
         ui.SetDisplayed(true);
 
         var callbacks = ui.BuildCallbacks();
-        await callbacks.OnAssistantTextDelta!("hello ");
-        await callbacks.OnAssistantTextDelta!("world");
+        await EmitText(callbacks, MessageId1, "hello ");
+        await EmitText(callbacks, MessageId1, "world");
 
         var countBeforeFlush = await dispatcher.InvokeAsync(() => ui.Messages.Count);
         Assert.Equal(0, countBeforeFlush);
@@ -99,15 +103,16 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
-    public async Task DisplayedSession_tool_delta_batches_before_timer_flush()
+    public async Task HiddenSession_tool_events_flush_when_displayed()
     {
         var dispatcher = await StartStaDispatcherAsync();
         var ui = new SessionTurnUiController(dispatcher);
         ui.SetDisplayed(false);
 
         var callbacks = ui.BuildCallbacks();
-        await callbacks.OnAssistantToolCallDelta!(new StreamingToolCallDelta(0, "call-1", "read_file", "{\"path\":"));
-        await callbacks.OnAssistantToolCallDelta!(new StreamingToolCallDelta(0, "call-1", "read_file", "{\"path\":\"/tmp\"}"));
+        await EmitToolStart(callbacks, "call-1", "read_file", 0);
+        await EmitToolArgs(callbacks, "call-1", "{\"path\":");
+        await EmitToolArgs(callbacks, "call-1", "{\"path\":\"/tmp\"}");
 
         var countWhileHidden = await dispatcher.InvokeAsync(() => ui.Messages.Count);
         Assert.Equal(0, countWhileHidden);
@@ -130,15 +135,17 @@ public sealed class SessionTurnUiControllerDisplayTests
         ui.SetDisplayed(true);
 
         var callbacks = ui.BuildCallbacks();
-        await callbacks.OnAssistantTextDelta!("hello");
+        await EmitText(callbacks, MessageId1, "hello");
         ui.SetDisplayed(false);
         ui.SetDisplayed(true);
 
-        await callbacks.OnAssistantToolCallDelta!(new StreamingToolCallDelta(0, "call-1", "read_file", "{}"));
+        await EmitTextEnd(callbacks, MessageId1);
+        await EmitToolStart(callbacks, "call-1", "read_file", 0);
+        await EmitToolArgs(callbacks, "call-1", "{}");
         ui.SetDisplayed(false);
         ui.SetDisplayed(true);
 
-        await callbacks.OnAssistantTextDelta!(" world");
+        await EmitText(callbacks, MessageId2, " world");
         ui.SetDisplayed(false);
         ui.SetDisplayed(true);
 
@@ -158,10 +165,12 @@ public sealed class SessionTurnUiControllerDisplayTests
         ui.SetDisplayed(true);
 
         var callbacks = ui.BuildCallbacks();
-        await callbacks.OnAssistantTextDelta!("before tool");
-        await callbacks.OnAssistantToolCallDelta!(new StreamingToolCallDelta(0, "call-1", "read_file", "{}"));
-        await callbacks.OnToolStarted!(new AgentToolCall("call-1", "read_file", new Dictionary<string, string>()));
-        await callbacks.OnAssistantTextDelta!("after tool");
+        await EmitText(callbacks, MessageId1, "before tool");
+        await EmitTextEnd(callbacks, MessageId1);
+        await EmitToolStart(callbacks, "call-1", "read_file", 0);
+        await EmitToolArgs(callbacks, "call-1", "{}");
+        await EmitToolEnd(callbacks, "call-1");
+        await EmitText(callbacks, MessageId2, "after tool");
 
         ui.SetDisplayed(false);
         ui.SetDisplayed(true);
@@ -173,6 +182,21 @@ public sealed class SessionTurnUiControllerDisplayTests
         Assert.Contains("before tool", assistants[0].Content, StringComparison.Ordinal);
         Assert.Contains("after tool", assistants[1].Content, StringComparison.Ordinal);
     }
+
+    private static Task EmitText(AgentTurnCallbacks callbacks, string messageId, string delta) =>
+        callbacks.OnStreamEvent!(new AgentStreamEvent.TextMessageContent(messageId, delta));
+
+    private static Task EmitTextEnd(AgentTurnCallbacks callbacks, string messageId) =>
+        callbacks.OnStreamEvent!(new AgentStreamEvent.TextMessageEnd(messageId));
+
+    private static Task EmitToolStart(AgentTurnCallbacks callbacks, string toolCallId, string name, int index) =>
+        callbacks.OnStreamEvent!(new AgentStreamEvent.ToolCallStart(toolCallId, name, index));
+
+    private static Task EmitToolArgs(AgentTurnCallbacks callbacks, string toolCallId, string args) =>
+        callbacks.OnStreamEvent!(new AgentStreamEvent.ToolCallArgs(toolCallId, args));
+
+    private static Task EmitToolEnd(AgentTurnCallbacks callbacks, string toolCallId) =>
+        callbacks.OnStreamEvent!(new AgentStreamEvent.ToolCallEnd(toolCallId));
 
     private static Task<Dispatcher> StartStaDispatcherAsync()
     {
