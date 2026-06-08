@@ -26,10 +26,10 @@ public sealed class AppSettings
 public sealed class FileReadSettings
 {
     public long MaxFileBytes { get; set; } = 2 * 1024 * 1024;
-    public int DefaultLineLimit { get; set; } = 500;
+    public int DefaultLineLimit { get; set; } = 1_000;
     public int MaxLinesPerCall { get; set; } = 2_000;
     public int MaxResponseChars { get; set; } = 32_768;
-    public int MaxLineChars { get; set; } = 1_024;
+    public int MaxLineChars { get; set; } = 1_0240;
     public bool CountTotalLines { get; set; } = true;
 }
 
@@ -44,7 +44,7 @@ public sealed class WorkspaceIgnoreSettings
 
 public sealed class PromptSettings
 {
-    public int MaxAgentsMdChars { get; set; } = 4000;
+    public int MaxAgentsMdChars { get; set; } = 8000;
     public int MaxKnowledgeMdChars { get; set; } = 1500;
     public int MaxKnowledgeCatalogEntries { get; set; } = 50;
 }
