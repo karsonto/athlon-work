@@ -34,6 +34,7 @@ public sealed class SessionStreamingUiContext
             case AgentStreamEvent.TextMessageContent(var messageId, var delta):
                 EnsureAssistantBubble(messageId, messages);
                 GetAssistantBubble(messageId)?.AppendStreamingToken(delta);
+                RequestScroll();
                 break;
             case AgentStreamEvent.TextMessageEnd(var messageId):
                 ReleaseAssistantBubble(messageId, messages);
@@ -44,6 +45,7 @@ public sealed class SessionStreamingUiContext
             case AgentStreamEvent.ReasoningMessageContent(var messageId, var delta):
                 EnsureAssistantBubble(messageId, messages);
                 GetAssistantBubble(messageId)?.AppendStreamingReasoningToken(delta);
+                RequestScroll();
                 break;
             case AgentStreamEvent.ReasoningMessageEnd(var messageId):
                 ReleaseAssistantBubble(messageId, messages);

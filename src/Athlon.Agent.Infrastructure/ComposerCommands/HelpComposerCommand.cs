@@ -1,9 +1,10 @@
 using System.Text;
 using Athlon.Agent.Core.ComposerCommands;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Athlon.Agent.Infrastructure.ComposerCommands;
 
-public sealed class HelpComposerCommand(IComposerCommandRegistry registry) : IComposerCommand
+public sealed class HelpComposerCommand(IServiceProvider services) : IComposerCommand
 {
     public ComposerCommandDescriptor Descriptor { get; } = new(
         "help",
@@ -12,6 +13,7 @@ public sealed class HelpComposerCommand(IComposerCommandRegistry registry) : ICo
 
     public Task<ComposerCommandResult> ExecuteAsync(ComposerCommandContext context)
     {
+        var registry = services.GetRequiredService<IComposerCommandRegistry>();
         string status;
         if (context.Args.Length > 0
             && registry.TryGet(context.Args[0], out var command)

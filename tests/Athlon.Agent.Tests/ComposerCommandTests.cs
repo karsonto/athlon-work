@@ -3,6 +3,7 @@ using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.ComposerCommands;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.ComposerCommands;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Athlon.Agent.Tests;
 
@@ -33,8 +34,11 @@ public sealed class ComposerCommandTests
     public void HelpComposerCommand_lists_registered_commands()
     {
         var compact = new CompactComposerCommand(new NoOpCompactionService());
-        var registry = new ComposerCommandRegistry(new IComposerCommand[] { compact });
-        var help = new HelpComposerCommand(registry);
+        var services = new ServiceCollection()
+            .AddSingleton<IComposerCommand>(compact)
+            .AddSingleton<IComposerCommandRegistry, ComposerCommandRegistry>()
+            .BuildServiceProvider();
+        var help = new HelpComposerCommand(services);
         var result = help.ExecuteAsync(new ComposerCommandContext
         {
             Session = AgentSession.Create("s"),

@@ -1273,7 +1273,7 @@
                                 </TextBlock.Style>
                             </TextBlock>
                         </Grid>
-                        <Popup IsOpen="{Binding IsComposerCompletionOpen}"
+                        <Popup IsOpen="{Binding IsComposerCompletionOpen, Mode=OneWay}"
                                PlacementTarget="{Binding ElementName=ComposerTextBox}"
                                Placement="Top"
                                StaysOpen="False"
@@ -1419,6 +1419,11 @@
                                                Margin="0,-2,0,0" />
                                 </Button>
                             </StackPanel>
+                            <TextBlock Text="Enter 发送 · Shift+Enter 换行 · Ctrl+V 粘贴图片"
+                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       FontSize="12"
+                                       Margin="32,0,0,0"
+                                       VerticalAlignment="Center" />
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button Command="{Binding StopCommand}"
                                         ToolTip="暂停当前回复"

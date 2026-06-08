@@ -13,7 +13,7 @@ public static class ComposerCommandParser
         }
 
         var trimmed = input.Trim();
-        if (!trimmed.StartsWith('/', StringComparison.Ordinal))
+        if (!trimmed.StartsWith("/", StringComparison.Ordinal))
         {
             return false;
         }
