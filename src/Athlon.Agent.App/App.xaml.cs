@@ -40,6 +40,7 @@ public partial class App : Application
             services.AddSingleton(_ => new SessionUiCache(System.Windows.Threading.Dispatcher.CurrentDispatcher));
             services.AddSingleton<SessionTurnHost>();
             services.AddSingleton<ApplicationShutdownService>();
+            services.AddSingleton<ClipboardImageAttachmentReader>();
             services.AddSingleton<MainWindowViewModel>();
             services.AddSingleton<MainWindow>();
             _services = services.BuildServiceProvider();

@@ -518,6 +518,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         var images = await _imageAttachmentReader.ReadImagesAsync(dialog.FileNames);
+        AddPendingImages(images);
+    }
+
+    public void AddPendingImages(IEnumerable<ImageAttachment> images)
+    {
         foreach (var image in images)
         {
             if (PendingImageAttachments.Any(existing => ImageAttachmentsMatch(existing.Attachment, image)))

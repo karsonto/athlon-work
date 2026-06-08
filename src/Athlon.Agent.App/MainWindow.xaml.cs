@@ -13,6 +13,7 @@ namespace Athlon.Agent.App;
 public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
+    private readonly ClipboardImageAttachmentReader _clipboardImageReader;
     private const double AutoScrollBottomThreshold = 48;
     private bool _autoScrollEnabled = true;
     private bool _isProgrammaticScroll;
@@ -23,12 +24,13 @@ public partial class MainWindow : Window
     private DispatcherTimer? _scrollThrottleTimer;
     private static readonly TimeSpan ScrollThrottleInterval = TimeSpan.FromMilliseconds(100);
 
-    public MainWindow(MainWindowViewModel viewModel)
+    public MainWindow(MainWindowViewModel viewModel, ClipboardImageAttachmentReader clipboardImageReader)
     {
         App.StartupTrace("MainWindow constructor entered");
         InitializeComponent();
         App.StartupTrace("MainWindow InitializeComponent completed");
         _viewModel = viewModel;
+        _clipboardImageReader = clipboardImageReader;
         DataContext = _viewModel;
         _viewModel.ScrollChatToBottom = () => ScrollChatToEnd(immediate: false);
         _viewModel.ScrollChatToBottomImmediate = () => ScrollChatToEnd(immediate: true);
@@ -48,8 +50,22 @@ public partial class MainWindow : Window
         ApplyContextSidebarLayout();
         ApplyEditorPaneLayout();
         ApplyComposerLayout();
+        AttachComposerPasteHandler();
         AttachChatMessagesScrollViewer();
         ScrollChatToEnd(immediate: true);
+    }
+
+    private void AttachComposerPasteHandler()
+    {
+        if (ComposerTextBox is null)
+        {
+            return;
+        }
+
+        ComposerTextBox.AddHandler(
+            CommandManager.PreviewExecutedEvent,
+            new ExecutedRoutedEventHandler(ComposerTextBox_OnPastePreviewExecuted),
+            handledEventsToo: true);
     }
 
     private void AttachChatMessagesScrollViewer()
@@ -507,6 +523,15 @@ public partial class MainWindow : Window
             }
         }
 
+        if (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            if (TryPasteImagesFromClipboard())
+            {
+                e.Handled = true;
+                return;
+            }
+        }
+
         if (e.Key != Key.Enter || (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
         {
             return;
@@ -518,6 +543,31 @@ public partial class MainWindow : Window
         }
 
         e.Handled = true;
+    }
+
+    private void ComposerTextBox_OnPastePreviewExecuted(object sender, ExecutedRoutedEventArgs e)
+    {
+        if (e.Command != ApplicationCommands.Paste)
+        {
+            return;
+        }
+
+        if (TryPasteImagesFromClipboard())
+        {
+            e.Handled = true;
+        }
+    }
+
+    private bool TryPasteImagesFromClipboard()
+    {
+        var images = _clipboardImageReader.TryReadImages();
+        if (images.Count == 0)
+        {
+            return false;
+        }
+
+        _viewModel.AddPendingImages(images);
+        return true;
     }
 
     private void ComposerTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
