@@ -30,6 +30,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly SessionUiCache _uiCache;
     private readonly ApplicationShutdownService _shutdownService;
     private readonly Dictionary<string, ObservableCollection<QueuedTurnViewModel>> _queuedTurnsBySession = new(StringComparer.Ordinal);
+    private static readonly TimeSpan HistoryRefreshDebounce = TimeSpan.FromMilliseconds(300);
+    private CancellationTokenSource? _historyRefreshCts;
     private FileSystemWatcher? _workspaceWatcher;
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -65,7 +67,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _skillCatalog = skillCatalog;
         _skillRuntime = skillRuntime;
         _displayedSessionId = _session.Id;
-        _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
+        _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
+        _activeUi.SetDisplayed(true);
         _turnHost.TurnCompleted += OnTurnCompleted;
         _turnHost.TurnStateChanged += OnTurnStateChanged;
         Settings = new SettingsViewModel(settings, _mcpRegistry, skillCatalog, paths);
@@ -151,8 +154,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<ChatMessageViewModel> Messages => _activeUi.Messages;
 
-    /// <summary>由 MainWindow 注入，用于流式输出时自动滚到底部。</summary>
+    /// <summary>由 MainWindow 注入，用于流式输出时自动滚到底部（节流）。</summary>
     public Action? ScrollChatToBottom { get; set; }
+
+    /// <summary>由 MainWindow 注入，用于非流式场景立即滚到底部。</summary>
+    public Action? ScrollChatToBottomImmediate { get; set; }
     public ObservableCollection<AgentRecordGroupViewModel> AgentRecordGroups { get; } = new();
     public ObservableCollection<QueuedTurnViewModel> QueuedTurns => GetQueuedTurnsFor(_displayedSessionId);
     public bool HasQueuedTurns => QueuedTurns.Count > 0;
@@ -368,9 +374,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private async Task NewSession()
+    private Task NewSession()
     {
-        await SaveCurrentSessionIfNeededAsync();
+        var previousSession = _session;
         _session = AgentSession.Create("New Chat");
         SwitchDisplayedSession(_session);
         CurrentSessionTitle = _session.Title;
@@ -380,8 +386,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         UpdateDisplayedBusyState();
         CurrentPage = "Chat";
         ApplySessionWorkspace();
-        await RefreshSessionHistoryAsync();
+        _ = SaveSessionInBackgroundAsync(previousSession);
+        RequestRefreshSessionHistory();
         NotifyCommandStatesChanged();
+        return Task.CompletedTask;
     }
 
     [RelayCommand(CanExecute = nameof(CanClearContext))]
@@ -442,8 +450,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        await SaveCurrentSessionIfNeededAsync();
+        var previousSession = _session;
         await LoadSessionInternalAsync(item.Id);
+        _ = SaveSessionInBackgroundAsync(previousSession);
         CurrentPage = "Chat";
     }
 
@@ -546,7 +555,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         StreamingText = string.Empty;
         SyncWorkspaceContext();
 
-        var ui = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
+        var ui = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         PendingImageAttachments.Clear();
 
         if (_turnHost.IsRunning(_displayedSessionId))
@@ -592,12 +601,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void RequestScrollToBottom() => ScrollChatToBottom?.Invoke();
 
+    private void RequestScrollToBottomImmediate() => ScrollChatToBottomImmediate?.Invoke();
+
     private void SwitchDisplayedSession(AgentSession session)
     {
+        _activeUi.SetDisplayed(false);
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         _displayedSessionId = session.Id;
         _session = session;
-        _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom);
+        _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
+        _activeUi.SetDisplayed(true);
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         OnPropertyChanged(nameof(Messages));
         OnPropertyChanged(nameof(HasChatMessages));
@@ -614,7 +627,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 UpdateDisplayedBusyState();
             }
 
-            _ = RefreshSessionHistoryAsync();
+            RequestRefreshSessionHistory();
         });
     }
 
@@ -629,11 +642,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 UpdateDisplayedBusyState();
             }
 
-            await SaveCurrentSessionIfNeededAsync(
+            await SaveSessionCoreAsync(
                 string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal)
                     ? _session
                     : e.Session);
-            await RefreshSessionHistoryAsync();
+            RequestRefreshSessionHistory();
             TryProcessNextQueuedTurn(e);
             NotifyCommandStatesChanged();
         });
@@ -1059,6 +1072,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task SaveCurrentSessionIfNeededAsync(AgentSession session)
     {
+        await SaveSessionCoreAsync(session);
+        await RefreshSessionHistoryAsync();
+    }
+
+    private async Task SaveSessionCoreAsync(AgentSession session)
+    {
         if (session.Messages.Count == 0)
         {
             return;
@@ -1071,7 +1090,42 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         await _storage.SaveSessionAsync(toSave);
-        await RefreshSessionHistoryAsync();
+    }
+
+    private async Task SaveSessionInBackgroundAsync(AgentSession session)
+    {
+        try
+        {
+            await SaveSessionCoreAsync(session);
+            RequestRefreshSessionHistory();
+        }
+        catch (Exception ex)
+        {
+            Application.Current?.Dispatcher.InvokeAsync(() =>
+                SettingsStatus = $"保存对话失败：{ex.Message}");
+        }
+    }
+
+    private void RequestRefreshSessionHistory()
+    {
+        _historyRefreshCts?.Cancel();
+        _historyRefreshCts?.Dispose();
+        _historyRefreshCts = new CancellationTokenSource();
+        var token = _historyRefreshCts.Token;
+        _ = DebouncedRefreshSessionHistoryAsync(token);
+    }
+
+    private async Task DebouncedRefreshSessionHistoryAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(HistoryRefreshDebounce, cancellationToken);
+            await RefreshSessionHistoryAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer refresh request.
+        }
     }
 
     private async Task RefreshSessionHistoryAsync()
@@ -1228,6 +1282,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _copyNoticeCts?.Dispose();
         _uiLayoutSaveCts?.Cancel();
         _uiLayoutSaveCts?.Dispose();
+        _historyRefreshCts?.Cancel();
+        _historyRefreshCts?.Dispose();
     }
 
     private bool EnsureCurrentApiKeySecret(AppSettings settings)

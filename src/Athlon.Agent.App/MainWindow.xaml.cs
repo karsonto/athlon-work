@@ -20,6 +20,8 @@ public partial class MainWindow : Window
     private bool _chatPointerDown;
     private bool _chatScrollLockedByUser;
     private ScrollViewer? _chatMessagesScrollViewer;
+    private DispatcherTimer? _scrollThrottleTimer;
+    private static readonly TimeSpan ScrollThrottleInterval = TimeSpan.FromMilliseconds(100);
 
     public MainWindow(MainWindowViewModel viewModel)
     {
@@ -28,7 +30,8 @@ public partial class MainWindow : Window
         App.StartupTrace("MainWindow InitializeComponent completed");
         _viewModel = viewModel;
         DataContext = _viewModel;
-        _viewModel.ScrollChatToBottom = ScrollChatToEnd;
+        _viewModel.ScrollChatToBottom = () => ScrollChatToEnd(immediate: false);
+        _viewModel.ScrollChatToBottomImmediate = () => ScrollChatToEnd(immediate: true);
         _viewModel.ContextSidebarLayoutChanged += (_, _) => Dispatcher.Invoke(ApplyContextSidebarLayout);
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
         MarkdownMessageView.ContentInteractionChanged += (_, _) => UpdateChatScrollLock();
@@ -46,7 +49,7 @@ public partial class MainWindow : Window
         ApplyEditorPaneLayout();
         ApplyComposerLayout();
         AttachChatMessagesScrollViewer();
-        ScrollChatToEnd();
+        ScrollChatToEnd(immediate: true);
     }
 
     private void AttachChatMessagesScrollViewer()
@@ -339,7 +342,56 @@ public partial class MainWindow : Window
         MaximizeRestoreButton.ToolTip = WindowState == WindowState.Maximized ? "还原" : "最大化";
     }
 
-    private void ScrollChatToEnd()
+    private void ScrollChatToEnd(bool immediate)
+    {
+        if (_chatMessagesScrollViewer is null)
+        {
+            return;
+        }
+
+        if (!_autoScrollEnabled || ShouldSuppressChatAutoScroll())
+        {
+            return;
+        }
+
+        if (immediate)
+        {
+            ExecuteScrollToEnd();
+            return;
+        }
+
+        if (_scrollThrottleTimer is not null)
+        {
+            return;
+        }
+
+        _scrollThrottleTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        {
+            Interval = ScrollThrottleInterval
+        };
+        _scrollThrottleTimer.Tick += OnScrollThrottleTimerTick;
+        _scrollThrottleTimer.Start();
+    }
+
+    private void OnScrollThrottleTimerTick(object? sender, EventArgs e)
+    {
+        StopScrollThrottleTimer();
+        ExecuteScrollToEnd();
+    }
+
+    private void StopScrollThrottleTimer()
+    {
+        if (_scrollThrottleTimer is null)
+        {
+            return;
+        }
+
+        _scrollThrottleTimer.Stop();
+        _scrollThrottleTimer.Tick -= OnScrollThrottleTimerTick;
+        _scrollThrottleTimer = null;
+    }
+
+    private void ExecuteScrollToEnd()
     {
         if (_chatMessagesScrollViewer is null)
         {
@@ -352,7 +404,7 @@ public partial class MainWindow : Window
         }
 
         _chatMessagesScrollViewer.Dispatcher.BeginInvoke(
-            DispatcherPriority.Loaded,
+            DispatcherPriority.Background,
             () =>
             {
                 _isProgrammaticScroll = true;

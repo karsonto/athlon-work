@@ -14,12 +14,20 @@ public sealed class SessionUiCache
 
     public SessionUiCache(Dispatcher dispatcher) => _dispatcher = dispatcher;
 
-    public SessionTurnUiController GetOrCreate(string sessionId, Action? requestScroll = null)
+    public SessionTurnUiController GetOrCreate(
+        string sessionId,
+        Action? requestScroll = null,
+        Action? requestScrollImmediate = null)
     {
         var controller = _controllers.GetOrAdd(sessionId, id => new SessionTurnUiController(_dispatcher, requestScroll));
         if (requestScroll is not null)
         {
             controller.RequestScroll = requestScroll;
+        }
+
+        if (requestScrollImmediate is not null)
+        {
+            controller.RequestScrollImmediate = requestScrollImmediate;
         }
 
         Touch(sessionId);
