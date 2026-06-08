@@ -6,6 +6,8 @@ using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.ComposerCommands;
+using Athlon.Agent.Infrastructure.ComposerCommands;
 using Athlon.Agent.Core.Licensing;
 using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Infrastructure.Licensing;
@@ -82,6 +84,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IConversationCompactor, ConversationCompactor>();
         services.AddSingleton<IToolResultEvictor, ToolResultEvictor>();
         services.AddSingleton<IPreCompletionPipeline, PreCompletionPipeline>();
+        services.AddSingleton<ISessionCompactionService, SessionCompactionService>();
+        services.AddSingleton<IComposerCommand, CompactComposerCommand>();
+        services.AddSingleton<IComposerCommand, HelpComposerCommand>();
+        services.AddSingleton<IComposerCommandRegistry, ComposerCommandRegistry>();
+        services.AddSingleton<ComposerCommandExecutor>();
         return services;
     }
 

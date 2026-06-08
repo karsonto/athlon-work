@@ -5,8 +5,10 @@ using System.IO;
 using System.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.ComposerCommands;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.ComposerCommands;
 using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -29,6 +31,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly SessionTurnHost _turnHost;
     private readonly SessionUiCache _uiCache;
     private readonly ApplicationShutdownService _shutdownService;
+    private readonly ComposerCommandExecutor _composerCommandExecutor;
+    private readonly IComposerCommandRegistry _composerCommandRegistry;
     private readonly Dictionary<string, ObservableCollection<QueuedTurnViewModel>> _queuedTurnsBySession = new(StringComparer.Ordinal);
     private static readonly TimeSpan HistoryRefreshDebounce = TimeSpan.FromMilliseconds(300);
     private CancellationTokenSource? _historyRefreshCts;
@@ -51,6 +55,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SessionUiCache uiCache,
         WorkspaceFileEditorService workspaceFileEditorService,
         ApplicationShutdownService shutdownService,
+        ComposerCommandExecutor composerCommandExecutor,
+        IComposerCommandRegistry composerCommandRegistry,
         AppSettings settings)
     {
         _storage = storage;
@@ -63,6 +69,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _turnHost = turnHost;
         _uiCache = uiCache;
         _shutdownService = shutdownService;
+        _composerCommandExecutor = composerCommandExecutor;
+        _composerCommandRegistry = composerCommandRegistry;
         _appSettings = settings;
         _skillCatalog = skillCatalog;
         _skillRuntime = skillRuntime;
@@ -126,6 +134,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ApplySessionWorkspace();
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         PendingImageAttachments.CollectionChanged += OnPendingImagesChanged;
+        RefreshSlashCompletionIndex();
         _ = InitializeAsync();
     }
 
@@ -251,13 +260,22 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool isAtCompletionOpen;
 
     [ObservableProperty]
+    private bool isSlashCompletionOpen;
+
+    [ObservableProperty]
     private int selectedAtCompletionIndex = -1;
+
+    [ObservableProperty]
+    private int selectedSlashCompletionIndex = -1;
 
     private readonly List<AtCompletionItemViewModel> _fileCompletionIndex = new();
     private readonly List<AtCompletionItemViewModel> _skillCompletionIndex = new();
+    private readonly List<AtCompletionItemViewModel> _slashCompletionIndex = new();
     private const int MaxCompletionItems = 30;
 
     public ObservableCollection<AtCompletionItemViewModel> AtCompletionItems { get; } = new();
+    public ObservableCollection<AtCompletionItemViewModel> SlashCompletionItems { get; } = new();
+    public bool IsComposerCompletionOpen => IsAtCompletionOpen || IsSlashCompletionOpen;
     public ObservableCollection<PendingImageAttachmentViewModel> PendingImageAttachments { get; } = new();
     public bool HasPendingImages => PendingImageAttachments.Count > 0;
 
@@ -546,11 +564,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand(CanExecute = nameof(CanSend))]
-    private Task SendAsync()
+    private async Task SendAsync()
     {
         if (string.IsNullOrWhiteSpace(ComposerText) && PendingImageAttachments.Count == 0)
         {
-            return Task.CompletedTask;
+            return;
+        }
+
+        if (ComposerCommandParser.TryParse(ComposerText.Trim(), out var commandName, out var commandArgs))
+        {
+            ComposerText = string.Empty;
+            CloseAtCompletion();
+            CloseSlashCompletion();
+            await ExecuteComposerCommandAsync(commandName, commandArgs);
+            return;
         }
 
         _skillCatalog.Reload();
@@ -572,7 +599,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             NotifyQueuedTurnsChanged();
             SettingsStatus = "已加入排队";
             NotifyCommandStatesChanged();
-            return Task.CompletedTask;
+            return;
         }
 
         ui.AddUserMessage(input, imageAttachments);
@@ -581,12 +608,41 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             SettingsStatus = error ?? "无法开始生成。";
             NotifyCommandStatesChanged();
-            return Task.CompletedTask;
+            return;
         }
 
         UpdateDisplayedBusyState();
         NotifyCommandStatesChanged();
-        return Task.CompletedTask;
+    }
+
+    private async Task ExecuteComposerCommandAsync(string commandName, string[] args)
+    {
+        var liveSession = new LiveAgentSession(_session);
+        var callbacks = _activeUi.BuildCallbacks(liveSession);
+        var result = await _composerCommandExecutor.ExecuteAsync(
+            commandName,
+            args,
+            _session,
+            _appSettings,
+            _turnHost.IsRunning(_displayedSessionId),
+            callbacks);
+
+        if (result.Outcome == ComposerCommandOutcome.Rejected)
+        {
+            SettingsStatus = result.StatusMessage ?? "命令执行失败。";
+            NotifyCommandStatesChanged();
+            return;
+        }
+
+        _session = result.Session;
+        if (string.Equals(commandName, "compact", StringComparison.OrdinalIgnoreCase))
+        {
+            _activeUi.HydrateFromSession(_session);
+        }
+
+        await SaveCurrentSessionIfNeededAsync(_session);
+        SettingsStatus = result.StatusMessage ?? "命令已执行。";
+        NotifyCommandStatesChanged();
     }
 
     [RelayCommand]
@@ -951,6 +1007,19 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasQueuedTurns));
     }
 
+    public void UpdateComposerCompletion(string composerText, int caretIndex)
+    {
+        if (TryGetSlashQuery(composerText, caretIndex, out var slashQuery))
+        {
+            CloseAtCompletion();
+            UpdateSlashCompletion(slashQuery);
+            return;
+        }
+
+        CloseSlashCompletion();
+        UpdateAtCompletion(composerText, caretIndex);
+    }
+
     public void UpdateAtCompletion(string composerText, int caretIndex)
     {
         if (!TryGetAtQuery(composerText, caretIndex, out var query))
@@ -980,6 +1049,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         IsAtCompletionOpen = true;
+        OnPropertyChanged(nameof(IsComposerCompletionOpen));
         if (SelectedAtCompletionIndex < 0 || SelectedAtCompletionIndex >= AtCompletionItems.Count)
         {
             SelectedAtCompletionIndex = 0;
@@ -1028,11 +1098,106 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         return true;
     }
 
+    public void UpdateSlashCompletion(string query)
+    {
+        var sorted = _slashCompletionIndex
+            .Where(item => MatchesQuery(item.MatchText, query))
+            .OrderBy(item => Rank(item.MatchText, query))
+            .ThenBy(item => item.PrimaryText, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxCompletionItems)
+            .ToArray();
+
+        SlashCompletionItems.Clear();
+        foreach (var item in sorted)
+        {
+            SlashCompletionItems.Add(item);
+        }
+
+        if (SlashCompletionItems.Count == 0)
+        {
+            CloseSlashCompletion();
+            return;
+        }
+
+        IsSlashCompletionOpen = true;
+        OnPropertyChanged(nameof(IsComposerCompletionOpen));
+        if (SelectedSlashCompletionIndex < 0 || SelectedSlashCompletionIndex >= SlashCompletionItems.Count)
+        {
+            SelectedSlashCompletionIndex = 0;
+        }
+    }
+
+    public void MoveSlashCompletionSelection(int delta)
+    {
+        if (!IsSlashCompletionOpen || SlashCompletionItems.Count == 0)
+        {
+            return;
+        }
+
+        var next = SelectedSlashCompletionIndex + delta;
+        if (next < 0)
+        {
+            next = SlashCompletionItems.Count - 1;
+        }
+        else if (next >= SlashCompletionItems.Count)
+        {
+            next = 0;
+        }
+
+        SelectedSlashCompletionIndex = next;
+    }
+
+    public bool TryAcceptSlashCompletion(int caretIndex, out int newCaretIndex)
+    {
+        newCaretIndex = caretIndex;
+        if (!IsSlashCompletionOpen
+            || SelectedSlashCompletionIndex < 0
+            || SelectedSlashCompletionIndex >= SlashCompletionItems.Count
+            || !TryGetSlashQuerySpan(ComposerText, caretIndex, out var slashStart, out var slashEndExclusive))
+        {
+            return false;
+        }
+
+        var replacement = SlashCompletionItems[SelectedSlashCompletionIndex].InsertText;
+        if (!replacement.EndsWith(' '))
+        {
+            replacement += " ";
+        }
+
+        ComposerText = ComposerText[..slashStart] + replacement + ComposerText[slashEndExclusive..];
+        newCaretIndex = slashStart + replacement.Length;
+        CloseSlashCompletion();
+        return true;
+    }
+
     public void CloseAtCompletion()
     {
         IsAtCompletionOpen = false;
         SelectedAtCompletionIndex = -1;
         AtCompletionItems.Clear();
+        OnPropertyChanged(nameof(IsComposerCompletionOpen));
+    }
+
+    public void CloseSlashCompletion()
+    {
+        IsSlashCompletionOpen = false;
+        SelectedSlashCompletionIndex = -1;
+        SlashCompletionItems.Clear();
+        OnPropertyChanged(nameof(IsComposerCompletionOpen));
+    }
+
+    private void RefreshSlashCompletionIndex()
+    {
+        _slashCompletionIndex.Clear();
+        foreach (var descriptor in _composerCommandRegistry.List())
+        {
+            _slashCompletionIndex.Add(new AtCompletionItemViewModel(
+                "命令",
+                descriptor.Name,
+                descriptor.Description,
+                descriptor.Usage,
+                descriptor.Name));
+        }
     }
 
     private void ApplySessionWorkspace()
@@ -1396,6 +1561,62 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         query = text[(atStart + 1)..atEndExclusive];
         return true;
+    }
+
+    private static bool TryGetSlashQuery(string text, int caretIndex, out string query)
+    {
+        query = string.Empty;
+        if (!TryGetSlashQuerySpan(text, caretIndex, out var slashStart, out var slashEndExclusive))
+        {
+            return false;
+        }
+
+        query = text[(slashStart + 1)..slashEndExclusive];
+        return true;
+    }
+
+    private static bool TryGetSlashQuerySpan(string text, int caretIndex, out int slashStart, out int slashEndExclusive)
+    {
+        slashStart = -1;
+        slashEndExclusive = -1;
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var safeCaret = Math.Clamp(caretIndex, 0, text.Length);
+        var index = safeCaret - 1;
+        while (index >= 0)
+        {
+            var c = text[index];
+            if (char.IsWhiteSpace(c))
+            {
+                break;
+            }
+
+            if (c == '/')
+            {
+                if (index > 0 && !char.IsWhiteSpace(text[index - 1]))
+                {
+                    return false;
+                }
+
+                slashStart = index;
+                slashEndExclusive = safeCaret;
+                return true;
+            }
+
+            index--;
+        }
+
+        if (safeCaret > 0 && text[0] == '/' && index < 0)
+        {
+            slashStart = 0;
+            slashEndExclusive = safeCaret;
+            return true;
+        }
+
+        return false;
     }
 
     private static bool TryGetAtQuerySpan(string text, int caretIndex, out int atStart, out int atEndExclusive)

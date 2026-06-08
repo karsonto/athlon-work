@@ -496,6 +496,33 @@ public partial class MainWindow : Window
 
     private void ComposerTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (_viewModel.IsSlashCompletionOpen)
+        {
+            switch (e.Key)
+            {
+                case Key.Down:
+                    _viewModel.MoveSlashCompletionSelection(1);
+                    e.Handled = true;
+                    return;
+                case Key.Up:
+                    _viewModel.MoveSlashCompletionSelection(-1);
+                    e.Handled = true;
+                    return;
+                case Key.Tab:
+                    AcceptSlashCompletion();
+                    e.Handled = true;
+                    return;
+                case Key.Enter:
+                    AcceptSlashCompletion();
+                    e.Handled = true;
+                    return;
+                case Key.Escape:
+                    _viewModel.CloseSlashCompletion();
+                    e.Handled = true;
+                    return;
+            }
+        }
+
         if (_viewModel.IsAtCompletionOpen)
         {
             switch (e.Key)
@@ -577,13 +604,30 @@ public partial class MainWindow : Window
             return;
         }
 
-        _viewModel.UpdateAtCompletion(textBox.Text, textBox.CaretIndex);
+        _viewModel.UpdateComposerCompletion(textBox.Text, textBox.CaretIndex);
     }
 
     private void AtCompletionListBox_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         AcceptAtCompletion();
         e.Handled = true;
+    }
+
+    private void SlashCompletionListBox_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        AcceptSlashCompletion();
+        e.Handled = true;
+    }
+
+    private void AcceptSlashCompletion()
+    {
+        if (!_viewModel.TryAcceptSlashCompletion(ComposerTextBox.CaretIndex, out var newCaretIndex))
+        {
+            return;
+        }
+
+        ComposerTextBox.Focus();
+        ComposerTextBox.CaretIndex = newCaretIndex;
     }
 
     private void AcceptAtCompletion()
