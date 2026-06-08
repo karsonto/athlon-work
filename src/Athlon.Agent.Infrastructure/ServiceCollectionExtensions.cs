@@ -6,7 +6,10 @@ using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Infrastructure.Memory;
 using Athlon.Agent.Core.ComposerCommands;
+using Athlon.Agent.Core.Memory;
+using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Infrastructure.ComposerCommands;
 using Athlon.Agent.Core.Licensing;
 using Athlon.Agent.Core.SubAgents;
@@ -89,6 +92,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IComposerCommand, HelpComposerCommand>();
         services.AddSingleton<IComposerCommandRegistry, ComposerCommandRegistry>();
         services.AddSingleton<ComposerCommandExecutor>();
+        // Long-term memory services
+        services.AddSingleton<ILongTermMemory, FileLongTermMemory>();
+        services.AddSingleton<MemoryFlushService>();
+        services.AddSingleton<MemoryConsolidationService>();
+        services.AddSingleton<IPostTurnMemoryProcessor, PostTurnMemoryProcessor>();
+        services.AddSingleton<IAgentTool, MemorySearchTool>();
+        services.AddSingleton<IAgentTool, MemoryGetTool>();
+        services.AddSingleton<IPreReasoningPromptContributor, MemoryPromptContributor>();
         return services;
     }
 

@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Streaming;
 using Athlon.Agent.Core.SubAgents;
@@ -19,7 +20,8 @@ public sealed class AgentRuntime(
     ITokenEstimatorCalibrator tokenEstimatorCalibrator,
     IActiveAgentSessionContext activeSessionContext,
     AppSettings settings,
-    IAppLogger logger) : IAgentRuntime
+    IAppLogger logger,
+    IPostTurnMemoryProcessor memoryProcessor) : IAgentRuntime
 {
     private readonly IAppLogger _logger = logger.ForContext("AgentRuntime");
 
@@ -158,6 +160,7 @@ public sealed class AgentRuntime(
                     await PersistMessageAsync(session, assistant, cancellationToken);
                     await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
                     _logger.Information("Saved session {SessionId} with {MessageCount} messages", session.Id, session.Messages.Count);
+                    FireAndForgetMemoryFlush(session);
                     return session;
                 }
 
@@ -180,6 +183,7 @@ public sealed class AgentRuntime(
                         maxModelToolRounds,
                         session.Id);
                     await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
+                    FireAndForgetMemoryFlush(session);
                     return session;
                 }
 
@@ -681,6 +685,25 @@ public sealed class AgentRuntime(
     private static bool ContainsAny(string value, params string[] terms)
     {
         return terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void FireAndForgetMemoryFlush(AgentSession session)
+    {
+        if (!settings.Memory.Enabled)
+            return;
+
+        var capturedSession = session;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await memoryProcessor.ProcessAsync(capturedSession.Messages, CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning("Post-turn memory flush failed: {Error}", ex.Message);
+            }
+        }, CancellationToken.None);
     }
 
     private IToolRouter ResolveToolRouter() => AmbientToolRouterScope.CurrentRouter ?? toolRouter;
