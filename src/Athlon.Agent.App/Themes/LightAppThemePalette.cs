@@ -24,6 +24,7 @@ public static class LightAppThemePalette
         PanelAlt = C(ReportHtmlLightColors.Slate50),
         // Composer: bg-white/95 border-slate-200
         Composer = C(ReportHtmlLightColors.White),
+        ComposerBorder = C(ReportHtmlLightColors.Slate200),
         Border = C(ReportHtmlLightColors.Slate200),
         Text = C(ReportHtmlLightColors.Slate900),
         SubtleText = C(ReportHtmlLightColors.Slate500),

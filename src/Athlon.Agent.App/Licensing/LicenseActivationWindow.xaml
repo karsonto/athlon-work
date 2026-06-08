@@ -45,7 +45,7 @@
                 BorderBrush="{StaticResource Brush.Border}"
                 BorderThickness="0,0,0,1"
                 MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
-            <Grid Margin="24,0">
+            <Grid Margin="28,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />

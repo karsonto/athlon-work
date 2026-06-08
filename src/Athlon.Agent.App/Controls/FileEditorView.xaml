@@ -58,7 +58,7 @@
         <Border Grid.Row="1"
                 Background="#1E1E1E"
                 BorderBrush="{StaticResource Brush.Border}"
-                BorderThickness="0"
+                BorderThickness="0,1,0,0"
                 Padding="0">
             <avalonEdit:TextEditor x:Name="CodeEditor"
                                    HorizontalAlignment="Stretch"

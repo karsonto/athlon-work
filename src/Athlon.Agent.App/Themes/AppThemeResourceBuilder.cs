@@ -16,6 +16,7 @@ internal static class AppThemeResourceBuilder
             ["Brush.Panel"] = Brush(c.Panel),
             ["Brush.PanelAlt"] = Brush(c.PanelAlt),
             ["Brush.Composer"] = Brush(c.Composer),
+            ["Brush.ComposerBorder"] = Brush(c.ComposerBorder),
             ["Brush.Border"] = Brush(c.Border),
             [TextBrushKey] = Brush(c.Text),
             ["Brush.SubtleText"] = Brush(c.SubtleText),

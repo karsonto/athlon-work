@@ -10,6 +10,7 @@ public sealed class UiChromeColors
     public required Color Panel { get; init; }
     public required Color PanelAlt { get; init; }
     public required Color Composer { get; init; }
+    public required Color ComposerBorder { get; init; }
     public required Color Border { get; init; }
     public required Color Text { get; init; }
     public required Color SubtleText { get; init; }

@@ -14,71 +14,109 @@ public static class DarkAppThemePalette
 
     private static UiChromeColors CreateChrome() => new()
     {
-        AppBackground = C("#101012"),
-        Chrome = C("#18181B"),
-        Panel = C("#262628"),
-        PanelAlt = C("#2A2A2D"),
-        Composer = C("#2A2A2D"),
-        Border = C("#3F3F46"),
+        // Base — deep neutral with subtle warmth instead of pure gray
+        AppBackground = C("#0C0C0E"),
+        Chrome = C("#161618"),
+        Panel = C("#202022"),
+        PanelAlt = C("#262628"),
+        Composer = C("#1C1C1E"),
+        ComposerBorder = C("#2C2C30"),
+
+        // Borders — softer than before
+        Border = C("#323236"),
+
+        // Text — high contrast
         Text = C("#F4F4F5"),
-        SubtleText = C("#A1A1AA"),
-        DisabledText = C("#71717A"),
-        DisabledBackground = C("#3F3F46"),
-        Accent = C("#2563EB"),
-        AccentHover = C("#1D4ED8"),
+        SubtleText = C("#9CA3AF"),
+        DisabledText = C("#6B7280"),
+        DisabledBackground = C("#323236"),
+
+        // Accent — more vibrant blue
+        Accent = C("#3B82F6"),
+        AccentHover = C("#2563EB"),
+
+        // Chat bubbles
         UserBubble = C("#1E3A5F"),
-        UserBubbleOpacity = 0.86,
-        AssistantBubble = C("#262628"),
+        UserBubbleOpacity = 0.88,
+        AssistantBubble = C("#202022"),
+
+        // Semantic
         Success = C("#10B981"),
-        Danger = C("#E11D48"),
-        DangerHover = C("#BE123C"),
-        Warning = C("#FBBF24"),
+        Danger = C("#EF4444"),
+        DangerHover = C("#DC2626"),
+        Warning = C("#F59E0B"),
+
+        // Navigation
         NavActiveBg = C("#1E3A5F"),
         NavActiveText = C("#93C5FD"),
-        ToolThinkingBorder = C("#6D28D9"),
-        ToolThinkingBg = C("#1E1B2E"),
-        ToolThinkingText = C("#DDD6FE"),
+
+        // Tool call cards — refined purple tones
+        ToolThinkingBorder = C("#5B21B6"),
+        ToolThinkingBg = C("#1C1A2E"),
+        ToolThinkingText = C("#C4B5FD"),
         ToolSuccessBorder = C("#059669"),
         ToolSuccessBg = C("#142A22"),
         ToolSuccessText = C("#6EE7B7"),
-        ToolFailureBorder = C("#E11D48"),
+        ToolFailureBorder = C("#DC2626"),
         ToolFailureBg = C("#2A1418"),
         ToolFailureText = C("#FDA4AF"),
+
+        // Icon badges
         IconBadgeStart = C("#0284C7"),
         IconBadgeEnd = C("#7DD3FC"),
+
+        // Hover states — more distinct
         HoverNeutral = C("#27272A"),
-        HoverNeutralAlt = C("#2F2F34"),
+        HoverNeutralAlt = C("#2D2D31"),
         HoverActive = C("#254766"),
         HoverTool = C("#242237"),
         HoverToolPressed = C("#2C2942"),
-        HoverSurface = C("#2A2A2D"),
-        HoverSurfacePressed = C("#33333A"),
+        HoverSurface = C("#28282B"),
+        HoverSurfacePressed = C("#303034"),
+
+        // Selection
         SelectionActive = C("#1E3A5F"),
-        SelectionInactive = C("#243A55"),
+        SelectionInactive = C("#1F2D45"),
         SelectionBorder = C("#2F5C8E"),
-        AtCompletionSkillBadgeBg = C("#1E1B2E"),
-        AtCompletionSkillBadgeBorder = C("#6D28D9"),
-        AtCompletionSkillBadgeText = C("#DDD6FE"),
-        AtCompletionFileBadgeBg = C("#2A2A2D"),
-        AtCompletionFileBadgeBorder = C("#3F3F46"),
-        AtCompletionFileBadgeText = C("#A1A1AA"),
-        CodeBackground = C("#202023"),
-        CodeBackgroundAlt = C("#27272A"),
+
+        // Completion popup badges
+        AtCompletionSkillBadgeBg = C("#1C1A2E"),
+        AtCompletionSkillBadgeBorder = C("#5B21B6"),
+        AtCompletionSkillBadgeText = C("#C4B5FD"),
+        AtCompletionFileBadgeBg = C("#262628"),
+        AtCompletionFileBadgeBorder = C("#323236"),
+        AtCompletionFileBadgeText = C("#9CA3AF"),
+
+        // Code blocks
+        CodeBackground = C("#18181B"),
+        CodeBackgroundAlt = C("#202023"),
         CodeForeground = C("#F1F5F9"),
         CodeBorder = C("#1E293B"),
-        CodeHighlightBlue = C("#93C5FD"),
-        TableBorder = C("#52525B"),
-        MenuBackground = C("#27272A"),
-        MenuHover = C("#3F3F46"),
+        CodeHighlightBlue = C("#60A5FA"),
+        TableBorder = C("#404048"),
+
+        // Menus
+        MenuBackground = C("#202022"),
+        MenuHover = C("#323236"),
+
+        // Toast
         ToastBackground = C("#0F172A"),
-        ToastBorder = C("#334155"),
+        ToastBorder = C("#2D3A5A"),
+
+        // Preview
         PreviewContentBackground = Colors.White,
-        ScrollThumb = C("#9494A8"),
-        ScrollThumbOpacity = 0.55,
-        ChatBackgroundTop = C("#141416"),
-        ChatBackgroundBottom = C("#101012"),
-        IconBadgeGradientStart = C("#E0F2FE"),
-        IconBadgeGradientEnd = C("#0284C7"),
+
+        // Scroll
+        ScrollThumb = C("#8888A0"),
+        ScrollThumbOpacity = 0.50,
+
+        // Chat gradient — warmer deep tone
+        ChatBackgroundTop = C("#111114"),
+        ChatBackgroundBottom = C("#0C0C0E"),
+
+        // Icon badge gradient
+        IconBadgeGradientStart = C("#DBEAFE"),
+        IconBadgeGradientEnd = C("#3B82F6"),
     };
 
     private static EditorThemeColors CreateEditor() => new()
