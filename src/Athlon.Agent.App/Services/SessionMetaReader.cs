@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 
 namespace Athlon.Agent.App.Services;
