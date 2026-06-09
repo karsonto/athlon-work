@@ -219,7 +219,9 @@ public static class FlowDocumentCodeBlockEnhancer
                 return builder.ToString().TrimEnd('\r', '\n');
             }
             case BlockUIContainer container:
-                return ExtractUiText(container.Child).TrimEnd('\r', '\n');
+                return container.Child is null
+                    ? string.Empty
+                    : ExtractUiText(container.Child).TrimEnd('\r', '\n');
             case List list:
             {
                 var builder = new System.Text.StringBuilder();
@@ -261,6 +263,11 @@ public static class FlowDocumentCodeBlockEnhancer
 
     private static string ExtractUiText(DependencyObject? element)
     {
+        if (element is null)
+        {
+            return string.Empty;
+        }
+
         switch (element)
         {
             case TextBlock textBlock:
@@ -271,6 +278,10 @@ public static class FlowDocumentCodeBlockEnhancer
                 return new TextRange(paragraph.ContentStart, paragraph.ContentEnd).Text;
             case Border border:
                 return ExtractUiText(border.Child);
+            case ScrollViewer scrollViewer:
+                return ExtractUiText(scrollViewer.Content as DependencyObject);
+            case ContentControl contentControl:
+                return ExtractUiText(contentControl.Content as DependencyObject);
             case Panel panel:
             {
                 var builder = new System.Text.StringBuilder();
@@ -374,6 +385,7 @@ public static class FlowDocumentCodeBlockEnhancer
 
         var bodyScroll = new ScrollViewer
         {
+            Background = codeBackground,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             MaxHeight = 480,

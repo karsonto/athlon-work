@@ -830,6 +830,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ApplySessionWorkspace();
         OnPropertyChanged(nameof(Sidebar));
         SettingsStatus = $"Saved at {AppTimeZone.Now:HH:mm:ss}";
+        CurrentPage = "Chat";
     }
 
     public Task OpenWorkspaceFileInEditorAsync(string path) =>

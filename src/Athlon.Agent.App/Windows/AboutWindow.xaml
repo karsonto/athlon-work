@@ -1,0 +1,101 @@
+<Window x:Class="Athlon.Agent.App.Windows.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="About Athlon Agent"
+        Icon="/Assets/app-icon.ico"
+        Height="400"
+        Width="440"
+        MinHeight="320"
+        MinWidth="400"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{StaticResource Brush.AppBackground}"
+        WindowStyle="None">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            CornerRadius="0"
+                            GlassFrameThickness="0"
+                            ResizeBorderThickness="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+    <Border BorderBrush="{StaticResource Brush.Border}"
+            BorderThickness="1"
+            Background="{StaticResource Brush.AppBackground}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="32" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Background="{StaticResource Brush.Chrome}"
+                    BorderBrush="{StaticResource Brush.Border}"
+                    BorderThickness="0,0,0,1"
+                    MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
+                <Grid Margin="12,0">
+                    <TextBlock Text="About Athlon Agent"
+                               FontSize="12"
+                               Foreground="{StaticResource Brush.SubtleText}"
+                               VerticalAlignment="Center" />
+                    <Button Content="×"
+                            HorizontalAlignment="Right"
+                            ToolTip="关闭"
+                            Click="CloseButton_OnClick"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                            Style="{StaticResource WindowCloseCaptionButtonStyle}" />
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="1"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Margin="32,24">
+                <Image Source="/Assets/app-icon-128.png"
+                       Width="72"
+                       Height="72"
+                       HorizontalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+                <TextBlock x:Name="ProductNameText"
+                           Text="Athlon Agent"
+                           FontSize="22"
+                           FontWeight="SemiBold"
+                           HorizontalAlignment="Center"
+                           Margin="0,16,0,4" />
+                <TextBlock x:Name="VersionText"
+                           FontSize="13"
+                           Foreground="{StaticResource Brush.SubtleText}"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="AI coding agent for your workspace."
+                           FontSize="13"
+                           Foreground="{StaticResource Brush.SubtleText}"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           MaxWidth="320"
+                           HorizontalAlignment="Center"
+                           Margin="0,16,0,0" />
+                <TextBlock Text="如有问题，请联系 FTD AMS 团队。"
+                           FontSize="12"
+                           Foreground="{StaticResource Brush.SubtleText}"
+                           TextAlignment="Center"
+                           TextWrapping="Wrap"
+                           MaxWidth="320"
+                           HorizontalAlignment="Center"
+                           Margin="0,12,0,0" />
+            </StackPanel>
+
+            <Border Grid.Row="2"
+                    BorderBrush="{StaticResource Brush.Border}"
+                    BorderThickness="0,1,0,0"
+                    Padding="16,12">
+                <Button Content="确定"
+                        HorizontalAlignment="Right"
+                        MinWidth="88"
+                        IsDefault="True"
+                        Click="CloseButton_OnClick"
+                        Style="{StaticResource GhostButtonStyle}" />
+            </Border>
+        </Grid>
+    </Border>
+</Window>

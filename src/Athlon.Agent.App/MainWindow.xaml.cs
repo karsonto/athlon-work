@@ -376,6 +376,11 @@ public partial class MainWindow : Window
 
     private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (IsWithinTitleBarMenu(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
         if (e.ClickCount == 2)
         {
             ToggleWindowState();
@@ -386,6 +391,21 @@ public partial class MainWindow : Window
         {
             DragMove();
         }
+    }
+
+    private static bool IsWithinTitleBarMenu(DependencyObject? source)
+    {
+        while (source is not null)
+        {
+            if (source is Menu or MenuItem)
+            {
+                return true;
+            }
+
+            source = VisualTreeHelper.GetParent(source);
+        }
+
+        return false;
     }
 
     private void MinimizeButton_OnClick(object sender, RoutedEventArgs e)
@@ -401,6 +421,15 @@ public partial class MainWindow : Window
     private void CloseButton_OnClick(object sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    private void HelpAboutMenuItem_OnClick(object sender, RoutedEventArgs e)
+    {
+        var about = new Windows.AboutWindow
+        {
+            Owner = this
+        };
+        about.ShowDialog();
     }
 
     private void ToggleWindowState()

@@ -57,13 +57,24 @@
                 MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
             <Grid>
                 <StackPanel Orientation="Horizontal"
-                            VerticalAlignment="Center"
+                            VerticalAlignment="Stretch"
                             HorizontalAlignment="Left"
-                            Margin="12,0,0,0">
+                            Margin="8,0,0,0">
                     <Image Source="/Assets/app-icon-48.png"
                            Width="16"
                            Height="16"
+                           VerticalAlignment="Center"
+                           Margin="0,0,8,0"
                            RenderOptions.BitmapScalingMode="HighQuality" />
+                    <Menu Style="{StaticResource TitleBarMenuStyle}"
+                          shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                          VerticalAlignment="Stretch">
+                        <MenuItem Header="Help"
+                                  Style="{StaticResource TitleBarTopMenuItemStyle}">
+                            <MenuItem Header="About"
+                                      Click="HelpAboutMenuItem_OnClick" />
+                        </MenuItem>
+                    </Menu>
                 </StackPanel>
                 <StackPanel Orientation="Horizontal"
                             HorizontalAlignment="Right"
@@ -668,7 +679,7 @@
                                                     <StackPanel Margin="12,10">
                                                         <ScrollViewer MaxHeight="160"
                                                                       VerticalScrollBarVisibility="Auto"
-                                                                      HorizontalScrollBarVisibility="Auto"
+                                                                      HorizontalScrollBarVisibility="Disabled"
                                                                       Margin="0,0,0,8">
                                                             <ScrollViewer.Style>
                                                                 <Style TargetType="ScrollViewer">
