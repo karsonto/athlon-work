@@ -180,11 +180,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public const double ContextSidebarMinWidth = 220;
     public const double ContextSidebarMaxWidth = 560;
-    public const double ContextSidebarDefaultWidth = 300;
+    public const double ContextSidebarDefaultWidth = 320;
 
     public const double NavigationSidebarMinWidth = 180;
     public const double NavigationSidebarMaxWidth = 480;
-    public const double NavigationSidebarDefaultWidth = 220;
+    public const double NavigationSidebarDefaultWidth = 280;
 
     public const double EditorPaneMinWidth = 280;
     public const double EditorPaneMaxWidth = 1200;
@@ -289,6 +289,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (string.Equals(page, "Settings", StringComparison.Ordinal))
         {
             Settings.SyncSkillsFromCatalog();
+        }
+    }
+
+    [RelayCommand]
+    private void ApplySuggestion(string text)
+    {
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            ComposerText = text;
         }
     }
 

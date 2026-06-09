@@ -28,6 +28,7 @@ public static class DarkAppThemePalette
 
         // Text — high contrast with improved readability
         Text = C("#F9FAFB"),
+        TextSecondary = C("#D1D5DB"),
         SubtleText = C("#A1A1AA"),
         DisabledText = C("#71717A"),
         DisabledBackground = C("#323236"),
@@ -35,32 +36,39 @@ public static class DarkAppThemePalette
         // Accent — Indigo for better distinction
         Accent = C("#6366F1"),
         AccentHover = C("#4F46E5"),
+        AccentActive = C("#4338CA"),
+        AccentSubtle = Ca(0x26, "#6366F1"),
+        SurfaceHover = C("#1A1A1E"),
+        SurfaceActive = C("#222226"),
 
         // Chat bubbles
-        UserBubble = C("#1E3A5F"),
-        UserBubbleOpacity = 0.88,
-        AssistantBubble = C("#202022"),
+        UserBubble = C("#6366F1"),
+        UserBubbleOpacity = 1,
+        AssistantBubble = C("#121214"),
 
         // Semantic
         Success = C("#10B981"),
+        SuccessSubtle = Ca(0x26, "#10B981"),
         Danger = C("#EF4444"),
         DangerHover = C("#DC2626"),
+        ErrorSubtle = Ca(0x26, "#EF4444"),
         Warning = C("#F59E0B"),
+        WarningSubtle = Ca(0x26, "#F59E0B"),
 
-        // Navigation — semi-transparent purple for active state
-        NavActiveBg = C("#6366F1"), // Will be applied with opacity in XAML
+        // Navigation — accent subtle for active session
+        NavActiveBg = Ca(0x26, "#6366F1"),
         NavActiveText = C("#818CF8"),
 
-        // Tool call cards — refined with more vibrant colors
-        ToolThinkingBorder = C("#7C3AED"),
-        ToolThinkingBg = C("#1C192A"),
-        ToolThinkingText = C("#C4B5FD"),
-        ToolSuccessBorder = C("#10B981"),
-        ToolSuccessBg = C("#064E3B"),
-        ToolSuccessText = C("#6EE7B7"),
-        ToolFailureBorder = C("#EF4444"),
-        ToolFailureBg = C("#450A0A"),
-        ToolFailureText = C("#FDA4AF"),
+        // Tool call cards — neutral elevated surfaces
+        ToolThinkingBorder = C("#27272A"),
+        ToolThinkingBg = C("#121214"),
+        ToolThinkingText = C("#D1D5DB"),
+        ToolSuccessBorder = C("#27272A"),
+        ToolSuccessBg = C("#121214"),
+        ToolSuccessText = C("#10B981"),
+        ToolFailureBorder = C("#27272A"),
+        ToolFailureBg = C("#121214"),
+        ToolFailureText = C("#EF4444"),
 
         // Icon badges
         IconBadgeStart = C("#0284C7"),
@@ -159,4 +167,10 @@ public static class DarkAppThemePalette
     };
 
     private static Color C(string hex) => AppThemeColor.FromHex(hex);
+
+    private static Color Ca(byte alpha, string hex)
+    {
+        var rgb = AppThemeColor.FromHex(hex);
+        return Color.FromArgb(alpha, rgb.R, rgb.G, rgb.B);
+    }
 }

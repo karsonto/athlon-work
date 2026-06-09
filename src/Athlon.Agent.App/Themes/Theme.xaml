@@ -4,6 +4,7 @@
     <!-- Palette brushes are injected at index 0 by AppThemeManager.Apply. -->
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="Controls.xaml" />
+        <ResourceDictionary Source="ChatStyles.xaml" />
         <ResourceDictionary Source="Overlays.xaml" />
     </ResourceDictionary.MergedDictionaries>
 

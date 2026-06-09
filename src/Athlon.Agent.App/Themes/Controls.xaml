@@ -371,8 +371,8 @@
     </Style>
 
     <Style x:Key="WindowCaptionButtonStyle" TargetType="Button">
-        <Setter Property="Width" Value="52" />
-        <Setter Property="Height" Value="40" />
+        <Setter Property="Width" Value="46" />
+        <Setter Property="Height" Value="32" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
         <Setter Property="Background" Value="Transparent" />

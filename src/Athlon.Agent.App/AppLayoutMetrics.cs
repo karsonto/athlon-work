@@ -4,7 +4,13 @@ namespace Athlon.Agent.App;
 public static class AppLayoutMetrics
 {
     /// <summary>Height of the editor tab strip and chat session toolbar (must match).</summary>
-    public const double SplitPaneHeaderHeight = 48;
+    public const double SplitPaneHeaderHeight = 56;
+
+    /// <summary>Custom window caption strip (minimize / maximize / close only).</summary>
+    public const double WindowChromeHeight = 32;
+
+    /// <summary>Per-panel header height (sidebar, chat, context).</summary>
+    public const double PanelHeaderHeight = 56;
 
     /// <summary>Gap between scrollbars and adjacent content.</summary>
     public const double ScrollBarGutter = 6;

@@ -14,18 +14,26 @@ public sealed class UiChromeColors
     public required Color Border { get; init; }
     public required Color BorderHover { get; init; }
     public required Color Text { get; init; }
+    public required Color TextSecondary { get; init; }
     public required Color SubtleText { get; init; }
     public required Color DisabledText { get; init; }
     public required Color DisabledBackground { get; init; }
     public required Color Accent { get; init; }
     public required Color AccentHover { get; init; }
+    public required Color AccentActive { get; init; }
+    public required Color AccentSubtle { get; init; }
+    public required Color SurfaceHover { get; init; }
+    public required Color SurfaceActive { get; init; }
     public required Color UserBubble { get; init; }
     public required double UserBubbleOpacity { get; init; }
     public required Color AssistantBubble { get; init; }
     public required Color Success { get; init; }
+    public required Color SuccessSubtle { get; init; }
     public required Color Danger { get; init; }
     public required Color DangerHover { get; init; }
+    public required Color ErrorSubtle { get; init; }
     public required Color Warning { get; init; }
+    public required Color WarningSubtle { get; init; }
     public required Color NavActiveBg { get; init; }
     public required Color NavActiveText { get; init; }
     public required Color ToolThinkingBorder { get; init; }

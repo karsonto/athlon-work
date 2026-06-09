@@ -28,32 +28,40 @@ public static class LightAppThemePalette
         Border = C(ReportHtmlLightColors.Slate200),
         BorderHover = C(ReportHtmlLightColors.Slate300),
         Text = C(ReportHtmlLightColors.Slate900),
+        TextSecondary = C(ReportHtmlLightColors.Slate600),
         SubtleText = C(ReportHtmlLightColors.Slate500),
         DisabledText = C(ReportHtmlLightColors.Slate400),
         DisabledBackground = C(ReportHtmlLightColors.Slate200),
         // Buttons: bg-sky-600 hover:bg-sky-700
         Accent = C(ReportHtmlLightColors.Sky600),
         AccentHover = C(ReportHtmlLightColors.Sky700),
+        AccentActive = C("#0369A1"),
+        AccentSubtle = Ca(0x1F, ReportHtmlLightColors.Sky600),
+        SurfaceHover = C(ReportHtmlLightColors.Slate50),
+        SurfaceActive = C(ReportHtmlLightColors.Slate100),
         // ChatPane user: bg-sky-600
         UserBubble = C(ReportHtmlLightColors.Sky600),
         UserBubbleOpacity = 1,
         AssistantBubble = C(ReportHtmlLightColors.White),
         Success = C(ReportHtmlLightColors.Green600),
+        SuccessSubtle = Ca(0x1F, ReportHtmlLightColors.Green600),
         Danger = C(ReportHtmlLightColors.Rose600),
         DangerHover = C(ReportHtmlLightColors.Rose700),
+        ErrorSubtle = Ca(0x1F, ReportHtmlLightColors.Rose600),
         Warning = C(ReportHtmlLightColors.Amber500),
+        WarningSubtle = Ca(0x1F, ReportHtmlLightColors.Amber500),
         // Sidebar active: bg-sky-50 text-sky-700
         NavActiveBg = C(ReportHtmlLightColors.Sky50),
         NavActiveText = C(ReportHtmlLightColors.Sky700),
-        // AssistantReasoningBlock light
-        ToolThinkingBorder = C(ReportHtmlLightColors.Violet200),
-        ToolThinkingBg = C(ReportHtmlLightColors.Violet50),
-        ToolThinkingText = C(ReportHtmlLightColors.Violet900),
-        ToolSuccessBorder = C(ReportHtmlLightColors.Green600),
-        ToolSuccessBg = C(ReportHtmlLightColors.Green50),
+        // Tool cards — neutral elevated
+        ToolThinkingBorder = C(ReportHtmlLightColors.Slate200),
+        ToolThinkingBg = C(ReportHtmlLightColors.White),
+        ToolThinkingText = C(ReportHtmlLightColors.Slate600),
+        ToolSuccessBorder = C(ReportHtmlLightColors.Slate200),
+        ToolSuccessBg = C(ReportHtmlLightColors.White),
         ToolSuccessText = C(ReportHtmlLightColors.Green700),
-        ToolFailureBorder = C(ReportHtmlLightColors.Rose600),
-        ToolFailureBg = C(ReportHtmlLightColors.Rose50),
+        ToolFailureBorder = C(ReportHtmlLightColors.Slate200),
+        ToolFailureBg = C(ReportHtmlLightColors.White),
         ToolFailureText = C(ReportHtmlLightColors.Rose700),
         IconBadgeStart = C(ReportHtmlLightColors.Sky600),
         IconBadgeEnd = C(ReportHtmlLightColors.Sky100),
@@ -135,4 +143,10 @@ public static class LightAppThemePalette
     };
 
     private static Color C(string hex) => AppThemeColor.FromHex(hex);
+
+    private static Color Ca(byte alpha, string hex)
+    {
+        var rgb = AppThemeColor.FromHex(hex);
+        return Color.FromArgb(alpha, rgb.R, rgb.G, rgb.B);
+    }
 }

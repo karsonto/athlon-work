@@ -1,3 +1,4 @@
+using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -7,6 +8,7 @@ namespace Athlon.Agent.App.ViewModels;
 public sealed partial class SessionHistoryItemViewModel : ObservableObject
 {
     private readonly Action<string>? _stopSession;
+    private readonly int _messageCount;
 
     public SessionHistoryItemViewModel(
         SessionIndexEntry entry,
@@ -20,6 +22,7 @@ public sealed partial class SessionHistoryItemViewModel : ObservableObject
         IsActive = isActive;
         IsRunning = isRunning;
         _stopSession = stopSession;
+        _messageCount = SessionMetaReader.TryReadMessageCount(entry.Path);
     }
 
     public string Id { get; }
@@ -31,6 +34,12 @@ public sealed partial class SessionHistoryItemViewModel : ObservableObject
     private bool isRunning;
 
     public bool CanStop => IsRunning;
+
+    public string MetaText => IsRunning
+        ? "生成中…"
+        : _messageCount > 0
+            ? $"已完成 • {_messageCount} 条消息"
+            : UpdatedAtText;
 
     [RelayCommand(CanExecute = nameof(CanStop))]
     private void StopSession() => _stopSession?.Invoke(Id);
