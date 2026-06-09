@@ -14,26 +14,27 @@ public static class DarkAppThemePalette
 
     private static UiChromeColors CreateChrome() => new()
     {
-        // Base — deep neutral with subtle warmth instead of pure gray
-        AppBackground = C("#0C0C0E"),
-        Chrome = C("#161618"),
-        Panel = C("#202022"),
-        PanelAlt = C("#262628"),
+        // Base — Calm Intelligence dark theme
+        AppBackground = C("#0A0A0C"),
+        Chrome = C("#121214"),
+        Panel = C("#1A1A1E"),
+        PanelAlt = C("#222226"),
         Composer = C("#1C1C1E"),
         ComposerBorder = C("#2C2C30"),
 
-        // Borders — softer than before
-        Border = C("#323236"),
+        // Borders
+        Border = C("#27272A"),
+        BorderHover = C("#3F3F46"),
 
-        // Text — high contrast
-        Text = C("#F4F4F5"),
-        SubtleText = C("#9CA3AF"),
-        DisabledText = C("#6B7280"),
+        // Text — high contrast with improved readability
+        Text = C("#F9FAFB"),
+        SubtleText = C("#A1A1AA"),
+        DisabledText = C("#71717A"),
         DisabledBackground = C("#323236"),
 
-        // Accent — more vibrant blue
-        Accent = C("#3B82F6"),
-        AccentHover = C("#2563EB"),
+        // Accent — Indigo for better distinction
+        Accent = C("#6366F1"),
+        AccentHover = C("#4F46E5"),
 
         // Chat bubbles
         UserBubble = C("#1E3A5F"),
@@ -46,28 +47,28 @@ public static class DarkAppThemePalette
         DangerHover = C("#DC2626"),
         Warning = C("#F59E0B"),
 
-        // Navigation
-        NavActiveBg = C("#1E3A5F"),
-        NavActiveText = C("#93C5FD"),
+        // Navigation — semi-transparent purple for active state
+        NavActiveBg = C("#6366F1"), // Will be applied with opacity in XAML
+        NavActiveText = C("#818CF8"),
 
-        // Tool call cards — refined purple tones
-        ToolThinkingBorder = C("#5B21B6"),
-        ToolThinkingBg = C("#1C1A2E"),
+        // Tool call cards — refined with more vibrant colors
+        ToolThinkingBorder = C("#7C3AED"),
+        ToolThinkingBg = C("#1C192A"),
         ToolThinkingText = C("#C4B5FD"),
-        ToolSuccessBorder = C("#059669"),
-        ToolSuccessBg = C("#142A22"),
+        ToolSuccessBorder = C("#10B981"),
+        ToolSuccessBg = C("#064E3B"),
         ToolSuccessText = C("#6EE7B7"),
-        ToolFailureBorder = C("#DC2626"),
-        ToolFailureBg = C("#2A1418"),
+        ToolFailureBorder = C("#EF4444"),
+        ToolFailureBg = C("#450A0A"),
         ToolFailureText = C("#FDA4AF"),
 
         // Icon badges
         IconBadgeStart = C("#0284C7"),
         IconBadgeEnd = C("#7DD3FC"),
 
-        // Hover states — more distinct
-        HoverNeutral = C("#27272A"),
-        HoverNeutralAlt = C("#2D2D31"),
+        // Hover states — more distinct for better feedback
+        HoverNeutral = C("#1A1A1E"),
+        HoverNeutralAlt = C("#222226"),
         HoverActive = C("#254766"),
         HoverTool = C("#242237"),
         HoverToolPressed = C("#2C2942"),
@@ -110,13 +111,13 @@ public static class DarkAppThemePalette
         ScrollThumb = C("#8888A0"),
         ScrollThumbOpacity = 0.50,
 
-        // Chat gradient — warmer deep tone
-        ChatBackgroundTop = C("#111114"),
-        ChatBackgroundBottom = C("#0C0C0E"),
+        // Chat gradient — Calm Intelligence deep tone
+        ChatBackgroundTop = C("#121214"),
+        ChatBackgroundBottom = C("#0A0A0C"),
 
-        // Icon badge gradient
-        IconBadgeGradientStart = C("#DBEAFE"),
-        IconBadgeGradientEnd = C("#3B82F6"),
+        // Icon badge gradient — Indigo theme
+        IconBadgeGradientStart = C("#E0E7FF"),
+        IconBadgeGradientEnd = C("#6366F1"),
     };
 
     private static EditorThemeColors CreateEditor() => new()
