@@ -99,9 +99,9 @@ public static partial class MarkdownDisplayNormalizer
 
     private static bool IsAdjacentToFence(string[] lines, int thematicBreakIndex)
     {
-        if (IsFenceLine(lines[thematicBreakIndex - 1]))
+        if (thematicBreakIndex > 0 && IsFenceLine(lines[thematicBreakIndex - 1]))
         {
-            return thematicBreakIndex > 0;
+            return true;
         }
 
         if (thematicBreakIndex < lines.Length - 1 && IsFenceLine(lines[thematicBreakIndex + 1]))

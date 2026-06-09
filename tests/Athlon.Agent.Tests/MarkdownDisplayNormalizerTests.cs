@@ -47,6 +47,38 @@ public sealed class MarkdownDisplayNormalizerTests
     }
 
     [Fact]
+    public void NormalizeForDisplay_does_not_throw_when_rule_is_first_line()
+    {
+        const string markdown = """
+            ---
+
+            section one
+            """;
+
+        var normalized = MarkdownDisplayNormalizer.NormalizeForDisplay(markdown);
+
+        Assert.Contains("---", normalized, StringComparison.Ordinal);
+        Assert.Contains("section one", normalized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NormalizeForDisplay_does_not_throw_when_streaming_starts_with_rule_before_fence()
+    {
+        const string markdown = """
+            ---
+
+            ```text
+            src/
+            """;
+
+        var normalized = MarkdownDisplayNormalizer.NormalizeForDisplay(markdown);
+
+        Assert.DoesNotContain("---", normalized, StringComparison.Ordinal);
+        Assert.Contains("```text", normalized, StringComparison.Ordinal);
+        Assert.Contains("src/", normalized, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExtractFencedBlocks_parses_language_and_content()
     {
         const string markdown = """

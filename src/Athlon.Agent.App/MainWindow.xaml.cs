@@ -502,10 +502,12 @@ public partial class MainWindow : Window
             {
                 case Key.Down:
                     _viewModel.MoveSlashCompletionSelection(1);
+                    SyncSlashCompletionListSelection();
                     e.Handled = true;
                     return;
                 case Key.Up:
                     _viewModel.MoveSlashCompletionSelection(-1);
+                    SyncSlashCompletionListSelection();
                     e.Handled = true;
                     return;
                 case Key.Tab:
@@ -529,10 +531,12 @@ public partial class MainWindow : Window
             {
                 case Key.Down:
                     _viewModel.MoveAtCompletionSelection(1);
+                    SyncAtCompletionListSelection();
                     e.Handled = true;
                     return;
                 case Key.Up:
                     _viewModel.MoveAtCompletionSelection(-1);
+                    SyncAtCompletionListSelection();
                     e.Handled = true;
                     return;
                 case Key.Tab:
@@ -605,6 +609,19 @@ public partial class MainWindow : Window
         }
 
         _viewModel.UpdateComposerCompletion(textBox.Text, textBox.CaretIndex);
+        Dispatcher.BeginInvoke(SyncActiveCompletionListSelection, DispatcherPriority.Loaded);
+    }
+
+    private void SyncActiveCompletionListSelection()
+    {
+        if (_viewModel.IsAtCompletionOpen)
+        {
+            SyncAtCompletionListSelection();
+        }
+        else if (_viewModel.IsSlashCompletionOpen)
+        {
+            SyncSlashCompletionListSelection();
+        }
     }
 
     private void AtCompletionListBox_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -617,6 +634,30 @@ public partial class MainWindow : Window
     {
         AcceptSlashCompletion();
         e.Handled = true;
+    }
+
+    private void SyncAtCompletionListSelection()
+    {
+        if (!_viewModel.IsAtCompletionOpen || AtCompletionListBox.Items.Count == 0)
+        {
+            return;
+        }
+
+        var index = Math.Clamp(_viewModel.SelectedAtCompletionIndex, 0, AtCompletionListBox.Items.Count - 1);
+        AtCompletionListBox.SelectedIndex = index;
+        AtCompletionListBox.ScrollIntoView(AtCompletionListBox.Items[index]);
+    }
+
+    private void SyncSlashCompletionListSelection()
+    {
+        if (!_viewModel.IsSlashCompletionOpen || SlashCompletionListBox.Items.Count == 0)
+        {
+            return;
+        }
+
+        var index = Math.Clamp(_viewModel.SelectedSlashCompletionIndex, 0, SlashCompletionListBox.Items.Count - 1);
+        SlashCompletionListBox.SelectedIndex = index;
+        SlashCompletionListBox.ScrollIntoView(SlashCompletionListBox.Items[index]);
     }
 
     private void AcceptSlashCompletion()

@@ -167,6 +167,17 @@
         </Setter>
     </Style>
 
+    <Style x:Key="SessionActionButtonStyle" TargetType="Button" BasedOn="{StaticResource SessionDeleteButtonStyle}">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="Opacity" Value="0.6" />
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Opacity" Value="1" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <Style x:Key="McpSidebarItemButtonStyle" TargetType="Button">
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="Background" Value="Transparent" />
@@ -588,11 +599,11 @@
                     <Border x:Name="Track"
                             Background="Transparent"
                             Width="12"
-                            Padding="4,0"
+                            Padding="0"
                             HorizontalAlignment="Stretch">
                         <Border x:Name="Line"
                                 Width="1"
-                                HorizontalAlignment="Center"
+                                HorizontalAlignment="Right"
                                 Background="{DynamicResource Brush.Border}"
                                 Opacity="0.6" />
                     </Border>
@@ -620,11 +631,11 @@
                     <Border x:Name="Track"
                             Background="Transparent"
                             Height="12"
-                            Padding="0,4"
+                            Padding="0"
                             VerticalAlignment="Stretch">
                         <Border x:Name="Line"
                                 Height="1"
-                                VerticalAlignment="Center"
+                                VerticalAlignment="Bottom"
                                 Background="{DynamicResource Brush.Border}"
                                 Opacity="0.6" />
                     </Border>

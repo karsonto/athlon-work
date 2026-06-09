@@ -81,8 +81,7 @@
         <Border Grid.Row="1"
                 Grid.Column="0"
                 Background="{StaticResource Brush.AppBackground}"
-                BorderBrush="{StaticResource Brush.Border}"
-                BorderThickness="0,0,1,0">
+                BorderThickness="0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderRowHeight}" />
@@ -93,18 +92,12 @@
                 <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}" Padding="20,0">
                     <Grid>
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Border Width="24"
-                                    Height="24"
-                                    CornerRadius="6"
-                                    Background="{StaticResource Brush.IconBadge}"
-                                    Margin="0,0,8,0">
-                                <Image Source="/Assets/app-icon-48.png"
-                                       Width="16"
-                                       Height="16"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"
-                                       RenderOptions.BitmapScalingMode="HighQuality" />
-                            </Border>
+                            <Image Source="/Assets/app-icon-48.png"
+                                   Width="24"
+                                   Height="24"
+                                   Margin="0,0,8,0"
+                                   VerticalAlignment="Center"
+                                   RenderOptions.BitmapScalingMode="HighQuality" />
                             <TextBlock Text="Athlon" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </StackPanel>
                         <Button Command="{Binding NewSessionCommand}"
@@ -538,25 +531,7 @@
                                TextAlignment="Center"
                                TextWrapping="Wrap"
                                MaxWidth="400"
-                               Margin="0,12,0,32" />
-                    <WrapPanel HorizontalAlignment="Center">
-                        <Button Style="{StaticResource SuggestionChipStyle}"
-                                Command="{Binding ApplySuggestionCommand}"
-                                CommandParameter="分析当前项目的 UI 设计问题"
-                                Content="🔍 分析当前项目的 UI 设计问题" />
-                        <Button Style="{StaticResource SuggestionChipStyle}"
-                                Command="{Binding ApplySuggestionCommand}"
-                                CommandParameter="生成一个响应式登录页面原型"
-                                Content="📱 生成一个响应式登录页面原型" />
-                        <Button Style="{StaticResource SuggestionChipStyle}"
-                                Command="{Binding ApplySuggestionCommand}"
-                                CommandParameter="优化代码结构和性能"
-                                Content="⚡ 优化代码结构和性能" />
-                        <Button Style="{StaticResource SuggestionChipStyle}"
-                                Command="{Binding ApplySuggestionCommand}"
-                                CommandParameter="创建设计系统规范文档"
-                                Content="🎨 创建设计系统规范文档" />
-                    </WrapPanel>
+                               Margin="0,12,0,0" />
                 </StackPanel>
 
                 <!-- Messages (ChatPane bubbles) -->
@@ -587,9 +562,9 @@
                                         </Style>
                                     </StackPanel.Style>
 
-                                    <Border>
-                                        <Border.Style>
-                                            <Style TargetType="Border" BasedOn="{StaticResource MessageAvatarAssistantStyle}">
+                                    <Image RenderOptions.BitmapScalingMode="HighQuality">
+                                        <Image.Style>
+                                            <Style TargetType="Image" BasedOn="{StaticResource MessageAvatarAssistantImageStyle}">
                                                 <Setter Property="Visibility" Value="Visible" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsUser}" Value="True">
@@ -600,10 +575,8 @@
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
-                                        </Border.Style>
-                                        <TextBlock Text="A" Foreground="White" FontWeight="SemiBold"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" />
-                                    </Border>
+                                        </Image.Style>
+                                    </Image>
 
                                     <StackPanel Orientation="Vertical"
                                                 MaxWidth="640"
@@ -1126,11 +1099,14 @@
                                 <Grid>
                                 <ListBox x:Name="SlashCompletionListBox"
                                          ItemsSource="{Binding SlashCompletionItems}"
-                                         SelectedIndex="{Binding SelectedSlashCompletionIndex}"
+                                         SelectedIndex="{Binding SelectedSlashCompletionIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Focusable="False"
+                                         KeyboardNavigation.DirectionalNavigation="Contained"
                                          MouseDoubleClick="SlashCompletionListBox_OnMouseDoubleClick"
                                          BorderThickness="0"
                                          Background="Transparent"
-                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                         ItemContainerStyle="{StaticResource CompletionListBoxItemStyle}">
                                     <ListBox.Style>
                                         <Style TargetType="ListBox">
                                             <Setter Property="Visibility" Value="Collapsed" />
@@ -1172,11 +1148,14 @@
                                 </ListBox>
                                 <ListBox x:Name="AtCompletionListBox"
                                          ItemsSource="{Binding AtCompletionItems}"
-                                         SelectedIndex="{Binding SelectedAtCompletionIndex}"
+                                         SelectedIndex="{Binding SelectedAtCompletionIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                         Focusable="False"
+                                         KeyboardNavigation.DirectionalNavigation="Contained"
                                          MouseDoubleClick="AtCompletionListBox_OnMouseDoubleClick"
                                          BorderThickness="0"
                                          Background="Transparent"
-                                         ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                         ItemContainerStyle="{StaticResource CompletionListBoxItemStyle}">
                                     <ListBox.Style>
                                         <Style TargetType="ListBox">
                                             <Setter Property="Visibility" Value="Collapsed" />
@@ -1238,12 +1217,7 @@
                                 </Grid>
                             </Border>
                         </Popup>
-                        <Border Grid.Row="2"
-                                BorderBrush="{StaticResource Brush.Border}"
-                                BorderThickness="0,1,0,0"
-                                Margin="0,12,0,0"
-                                Padding="0,12,0,0">
-                            <Grid>
+                        <Grid Grid.Row="2" Margin="0,8,0,0">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
                                     <Button Command="{Binding SelectImagesCommand}"
                                             Style="{StaticResource ComposerToolButtonStyle}"
@@ -1276,8 +1250,7 @@
                                         </StackPanel>
                                     </Button>
                                 </StackPanel>
-                            </Grid>
-                        </Border>
+                        </Grid>
                         <TextBlock Grid.Row="3"
                                    Text="按 Enter 发送消息，Shift+Enter 换行"
                                    Foreground="{StaticResource Brush.DisabledText}"
@@ -1590,8 +1563,7 @@
                 Width="28"
                 HorizontalAlignment="Right"
                 Background="{StaticResource Brush.Chrome}"
-                BorderBrush="{StaticResource Brush.Border}"
-                BorderThickness="1,0,0,0"
+                BorderThickness="0"
                 Panel.ZIndex="2"
                 Visibility="Collapsed"
                 ToolTip="{Binding ContextSidebarToggleToolTip}">
@@ -1610,8 +1582,7 @@
                 Grid.Row="1"
                 Grid.Column="2"
                 Background="{StaticResource Brush.AppBackground}"
-                BorderBrush="{StaticResource Brush.Border}"
-                BorderThickness="1,0,0,0">
+                BorderThickness="0">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderRowHeight}" />
@@ -1636,15 +1607,11 @@
                     </Grid>
                 </Border>
 
-                <UniformGrid Grid.Row="1" Columns="3" Background="{StaticResource Brush.Chrome}">
+                <UniformGrid Grid.Row="1" Columns="2" Background="{StaticResource Brush.Chrome}">
                     <RadioButton x:Name="ContextTabFiles"
                                  GroupName="ContextTabs"
                                  Content="文件"
                                  IsChecked="True"
-                                 Style="{StaticResource ContextTabButtonStyle}" />
-                    <RadioButton x:Name="ContextTabMemory"
-                                 GroupName="ContextTabs"
-                                 Content="记忆"
                                  Style="{StaticResource ContextTabButtonStyle}" />
                     <RadioButton x:Name="ContextTabSkills"
                                  GroupName="ContextTabs"
@@ -1653,18 +1620,18 @@
                 </UniformGrid>
 
                 <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16">
+                    <ScrollViewer.Style>
+                        <Style TargetType="ScrollViewer">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked, ElementName=ContextTabFiles}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ScrollViewer.Style>
                     <!-- Files tab -->
                     <StackPanel>
-                        <StackPanel.Style>
-                            <Style TargetType="StackPanel">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsChecked, ElementName=ContextTabFiles}" Value="True">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </StackPanel.Style>
                         <TextBlock Text="{Binding ActiveWorkspaceName}"
                                    FontWeight="SemiBold"
                                    FontSize="13"
@@ -1722,38 +1689,18 @@
                 </ScrollViewer>
 
                 <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16">
-                    <!-- Memory tab placeholder -->
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,40,0,0">
-                        <StackPanel.Style>
-                            <Style TargetType="StackPanel">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsChecked, ElementName=ContextTabMemory}" Value="True">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </StackPanel.Style>
-                        <TextBlock Text="暂无记忆条目"
-                                   Foreground="{StaticResource Brush.SubtleText}"
-                                   FontSize="13"
-                                   HorizontalAlignment="Center" />
-                    </StackPanel>
-                </ScrollViewer>
-
-                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16">
+                    <ScrollViewer.Style>
+                        <Style TargetType="ScrollViewer">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked, ElementName=ContextTabSkills}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ScrollViewer.Style>
                     <!-- Skills + MCP tab -->
                     <StackPanel>
-                        <StackPanel.Style>
-                            <Style TargetType="StackPanel">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsChecked, ElementName=ContextTabSkills}" Value="True">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </StackPanel.Style>
                         <TextBlock Text="技能" Foreground="{StaticResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
                         <Border Background="{StaticResource Brush.Panel}"
                                 BorderBrush="{StaticResource Brush.Border}"

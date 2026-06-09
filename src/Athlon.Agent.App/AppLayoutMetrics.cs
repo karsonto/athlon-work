@@ -27,5 +27,5 @@ public static class AppLayoutMetrics
     public const double SplitterHitSize = 12;
 
     /// <summary>Inset of the visible splitter line inside the hit target.</summary>
-    public const double SplitterLineInset = 4;
+    public const double SplitterLineInset = 0;
 }
