@@ -19,7 +19,9 @@ public sealed class SessionUiCache
         Action? requestScroll = null,
         Action? requestScrollImmediate = null)
     {
-        var controller = _controllers.GetOrAdd(sessionId, id => new SessionTurnUiController(_dispatcher, requestScroll));
+        var controller = _controllers.GetOrAdd(
+            sessionId,
+            id => new SessionTurnUiController(_dispatcher, requestScroll, requestScrollImmediate));
         if (requestScroll is not null)
         {
             controller.RequestScroll = requestScroll;

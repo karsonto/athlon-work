@@ -35,21 +35,38 @@ public sealed class SessionTurnUiController
     private string? _pendingReasoningMessageId;
     private DispatcherTimer? _streamingFlushTimer;
 
-    public SessionTurnUiController(Dispatcher dispatcher, Action? requestScroll = null)
+    private Action _requestScroll = NoOpScroll;
+    private Action _requestScrollImmediate = NoOpScroll;
+
+    public SessionTurnUiController(Dispatcher dispatcher, Action? requestScroll = null, Action? requestScrollImmediate = null)
     {
         _dispatcher = dispatcher;
         RequestScroll = requestScroll ?? NoOpScroll;
-        RequestScrollImmediate = requestScroll ?? NoOpScroll;
-        _streaming.RequestScroll = RequestScroll;
-        _streaming.RequestScrollImmediate = RequestScrollImmediate;
+        RequestScrollImmediate = requestScrollImmediate ?? requestScroll ?? NoOpScroll;
         Messages = new ObservableCollection<ChatMessageViewModel>();
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages { get; }
 
-    public Action RequestScroll { get; set; }
+    public Action RequestScroll
+    {
+        get => _requestScroll;
+        set
+        {
+            _requestScroll = value ?? NoOpScroll;
+            _streaming.RequestScroll = _requestScroll;
+        }
+    }
 
-    public Action RequestScrollImmediate { get; set; }
+    public Action RequestScrollImmediate
+    {
+        get => _requestScrollImmediate;
+        set
+        {
+            _requestScrollImmediate = value ?? NoOpScroll;
+            _streaming.RequestScrollImmediate = _requestScrollImmediate;
+        }
+    }
 
     public bool IsDisplayed { get; private set; }
 

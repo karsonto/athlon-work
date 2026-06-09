@@ -68,37 +68,54 @@ public partial class MainWindow : Window
             handledEventsToo: true);
     }
 
-    private void AttachChatMessagesScrollViewer()
+    private void AttachChatMessagesScrollViewer() => EnsureChatMessagesScrollViewer();
+
+    private void EnsureChatMessagesScrollViewer()
     {
         if (ChatMessagesList is null)
         {
             return;
         }
 
-        _chatMessagesScrollViewer = FindVisualChild<ScrollViewer>(ChatMessagesList);
-        if (_chatMessagesScrollViewer is null)
+        if (_chatMessagesScrollViewer is not null)
         {
             return;
         }
 
+        ChatMessagesList.ApplyTemplate();
+        var scrollViewer = FindListBoxScrollViewer(ChatMessagesList);
+        if (scrollViewer is null)
+        {
+            ChatMessagesList.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, EnsureChatMessagesScrollViewer);
+            return;
+        }
+
+        _chatMessagesScrollViewer = scrollViewer;
         _chatMessagesScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Visible;
         _chatMessagesScrollViewer.ScrollChanged += ChatMessagesScrollViewer_OnScrollChanged;
     }
 
-    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    private static ScrollViewer? FindListBoxScrollViewer(ListBox listBox)
     {
-        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        if (listBox.Template?.FindName("ScrollViewer", listBox) is ScrollViewer named)
         {
-            var child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T match)
+            return named;
+        }
+
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(listBox); i++)
+        {
+            var child = VisualTreeHelper.GetChild(listBox, i);
+            if (child is ScrollViewer direct)
             {
-                return match;
+                return direct;
             }
 
-            var nested = FindVisualChild<T>(child);
-            if (nested is not null)
+            for (var j = 0; j < VisualTreeHelper.GetChildrenCount(child); j++)
             {
-                return nested;
+                if (VisualTreeHelper.GetChild(child, j) is ScrollViewer nested)
+                {
+                    return nested;
+                }
             }
         }
 
@@ -184,13 +201,58 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainWindowViewModel.HasChatMessages))
         {
-            Dispatcher.Invoke(ApplyContextSidebarLayout);
+            Dispatcher.Invoke(() =>
+            {
+                EnsureChatMessagesScrollViewer();
+                ApplyContextSidebarLayout();
+                if (_viewModel.HasChatMessages)
+                {
+                    _autoScrollEnabled = true;
+                    ScrollChatToEnd(immediate: true);
+                }
+            });
         }
 
         if (e.PropertyName == nameof(MainWindowViewModel.HasOpenEditorTabs))
         {
             Dispatcher.Invoke(ApplyEditorPaneLayout);
         }
+
+        if (e.PropertyName == nameof(MainWindowViewModel.IsBusy))
+        {
+            Dispatcher.Invoke(UpdateStreamingAutoScroll);
+        }
+    }
+
+    private void UpdateStreamingAutoScroll()
+    {
+        if (_viewModel.IsBusy)
+        {
+            _autoScrollEnabled = true;
+            if (ChatMessagesList is not null)
+            {
+                ChatMessagesList.LayoutUpdated -= ChatMessagesList_OnLayoutUpdatedWhileBusy;
+                ChatMessagesList.LayoutUpdated += ChatMessagesList_OnLayoutUpdatedWhileBusy;
+            }
+
+            ScrollChatToEnd(immediate: true);
+            return;
+        }
+
+        if (ChatMessagesList is not null)
+        {
+            ChatMessagesList.LayoutUpdated -= ChatMessagesList_OnLayoutUpdatedWhileBusy;
+        }
+    }
+
+    private void ChatMessagesList_OnLayoutUpdatedWhileBusy(object? sender, EventArgs e)
+    {
+        if (!_viewModel.IsBusy || !_autoScrollEnabled || ShouldSuppressChatAutoScroll())
+        {
+            return;
+        }
+
+        ScrollChatToEnd(immediate: false);
     }
 
     private void ApplyEditorPaneLayout()
@@ -285,9 +347,8 @@ public partial class MainWindow : Window
             ContextSidebarSplitter.Visibility = Visibility.Collapsed;
             if (ContextSidebarCollapsedRail is not null)
             {
-                ContextSidebarCollapsedRail.Visibility = _viewModel.HasChatMessages
-                    ? Visibility.Collapsed
-                    : Visibility.Visible;
+                // No edge affordance without an active conversation; use the chat header toggle instead.
+                ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
             }
         }
     }
@@ -360,10 +421,7 @@ public partial class MainWindow : Window
 
     private void ScrollChatToEnd(bool immediate)
     {
-        if (_chatMessagesScrollViewer is null)
-        {
-            return;
-        }
+        EnsureChatMessagesScrollViewer();
 
         if (!_autoScrollEnabled || ShouldSuppressChatAutoScroll())
         {
@@ -378,6 +436,8 @@ public partial class MainWindow : Window
 
         if (_scrollThrottleTimer is not null)
         {
+            _scrollThrottleTimer.Stop();
+            _scrollThrottleTimer.Start();
             return;
         }
 
@@ -409,24 +469,65 @@ public partial class MainWindow : Window
 
     private void ExecuteScrollToEnd()
     {
-        if (_chatMessagesScrollViewer is null)
-        {
-            return;
-        }
+        EnsureChatMessagesScrollViewer();
 
         if (!_autoScrollEnabled || ShouldSuppressChatAutoScroll())
         {
             return;
         }
 
-        _chatMessagesScrollViewer.Dispatcher.BeginInvoke(
-            DispatcherPriority.Background,
+        if (ChatMessagesList is null)
+        {
+            return;
+        }
+
+        ChatMessagesList.Dispatcher.BeginInvoke(
+            DispatcherPriority.Loaded,
             () =>
             {
+                if (!_autoScrollEnabled || ShouldSuppressChatAutoScroll())
+                {
+                    return;
+                }
+
                 _isProgrammaticScroll = true;
-                _chatMessagesScrollViewer!.ScrollToEnd();
-                _isProgrammaticScroll = false;
+                ScrollChatListToBottom();
+
+                ChatMessagesList.Dispatcher.BeginInvoke(
+                    DispatcherPriority.ApplicationIdle,
+                    () =>
+                    {
+                        if (_autoScrollEnabled && !ShouldSuppressChatAutoScroll())
+                        {
+                            ScrollChatListToBottom();
+                        }
+
+                        _isProgrammaticScroll = false;
+                    });
             });
+    }
+
+    private void ScrollChatListToBottom()
+    {
+        if (ChatMessagesList is null)
+        {
+            return;
+        }
+
+        if (ChatMessagesList.Items.Count > 0)
+        {
+            ChatMessagesList.UpdateLayout();
+            ChatMessagesList.ScrollIntoView(ChatMessagesList.Items[^1]);
+        }
+
+        EnsureChatMessagesScrollViewer();
+        if (_chatMessagesScrollViewer is null)
+        {
+            return;
+        }
+
+        _chatMessagesScrollViewer.UpdateLayout();
+        _chatMessagesScrollViewer.ScrollToVerticalOffset(_chatMessagesScrollViewer.ScrollableHeight);
     }
 
     private void ChatMessagesScrollViewer_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -446,6 +547,12 @@ public partial class MainWindow : Window
         if (_chatScrollLockedByUser)
         {
             _autoScrollEnabled = false;
+            return;
+        }
+
+        if (_viewModel.IsBusy)
+        {
+            _autoScrollEnabled = true;
             return;
         }
 
@@ -477,7 +584,27 @@ public partial class MainWindow : Window
             return;
         }
 
-        _autoScrollEnabled = IsNearBottom(viewer);
+        // Content grew during streaming while the user was pinned to the bottom.
+        if (e.ExtentHeightChange > 0)
+        {
+            if (_autoScrollEnabled)
+            {
+                ExecuteScrollToEnd();
+                return;
+            }
+
+            if (_viewModel.IsBusy && IsNearBottom(viewer))
+            {
+                _autoScrollEnabled = true;
+                ExecuteScrollToEnd();
+                return;
+            }
+        }
+
+        if (Math.Abs(e.VerticalChange) > 0.01)
+        {
+            _autoScrollEnabled = IsNearBottom(viewer);
+        }
     }
 
     private static bool IsNearBottom(ScrollViewer viewer)
@@ -496,6 +623,42 @@ public partial class MainWindow : Window
 
     private void ComposerTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            if (TryPasteImagesFromClipboard())
+            {
+                e.Handled = true;
+                return;
+            }
+        }
+
+        if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
+        {
+            if (_viewModel.IsSlashCompletionOpen && TryAcceptSlashCompletion())
+            {
+                e.Handled = true;
+                return;
+            }
+
+            _viewModel.CloseSlashCompletion();
+
+            if (_viewModel.IsAtCompletionOpen && TryAcceptAtCompletion())
+            {
+                e.Handled = true;
+                return;
+            }
+
+            _viewModel.CloseAtCompletion();
+
+            if (_viewModel.SendCommand.CanExecute(null))
+            {
+                _viewModel.SendCommand.Execute(null);
+            }
+
+            e.Handled = true;
+            return;
+        }
+
         if (_viewModel.IsSlashCompletionOpen)
         {
             switch (e.Key)
@@ -511,11 +674,7 @@ public partial class MainWindow : Window
                     e.Handled = true;
                     return;
                 case Key.Tab:
-                    AcceptSlashCompletion();
-                    e.Handled = true;
-                    return;
-                case Key.Enter:
-                    AcceptSlashCompletion();
+                    TryAcceptSlashCompletion();
                     e.Handled = true;
                     return;
                 case Key.Escape:
@@ -540,11 +699,7 @@ public partial class MainWindow : Window
                     e.Handled = true;
                     return;
                 case Key.Tab:
-                    AcceptAtCompletion();
-                    e.Handled = true;
-                    return;
-                case Key.Enter:
-                    AcceptAtCompletion();
+                    TryAcceptAtCompletion();
                     e.Handled = true;
                     return;
                 case Key.Escape:
@@ -553,27 +708,6 @@ public partial class MainWindow : Window
                     return;
             }
         }
-
-        if (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
-        {
-            if (TryPasteImagesFromClipboard())
-            {
-                e.Handled = true;
-                return;
-            }
-        }
-
-        if (e.Key != Key.Enter || (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift)
-        {
-            return;
-        }
-
-        if (_viewModel.SendCommand.CanExecute(null))
-        {
-            _viewModel.SendCommand.Execute(null);
-        }
-
-        e.Handled = true;
     }
 
     private void ComposerTextBox_OnPastePreviewExecuted(object sender, ExecutedRoutedEventArgs e)
@@ -626,13 +760,13 @@ public partial class MainWindow : Window
 
     private void AtCompletionListBox_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        AcceptAtCompletion();
+        TryAcceptAtCompletion();
         e.Handled = true;
     }
 
     private void SlashCompletionListBox_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        AcceptSlashCompletion();
+        TryAcceptSlashCompletion();
         e.Handled = true;
     }
 
@@ -660,26 +794,28 @@ public partial class MainWindow : Window
         SlashCompletionListBox.ScrollIntoView(SlashCompletionListBox.Items[index]);
     }
 
-    private void AcceptSlashCompletion()
+    private bool TryAcceptSlashCompletion()
     {
         if (!_viewModel.TryAcceptSlashCompletion(ComposerTextBox.CaretIndex, out var newCaretIndex))
         {
-            return;
+            return false;
         }
 
         ComposerTextBox.Focus();
         ComposerTextBox.CaretIndex = newCaretIndex;
+        return true;
     }
 
-    private void AcceptAtCompletion()
+    private bool TryAcceptAtCompletion()
     {
         if (!_viewModel.TryAcceptAtCompletion(ComposerTextBox.CaretIndex, out var newCaretIndex))
         {
-            return;
+            return false;
         }
 
         ComposerTextBox.Focus();
         ComposerTextBox.CaretIndex = newCaretIndex;
+        return true;
     }
 
     private void WorkspaceTreeItem_OnExpanded(object sender, RoutedEventArgs e)

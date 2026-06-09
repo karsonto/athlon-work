@@ -454,6 +454,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(HasChatMessages));
         ClearContextCommand.NotifyCanExecuteChanged();
+
+        if (IsBusy && e.Action == NotifyCollectionChangedAction.Add)
+        {
+            ScrollChatToBottom?.Invoke();
+        }
     }
 
     private void OnPendingImagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -575,6 +580,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {
+        CloseAtCompletion();
+        CloseSlashCompletion();
+
         if (string.IsNullOrWhiteSpace(ComposerText) && PendingImageAttachments.Count == 0)
         {
             return;
@@ -1091,7 +1099,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (!IsAtCompletionOpen
             || SelectedAtCompletionIndex < 0
             || SelectedAtCompletionIndex >= AtCompletionItems.Count
-            || !TryGetAtQuerySpan(ComposerText, caretIndex, out var atStart, out var atEndExclusive))
+            || !ComposerCompletionQuery.TryGetAtQuerySpan(ComposerText, caretIndex, out var atStart, out var atEndExclusive))
         {
             return false;
         }
@@ -1162,7 +1170,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (!IsSlashCompletionOpen
             || SelectedSlashCompletionIndex < 0
             || SelectedSlashCompletionIndex >= SlashCompletionItems.Count
-            || !TryGetSlashQuerySpan(ComposerText, caretIndex, out var slashStart, out var slashEndExclusive))
+            || !ComposerCompletionQuery.TryGetSlashQuerySpan(ComposerText, caretIndex, out var slashStart, out var slashEndExclusive))
         {
             return false;
         }
@@ -1563,7 +1571,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private static bool TryGetAtQuery(string text, int caretIndex, out string query)
     {
         query = string.Empty;
-        if (!TryGetAtQuerySpan(text, caretIndex, out var atStart, out var atEndExclusive))
+        if (!ComposerCompletionQuery.TryGetAtQuerySpan(text, caretIndex, out var atStart, out var atEndExclusive))
         {
             return false;
         }
@@ -1575,89 +1583,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private static bool TryGetSlashQuery(string text, int caretIndex, out string query)
     {
         query = string.Empty;
-        if (!TryGetSlashQuerySpan(text, caretIndex, out var slashStart, out var slashEndExclusive))
+        if (!ComposerCompletionQuery.TryGetSlashQuerySpan(text, caretIndex, out var slashStart, out var slashEndExclusive))
         {
             return false;
         }
 
         query = text[(slashStart + 1)..slashEndExclusive];
         return true;
-    }
-
-    private static bool TryGetSlashQuerySpan(string text, int caretIndex, out int slashStart, out int slashEndExclusive)
-    {
-        slashStart = -1;
-        slashEndExclusive = -1;
-        if (string.IsNullOrEmpty(text))
-        {
-            return false;
-        }
-
-        var safeCaret = Math.Clamp(caretIndex, 0, text.Length);
-        var index = safeCaret - 1;
-        while (index >= 0)
-        {
-            var c = text[index];
-            if (char.IsWhiteSpace(c))
-            {
-                break;
-            }
-
-            if (c == '/')
-            {
-                if (index > 0 && !char.IsWhiteSpace(text[index - 1]))
-                {
-                    return false;
-                }
-
-                slashStart = index;
-                slashEndExclusive = safeCaret;
-                return true;
-            }
-
-            index--;
-        }
-
-        if (safeCaret > 0 && text[0] == '/' && index < 0)
-        {
-            slashStart = 0;
-            slashEndExclusive = safeCaret;
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool TryGetAtQuerySpan(string text, int caretIndex, out int atStart, out int atEndExclusive)
-    {
-        atStart = -1;
-        atEndExclusive = -1;
-        if (string.IsNullOrEmpty(text))
-        {
-            return false;
-        }
-
-        var safeCaret = Math.Clamp(caretIndex, 0, text.Length);
-        var index = safeCaret - 1;
-        while (index >= 0)
-        {
-            var c = text[index];
-            if (char.IsWhiteSpace(c))
-            {
-                break;
-            }
-
-            if (c == '@')
-            {
-                atStart = index;
-                atEndExclusive = safeCaret;
-                return true;
-            }
-
-            index--;
-        }
-
-        return false;
     }
 
     private static bool MatchesQuery(string haystack, string query) =>

@@ -57,6 +57,15 @@
                 MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
             <Grid>
                 <StackPanel Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Left"
+                            Margin="12,0,0,0">
+                    <Image Source="/Assets/app-icon-48.png"
+                           Width="16"
+                           Height="16"
+                           RenderOptions.BitmapScalingMode="HighQuality" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Stretch"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
@@ -362,41 +371,6 @@
                             </ScrollViewer>
                         </StackPanel>
                     </Border>
-
-                    <Border Background="{StaticResource Brush.PanelAlt}"
-                            BorderBrush="{StaticResource Brush.Border}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="8,8">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="工作区"
-                                       Foreground="{StaticResource Brush.SubtleText}"
-                                       FontSize="10"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,6,0" />
-                            <TextBlock Grid.Column="1"
-                                       Text="{Binding ActiveWorkspaceName}"
-                                       FontWeight="SemiBold"
-                                       FontSize="11"
-                                       VerticalAlignment="Center"
-                                       TextTrimming="CharacterEllipsis" />
-                            <Button Grid.Column="2"
-                                    Content="配置"
-                                    Command="{Binding ConfigureWorkspaceCommand}"
-                                    Style="{StaticResource GhostButtonStyle}"
-                                    Padding="6,2"
-                                    FontSize="10"
-                                    MinHeight="22"
-                                    MinWidth="40"
-                                    Margin="6,0,0,0"
-                                    VerticalAlignment="Center" />
-                        </Grid>
-                    </Border>
                 </StackPanel>
             </Grid>
         </Border>
@@ -460,16 +434,6 @@
                         BorderBrush="{StaticResource Brush.Border}"
                         BorderThickness="0,0,0,1"
                         Padding="24,0">
-                    <Border.Style>
-                        <Style TargetType="Border">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding HasChatMessages}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Border.Style>
                     <Grid VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -1632,11 +1596,37 @@
                     </ScrollViewer.Style>
                     <!-- Files tab -->
                     <StackPanel>
-                        <TextBlock Text="{Binding ActiveWorkspaceName}"
-                                   FontWeight="SemiBold"
-                                   FontSize="13"
-                                   Margin="0,0,0,8"
-                                   TextTrimming="CharacterEllipsis" />
+                        <Border Background="{StaticResource Brush.PanelAlt}"
+                                BorderBrush="{StaticResource Brush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="10,8"
+                                Margin="0,0,0,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="工作区"
+                                               Foreground="{StaticResource Brush.SubtleText}"
+                                               FontSize="11"
+                                               Margin="0,0,0,2" />
+                                    <TextBlock Text="{Binding ActiveWorkspaceName}"
+                                               FontWeight="SemiBold"
+                                               FontSize="13"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        Content="配置"
+                                        Command="{Binding ConfigureWorkspaceCommand}"
+                                        Style="{StaticResource GhostButtonStyle}"
+                                        Padding="8,4"
+                                        FontSize="12"
+                                        MinHeight="28"
+                                        VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
                         <Border Background="{StaticResource Brush.Panel}"
                                 BorderBrush="{StaticResource Brush.Border}"
                                 BorderThickness="1"
