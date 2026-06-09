@@ -398,6 +398,33 @@
         </Setter>
     </Style>
 
+    <Style x:Key="TitleBarMenuDropdownItemStyle" TargetType="{x:Type MenuItem}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+        <Setter Property="Padding" Value="12,8" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type MenuItem}">
+                    <Border x:Name="ItemBorder"
+                            Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}"
+                            CornerRadius="4">
+                        <ContentPresenter ContentSource="Header"
+                                          RecognizesAccessKey="True"
+                                          VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Brush.MenuHover}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="TitleBarTopMenuItemStyle" TargetType="{x:Type MenuItem}">
         <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
         <Setter Property="Background" Value="Transparent" />
@@ -406,12 +433,53 @@
         <Setter Property="Padding" Value="8,0" />
         <Setter Property="Height" Value="32" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
-        <Style.Triggers>
-            <Trigger Property="IsHighlighted" Value="True">
-                <Setter Property="Background" Value="{DynamicResource Brush.HoverNeutral}" />
-                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
-            </Trigger>
-        </Style.Triggers>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource TitleBarMenuDropdownItemStyle}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type MenuItem}">
+                    <Border x:Name="Border"
+                            Background="{TemplateBinding Background}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <Grid>
+                            <ContentPresenter x:Name="HeaderHost"
+                                              ContentSource="Header"
+                                              RecognizesAccessKey="True"
+                                              VerticalAlignment="Center"
+                                              TextElement.Foreground="{TemplateBinding Foreground}" />
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsSubmenuOpen}"
+                                   Placement="Bottom"
+                                   PlacementTarget="{Binding ElementName=Border}"
+                                   PopupAnimation="Fade"
+                                   VerticalOffset="2">
+                                <Border Background="{DynamicResource Brush.MenuBackground}"
+                                        BorderBrush="{DynamicResource Brush.Border}"
+                                        BorderThickness="1"
+                                        CornerRadius="6"
+                                        Padding="4"
+                                        SnapsToDevicePixels="True">
+                                    <StackPanel IsItemsHost="True"
+                                                KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.HoverNeutral}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                        </Trigger>
+                        <Trigger Property="IsSubmenuOpen" Value="True">
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource Brush.HoverNeutral}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style x:Key="WindowCaptionButtonStyle" TargetType="Button">
