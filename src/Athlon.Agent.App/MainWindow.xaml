@@ -32,7 +32,7 @@
     <Grid>
         <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="{x:Static app:AppLayoutMetrics.WindowChromeHeight}" />
+            <RowDefinition Height="{x:Static app:AppLayoutMetrics.WindowChromeRowHeight}" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -85,7 +85,7 @@
                 BorderThickness="0,0,1,0">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}" />
+                    <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderRowHeight}" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -1614,7 +1614,7 @@
                 BorderThickness="1,0,0,0">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}" />
+                    <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderRowHeight}" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>

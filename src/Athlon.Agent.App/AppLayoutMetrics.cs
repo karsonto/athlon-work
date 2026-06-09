@@ -1,3 +1,5 @@
+using System.Windows;
+
 namespace Athlon.Agent.App;
 
 /// <summary>Shared layout sizes so split-pane chrome lines up.</summary>
@@ -11,6 +13,12 @@ public static class AppLayoutMetrics
 
     /// <summary>Per-panel header height (sidebar, chat, context).</summary>
     public const double PanelHeaderHeight = 56;
+
+    /// <summary><see cref="WindowChromeHeight"/> as <see cref="GridLength"/> for row definitions.</summary>
+    public static readonly GridLength WindowChromeRowHeight = new(WindowChromeHeight);
+
+    /// <summary><see cref="PanelHeaderHeight"/> as <see cref="GridLength"/> for row definitions.</summary>
+    public static readonly GridLength PanelHeaderRowHeight = new(PanelHeaderHeight);
 
     /// <summary>Gap between scrollbars and adjacent content.</summary>
     public const double ScrollBarGutter = 6;
