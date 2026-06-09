@@ -88,7 +88,11 @@ public partial class App : Application
             StartupTrace($"OnExit cleanup failed: {ex}");
         }
 
-        _services?.Dispose();
+        if (_services is not null)
+        {
+            _services.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+
         base.OnExit(e);
     }
 

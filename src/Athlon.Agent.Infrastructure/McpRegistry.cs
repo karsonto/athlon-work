@@ -21,6 +21,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
     private readonly ConcurrentDictionary<string, McpServerStatus> _statuses = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, IReadOnlyList<McpTool>> _tools = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private int _disposed;
 
     public IReadOnlyList<McpServerStatus> GetStatuses() =>
         _statuses.Values.OrderBy(status => status.Name, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -224,6 +225,11 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
 
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return;
+        }
+
         foreach (var client in _clients.Values)
         {
             try { await client.DisposeAsync(); } catch { /* ignore */ }
