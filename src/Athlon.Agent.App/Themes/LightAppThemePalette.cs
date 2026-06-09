@@ -26,6 +26,7 @@ public static class LightAppThemePalette
         Composer = C(ReportHtmlLightColors.White),
         ComposerBorder = C(ReportHtmlLightColors.Slate200),
         Border = C(ReportHtmlLightColors.Slate200),
+        BorderHover = C(ReportHtmlLightColors.Slate300),
         Text = C(ReportHtmlLightColors.Slate900),
         SubtleText = C(ReportHtmlLightColors.Slate500),
         DisabledText = C(ReportHtmlLightColors.Slate400),
