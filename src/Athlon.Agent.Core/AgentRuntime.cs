@@ -91,7 +91,8 @@ public sealed class AgentRuntime(
             var environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
             var modelToolRound = 0;
             var maxModelToolRounds = AgentLoopOptionsScope.Current?.MaxModelToolRounds;
-            var modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
+            var modelMessageCache = new ModelMessageCache();
+            var modelMessages = BuildModelMessagesForSession(modelMessageCache, environmentPrompt, session.Messages);
             var runId = Guid.NewGuid().ToString("N");
             var streamAdapter = new AgentStreamAdapter(session.Id, runId);
             await PublishStreamEventsAsync(callbacks, streamAdapter.CreateRunStarted());
@@ -110,6 +111,7 @@ public sealed class AgentRuntime(
 
             while (true)
             {
+                var historyBeforePreCompletion = session.Messages;
                 session = await RunPreCompletionPipelineAsync(
                     session,
                     callbacks,
@@ -117,8 +119,9 @@ public sealed class AgentRuntime(
                     environmentPrompt,
                     tools,
                     cancellationToken: cancellationToken);
+                modelMessageCache.NotePreCompletionResult(historyBeforePreCompletion, session.Messages);
                 environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
-                modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
+                modelMessages = BuildModelMessagesForSession(modelMessageCache, environmentPrompt, session.Messages);
 
                 var assistantMessageId = Guid.NewGuid().ToString("N");
                 var (updatedSession, response) = await TurnCoordinator.CompleteWithOverflowRetryAsync(
@@ -189,7 +192,7 @@ public sealed class AgentRuntime(
                 }
 
                 environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
-                modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
+                modelMessages = BuildModelMessagesForSession(modelMessageCache, environmentPrompt, session.Messages);
                 foreach (var toolCall in response.ToolCalls)
                 {
                     session = await InvokeToolAndPersistAsync(
@@ -270,7 +273,6 @@ public sealed class AgentRuntime(
             await NotifySessionUpdatedAsync(callbacks, session);
         }
 
-        var persistedNew = false;
         foreach (var message in session.Messages)
         {
             if (messageIdsBefore.Contains(message.Id))
@@ -278,15 +280,11 @@ public sealed class AgentRuntime(
                 continue;
             }
 
-            persistedNew = true;
             await PublishStreamEventsAsync(callbacks, [new AgentStreamEvent.ChatMessageAppended(message)]);
             await PersistMessageAsync(session, message, cancellationToken);
         }
 
-        if (!persistedNew)
-        {
-            await storage.SaveSessionAsync(session, cancellationToken);
-        }
+        await storage.SaveSessionAsync(session, cancellationToken);
 
         return session;
     }
@@ -294,7 +292,6 @@ public sealed class AgentRuntime(
     private async Task PersistMessageAsync(AgentSession session, ChatMessage message, CancellationToken cancellationToken)
     {
         await storage.AppendConversationMessageAsync(session.Id, message, cancellationToken);
-        await storage.SaveSessionAsync(session, cancellationToken);
     }
 
     private static bool HasCompactionStructureChange(AgentSession session, HashSet<string> messageIdsBefore)
@@ -368,8 +365,11 @@ public sealed class AgentRuntime(
         return false;
     }
 
-    private List<AgentModelMessage> BuildModelMessagesForSession(string environmentPrompt, IReadOnlyList<ChatMessage> history) =>
-        ModelMessageBuilder.BuildForSession(environmentPrompt, history, settings.ContextCompaction.IncludeReasoningInModelContext);
+    private List<AgentModelMessage> BuildModelMessagesForSession(
+        ModelMessageCache cache,
+        string environmentPrompt,
+        IReadOnlyList<ChatMessage> history) =>
+        cache.Build(environmentPrompt, history, settings.ContextCompaction.IncludeReasoningInModelContext);
 
     internal static List<AgentModelMessage> BuildModelMessages(
         string environmentPrompt,

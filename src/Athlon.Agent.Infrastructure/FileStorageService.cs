@@ -16,8 +16,8 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths, IJsonFileStore jsonFileStore) : IFileStorageService
 {
-    private static readonly SemaphoreSlim IndexLock = new(1, 1);
     private readonly IAppLogger _logger = logger.ForContext("Storage");
+    private readonly SessionIndexCoordinator _indexCoordinator = new(paths, jsonFileStore);
 
     public string RootPath => paths.RootPath;
 
@@ -36,7 +36,7 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
             _logger.Information("Session persisted to {SessionDir}", sessionDir);
         }
 
-        await RefreshIndexAsync(cancellationToken);
+        _indexCoordinator.ScheduleUpdate(session);
     }
 
     public async Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default)
@@ -319,7 +319,7 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
             Directory.Delete(directDir, true);
         }
 
-        await RefreshIndexAsync(cancellationToken);
+        await _indexCoordinator.RefreshIndexImmediateAsync(cancellationToken);
         _logger.Information("Deleted session {SessionId}", sessionId);
     }
 
@@ -378,19 +378,6 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
             string.Equals(Path.GetFullPath(workspace.RootPath), Path.GetFullPath(myDocuments), StringComparison.OrdinalIgnoreCase));
 
         return removed > 0;
-    }
-
-    private async Task RefreshIndexAsync(CancellationToken cancellationToken)
-    {
-        await IndexLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await RebuildSessionIndexAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            IndexLock.Release();
-        }
     }
 
     private void EnsureSessionLogDirectories(string sessionId)

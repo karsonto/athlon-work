@@ -33,7 +33,9 @@ public sealed class SessionStreamingUiContext
                 break;
             case AgentStreamEvent.TextMessageContent(var messageId, var delta):
                 EnsureAssistantBubble(messageId, messages);
-                GetAssistantBubble(messageId)?.AppendStreamingToken(delta);
+                var textBubble = GetAssistantBubble(messageId);
+                textBubble?.AppendStreamingToken(delta);
+                textBubble?.FlushStreamingContent();
                 RequestScroll();
                 break;
             case AgentStreamEvent.TextMessageEnd(var messageId):
@@ -44,7 +46,9 @@ public sealed class SessionStreamingUiContext
                 break;
             case AgentStreamEvent.ReasoningMessageContent(var messageId, var delta):
                 EnsureAssistantBubble(messageId, messages);
-                GetAssistantBubble(messageId)?.AppendStreamingReasoningToken(delta);
+                var reasoningBubble = GetAssistantBubble(messageId);
+                reasoningBubble?.AppendStreamingReasoningToken(delta);
+                reasoningBubble?.FlushStreamingContent();
                 RequestScroll();
                 break;
             case AgentStreamEvent.ReasoningMessageEnd(var messageId):
@@ -214,6 +218,7 @@ public sealed class SessionStreamingUiContext
             return;
         }
 
+        bubble.FlushStreamingContent();
         if (string.IsNullOrWhiteSpace(bubble.Content) && string.IsNullOrWhiteSpace(bubble.ReasoningContent))
         {
             messages.Remove(bubble);

@@ -1,3 +1,5 @@
+using System.Text;
+using System.Windows.Threading;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
@@ -9,9 +11,14 @@ namespace Athlon.Agent.App.ViewModels;
 public sealed partial class ChatMessageViewModel : ObservableObject
 {
     public const int MaxToolDetailDisplayChars = 16_384;
+    public const int DeferredMarkdownThresholdChars = 8_192;
     private const int ToolDetailPreviewChars = 4_096;
+    private static readonly TimeSpan DeferredMarkdownIdleDelay = TimeSpan.FromSeconds(2);
 
     private string _toolDetailFull = string.Empty;
+    private StringBuilder? _streamingContentBuilder;
+    private StringBuilder? _streamingReasoningBuilder;
+    private DispatcherTimer? _deferredMarkdownTimer;
 
     public ChatMessageViewModel(ChatMessage message, bool expandTool = false)
     {
@@ -74,6 +81,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             ToolArgumentsText = string.Empty;
             ToolCallStatus = ToolCallDisplayStatus.None;
             IsToolRunning = false;
+            ApplyDeferredMarkdownPolicy();
         }
     }
 
@@ -129,6 +137,12 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isStreaming;
+
+    [ObservableProperty]
+    private bool _isMarkdownDeferred;
+
+    [ObservableProperty]
+    private bool _isMarkdownRenderingEnabled = true;
 
     public bool IsUser { get; }
     public bool IsTool { get; }
@@ -326,7 +340,8 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             return;
         }
 
-        Content += token;
+        _streamingContentBuilder ??= new StringBuilder(Content);
+        _streamingContentBuilder.Append(token);
     }
 
     public void AppendStreamingReasoningToken(string token)
@@ -337,22 +352,56 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         }
 
         IsReasoningStreaming = true;
-        ReasoningContent += token;
+        _streamingReasoningBuilder ??= new StringBuilder(ReasoningContent);
+        _streamingReasoningBuilder.Append(token);
     }
+
+    public void FlushStreamingContent()
+    {
+        if (_streamingContentBuilder is { Length: > 0 })
+        {
+            Content = _streamingContentBuilder.ToString();
+            _streamingContentBuilder = null;
+        }
+
+        if (_streamingReasoningBuilder is { Length: > 0 })
+        {
+            ReasoningContent = _streamingReasoningBuilder.ToString();
+            _streamingReasoningBuilder = null;
+        }
+    }
+
+    public bool HasBufferedStreamingContent() =>
+        _streamingContentBuilder is { Length: > 0 } || _streamingReasoningBuilder is { Length: > 0 };
 
     public void CompleteStreamingAssistant(ChatMessage message)
     {
+        FlushStreamingContent();
+        _streamingContentBuilder = null;
+        _streamingReasoningBuilder = null;
         Content = message.Content;
         ReasoningContent = message.ReasoningContent ?? ReasoningContent;
         CreatedAt = AppTimeZone.ToChina(message.CreatedAt).ToString("HH:mm:ss");
         IsStreaming = false;
         IsReasoningStreaming = false;
+        ApplyDeferredMarkdownPolicy();
     }
 
     public void SealStreamingDisplay()
     {
+        FlushStreamingContent();
+        _streamingContentBuilder = null;
+        _streamingReasoningBuilder = null;
         IsStreaming = false;
         IsReasoningStreaming = false;
+        ApplyDeferredMarkdownPolicy();
+    }
+
+    [RelayCommand]
+    private void EnableMarkdownRendering()
+    {
+        CancelDeferredMarkdownTimer();
+        IsMarkdownRenderingEnabled = true;
     }
 
     public void MarkStreamingCancelled()
@@ -362,12 +411,69 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             return;
         }
 
+        FlushStreamingContent();
+        _streamingContentBuilder = null;
+        _streamingReasoningBuilder = null;
         IsStreaming = false;
         IsReasoningStreaming = false;
         if (string.IsNullOrWhiteSpace(Content))
         {
             Content = "（已停止）";
         }
+    }
+
+    private void ApplyDeferredMarkdownPolicy()
+    {
+        CancelDeferredMarkdownTimer();
+        if (IsUser || IsTool || IsCompaction || IsStreaming)
+        {
+            IsMarkdownDeferred = false;
+            IsMarkdownRenderingEnabled = true;
+            return;
+        }
+
+        if (Content.Length > DeferredMarkdownThresholdChars)
+        {
+            IsMarkdownDeferred = true;
+            IsMarkdownRenderingEnabled = false;
+            ScheduleDeferredMarkdownRendering();
+            return;
+        }
+
+        IsMarkdownDeferred = false;
+        IsMarkdownRenderingEnabled = true;
+    }
+
+    private void ScheduleDeferredMarkdownRendering()
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            IsMarkdownRenderingEnabled = true;
+            return;
+        }
+
+        _deferredMarkdownTimer = new DispatcherTimer(DispatcherPriority.Background, dispatcher)
+        {
+            Interval = DeferredMarkdownIdleDelay
+        };
+        _deferredMarkdownTimer.Tick += (_, _) =>
+        {
+            CancelDeferredMarkdownTimer();
+            IsMarkdownRenderingEnabled = true;
+        };
+        _deferredMarkdownTimer.Start();
+    }
+
+    private void CancelDeferredMarkdownTimer()
+    {
+        if (_deferredMarkdownTimer is null)
+        {
+            return;
+        }
+
+        _deferredMarkdownTimer.Stop();
+        _deferredMarkdownTimer = null;
     }
 
     public void ApplyCompletedTool(ChatMessage message)

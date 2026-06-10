@@ -792,6 +792,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
+        _atCompletion.EnsureFileIndexBuilt(
+            _skillCatalog,
+            _session.ActiveWorkspace,
+            _workspaceContext.IgnorePatterns);
+
         var sorted = _atCompletion.FilterMatches(query);
 
         AtCompletionItems.Clear();
@@ -862,7 +867,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         SyncWorkspaceContext();
         ActiveWorkspaceName = string.IsNullOrWhiteSpace(_workspaceContext.DisplayName) ? "未配置工作区" : _workspaceContext.DisplayName!;
-        RefreshAtCompletionSources();
+        RefreshAtCompletionSources(reloadSkills: true);
         Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
         ConfigureWorkspaceWatcher();
         OnPropertyChanged(nameof(Sidebar));
@@ -1025,7 +1030,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         _skillCatalog.Reload();
         Sidebar.Refresh(_appSettings);
-        RefreshAtCompletionSources();
+        RefreshAtCompletionSources(reloadSkills: true);
         OnPropertyChanged(nameof(Sidebar));
     }
 
@@ -1041,11 +1046,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SendCommand.NotifyCanExecuteChanged();
     }
 
-    private void RefreshAtCompletionSources() =>
+    private void RefreshAtCompletionSources(bool reloadSkills = false) =>
         _atCompletion.RefreshSources(
             _skillCatalog,
             _session.ActiveWorkspace,
-            _workspaceContext.IgnorePatterns);
+            _workspaceContext.IgnorePatterns,
+            reloadSkills);
 
     public void ShowCopyNotice(string message)
     {

@@ -18,35 +18,58 @@ internal static class ModelMessageBuilder
             new("system", environmentPrompt)
         };
 
-        for (var index = 0; index < history.Count; index++)
-        {
-            var message = history[index];
-            switch (message.Role)
-            {
-                case MessageRole.Compaction:
-                    continue;
-                case MessageRole.User:
-                    messages.Add(new AgentModelMessage("user", BuildUserContent(message)));
-                    break;
-                case MessageRole.Assistant:
-                    index = AppendAssistantModelMessages(messages, history, index, includeReasoningInModelContext);
-                    break;
-                case MessageRole.Tool:
-                    messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(message.Content)));
-                    break;
-                case MessageRole.Summary:
-                    messages.Add(new AgentModelMessage("user", $"History summary: {message.Content}"));
-                    break;
-                case MessageRole.System:
-                    messages.Add(new AgentModelMessage("user", message.Content));
-                    break;
-                default:
-                    messages.Add(new AgentModelMessage("user", message.Content));
-                    break;
-            }
-        }
-
+        AppendHistoryRange(messages, history, 0, includeReasoningInModelContext);
         return messages;
+    }
+
+    public static int AppendHistoryMessage(
+        List<AgentModelMessage> messages,
+        IReadOnlyList<ChatMessage> history,
+        int index,
+        bool includeReasoningInModelContext) =>
+        AppendHistoryMessageCore(messages, history, index, includeReasoningInModelContext);
+
+    private static void AppendHistoryRange(
+        List<AgentModelMessage> messages,
+        IReadOnlyList<ChatMessage> history,
+        int startIndex,
+        bool includeReasoningInModelContext)
+    {
+        for (var index = startIndex; index < history.Count; index++)
+        {
+            index = AppendHistoryMessageCore(messages, history, index, includeReasoningInModelContext);
+        }
+    }
+
+    private static int AppendHistoryMessageCore(
+        List<AgentModelMessage> messages,
+        IReadOnlyList<ChatMessage> history,
+        int index,
+        bool includeReasoningInModelContext)
+    {
+        var message = history[index];
+        switch (message.Role)
+        {
+            case MessageRole.Compaction:
+                return index;
+            case MessageRole.User:
+                messages.Add(new AgentModelMessage("user", BuildUserContent(message)));
+                return index;
+            case MessageRole.Assistant:
+                return AppendAssistantModelMessages(messages, history, index, includeReasoningInModelContext);
+            case MessageRole.Tool:
+                messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(message.Content)));
+                return index;
+            case MessageRole.Summary:
+                messages.Add(new AgentModelMessage("user", $"History summary: {message.Content}"));
+                return index;
+            case MessageRole.System:
+                messages.Add(new AgentModelMessage("user", message.Content));
+                return index;
+            default:
+                messages.Add(new AgentModelMessage("user", message.Content));
+                return index;
+        }
     }
 
     public static string FormatToolResult(AgentToolCall call, ToolResult result)

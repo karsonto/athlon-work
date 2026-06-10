@@ -78,13 +78,49 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
         }
     }
 
+    private static readonly TimeSpan WorkspaceTreeDebounceInterval = TimeSpan.FromMilliseconds(400);
+
     private IReadOnlyList<string> _workspaceIgnorePatterns = Array.Empty<string>();
+    private string? _pendingWorkspaceRootPath;
+    private DispatcherTimer? _workspaceTreeDebounceTimer;
 
     public void RefreshWorkspaceTree(string? workspaceRootPath, IReadOnlyList<string> ignorePatterns)
     {
         _workspaceIgnorePatterns = ignorePatterns;
+        _pendingWorkspaceRootPath = workspaceRootPath;
+        ScheduleWorkspaceTreeRefresh();
+    }
+
+    private void ScheduleWorkspaceTreeRefresh()
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            FlushWorkspaceTreeRefresh();
+            return;
+        }
+
+        if (_workspaceTreeDebounceTimer is null)
+        {
+            _workspaceTreeDebounceTimer = new DispatcherTimer(DispatcherPriority.Background, dispatcher)
+            {
+                Interval = WorkspaceTreeDebounceInterval
+            };
+            _workspaceTreeDebounceTimer.Tick += (_, _) =>
+            {
+                _workspaceTreeDebounceTimer?.Stop();
+                FlushWorkspaceTreeRefresh();
+            };
+        }
+
+        _workspaceTreeDebounceTimer.Stop();
+        _workspaceTreeDebounceTimer.Start();
+    }
+
+    private void FlushWorkspaceTreeRefresh()
+    {
         WorkspaceTree.Clear();
-        foreach (var node in WorkspaceTreeNodeViewModel.BuildTree(workspaceRootPath, ignorePatterns))
+        foreach (var node in WorkspaceTreeNodeViewModel.BuildTree(_pendingWorkspaceRootPath, _workspaceIgnorePatterns))
         {
             WorkspaceTree.Add(node);
         }

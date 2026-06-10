@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows.Threading;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 
@@ -7,7 +8,12 @@ namespace Athlon.Agent.App.Services;
 /// <summary>Workspace context sync and filesystem watching for the active session.</summary>
 public sealed class WorkspaceSessionBridge : IDisposable
 {
+    private static readonly TimeSpan WatcherDebounceInterval = TimeSpan.FromMilliseconds(400);
+
     private FileSystemWatcher? _workspaceWatcher;
+    private DispatcherTimer? _watcherDebounceTimer;
+    private Action? _pendingTreeRefresh;
+    private string? _pendingExternalFileChange;
 
     public void SyncWorkspaceContext(
         AgentSession session,
@@ -41,6 +47,7 @@ public sealed class WorkspaceSessionBridge : IDisposable
     {
         _workspaceWatcher?.Dispose();
         _workspaceWatcher = null;
+        StopWatcherDebounceTimer();
 
         if (string.IsNullOrWhiteSpace(session.ActiveWorkspace) || !Directory.Exists(session.ActiveWorkspace))
         {
@@ -55,15 +62,13 @@ public sealed class WorkspaceSessionBridge : IDisposable
 
         void Handler(object sender, FileSystemEventArgs e)
         {
-            System.Windows.Application.Current.Dispatcher.InvokeAsync(() =>
+            if (!string.IsNullOrWhiteSpace(e.FullPath))
             {
-                if (!string.IsNullOrWhiteSpace(e.FullPath))
-                {
-                    onExternalFileChange(e.FullPath);
-                }
+                _pendingExternalFileChange = e.FullPath;
+            }
 
-                onWorkspaceTreeRefresh();
-            });
+            _pendingTreeRefresh = onWorkspaceTreeRefresh;
+            ScheduleWatcherDebounce(onExternalFileChange);
         }
 
         _workspaceWatcher.Created += Handler;
@@ -112,8 +117,61 @@ public sealed class WorkspaceSessionBridge : IDisposable
     private static string NormalizeDirectoryPath(string path) =>
         Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
+    private void ScheduleWatcherDebounce(Action<string> onExternalFileChange)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            FlushWatcherDebounce(onExternalFileChange);
+            return;
+        }
+
+        if (_watcherDebounceTimer is null)
+        {
+            _watcherDebounceTimer = new DispatcherTimer(DispatcherPriority.Background, dispatcher)
+            {
+                Interval = WatcherDebounceInterval
+            };
+            _watcherDebounceTimer.Tick += (_, _) =>
+            {
+                StopWatcherDebounceTimer();
+                FlushWatcherDebounce(onExternalFileChange);
+            };
+        }
+
+        _watcherDebounceTimer.Stop();
+        _watcherDebounceTimer.Start();
+    }
+
+    private void FlushWatcherDebounce(Action<string> onExternalFileChange)
+    {
+        var externalPath = _pendingExternalFileChange;
+        var treeRefresh = _pendingTreeRefresh;
+        _pendingExternalFileChange = null;
+        _pendingTreeRefresh = null;
+
+        if (!string.IsNullOrWhiteSpace(externalPath))
+        {
+            onExternalFileChange(externalPath);
+        }
+
+        treeRefresh?.Invoke();
+    }
+
+    private void StopWatcherDebounceTimer()
+    {
+        if (_watcherDebounceTimer is null)
+        {
+            return;
+        }
+
+        _watcherDebounceTimer.Stop();
+        _watcherDebounceTimer = null;
+    }
+
     public void Dispose()
     {
+        StopWatcherDebounceTimer();
         _workspaceWatcher?.Dispose();
         _workspaceWatcher = null;
     }

@@ -880,6 +880,37 @@
                                                                     <Setter Property="Visibility" Value="Visible" />
                                                                     <Setter Property="Foreground" Value="White" />
                                                                 </DataTrigger>
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding IsMarkdownDeferred}" Value="True" />
+                                                                        <Condition Binding="{Binding IsMarkdownRenderingEnabled}" Value="False" />
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </MultiDataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <TextBlock Margin="0,6,0,0"
+                                                           FontSize="12"
+                                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                                           Text="正在准备格式渲染…（点击立即渲染）"
+                                                           Cursor="Hand">
+                                                    <TextBlock.InputBindings>
+                                                        <MouseBinding MouseAction="LeftClick"
+                                                                      Command="{Binding EnableMarkdownRenderingCommand}" />
+                                                    </TextBlock.InputBindings>
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding IsMarkdownDeferred}" Value="True" />
+                                                                        <Condition Binding="{Binding IsMarkdownRenderingEnabled}" Value="False" />
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </MultiDataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </TextBlock.Style>
@@ -898,6 +929,13 @@
                                                                 <DataTrigger Binding="{Binding IsStreaming}" Value="True">
                                                                     <Setter Property="Visibility" Value="Collapsed" />
                                                                 </DataTrigger>
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding IsMarkdownDeferred}" Value="True" />
+                                                                        <Condition Binding="{Binding IsMarkdownRenderingEnabled}" Value="False" />
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </MultiDataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </controls:MarkdownMessageView.Style>

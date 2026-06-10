@@ -48,20 +48,11 @@ public sealed class ChatAutoScrollController
         if (isBusy)
         {
             _autoScrollEnabled = true;
-            if (_chatMessagesList is not null)
-            {
-                _chatMessagesList.LayoutUpdated -= OnLayoutUpdatedWhileBusy;
-                _chatMessagesList.LayoutUpdated += OnLayoutUpdatedWhileBusy;
-            }
-
             ScrollToEnd(immediate: true);
             return;
         }
 
-        if (_chatMessagesList is not null)
-        {
-            _chatMessagesList.LayoutUpdated -= OnLayoutUpdatedWhileBusy;
-        }
+        StopScrollThrottleTimer();
     }
 
     public void OnContentInteractionChanged()
@@ -146,16 +137,6 @@ public sealed class ChatAutoScrollController
         }
     }
 
-    private void OnLayoutUpdatedWhileBusy(object? sender, EventArgs e)
-    {
-        if (!_isBusy() || !_autoScrollEnabled || ShouldSuppressAutoScroll())
-        {
-            return;
-        }
-
-        ScrollToEnd(immediate: false);
-    }
-
     private void OnScrollThrottleTimerTick(object? sender, EventArgs e)
     {
         StopScrollThrottleTimer();
@@ -211,25 +192,17 @@ public sealed class ChatAutoScrollController
 
     private void ScrollListToBottom()
     {
-        if (_chatMessagesList is null)
+        EnsureScrollViewer();
+        if (_scrollViewer is not null)
         {
+            _scrollViewer.ScrollToVerticalOffset(_scrollViewer.ScrollableHeight);
             return;
         }
 
-        if (_chatMessagesList.Items.Count > 0)
+        if (_chatMessagesList is { Items.Count: > 0 })
         {
-            _chatMessagesList.UpdateLayout();
             _chatMessagesList.ScrollIntoView(_chatMessagesList.Items[^1]);
         }
-
-        EnsureScrollViewer();
-        if (_scrollViewer is null)
-        {
-            return;
-        }
-
-        _scrollViewer.UpdateLayout();
-        _scrollViewer.ScrollToVerticalOffset(_scrollViewer.ScrollableHeight);
     }
 
     private void EnsureScrollViewer()

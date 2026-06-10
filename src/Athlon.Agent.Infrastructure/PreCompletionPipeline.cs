@@ -48,6 +48,15 @@ public sealed class PreCompletionPipeline(
             budget,
             cfg.DynamicCompaction,
             runtimeContext.ForceOverflow);
+
+        if (!force
+            && pressure == ContextPressureLevel.Normal
+            && !ContextPressureEvaluator.MeetsStaticTruncateThreshold(conversation, cfg)
+            && budget.TotalUtilization < ContextPressureEvaluator.ResolveTruncateThreshold(cfg.DynamicCompaction))
+        {
+            return session;
+        }
+
         var plan = DynamicCompactionPlan.Create(pressure, budget, conversation, cfg, force);
 
         var truncateApplied = false;

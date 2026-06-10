@@ -9,7 +9,7 @@ namespace Athlon.Agent.App.Services.Streaming;
 /// <summary>Batches streaming text/reasoning tokens and non-content stream events before UI flush.</summary>
 internal sealed class StreamingTokenBuffer
 {
-    private static readonly TimeSpan FlushInterval = TimeSpan.FromMilliseconds(60);
+    private static readonly TimeSpan FlushInterval = TimeSpan.FromMilliseconds(100);
 
     private readonly Dispatcher _dispatcher;
     private readonly SessionStreamingUiContext _streaming;
