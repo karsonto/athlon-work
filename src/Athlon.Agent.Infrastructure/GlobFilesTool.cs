@@ -27,8 +27,7 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
         if (!ToolArguments.TryGetRequired(invocation, "pattern", out var pattern, out var error)) return error;
-        if (!ToolArguments.TryGetOptionalNormalizedPath(invocation, out var requestedPath, out error)) return error;
-        var fullPath = guard.Normalize(requestedPath);
+        if (!WorkspaceToolHelper.TryResolveOptionalNormalizedPath(invocation, guard, out var fullPath, out error)) return error;
         if (!Directory.Exists(fullPath)) return ToolResult.Failure("Directory not found", fullPath);
 
         var ignorePatterns = guard.GetIgnorePatterns();
@@ -38,7 +37,7 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
                 : $"{Path.GetRelativePath(fullPath, path)} ({new FileInfo(path).Length} bytes)")
             .ToArray();
 
-        await audit.WriteAsync("glob_files", new { path = fullPath, pattern, count = matches.Length }, cancellationToken);
+        await WorkspaceToolHelper.AuditAsync(audit, "glob_files", new { path = fullPath, pattern, count = matches.Length }, cancellationToken);
         return matches.Length == 0
             ? ToolResult.Success("No matching files found", "No matching files found")
             : ToolResult.Success($"Found {matches.Length} matching entries", string.Join(Environment.NewLine, matches));

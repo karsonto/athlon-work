@@ -21,7 +21,8 @@ public sealed class AgentLoopOptionsTests
             new NoOpTokenEstimator(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
-            new LoopNoOpAppLogger());
+            new LoopNoOpAppLogger(),
+            new NoOpPostTurnMemoryProcessor());
 
         var session = AgentSession.Create("loop-test");
         using (AgentLoopOptionsScope.Enter(new AgentLoopOptions { MaxModelToolRounds = 1 }))

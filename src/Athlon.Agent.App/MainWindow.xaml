@@ -1250,21 +1250,39 @@
                     </Border>
 
                     <Border Style="{StaticResource SettingsCardStyle}">
-                        <StackPanel>
-                            <TextBlock Text="长期记忆" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
-                            <CheckBox Style="{StaticResource McpToggleSwitchStyle}"
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="长期记忆"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <CheckBox Grid.Column="1"
+                                      Style="{StaticResource McpToggleSwitchStyle}"
                                       IsChecked="{Binding Settings.Settings.Memory.Enabled, UpdateSourceTrigger=PropertyChanged}"
-                                      Content="启用长期记忆" />
-                        </StackPanel>
+                                      ToolTip="启用长期记忆"
+                                      VerticalAlignment="Center" />
+                        </Grid>
                     </Border>
 
                     <Border Style="{StaticResource SettingsCardStyle}">
-                        <StackPanel>
-                            <TextBlock Text="上下文压缩" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
-                            <CheckBox Style="{StaticResource McpToggleSwitchStyle}"
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="上下文压缩"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                            <CheckBox Grid.Column="1"
+                                      Style="{StaticResource McpToggleSwitchStyle}"
                                       IsChecked="{Binding Settings.Settings.ContextCompaction.DynamicCompaction.Enabled, UpdateSourceTrigger=PropertyChanged}"
-                                      Content="启用动态压缩策略" />
-                        </StackPanel>
+                                      ToolTip="启用动态压缩策略"
+                                      VerticalAlignment="Center" />
+                        </Grid>
                     </Border>
 
                     <Border Style="{StaticResource SettingsCardStyle}">

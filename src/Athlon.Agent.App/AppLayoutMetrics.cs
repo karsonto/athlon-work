@@ -29,3 +29,24 @@ public static class AppLayoutMetrics
     /// <summary>Inset of the visible splitter line inside the hit target.</summary>
     public const double SplitterLineInset = 0;
 }
+
+/// <summary>Min/max/default sizes for resizable shell panes.</summary>
+public static class UiLayoutConstraints
+{
+    public const double ContextSidebarMinWidth = 220;
+    public const double ContextSidebarMaxWidth = 560;
+    public const double ContextSidebarDefaultWidth = 320;
+    public const double ContextSidebarCollapseDragThreshold = 200;
+
+    public const double NavigationSidebarMinWidth = 180;
+    public const double NavigationSidebarMaxWidth = 480;
+    public const double NavigationSidebarDefaultWidth = 280;
+
+    public const double EditorPaneMinWidth = 280;
+    public const double EditorPaneMaxWidth = 1200;
+    public const double EditorPaneDefaultWidth = 480;
+
+    public const double ComposerMinHeight = 120;
+    public const double ComposerMaxHeight = 420;
+    public const double ComposerDefaultHeight = 168;
+}

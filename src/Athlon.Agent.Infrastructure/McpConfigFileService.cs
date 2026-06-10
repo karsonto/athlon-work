@@ -53,24 +53,15 @@ public static class McpConfigFileService
             return ClaudeDesktopMcpConfigMapper.ToSettingsList(config!);
         }
 
-        // Legacy: array of McpServerSettings
-        try
-        {
-            var legacy = JsonSerializer.Deserialize<List<McpServerSettings>>(json, JsonFileStore.Options);
-            return legacy ?? new List<McpServerSettings>();
-        }
-        catch
-        {
-            return new List<McpServerSettings>();
-        }
+        return JsonConfigFileService.Deserialize<List<McpServerSettings>>(json) ?? new List<McpServerSettings>();
     }
 
-    public static Task SaveServersAsync(IAppPathProvider paths, IEnumerable<McpServerSettings> servers, CancellationToken cancellationToken = default)
+    public static async Task SaveServersAsync(IAppPathProvider paths, IEnumerable<McpServerSettings> servers, CancellationToken cancellationToken = default)
     {
         var path = GetPath(paths);
-        Directory.CreateDirectory(paths.ConfigPath);
         var config = ClaudeDesktopMcpConfigMapper.FromSettingsList(servers);
         var json = ClaudeDesktopMcpConfigMapper.Serialize(config);
-        return AtomicFile.WriteAllTextAsync(path, json, cancellationToken);
+        Directory.CreateDirectory(paths.ConfigPath);
+        await AtomicFile.WriteAllTextAsync(path, json, cancellationToken);
     }
 }

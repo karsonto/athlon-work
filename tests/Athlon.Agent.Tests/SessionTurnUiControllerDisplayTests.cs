@@ -47,7 +47,7 @@ public sealed class SessionTurnUiControllerDisplayTests
         ui.SetDisplayed(false);
 
         var session = AgentSession.Create("test");
-        var persisted =
+        IReadOnlyList<ChatMessage> persisted =
         [
             ChatMessage.Create(MessageRole.User, "question"),
             ChatMessage.Create(MessageRole.Assistant, "answer")

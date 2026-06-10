@@ -113,7 +113,8 @@ public sealed class SessionDiskLogTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
-            new NoOpLogger());
+            new NoOpLogger(),
+            new NoOpPostTurnMemoryProcessor());
 
         var session = AgentSession.Create("cancel-persist");
         using var cts = new CancellationTokenSource();

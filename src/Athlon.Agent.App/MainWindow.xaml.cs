@@ -14,15 +14,9 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly ClipboardImageAttachmentReader _clipboardImageReader;
-    private const double AutoScrollBottomThreshold = 48;
-    private bool _autoScrollEnabled = true;
-    private bool _isProgrammaticScroll;
+    private readonly ChatAutoScrollController _chatScroll;
+    private readonly MainWindowLayoutBinder _layoutBinder;
     private bool _shutdownInProgress;
-    private bool _chatPointerDown;
-    private bool _chatScrollLockedByUser;
-    private ScrollViewer? _chatMessagesScrollViewer;
-    private DispatcherTimer? _scrollThrottleTimer;
-    private static readonly TimeSpan ScrollThrottleInterval = TimeSpan.FromMilliseconds(100);
 
     public MainWindow(MainWindowViewModel viewModel, ClipboardImageAttachmentReader clipboardImageReader)
     {
@@ -31,16 +25,25 @@ public partial class MainWindow : Window
         App.StartupTrace("MainWindow InitializeComponent completed");
         _viewModel = viewModel;
         _clipboardImageReader = clipboardImageReader;
-        DataContext = _viewModel;
-        _viewModel.ScrollChatToBottom = () => ScrollChatToEnd(immediate: false);
-        _viewModel.ScrollChatToBottomImmediate = () => ScrollChatToEnd(immediate: true);
-        _viewModel.ContextSidebarLayoutChanged += (_, _) => Dispatcher.Invoke(ApplyContextSidebarLayout);
-        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-        MarkdownMessageView.ContentInteractionChanged += (_, _) =>
+        _chatScroll = new ChatAutoScrollController(Dispatcher, () => _viewModel.IsBusy);
+        _layoutBinder = new MainWindowLayoutBinder(_viewModel, new MainWindowLayoutElements
         {
-            StopScrollThrottleTimer();
-            UpdateChatScrollLock();
-        };
+            NavigationSidebarColumn = NavigationSidebarColumn,
+            EditorPaneColumn = EditorPaneColumn,
+            ContextSidebarColumn = ContextSidebarColumn,
+            ComposerRow = ComposerRow,
+            EditorPaneHost = EditorPaneHost,
+            EditorChatSplitter = EditorChatSplitter,
+            ContextSidebarPanel = ContextSidebarPanel,
+            ContextSidebarSplitter = ContextSidebarSplitter,
+            ContextSidebarCollapsedRail = ContextSidebarCollapsedRail
+        });
+        DataContext = _viewModel;
+        _viewModel.ScrollChatToBottom = () => _chatScroll.ScrollToEnd(immediate: false);
+        _viewModel.ScrollChatToBottomImmediate = () => _chatScroll.ScrollToEnd(immediate: true);
+        _viewModel.ContextSidebarLayoutChanged += (_, _) => Dispatcher.Invoke(_layoutBinder.ApplyContextSidebar);
+        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        MarkdownMessageView.ContentInteractionChanged += (_, _) => _chatScroll.OnContentInteractionChanged();
         Loaded += OnMainWindowLoaded;
         Closing += OnMainWindowClosing;
         StateChanged += (_, _) => UpdateMaximizeRestoreButton();
@@ -50,13 +53,14 @@ public partial class MainWindow : Window
 
     private void OnMainWindowLoaded(object sender, RoutedEventArgs e)
     {
-        ApplyNavigationSidebarLayout();
-        ApplyContextSidebarLayout();
-        ApplyEditorPaneLayout();
-        ApplyComposerLayout();
+        _layoutBinder.ApplyAll();
         AttachComposerPasteHandler();
-        AttachChatMessagesScrollViewer();
-        ScrollChatToEnd(immediate: true);
+        if (ChatMessagesList is not null)
+        {
+            _chatScroll.Attach(ChatMessagesList);
+        }
+
+        _chatScroll.ScrollToEnd(immediate: true);
     }
 
     private void AttachComposerPasteHandler()
@@ -70,60 +74,6 @@ public partial class MainWindow : Window
             CommandManager.PreviewExecutedEvent,
             new ExecutedRoutedEventHandler(ComposerTextBox_OnPastePreviewExecuted),
             handledEventsToo: true);
-    }
-
-    private void AttachChatMessagesScrollViewer() => EnsureChatMessagesScrollViewer();
-
-    private void EnsureChatMessagesScrollViewer()
-    {
-        if (ChatMessagesList is null)
-        {
-            return;
-        }
-
-        if (_chatMessagesScrollViewer is not null)
-        {
-            return;
-        }
-
-        ChatMessagesList.ApplyTemplate();
-        var scrollViewer = FindListBoxScrollViewer(ChatMessagesList);
-        if (scrollViewer is null)
-        {
-            ChatMessagesList.Dispatcher.BeginInvoke(DispatcherPriority.Loaded, EnsureChatMessagesScrollViewer);
-            return;
-        }
-
-        _chatMessagesScrollViewer = scrollViewer;
-        _chatMessagesScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Visible;
-        _chatMessagesScrollViewer.ScrollChanged += ChatMessagesScrollViewer_OnScrollChanged;
-    }
-
-    private static ScrollViewer? FindListBoxScrollViewer(ListBox listBox)
-    {
-        if (listBox.Template?.FindName("ScrollViewer", listBox) is ScrollViewer named)
-        {
-            return named;
-        }
-
-        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(listBox); i++)
-        {
-            var child = VisualTreeHelper.GetChild(listBox, i);
-            if (child is ScrollViewer direct)
-            {
-                return direct;
-            }
-
-            for (var j = 0; j < VisualTreeHelper.GetChildrenCount(child); j++)
-            {
-                if (VisualTreeHelper.GetChild(child, j) is ScrollViewer nested)
-                {
-                    return nested;
-                }
-            }
-        }
-
-        return null;
     }
 
     private async void OnMainWindowClosing(object? sender, CancelEventArgs e)
@@ -175,31 +125,8 @@ public partial class MainWindow : Window
         Application.Current.Shutdown();
     }
 
-    private void ApplyNavigationSidebarLayout()
-    {
-        if (NavigationSidebarColumn is null)
-        {
-            return;
-        }
-
-        NavigationSidebarColumn.MinWidth = MainWindowViewModel.NavigationSidebarMinWidth;
-        NavigationSidebarColumn.MaxWidth = MainWindowViewModel.NavigationSidebarMaxWidth;
-        NavigationSidebarColumn.Width = new GridLength(_viewModel.NavigationSidebarWidth);
-    }
-
-    private void NavigationSidebarSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
-    {
-        if (NavigationSidebarColumn is null)
-        {
-            return;
-        }
-
-        var width = NavigationSidebarColumn.ActualWidth;
-        if (width >= MainWindowViewModel.NavigationSidebarMinWidth)
-        {
-            _viewModel.UpdateNavigationSidebarWidth(width);
-        }
-    }
+    private void NavigationSidebarSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
+        _layoutBinder.OnNavigationSidebarDragCompleted();
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -207,176 +134,35 @@ public partial class MainWindow : Window
         {
             Dispatcher.Invoke(() =>
             {
-                EnsureChatMessagesScrollViewer();
-                ApplyContextSidebarLayout();
-                if (_viewModel.HasChatMessages)
+                if (ChatMessagesList is not null)
                 {
-                    _autoScrollEnabled = true;
-                    ScrollChatToEnd(immediate: true);
+                    _chatScroll.Attach(ChatMessagesList);
                 }
+
+                _layoutBinder.ApplyContextSidebar();
+                _chatScroll.OnHasChatMessagesChanged(_viewModel.HasChatMessages);
             });
         }
 
         if (e.PropertyName == nameof(MainWindowViewModel.HasOpenEditorTabs))
         {
-            Dispatcher.Invoke(ApplyEditorPaneLayout);
+            Dispatcher.Invoke(_layoutBinder.ApplyEditorPane);
         }
 
         if (e.PropertyName == nameof(MainWindowViewModel.IsBusy))
         {
-            Dispatcher.Invoke(UpdateStreamingAutoScroll);
+            Dispatcher.Invoke(() => _chatScroll.OnStreamingStateChanged(_viewModel.IsBusy));
         }
     }
 
-    private void UpdateStreamingAutoScroll()
-    {
-        if (_viewModel.IsBusy)
-        {
-            _autoScrollEnabled = true;
-            if (ChatMessagesList is not null)
-            {
-                ChatMessagesList.LayoutUpdated -= ChatMessagesList_OnLayoutUpdatedWhileBusy;
-                ChatMessagesList.LayoutUpdated += ChatMessagesList_OnLayoutUpdatedWhileBusy;
-            }
+    private void EditorChatSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
+        _layoutBinder.OnEditorPaneDragCompleted();
 
-            ScrollChatToEnd(immediate: true);
-            return;
-        }
+    private void ComposerSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
+        _layoutBinder.OnComposerDragCompleted();
 
-        if (ChatMessagesList is not null)
-        {
-            ChatMessagesList.LayoutUpdated -= ChatMessagesList_OnLayoutUpdatedWhileBusy;
-        }
-    }
-
-    private void ChatMessagesList_OnLayoutUpdatedWhileBusy(object? sender, EventArgs e)
-    {
-        if (!_viewModel.IsBusy || !_autoScrollEnabled || ShouldSuppressChatAutoScroll())
-        {
-            return;
-        }
-
-        ScrollChatToEnd(immediate: false);
-    }
-
-    private void ApplyEditorPaneLayout()
-    {
-        if (EditorPaneColumn is null || EditorPaneHost is null || EditorChatSplitter is null)
-        {
-            return;
-        }
-
-        if (!_viewModel.HasOpenEditorTabs)
-        {
-            EditorPaneColumn.MinWidth = 0;
-            EditorPaneColumn.MaxWidth = double.PositiveInfinity;
-            EditorPaneColumn.Width = new GridLength(0);
-            EditorPaneHost.Visibility = Visibility.Collapsed;
-            EditorChatSplitter.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        EditorPaneColumn.MinWidth = MainWindowViewModel.EditorPaneMinWidth;
-        EditorPaneColumn.MaxWidth = MainWindowViewModel.EditorPaneMaxWidth;
-        EditorPaneColumn.Width = new GridLength(_viewModel.EditorPaneWidth);
-        EditorPaneHost.Visibility = Visibility.Visible;
-        EditorChatSplitter.Visibility = Visibility.Visible;
-    }
-
-    private void EditorChatSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
-    {
-        if (EditorPaneColumn is null || !_viewModel.HasOpenEditorTabs)
-        {
-            return;
-        }
-
-        var width = EditorPaneColumn.ActualWidth;
-        if (width >= MainWindowViewModel.EditorPaneMinWidth)
-        {
-            _viewModel.UpdateEditorPaneWidth(width);
-        }
-    }
-
-    private void ApplyComposerLayout()
-    {
-        if (ComposerRow is null)
-        {
-            return;
-        }
-
-        ComposerRow.MinHeight = MainWindowViewModel.ComposerMinHeight;
-        ComposerRow.MaxHeight = MainWindowViewModel.ComposerMaxHeight;
-        ComposerRow.Height = new GridLength(_viewModel.ComposerHeight);
-    }
-
-    private void ComposerSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
-    {
-        if (ComposerRow is null)
-        {
-            return;
-        }
-
-        var height = ComposerRow.ActualHeight;
-        if (height >= MainWindowViewModel.ComposerMinHeight)
-        {
-            _viewModel.UpdateComposerHeight(height);
-        }
-    }
-
-    private void ApplyContextSidebarLayout()
-    {
-        if (ContextSidebarColumn is null || ContextSidebarPanel is null || ContextSidebarSplitter is null)
-        {
-            return;
-        }
-
-        if (_viewModel.IsContextSidebarVisible)
-        {
-            ContextSidebarColumn.MinWidth = MainWindowViewModel.ContextSidebarMinWidth;
-            ContextSidebarColumn.MaxWidth = MainWindowViewModel.ContextSidebarMaxWidth;
-            ContextSidebarColumn.Width = new GridLength(_viewModel.ContextSidebarWidth);
-            ContextSidebarPanel.Visibility = Visibility.Visible;
-            ContextSidebarSplitter.Visibility = Visibility.Visible;
-            if (ContextSidebarCollapsedRail is not null)
-            {
-                ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
-            }
-        }
-        else
-        {
-            ContextSidebarColumn.MinWidth = 0;
-            ContextSidebarColumn.MaxWidth = double.PositiveInfinity;
-            ContextSidebarColumn.Width = new GridLength(0);
-            ContextSidebarPanel.Visibility = Visibility.Collapsed;
-            ContextSidebarSplitter.Visibility = Visibility.Collapsed;
-            if (ContextSidebarCollapsedRail is not null)
-            {
-                // No edge affordance without an active conversation; use the chat header toggle instead.
-                ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
-            }
-        }
-    }
-
-    private void ContextSidebarSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
-    {
-        if (!_viewModel.IsContextSidebarVisible || ContextSidebarColumn is null)
-        {
-            return;
-        }
-
-        var width = ContextSidebarColumn.ActualWidth;
-        if (width < MainWindowViewModel.ContextSidebarCollapseDragThreshold)
-        {
-            _viewModel.SetContextSidebarVisible(false);
-            _ = _viewModel.PersistUiLayoutForSidebarAsync();
-            return;
-        }
-
-        if (width >= MainWindowViewModel.ContextSidebarMinWidth)
-        {
-            _viewModel.UpdateContextSidebarWidth(width);
-        }
-    }
+    private void ContextSidebarSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
+        _layoutBinder.OnContextSidebarDragCompleted();
 
     private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -452,200 +238,11 @@ public partial class MainWindow : Window
         MaximizeRestoreButton.ToolTip = WindowState == WindowState.Maximized ? "还原" : "最大化";
     }
 
-    private void ScrollChatToEnd(bool immediate)
-    {
-        EnsureChatMessagesScrollViewer();
+    private void ChatMessagesScrollViewer_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) =>
+        _chatScroll.HandlePreviewMouseLeftButtonDown();
 
-        if (!_autoScrollEnabled || ShouldSuppressChatAutoScroll())
-        {
-            return;
-        }
-
-        if (immediate)
-        {
-            ExecuteScrollToEnd();
-            return;
-        }
-
-        if (_scrollThrottleTimer is not null)
-        {
-            _scrollThrottleTimer.Stop();
-            _scrollThrottleTimer.Start();
-            return;
-        }
-
-        _scrollThrottleTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
-        {
-            Interval = ScrollThrottleInterval
-        };
-        _scrollThrottleTimer.Tick += OnScrollThrottleTimerTick;
-        _scrollThrottleTimer.Start();
-    }
-
-    private void OnScrollThrottleTimerTick(object? sender, EventArgs e)
-    {
-        StopScrollThrottleTimer();
-        ExecuteScrollToEnd();
-    }
-
-    private void StopScrollThrottleTimer()
-    {
-        if (_scrollThrottleTimer is null)
-        {
-            return;
-        }
-
-        _scrollThrottleTimer.Stop();
-        _scrollThrottleTimer.Tick -= OnScrollThrottleTimerTick;
-        _scrollThrottleTimer = null;
-    }
-
-    private void ExecuteScrollToEnd()
-    {
-        EnsureChatMessagesScrollViewer();
-
-        if (!_autoScrollEnabled || ShouldSuppressChatAutoScroll())
-        {
-            return;
-        }
-
-        if (ChatMessagesList is null)
-        {
-            return;
-        }
-
-        ChatMessagesList.Dispatcher.BeginInvoke(
-            DispatcherPriority.Loaded,
-            () =>
-            {
-                if (!_autoScrollEnabled || ShouldSuppressChatAutoScroll())
-                {
-                    return;
-                }
-
-                _isProgrammaticScroll = true;
-                ScrollChatListToBottom();
-
-                ChatMessagesList.Dispatcher.BeginInvoke(
-                    DispatcherPriority.ApplicationIdle,
-                    () =>
-                    {
-                        if (_autoScrollEnabled && !ShouldSuppressChatAutoScroll())
-                        {
-                            ScrollChatListToBottom();
-                        }
-
-                        _isProgrammaticScroll = false;
-                    });
-            });
-    }
-
-    private void ScrollChatListToBottom()
-    {
-        if (ChatMessagesList is null)
-        {
-            return;
-        }
-
-        if (ChatMessagesList.Items.Count > 0)
-        {
-            ChatMessagesList.UpdateLayout();
-            ChatMessagesList.ScrollIntoView(ChatMessagesList.Items[^1]);
-        }
-
-        EnsureChatMessagesScrollViewer();
-        if (_chatMessagesScrollViewer is null)
-        {
-            return;
-        }
-
-        _chatMessagesScrollViewer.UpdateLayout();
-        _chatMessagesScrollViewer.ScrollToVerticalOffset(_chatMessagesScrollViewer.ScrollableHeight);
-    }
-
-    private void ChatMessagesScrollViewer_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        _chatPointerDown = true;
-        StopScrollThrottleTimer();
-    }
-
-    private void ChatMessagesScrollViewer_OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-    {
-        _chatPointerDown = false;
-        UpdateChatScrollLock();
-    }
-
-    private void UpdateChatScrollLock()
-    {
-        _chatScrollLockedByUser = ChatScrollHelper.HasTextSelection(ChatMessagesList);
-        if (_chatScrollLockedByUser)
-        {
-            _autoScrollEnabled = false;
-            return;
-        }
-
-        if (_viewModel.IsBusy)
-        {
-            _autoScrollEnabled = true;
-            return;
-        }
-
-        if (_chatMessagesScrollViewer is not null && IsNearBottom(_chatMessagesScrollViewer))
-        {
-            _autoScrollEnabled = true;
-        }
-    }
-
-    private bool ShouldSuppressChatAutoScroll() =>
-        _chatPointerDown
-        || _chatScrollLockedByUser
-        || ChatScrollHelper.HasTextSelection(ChatMessagesList);
-
-    private void ChatMessagesScrollViewer_OnScrollChanged(object sender, ScrollChangedEventArgs e)
-    {
-        if (sender is not ScrollViewer viewer)
-        {
-            return;
-        }
-
-        if (_isProgrammaticScroll)
-        {
-            return;
-        }
-
-        if (ShouldSuppressChatAutoScroll())
-        {
-            return;
-        }
-
-        // Content grew during streaming while the user was pinned to the bottom.
-        if (e.ExtentHeightChange > 0)
-        {
-            if (_autoScrollEnabled)
-            {
-                ExecuteScrollToEnd();
-                return;
-            }
-
-            if (_viewModel.IsBusy && IsNearBottom(viewer))
-            {
-                _autoScrollEnabled = true;
-                ExecuteScrollToEnd();
-                return;
-            }
-        }
-
-        if (Math.Abs(e.VerticalChange) > 0.01)
-        {
-            _autoScrollEnabled = IsNearBottom(viewer);
-        }
-    }
-
-    private static bool IsNearBottom(ScrollViewer viewer)
-    {
-        var distanceFromBottom = viewer.ScrollableHeight - viewer.VerticalOffset;
-        return distanceFromBottom <= AutoScrollBottomThreshold;
-    }
+    private void ChatMessagesScrollViewer_OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) =>
+        _chatScroll.HandlePreviewMouseLeftButtonUp();
 
     private void ApiKeyPasswordBox_OnPasswordChanged(object sender, RoutedEventArgs e)
     {

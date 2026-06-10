@@ -29,7 +29,8 @@ public sealed class AgentRuntimeProgressTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
-            new NoOpLogger());
+            new NoOpLogger(),
+            new NoOpPostTurnMemoryProcessor());
 
         var events = new List<string>();
         var session = AgentSession.Create("progress-test");
@@ -86,7 +87,8 @@ public sealed class AgentRuntimeProgressTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
-            new NoOpLogger());
+            new NoOpLogger(),
+            new NoOpPostTurnMemoryProcessor());
 
         var tokens = new List<string>();
         var session = AgentSession.Create("delta-test");
@@ -132,7 +134,8 @@ public sealed class AgentRuntimeProgressTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
-            new NoOpLogger());
+            new NoOpLogger(),
+            new NoOpPostTurnMemoryProcessor());
 
         await runtime.SendAsync(AgentSession.Create("thread-test"), "run tool");
 
@@ -152,7 +155,7 @@ public sealed class AgentRuntimeProgressTests
             new AgentModelResponse("done", Array.Empty<AgentToolCall>()));
 
         var registry = new FakeMcpRegistry();
-        var composite = new Athlon.Agent.Infrastructure.CompositeToolRouter(Array.Empty<IAgentTool>(), registry);
+        var composite = new Athlon.Agent.Infrastructure.CompositeToolRouter(Array.Empty<IAgentTool>(), registry, new AppSettings());
         var runtime = new AgentRuntime(
             modelClient,
             storage,
@@ -163,7 +166,8 @@ public sealed class AgentRuntimeProgressTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
-            new NoOpLogger());
+            new NoOpLogger(),
+            new NoOpPostTurnMemoryProcessor());
 
         await runtime.SendAsync(AgentSession.Create("mcp-route-test"), "call mcp");
 

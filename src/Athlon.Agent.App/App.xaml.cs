@@ -39,6 +39,8 @@ public partial class App : Application
             StartupTrace("Infrastructure registered");
             services.AddSingleton(_ => new SessionUiCache(System.Windows.Threading.Dispatcher.CurrentDispatcher));
             services.AddSingleton<SessionTurnHost>();
+            services.AddSingleton<QueuedTurnPresenter>();
+            services.AddSingleton<ComposerAtCompletionService>();
             services.AddSingleton<ApplicationShutdownService>();
             services.AddSingleton<ClipboardImageAttachmentReader>();
             services.AddSingleton<MainWindowViewModel>();

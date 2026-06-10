@@ -12,6 +12,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 
+using Athlon.Agent.App;
+
 namespace Athlon.Agent.App.ViewModels;
 
 public partial class MainWindowViewModel : ObservableObject, IDisposable
@@ -27,12 +29,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IImageAttachmentStore _imageAttachmentStore;
     private readonly IAppPathProvider _paths;
     private readonly SessionTurnHost _turnHost;
+    private readonly QueuedTurnPresenter _queuedTurnPresenter;
+    private readonly ComposerAtCompletionService _atCompletion;
     private readonly SessionUiCache _uiCache;
     private readonly ApplicationShutdownService _shutdownService;
-    private readonly Dictionary<string, ObservableCollection<QueuedTurnViewModel>> _queuedTurnsBySession = new(StringComparer.Ordinal);
-    private static readonly TimeSpan HistoryRefreshDebounce = TimeSpan.FromMilliseconds(300);
-    private CancellationTokenSource? _historyRefreshCts;
-    private FileSystemWatcher? _workspaceWatcher;
+    private readonly UiLayoutSettingsBridge _uiLayout;
+    private readonly SessionHistoryCoordinator _sessionHistory;
+    private readonly WorkspaceSessionBridge _workspaceBridge = new();
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
     private SessionTurnUiController _activeUi;
@@ -48,6 +51,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IAgentSkillCatalog skillCatalog,
         ISkillRuntime skillRuntime,
         SessionTurnHost turnHost,
+        QueuedTurnPresenter queuedTurnPresenter,
+        ComposerAtCompletionService atCompletion,
         SessionUiCache uiCache,
         WorkspaceFileEditorService workspaceFileEditorService,
         ApplicationShutdownService shutdownService,
@@ -61,9 +66,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _imageAttachmentStore = imageAttachmentStore;
         _paths = paths;
         _turnHost = turnHost;
+        _queuedTurnPresenter = queuedTurnPresenter;
+        _queuedTurnPresenter.QueueChanged += OnQueuedTurnsChanged;
+        _atCompletion = atCompletion;
         _uiCache = uiCache;
         _shutdownService = shutdownService;
         _appSettings = settings;
+        _uiLayout = new UiLayoutSettingsBridge(storage, settings);
+        _sessionHistory = new SessionHistoryCoordinator(storage);
         _skillCatalog = skillCatalog;
         _skillRuntime = skillRuntime;
         _displayedSessionId = _session.Id;
@@ -85,41 +95,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
         };
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
-        _appSettings.Ui.ContextSidebarWidth = Math.Clamp(
-            _appSettings.Ui.ContextSidebarWidth,
-            ContextSidebarMinWidth,
-            ContextSidebarMaxWidth);
-        if (_appSettings.Ui.ContextSidebarWidth < ContextSidebarMinWidth)
-        {
-            _appSettings.Ui.ContextSidebarWidth = ContextSidebarDefaultWidth;
-        }
-
-        _appSettings.Ui.NavigationSidebarWidth = Math.Clamp(
-            _appSettings.Ui.NavigationSidebarWidth,
-            NavigationSidebarMinWidth,
-            NavigationSidebarMaxWidth);
-        if (_appSettings.Ui.NavigationSidebarWidth < NavigationSidebarMinWidth)
-        {
-            _appSettings.Ui.NavigationSidebarWidth = NavigationSidebarDefaultWidth;
-        }
-
-        _appSettings.Ui.EditorPaneWidth = Math.Clamp(
-            _appSettings.Ui.EditorPaneWidth,
-            EditorPaneMinWidth,
-            EditorPaneMaxWidth);
-        if (_appSettings.Ui.EditorPaneWidth < EditorPaneMinWidth)
-        {
-            _appSettings.Ui.EditorPaneWidth = EditorPaneDefaultWidth;
-        }
-
-        _appSettings.Ui.ComposerHeight = Math.Clamp(
-            _appSettings.Ui.ComposerHeight,
-            ComposerMinHeight,
-            ComposerMaxHeight);
-        if (_appSettings.Ui.ComposerHeight < ComposerMinHeight)
-        {
-            _appSettings.Ui.ComposerHeight = ComposerDefaultHeight;
-        }
+        _uiLayout.ClampInitialLayout();
 
         LogsPath = paths.LogsPath;
 
@@ -159,8 +135,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     /// <summary>由 MainWindow 注入，用于非流式场景立即滚到底部。</summary>
     public Action? ScrollChatToBottomImmediate { get; set; }
-    public ObservableCollection<AgentRecordGroupViewModel> AgentRecordGroups { get; } = new();
-    public ObservableCollection<QueuedTurnViewModel> QueuedTurns => GetQueuedTurnsFor(_displayedSessionId);
+    public ObservableCollection<AgentRecordGroupViewModel> AgentRecordGroups => _sessionHistory.AgentRecordGroups;
+    public ObservableCollection<QueuedTurnViewModel> QueuedTurns => _queuedTurnPresenter.GetForSession(_displayedSessionId);
     public bool HasQueuedTurns => QueuedTurns.Count > 0;
     public ContextSidebarViewModel Sidebar { get; }
     public SettingsViewModel Settings { get; }
@@ -169,21 +145,21 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool HasOpenEditorTabs => FileEditor.HasOpenTabs;
 
-    public const double ContextSidebarMinWidth = 220;
-    public const double ContextSidebarMaxWidth = 560;
-    public const double ContextSidebarDefaultWidth = 320;
+    public const double ContextSidebarMinWidth = UiLayoutConstraints.ContextSidebarMinWidth;
+    public const double ContextSidebarMaxWidth = UiLayoutConstraints.ContextSidebarMaxWidth;
+    public const double ContextSidebarDefaultWidth = UiLayoutConstraints.ContextSidebarDefaultWidth;
 
-    public const double NavigationSidebarMinWidth = 180;
-    public const double NavigationSidebarMaxWidth = 480;
-    public const double NavigationSidebarDefaultWidth = 280;
+    public const double NavigationSidebarMinWidth = UiLayoutConstraints.NavigationSidebarMinWidth;
+    public const double NavigationSidebarMaxWidth = UiLayoutConstraints.NavigationSidebarMaxWidth;
+    public const double NavigationSidebarDefaultWidth = UiLayoutConstraints.NavigationSidebarDefaultWidth;
 
-    public const double EditorPaneMinWidth = 280;
-    public const double EditorPaneMaxWidth = 1200;
-    public const double EditorPaneDefaultWidth = 480;
+    public const double EditorPaneMinWidth = UiLayoutConstraints.EditorPaneMinWidth;
+    public const double EditorPaneMaxWidth = UiLayoutConstraints.EditorPaneMaxWidth;
+    public const double EditorPaneDefaultWidth = UiLayoutConstraints.EditorPaneDefaultWidth;
 
-    public const double ComposerMinHeight = 120;
-    public const double ComposerMaxHeight = 420;
-    public const double ComposerDefaultHeight = 168;
+    public const double ComposerMinHeight = UiLayoutConstraints.ComposerMinHeight;
+    public const double ComposerMaxHeight = UiLayoutConstraints.ComposerMaxHeight;
+    public const double ComposerDefaultHeight = UiLayoutConstraints.ComposerDefaultHeight;
 
     public double EditorPaneWidth =>
         Math.Clamp(_appSettings.Ui.EditorPaneWidth, EditorPaneMinWidth, EditorPaneMaxWidth);
@@ -204,10 +180,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public string ContextSidebarToggleToolTip =>
         IsContextSidebarVisible ? "关闭右侧栏 (Ctrl+Alt+B)" : "打开右侧栏 (Ctrl+Alt+B)";
 
-    public const double ContextSidebarCollapseDragThreshold = 200;
+    public const double ContextSidebarCollapseDragThreshold = UiLayoutConstraints.ContextSidebarCollapseDragThreshold;
 
     private CancellationTokenSource? _copyNoticeCts;
-    private CancellationTokenSource? _uiLayoutSaveCts;
 
     [ObservableProperty]
     private string copyNotice = string.Empty;
@@ -253,10 +228,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private int selectedAtCompletionIndex = -1;
 
-    private readonly List<AtCompletionItemViewModel> _fileCompletionIndex = new();
-    private readonly List<AtCompletionItemViewModel> _skillCompletionIndex = new();
-    private const int MaxCompletionItems = 30;
-
     public ObservableCollection<AtCompletionItemViewModel> AtCompletionItems { get; } = new();
     public ObservableCollection<PendingImageAttachmentViewModel> PendingImageAttachments { get; } = new();
     public bool HasPendingImages => PendingImageAttachments.Count > 0;
@@ -287,7 +258,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private async Task ToggleContextSidebarAsync()
     {
         SetContextSidebarVisible(!_appSettings.Ui.ContextSidebarVisible);
-        await PersistUiLayoutAsync();
+        await _uiLayout.PersistNowAsync();
     }
 
     public void SetContextSidebarVisible(bool visible)
@@ -314,39 +285,29 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var clamped = Math.Clamp(width, ContextSidebarMinWidth, ContextSidebarMaxWidth);
-        if (Math.Abs(_appSettings.Ui.ContextSidebarWidth - clamped) < 0.5)
-        {
-            return;
-        }
-
-        _appSettings.Ui.ContextSidebarWidth = clamped;
-        SchedulePersistUiLayout();
+        _uiLayout.TryUpdateDimension(
+            _appSettings.Ui.ContextSidebarWidth,
+            width,
+            ContextSidebarMinWidth,
+            ContextSidebarMaxWidth,
+            value => _appSettings.Ui.ContextSidebarWidth = value);
     }
 
-    public void UpdateNavigationSidebarWidth(double width)
-    {
-        var clamped = Math.Clamp(width, NavigationSidebarMinWidth, NavigationSidebarMaxWidth);
-        if (Math.Abs(_appSettings.Ui.NavigationSidebarWidth - clamped) < 0.5)
-        {
-            return;
-        }
+    public void UpdateNavigationSidebarWidth(double width) =>
+        _uiLayout.TryUpdateDimension(
+            _appSettings.Ui.NavigationSidebarWidth,
+            width,
+            NavigationSidebarMinWidth,
+            NavigationSidebarMaxWidth,
+            value => _appSettings.Ui.NavigationSidebarWidth = value);
 
-        _appSettings.Ui.NavigationSidebarWidth = clamped;
-        SchedulePersistUiLayout();
-    }
-
-    public void UpdateComposerHeight(double height)
-    {
-        var clamped = Math.Clamp(height, ComposerMinHeight, ComposerMaxHeight);
-        if (Math.Abs(_appSettings.Ui.ComposerHeight - clamped) < 0.5)
-        {
-            return;
-        }
-
-        _appSettings.Ui.ComposerHeight = clamped;
-        SchedulePersistUiLayout();
-    }
+    public void UpdateComposerHeight(double height) =>
+        _uiLayout.TryUpdateDimension(
+            _appSettings.Ui.ComposerHeight,
+            height,
+            ComposerMinHeight,
+            ComposerMaxHeight,
+            value => _appSettings.Ui.ComposerHeight = value);
 
     private void NotifyContextSidebarLayoutChanged()
     {
@@ -356,31 +317,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ContextSidebarLayoutChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private Task PersistUiLayoutAsync() => _storage.SaveSettingsAsync(_appSettings);
-
-    public Task PersistUiLayoutForSidebarAsync() => PersistUiLayoutAsync();
-
-    private void SchedulePersistUiLayout()
-    {
-        _uiLayoutSaveCts?.Cancel();
-        _uiLayoutSaveCts?.Dispose();
-        _uiLayoutSaveCts = new CancellationTokenSource();
-        var token = _uiLayoutSaveCts.Token;
-        _ = PersistUiLayoutDebouncedAsync(token);
-    }
-
-    private async Task PersistUiLayoutDebouncedAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Task.Delay(400, cancellationToken);
-            await _storage.SaveSettingsAsync(_appSettings);
-        }
-        catch (OperationCanceledException)
-        {
-            // Superseded by a newer width change.
-        }
-    }
+    public Task PersistUiLayoutForSidebarAsync() => _uiLayout.PersistNowAsync();
 
     [RelayCommand]
     private Task NewSession()
@@ -494,7 +431,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         _turnHost.ClearQueue(item.Id);
-        _queuedTurnsBySession.Remove(item.Id);
+        _queuedTurnPresenter.RemoveSession(item.Id);
 
         _uiCache.Remove(item.Id);
         await _storage.DeleteSessionAsync(item.Id);
@@ -582,10 +519,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (_turnHost.IsRunning(_displayedSessionId))
         {
             var queueId = Guid.NewGuid().ToString("N");
-            _turnHost.Enqueue(new QueuedTurnPayload(queueId, _displayedSessionId, input, imageAttachments, ui));
-            GetQueuedTurnsFor(_displayedSessionId).Add(
-                QueuedTurnViewModel.Create(queueId, input, imageAttachments));
-            NotifyQueuedTurnsChanged();
+            _queuedTurnPresenter.Enqueue(_displayedSessionId, queueId, input, imageAttachments, ui);
             SettingsStatus = "已加入排队";
             NotifyCommandStatesChanged();
             return;
@@ -612,11 +546,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (_turnHost.Remove(_displayedSessionId, item.QueueId))
-        {
-            GetQueuedTurnsFor(_displayedSessionId).Remove(item);
-            NotifyQueuedTurnsChanged();
-        }
+        _queuedTurnPresenter.Remove(_displayedSessionId, item.QueueId);
     }
 
     private void RequestScrollToBottom() => ScrollChatToBottom?.Invoke();
@@ -634,7 +564,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         OnPropertyChanged(nameof(Messages));
         OnPropertyChanged(nameof(HasChatMessages));
-        NotifyQueuedTurnsChanged();
+        OnPropertyChanged(nameof(QueuedTurns));
+        OnPropertyChanged(nameof(HasQueuedTurns));
         UpdateDisplayedBusyState();
     }
 
@@ -667,49 +598,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     ? _session
                     : e.Session);
             RequestRefreshSessionHistory();
-            TryProcessNextQueuedTurn(e);
-            NotifyCommandStatesChanged();
-        });
-    }
-
-    private bool TryProcessNextQueuedTurn(SessionTurnCompletedEventArgs e)
-    {
-        if (!_turnHost.TryDequeue(e.SessionId, out var payload) || payload is null)
-        {
-            return false;
-        }
-
-        RemoveQueuedTurnFromUi(e.SessionId, payload.QueueId);
-        payload.Ui.AddUserMessage(payload.UserInput, payload.ImageAttachments);
-        var request = new SessionTurnRequest(
-            e.SessionId,
-            e.Session,
-            payload.UserInput,
-            payload.ImageAttachments,
-            payload.Ui,
-            IsAutoContinue: false);
-
-        if (_turnHost.TryStart(request, out var error))
-        {
-            if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
+            if (_queuedTurnPresenter.TryProcessNext(e, out var queueError))
             {
-                UpdateDisplayedBusyState();
+                if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
+                {
+                    UpdateDisplayedBusyState();
+                    if (queueError is not null)
+                    {
+                        SettingsStatus = queueError;
+                    }
+                }
             }
 
-            return true;
-        }
-
-        _turnHost.RequeueFront(payload);
-        GetQueuedTurnsFor(e.SessionId).Insert(
-            0,
-            QueuedTurnViewModel.Create(payload.QueueId, payload.UserInput, payload.ImageAttachments));
-        NotifyQueuedTurnsChanged();
-        if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
-        {
-            SettingsStatus = error ?? "无法开始下一条排队消息。";
-        }
-
-        return true;
+            NotifyCommandStatesChanged();
+        });
     }
 
     private void UpdateDisplayedBusyState()
@@ -720,8 +622,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void StopSession(string sessionId)
     {
         _turnHost.Cancel(sessionId);
-        _turnHost.ClearQueue(sessionId);
-        ClearQueuedTurnsUi(sessionId);
+        _queuedTurnPresenter.Clear(sessionId);
     }
 
     [RelayCommand]
@@ -813,17 +714,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool ConfirmCloseEditorTabs() => FileEditor.TryCloseAllTabs();
 
-    public void UpdateEditorPaneWidth(double width)
-    {
-        var clamped = Math.Clamp(width, EditorPaneMinWidth, EditorPaneMaxWidth);
-        if (Math.Abs(_appSettings.Ui.EditorPaneWidth - clamped) < 0.5)
-        {
-            return;
-        }
-
-        _appSettings.Ui.EditorPaneWidth = clamped;
-        SchedulePersistUiLayout();
-    }
+    public void UpdateEditorPaneWidth(double width) =>
+        _uiLayout.TryUpdateDimension(
+            _appSettings.Ui.EditorPaneWidth,
+            width,
+            EditorPaneMinWidth,
+            EditorPaneMaxWidth,
+            value => _appSettings.Ui.EditorPaneWidth = value);
 
     [RelayCommand(CanExecute = nameof(CanDeleteWorkspaceItem))]
     private void DeleteWorkspaceItem(WorkspaceTreeNodeViewModel? node)
@@ -884,87 +781,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         && !node.IsPlaceholder
         && !node.IsExpanderPlaceholder
         && !string.IsNullOrWhiteSpace(node.FullPath)
-        && TryGetActiveWorkspaceRoot(out var root)
-        && IsPathUnderWorkspace(root, node.FullPath)
-        && !IsWorkspaceRootPath(root, node.FullPath);
-
-    private bool TryGetActiveWorkspaceRoot(out string root)
-    {
-        root = string.Empty;
-        if (string.IsNullOrWhiteSpace(_session.ActiveWorkspace) || !Directory.Exists(_session.ActiveWorkspace))
-        {
-            return false;
-        }
-
-        root = Path.GetFullPath(_session.ActiveWorkspace);
-        return true;
-    }
-
-    private static bool IsWorkspaceRootPath(string workspaceRoot, string targetPath)
-    {
-        var root = NormalizeDirectoryPath(workspaceRoot);
-        var target = NormalizeDirectoryPath(targetPath);
-        return string.Equals(root, target, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsPathUnderWorkspace(string workspaceRoot, string targetPath)
-    {
-        var root = NormalizeDirectoryPath(workspaceRoot);
-        var target = Path.GetFullPath(targetPath);
-        if (string.Equals(root, target, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var rootPrefix = root + Path.DirectorySeparatorChar;
-        return target.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string NormalizeDirectoryPath(string path) =>
-        Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        && WorkspaceSessionBridge.TryGetActiveWorkspaceRoot(_session, out var root)
+        && WorkspaceSessionBridge.IsPathUnderWorkspace(root, node.FullPath)
+        && !WorkspaceSessionBridge.IsWorkspaceRootPath(root, node.FullPath);
 
     private bool CanSend() =>
         !string.IsNullOrWhiteSpace(ComposerText) || PendingImageAttachments.Count > 0;
 
-    private ObservableCollection<QueuedTurnViewModel> GetQueuedTurnsFor(string sessionId)
+    private void OnQueuedTurnsChanged(string sessionId)
     {
-        if (!_queuedTurnsBySession.TryGetValue(sessionId, out var collection))
-        {
-            collection = new ObservableCollection<QueuedTurnViewModel>();
-            _queuedTurnsBySession[sessionId] = collection;
-        }
-
-        return collection;
-    }
-
-    private void RemoveQueuedTurnFromUi(string sessionId, string queueId)
-    {
-        var collection = GetQueuedTurnsFor(sessionId);
-        var item = collection.FirstOrDefault(turn => string.Equals(turn.QueueId, queueId, StringComparison.Ordinal));
-        if (item is not null)
-        {
-            collection.Remove(item);
-        }
-
         if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
         {
-            NotifyQueuedTurnsChanged();
+            OnPropertyChanged(nameof(QueuedTurns));
+            OnPropertyChanged(nameof(HasQueuedTurns));
         }
-    }
-
-    private void ClearQueuedTurnsUi(string sessionId)
-    {
-        GetQueuedTurnsFor(sessionId).Clear();
-        if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
-        {
-            NotifyQueuedTurnsChanged();
-        }
-    }
-
-    private void NotifyQueuedTurnsChanged()
-    {
-        OnPropertyChanged(nameof(QueuedTurns));
-        OnPropertyChanged(nameof(HasQueuedTurns));
     }
 
     public void UpdateComposerCompletion(string composerText, int caretIndex) =>
@@ -972,19 +802,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public void UpdateAtCompletion(string composerText, int caretIndex)
     {
-        if (!TryGetAtQuery(composerText, caretIndex, out var query))
+        if (!ComposerAtCompletionService.TryGetQuery(composerText, caretIndex, out var query))
         {
             CloseAtCompletion();
             return;
         }
 
-        var sorted = _fileCompletionIndex
-            .Concat(_skillCompletionIndex)
-            .Where(item => MatchesQuery(item.MatchText, query))
-            .OrderBy(item => Rank(item.MatchText, query))
-            .ThenBy(item => item.PrimaryText, StringComparer.OrdinalIgnoreCase)
-            .Take(MaxCompletionItems)
-            .ToArray();
+        var sorted = _atCompletion.FilterMatches(query);
 
         AtCompletionItems.Clear();
         foreach (var item in sorted)
@@ -1036,11 +860,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return false;
         }
 
-        var replacement = AtCompletionItems[SelectedAtCompletionIndex].InsertText;
-        if (!replacement.EndsWith(' '))
-        {
-            replacement += " ";
-        }
+        var replacement = ComposerAtCompletionService.FormatReplacement(AtCompletionItems[SelectedAtCompletionIndex]);
         ComposerText = ComposerText[..atStart] + replacement + ComposerText[atEndExclusive..];
         newCaretIndex = atStart + replacement.Length;
         CloseAtCompletion();
@@ -1064,32 +884,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(Sidebar));
     }
 
-    private void SyncWorkspaceContext()
-    {
-        if (!string.IsNullOrWhiteSpace(_session.ActiveWorkspace))
-        {
-            var activeRoot = Path.GetFullPath(_session.ActiveWorkspace);
-            var match = _appSettings.Workspaces.FirstOrDefault(workspace =>
-                !string.IsNullOrWhiteSpace(workspace.RootPath)
-                && string.Equals(Path.GetFullPath(workspace.RootPath), activeRoot, StringComparison.OrdinalIgnoreCase));
-            _workspaceContext.SetWorkspace(activeRoot, match?.Name, ResolveIgnorePatterns(match));
-            return;
-        }
-
-        var configured = _appSettings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath));
-        if (configured is null)
-        {
-            _workspaceContext.SetWorkspace(null);
-            return;
-        }
-
-        _workspaceContext.SetWorkspace(configured.RootPath, configured.Name, ResolveIgnorePatterns(configured));
-    }
-
-    private IReadOnlyList<string> ResolveIgnorePatterns(WorkspaceSettings? workspace) =>
-        WorkspaceIgnoreResolver.Resolve(
-            workspacePatterns: workspace?.IgnorePatterns,
-            globalPatterns: _appSettings.WorkspaceIgnore.DirectoryNames);
+    private void SyncWorkspaceContext() =>
+        _workspaceBridge.SyncWorkspaceContext(_session, _appSettings, _workspaceContext);
 
     private async Task SaveCurrentSessionIfNeededAsync() =>
         await SaveCurrentSessionIfNeededAsync(_session);
@@ -1107,7 +903,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var toSave = DeriveSessionTitle(session);
+        var toSave = SessionHistoryCoordinator.DeriveSessionTitle(session);
         if (string.Equals(toSave.Id, _displayedSessionId, StringComparison.Ordinal))
         {
             _session = toSave;
@@ -1130,61 +926,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void RequestRefreshSessionHistory()
-    {
-        _historyRefreshCts?.Cancel();
-        _historyRefreshCts?.Dispose();
-        _historyRefreshCts = new CancellationTokenSource();
-        var token = _historyRefreshCts.Token;
-        _ = DebouncedRefreshSessionHistoryAsync(token);
-    }
-
-    private async Task DebouncedRefreshSessionHistoryAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Task.Delay(HistoryRefreshDebounce, cancellationToken);
-            await RefreshSessionHistoryAsync();
-        }
-        catch (OperationCanceledException)
-        {
-            // Superseded by a newer refresh request.
-        }
-    }
+    private void RequestRefreshSessionHistory() =>
+        _sessionHistory.RequestRefresh(RefreshSessionHistoryAsync);
 
     private async Task RefreshSessionHistoryAsync()
     {
-        var entries = await _storage.ListSessionsAsync();
-        AgentRecordGroups.Clear();
-        foreach (var group in AgentRecordGrouping.Build(
-                     entries,
-                     _session.Id,
-                     _turnHost.IsRunning,
-                     StopSession))
-        {
-            if (group.Items.Count > 0)
-            {
-                AgentRecordGroups.Add(group);
-            }
-        }
-
+        await _sessionHistory.RefreshAsync(_session.Id, _turnHost.IsRunning, StopSession);
         OnPropertyChanged(nameof(HasAgentRecords));
     }
 
-    public bool HasAgentRecords => AgentRecordGroups.Count > 0;
+    public bool HasAgentRecords => _sessionHistory.HasAgentRecords;
 
-    private SessionHistoryItemViewModel? GetFirstAgentRecord()
-    {
-        foreach (var group in AgentRecordGroups)
-        {
-            if (group.Items.Count > 0)
-            {
-                return group.Items[0];
-            }
-        }
-
-        return null;
-    }
+    private SessionHistoryItemViewModel? GetFirstAgentRecord() => _sessionHistory.GetFirstAgentRecord();
 
     private async Task LoadSessionInternalAsync(string sessionId)
     {
@@ -1223,59 +976,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         NotifyCommandStatesChanged();
     }
 
-    private static AgentSession DeriveSessionTitle(AgentSession session)
-    {
-        if (!string.Equals(session.Title, "New Chat", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(session.Title, "New chat", StringComparison.OrdinalIgnoreCase))
-        {
-            return session;
-        }
-
-        var firstUser = session.Messages.FirstOrDefault(message => message.Role == MessageRole.User);
-        if (firstUser is null || string.IsNullOrWhiteSpace(firstUser.Content))
-        {
-            return session;
-        }
-
-        var normalized = firstUser.Content.Replace("\r\n", " ").Replace('\n', ' ').Trim();
-        var title = normalized.Length <= 30 ? normalized : $"{normalized[..30]}...";
-        return session.WithTitle(title);
-    }
-
-    private void ConfigureWorkspaceWatcher()
-    {
-        _workspaceWatcher?.Dispose();
-        _workspaceWatcher = null;
-
-        if (string.IsNullOrWhiteSpace(_session.ActiveWorkspace) || !Directory.Exists(_session.ActiveWorkspace))
-        {
-            return;
-        }
-
-        _workspaceWatcher = new FileSystemWatcher(_session.ActiveWorkspace)
-        {
-            IncludeSubdirectories = true,
-            EnableRaisingEvents = true
-        };
-        _workspaceWatcher.Created += WorkspaceChanged;
-        _workspaceWatcher.Deleted += WorkspaceChanged;
-        _workspaceWatcher.Changed += WorkspaceChanged;
-        _workspaceWatcher.Renamed += WorkspaceChanged;
-    }
-
-    private void WorkspaceChanged(object sender, FileSystemEventArgs e)
-    {
-        Application.Current.Dispatcher.InvokeAsync(() =>
-        {
-            if (!string.IsNullOrWhiteSpace(e.FullPath))
+    private void ConfigureWorkspaceWatcher() =>
+        _workspaceBridge.ConfigureWatcher(
+            _session,
+            path => FileEditor.HandleExternalFileChange(path),
+            () =>
             {
-                FileEditor.HandleExternalFileChange(e.FullPath);
-            }
-
-            RefreshAtCompletionSources();
-            Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
-        });
-    }
+                RefreshAtCompletionSources();
+                Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
+            });
 
     public bool HasPendingShutdownWork => _turnHost.HasActiveWork;
 
@@ -1283,9 +992,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        _uiLayoutSaveCts?.Cancel();
-        _workspaceWatcher?.Dispose();
-        _workspaceWatcher = null;
+        _workspaceBridge.Dispose();
 
         await _shutdownService.ShutdownAsync(progress, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
@@ -1304,10 +1011,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();
-        _uiLayoutSaveCts?.Cancel();
-        _uiLayoutSaveCts?.Dispose();
-        _historyRefreshCts?.Cancel();
-        _historyRefreshCts?.Dispose();
+        _uiLayout.Dispose();
+        _sessionHistory.Dispose();
+        _workspaceBridge.Dispose();
     }
 
     private bool EnsureCurrentApiKeySecret(AppSettings settings)
@@ -1358,77 +1064,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SendCommand.NotifyCanExecuteChanged();
     }
 
-    private void RefreshAtCompletionSources()
-    {
-        _fileCompletionIndex.Clear();
-        _skillCompletionIndex.Clear();
-
-        _skillCatalog.Reload();
-        foreach (var skill in _skillCatalog.Skills)
-        {
-            _skillCompletionIndex.Add(new AtCompletionItemViewModel(
-                Type: "技能",
-                PrimaryText: skill.Name,
-                SecondaryText: skill.SkillId,
-                InsertText: $"@skill:{skill.SkillId}",
-                MatchText: $"{skill.Name} {skill.SkillId}"));
-        }
-
-        if (string.IsNullOrWhiteSpace(_session.ActiveWorkspace) || !Directory.Exists(_session.ActiveWorkspace))
-        {
-            return;
-        }
-
-        var root = Path.GetFullPath(_session.ActiveWorkspace);
-        var ignoredNames = new HashSet<string>(_workspaceContext.IgnorePatterns, StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
-            {
-                if (ignoredNames.Contains(Path.GetFileName(path)))
-                {
-                    continue;
-                }
-
-                var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-                _fileCompletionIndex.Add(new AtCompletionItemViewModel(
-                    Type: "文件",
-                    PrimaryText: Path.GetFileName(path),
-                    SecondaryText: relative,
-                    InsertText: $"@{relative}",
-                    MatchText: $"{relative} {Path.GetFileName(path)}"));
-            }
-        }
-        catch
-        {
-            // Keep whatever was indexed successfully.
-        }
-    }
-
-    private static bool TryGetAtQuery(string text, int caretIndex, out string query)
-    {
-        query = string.Empty;
-        if (!ComposerCompletionQuery.TryGetAtQuerySpan(text, caretIndex, out var atStart, out var atEndExclusive))
-        {
-            return false;
-        }
-
-        query = text[(atStart + 1)..atEndExclusive];
-        return true;
-    }
-
-    private static bool MatchesQuery(string haystack, string query) =>
-        string.IsNullOrWhiteSpace(query) || haystack.Contains(query, StringComparison.OrdinalIgnoreCase);
-
-    private static int Rank(string haystack, string query)
-    {
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            return 0;
-        }
-
-        return haystack.StartsWith(query, StringComparison.OrdinalIgnoreCase) ? 0 : 1;
-    }
+    private void RefreshAtCompletionSources() =>
+        _atCompletion.RefreshSources(
+            _skillCatalog,
+            _session.ActiveWorkspace,
+            _workspaceContext.IgnorePatterns);
 
     public void ShowCopyNotice(string message)
     {

@@ -22,12 +22,10 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!ToolArguments.TryGetOptionalNormalizedPath(invocation, out var requestedPath, out var error))
+        if (!WorkspaceToolHelper.TryResolveOptionalNormalizedPath(invocation, guard, out var fullPath, out var error))
         {
             return error;
         }
-
-        var fullPath = guard.Normalize(requestedPath);
         if (!Directory.Exists(fullPath))
         {
             return ToolResult.Failure("Directory not found", fullPath);
@@ -43,7 +41,7 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
             .Select(path => FormatEntry(workspaceRoot, path))
             .ToArray();
 
-        await audit.WriteAsync("file_list", new { path = fullPath, count = files.Length }, cancellationToken);
+        await WorkspaceToolHelper.AuditAsync(audit, "file_list", new { path = fullPath, count = files.Length }, cancellationToken);
         var content = files.Length == 0
             ? "(empty directory)"
             : string.Join(Environment.NewLine, files) + Environment.NewLine + FileListPathCopyNotice;

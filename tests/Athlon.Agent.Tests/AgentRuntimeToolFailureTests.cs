@@ -26,7 +26,8 @@ public sealed class AgentRuntimeToolFailureTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
-            new NoOpLogger());
+            new NoOpLogger(),
+            new NoOpPostTurnMemoryProcessor());
 
         var session = AgentSession.Create("tool-failure-test");
         var result = await runtime.SendAsync(session, "run tool", null);

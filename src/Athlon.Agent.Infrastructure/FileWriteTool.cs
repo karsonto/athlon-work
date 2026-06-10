@@ -19,14 +19,12 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!ToolArguments.TryGetNormalizedPath(invocation, out var path, out var error)) return error;
+        if (!WorkspaceToolHelper.TryResolveNormalizedPath(invocation, guard, out var fullPath, out var error)) return error;
         if (!ToolArguments.TryGetRequired(invocation, "content", out var content, out error)) return error;
-
-        var fullPath = guard.Normalize(path);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
         AtomicFile.BackupIfExists(fullPath);
         await File.WriteAllTextAsync(fullPath, content, cancellationToken);
-        await audit.WriteAsync("file_write", new { path = fullPath, chars = content.Length }, cancellationToken);
+        await WorkspaceToolHelper.AuditAsync(audit, "file_write", new { path = fullPath, chars = content.Length }, cancellationToken);
         return ToolResult.Success($"Wrote {content.Length} chars to {Path.GetFileName(fullPath)}");
     }
 }

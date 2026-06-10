@@ -32,8 +32,7 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
         if (!ToolArguments.TryGetRequired(invocation, "pattern", out var pattern, out var error)) return error;
-        if (!ToolArguments.TryGetOptionalNormalizedPath(invocation, out var requestedPath, out error)) return error;
-        var fullPath = guard.Normalize(requestedPath);
+        if (!WorkspaceToolHelper.TryResolveOptionalNormalizedPath(invocation, guard, out var fullPath, out error)) return error;
 
         var glob = invocation.Arguments.GetValueOrDefault("glob") ?? "*";
         var ignorePatterns = guard.GetIgnorePatterns();
@@ -95,7 +94,7 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
             if (matches.Count >= MaxMatches) break;
         }
 
-        await audit.WriteAsync("grep_files", new { path = fullPath, pattern, count = matches.Count }, cancellationToken);
+        await WorkspaceToolHelper.AuditAsync(audit, "grep_files", new { path = fullPath, pattern, count = matches.Count }, cancellationToken);
         return matches.Count == 0
             ? ToolResult.Success("No matches found", "No matches found")
             : ToolResult.Success($"Found {matches.Count} matches", string.Join(Environment.NewLine, matches));

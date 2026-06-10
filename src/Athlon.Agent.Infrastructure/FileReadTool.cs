@@ -19,12 +19,10 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, Ap
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!ToolArguments.TryGetNormalizedPath(invocation, out var path, out var error))
+        if (!WorkspaceToolHelper.TryResolveNormalizedPath(invocation, guard, out var fullPath, out var error))
         {
             return error;
         }
-
-        var fullPath = guard.Normalize(path);
         if (!File.Exists(fullPath))
         {
             return ToolResult.Failure("File not found", fullPath);
@@ -41,7 +39,8 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, Ap
 
         var selection = FileReadLineReader.ResolveSelection(invocation, fileRead);
         var read = await FileReadLineReader.ReadAsync(fullPath, selection, fileRead, cancellationToken);
-        await audit.WriteAsync(
+        await WorkspaceToolHelper.AuditAsync(
+            audit,
             "file_read",
             new
             {

@@ -1,7 +1,3 @@
-using System.Diagnostics;
-using System.Net.Http;
-using System.Text;
-using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
@@ -24,6 +20,19 @@ public sealed class AgentRuntime(
     IPostTurnMemoryProcessor memoryProcessor) : IAgentRuntime
 {
     private readonly IAppLogger _logger = logger.ForContext("AgentRuntime");
+    private readonly ToolInvocationPipeline _toolPipeline = new(
+        storage,
+        toolResultEvictor,
+        () => AmbientToolRouterScope.CurrentRouter ?? toolRouter,
+        logger);
+    private AgentTurnCoordinator? _turnCoordinator;
+    private AgentTurnCoordinator TurnCoordinator => _turnCoordinator ??= new AgentTurnCoordinator(
+        modelClient,
+        tokenEstimatorCalibrator,
+        settings,
+        ResolveSystemPromptOrchestrator,
+        RunPreCompletionPipelineAsync,
+        logger);
 
     public async Task<AgentSession> SendAsync(
         AgentSession session,
@@ -120,7 +129,7 @@ public sealed class AgentRuntime(
                 modelMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
 
                 var assistantMessageId = Guid.NewGuid().ToString("N");
-                var (updatedSession, response) = await CompleteWithOverflowRetryAsync(
+                var (updatedSession, response) = await TurnCoordinator.CompleteWithOverflowRetryAsync(
                     session,
                     callbacks,
                     streamAdapter,
@@ -208,114 +217,21 @@ public sealed class AgentRuntime(
         }
     }
 
-    private async Task<(AgentSession Session, AgentModelResponse Response)> CompleteWithOverflowRetryAsync(
-        AgentSession session,
-        AgentTurnCallbacks? callbacks,
-        AgentStreamAdapter streamAdapter,
-        string assistantMessageId,
-        IReadOnlyList<AgentModelMessage> modelMessages,
-        IReadOnlyList<ToolDefinition> tools,
-        FrozenSystemPrompt frozenPrompt,
-        string environmentPrompt,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var response = await modelClient.CompleteAsync(
-                new AgentModelRequest(modelMessages, tools),
-                token => PublishStreamEventsAsync(callbacks, streamAdapter.OnTextDelta(assistantMessageId, token)),
-                token => PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
-                delta => PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
-                cancellationToken);
-            ObserveModelUsage(session, environmentPrompt, tools, response);
-            return (session, response);
-        }
-        catch (HttpRequestException ex) when (IsContextLengthError(ex))
-        {
-            _logger.Warning("Context length exceeded for session {SessionId}; forcing compact and retrying once", session.Id);
-
-            session = await RunPreCompletionPipelineAsync(
-                session,
-                callbacks,
-                PreCompletionOptions.ForceCompact,
-                environmentPrompt,
-                tools,
-                ContextPressureLevel.Overflow,
-                cancellationToken);
-
-            environmentPrompt = ResolveSystemPromptOrchestrator().BuildForReasoningIteration(
-                frozenPrompt,
-                session,
-                tools);
-            var retryMessages = BuildModelMessagesForSession(environmentPrompt, session.Messages);
-            var response = await modelClient.CompleteAsync(
-                new AgentModelRequest(retryMessages, tools),
-                token => PublishStreamEventsAsync(callbacks, streamAdapter.OnTextDelta(assistantMessageId, token)),
-                token => PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
-                delta => PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
-                cancellationToken);
-            ObserveModelUsage(session, environmentPrompt, tools, response);
-            return (session, response);
-        }
-    }
-
-    private async Task<AgentSession> InvokeToolAndPersistAsync(
+    private Task<AgentSession> InvokeToolAndPersistAsync(
         AgentSession session,
         string? parentMessageId,
         AgentToolCall toolCall,
         AgentStreamAdapter streamAdapter,
         AgentTurnCallbacks? callbacks,
-        CancellationToken cancellationToken)
-    {
-        var sw = Stopwatch.StartNew();
-        ToolResult result;
-        try
-        {
-            result = await Task.Run(
-                    () => ResolveToolRouter().InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken),
-                    cancellationToken)
-                .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "Tool {ToolName} threw; returning failure to the model", toolCall.Name);
-            result = ToolResult.Failure("Tool invocation failed", ex.Message, sw.Elapsed);
-        }
-
-        sw.Stop();
-
-        await storage.AppendToolCallLogAsync(
-            session.Id,
-            new SessionToolCallLogEntry(
-                DateTimeOffset.UtcNow,
-                toolCall.Id,
-                toolCall.Name,
-                toolCall.Arguments,
-                result.Succeeded,
-                result.Summary,
-                result.Content,
-                result.Error,
-                sw.ElapsedMilliseconds),
-            cancellationToken);
-
-        var content = FormatToolResult(toolCall, result);
-        content = await toolResultEvictor.EvictIfNeededAsync(
-            session.Id,
+        CancellationToken cancellationToken) =>
+        _toolPipeline.InvokeAndPersistAsync(
+            session,
+            parentMessageId,
             toolCall,
-            result,
-            content,
+            streamAdapter,
+            callbacks,
+            PersistMessageAsync,
             cancellationToken);
-
-        var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
-        session = session.WithMessage(toolMessage);
-        await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall));
-        await PersistMessageAsync(session, toolMessage, cancellationToken);
-        return session;
-    }
 
     private async Task<AgentSession> RunPreCompletionPipelineAsync(
         AgentSession session,
@@ -349,29 +265,6 @@ public sealed class AgentRuntime(
         var messageIdsBefore = session.Messages.Select(message => message.Id).ToHashSet(StringComparer.Ordinal);
         session = await preCompletionPipeline.RunAsync(session, options, runtimeContext, cancellationToken);
         return await PersistCompactionAuditsAsync(session, messageIdsBefore, callbacks, cancellationToken);
-    }
-
-    private void ObserveModelUsage(
-        AgentSession session,
-        string environmentPrompt,
-        IReadOnlyList<ToolDefinition> tools,
-        AgentModelResponse response)
-    {
-        if (response.Usage?.PromptTokens is not > 0)
-        {
-            return;
-        }
-
-        var multiplier = tokenEstimatorCalibrator.GetMultiplier(session.Id);
-        var budget = ContextBudgetCalculator.Compute(
-            environmentPrompt,
-            tools,
-            session.Messages,
-            settings.ContextCompaction,
-            settings.Model,
-            multiplier);
-        var estimatedPromptTokens = budget.FixedOverhead + budget.EstimatedHistory;
-        tokenEstimatorCalibrator.Observe(session.Id, estimatedPromptTokens, response.Usage.PromptTokens);
     }
 
     private async Task<AgentSession> PersistCompactionAuditsAsync(
@@ -449,7 +342,7 @@ public sealed class AgentRuntime(
         }
     }
 
-    private static async Task PublishStreamEventsAsync(
+    internal static async Task PublishStreamEventsAsync(
         AgentTurnCallbacks? callbacks,
         IReadOnlyList<AgentStreamEvent> events)
     {
@@ -464,7 +357,7 @@ public sealed class AgentRuntime(
         }
     }
 
-    private static bool IsContextLengthError(Exception exception)
+    internal static bool IsContextLengthError(Exception exception)
     {
         for (var current = exception; current is not null; current = current.InnerException)
         {
@@ -484,198 +377,16 @@ public sealed class AgentRuntime(
     }
 
     private List<AgentModelMessage> BuildModelMessagesForSession(string environmentPrompt, IReadOnlyList<ChatMessage> history) =>
-        BuildModelMessages(environmentPrompt, history, settings.ContextCompaction.IncludeReasoningInModelContext);
+        ModelMessageBuilder.BuildForSession(environmentPrompt, history, settings.ContextCompaction.IncludeReasoningInModelContext);
 
     internal static List<AgentModelMessage> BuildModelMessages(
         string environmentPrompt,
         IReadOnlyList<ChatMessage> history,
-        bool includeReasoningInModelContext = false)
-    {
-        var messages = new List<AgentModelMessage>
-        {
-            new("system", environmentPrompt)
-        };
+        bool includeReasoningInModelContext = false) =>
+        ModelMessageBuilder.BuildModelMessages(environmentPrompt, history, includeReasoningInModelContext);
 
-        for (var index = 0; index < history.Count; index++)
-        {
-            var message = history[index];
-            switch (message.Role)
-            {
-                case MessageRole.Compaction:
-                    continue;
-                case MessageRole.User:
-                    messages.Add(new AgentModelMessage("user", BuildUserContent(message)));
-                    break;
-                case MessageRole.Assistant:
-                    index = AppendAssistantModelMessages(messages, history, index, includeReasoningInModelContext);
-                    break;
-                case MessageRole.Tool:
-                    messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(message.Content)));
-                    break;
-                case MessageRole.Summary:
-                    messages.Add(new AgentModelMessage("user", $"History summary: {message.Content}"));
-                    break;
-                case MessageRole.System:
-                    messages.Add(new AgentModelMessage("user", message.Content));
-                    break;
-                default:
-                    messages.Add(new AgentModelMessage("user", message.Content));
-                    break;
-            }
-        }
-
-        return messages;
-    }
-
-    private static int AppendAssistantModelMessages(
-        List<AgentModelMessage> messages,
-        IReadOnlyList<ChatMessage> history,
-        int assistantIndex,
-        bool includeReasoningInModelContext)
-    {
-        var message = history[assistantIndex];
-        var reasoningContent = includeReasoningInModelContext ? message.ReasoningContent : null;
-        var toolCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
-        if (toolCalls is not { Count: > 0 })
-        {
-            messages.Add(new AgentModelMessage("assistant", message.Content, ReasoningContent: reasoningContent));
-            return assistantIndex;
-        }
-
-        var scanIndex = assistantIndex + 1;
-        var toolMessages = new List<ChatMessage>();
-        while (scanIndex < history.Count)
-        {
-            switch (history[scanIndex].Role)
-            {
-                case MessageRole.Tool:
-                    toolMessages.Add(history[scanIndex]);
-                    scanIndex++;
-                    break;
-                case MessageRole.Compaction:
-                    scanIndex++;
-                    break;
-                default:
-                    goto DoneScanning;
-            }
-        }
-
-        DoneScanning:
-        var toolByCallId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
-        foreach (var toolMessage in toolMessages)
-        {
-            var toolCallId = ExtractToolCallId(toolMessage.Content);
-            if (!string.IsNullOrWhiteSpace(toolCallId))
-            {
-                toolByCallId.TryAdd(toolCallId, toolMessage);
-            }
-        }
-
-        messages.Add(new AgentModelMessage("assistant", message.Content, ToolCalls: toolCalls, ReasoningContent: reasoningContent));
-        foreach (var toolCall in toolCalls)
-        {
-            var content = toolByCallId.TryGetValue(toolCall.Id, out var toolMessage)
-                ? toolMessage.Content
-                : "Tool did not run or the result was not recorded.";
-            messages.Add(new AgentModelMessage("tool", content, toolCall.Id));
-        }
-
-        var consumed = new HashSet<string>(toolCalls.Select(call => call.Id), StringComparer.Ordinal);
-        foreach (var toolMessage in toolMessages)
-        {
-            var toolCallId = ExtractToolCallId(toolMessage.Content);
-            if (toolCallId is not null && consumed.Contains(toolCallId))
-            {
-                continue;
-            }
-
-            messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(toolMessage.Content)));
-        }
-
-        return scanIndex - 1;
-    }
-
-    private static string FormatToolResultAsUserContent(string content) =>
-        string.Join(Environment.NewLine, "[Tool output]", content);
-
-    private static object BuildUserContent(ChatMessage message)
-    {
-        if (message.ImageAttachments is not { Count: > 0 })
-        {
-            return message.Content;
-        }
-
-        var parts = new List<object>
-        {
-            new Dictionary<string, object?>
-            {
-                ["type"] = "text",
-                ["text"] = message.Content
-            }
-        };
-
-        foreach (var image in message.ImageAttachments)
-        {
-            var dataUrl = ImageAttachmentDataUrlResolver.ResolveDataUrl(image);
-            if (string.IsNullOrWhiteSpace(dataUrl))
-            {
-                continue;
-            }
-
-            parts.Add(new Dictionary<string, object?>
-            {
-                ["type"] = "image_url",
-                ["image_url"] = new Dictionary<string, object?>
-                {
-                    ["url"] = dataUrl
-                }
-            });
-        }
-
-        return parts;
-    }
-
-    public static string FormatToolResult(AgentToolCall call, ToolResult result)
-    {
-        var status = result.Succeeded ? "succeeded" : "failed";
-        return string.Join(Environment.NewLine, new[]
-        {
-            $"ToolCallId: {call.Id}",
-            $"Tool `{call.Name}` {status}.",
-            "",
-            $"Arguments: {FormatArguments(call.Arguments)}",
-            $"Summary: {result.Summary}",
-            "",
-            result.Content ?? result.Error ?? string.Empty
-        });
-    }
-
-    private static string FormatArguments(IReadOnlyDictionary<string, string> arguments)
-    {
-        return arguments.Count == 0
-            ? "(none)"
-            : string.Join(Environment.NewLine, arguments.Select(argument => $"{argument.Key}={argument.Value}"));
-    }
-
-    private static string? ExtractToolCallId(string? content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            return null;
-        }
-
-        foreach (var line in content.Split(["\r\n", "\n"], StringSplitOptions.None))
-        {
-            const string prefix = "ToolCallId:";
-            if (line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                var value = line[prefix.Length..].Trim();
-                return string.IsNullOrWhiteSpace(value) ? null : value;
-            }
-        }
-
-        return null;
-    }
+    public static string FormatToolResult(AgentToolCall call, ToolResult result) =>
+        ModelMessageBuilder.FormatToolResult(call, result);
 
     private static bool ShouldListWorkspaceFiles(string userInput)
     {
@@ -711,14 +422,4 @@ public sealed class AgentRuntime(
 
     private ISystemPromptOrchestrator ResolveSystemPromptOrchestrator() =>
         AmbientSystemPromptOrchestratorScope.CurrentOrchestrator ?? systemPromptOrchestrator;
-}
-public sealed class AgentOrchestrator(IAgentRuntime agentRuntime) : IAgentOrchestrator
-{
-    public Task<AgentSession> SendAsync(
-        AgentSession session,
-        string userInput,
-        IReadOnlyList<ImageAttachment>? imageAttachments = null,
-        AgentTurnCallbacks? callbacks = null,
-        CancellationToken cancellationToken = default) =>
-        agentRuntime.SendAsync(session, userInput, imageAttachments, callbacks, cancellationToken);
 }

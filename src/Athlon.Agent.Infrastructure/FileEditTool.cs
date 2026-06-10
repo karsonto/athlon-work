@@ -29,11 +29,9 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!ToolArguments.TryGetNormalizedPath(invocation, out var path, out var error)) return error;
+        if (!WorkspaceToolHelper.TryResolveNormalizedPath(invocation, guard, out var fullPath, out var error)) return error;
         if (!ToolArguments.TryGetRequired(invocation, "old_text", out var oldText, out error)) return error;
         if (!ToolArguments.TryGetRequired(invocation, "new_text", out var newText, out error)) return error;
-
-        var fullPath = guard.Normalize(path);
         var content = await File.ReadAllTextAsync(fullPath, cancellationToken);
         var replaceAll = invocation.Arguments.TryGetValue("replace_all", out var value) && bool.TryParse(value, out var parsed) && parsed;
 
@@ -52,7 +50,8 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         AtomicFile.BackupIfExists(fullPath);
         var updated = FileEditMatcher.ApplyReplace(content, match.MatchedOldText, effectiveNewText, replaceAll);
         await File.WriteAllTextAsync(fullPath, updated, cancellationToken);
-        await audit.WriteAsync(
+        await WorkspaceToolHelper.AuditAsync(
+            audit,
             "file_edit",
             new
             {

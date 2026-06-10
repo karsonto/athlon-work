@@ -46,9 +46,8 @@ public sealed class AgentRuntimeCompactionTests
 
             new AppSettings(),
 
-            new NoOpLogger());
-
-
+            new NoOpLogger(),
+            new NoOpPostTurnMemoryProcessor());
 
         ChatMessage? notified = null;
         AgentSession? sessionAfterCompact = null;

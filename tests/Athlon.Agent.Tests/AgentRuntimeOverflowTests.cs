@@ -37,7 +37,8 @@ public sealed class AgentRuntimeOverflowTests
             new TokenEstimatorCalibrator(settings),
             new NoOpActiveAgentSessionContext(),
             settings,
-            new NoOpLogger());
+            new NoOpLogger(),
+            new NoOpPostTurnMemoryProcessor());
 
         var session = AgentSession.Create("overflow");
         var result = await runtime.SendAsync(session, "hello");
