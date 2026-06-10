@@ -2,62 +2,6 @@ namespace Athlon.Agent.App.Services;
 
 internal static class ComposerCompletionQuery
 {
-    public static bool TryGetSlashQuerySpan(string text, int caretIndex, out int slashStart, out int slashEndExclusive)
-    {
-        slashStart = -1;
-        slashEndExclusive = -1;
-        if (string.IsNullOrEmpty(text))
-        {
-            return false;
-        }
-
-        var safeCaret = Math.Clamp(caretIndex, 0, text.Length);
-        var index = safeCaret - 1;
-        while (index >= 0)
-        {
-            var c = text[index];
-            if (char.IsWhiteSpace(c))
-            {
-                break;
-            }
-
-            if (c == '/')
-            {
-                if (index > 0 && !char.IsWhiteSpace(text[index - 1]))
-                {
-                    return false;
-                }
-
-                var queryStart = index + 1;
-                if (queryStart < safeCaret && ContainsPathLikeSlash(text, queryStart, safeCaret))
-                {
-                    return false;
-                }
-
-                slashStart = index;
-                slashEndExclusive = safeCaret;
-                return true;
-            }
-
-            index--;
-        }
-
-        if (safeCaret > 0 && text[0] == '/' && index < 0)
-        {
-            var queryStart = 1;
-            if (queryStart < safeCaret && ContainsPathLikeSlash(text, queryStart, safeCaret))
-            {
-                return false;
-            }
-
-            slashStart = 0;
-            slashEndExclusive = safeCaret;
-            return true;
-        }
-
-        return false;
-    }
-
     public static bool TryGetAtQuerySpan(string text, int caretIndex, out int atStart, out int atEndExclusive)
     {
         atStart = -1;
@@ -97,19 +41,6 @@ internal static class ComposerCompletionQuery
             }
 
             index--;
-        }
-
-        return false;
-    }
-
-    private static bool ContainsPathLikeSlash(string text, int start, int endExclusive)
-    {
-        for (var i = start; i < endExclusive; i++)
-        {
-            if (text[i] == '/')
-            {
-                return true;
-            }
         }
 
         return false;

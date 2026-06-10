@@ -668,14 +668,6 @@ public partial class MainWindow : Window
 
         if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
         {
-            if (_viewModel.IsSlashCompletionOpen && TryAcceptSlashCompletion())
-            {
-                e.Handled = true;
-                return;
-            }
-
-            _viewModel.CloseSlashCompletion();
-
             if (_viewModel.IsAtCompletionOpen && TryAcceptAtCompletion())
             {
                 e.Handled = true;
@@ -691,31 +683,6 @@ public partial class MainWindow : Window
 
             e.Handled = true;
             return;
-        }
-
-        if (_viewModel.IsSlashCompletionOpen)
-        {
-            switch (e.Key)
-            {
-                case Key.Down:
-                    _viewModel.MoveSlashCompletionSelection(1);
-                    SyncSlashCompletionListSelection();
-                    e.Handled = true;
-                    return;
-                case Key.Up:
-                    _viewModel.MoveSlashCompletionSelection(-1);
-                    SyncSlashCompletionListSelection();
-                    e.Handled = true;
-                    return;
-                case Key.Tab:
-                    TryAcceptSlashCompletion();
-                    e.Handled = true;
-                    return;
-                case Key.Escape:
-                    _viewModel.CloseSlashCompletion();
-                    e.Handled = true;
-                    return;
-            }
         }
 
         if (_viewModel.IsAtCompletionOpen)
@@ -786,21 +753,11 @@ public partial class MainWindow : Window
         {
             SyncAtCompletionListSelection();
         }
-        else if (_viewModel.IsSlashCompletionOpen)
-        {
-            SyncSlashCompletionListSelection();
-        }
     }
 
     private void AtCompletionListBox_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         TryAcceptAtCompletion();
-        e.Handled = true;
-    }
-
-    private void SlashCompletionListBox_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        TryAcceptSlashCompletion();
         e.Handled = true;
     }
 
@@ -814,30 +771,6 @@ public partial class MainWindow : Window
         var index = Math.Clamp(_viewModel.SelectedAtCompletionIndex, 0, AtCompletionListBox.Items.Count - 1);
         AtCompletionListBox.SelectedIndex = index;
         AtCompletionListBox.ScrollIntoView(AtCompletionListBox.Items[index]);
-    }
-
-    private void SyncSlashCompletionListSelection()
-    {
-        if (!_viewModel.IsSlashCompletionOpen || SlashCompletionListBox.Items.Count == 0)
-        {
-            return;
-        }
-
-        var index = Math.Clamp(_viewModel.SelectedSlashCompletionIndex, 0, SlashCompletionListBox.Items.Count - 1);
-        SlashCompletionListBox.SelectedIndex = index;
-        SlashCompletionListBox.ScrollIntoView(SlashCompletionListBox.Items[index]);
-    }
-
-    private bool TryAcceptSlashCompletion()
-    {
-        if (!_viewModel.TryAcceptSlashCompletion(ComposerTextBox.CaretIndex, out var newCaretIndex))
-        {
-            return false;
-        }
-
-        ComposerTextBox.Focus();
-        ComposerTextBox.CaretIndex = newCaretIndex;
-        return true;
     }
 
     private bool TryAcceptAtCompletion()

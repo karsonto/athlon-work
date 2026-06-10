@@ -28,13 +28,4 @@ public sealed class PreCompletionOptions
     public bool EmitCompactionAudit { get; init; } = true;
 
     public CompactionKind CompactionKind { get; init; } = CompactionKind.ConversationCompact;
-
-    public static PreCompletionOptions ManualForceCompact { get; } = new()
-    {
-        AllowTruncateArgs = true,
-        AllowConversationCompact = true,
-        ForceConversationCompact = true,
-        EmitCompactionAudit = true,
-        CompactionKind = CompactionKind.ManualCompact
-    };
 }

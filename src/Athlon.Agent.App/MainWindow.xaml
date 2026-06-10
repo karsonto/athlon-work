@@ -1063,7 +1063,7 @@
                             </TextBlock>
                         </Grid>
                         <Popup Grid.Row="1"
-                               IsOpen="{Binding IsComposerCompletionOpen, Mode=OneWay}"
+                               IsOpen="{Binding IsAtCompletionOpen, Mode=OneWay}"
                                PlacementTarget="{Binding ElementName=ComposerTextBox}"
                                Placement="Top"
                                StaysOpen="False"
@@ -1076,56 +1076,6 @@
                                     MinWidth="340"
                                     MaxWidth="560"
                                     MaxHeight="240">
-                                <Grid>
-                                <ListBox x:Name="SlashCompletionListBox"
-                                         ItemsSource="{Binding SlashCompletionItems}"
-                                         SelectedIndex="{Binding SelectedSlashCompletionIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         Focusable="False"
-                                         KeyboardNavigation.DirectionalNavigation="Contained"
-                                         MouseDoubleClick="SlashCompletionListBox_OnMouseDoubleClick"
-                                         BorderThickness="0"
-                                         Background="Transparent"
-                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                         ItemContainerStyle="{StaticResource CompletionListBoxItemStyle}">
-                                    <ListBox.Style>
-                                        <Style TargetType="ListBox">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsSlashCompletionOpen}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </ListBox.Style>
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="2,4">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0"
-                                                        Background="{StaticResource Brush.AtCompletionSkillBadgeBg}"
-                                                        BorderBrush="{StaticResource Brush.AtCompletionSkillBadgeBorder}"
-                                                        BorderThickness="1"
-                                                        CornerRadius="8"
-                                                        Padding="6,2"
-                                                        Margin="0,0,8,0">
-                                                    <TextBlock Text="{Binding Type}"
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource Brush.AtCompletionSkillBadgeText}" />
-                                                </Border>
-                                                <StackPanel Grid.Column="1">
-                                                    <TextBlock Text="{Binding PrimaryText}" FontSize="13" FontWeight="SemiBold" />
-                                                    <TextBlock Text="{Binding SecondaryText}"
-                                                               FontSize="11"
-                                                               Foreground="{StaticResource Brush.SubtleText}"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
                                 <ListBox x:Name="AtCompletionListBox"
                                          ItemsSource="{Binding AtCompletionItems}"
                                          SelectedIndex="{Binding SelectedAtCompletionIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
@@ -1194,7 +1144,6 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
-                                </Grid>
                             </Border>
                         </Popup>
                         <Grid Grid.Row="2" Margin="0,8,0,0">

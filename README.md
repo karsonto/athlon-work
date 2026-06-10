@@ -177,7 +177,7 @@ Before each model call, `PreCompletionPipeline` runs a **budget-aware parameter 
 | Critical | ≥ 80% (= target) | full 3-level pass → ~30% post-compaction |
 | Overflow | API `context_length` error | force compact → ~20% post-compaction + retry once |
 
-By default, `contextCompaction.enabled` and `dynamicCompaction.enabled` are **false**: proactive compaction is off until you enable it in settings or `settings.json`. Manual `/compact` and API overflow retry still compact when needed.
+By default, `contextCompaction.enabled` and `dynamicCompaction.enabled` are **false**: proactive compaction is off until you enable it in settings or `settings.json`. API overflow retry still compacts when needed.
 
 When dynamic compaction is disabled (but proactive compaction is enabled), only the static thresholds below apply.
 

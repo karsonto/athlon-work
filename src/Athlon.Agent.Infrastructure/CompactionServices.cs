@@ -521,21 +521,11 @@ public sealed class ConversationCompactor(
 
 
 
-        var auditKind = request.Kind == CompactionKind.ManualCompact
-
-            ? CompactionKind.ManualCompact
-
-            : CompactionKind.ConversationCompact;
-
         var strategy = request.Force
 
             ? CompactionStrategy.ForceCompact
 
-            : request.Kind == CompactionKind.ManualCompact
-
-                ? CompactionStrategy.ManualCompact
-
-                : CompactionStrategy.ConversationCompact;
+            : CompactionStrategy.ConversationCompact;
 
         var layers = new List<CompactionLayer> { CompactionLayer.ConversationCompact };
 
@@ -575,45 +565,25 @@ public sealed class ConversationCompactor(
 
                 cfg.IncludeReasoningInModelContext);
 
-            var auditContent = auditKind == CompactionKind.ManualCompact
+            var auditContent = CompactionMessageContent.CreateConversationCompact(
 
-                ? CompactionMessageContent.CreateManualCompact(
+                tokensBefore,
 
-                    tokensBefore,
+                tokensAfterPreview,
 
-                    tokensAfterPreview,
+                originalCount,
 
-                    originalCount,
+                transcriptPath,
 
-                    transcriptPath ?? string.Empty,
+                summary,
 
-                    summary,
+                strategy,
 
-                    layers,
+                layers,
 
-                    pressure,
+                pressure,
 
-                    utilization)
-
-                : CompactionMessageContent.CreateConversationCompact(
-
-                    tokensBefore,
-
-                    tokensAfterPreview,
-
-                    originalCount,
-
-                    transcriptPath,
-
-                    summary,
-
-                    strategy,
-
-                    layers,
-
-                    pressure,
-
-                    utilization);
+                utilization);
 
             compactMessages.Add(CompactionMessageContent.CreateCompactionMessage(auditContent));
 
@@ -659,7 +629,7 @@ public sealed class ConversationCompactor(
 
             session.Messages.Count,
 
-            auditKind,
+            request.Kind,
 
             request.Force);
 

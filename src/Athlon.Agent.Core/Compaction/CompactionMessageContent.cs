@@ -41,29 +41,6 @@ public static class CompactionMessageContent
         content.StartsWith(ConversationCompactionDefaults.SummaryMessageMarker, StringComparison.Ordinal)
         || IsCompressedPlaceholder(content);
 
-    public static string CreateManualCompact(
-        int tokensBefore,
-        int tokensAfter,
-        int originalMessageCount,
-        string transcriptPath,
-        string summaryPreview,
-        IReadOnlyList<CompactionLayer>? layers = null,
-        ContextPressureLevel? pressureLevel = null,
-        double? utilization = null) =>
-        Build(
-            CompactionKind.ManualCompact,
-            tokensBefore,
-            tokensAfter,
-            string.IsNullOrWhiteSpace(summaryPreview)
-                ? $"已手动压缩 {originalMessageCount} 条消息。"
-                : summaryPreview.Trim(),
-            CompactionStrategy.ManualCompact,
-            layers,
-            originalMessageCount: originalMessageCount,
-            transcriptPath: transcriptPath,
-            pressureLevel: pressureLevel,
-            utilization: utilization);
-
     public static ChatMessage CreateCompactionMessage(string content, string? parentId = null) =>
         ChatMessage.Create(MessageRole.Compaction, content, parentId);
 
