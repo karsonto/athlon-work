@@ -52,7 +52,6 @@ public static class LightAppThemePalette
         WarningSubtle = Ca(0x1F, ReportHtmlLightColors.Amber500),
         // Sidebar active: bg-sky-50 text-sky-700
         NavActiveBg = C(ReportHtmlLightColors.Sky50),
-        NavActiveText = C(ReportHtmlLightColors.Sky700),
         // Tool cards — neutral elevated
         ToolThinkingBorder = C(ReportHtmlLightColors.Slate200),
         ToolThinkingBg = C(ReportHtmlLightColors.White),
@@ -63,8 +62,6 @@ public static class LightAppThemePalette
         ToolFailureBorder = C(ReportHtmlLightColors.Slate200),
         ToolFailureBg = C(ReportHtmlLightColors.White),
         ToolFailureText = C(ReportHtmlLightColors.Rose700),
-        IconBadgeStart = C(ReportHtmlLightColors.Sky600),
-        IconBadgeEnd = C(ReportHtmlLightColors.Sky100),
         HoverNeutral = C(ReportHtmlLightColors.Slate50),
         HoverNeutralAlt = C(ReportHtmlLightColors.Slate100),
         HoverActive = C(ReportHtmlLightColors.Sky50),
@@ -99,8 +96,6 @@ public static class LightAppThemePalette
         // ChatPane gradient: #f8fbff → #f1f5f9
         ChatBackgroundTop = C(ReportHtmlLightColors.ChatGradientTop),
         ChatBackgroundBottom = C(ReportHtmlLightColors.ChatGradientBottom),
-        IconBadgeGradientStart = C(ReportHtmlLightColors.IconBadgeGradientStart),
-        IconBadgeGradientEnd = C(ReportHtmlLightColors.IconBadgeGradientEnd),
     };
 
     private static EditorThemeColors CreateEditor() => new()

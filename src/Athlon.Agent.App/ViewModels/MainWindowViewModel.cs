@@ -196,9 +196,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public bool IsComposerEmpty => string.IsNullOrWhiteSpace(ComposerText);
 
     [ObservableProperty]
-    private string streamingText = string.Empty;
-
-    [ObservableProperty]
     private bool isBusy;
 
     [ObservableProperty]
@@ -242,15 +239,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         if (string.Equals(page, "Settings", StringComparison.Ordinal))
         {
             Settings.SyncSkillsFromCatalog();
-        }
-    }
-
-    [RelayCommand]
-    private void ApplySuggestion(string text)
-    {
-        if (!string.IsNullOrWhiteSpace(text))
-        {
-            ComposerText = text;
         }
     }
 
@@ -328,7 +316,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         CurrentSessionTitle = _session.Title;
         ComposerText = string.Empty;
         PendingImageAttachments.Clear();
-        StreamingText = string.Empty;
         UpdateDisplayedBusyState();
         CurrentPage = "Chat";
         ApplySessionWorkspace();
@@ -359,7 +346,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _session = _session.WithMessages(Array.Empty<ChatMessage>());
         _activeUi.Messages.Clear();
         await _storage.ClearConversationDisplayAsync(_session.Id);
-        StreamingText = string.Empty;
         PendingImageAttachments.Clear();
 
         await _storage.SaveSessionAsync(_session);
@@ -443,7 +429,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             CurrentSessionTitle = _session.Title;
             ComposerText = string.Empty;
             PendingImageAttachments.Clear();
-            StreamingText = string.Empty;
             ApplySessionWorkspace();
             CurrentPage = "Chat";
         }
@@ -510,7 +495,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var input = SkillComposerExpander.Expand(ComposerText, _skillRuntime.GetSkills());
         var imageAttachments = PersistPendingImages(_displayedSessionId);
         ComposerText = string.Empty;
-        StreamingText = string.Empty;
         SyncWorkspaceContext();
 
         var ui = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
@@ -952,7 +936,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         CurrentSessionTitle = _session.Title;
         ComposerText = string.Empty;
         PendingImageAttachments.Clear();
-        StreamingText = string.Empty;
 
         if (_activeUi.Messages.Count == 0)
         {
@@ -997,17 +980,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         await _shutdownService.ShutdownAsync(progress, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
-    /// <summary>Legacy entry point; prefer <see cref="ShutdownAsync"/>.</summary>
-    public void PrepareForShutdown()
-    {
-        ShutdownAsync().GetAwaiter().GetResult();
-    }
-
     public void Dispose()
     {
         _turnHost.TurnCompleted -= OnTurnCompleted;
         _turnHost.TurnStateChanged -= OnTurnStateChanged;
-        PrepareForShutdown();
+        ShutdownAsync().GetAwaiter().GetResult();
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();

@@ -16,8 +16,6 @@ public sealed class UiLayoutSettingsBridge : IDisposable
         _appSettings = appSettings;
     }
 
-    public AppSettings Settings => _appSettings;
-
     public void ClampInitialLayout()
     {
         _appSettings.Ui.ContextSidebarWidth = Math.Clamp(

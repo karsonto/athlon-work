@@ -128,7 +128,7 @@ public sealed class SessionStreamingUiContext
 
         if (message.Role == MessageRole.Tool)
         {
-            var toolCallId = ExtractToolCallId(message.Content);
+            var toolCallId = AgentRuntime.ExtractToolCallId(message.Content);
             var existing = FindToolMessage(messages, toolCallId);
             if (existing is not null)
             {
@@ -293,16 +293,4 @@ public sealed class SessionStreamingUiContext
         }
     }
 
-    private static string? ExtractToolCallId(string content)
-    {
-        foreach (var line in content.Replace("\r\n", "\n").Split('\n'))
-        {
-            if (line.StartsWith("ToolCallId:", StringComparison.OrdinalIgnoreCase))
-            {
-                return line["ToolCallId:".Length..].Trim();
-            }
-        }
-
-        return null;
-    }
 }

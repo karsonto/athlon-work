@@ -35,7 +35,6 @@ public sealed class UiChromeColors
     public required Color Warning { get; init; }
     public required Color WarningSubtle { get; init; }
     public required Color NavActiveBg { get; init; }
-    public required Color NavActiveText { get; init; }
     public required Color ToolThinkingBorder { get; init; }
     public required Color ToolThinkingBg { get; init; }
     public required Color ToolThinkingText { get; init; }
@@ -45,8 +44,6 @@ public sealed class UiChromeColors
     public required Color ToolFailureBorder { get; init; }
     public required Color ToolFailureBg { get; init; }
     public required Color ToolFailureText { get; init; }
-    public required Color IconBadgeStart { get; init; }
-    public required Color IconBadgeEnd { get; init; }
     public required Color HoverNeutral { get; init; }
     public required Color HoverNeutralAlt { get; init; }
     public required Color HoverActive { get; init; }
@@ -78,6 +75,4 @@ public sealed class UiChromeColors
     public required double ScrollThumbOpacity { get; init; }
     public required Color ChatBackgroundTop { get; init; }
     public required Color ChatBackgroundBottom { get; init; }
-    public required Color IconBadgeGradientStart { get; init; }
-    public required Color IconBadgeGradientEnd { get; init; }
 }

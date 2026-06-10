@@ -57,7 +57,6 @@ public static class DarkAppThemePalette
 
         // Navigation — accent subtle for active session
         NavActiveBg = Ca(0x26, "#6366F1"),
-        NavActiveText = C("#818CF8"),
 
         // Tool call cards — neutral elevated surfaces
         ToolThinkingBorder = C("#27272A"),
@@ -69,10 +68,6 @@ public static class DarkAppThemePalette
         ToolFailureBorder = C("#27272A"),
         ToolFailureBg = C("#121214"),
         ToolFailureText = C("#EF4444"),
-
-        // Icon badges
-        IconBadgeStart = C("#0284C7"),
-        IconBadgeEnd = C("#7DD3FC"),
 
         // Hover states — more distinct for better feedback
         HoverNeutral = C("#1A1A1E"),
@@ -122,10 +117,6 @@ public static class DarkAppThemePalette
         // Chat gradient — Calm Intelligence deep tone
         ChatBackgroundTop = C("#121214"),
         ChatBackgroundBottom = C("#0A0A0C"),
-
-        // Icon badge gradient — Indigo theme
-        IconBadgeGradientStart = C("#E0E7FF"),
-        IconBadgeGradientEnd = C("#6366F1"),
     };
 
     private static EditorThemeColors CreateEditor() => new()

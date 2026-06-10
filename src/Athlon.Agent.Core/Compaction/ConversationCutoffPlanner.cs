@@ -145,7 +145,7 @@ public static class ConversationCutoffPlanner
         var scanIndex = cutoffIndex;
         while (scanIndex < messages.Count && messages[scanIndex].Role == MessageRole.Tool)
         {
-            var toolCallId = ExtractToolCallId(messages[scanIndex].Content);
+            var toolCallId = ModelMessageBuilder.ExtractToolCallId(messages[scanIndex].Content);
             if (!string.IsNullOrWhiteSpace(toolCallId))
             {
                 toolCallIds.Add(toolCallId);
@@ -229,23 +229,4 @@ public static class ConversationCutoffPlanner
         return Math.Min(candidate, messages.Count - 1);
     }
 
-    private static string? ExtractToolCallId(string? content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            return null;
-        }
-
-        foreach (var line in content.Split(["\r\n", "\n"], StringSplitOptions.None))
-        {
-            const string prefix = "ToolCallId:";
-            if (line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                var value = line[prefix.Length..].Trim();
-                return string.IsNullOrWhiteSpace(value) ? null : value;
-            }
-        }
-
-        return null;
-    }
 }

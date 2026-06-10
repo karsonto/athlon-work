@@ -45,7 +45,7 @@ public sealed class AgentRuntime(
         using var workspaceScope = SessionWorkspaceScope.Enter(session.ActiveWorkspace, ignorePatterns);
         using var skillActivationScope = SessionSkillActivationScope.EnterNewTurn();
         using var sessionScope = activeSessionContext.Enter(session.Id);
-        return await SendAsyncCore(session, userInput, imageAttachments, callbacks, cancellationToken);
+        return await SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, cancellationToken);
     }
 
     private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session)
@@ -66,14 +66,6 @@ public sealed class AgentRuntime(
             workspacePatterns: configuredWorkspace?.IgnorePatterns,
             globalPatterns: settings.WorkspaceIgnore.DirectoryNames);
     }
-
-    private Task<AgentSession> SendAsyncCore(
-        AgentSession session,
-        string userInput,
-        IReadOnlyList<ImageAttachment>? imageAttachments,
-        AgentTurnCallbacks? callbacks,
-        CancellationToken cancellationToken) =>
-        SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, cancellationToken);
 
     private async Task<AgentSession> SendAsyncTurnAsync(
         AgentSession session,
@@ -387,6 +379,9 @@ public sealed class AgentRuntime(
 
     public static string FormatToolResult(AgentToolCall call, ToolResult result) =>
         ModelMessageBuilder.FormatToolResult(call, result);
+
+    public static string? ExtractToolCallId(string? content) =>
+        ModelMessageBuilder.ExtractToolCallId(content);
 
     private static bool ShouldListWorkspaceFiles(string userInput)
     {

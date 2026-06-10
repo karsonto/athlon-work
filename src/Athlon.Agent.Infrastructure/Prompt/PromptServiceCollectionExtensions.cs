@@ -20,7 +20,6 @@ public static class PromptServiceCollectionExtensions
         services.AddSingleton<IEnvironmentPromptSection, ProductGuidanceSection>();
         services.AddSingleton<IEnvironmentPromptSection, SubAgentPersonaSection>();
         services.AddSingleton<ISystemPromptOrchestrator, SystemPromptOrchestrator>();
-        services.AddSingleton<IAgentEnvironmentPromptBuilder, EnvironmentPromptBuilderAdapter>();
         return services;
     }
 }

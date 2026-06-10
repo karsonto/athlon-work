@@ -40,7 +40,6 @@ internal static class AppThemeResourceBuilder
             ["Brush.Warning"] = Brush(c.Warning),
             ["Brush.WarningSubtle"] = Brush(c.WarningSubtle),
             ["Brush.NavActiveBg"] = Brush(c.NavActiveBg),
-            ["Brush.NavActiveText"] = Brush(c.NavActiveText),
             ["Brush.ToolThinkingBorder"] = Brush(c.ToolThinkingBorder),
             ["Brush.ToolThinkingBg"] = Brush(c.ToolThinkingBg),
             ["Brush.ToolThinkingText"] = Brush(c.ToolThinkingText),
@@ -50,8 +49,6 @@ internal static class AppThemeResourceBuilder
             ["Brush.ToolFailureBorder"] = Brush(c.ToolFailureBorder),
             ["Brush.ToolFailureBg"] = Brush(c.ToolFailureBg),
             ["Brush.ToolFailureText"] = Brush(c.ToolFailureText),
-            ["Brush.IconBadgeStart"] = Brush(c.IconBadgeStart),
-            ["Brush.IconBadgeEnd"] = Brush(c.IconBadgeEnd),
             ["Brush.HoverNeutral"] = Brush(c.HoverNeutral),
             ["Brush.HoverNeutralAlt"] = Brush(c.HoverNeutralAlt),
             ["Brush.HoverActive"] = Brush(c.HoverActive),
@@ -81,7 +78,6 @@ internal static class AppThemeResourceBuilder
             ["Brush.PreviewContentBackground"] = Brush(c.PreviewContentBackground),
             ["Brush.ScrollThumb"] = Brush(c.ScrollThumb, c.ScrollThumbOpacity),
             ["Brush.ChatBackground"] = ChatGradient(c),
-            ["Brush.IconBadge"] = IconBadgeGradient(c),
         };
         return resources;
     }
@@ -128,19 +124,6 @@ internal static class AppThemeResourceBuilder
     private static LinearGradientBrush ChatGradient(UiChromeColors c)
     {
         var brush = new LinearGradientBrush(c.ChatBackgroundTop, c.ChatBackgroundBottom, new Point(0, 0), new Point(0, 1));
-        brush.Freeze();
-        return brush;
-    }
-
-    private static LinearGradientBrush IconBadgeGradient(UiChromeColors c)
-    {
-        var brush = new LinearGradientBrush
-        {
-            StartPoint = new Point(0, 0),
-            EndPoint = new Point(1, 1),
-        };
-        brush.GradientStops.Add(new GradientStop(c.IconBadgeGradientStart, 0));
-        brush.GradientStops.Add(new GradientStop(c.IconBadgeGradientEnd, 1));
         brush.Freeze();
         return brush;
     }

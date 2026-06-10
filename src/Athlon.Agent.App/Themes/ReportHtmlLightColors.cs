@@ -47,10 +47,6 @@ internal static class ReportHtmlLightColors
     public const string Rose50 = "#FFF1F2";
     public const string Amber500 = "#F59E0B";
 
-    // Icon badge (public/athlon-icon.svg)
-    public const string IconBadgeGradientStart = "#E0F2FE";
-    public const string IconBadgeGradientEnd = "#0284C7";
-
     // Scrollbar (index.css)
     public const string ScrollThumb = "#94A3B8";
     public const double ScrollThumbOpacity = 0.55;

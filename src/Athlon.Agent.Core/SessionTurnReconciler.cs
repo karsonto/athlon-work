@@ -187,7 +187,7 @@ public static class SessionTurnReconciler
                 continue;
             }
 
-            var toolCallId = ExtractToolCallId(message.Content);
+            var toolCallId = ModelMessageBuilder.ExtractToolCallId(message.Content);
             if (!string.IsNullOrWhiteSpace(toolCallId))
             {
                 answered.Add(toolCallId);
@@ -197,23 +197,4 @@ public static class SessionTurnReconciler
         return answered;
     }
 
-    private static string? ExtractToolCallId(string? content)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            return null;
-        }
-
-        foreach (var line in content.Split(["\r\n", "\n"], StringSplitOptions.None))
-        {
-            const string prefix = "ToolCallId:";
-            if (line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                var value = line[prefix.Length..].Trim();
-                return string.IsNullOrWhiteSpace(value) ? null : value;
-            }
-        }
-
-        return null;
-    }
 }

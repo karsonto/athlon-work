@@ -52,16 +52,6 @@ public sealed class SessionHistoryCoordinator : IDisposable
         }
     }
 
-    public async Task SaveSessionCoreAsync(AgentSession session, Func<AgentSession, AgentSession> deriveTitle)
-    {
-        if (session.Messages.Count == 0)
-        {
-            return;
-        }
-
-        await _storage.SaveSessionAsync(deriveTitle(session));
-    }
-
     public static AgentSession DeriveSessionTitle(AgentSession session)
     {
         if (!string.Equals(session.Title, "New Chat", StringComparison.OrdinalIgnoreCase)

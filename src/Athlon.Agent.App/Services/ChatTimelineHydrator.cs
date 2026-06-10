@@ -39,18 +39,8 @@ internal static class ChatTimelineHydrator
         return answered;
     }
 
-    public static string? ExtractToolCallId(string content)
-    {
-        foreach (var line in content.Replace("\r\n", "\n").Split('\n'))
-        {
-            if (line.StartsWith("ToolCallId:", StringComparison.OrdinalIgnoreCase))
-            {
-                return line["ToolCallId:".Length..].Trim();
-            }
-        }
-
-        return null;
-    }
+    public static string? ExtractToolCallId(string content) =>
+        AgentRuntime.ExtractToolCallId(content);
 
     private static void AddMessageToDisplay(
         List<ChatMessageViewModel> messages,
@@ -102,7 +92,7 @@ internal static class ChatTimelineHydrator
         !string.IsNullOrWhiteSpace(messageId)
         && messages.Any(message => string.Equals(message.MessageId, messageId, StringComparison.Ordinal));
 
-    private static bool ShouldHideMessageFromChat(ChatMessage message) =>
+    public static bool ShouldHideMessageFromChat(ChatMessage message) =>
         message.Role == MessageRole.User && SummaryMessageBuilder.IsSummaryMessage(message)
         || ChatMessageViewModel.IsAssistantToolCallsOnly(message);
 }
