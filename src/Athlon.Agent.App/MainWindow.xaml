@@ -1302,38 +1302,19 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="长期记忆" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-                            <TextBlock Text="开启后，对话结束会自动提取并持久化重要信息到 memory/MEMORY.md，并在推理时注入上下文；同时启用 memory_search / memory_get 工具。关闭后不会写入记忆文件，也不会向模型暴露相关工具。"
-                                       Foreground="{StaticResource Brush.SubtleText}"
-                                       TextWrapping="Wrap"
-                                       FontSize="12"
-                                       Margin="0,0,0,14" />
+                            <TextBlock Text="长期记忆" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
                             <CheckBox Style="{StaticResource McpToggleSwitchStyle}"
                                       IsChecked="{Binding Settings.Settings.Memory.Enabled, UpdateSourceTrigger=PropertyChanged}"
-                                      Content="启用长期记忆"
-                                      Margin="0,0,0,4" />
+                                      Content="启用长期记忆" />
                         </StackPanel>
                     </Border>
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="上下文压缩" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-                            <TextBlock Text="每次调用模型前，根据上下文压力自动 truncate、归档工具结果或 LLM 摘要。默认启用动态策略：触发阈值约 80%，完整三级压缩后回落到约 30%。"
-                                       Foreground="{StaticResource Brush.SubtleText}"
-                                       TextWrapping="Wrap"
-                                       FontSize="12"
-                                       Margin="0,0,0,10" />
-                            <TextBlock Foreground="{StaticResource Brush.SubtleText}"
-                                       TextWrapping="Wrap"
-                                       FontSize="12">
-                                <Run Text="在 " />
-                                <Run Text="{Binding Settings.SettingsConfigPath, Mode=OneWay}" />
-                                <Run Text=" 的 contextCompaction.dynamicCompaction 中配置。设为 " />
-                                <Run Text="&quot;enabled&quot;: false" FontFamily="Consolas" />
-                                <Run Text=" 可切换为纯静态阈值（triggerMessages / triggerTokens 等）。" />
-                                <LineBreak />
-                                <Run Text="修改配置文件后需重启应用生效。" />
-                            </TextBlock>
+                            <TextBlock Text="上下文压缩" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
+                            <CheckBox Style="{StaticResource McpToggleSwitchStyle}"
+                                      IsChecked="{Binding Settings.Settings.ContextCompaction.DynamicCompaction.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                      Content="启用动态压缩策略" />
                         </StackPanel>
                     </Border>
 
