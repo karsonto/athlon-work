@@ -6,6 +6,7 @@
         xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
+        xmlns:xml="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Athlon Agent"
@@ -866,7 +867,8 @@
                                                 <TextBlock Text="{Binding Content}"
                                                            TextWrapping="Wrap"
                                                            FontSize="14"
-                                                           HorizontalAlignment="Stretch">
+                                                           HorizontalAlignment="Stretch"
+                                                           xml:space="preserve">
                                                     <TextBlock.Style>
                                                         <Style TargetType="TextBlock">
                                                             <Setter Property="Visibility" Value="Collapsed" />
@@ -876,6 +878,7 @@
                                                                     <Setter Property="Visibility" Value="Visible" />
                                                                 </DataTrigger>
                                                                 <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible" />
                                                                     <Setter Property="Foreground" Value="White" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
@@ -890,6 +893,9 @@
                                                         <Style TargetType="controls:MarkdownMessageView">
                                                             <Setter Property="Visibility" Value="Visible" />
                                                             <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
                                                                 <DataTrigger Binding="{Binding IsStreaming}" Value="True">
                                                                     <Setter Property="Visibility" Value="Collapsed" />
                                                                 </DataTrigger>
@@ -1292,6 +1298,21 @@
                             <TextBlock Text="API Key 使用 Windows DPAPI 加密保存在用户目录。"
                                        Foreground="{StaticResource Brush.SubtleText}"
                                        TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="长期记忆" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="开启后，对话结束会自动提取并持久化重要信息到 memory/MEMORY.md，并在推理时注入上下文；同时启用 memory_search / memory_get 工具。关闭后不会写入记忆文件，也不会向模型暴露相关工具。"
+                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,0,0,14" />
+                            <CheckBox Style="{StaticResource McpToggleSwitchStyle}"
+                                      IsChecked="{Binding Settings.Settings.Memory.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                      Content="启用长期记忆"
+                                      Margin="0,0,0,4" />
                         </StackPanel>
                     </Border>
 

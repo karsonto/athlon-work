@@ -1,14 +1,23 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Memory;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class CompositeToolRouter(IEnumerable<IAgentTool> localTools, IMcpRegistry mcpRegistry) : IToolRouter
+public sealed class CompositeToolRouter(
+    IEnumerable<IAgentTool> localTools,
+    IMcpRegistry mcpRegistry,
+    AppSettings settings) : IToolRouter
 {
-    private readonly ToolRouter _local = new(localTools);
+    private readonly IAgentTool[] _allLocalTools = localTools.ToArray();
+
+    private IEnumerable<IAgentTool> ActiveLocalTools =>
+        settings.Memory.Enabled
+            ? _allLocalTools
+            : _allLocalTools.Where(tool => tool is not ILongTermMemoryTool);
 
     public IReadOnlyList<ToolDefinition> ListTools()
     {
-        var local = _local.ListTools();
+        var local = new ToolRouter(ActiveLocalTools).ListTools();
         var mcp = mcpRegistry.ListToolDefinitions();
         return local.Concat(mcp).OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
@@ -20,7 +29,6 @@ public sealed class CompositeToolRouter(IEnumerable<IAgentTool> localTools, IMcp
             return mcpRegistry.InvokeAsync(serverName, toolName, invocation.Arguments, cancellationToken);
         }
 
-        return _local.InvokeAsync(invocation, cancellationToken);
+        return new ToolRouter(ActiveLocalTools).InvokeAsync(invocation, cancellationToken);
     }
 }
-

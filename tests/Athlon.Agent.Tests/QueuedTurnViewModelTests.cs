@@ -41,4 +41,14 @@ public sealed class QueuedTurnViewModelTests
         Assert.True(vm.HasText);
         Assert.True(vm.HasImages);
     }
+
+    [Fact]
+    public void Create_PreservesLeadingTrailingWhitespaceAndNewlines()
+    {
+        const string input = "\n```csharp\ncode\n```\n\n";
+
+        var vm = QueuedTurnViewModel.Create("q1", input, Array.Empty<ImageAttachment>());
+
+        Assert.Equal(input, vm.TextContent);
+    }
 }

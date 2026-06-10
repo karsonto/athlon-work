@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.SubAgents;
@@ -15,7 +16,8 @@ public sealed class ChildAgentToolRouterTests
         var other = new StubNamedTool("file_list");
         var registry = new StubMcpRegistry([new ToolDefinition("mcp__srv__search", "mcp", new Dictionary<string, string>())]);
 
-        var router = new ChildAgentToolRouter([subAgent, other], registry);
+        var settings = new AppSettings { Memory = new MemorySettings { Enabled = true } };
+        var router = new ChildAgentToolRouter([subAgent, other], registry, settings);
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
         Assert.DoesNotContain("call_assistant", names);
@@ -24,11 +26,27 @@ public sealed class ChildAgentToolRouterTests
     }
 
     [Fact]
+    public void ListTools_WhenMemoryDisabled_ExcludesMemoryTools()
+    {
+        var memorySearch = new StubMemoryTool("memory_search");
+        var other = new StubNamedTool("file_list");
+        var registry = new StubMcpRegistry([]);
+        var settings = new AppSettings { Memory = new MemorySettings { Enabled = false } };
+
+        var router = new ChildAgentToolRouter([memorySearch, other], registry, settings);
+        var names = router.ListTools().Select(tool => tool.Name).ToArray();
+
+        Assert.DoesNotContain("memory_search", names);
+        Assert.Contains("file_list", names);
+    }
+
+    [Fact]
     public async Task InvokeAsync_RoutesMcpThroughSharedRegistry()
     {
         var registry = new StubMcpRegistry([]);
         registry.Definitions.Add(new ToolDefinition("mcp__srv__ping", "ping", new Dictionary<string, string>()));
-        var router = new ChildAgentToolRouter(Array.Empty<IAgentTool>(), registry);
+        var settings = new AppSettings { Memory = new MemorySettings { Enabled = true } };
+        var router = new ChildAgentToolRouter(Array.Empty<IAgentTool>(), registry, settings);
 
         var result = await router.InvokeAsync(new ToolInvocation("mcp__srv__ping", new Dictionary<string, string>()));
 
@@ -44,6 +62,13 @@ public sealed class ChildAgentToolRouterTests
     }
 
     private sealed class StubNamedTool(string name) : IAgentTool
+    {
+        public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
+        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ToolResult.Success("ok"));
+    }
+
+    private sealed class StubMemoryTool(string name) : IAgentTool, ILongTermMemoryTool
     {
         public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>

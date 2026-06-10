@@ -122,7 +122,7 @@ public sealed class SubAgentToolTests
         store ??= new InMemorySubAgentStore();
         var storage = new ParentSessionStorage();
         var childRouter = new Lazy<ChildAgentToolRouter>(() =>
-            new ChildAgentToolRouter(Array.Empty<IAgentTool>(), new EmptyMcpRegistry()));
+            new ChildAgentToolRouter(Array.Empty<IAgentTool>(), new EmptyMcpRegistry(), settings));
         var prompt = new SubAgentSystemPromptOrchestrator(
             settings,
             new StubHostEnvironment(),

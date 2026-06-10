@@ -35,7 +35,7 @@ public sealed class QueuedTurnViewModel
         new(
             queueId,
             BuildPreview(userInput, images.Count),
-            userInput.Trim(),
+            userInput,
             images);
 
     public static string BuildPreview(string input, int imageCount, int maxLength = 80)

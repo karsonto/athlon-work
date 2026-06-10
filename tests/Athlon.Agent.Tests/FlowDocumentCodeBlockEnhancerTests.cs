@@ -84,7 +84,44 @@ public sealed class FlowDocumentCodeBlockEnhancerTests
         }
 
         var scroll = grid.Children.OfType<ScrollViewer>().FirstOrDefault();
-        return scroll?.Content is TextBlock textBlock ? textBlock.Text : string.Empty;
+        return scroll?.Content switch
+        {
+            TextBox textBox => textBox.Text,
+            TextBlock textBlock => textBlock.Text,
+            _ => string.Empty,
+        };
+    }
+
+    [Fact]
+    public async Task Enhance_uses_read_only_textbox_for_selectable_code_body()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            const string markdown = """
+                ```text
+                selectable line
+                ```
+                """;
+
+            var engine = new Markdown { DocumentStyle = MarkdownStyle.Standard };
+            var document = engine.Transform(MarkdownDisplayNormalizer.NormalizeForDisplay(markdown));
+            var fencedBlocks = MarkdownDisplayNormalizer.ExtractFencedBlocks(markdown);
+
+            FlowDocumentThemeNormalizer.Normalize(document, contextMenu: null, fencedBlocks);
+
+            var card = document.Blocks
+                .OfType<BlockUIContainer>()
+                .Single(block => block.Tag as string == FlowDocumentCodeBlockEnhancer.CodeBlockCardTag);
+
+            var grid = Assert.IsType<Grid>(Assert.IsType<Border>(card.Child).Child);
+            var scroll = grid.Children.OfType<ScrollViewer>().Single();
+            var body = Assert.IsType<TextBox>(scroll.Content);
+
+            Assert.True(body.IsReadOnly);
+            Assert.Contains("selectable line", body.Text, StringComparison.Ordinal);
+        });
     }
 
     [Fact]

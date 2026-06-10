@@ -23,6 +23,11 @@ internal static class ChatScrollHelper
                 return true;
             }
 
+            if (child is TextBox textBox && textBox.IsReadOnly && textBox.SelectionLength > 0)
+            {
+                return true;
+            }
+
             if (HasTextSelection(child))
             {
                 return true;

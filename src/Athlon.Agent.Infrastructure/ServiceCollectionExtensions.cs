@@ -72,8 +72,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, LoadSkillThroughPathTool>();
         services.AddSingleton<Lazy<ChildAgentToolRouter>>(static sp => new Lazy<ChildAgentToolRouter>(() =>
             new ChildAgentToolRouter(
-                sp.GetServices<IAgentTool>().Where(tool => tool is not IExcludedFromChildAgentToolkit),
-                sp.GetRequiredService<IMcpRegistry>())));
+                sp.GetServices<IAgentTool>(),
+                sp.GetRequiredService<IMcpRegistry>(),
+                sp.GetRequiredService<AppSettings>())));
         services.AddSingleton<SubAgentSystemPromptOrchestrator>();
         services.AddSingleton<ISubAgentSessionStore, FileSubAgentSessionStore>();
         if (settings.SubAgent.Enabled)

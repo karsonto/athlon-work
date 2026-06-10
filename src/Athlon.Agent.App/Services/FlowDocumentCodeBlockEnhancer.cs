@@ -372,15 +372,24 @@ public static class FlowDocumentCodeBlockEnhancer
             VerticalAlignment = VerticalAlignment.Center,
         });
 
-        var body = new TextBlock
+        var body = new TextBox
         {
             Text = codeText,
+            IsReadOnly = true,
+            BorderThickness = new Thickness(0),
+            Background = Brushes.Transparent,
             FontFamily = new FontFamily("Consolas, Cascadia Code"),
             FontSize = 13,
             Foreground = codeForeground,
             TextWrapping = TextWrapping.NoWrap,
+            AcceptsReturn = true,
+            AcceptsTab = true,
             Margin = new Thickness(16, 12, 16, 16),
             HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            IsTabStop = false,
+            Cursor = System.Windows.Input.Cursors.IBeam,
         };
 
         var bodyScroll = new ScrollViewer

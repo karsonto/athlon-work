@@ -598,7 +598,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         _skillCatalog.Reload();
-        var input = SkillComposerExpander.Expand(ComposerText.Trim(), _skillRuntime.GetSkills());
+        var input = SkillComposerExpander.Expand(ComposerText, _skillRuntime.GetSkills());
         var imageAttachments = PersistPendingImages(_displayedSessionId);
         ComposerText = string.Empty;
         StreamingText = string.Empty;

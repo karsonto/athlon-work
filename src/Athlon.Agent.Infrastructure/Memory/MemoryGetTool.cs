@@ -4,7 +4,7 @@ using Athlon.Agent.Core.Memory;
 
 namespace Athlon.Agent.Infrastructure.Memory;
 
-public sealed class MemoryGetTool(ILongTermMemory longTermMemory, IAppLogger logger) : IAgentTool
+public sealed class MemoryGetTool(ILongTermMemory longTermMemory, IAppLogger logger) : IAgentTool, ILongTermMemoryTool
 {
     private readonly IAppLogger _logger = logger.ForContext("MemoryGetTool");
 
