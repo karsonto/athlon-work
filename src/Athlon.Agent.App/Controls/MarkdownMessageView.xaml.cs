@@ -55,7 +55,19 @@ public partial class MarkdownMessageView : UserControl
         ContextMenu = _contextMenu;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        AddHandler(
+            FrameworkElement.RequestBringIntoViewEvent,
+            new RequestBringIntoViewEventHandler(OnMarkdownRequestBringIntoView),
+            handledEventsToo: true);
     }
+
+    /// <summary>
+    /// Selection and caret moves inside markdown raise RequestBringIntoView, which otherwise
+    /// bubbles to the chat ListBox ScrollViewer and makes the right scrollbar jump.
+    /// Inner HostScroll / code-block scrollers still handle the event on the way up.
+    /// </summary>
+    private static void OnMarkdownRequestBringIntoView(object sender, RequestBringIntoViewEventArgs e) =>
+        e.Handled = true;
 
     public string Markdown
     {

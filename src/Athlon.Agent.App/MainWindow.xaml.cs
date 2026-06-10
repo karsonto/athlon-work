@@ -36,7 +36,11 @@ public partial class MainWindow : Window
         _viewModel.ScrollChatToBottomImmediate = () => ScrollChatToEnd(immediate: true);
         _viewModel.ContextSidebarLayoutChanged += (_, _) => Dispatcher.Invoke(ApplyContextSidebarLayout);
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-        MarkdownMessageView.ContentInteractionChanged += (_, _) => UpdateChatScrollLock();
+        MarkdownMessageView.ContentInteractionChanged += (_, _) =>
+        {
+            StopScrollThrottleTimer();
+            UpdateChatScrollLock();
+        };
         Loaded += OnMainWindowLoaded;
         Closing += OnMainWindowClosing;
         StateChanged += (_, _) => UpdateMaximizeRestoreButton();
@@ -562,6 +566,7 @@ public partial class MainWindow : Window
     private void ChatMessagesScrollViewer_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _chatPointerDown = true;
+        StopScrollThrottleTimer();
     }
 
     private void ChatMessagesScrollViewer_OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
