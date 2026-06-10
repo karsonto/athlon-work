@@ -327,7 +327,8 @@ public sealed class AgentRuntime(
         CancellationToken cancellationToken = default)
     {
         CompactionRuntimeContext? runtimeContext = null;
-        if (settings.ContextCompaction.DynamicCompaction.Enabled)
+        var compaction = settings.ContextCompaction;
+        if (compaction.Enabled && compaction.DynamicCompaction.Enabled)
         {
             var multiplier = tokenEstimatorCalibrator.GetMultiplier(session.Id);
             var budget = ContextBudgetCalculator.Compute(

@@ -8,6 +8,14 @@ namespace Athlon.Agent.Tests;
 public sealed class CompositeToolRouterMemoryTests
 {
     [Fact]
+    public void MemorySettings_DefaultsToDisabled()
+    {
+        var settings = new MemorySettings();
+
+        Assert.False(settings.Enabled);
+    }
+
+    [Fact]
     public void ListTools_WhenMemoryDisabled_ExcludesMemoryTools()
     {
         var settings = new AppSettings { Memory = new MemorySettings { Enabled = false } };

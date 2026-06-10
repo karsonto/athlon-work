@@ -11,6 +11,8 @@ public sealed class CompactionTests
     {
         var settings = new ContextCompactionSettings();
 
+        Assert.False(settings.Enabled);
+        Assert.False(settings.DynamicCompaction.Enabled);
         Assert.Equal(50, settings.TriggerMessages);
         Assert.Equal(80_000, settings.TriggerTokens);
         Assert.Equal(20, settings.KeepMessages);
@@ -190,6 +192,7 @@ public sealed class CompactionTests
         {
             ContextCompaction = new ContextCompactionSettings
             {
+                Enabled = true,
                 TriggerMessages = 2,
                 KeepMessages = 1
             }
@@ -213,6 +216,39 @@ public sealed class CompactionTests
         await pipeline.RunAsync(session, PreCompletionOptions.AgentLoop);
 
         Assert.Equal(1, compactor.CallCount);
+    }
+
+    [Fact]
+    public async Task PreCompletionPipeline_Disabled_SkipsProactiveCompaction()
+    {
+        var settings = new AppSettings
+        {
+            ContextCompaction = new ContextCompactionSettings
+            {
+                Enabled = false,
+                TriggerMessages = 2,
+                KeepMessages = 1
+            }
+        };
+
+        var session = AgentSession.Create("disabled")
+            .WithMessages(new[]
+            {
+                ChatMessage.Create(MessageRole.User, "one"),
+                ChatMessage.Create(MessageRole.Assistant, "two"),
+                ChatMessage.Create(MessageRole.User, "three")
+            });
+
+        var compactor = new FakeConversationCompactor(settings);
+        var pipeline = new PreCompletionPipeline(
+            compactor,
+            new TruncateArgsService(),
+            settings,
+            new NoOpLogger());
+
+        await pipeline.RunAsync(session, PreCompletionOptions.AgentLoop);
+
+        Assert.Equal(0, compactor.CallCount);
     }
 
     [Fact]
@@ -581,6 +617,7 @@ public sealed class CompactionTests
         {
             ContextCompaction = new ContextCompactionSettings
             {
+                Enabled = true,
                 TriggerMessages = 2,
                 KeepMessages = 1,
                 DynamicCompaction = new DynamicCompactionSettings { Enabled = false }

@@ -54,6 +54,11 @@ public sealed class PreCompletionPipeline(
 
         var cfg = settings.ContextCompaction;
 
+        if (!cfg.Enabled && !options.ForceConversationCompact)
+        {
+            return session;
+        }
+
         if (!cfg.DynamicCompaction.Enabled || runtimeContext is null)
 
         {

@@ -177,7 +177,9 @@ Before each model call, `PreCompletionPipeline` runs a **budget-aware parameter 
 | Critical | ≥ 80% (= target) | full 3-level pass → ~30% post-compaction |
 | Overflow | API `context_length` error | force compact → ~20% post-compaction + retry once |
 
-When dynamic compaction is disabled, only the static thresholds below apply.
+By default, `contextCompaction.enabled` and `dynamicCompaction.enabled` are **false**: proactive compaction is off until you enable it in settings or `settings.json`. Manual `/compact` and API overflow retry still compact when needed.
+
+When dynamic compaction is disabled (but proactive compaction is enabled), only the static thresholds below apply.
 
 Static layers:
 
@@ -195,6 +197,7 @@ Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
 
 ```json
 "contextCompaction": {
+  "enabled": false,
   "contextWindowTokens": 65535,
   "compactTriggerRatio": 0.7,
   "triggerMessages": 50,
@@ -205,7 +208,7 @@ Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
   "truncateArgs": { "triggerMessages": 25, "triggerTokens": 40000, "keepMessages": 20, "maxArgLength": 2000 },
   "toolResultEviction": { "maxResultChars": 80000, "previewChars": 2000 },
   "dynamicCompaction": {
-    "enabled": true,
+    "enabled": false,
     "targetUtilization": 0.80,
     "postCompactionUtilization": 0.30,
     "safetyMarginRatio": 0.08,

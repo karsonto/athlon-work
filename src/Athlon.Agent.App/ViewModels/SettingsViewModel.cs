@@ -184,6 +184,43 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Settings.WorkspaceIgnore.DirectoryNames = ParseIgnoreDirectoryLines(value);
     }
 
+    public string MemoryMaxTokensText
+    {
+        get => Settings.Memory.MaxMemoryTokens.ToString();
+        set => Settings.Memory.MaxMemoryTokens = ParsePositiveInt(value, Settings.Memory.MaxMemoryTokens);
+    }
+
+    public string MemoryDailyRetentionDaysText
+    {
+        get => Settings.Memory.DailyFileRetentionDays.ToString();
+        set => Settings.Memory.DailyFileRetentionDays = ParsePositiveInt(value, Settings.Memory.DailyFileRetentionDays);
+    }
+
+    public string MemoryConsolidationGapMinutesText
+    {
+        get => Math.Max(1, (int)Settings.Memory.ConsolidationMinGap.TotalMinutes).ToString();
+        set => Settings.Memory.ConsolidationMinGap = TimeSpan.FromMinutes(ParsePositiveInt(value, 30));
+    }
+
+    public string ContextWindowTokensText
+    {
+        get => Settings.ContextCompaction.ContextWindowTokens.ToString();
+        set => Settings.ContextCompaction.ContextWindowTokens = ParsePositiveInt(value, Settings.ContextCompaction.ContextWindowTokens);
+    }
+
+    public string CompactTriggerMessagesText
+    {
+        get => Settings.ContextCompaction.TriggerMessages.ToString();
+        set => Settings.ContextCompaction.TriggerMessages = ParsePositiveInt(value, Settings.ContextCompaction.TriggerMessages);
+    }
+
+    public string CompactTargetUtilizationPercentText
+    {
+        get => (Settings.ContextCompaction.DynamicCompaction.TargetUtilization * 100).ToString("0");
+        set => Settings.ContextCompaction.DynamicCompaction.TargetUtilization =
+            ParsePercent(value, Settings.ContextCompaction.DynamicCompaction.TargetUtilization);
+    }
+
     private static int? ParseOptionalPositiveInt(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -206,5 +243,31 @@ public sealed partial class SettingsViewModel : ObservableObject
             .Where(line => !string.IsNullOrWhiteSpace(line))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static int ParsePositiveInt(string? text, int fallback)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return fallback;
+        }
+
+        return int.TryParse(text.Trim(), out var value) && value > 0 ? value : fallback;
+    }
+
+    private static double ParsePercent(string? text, double fallbackRatio)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return fallbackRatio;
+        }
+
+        var trimmed = text.Trim().TrimEnd('%');
+        if (!double.TryParse(trimmed, out var percent))
+        {
+            return fallbackRatio;
+        }
+
+        return Math.Clamp(percent, 1, 99) / 100.0;
     }
 }
