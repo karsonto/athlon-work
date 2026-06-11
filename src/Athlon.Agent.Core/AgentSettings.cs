@@ -35,6 +35,7 @@ public sealed class ScheduledTask
     public string UpdatedAt { get; set; } = "";
     public string NextRunAt { get; set; } = "";
     public string LastRunAt { get; set; } = "";
+    public string LastRunEndedAt { get; set; } = "";
     public string LastStatus { get; set; } = "idle";
     public string LastMessage { get; set; } = "";
     public string LastThreadId { get; set; } = "";

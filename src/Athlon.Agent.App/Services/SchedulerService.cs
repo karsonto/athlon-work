@@ -174,6 +174,11 @@ public sealed class SchedulerService : IDisposable
                 removedCts.Dispose();
             }
 
+            if (!string.IsNullOrWhiteSpace(task.LastRunAt))
+            {
+                task.LastRunEndedAt = DateTime.UtcNow.ToString("O");
+            }
+
             SystemKeepAwakeHelper.Release();
             task.NextRunAt = ScheduleTiming.ComputeNextRun(task);
             await PersistSettingsAsync();

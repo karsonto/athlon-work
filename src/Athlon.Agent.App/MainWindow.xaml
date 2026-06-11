@@ -1924,21 +1924,22 @@
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="*" />
                                             </Grid.RowDefinitions>
-                                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                                                <Border Background="#27272A"
-                                                        CornerRadius="4"
-                                                        Padding="6,2"
-                                                        Margin="0,0,8,0">
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding StatusIcon}" FontSize="11" />
-                                                        <TextBlock Text="{Binding StatusDisplay}" FontSize="11" Margin="4,0,0,0" />
-                                                    </StackPanel>
-                                                </Border>
-                                                <TextBlock Text="上次运行结果"
-                                                           FontSize="11"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="{StaticResource Brush.SubtleText}"
-                                                           VerticalAlignment="Center" />
+                                            <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Border Background="#27272A"
+                                                            CornerRadius="4"
+                                                            Padding="6,2"
+                                                            Margin="0,0,8,0">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding StatusIcon}" FontSize="11" />
+                                                            <TextBlock Text="{Binding StatusDisplay}" FontSize="11" Margin="4,0,0,0" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <TextBlock Text="上次运行结果"
+                                                               FontSize="11"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               VerticalAlignment="Center" />
                                                 <Button Command="{Binding OpenSessionCommand}"
                                                         Content="查看对话"
                                                         Padding="8,4"
@@ -1956,6 +1957,42 @@
                                                         </Style>
                                                     </Button.Style>
                                                 </Button>
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                                    <StackPanel.Style>
+                                                        <Style TargetType="StackPanel">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasLastRunTiming}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </StackPanel.Style>
+                                                    <Border Background="#27272A"
+                                                            CornerRadius="4"
+                                                            Padding="6,2"
+                                                            Margin="0,0,8,0">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="开始: "
+                                                                       FontSize="11"
+                                                                       Foreground="{StaticResource Brush.SubtleText}" />
+                                                            <TextBlock Text="{Binding LastRunStartDisplay}"
+                                                                       FontSize="11" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Border Background="#27272A"
+                                                            CornerRadius="4"
+                                                            Padding="6,2">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="结束: "
+                                                                       FontSize="11"
+                                                                       Foreground="{StaticResource Brush.SubtleText}" />
+                                                            <TextBlock Text="{Binding LastRunEndDisplay}"
+                                                                       FontSize="11" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </StackPanel>
                                             </StackPanel>
                                             <Border Grid.Row="1"
                                                     Background="{StaticResource Brush.AppBackground}"

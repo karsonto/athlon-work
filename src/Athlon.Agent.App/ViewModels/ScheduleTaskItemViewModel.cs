@@ -72,6 +72,15 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
     [ObservableProperty]
     private bool canOpenSession;
 
+    [ObservableProperty]
+    private string lastRunStartDisplay = "";
+
+    [ObservableProperty]
+    private string lastRunEndDisplay = "";
+
+    [ObservableProperty]
+    private bool hasLastRunTiming;
+
     public string LastStatus => _task.LastStatus;
 
     public ScheduledTask Task => _task;
@@ -93,6 +102,11 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
         LastMessage = _task.LastMessage ?? "";
         HasResult = !string.IsNullOrWhiteSpace(LastMessage);
         CanOpenSession = !string.IsNullOrWhiteSpace(_task.LastThreadId);
+        LastRunStartDisplay = FormatRunDateTime(_task.LastRunAt);
+        LastRunEndDisplay = string.IsNullOrWhiteSpace(_task.LastRunEndedAt)
+            ? (string.IsNullOrWhiteSpace(_task.LastRunAt) ? "" : "-")
+            : FormatRunDateTime(_task.LastRunEndedAt);
+        HasLastRunTiming = !string.IsNullOrWhiteSpace(LastRunStartDisplay);
 
         ScheduleDescription = _task.Kind switch
         {
@@ -210,6 +224,21 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
         if (DateTime.TryParse(iso, out var dt))
         {
             return dt.ToLocalTime().ToString("MM-dd HH:mm");
+        }
+
+        return iso;
+    }
+
+    private static string FormatRunDateTime(string iso)
+    {
+        if (string.IsNullOrWhiteSpace(iso))
+        {
+            return "";
+        }
+
+        if (DateTime.TryParse(iso, out var dt))
+        {
+            return dt.ToLocalTime().ToString("MM-dd HH:mm:ss");
         }
 
         return iso;
