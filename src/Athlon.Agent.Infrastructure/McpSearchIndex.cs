@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -121,7 +122,7 @@ internal static partial class McpSearchIndex
             }
         }
 
-        foreach (Match match in HanSegmentPattern().Matches(text))
+        foreach (Match match in HanSegmentPattern.Matches(text))
         {
             var chars = match.Value.ToCharArray();
             if (chars.Length == 1)
@@ -150,6 +151,6 @@ internal static partial class McpSearchIndex
     [GeneratedRegex("[a-z0-9][a-z0-9_./-]{1,}", RegexOptions.IgnoreCase)]
     private static partial Regex LatinTokenPattern();
 
-    [GeneratedRegex(@"\p{Script=Han}+")]
-    private static partial Regex HanSegmentPattern();
+    // Runtime Regex: GeneratedRegex does not support \p{Script=Han} (SYSLIB1042).
+    private static readonly Regex HanSegmentPattern = new(@"\p{Script=Han}+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 }
