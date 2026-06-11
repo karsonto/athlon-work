@@ -33,6 +33,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly ComposerAtCompletionService _atCompletion;
     private readonly SessionUiCache _uiCache;
     private readonly ApplicationShutdownService _shutdownService;
+    private readonly SchedulerService _scheduler;
     private readonly UiLayoutSettingsBridge _uiLayout;
     private readonly SessionHistoryCoordinator _sessionHistory;
     private readonly WorkspaceSessionBridge _workspaceBridge = new();
@@ -58,7 +59,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         WorkspaceFileEditorService workspaceFileEditorService,
         ApplicationShutdownService shutdownService,
         AppSettings settings,
-        ISessionUsageAccumulator sessionUsageAccumulator)
+        ISessionUsageAccumulator sessionUsageAccumulator,
+        SchedulerService scheduler)
     {
         _storage = storage;
         _credentialStore = credentialStore;
@@ -73,6 +75,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _atCompletion = atCompletion;
         _uiCache = uiCache;
         _shutdownService = shutdownService;
+        _scheduler = scheduler;
         _appSettings = settings;
         _uiLayout = new UiLayoutSettingsBridge(storage, settings);
         _sessionHistory = new SessionHistoryCoordinator(storage);
@@ -86,6 +89,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _turnHost.TurnCompleted += OnTurnCompleted;
         _turnHost.TurnStateChanged += OnTurnStateChanged;
         Settings = new SettingsViewModel(settings, _mcpRegistry, skillCatalog, paths);
+        SchedulePageVm = new ScheduleViewModel(settings, storage, scheduler, OpenSessionByIdAsync);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
@@ -238,6 +242,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool IsChatPage => CurrentPage == "Chat";
     public bool IsSettingsPage => CurrentPage == "Settings";
+    public bool IsSchedulePage => CurrentPage == "Schedule";
+
+    public ScheduleViewModel SchedulePageVm { get; }
 
     [RelayCommand]
     private void Navigate(string page)
@@ -942,6 +949,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private SessionHistoryItemViewModel? GetFirstAgentRecord() => _sessionHistory.GetFirstAgentRecord();
 
+    public async Task OpenSessionByIdAsync(string sessionId)
+    {
+        CurrentPage = "Chat";
+        await LoadSessionInternalAsync(sessionId);
+    }
+
     private async Task LoadSessionInternalAsync(string sessionId)
     {
         var loaded = await _storage.LoadSessionAsync(sessionId);
@@ -956,20 +969,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ComposerText = string.Empty;
         PendingImageAttachments.Clear();
 
-        if (_activeUi.Messages.Count == 0)
+        // conversation.jsonl is the display source of truth; session.json may be saved
+        // before the assistant reply (e.g. scheduled tasks) and only contain the user turn.
+        var displayMessages = await _storage.LoadConversationDisplayAsync(sessionId);
+        if (displayMessages.Count > 0)
         {
-            if (_session.Messages.Count > 0)
-            {
-                _activeUi.HydrateFromSession(_session);
-            }
-            else
-            {
-                var displayMessages = await _storage.LoadConversationDisplayAsync(sessionId);
-                if (displayMessages.Count > 0)
-                {
-                    _activeUi.HydrateDisplay(_session, displayMessages);
-                }
-            }
+            _activeUi.HydrateDisplay(_session, displayMessages);
+        }
+        else if (_session.Messages.Count > 0)
+        {
+            _activeUi.HydrateFromSession(_session);
+        }
+        else
+        {
+            _activeUi.HydrateFromSession(_session);
         }
 
         ApplySessionWorkspace();
@@ -1034,9 +1047,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsChatPage));
         OnPropertyChanged(nameof(IsSettingsPage));
+        OnPropertyChanged(nameof(IsSchedulePage));
         if (string.Equals(value, "Settings", StringComparison.Ordinal))
         {
             Settings.SyncSkillsFromCatalog();
+        }
+        else if (string.Equals(value, "Schedule", StringComparison.Ordinal))
+        {
+            SchedulePageVm.SyncFromSettings();
         }
     }
 

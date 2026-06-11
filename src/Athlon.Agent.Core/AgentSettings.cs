@@ -7,6 +7,39 @@ using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Core;
 
+public sealed class ScheduleSettings
+{
+    public bool Enabled { get; set; } = false;
+    public string DefaultWorkspaceRoot { get; set; } = "";
+    public string Model { get; set; } = "auto";
+    public string Mode { get; set; } = "agent";
+    public string PromptPrefix { get; set; } = "";
+    public bool KeepAwake { get; set; } = false;
+    public List<ScheduledTask> Tasks { get; set; } = new();
+}
+
+public sealed class ScheduledTask
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public string Title { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+    public string Prompt { get; set; } = "";
+    public string WorkspaceRoot { get; set; } = "";
+    public string Model { get; set; } = "auto";
+    public string Mode { get; set; } = "agent";
+    public string Kind { get; set; } = "daily";
+    public int EveryMinutes { get; set; } = 60;
+    public string TimeOfDay { get; set; } = "09:00";
+    public string AtTime { get; set; } = "";
+    public string CreatedAt { get; set; } = "";
+    public string UpdatedAt { get; set; } = "";
+    public string NextRunAt { get; set; } = "";
+    public string LastRunAt { get; set; } = "";
+    public string LastStatus { get; set; } = "idle";
+    public string LastMessage { get; set; } = "";
+    public string LastThreadId { get; set; } = "";
+}
+
 public sealed class AppSettings
 {
     public ModelSettings Model { get; set; } = new();
@@ -24,6 +57,7 @@ public sealed class AppSettings
     public FileReadSettings FileRead { get; set; } = new();
     public SubAgentSettings SubAgent { get; set; } = new();
     public MemorySettings Memory { get; set; } = new();
+    public ScheduleSettings Schedule { get; set; } = new();
 }
 
 public sealed class FileReadSettings

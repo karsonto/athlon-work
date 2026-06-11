@@ -1,0 +1,113 @@
+<Window x:Class="Athlon.Agent.App.ViewModels.ScheduleTaskEditWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="编辑定时任务"
+        Width="520"
+        Height="560"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Brush.AppBackground}"
+        Foreground="{StaticResource Brush.Text}"
+        FontFamily="Segoe UI"
+        FontSize="14"
+        ResizeMode="NoResize">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="HeaderText"
+                   Text="编辑定时任务"
+                   FontSize="20"
+                   FontWeight="SemiBold"
+                   Margin="0,0,0,20" />
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Text="任务名称" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBox x:Name="TitleBox" Padding="10,8" Margin="0,0,0,16" />
+
+                <TextBlock Text="工作目录" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBlock Text="必填。Agent 将在此目录下执行任务。"
+                           Foreground="{StaticResource Brush.SubtleText}"
+                           FontSize="11"
+                           Margin="0,0,0,6" />
+                <TextBox x:Name="WorkspaceBox" Padding="10,8" Margin="0,0,0,16" />
+
+                <TextBlock Text="Prompt / 指令" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBox x:Name="PromptBox"
+                         Padding="10,8"
+                         Margin="0,0,0,16"
+                         MinHeight="100"
+                         TextWrapping="Wrap"
+                         AcceptsReturn="True" />
+
+                <TextBlock Text="调度类型" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <ComboBox x:Name="KindCombo"
+                          Margin="0,0,0,16">
+                    <ComboBoxItem Tag="daily" Content="每天固定时间" />
+                    <ComboBoxItem Tag="interval" Content="间隔执行" />
+                    <ComboBoxItem Tag="at" Content="一次性" />
+                    <ComboBoxItem Tag="manual" Content="手动触发" />
+                </ComboBox>
+
+                <Border x:Name="DailyPanel"
+                        Background="{StaticResource Brush.Panel}"
+                        BorderBrush="{StaticResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16"
+                        Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="执行时间" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBox x:Name="TimeOfDayBox" Text="09:00" Padding="10,8" Width="120" HorizontalAlignment="Left" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="IntervalPanel"
+                        Background="{StaticResource Brush.Panel}"
+                        BorderBrush="{StaticResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16"
+                        Margin="0,0,0,16"
+                        Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="间隔时间（分钟）" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBox x:Name="IntervalBox" Text="60" Padding="10,8" Width="120" HorizontalAlignment="Left" />
+                    </StackPanel>
+                </Border>
+
+                <Border x:Name="AtPanel"
+                        Background="{StaticResource Brush.Panel}"
+                        BorderBrush="{StaticResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="16"
+                        Margin="0,0,0,16"
+                        Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="执行时间点" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBox x:Name="AtTimeBox" Padding="10,8" Width="220" HorizontalAlignment="Left" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button Content="取消"
+                    IsCancel="True"
+                    Style="{StaticResource GhostButtonStyle}"
+                    Margin="0,0,12,0" />
+            <Button x:Name="SaveButton"
+                    Content="保存"
+                    Click="SaveButton_Click"
+                    Style="{StaticResource GhostButtonStyle}"
+                    Foreground="{StaticResource Brush.Accent}" />
+        </StackPanel>
+    </Grid>
+</Window>

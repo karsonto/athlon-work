@@ -8,6 +8,7 @@ namespace Athlon.Agent.App.Services;
 
 public sealed class ApplicationShutdownService(
     SessionTurnHost turnHost,
+    SchedulerService scheduler,
     ExecuteCommandProcessRegistry processRegistry,
     IMcpRegistry mcpRegistry,
     IFileStorageService storage,
@@ -29,6 +30,9 @@ public sealed class ApplicationShutdownService(
         }
 
         CloseSecondaryWindows();
+
+        progress?.Report("正在停止定时任务…");
+        scheduler.Stop();
 
         progress?.Report("正在停止生成任务…");
         await turnHost

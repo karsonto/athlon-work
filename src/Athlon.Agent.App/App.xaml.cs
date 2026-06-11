@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using System.Windows;
 using Athlon.Agent.App.Licensing;
 using Athlon.Agent.App.Services;
@@ -41,6 +41,7 @@ public partial class App : Application
             services.AddSingleton<SessionTurnHost>();
             services.AddSingleton<QueuedTurnPresenter>();
             services.AddSingleton<ComposerAtCompletionService>();
+            services.AddSingleton<SchedulerService>();
             services.AddSingleton<ApplicationShutdownService>();
             services.AddSingleton<ClipboardImageAttachmentReader>();
             services.AddSingleton<MainWindowViewModel>();

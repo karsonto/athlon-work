@@ -33,8 +33,9 @@ internal sealed class AgentTurnCoordinator(
     {
         try
         {
+            var allowToolCalls = ScheduleTurnScope.Current?.AllowToolCalls ?? true;
             var response = await modelClient.CompleteAsync(
-                new AgentModelRequest(modelMessages, tools),
+                new AgentModelRequest(modelMessages, tools, AllowToolCalls: allowToolCalls),
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnTextDelta(assistantMessageId, token)),
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
                 delta => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
@@ -65,8 +66,9 @@ internal sealed class AgentTurnCoordinator(
                 environmentPrompt,
                 session.Messages,
                 settings.ContextCompaction);
+            var allowToolCalls = ScheduleTurnScope.Current?.AllowToolCalls ?? true;
             var response = await modelClient.CompleteAsync(
-                new AgentModelRequest(retryResult.Messages, tools),
+                new AgentModelRequest(retryResult.Messages, tools, AllowToolCalls: allowToolCalls),
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnTextDelta(assistantMessageId, token)),
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
                 delta => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),

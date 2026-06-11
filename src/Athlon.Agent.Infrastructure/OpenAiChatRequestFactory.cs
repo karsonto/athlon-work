@@ -7,9 +7,10 @@ internal static class OpenAiChatRequestFactory
 {
     public static Dictionary<string, object?> BuildPayload(AgentModelRequest request, AppSettings settings, bool stream)
     {
+        var modelName = ScheduleTurnScope.Current?.ModelNameOverride ?? settings.Model.ModelName;
         var payload = new Dictionary<string, object?>
         {
-            ["model"] = settings.Model.ModelName,
+            ["model"] = modelName,
             ["stream"] = stream,
             ["messages"] = request.Messages.Select(ToOpenAiMessage).ToArray()
         };

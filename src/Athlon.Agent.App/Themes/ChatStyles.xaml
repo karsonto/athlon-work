@@ -217,10 +217,12 @@
     <Style x:Key="ComposerToolButtonStyle" TargetType="Button" BasedOn="{StaticResource IconButtonStyle}" />
 
     <Style x:Key="ComposerSendButtonStyle" TargetType="Button">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="12,8" />
+        <Setter Property="Padding" Value="0" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Cursor" Value="Hand" />
