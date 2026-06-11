@@ -10,6 +10,7 @@ public interface IMcpRegistry
 {
     IReadOnlyList<McpServerStatus> GetStatuses();
     IReadOnlyList<ToolDefinition> ListToolDefinitions();
+    IReadOnlyList<McpCatalogEntry> ListCatalogEntries();
     Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default);
     Task<ToolResult> InvokeAsync(string serverName, string toolName, IReadOnlyDictionary<string, string> args, CancellationToken cancellationToken = default);
 }
@@ -48,6 +49,25 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         }
 
         return definitions.OrderBy(definition => definition.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public IReadOnlyList<McpCatalogEntry> ListCatalogEntries()
+    {
+        var entries = new List<McpCatalogEntry>();
+        foreach (var (serverName, tools) in _tools)
+        {
+            foreach (var tool in tools)
+            {
+                entries.Add(new McpCatalogEntry(
+                    serverName,
+                    tool.Name,
+                    McpToolNameCodec.Encode(serverName, tool.Name),
+                    tool.Description,
+                    tool.InputSchemaJson));
+            }
+        }
+
+        return entries.OrderBy(entry => entry.EncodedName, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     public async Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default)

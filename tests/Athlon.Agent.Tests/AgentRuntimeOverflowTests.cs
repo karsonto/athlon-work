@@ -35,6 +35,8 @@ public sealed class AgentRuntimeOverflowTests
             pipeline,
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
+            new SessionUsageAccumulator(),
+            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             settings,
             new NoOpLogger(),

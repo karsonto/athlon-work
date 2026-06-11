@@ -8,6 +8,8 @@ namespace Athlon.Agent.Core;
 internal sealed class AgentTurnCoordinator(
     IAgentModelClient modelClient,
     ITokenEstimatorCalibrator tokenEstimatorCalibrator,
+    ISessionUsageAccumulator sessionUsageAccumulator,
+    IPromptPressureStore promptPressureStore,
     AppSettings settings,
     Func<ISystemPromptOrchestrator> resolveSystemPromptOrchestrator,
     Func<AgentSession, AgentTurnCallbacks?, PreCompletionOptions, string, IReadOnlyList<ToolDefinition>, ContextPressureLevel, CancellationToken, Task<AgentSession>> runPreCompletionPipelineAsync,
@@ -24,6 +26,7 @@ internal sealed class AgentTurnCoordinator(
         IReadOnlyList<ToolDefinition> tools,
         FrozenSystemPrompt frozenPrompt,
         string environmentPrompt,
+        int contextSavingsTokens,
         CancellationToken cancellationToken)
     {
         try
@@ -34,7 +37,7 @@ internal sealed class AgentTurnCoordinator(
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
                 delta => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
                 cancellationToken);
-            ObserveModelUsage(session, environmentPrompt, tools, response);
+            await RecordModelUsageAsync(session, callbacks, environmentPrompt, tools, response, contextSavingsTokens);
             return (session, response);
         }
         catch (HttpRequestException ex) when (AgentRuntime.IsContextLengthError(ex))
@@ -64,16 +67,18 @@ internal sealed class AgentTurnCoordinator(
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
                 delta => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
                 cancellationToken);
-            ObserveModelUsage(session, environmentPrompt, tools, response);
+            await RecordModelUsageAsync(session, callbacks, environmentPrompt, tools, response, contextSavingsTokens: 0);
             return (session, response);
         }
     }
 
-    private void ObserveModelUsage(
+    private async Task RecordModelUsageAsync(
         AgentSession session,
+        AgentTurnCallbacks? callbacks,
         string environmentPrompt,
         IReadOnlyList<ToolDefinition> tools,
-        AgentModelResponse response)
+        AgentModelResponse response,
+        int contextSavingsTokens)
     {
         if (response.Usage?.PromptTokens is not > 0)
         {
@@ -90,5 +95,16 @@ internal sealed class AgentTurnCoordinator(
             multiplier);
         var estimatedPromptTokens = budget.FixedOverhead + budget.EstimatedHistory;
         tokenEstimatorCalibrator.Observe(session.Id, estimatedPromptTokens, response.Usage.PromptTokens);
+        promptPressureStore.Record(session.Id, response.Usage.PromptTokens.Value);
+
+        var snapshot = sessionUsageAccumulator.Record(session.Id, response.Usage, contextSavingsTokens);
+        if (callbacks?.OnUsageRecorded is { } onUsage)
+        {
+            await onUsage(snapshot);
+        }
+
+        await AgentRuntime.PublishStreamEventsAsync(
+            callbacks,
+            [new AgentStreamEvent.UsageRecorded(snapshot)]);
     }
 }

@@ -19,6 +19,8 @@ public sealed class AgentLoopOptionsTests
             new NoOpPreCompletionPipeline(),
             new NoOpToolResultEvictor(),
             new NoOpTokenEstimator(),
+            new SessionUsageAccumulator(),
+            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new LoopNoOpAppLogger(),

@@ -42,6 +42,10 @@ public sealed class AgentRuntimeCompactionTests
 
             new TokenEstimatorCalibrator(new AppSettings()),
 
+            new SessionUsageAccumulator(),
+
+            new PromptPressureStore(),
+
             new NoOpActiveAgentSessionContext(),
 
             new AppSettings(),

@@ -31,4 +31,6 @@ public abstract record AgentStreamEvent
     public sealed record ChatMessageAppended(ChatMessage Message) : AgentStreamEvent;
 
     public sealed record ClearEmptyAssistantPlaceholder : AgentStreamEvent;
+
+    public sealed record UsageRecorded(SessionUsageSnapshot Snapshot) : AgentStreamEvent;
 }

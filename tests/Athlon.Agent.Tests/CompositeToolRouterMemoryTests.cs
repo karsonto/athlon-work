@@ -107,6 +107,13 @@ public sealed class CompositeToolRouterMemoryTests
 
         public IReadOnlyList<ToolDefinition> ListToolDefinitions() => Definitions;
 
+        public IReadOnlyList<McpCatalogEntry> ListCatalogEntries() =>
+            Definitions.Select(definition =>
+            {
+                McpToolNameCodec.TryDecode(definition.Name, out var server, out var tool);
+                return new McpCatalogEntry(server, tool, definition.Name, definition.Description, "{}");
+            }).ToArray();
+
         public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 

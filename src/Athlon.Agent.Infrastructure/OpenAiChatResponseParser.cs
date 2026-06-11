@@ -272,9 +272,13 @@ internal static class OpenAiChatResponseParser
             ? totalValue
             : null;
 
-        return promptTokens is null && completionTokens is null && totalTokens is null
-            ? null
-            : new ModelUsage(promptTokens, completionTokens, totalTokens);
+        if (promptTokens is null && completionTokens is null && totalTokens is null)
+        {
+            return null;
+        }
+
+        var baseUsage = new ModelUsage(promptTokens, completionTokens, totalTokens);
+        return PromptCacheUsageParser.MergeInto(baseUsage, usageElement);
     }
 
     private static (string Content, string? ReasoningContent) SplitEmbeddedThinkingContent(

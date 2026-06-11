@@ -36,6 +36,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly UiLayoutSettingsBridge _uiLayout;
     private readonly SessionHistoryCoordinator _sessionHistory;
     private readonly WorkspaceSessionBridge _workspaceBridge = new();
+    private readonly ISessionUsageAccumulator _sessionUsageAccumulator;
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
     private SessionTurnUiController _activeUi;
@@ -56,7 +57,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SessionUiCache uiCache,
         WorkspaceFileEditorService workspaceFileEditorService,
         ApplicationShutdownService shutdownService,
-        AppSettings settings)
+        AppSettings settings,
+        ISessionUsageAccumulator sessionUsageAccumulator)
     {
         _storage = storage;
         _credentialStore = credentialStore;
@@ -74,10 +76,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _appSettings = settings;
         _uiLayout = new UiLayoutSettingsBridge(storage, settings);
         _sessionHistory = new SessionHistoryCoordinator(storage);
+        _sessionUsageAccumulator = sessionUsageAccumulator;
         _skillCatalog = skillCatalog;
         _skillRuntime = skillRuntime;
         _displayedSessionId = _session.Id;
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
+        WireSessionUsageUi(_activeUi);
         _activeUi.SetDisplayed(true);
         _turnHost.TurnCompleted += OnTurnCompleted;
         _turnHost.TurnStateChanged += OnTurnStateChanged;
@@ -206,6 +210,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     private string currentSessionTitle = "New Chat";
+
+    [ObservableProperty]
+    private string sessionUsageLine = string.Empty;
 
     [ObservableProperty]
     private string settingsStatus = "Settings are stored as JSON files under the app data folder.";
@@ -537,6 +544,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void RequestScrollToBottomImmediate() => ScrollChatToBottomImmediate?.Invoke();
 
+    private void WireSessionUsageUi(SessionTurnUiController ui)
+    {
+        ui.OnUsageRecorded = snapshot => SessionUsageLine = SessionUsageFormatter.Format(snapshot);
+        SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
+    }
+
     private void SwitchDisplayedSession(AgentSession session)
     {
         _activeUi.SetDisplayed(false);
@@ -544,6 +557,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _displayedSessionId = session.Id;
         _session = session;
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
+        WireSessionUsageUi(_activeUi);
         _activeUi.SetDisplayed(true);
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         OnPropertyChanged(nameof(Messages));

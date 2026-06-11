@@ -40,6 +40,10 @@ public sealed class ContextCompactionSettings
     public ToolResultEvictionSettings ToolResultEviction { get; set; } = new();
 
     public DynamicCompactionSettings DynamicCompaction { get; set; } = new();
+
+    public RequestHistoryHygieneSettings RequestHistoryHygiene { get; set; } = new();
+
+    public ToolStormSettings ToolStorm { get; set; } = new();
 }
 
 public sealed class TruncateArgsSettings

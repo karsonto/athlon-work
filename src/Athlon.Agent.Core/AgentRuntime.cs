@@ -14,6 +14,8 @@ public sealed class AgentRuntime(
     IPreCompletionPipeline preCompletionPipeline,
     IToolResultEvictor toolResultEvictor,
     ITokenEstimatorCalibrator tokenEstimatorCalibrator,
+    ISessionUsageAccumulator sessionUsageAccumulator,
+    IPromptPressureStore promptPressureStore,
     IActiveAgentSessionContext activeSessionContext,
     AppSettings settings,
     IAppLogger logger,
@@ -29,6 +31,8 @@ public sealed class AgentRuntime(
     private AgentTurnCoordinator TurnCoordinator => _turnCoordinator ??= new AgentTurnCoordinator(
         modelClient,
         tokenEstimatorCalibrator,
+        sessionUsageAccumulator,
+        promptPressureStore,
         settings,
         ResolveSystemPromptOrchestrator,
         RunPreCompletionPipelineAsync,
@@ -87,14 +91,19 @@ public sealed class AgentRuntime(
             var activeRouter = ResolveToolRouter();
             var activePrompt = ResolveSystemPromptOrchestrator();
             var tools = activeRouter.ListTools();
+            var toolCatalogFingerprint = ToolCatalogFingerprint.Compute(tools);
+            LogToolCatalogDrift(session.Id, toolCatalogFingerprint);
+
             var frozenPrompt = activePrompt.PrepareForTurn(session, tools);
             var environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
             var modelToolRound = 0;
             var maxModelToolRounds = AgentLoopOptionsScope.Current?.MaxModelToolRounds;
             var modelMessageCache = new ModelMessageCache();
-            var modelMessages = BuildModelMessagesForSession(modelMessageCache, environmentPrompt, session.Messages);
             var runId = Guid.NewGuid().ToString("N");
             var streamAdapter = new AgentStreamAdapter(session.Id, runId);
+            var toolStorm = settings.ContextCompaction.ToolStorm.Enabled
+                ? new ToolStormBreaker(settings.ContextCompaction.ToolStorm)
+                : null;
             await PublishStreamEventsAsync(callbacks, streamAdapter.CreateRunStarted());
 
             if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
@@ -106,6 +115,7 @@ public sealed class AgentRuntime(
                     toolCall,
                     streamAdapter,
                     callbacks,
+                    toolStorm,
                     cancellationToken);
             }
 
@@ -121,7 +131,7 @@ public sealed class AgentRuntime(
                     cancellationToken: cancellationToken);
                 modelMessageCache.NotePreCompletionResult(historyBeforePreCompletion, session.Messages);
                 environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
-                modelMessages = BuildModelMessagesForSession(modelMessageCache, environmentPrompt, session.Messages);
+                var hygieneResult = BuildSanitizedModelMessages(modelMessageCache, environmentPrompt, session.Messages);
 
                 var assistantMessageId = Guid.NewGuid().ToString("N");
                 var (updatedSession, response) = await TurnCoordinator.CompleteWithOverflowRetryAsync(
@@ -129,10 +139,11 @@ public sealed class AgentRuntime(
                     callbacks,
                     streamAdapter,
                     assistantMessageId,
-                    modelMessages,
+                    hygieneResult.Messages,
                     tools,
                     frozenPrompt,
                     environmentPrompt,
+                    hygieneResult.EstimatedSavingsTokens,
                     cancellationToken);
                 session = updatedSession;
 
@@ -191,8 +202,6 @@ public sealed class AgentRuntime(
                     return session;
                 }
 
-                environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
-                modelMessages = BuildModelMessagesForSession(modelMessageCache, environmentPrompt, session.Messages);
                 foreach (var toolCall in response.ToolCalls)
                 {
                     session = await InvokeToolAndPersistAsync(
@@ -201,6 +210,7 @@ public sealed class AgentRuntime(
                         toolCall,
                         streamAdapter,
                         callbacks,
+                        toolStorm,
                         cancellationToken);
                 }
             }
@@ -212,14 +222,58 @@ public sealed class AgentRuntime(
         }
     }
 
-    private Task<AgentSession> InvokeToolAndPersistAsync(
+    private RequestHistoryHygiene.ApplyResult BuildSanitizedModelMessages(
+        ModelMessageCache cache,
+        string environmentPrompt,
+        IReadOnlyList<ChatMessage> history)
+    {
+        var messages = cache.Build(environmentPrompt, history, settings.ContextCompaction.IncludeReasoningInModelContext);
+        return RequestHistoryHygiene.ApplyToModelMessages(
+            messages,
+            settings.ContextCompaction.RequestHistoryHygiene);
+    }
+
+    private void LogToolCatalogDrift(string sessionId, string fingerprint)
+    {
+        var key = $"tool-catalog:{sessionId}";
+        if (_toolCatalogFingerprints.TryGetValue(key, out var previous)
+            && ToolCatalogFingerprint.IsBreakingChange(previous, fingerprint))
+        {
+            _logger.Warning(
+                "Tool catalog fingerprint changed for session {SessionId}: {Previous} -> {Current}",
+                sessionId,
+                previous,
+                fingerprint);
+        }
+
+        _toolCatalogFingerprints[key] = fingerprint;
+    }
+
+    private readonly Dictionary<string, string> _toolCatalogFingerprints = new(StringComparer.Ordinal);
+
+    private async Task<AgentSession> InvokeToolAndPersistAsync(
         AgentSession session,
         string? parentMessageId,
         AgentToolCall toolCall,
         AgentStreamAdapter streamAdapter,
         AgentTurnCallbacks? callbacks,
-        CancellationToken cancellationToken) =>
-        _toolPipeline.InvokeAndPersistAsync(
+        ToolStormBreaker? toolStorm,
+        CancellationToken cancellationToken)
+    {
+        if (toolStorm is not null && !toolStorm.TryInspect(toolCall, out var reason))
+        {
+            var suppressed = ToolResult.Failure(
+                "Duplicate tool call suppressed",
+                reason ?? "repeat-loop guard suppressed the duplicate tool call.");
+            var content = FormatToolResult(toolCall, suppressed);
+            var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
+            session = session.WithMessage(toolMessage);
+            await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall));
+            await PersistMessageAsync(session, toolMessage, cancellationToken);
+            return session;
+        }
+
+        return await _toolPipeline.InvokeAndPersistAsync(
             session,
             parentMessageId,
             toolCall,
@@ -227,6 +281,7 @@ public sealed class AgentRuntime(
             callbacks,
             PersistMessageAsync,
             cancellationToken);
+    }
 
     private async Task<AgentSession> RunPreCompletionPipelineAsync(
         AgentSession session,
@@ -249,17 +304,36 @@ public sealed class AgentRuntime(
                 settings.ContextCompaction,
                 settings.Model,
                 multiplier);
+            budget = ApplyPromptPressure(budget, session.Id);
             runtimeContext = new CompactionRuntimeContext(
                 budget,
                 environmentPrompt,
                 tools,
                 multiplier,
-                pressureOverride);
+                pressureOverride,
+                promptPressureStore.GetLastPromptTokens(session.Id));
         }
 
         var messageIdsBefore = session.Messages.Select(message => message.Id).ToHashSet(StringComparer.Ordinal);
         session = await preCompletionPipeline.RunAsync(session, options, runtimeContext, cancellationToken);
         return await PersistCompactionAuditsAsync(session, messageIdsBefore, callbacks, cancellationToken);
+    }
+
+    private ContextBudgetSnapshot ApplyPromptPressure(ContextBudgetSnapshot budget, string sessionId)
+    {
+        var lastPromptTokens = promptPressureStore.GetLastPromptTokens(sessionId);
+        if (lastPromptTokens is not > 0)
+        {
+            return budget;
+        }
+
+        var historyFromActual = Math.Max(0, lastPromptTokens.Value - budget.FixedOverhead);
+        if (historyFromActual <= budget.EstimatedHistory)
+        {
+            return budget;
+        }
+
+        return budget.WithHistoryEstimate(historyFromActual, budget.HistoryBudget);
     }
 
     private async Task<AgentSession> PersistCompactionAuditsAsync(
@@ -364,12 +438,6 @@ public sealed class AgentRuntime(
 
         return false;
     }
-
-    private List<AgentModelMessage> BuildModelMessagesForSession(
-        ModelMessageCache cache,
-        string environmentPrompt,
-        IReadOnlyList<ChatMessage> history) =>
-        cache.Build(environmentPrompt, history, settings.ContextCompaction.IncludeReasoningInModelContext);
 
     internal static List<AgentModelMessage> BuildModelMessages(
         string environmentPrompt,

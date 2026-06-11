@@ -84,6 +84,8 @@ public sealed class SessionTurnUiController
         });
     }
 
+    public Action<SessionUsageSnapshot>? OnUsageRecorded { get; set; }
+
     public AgentTurnCallbacks BuildCallbacks(LiveAgentSession? liveSession = null) => new()
     {
         OnSessionUpdated = session =>
@@ -95,8 +97,19 @@ public sealed class SessionTurnUiController
 
             return Task.CompletedTask;
         },
+        OnUsageRecorded = snapshot =>
+        {
+            OnUsageRecorded?.Invoke(snapshot);
+            return Task.CompletedTask;
+        },
         OnStreamEvent = streamEvent =>
         {
+            if (streamEvent is AgentStreamEvent.UsageRecorded(var snapshot))
+            {
+                OnUsageRecorded?.Invoke(snapshot);
+                return Task.CompletedTask;
+            }
+
             switch (streamEvent)
             {
                 case AgentStreamEvent.TextMessageContent(var messageId, var delta):

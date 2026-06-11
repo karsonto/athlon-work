@@ -9,6 +9,8 @@ public sealed class WorkspaceFilesSection : IEnvironmentPromptSection
 
     public PromptSectionPlacement Placement => PromptSectionPlacement.PreCall;
 
-    public void Append(StringBuilder builder, EnvironmentPromptContext context) =>
-        WorkspacePromptLoader.AppendWorkspaceFiles(builder, context);
+    public void Append(StringBuilder builder, EnvironmentPromptContext context)
+    {
+        // Workspace file contents are injected per reasoning iteration via WorkspaceFilesPromptContributor.
+    }
 }

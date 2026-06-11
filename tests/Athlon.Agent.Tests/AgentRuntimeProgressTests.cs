@@ -27,6 +27,8 @@ public sealed class AgentRuntimeProgressTests
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(new AppSettings()),
+            new SessionUsageAccumulator(),
+            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger(),
@@ -85,6 +87,8 @@ public sealed class AgentRuntimeProgressTests
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(new AppSettings()),
+            new SessionUsageAccumulator(),
+            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger(),
@@ -132,6 +136,8 @@ public sealed class AgentRuntimeProgressTests
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(new AppSettings()),
+            new SessionUsageAccumulator(),
+            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger(),
@@ -164,6 +170,8 @@ public sealed class AgentRuntimeProgressTests
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(new AppSettings()),
+            new SessionUsageAccumulator(),
+            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger(),
@@ -246,6 +254,9 @@ public sealed class AgentRuntimeProgressTests
 
         public IReadOnlyList<ToolDefinition> ListToolDefinitions() =>
             new[] { new ToolDefinition("mcp_demo__echo", "echo", new Dictionary<string, string> { ["argumentsJson"] = "args" }, Source: "mcp") };
+
+        public IReadOnlyList<McpCatalogEntry> ListCatalogEntries() =>
+            [new McpCatalogEntry("demo", "echo", "mcp_demo__echo", "echo", "{}")];
 
         public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
 

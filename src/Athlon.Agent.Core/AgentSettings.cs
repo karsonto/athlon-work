@@ -12,6 +12,7 @@ public sealed class AppSettings
     public ModelSettings Model { get; set; } = new();
     public ToolPermissionSettings ToolPermissions { get; set; } = new();
     public List<McpServerSettings> McpServers { get; set; } = new();
+    public McpSearchSettings McpSearch { get; set; } = new();
     public List<SkillSettings> Skills { get; set; } = new();
     public List<WorkspaceSettings> Workspaces { get; set; } = new();
     public UiSettings Ui { get; set; } = new();
@@ -102,6 +103,23 @@ public sealed class McpServerSettings
     /// <summary>Working directory for stdio MCP server process (Claude Desktop <c>cwd</c>).</summary>
     public string WorkingDirectory { get; set; } = string.Empty;
 }
+
+public sealed class McpSearchSettings
+{
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>direct | search | auto</summary>
+    public string Mode { get; set; } = "auto";
+
+    public int AutoThresholdToolCount { get; set; } = 12;
+
+    public int TopKDefault { get; set; } = 8;
+
+    public int TopKMax { get; set; } = 20;
+
+    public double MinScore { get; set; } = 0.5;
+}
+
 public sealed class SkillSettings
 {
     public string Name { get; set; } = string.Empty;

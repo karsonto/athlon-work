@@ -205,6 +205,7 @@ public sealed class SubAgentToolTests
     {
         public IReadOnlyList<McpServerStatus> GetStatuses() => Array.Empty<McpServerStatus>();
         public IReadOnlyList<ToolDefinition> ListToolDefinitions() => Array.Empty<ToolDefinition>();
+        public IReadOnlyList<McpCatalogEntry> ListCatalogEntries() => Array.Empty<McpCatalogEntry>();
         public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
         public Task<ToolResult> InvokeAsync(string serverName, string toolName, IReadOnlyDictionary<string, string> arguments, CancellationToken cancellationToken = default) =>

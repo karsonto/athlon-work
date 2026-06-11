@@ -24,6 +24,8 @@ public sealed class AgentRuntimeToolFailureTests
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(new AppSettings()),
+            new SessionUsageAccumulator(),
+            new PromptPressureStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger(),

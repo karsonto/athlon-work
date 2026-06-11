@@ -1325,6 +1325,33 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
+                            <TextBlock Text="MCP Search Mode" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <CheckBox Content="启用 MCP 按需工具发现（search 模式）"
+                                      IsChecked="{Binding Settings.Settings.McpSearch.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="0,0,0,8" />
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="模式 (direct/search/auto)" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding Settings.Settings.McpSearch.Mode, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Auto 阈值 (工具数)" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding Settings.Settings.McpSearch.AutoThresholdToolCount, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
                             <TextBlock Text="Installed MCP Servers" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <TextBlock Text="{Binding Settings.McpConfigPath, StringFormat=MCP 服务从 {0} 读取；此页面仅控制每个服务是否启用。新增、删除和命令参数请直接修改 JSON 配置。}"
                                        Foreground="{StaticResource Brush.SubtleText}"
@@ -1527,6 +1554,13 @@
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            FontSize="12" />
+                <TextBlock Text="{Binding SessionUsageLine}"
+                           Foreground="{StaticResource Brush.SubtleText}"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Margin="0,14,0,0"
+                           FontSize="11"
+                           TextTrimming="CharacterEllipsis" />
                 <TextBlock Text="{Binding LogsPath, StringFormat=Logs: {0}}"
                            Foreground="{StaticResource Brush.SubtleText}"
                            HorizontalAlignment="Right"

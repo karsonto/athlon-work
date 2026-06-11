@@ -23,7 +23,21 @@ public sealed record AgentModelRequest(
 public sealed record ModelUsage(
     int? PromptTokens = null,
     int? CompletionTokens = null,
-    int? TotalTokens = null);
+    int? TotalTokens = null,
+    int? PromptCacheHitTokens = null,
+    int? PromptCacheMissTokens = null,
+    int? CacheReadTokens = null,
+    int? CacheCreationTokens = null,
+    PromptCacheAvailability PromptCacheAvailability = PromptCacheAvailability.Unknown)
+{
+    public double? PromptCacheHitRate =>
+        PromptCacheAvailability == PromptCacheAvailability.HitMiss
+        && PromptCacheHitTokens is > 0 or 0
+        && PromptCacheMissTokens is > 0 or 0
+        && PromptCacheHitTokens + PromptCacheMissTokens > 0
+            ? (double)PromptCacheHitTokens.Value / (PromptCacheHitTokens.Value + PromptCacheMissTokens.Value)
+            : null;
+}
 
 public sealed record AgentModelResponse(
     string Content,

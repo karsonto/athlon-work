@@ -8,4 +8,6 @@ public sealed class AgentTurnCallbacks
     public Func<AgentSession, Task>? OnSessionUpdated { get; init; }
 
     public Func<AgentStreamEvent, Task>? OnStreamEvent { get; init; }
+
+    public Func<SessionUsageSnapshot, Task>? OnUsageRecorded { get; init; }
 }
