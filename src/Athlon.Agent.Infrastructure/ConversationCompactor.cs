@@ -85,8 +85,9 @@ public sealed class ConversationCompactor(
         int? summaryInputCharsBefore = formatted.Length;
         int? summaryInputCharsAfter = formatted.Length;
         int? hygieneSavingsEstimate = null;
+        var calibrationMultiplier = request.RuntimeContext?.CalibrationMultiplier ?? 1.0;
         if (formatted.Length > cfg.MaxConversationCharsForSummary
-            || ContextTokenEstimator.EstimateTextTokens(formatted) > cfg.RequestHistoryHygiene.MaxToolResultTokens)
+            || ContextTokenEstimator.EstimateTextTokens(formatted, calibrationMultiplier) > cfg.RequestHistoryHygiene.MaxToolResultTokens)
         {
             var compacted = RequestHistoryHygiene.CompactTextForSummary(formatted, cfg.RequestHistoryHygiene);
             formatted = compacted.Text;

@@ -5,7 +5,7 @@ namespace Athlon.Agent.Core;
 /// <summary>
 /// Incrementally builds model messages within a turn; invalidates when compaction reshapes history.
 /// </summary>
-internal sealed class ModelMessageCache
+public sealed class ModelMessageCache
 {
     private List<AgentModelMessage>? _messages;
     private string? _environmentPrompt;

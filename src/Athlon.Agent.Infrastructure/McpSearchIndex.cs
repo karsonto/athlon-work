@@ -3,7 +3,7 @@ using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
 
-internal static partial class McpSearchIndex
+public static partial class McpSearchIndex
 {
     public sealed record SearchResult(McpCatalogEntry Entry, double Score, IReadOnlyList<string> MatchedKeywords);
 
