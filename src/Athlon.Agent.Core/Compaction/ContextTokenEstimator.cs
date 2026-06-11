@@ -30,6 +30,20 @@ public static class ContextTokenEstimator
             : (int)Math.Ceiling(tokens * calibrationMultiplier);
     }
 
+    public static int ResolveEffectiveEstimate(
+        IReadOnlyList<ChatMessage> messages,
+        ContextCompactionSettings settings,
+        ContextBudgetSnapshot? budget)
+    {
+        var estimated = Estimate(messages, settings.IncludeReasoningInModelContext);
+        if (budget is null)
+        {
+            return estimated;
+        }
+
+        return Math.Max(estimated, budget.EstimatedHistory);
+    }
+
     public static int Estimate(
         IReadOnlyList<ChatMessage> messages,
         bool includeReasoningInModelContext = false,

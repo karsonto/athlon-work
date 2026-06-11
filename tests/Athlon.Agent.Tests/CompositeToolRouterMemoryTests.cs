@@ -114,6 +114,12 @@ public sealed class CompositeToolRouterMemoryTests
                 return new McpCatalogEntry(server, tool, definition.Name, definition.Description, "{}");
             }).ToArray();
 
+        public int CatalogVersion => 0;
+        public int CatalogCount => ListCatalogEntries().Count;
+        public int CatalogSchemaCharCount => ListCatalogEntries().Sum(entry => entry.Description.Length + entry.InputSchemaJson.Length);
+        public IReadOnlyList<McpSearchIndex.SearchResult> SearchCatalog(string query, int topK, double minScore, string? serverName = null) =>
+            McpSearchIndex.Search(ListCatalogEntries(), query, topK, minScore);
+
         public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 

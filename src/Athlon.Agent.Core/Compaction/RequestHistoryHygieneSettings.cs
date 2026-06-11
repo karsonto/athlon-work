@@ -17,9 +17,17 @@ public sealed class RequestHistoryHygieneSettings
     public int MaxArrayItems { get; set; } = 80;
 }
 
+public enum ToolStormScope
+{
+    Turn,
+    Session
+}
+
 public sealed class ToolStormSettings
 {
     public bool Enabled { get; set; } = true;
+
+    public ToolStormScope Scope { get; set; } = ToolStormScope.Turn;
 
     public int WindowSize { get; set; } = 8;
 

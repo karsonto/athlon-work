@@ -6,6 +6,15 @@ namespace Athlon.Agent.Tests;
 public sealed class RequestHistoryHygieneTests
 {
     [Fact]
+    public void CompactTextForSummary_skips_heavy_compaction_for_evicted_placeholder()
+    {
+        var evicted = "[Tool result evicted to disk]\n" + new string('z', 100_000);
+        var result = RequestHistoryHygiene.CompactTextForSummary(evicted, new RequestHistoryHygieneSettings());
+
+        Assert.DoesNotContain("[cache hygiene: omitted", result.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ApplyToModelMessages_truncates_large_tool_payload()
     {
         var large = string.Join('\n', Enumerable.Range(1, 500).Select(index => $"line {index}"));

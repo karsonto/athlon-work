@@ -16,6 +16,26 @@ public static partial class RequestHistoryHygiene
 
     public sealed record ApplyResult(IReadOnlyList<AgentModelMessage> Messages, int EstimatedSavingsTokens);
 
+    public sealed record SummaryCompactResult(string Text, int CharsBefore, int CharsAfter, int EstimatedSavingsTokens);
+
+    public static SummaryCompactResult CompactTextForSummary(string text, RequestHistoryHygieneSettings settings)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return new SummaryCompactResult(text, 0, 0, 0);
+        }
+
+        var beforeChars = text.Length;
+        var beforeTokens = EstimateTokens(text);
+        var compacted = CompactToolPayload(text, settings);
+        var afterTokens = EstimateTokens(compacted);
+        return new SummaryCompactResult(
+            compacted,
+            beforeChars,
+            compacted.Length,
+            Math.Max(0, beforeTokens - afterTokens));
+    }
+
     public static ApplyResult ApplyToModelMessages(
         IReadOnlyList<AgentModelMessage> messages,
         RequestHistoryHygieneSettings settings)
@@ -149,6 +169,12 @@ public static partial class RequestHistoryHygiene
         if (string.IsNullOrEmpty(text))
         {
             return text;
+        }
+
+        if (text.Contains("[Tool result evicted", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("[cache hygiene:", StringComparison.OrdinalIgnoreCase))
+        {
+            return CompactEmbeddedBase64(text);
         }
 
         var originalBytes = Encoding.UTF8.GetByteCount(text);

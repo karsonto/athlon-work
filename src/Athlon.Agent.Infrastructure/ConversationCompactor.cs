@@ -9,6 +9,7 @@ public sealed class ConversationCompactor(
     IAgentModelClient modelClient,
     IFileStorageService storage,
     TruncateArgsService truncateArgsService,
+    ISessionUsageAccumulator sessionUsageAccumulator,
     IAppLogger logger) : IConversationCompactor
 {
     private readonly IAppLogger _logger = logger.ForContext("ConversationCompactor");
@@ -25,19 +26,25 @@ public sealed class ConversationCompactor(
             return new ConversationCompactResult(session, false);
         }
 
-        var truncateArgsApplied = false;
-        if (!cfg.DynamicCompaction.Enabled || request.RuntimeContext is null)
+        var truncateArgsApplied = request.Plan?.ApplyTruncateArgs == true;
+        if (!cfg.DynamicCompaction.Enabled)
         {
-            conversation = ConversationMessageFilters.WithoutCompactionAudits(
-                truncateArgsService.ApplyToMessages(conversation, cfg, out truncateArgsApplied));
+            if (!truncateArgsApplied)
+            {
+                conversation = ConversationMessageFilters.WithoutCompactionAudits(
+                    truncateArgsService.ApplyToMessages(conversation, cfg, out truncateArgsApplied));
+            }
         }
-        else if (request.Plan?.ApplyTruncateArgs == true)
+        else if (truncateArgsApplied)
         {
-            truncateArgsApplied = true;
+            // truncate already applied in dynamic pipeline.
         }
 
-        var estimatedTokens = ContextTokenEstimator.Estimate(conversation, cfg.IncludeReasoningInModelContext);
-        var shouldCompact = request.RuntimeContext is { } runtime
+        var estimatedTokens = ContextTokenEstimator.ResolveEffectiveEstimate(
+            conversation,
+            cfg,
+            request.RuntimeContext?.Budget);
+        var shouldCompact = request.RuntimeContext is { } runtime && cfg.DynamicCompaction.Enabled
             ? ContextPressureEvaluator.ShouldCompact(
                 runtime.Budget,
                 conversation,
@@ -75,9 +82,23 @@ public sealed class ConversationCompactor(
         }
 
         var formatted = ConversationSummaryFormatter.FormatMessages(prefix);
+        int? summaryInputCharsBefore = formatted.Length;
+        int? summaryInputCharsAfter = formatted.Length;
+        int? hygieneSavingsEstimate = null;
+        if (formatted.Length > cfg.MaxConversationCharsForSummary
+            || ContextTokenEstimator.EstimateTextTokens(formatted) > cfg.RequestHistoryHygiene.MaxToolResultTokens)
+        {
+            var compacted = RequestHistoryHygiene.CompactTextForSummary(formatted, cfg.RequestHistoryHygiene);
+            formatted = compacted.Text;
+            summaryInputCharsBefore = compacted.CharsBefore;
+            summaryInputCharsAfter = compacted.CharsAfter;
+            hygieneSavingsEstimate = compacted.EstimatedSavingsTokens;
+        }
+
         if (formatted.Length > cfg.MaxConversationCharsForSummary)
         {
             formatted = formatted[^cfg.MaxConversationCharsForSummary..];
+            summaryInputCharsAfter = formatted.Length;
         }
 
         var mustPreserve = request.Plan?.MustPreserveAppendix;
@@ -124,12 +145,12 @@ public sealed class ConversationCompactor(
 
         var pressure = request.Plan?.Pressure;
         var utilization = request.RuntimeContext?.Budget.TotalUtilization;
+        var tokensAfterPreview = ContextTokenEstimator.Estimate(
+            new[] { summaryMessage }.Concat(tail).ToArray(),
+            cfg.IncludeReasoningInModelContext);
 
         if (request.EmitAudit)
         {
-            var tokensAfterPreview = ContextTokenEstimator.Estimate(
-                new[] { summaryMessage }.Concat(tail).ToArray(),
-                cfg.IncludeReasoningInModelContext);
             var auditContent = CompactionMessageContent.CreateConversationCompact(
                 tokensBefore,
                 tokensAfterPreview,
@@ -139,7 +160,10 @@ public sealed class ConversationCompactor(
                 strategy,
                 layers,
                 pressure,
-                utilization);
+                utilization,
+                summaryInputCharsBefore,
+                summaryInputCharsAfter,
+                hygieneSavingsEstimate);
             compactMessages.Add(CompactionMessageContent.CreateCompactionMessage(auditContent));
         }
 
@@ -156,6 +180,7 @@ public sealed class ConversationCompactor(
             cancellationToken);
 
         session = session.WithMessages(compactMessages);
+        sessionUsageAccumulator.RecordCompaction(session.Id, tokensBefore, tokensAfterPreview);
 
         _logger.Information(
             "Compacted session {SessionId} from {OriginalCount} to {ResultCount} messages (kind {Kind}, force {Force})",

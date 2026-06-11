@@ -113,6 +113,8 @@ public sealed class McpSearchSettings
 
     public int AutoThresholdToolCount { get; set; } = 12;
 
+    public int AutoThresholdSchemaChars { get; set; } = 80_000;
+
     public int TopKDefault { get; set; } = 8;
 
     public int TopKMax { get; set; } = 20;

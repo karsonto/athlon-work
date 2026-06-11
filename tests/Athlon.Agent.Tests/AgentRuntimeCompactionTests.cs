@@ -46,6 +46,8 @@ public sealed class AgentRuntimeCompactionTests
 
             new PromptPressureStore(),
 
+            new SessionToolStormStore(),
+
             new NoOpActiveAgentSessionContext(),
 
             new AppSettings(),

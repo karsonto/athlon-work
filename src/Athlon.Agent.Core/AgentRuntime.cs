@@ -16,6 +16,7 @@ public sealed class AgentRuntime(
     ITokenEstimatorCalibrator tokenEstimatorCalibrator,
     ISessionUsageAccumulator sessionUsageAccumulator,
     IPromptPressureStore promptPressureStore,
+    ISessionToolStormStore sessionToolStormStore,
     IActiveAgentSessionContext activeSessionContext,
     AppSettings settings,
     IAppLogger logger,
@@ -101,9 +102,7 @@ public sealed class AgentRuntime(
             var modelMessageCache = new ModelMessageCache();
             var runId = Guid.NewGuid().ToString("N");
             var streamAdapter = new AgentStreamAdapter(session.Id, runId);
-            var toolStorm = settings.ContextCompaction.ToolStorm.Enabled
-                ? new ToolStormBreaker(settings.ContextCompaction.ToolStorm)
-                : null;
+            var toolStorm = ResolveToolStormBreaker(session.Id);
             await PublishStreamEventsAsync(callbacks, streamAdapter.CreateRunStarted());
 
             if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
@@ -131,7 +130,11 @@ public sealed class AgentRuntime(
                     cancellationToken: cancellationToken);
                 modelMessageCache.NotePreCompletionResult(historyBeforePreCompletion, session.Messages);
                 environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
-                var hygieneResult = BuildSanitizedModelMessages(modelMessageCache, environmentPrompt, session.Messages);
+                var hygieneResult = ModelMessagesForApiBuilder.Build(
+                    modelMessageCache,
+                    environmentPrompt,
+                    session.Messages,
+                    settings.ContextCompaction);
 
                 var assistantMessageId = Guid.NewGuid().ToString("N");
                 var (updatedSession, response) = await TurnCoordinator.CompleteWithOverflowRetryAsync(
@@ -143,6 +146,7 @@ public sealed class AgentRuntime(
                     tools,
                     frozenPrompt,
                     environmentPrompt,
+                    modelMessageCache,
                     hygieneResult.EstimatedSavingsTokens,
                     cancellationToken);
                 session = updatedSession;
@@ -222,15 +226,17 @@ public sealed class AgentRuntime(
         }
     }
 
-    private RequestHistoryHygiene.ApplyResult BuildSanitizedModelMessages(
-        ModelMessageCache cache,
-        string environmentPrompt,
-        IReadOnlyList<ChatMessage> history)
+    private ToolStormBreaker? ResolveToolStormBreaker(string sessionId)
     {
-        var messages = cache.Build(environmentPrompt, history, settings.ContextCompaction.IncludeReasoningInModelContext);
-        return RequestHistoryHygiene.ApplyToModelMessages(
-            messages,
-            settings.ContextCompaction.RequestHistoryHygiene);
+        var stormSettings = settings.ContextCompaction.ToolStorm;
+        if (!stormSettings.Enabled)
+        {
+            return null;
+        }
+
+        return stormSettings.Scope == ToolStormScope.Session
+            ? sessionToolStormStore.GetOrCreate(sessionId, stormSettings)
+            : new ToolStormBreaker(stormSettings);
     }
 
     private void LogToolCatalogDrift(string sessionId, string fingerprint)
@@ -239,11 +245,24 @@ public sealed class AgentRuntime(
         if (_toolCatalogFingerprints.TryGetValue(key, out var previous)
             && ToolCatalogFingerprint.IsBreakingChange(previous, fingerprint))
         {
-            _logger.Warning(
-                "Tool catalog fingerprint changed for session {SessionId}: {Previous} -> {Current}",
-                sessionId,
-                previous,
-                fingerprint);
+            var snapshot = sessionUsageAccumulator.Get(sessionId);
+            if (snapshot.CacheAvailability == PromptCacheAvailability.HitMiss && snapshot.CacheHitRate is >= 0.3)
+            {
+                _logger.Warning(
+                    "Tool catalog breaking change for session {SessionId} ({Previous} -> {Current}); prompt prefix cache may be invalidated (recent cache hit rate {HitRate:P0})",
+                    sessionId,
+                    previous,
+                    fingerprint,
+                    snapshot.CacheHitRate.Value);
+            }
+            else
+            {
+                _logger.Warning(
+                    "Tool catalog fingerprint changed for session {SessionId}: {Previous} -> {Current}",
+                    sessionId,
+                    previous,
+                    fingerprint);
+            }
         }
 
         _toolCatalogFingerprints[key] = fingerprint;
@@ -294,7 +313,7 @@ public sealed class AgentRuntime(
     {
         CompactionRuntimeContext? runtimeContext = null;
         var compaction = settings.ContextCompaction;
-        if (compaction.Enabled && compaction.DynamicCompaction.Enabled)
+        if (compaction.Enabled || options.ForceConversationCompact)
         {
             var multiplier = tokenEstimatorCalibrator.GetMultiplier(session.Id);
             var budget = ContextBudgetCalculator.Compute(

@@ -113,6 +113,7 @@ public sealed class SessionDiskLogTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
+            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger(),

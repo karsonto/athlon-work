@@ -33,4 +33,6 @@ public abstract record AgentStreamEvent
     public sealed record ClearEmptyAssistantPlaceholder : AgentStreamEvent;
 
     public sealed record UsageRecorded(SessionUsageSnapshot Snapshot) : AgentStreamEvent;
+
+    public sealed record ContextHygieneApplied(int EstimatedSavingsTokens) : AgentStreamEvent;
 }

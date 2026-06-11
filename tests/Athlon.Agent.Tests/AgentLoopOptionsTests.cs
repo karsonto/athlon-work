@@ -21,6 +21,7 @@ public sealed class AgentLoopOptionsTests
             new NoOpTokenEstimator(),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
+            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new LoopNoOpAppLogger(),

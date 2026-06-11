@@ -8,8 +8,10 @@ internal sealed class McpDelegatingToolRouter(
     IEnumerable<IAgentTool> allLocalTools,
     IMcpRegistry mcpRegistry,
     AppSettings settings,
-    Func<Task>? refreshMcpCatalogAsync = null) : IToolRouter
+    Func<Task>? refreshMcpCatalogAsync = null,
+    IAppLogger? logger = null) : IToolRouter
 {
+    private readonly IAppLogger _logger = (logger ?? NullAppLogger.Instance).ForContext("McpDelegatingToolRouter");
     private readonly IAgentTool[] _allLocalTools = localToolFilter(allLocalTools).ToArray();
     private readonly Lazy<IReadOnlyList<IAgentTool>> _searchGatewayTools = new(() =>
         McpSearchGatewayTools.Create(
@@ -25,14 +27,21 @@ internal sealed class McpDelegatingToolRouter(
     public IReadOnlyList<ToolDefinition> ListTools()
     {
         var local = new ToolRouter(ActiveLocalTools).ListTools();
-        if (!ShouldUseMcpSearch())
+        var useSearch = ShouldUseMcpSearch();
+        if (!useSearch)
         {
             var mcp = mcpRegistry.ListToolDefinitions();
             return local.Concat(mcp).OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase).ToArray();
         }
 
         var gateway = _searchGatewayTools.Value.Select(tool => tool.Definition);
-        return local.Concat(gateway).OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+        var tools = local.Concat(gateway).OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+        _logger.Information(
+            "MCP tool advertisement mode=search tools={ToolCount} catalog={CatalogCount} schemaChars={SchemaChars}",
+            tools.Length,
+            mcpRegistry.CatalogCount,
+            mcpRegistry.CatalogSchemaCharCount);
+        return tools;
     }
 
     public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
@@ -75,10 +84,21 @@ internal sealed class McpDelegatingToolRouter(
 
         if (string.Equals(config.Mode, "search", StringComparison.OrdinalIgnoreCase))
         {
-            return mcpRegistry.ListCatalogEntries().Count > 0;
+            return mcpRegistry.CatalogCount > 0;
         }
 
-        return mcpRegistry.ListCatalogEntries().Count >= config.AutoThresholdToolCount;
+        return mcpRegistry.CatalogCount >= config.AutoThresholdToolCount
+            || mcpRegistry.CatalogSchemaCharCount >= config.AutoThresholdSchemaChars;
+    }
+
+    private sealed class NullAppLogger : IAppLogger
+    {
+        public static readonly NullAppLogger Instance = new();
+        public void Debug(string messageTemplate, params object[] values) { }
+        public void Information(string messageTemplate, params object[] values) { }
+        public void Warning(string messageTemplate, params object[] values) { }
+        public void Error(Exception exception, string messageTemplate, params object[] values) { }
+        public IAppLogger ForContext(string sourceContext) => this;
     }
 
     private static bool IsSearchGatewayTool(string toolName) =>

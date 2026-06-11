@@ -29,6 +29,7 @@ public sealed class AgentRuntimeProgressTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
+            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger(),
@@ -89,6 +90,7 @@ public sealed class AgentRuntimeProgressTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
+            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger(),
@@ -138,6 +140,7 @@ public sealed class AgentRuntimeProgressTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
+            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger(),
@@ -172,6 +175,7 @@ public sealed class AgentRuntimeProgressTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
+            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger(),
@@ -257,6 +261,12 @@ public sealed class AgentRuntimeProgressTests
 
         public IReadOnlyList<McpCatalogEntry> ListCatalogEntries() =>
             [new McpCatalogEntry("demo", "echo", "mcp_demo__echo", "echo", "{}")];
+
+        public int CatalogVersion => 0;
+        public int CatalogCount => ListCatalogEntries().Count;
+        public int CatalogSchemaCharCount => ListCatalogEntries().Sum(entry => entry.Description.Length + entry.InputSchemaJson.Length);
+        public IReadOnlyList<McpSearchIndex.SearchResult> SearchCatalog(string query, int topK, double minScore, string? serverName = null) =>
+            McpSearchIndex.Search(ListCatalogEntries(), query, topK, minScore);
 
         public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
 

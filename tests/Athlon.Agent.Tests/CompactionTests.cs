@@ -7,6 +7,31 @@ namespace Athlon.Agent.Tests;
 public sealed class CompactionTests
 {
     [Fact]
+    public void ResolveEffectiveEstimate_uses_prompt_pressure_floor_when_higher_than_estimate()
+    {
+        var settings = new ContextCompactionSettings();
+        var messages = new[] { ChatMessage.Create(MessageRole.User, "short") };
+        var estimated = ContextTokenEstimator.Estimate(messages);
+        var budget = new ContextBudgetSnapshot(
+            200_000,
+            8192,
+            120_000,
+            estimated,
+            20_000,
+            (double)(estimated + 20_000) / 200_000);
+
+        var effective = ContextTokenEstimator.ResolveEffectiveEstimate(messages, settings, budget);
+
+        Assert.Equal(120_000, effective);
+        Assert.True(effective > estimated);
+        Assert.True(ConversationCutoffPlanner.ShouldCompact(messages, effective, settings with
+        {
+            TriggerMessages = 0,
+            TriggerTokens = effective - 1
+        }, force: false));
+    }
+
+    [Fact]
     public void ContextCompactionSettings_UsesAgentScopeDefaults()
     {
         var settings = new ContextCompactionSettings();
@@ -290,6 +315,7 @@ public sealed class CompactionTests
                 new FakeModelClient("summary text"),
                 storage,
                 new TruncateArgsService(),
+                new SessionUsageAccumulator(),
                 new NoOpLogger());
 
             var result = await compactor.CompactIfNeededAsync(

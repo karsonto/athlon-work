@@ -85,6 +85,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITokenEstimatorCalibrator, TokenEstimatorCalibrator>();
         services.AddSingleton<ISessionUsageAccumulator, SessionUsageAccumulator>();
         services.AddSingleton<IPromptPressureStore, PromptPressureStore>();
+        services.AddSingleton<ISessionToolStormStore, SessionToolStormStore>();
         services.AddSingleton<IConversationCompactor, ConversationCompactor>();
         services.AddSingleton<IToolResultEvictor, ToolResultEvictor>();
         services.AddSingleton<IPreCompletionPipeline, PreCompletionPipeline>();

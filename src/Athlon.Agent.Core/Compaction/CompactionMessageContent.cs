@@ -18,7 +18,10 @@ public static class CompactionMessageContent
         CompactionStrategy strategy = CompactionStrategy.ConversationCompact,
         IReadOnlyList<CompactionLayer>? layers = null,
         ContextPressureLevel? pressureLevel = null,
-        double? utilization = null)
+        double? utilization = null,
+        int? summaryInputCharsBefore = null,
+        int? summaryInputCharsAfter = null,
+        int? hygieneSavingsEstimate = null)
     {
         var summary = string.IsNullOrWhiteSpace(summaryPreview)
             ? $"已将 {originalMessageCount} 条消息压缩为摘要并保留最近上下文。"
@@ -34,7 +37,10 @@ public static class CompactionMessageContent
             originalMessageCount: originalMessageCount,
             transcriptPath: transcriptPath,
             pressureLevel: pressureLevel,
-            utilization: utilization);
+            utilization: utilization,
+            summaryInputCharsBefore: summaryInputCharsBefore,
+            summaryInputCharsAfter: summaryInputCharsAfter,
+            hygieneSavingsEstimate: hygieneSavingsEstimate);
     }
 
     public static bool IsSummaryPlaceholder(string content) =>
@@ -54,7 +60,10 @@ public static class CompactionMessageContent
         int? originalMessageCount = null,
         string? transcriptPath = null,
         ContextPressureLevel? pressureLevel = null,
-        double? utilization = null)
+        double? utilization = null,
+        int? summaryInputCharsBefore = null,
+        int? summaryInputCharsAfter = null,
+        int? hygieneSavingsEstimate = null)
     {
         var builder = new StringBuilder();
         builder.AppendLine($"CompactionKind: {kind.ToString().ToLowerInvariant()}");
@@ -89,6 +98,21 @@ public static class CompactionMessageContent
         if (utilization.HasValue)
         {
             builder.AppendLine($"ContextUtilization: {utilization.Value:0.###}");
+        }
+
+        if (summaryInputCharsBefore.HasValue)
+        {
+            builder.AppendLine($"SummaryInputCharsBefore: {summaryInputCharsBefore.Value}");
+        }
+
+        if (summaryInputCharsAfter.HasValue)
+        {
+            builder.AppendLine($"SummaryInputCharsAfter: {summaryInputCharsAfter.Value}");
+        }
+
+        if (hygieneSavingsEstimate is > 0)
+        {
+            builder.AppendLine($"HygieneSavingsEstimate: {hygieneSavingsEstimate.Value}");
         }
 
         builder.AppendLine();

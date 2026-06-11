@@ -28,6 +28,7 @@ internal static class AgentRuntimeTestFactory
             tokenEstimatorCalibrator,
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
+            new SessionToolStormStore(),
             activeSessionContext,
             settings,
             logger,

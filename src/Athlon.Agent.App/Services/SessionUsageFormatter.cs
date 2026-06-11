@@ -6,15 +6,16 @@ internal static class SessionUsageFormatter
 {
     public static string Format(SessionUsageSnapshot snapshot)
     {
-        if (snapshot.TurnCount <= 0)
+        if (snapshot.TurnCount <= 0 && snapshot.SubAgentRollupPromptTokens <= 0)
         {
             return string.Empty;
         }
 
-        var parts = new List<string>
+        var parts = new List<string>();
+        if (snapshot.TurnCount > 0)
         {
-            $"tokens {FormatCompact(snapshot.TotalTokens)} (in {FormatCompact(snapshot.PromptTokens)} / out {FormatCompact(snapshot.CompletionTokens)})"
-        };
+            parts.Add($"tokens {FormatCompact(snapshot.TotalTokens)} (in {FormatCompact(snapshot.PromptTokens)} / out {FormatCompact(snapshot.CompletionTokens)})");
+        }
 
         if (snapshot.CacheAvailability == PromptCacheAvailability.HitMiss && snapshot.CacheHitRate is { } hitRate)
         {
@@ -25,9 +26,19 @@ internal static class SessionUsageFormatter
             parts.Add($"cache read {FormatCompact(snapshot.CacheHitTokens)}");
         }
 
-        if (snapshot.ContextSavingsTokens > 0)
+        if (snapshot.HygieneSavingsTokens > 0)
         {
-            parts.Add($"saved ~{FormatCompact(snapshot.ContextSavingsTokens)}");
+            parts.Add($"saved ~{FormatCompact(snapshot.HygieneSavingsTokens)} (hygiene)");
+        }
+
+        if (snapshot.CompactionSavingsTokens > 0)
+        {
+            parts.Add($"compact ~{FormatCompact(snapshot.CompactionSavingsTokens)}");
+        }
+
+        if (snapshot.SubAgentRollupPromptTokens + snapshot.SubAgentRollupCompletionTokens > 0)
+        {
+            parts.Add($"incl. sub-agents {FormatCompact(snapshot.SubAgentRollupPromptTokens + snapshot.SubAgentRollupCompletionTokens)}");
         }
 
         return string.Join(" · ", parts);

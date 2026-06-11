@@ -24,7 +24,7 @@ internal static partial class McpSearchIndex
             return Array.Empty<SearchResult>();
         }
 
-        var indexed = catalog.Select(IndexEntry).ToArray();
+        var indexed = catalog.Select(IndexEntryPublic).ToArray();
         var documentFrequency = new Dictionary<string, int>(StringComparer.Ordinal);
         var totalTokens = 0;
         foreach (var entry in indexed)
@@ -37,8 +37,27 @@ internal static partial class McpSearchIndex
         }
 
         var averageLength = Math.Max(1, (double)totalTokens / Math.Max(1, indexed.Length));
+        return SearchPrepared(
+            new McpSearchIndexCache.CachedIndex(indexed, documentFrequency, averageLength),
+            query,
+            topK,
+            minScore);
+    }
+
+    internal static IReadOnlyList<SearchResult> SearchPrepared(
+        McpSearchIndexCache.CachedIndex index,
+        string query,
+        int topK,
+        double minScore)
+    {
+        var queryTerms = Tokenize(query);
+        if (queryTerms.Count == 0)
+        {
+            return Array.Empty<SearchResult>();
+        }
+
         var results = new List<SearchResult>();
-        foreach (var entry in indexed)
+        foreach (var entry in index.Entries)
         {
             var keywords = queryTerms.Where(term => entry.TermFrequency.ContainsKey(term)).Distinct(StringComparer.Ordinal).ToArray();
             if (keywords.Length == 0)
@@ -46,7 +65,7 @@ internal static partial class McpSearchIndex
                 continue;
             }
 
-            var score = Score(entry, queryTerms, documentFrequency, indexed.Length, averageLength);
+            var score = Score(entry, queryTerms, index.DocumentFrequency, index.Entries.Length, index.AverageLength);
             if (score < minScore)
             {
                 continue;
@@ -60,6 +79,8 @@ internal static partial class McpSearchIndex
             .Take(Math.Max(1, topK))
             .ToArray();
     }
+
+    internal static IndexedEntry IndexEntryPublic(McpCatalogEntry entry) => IndexEntry(entry);
 
     private static IndexedEntry IndexEntry(McpCatalogEntry entry)
     {
@@ -143,7 +164,7 @@ internal static partial class McpSearchIndex
         return tokens;
     }
 
-    private sealed record IndexedEntry(
+    internal sealed record IndexedEntry(
         McpCatalogEntry Entry,
         List<string> Tokens,
         Dictionary<string, int> TermFrequency);

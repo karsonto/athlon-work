@@ -11,6 +11,14 @@ public interface IMcpRegistry
     IReadOnlyList<McpServerStatus> GetStatuses();
     IReadOnlyList<ToolDefinition> ListToolDefinitions();
     IReadOnlyList<McpCatalogEntry> ListCatalogEntries();
+    int CatalogVersion { get; }
+    int CatalogCount { get; }
+    int CatalogSchemaCharCount { get; }
+    IReadOnlyList<McpSearchIndex.SearchResult> SearchCatalog(
+        string query,
+        int topK,
+        double minScore,
+        string? serverName = null);
     Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default);
     Task<ToolResult> InvokeAsync(string serverName, string toolName, IReadOnlyDictionary<string, string> args, CancellationToken cancellationToken = default);
 }
@@ -21,8 +29,16 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
     private readonly ConcurrentDictionary<string, IMcpClient> _clients = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, McpServerStatus> _statuses = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, IReadOnlyList<McpTool>> _tools = new(StringComparer.OrdinalIgnoreCase);
+    private readonly McpSearchIndexCache _searchIndexCache = new();
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private IReadOnlyList<McpCatalogEntry>? _catalogCache;
+    private int _catalogVersion;
     private int _disposed;
+
+    public int CatalogVersion => _catalogVersion;
+    public int CatalogCount => ListCatalogEntries().Count;
+    public int CatalogSchemaCharCount => ListCatalogEntries().Sum(entry =>
+        entry.Description.Length + entry.InputSchemaJson.Length + entry.EncodedName.Length);
 
     public IReadOnlyList<McpServerStatus> GetStatuses() =>
         _statuses.Values.OrderBy(status => status.Name, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -51,7 +67,27 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         return definitions.OrderBy(definition => definition.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    public IReadOnlyList<McpCatalogEntry> ListCatalogEntries()
+    public IReadOnlyList<McpCatalogEntry> ListCatalogEntries() =>
+        _catalogCache ??= BuildCatalogEntries();
+
+    public IReadOnlyList<McpSearchIndex.SearchResult> SearchCatalog(
+        string query,
+        int topK,
+        double minScore,
+        string? serverName = null)
+    {
+        var catalog = ListCatalogEntries();
+        if (!string.IsNullOrWhiteSpace(serverName))
+        {
+            catalog = catalog
+                .Where(entry => string.Equals(entry.ServerName, serverName, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        }
+
+        return _searchIndexCache.Search(catalog, _catalogVersion, query, topK, minScore);
+    }
+
+    private IReadOnlyList<McpCatalogEntry> BuildCatalogEntries()
     {
         var entries = new List<McpCatalogEntry>();
         foreach (var (serverName, tools) in _tools)
@@ -68,6 +104,12 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         }
 
         return entries.OrderBy(entry => entry.EncodedName, StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private void InvalidateCatalogCache()
+    {
+        Interlocked.Increment(ref _catalogVersion);
+        _catalogCache = null;
     }
 
     public async Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default)
@@ -141,6 +183,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         }
         finally
         {
+            InvalidateCatalogCache();
             _refreshLock.Release();
         }
     }

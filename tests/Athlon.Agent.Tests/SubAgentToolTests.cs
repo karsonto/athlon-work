@@ -206,6 +206,11 @@ public sealed class SubAgentToolTests
         public IReadOnlyList<McpServerStatus> GetStatuses() => Array.Empty<McpServerStatus>();
         public IReadOnlyList<ToolDefinition> ListToolDefinitions() => Array.Empty<ToolDefinition>();
         public IReadOnlyList<McpCatalogEntry> ListCatalogEntries() => Array.Empty<McpCatalogEntry>();
+        public int CatalogVersion => 0;
+        public int CatalogCount => 0;
+        public int CatalogSchemaCharCount => 0;
+        public IReadOnlyList<McpSearchIndex.SearchResult> SearchCatalog(string query, int topK, double minScore, string? serverName = null) =>
+            Array.Empty<McpSearchIndex.SearchResult>();
         public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
         public Task<ToolResult> InvokeAsync(string serverName, string toolName, IReadOnlyDictionary<string, string> arguments, CancellationToken cancellationToken = default) =>

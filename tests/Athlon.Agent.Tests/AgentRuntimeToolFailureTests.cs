@@ -26,6 +26,7 @@ public sealed class AgentRuntimeToolFailureTests
             new TokenEstimatorCalibrator(new AppSettings()),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
+            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AppSettings(),
             new NoOpLogger(),

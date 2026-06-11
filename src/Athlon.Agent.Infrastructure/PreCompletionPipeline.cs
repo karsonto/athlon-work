@@ -31,9 +31,14 @@ public sealed class PreCompletionPipeline(
             return session;
         }
 
-        if (!cfg.DynamicCompaction.Enabled || runtimeContext is null)
+        if (!cfg.DynamicCompaction.Enabled)
         {
-            return await RunLegacyAsync(session, options, cancellationToken);
+            return await RunLegacyAsync(session, options, runtimeContext, cancellationToken);
+        }
+
+        if (runtimeContext is null)
+        {
+            return session;
         }
 
         var budget = runtimeContext.Budget;
@@ -141,14 +146,66 @@ public sealed class PreCompletionPipeline(
     private async Task<AgentSession> RunLegacyAsync(
         AgentSession session,
         PreCompletionOptions options,
+        CompactionRuntimeContext? runtimeContext,
         CancellationToken cancellationToken)
     {
+        var cfg = settings.ContextCompaction;
+        var conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
+        var truncateApplied = false;
+        var reEvictApplied = false;
+
+        if (conversation.Count > 0
+            && ContextPressureEvaluator.MeetsStaticTruncateThreshold(conversation, cfg))
+        {
+            var truncatedMessages = truncateArgsService.ApplyToMessages(
+                session.Messages,
+                cfg,
+                out truncateApplied);
+            if (truncateApplied)
+            {
+                session = session with { Messages = truncatedMessages };
+                conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
+            }
+
+            var cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoff(
+                conversation,
+                cfg.TruncateArgs,
+                cfg.IncludeReasoningInModelContext);
+            var (updatedMessages, changed) = PrefixToolResultReEvictor.Apply(
+                session.Messages,
+                cfg,
+                cutoff);
+            if (changed)
+            {
+                reEvictApplied = true;
+                session = session with { Messages = updatedMessages };
+            }
+        }
+
         var compactResult = await conversationCompactor.CompactIfNeededAsync(
             session,
             new CompactionExecutionRequest(
                 options.CompactionKind,
                 options.ForceConversationCompact,
-                options.EmitCompactionAudit),
+                options.EmitCompactionAudit,
+                runtimeContext,
+                reEvictApplied
+                    ? new DynamicCompactionPlan(
+                        ContextPressureLevel.Normal,
+                        ApplyTruncateArgs: truncateApplied,
+                        ApplyPrefixReEvict: true,
+                        ApplyConversationCompact: true,
+                        KeepTokenBudget: 0,
+                        MustPreserveAppendix: null)
+                    : truncateApplied
+                        ? new DynamicCompactionPlan(
+                            ContextPressureLevel.Normal,
+                            ApplyTruncateArgs: true,
+                            ApplyPrefixReEvict: false,
+                            ApplyConversationCompact: true,
+                            KeepTokenBudget: 0,
+                            MustPreserveAppendix: null)
+                        : null),
             cancellationToken);
 
         if (compactResult.Compacted)

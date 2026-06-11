@@ -2,6 +2,7 @@ using System.Net.Http;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Streaming;
+using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Core;
 
@@ -26,6 +27,7 @@ internal sealed class AgentTurnCoordinator(
         IReadOnlyList<ToolDefinition> tools,
         FrozenSystemPrompt frozenPrompt,
         string environmentPrompt,
+        ModelMessageCache? modelMessageCache,
         int contextSavingsTokens,
         CancellationToken cancellationToken)
     {
@@ -53,21 +55,23 @@ internal sealed class AgentTurnCoordinator(
                 ContextPressureLevel.Overflow,
                 cancellationToken);
 
+            modelMessageCache?.Invalidate();
             environmentPrompt = resolveSystemPromptOrchestrator().BuildForReasoningIteration(
                 frozenPrompt,
                 session,
                 tools);
-            var retryMessages = ModelMessageBuilder.BuildForSession(
+            var retryResult = ModelMessagesForApiBuilder.Build(
+                modelMessageCache,
                 environmentPrompt,
                 session.Messages,
-                settings.ContextCompaction.IncludeReasoningInModelContext);
+                settings.ContextCompaction);
             var response = await modelClient.CompleteAsync(
-                new AgentModelRequest(retryMessages, tools),
+                new AgentModelRequest(retryResult.Messages, tools),
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnTextDelta(assistantMessageId, token)),
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
                 delta => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
                 cancellationToken);
-            await RecordModelUsageAsync(session, callbacks, environmentPrompt, tools, response, contextSavingsTokens: 0);
+            await RecordModelUsageAsync(session, callbacks, environmentPrompt, tools, response, retryResult.EstimatedSavingsTokens);
             return (session, response);
         }
     }
@@ -98,13 +102,24 @@ internal sealed class AgentTurnCoordinator(
         promptPressureStore.Record(session.Id, response.Usage.PromptTokens.Value);
 
         var snapshot = sessionUsageAccumulator.Record(session.Id, response.Usage, contextSavingsTokens);
+        var parentContext = AmbientSubAgentStorageScope.Current;
+        if (parentContext is not null)
+        {
+            sessionUsageAccumulator.RecordRollup(parentContext.ParentSessionId, response.Usage, contextSavingsTokens);
+            snapshot = sessionUsageAccumulator.Get(parentContext.ParentSessionId);
+        }
+
         if (callbacks?.OnUsageRecorded is { } onUsage)
         {
             await onUsage(snapshot);
         }
 
-        await AgentRuntime.PublishStreamEventsAsync(
-            callbacks,
-            [new AgentStreamEvent.UsageRecorded(snapshot)]);
+        var events = new List<AgentStreamEvent> { new AgentStreamEvent.UsageRecorded(snapshot) };
+        if (contextSavingsTokens > 0)
+        {
+            events.Add(new AgentStreamEvent.ContextHygieneApplied(contextSavingsTokens));
+        }
+
+        await AgentRuntime.PublishStreamEventsAsync(callbacks, events);
     }
 }

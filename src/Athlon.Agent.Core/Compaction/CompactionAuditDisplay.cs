@@ -16,6 +16,9 @@ public static class CompactionAuditDisplay
         var layersToken = string.Empty;
         var pressureToken = string.Empty;
         var utilizationToken = string.Empty;
+        var summaryInputBeforeToken = string.Empty;
+        var summaryInputAfterToken = string.Empty;
+        var hygieneSavingsToken = string.Empty;
         var summary = string.Empty;
 
         foreach (var line in lines)
@@ -50,6 +53,24 @@ public static class CompactionAuditDisplay
                 continue;
             }
 
+            if (line.StartsWith("SummaryInputCharsBefore:", StringComparison.OrdinalIgnoreCase))
+            {
+                summaryInputBeforeToken = line["SummaryInputCharsBefore:".Length..].Trim();
+                continue;
+            }
+
+            if (line.StartsWith("SummaryInputCharsAfter:", StringComparison.OrdinalIgnoreCase))
+            {
+                summaryInputAfterToken = line["SummaryInputCharsAfter:".Length..].Trim();
+                continue;
+            }
+
+            if (line.StartsWith("HygieneSavingsEstimate:", StringComparison.OrdinalIgnoreCase))
+            {
+                hygieneSavingsToken = line["HygieneSavingsEstimate:".Length..].Trim();
+                continue;
+            }
+
             if (line.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
             {
                 summary = line["Summary:".Length..].Trim();
@@ -59,7 +80,14 @@ public static class CompactionAuditDisplay
         var strategy = ResolveStrategy(strategyToken, legacyKind);
         var layers = ParseLayers(layersToken, strategy);
         var cardTitle = GetCardTitle(strategy);
-        var subtitle = BuildStrategySubtitle(strategy, layers, pressureToken, utilizationToken);
+        var subtitle = BuildStrategySubtitle(
+            strategy,
+            layers,
+            pressureToken,
+            utilizationToken,
+            summaryInputBeforeToken,
+            summaryInputAfterToken,
+            hygieneSavingsToken);
 
         return new CompactionAuditDisplayInfo(
             cardTitle,
@@ -155,7 +183,10 @@ public static class CompactionAuditDisplay
         CompactionStrategy strategy,
         IReadOnlyList<CompactionLayer> layers,
         string pressureToken,
-        string utilizationToken)
+        string utilizationToken,
+        string summaryInputBeforeToken,
+        string summaryInputAfterToken,
+        string hygieneSavingsToken)
     {
         var trigger = strategy switch
         {
@@ -167,7 +198,13 @@ public static class CompactionAuditDisplay
         var layerText = string.Join(" → ", layers.Select(GetLayerLabel));
         var pressureText = string.IsNullOrWhiteSpace(pressureToken) ? null : $"压力 {pressureToken}";
         var utilizationText = string.IsNullOrWhiteSpace(utilizationToken) ? null : $"利用率 {utilizationToken}";
-        var metrics = string.Join(" · ", new[] { pressureText, utilizationText }.Where(part => !string.IsNullOrWhiteSpace(part)));
+        var summaryText = string.IsNullOrWhiteSpace(summaryInputBeforeToken) || string.IsNullOrWhiteSpace(summaryInputAfterToken)
+            ? null
+            : $"摘要输入 {summaryInputBeforeToken}→{summaryInputAfterToken}";
+        var hygieneText = string.IsNullOrWhiteSpace(hygieneSavingsToken) ? null : $"hygiene ~{hygieneSavingsToken} tok";
+        var metrics = string.Join(
+            " · ",
+            new[] { pressureText, utilizationText, summaryText, hygieneText }.Where(part => !string.IsNullOrWhiteSpace(part)));
         return string.IsNullOrWhiteSpace(metrics)
             ? $"{trigger} · 层级：{layerText}"
             : $"{trigger} · {metrics} · 层级：{layerText}";

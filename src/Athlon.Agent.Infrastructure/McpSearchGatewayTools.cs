@@ -17,7 +17,7 @@ internal static class McpSearchGatewayTools
         [
             new GatewayTool(
                 SearchToolName,
-                "Search connected MCP tools by natural-language intent, server, action, and parameter names.",
+                "Search connected MCP tools by natural-language intent. In search mode, always call this before mcp_call when the target MCP tool is not already known.",
                 new Dictionary<string, string>
                 {
                     ["query"] = "The user intent or task to find MCP tools for.",
@@ -34,15 +34,12 @@ internal static class McpSearchGatewayTools
 
                     var topK = ParseTopK(invocation.Arguments.GetValueOrDefault("topK"), searchSettings);
                     var serverName = invocation.Arguments.GetValueOrDefault("serverName");
-                    var catalog = registry.ListCatalogEntries();
-                    if (!string.IsNullOrWhiteSpace(serverName))
-                    {
-                        catalog = catalog
+                    var results = registry.SearchCatalog(query, topK, searchSettings.MinScore, serverName);
+                    var catalog = string.IsNullOrWhiteSpace(serverName)
+                        ? registry.ListCatalogEntries()
+                        : registry.ListCatalogEntries()
                             .Where(entry => string.Equals(entry.ServerName, serverName, StringComparison.OrdinalIgnoreCase))
                             .ToArray();
-                    }
-
-                    var results = McpSearchIndex.Search(catalog, query, topK, searchSettings.MinScore);
                     var payload = results.Select(result => new
                     {
                         toolId = result.Entry.EncodedName,
@@ -58,7 +55,7 @@ internal static class McpSearchGatewayTools
                         JsonSerializer.Serialize(new
                         {
                             query,
-                            totalIndexed = registry.ListCatalogEntries().Count,
+                            totalIndexed = registry.CatalogCount,
                             searchedTools = catalog.Count,
                             results = payload
                         }));

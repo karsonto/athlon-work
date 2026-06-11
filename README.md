@@ -187,7 +187,15 @@ Static layers:
 2. **conversation compact**: when history reaches the compact threshold (default: 50 messages / 80k estimated tokens), archives the session to `sessions/<sessionId>/transcripts/transcript_<unix>.jsonl`, summarizes the prefix, then replaces it with an optional `Compaction` audit message plus a summary user placeholder (`__compaction_summary__`) and the preserved tail. Cutoff uses keep windows and never splits assistant/tool pairs. Semantic cutoff can inject `<must_preserve>` hints into the summary prompt for high-scoring prefix messages (user goals, file paths, write/edit commands).
 3. **tool result eviction** (after each tool invoke): if a tool result exceeds 80k characters, the full body is written to `sessions/<sessionId>/evicted/<toolCallId>.txt` and only a head/tail preview is kept in the in-memory tool message. `file_write`, `file_edit`, `grep_files`, `glob_files`, and `file_list` are excluded by default; `file_read` is included so oversized reads do not blow the context window.
 
-On context-length API errors, the runtime forces compaction at **Overflow** pressure and retries once, rebuilding the iteration system prompt after compact.
+**Send-boundary hygiene** (always on by default, does not mutate `conversation.jsonl`): before each model API call, `RequestHistoryHygiene` compacts oversized tool payloads and completed tool arguments in the outbound request only. Footer `saved ~XK (hygiene)` reflects estimated tokens omitted at this layer.
+
+| Layer | Persists to session | When | Purpose |
+|-------|---------------------|------|---------|
+| Tool result eviction | Yes | After each tool invoke | Archive huge results to disk |
+| truncateArgs / prefix re-evict / LLM compact | Yes | Proactive compaction thresholds | Shrink stored history |
+| RequestHistoryHygiene | No | Every API request (incl. overflow retry) | Shrink outbound payload without changing logs |
+
+On context-length API errors, the runtime forces compaction at **Overflow** pressure and retries once, rebuilding the iteration system prompt after compact. The retry uses the same hygiene path as the main loop.
 
 When compaction runs, the app appends a persisted `Compaction` role message and shows it in chat as a collapsible card (including pressure level and utilization when available). Summary placeholders are hidden in the UI but sent to the model as user messages. `Compaction` audit messages are not sent to the model API.
 
