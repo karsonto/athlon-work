@@ -10,7 +10,7 @@
         MinWidth="560"
         WindowStartupLocation="CenterScreen"
         ResizeMode="CanResize"
-        Background="{StaticResource Brush.AppBackground}"
+        Background="{DynamicResource Brush.AppBackground}"
         WindowStyle="None">
     <Window.Resources>
         <Style x:Key="CopyableAccountTextStyle" TargetType="TextBox">
@@ -19,7 +19,7 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
             <Setter Property="FontSize" Value="14" />
             <Setter Property="TextWrapping" Value="Wrap" />
             <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
@@ -41,8 +41,8 @@
         </Grid.RowDefinitions>
 
         <Border Grid.Row="0"
-                Background="{StaticResource Brush.Chrome}"
-                BorderBrush="{StaticResource Brush.Border}"
+                Background="{DynamicResource Brush.Chrome}"
+                BorderBrush="{DynamicResource Brush.Border}"
                 BorderThickness="0,0,0,1"
                 MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
             <Grid Margin="28,0">
@@ -62,7 +62,7 @@
                                    FontWeight="SemiBold" />
                         <TextBlock Text="激活 License"
                                    FontSize="13"
-                                   Foreground="{StaticResource Brush.SubtleText}"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
                                    Margin="0,2,0,0" />
                     </StackPanel>
                 </StackPanel>
@@ -100,19 +100,19 @@
             <TextBlock x:Name="ReasonText"
                        Grid.Row="0"
                        TextWrapping="Wrap"
-                       Foreground="{StaticResource Brush.SubtleText}"
+                       Foreground="{DynamicResource Brush.SubtleText}"
                        Margin="0,0,0,12" />
 
             <Border Grid.Row="1"
-                    Background="{StaticResource Brush.Panel}"
-                    BorderBrush="{StaticResource Brush.Border}"
+                    Background="{DynamicResource Brush.Panel}"
+                    BorderBrush="{DynamicResource Brush.Border}"
                     BorderThickness="1"
                     CornerRadius="8"
                     Padding="12"
                     Margin="0,0,0,12">
                 <StackPanel>
                     <TextBlock Text="当前 Windows 账号"
-                               Foreground="{StaticResource Brush.SubtleText}"
+                               Foreground="{DynamicResource Brush.SubtleText}"
                                FontSize="12"
                                Margin="0,0,0,6" />
                     <TextBox x:Name="SamAccountText"
@@ -137,7 +137,7 @@
             <TextBlock x:Name="InlineErrorText"
                        Grid.Row="3"
                        TextWrapping="Wrap"
-                       Foreground="{StaticResource Brush.Danger}"
+                       Foreground="{DynamicResource Brush.Danger}"
                        Visibility="Collapsed"
                        Margin="0,0,0,12" />
 

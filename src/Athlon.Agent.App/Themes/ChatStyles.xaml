@@ -139,7 +139,7 @@
     </Style>
 
     <Style x:Key="MessageBubbleAssistantStyle" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource Brush.Chrome}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.AssistantBubble}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="12" />
@@ -189,7 +189,7 @@
     </Style>
 
     <Style x:Key="ComposerInputWrapperStyle" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource Brush.AppBackground}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Composer}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="12" />

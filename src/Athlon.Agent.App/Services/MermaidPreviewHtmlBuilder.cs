@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Text;
+using Athlon.Agent.App.Themes;
 
 namespace Athlon.Agent.App.Services;
 
@@ -24,6 +25,8 @@ public static class MermaidPreviewHtmlBuilder
         {
             throw new ArgumentException("At least one Mermaid diagram is required.", nameof(diagrams));
         }
+
+        var palette = ThemeHtmlStyles.GetMermaidPalette();
 
         var body = new StringBuilder();
         for (var i = 0; i < diagrams.Count; i++)
@@ -55,8 +58,8 @@ public static class MermaidPreviewHtmlBuilder
                   margin: 0;
                   padding: 24px;
                   min-height: 100%;
-                  background: #101012;
-                  color: #F4F4F5;
+                  background: {{palette.PageBackground}};
+                  color: {{palette.TextColor}};
                   font-family: "Segoe UI", "PingFang SC", sans-serif;
                 }
                 h1 {
@@ -67,27 +70,27 @@ public static class MermaidPreviewHtmlBuilder
                 .diagram-card {
                   margin: 0 0 24px;
                   padding: 16px;
-                  border: 1px solid #3F3F46;
+                  border: 1px solid {{palette.CardBorder}};
                   border-radius: 16px;
-                  background: #18181B;
+                  background: {{palette.CardBackground}};
                   overflow-x: auto;
                 }
                 .diagram-title {
                   margin: 0 0 12px;
                   font-size: 14px;
-                  color: #A1A1AA;
+                  color: {{palette.SubtleText}};
                   font-weight: 600;
                 }
                 .mermaid { margin: 0; background: transparent; }
-                #status { margin-top: 12px; color: #A1A1AA; font-size: 13px; }
+                #status { margin-top: 12px; color: {{palette.SubtleText}}; font-size: 13px; }
                 #error {
                   display: none;
                   margin-top: 16px;
                   padding: 12px 14px;
                   border-radius: 8px;
-                  border: 1px solid #E11D48;
-                  background: #2A1418;
-                  color: #FDA4AF;
+                  border: 1px solid {{palette.ErrorBorder}};
+                  background: {{palette.ErrorBackground}};
+                  color: {{palette.ErrorText}};
                   white-space: pre-wrap;
                   font-family: Consolas, monospace;
                   font-size: 13px;
@@ -118,7 +121,7 @@ public static class MermaidPreviewHtmlBuilder
                   try {
                     mermaid.initialize({
                       startOnLoad: false,
-                      theme: 'dark',
+                      theme: '{{palette.MermaidTheme}}',
                       securityLevel: 'strict',
                       fontFamily: 'Segoe UI, PingFang SC, sans-serif'
                     });

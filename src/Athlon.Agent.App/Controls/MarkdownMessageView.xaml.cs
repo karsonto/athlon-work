@@ -5,6 +5,7 @@ using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.Windows;
 using MdXaml;
 
@@ -136,14 +137,14 @@ public partial class MarkdownMessageView : UserControl
         ApplyMaxHeight();
 
         var textBrush = AssistantTone
-            ? FlowDocumentThemeNormalizer.ResolveBrush("Brush.Text") ?? Brushes.White
-            : new SolidColorBrush(Color.FromRgb(239, 246, 255));
+            ? ThemeBrushResolver.Get("Brush.Text")
+            : Brushes.White;
 
         MarkdownViewer.Foreground = textBrush;
-        MarkdownViewer.MarkdownStyle = BuildDarkMarkdownStyle(textBrush);
+        MarkdownViewer.MarkdownStyle = BuildMarkdownStyle(textBrush);
     }
 
-    private static Style BuildDarkMarkdownStyle(Brush textBrush)
+    private static Style BuildMarkdownStyle(Brush textBrush)
     {
         var style = new Style(typeof(FlowDocument), MarkdownStyle.Standard)
         {
@@ -155,18 +156,13 @@ public partial class MarkdownMessageView : UserControl
             }
         };
 
-        var inlineCodeBackground = FlowDocumentThemeNormalizer.ResolveBrush("Brush.CodeBackgroundAlt")
-            ?? new SolidColorBrush(Color.FromRgb(39, 39, 42));
-        var codeBlockBackground = FlowDocumentThemeNormalizer.ResolveBrush("Brush.CodeBackground")
-            ?? new SolidColorBrush(Color.FromRgb(32, 32, 35));
-        var codeForeground = FlowDocumentThemeNormalizer.ResolveBrush("Brush.CodeForeground")
-            ?? new SolidColorBrush(Color.FromRgb(241, 245, 249));
-        var codeBorder = FlowDocumentThemeNormalizer.ResolveBrush("Brush.CodeBorder")
-            ?? new SolidColorBrush(Color.FromRgb(30, 41, 59));
+        var inlineCodeBackground = ThemeBrushResolver.Get("Brush.CodeBackgroundAlt");
+        var codeBlockBackground = ThemeBrushResolver.Get("Brush.CodeBackground");
+        var codeForeground = ThemeBrushResolver.Get("Brush.CodeForeground");
+        var codeBorder = ThemeBrushResolver.Get("Brush.CodeBorder");
         var tableBackground = codeBlockBackground;
         var tableHeaderBackground = inlineCodeBackground;
-        var tableBorder = FlowDocumentThemeNormalizer.ResolveBrush("Brush.TableBorder")
-            ?? new SolidColorBrush(Color.FromRgb(82, 82, 91));
+        var tableBorder = ThemeBrushResolver.Get("Brush.TableBorder");
 
         var paragraphStyle = new Style(typeof(Paragraph))
         {
@@ -223,8 +219,7 @@ public partial class MarkdownMessageView : UserControl
 
     private static void AddSeparatorStyle(Style documentStyle)
     {
-        var borderBrush = FlowDocumentThemeNormalizer.ResolveBrush("Brush.Border")
-            ?? new SolidColorBrush(Color.FromRgb(63, 63, 70));
+        var borderBrush = ThemeBrushResolver.Get("Brush.Border");
 
         var separatorStyle = new Style(typeof(Separator))
         {
@@ -306,6 +301,7 @@ public partial class MarkdownMessageView : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        AppThemeManager.ThemeChanged += OnAppThemeChanged;
         ApplyTheme();
         RefreshDisplayMarkdown();
         AttachMarkdownContextMenu();
@@ -315,6 +311,8 @@ public partial class MarkdownMessageView : UserControl
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        AppThemeManager.ThemeChanged -= OnAppThemeChanged;
+
         if (_documentHooked)
         {
             DependencyPropertyDescriptor
@@ -357,6 +355,12 @@ public partial class MarkdownMessageView : UserControl
     {
         ApplyFlowDocumentContextMenu();
         AttachSelectionHandler();
+    }
+
+    private void OnAppThemeChanged(object? sender, EventArgs e)
+    {
+        ApplyTheme();
+        RefreshDisplayMarkdown();
     }
 
     private void ApplyFlowDocumentContextMenu()

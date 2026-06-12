@@ -321,14 +321,10 @@ public static class FlowDocumentCodeBlockEnhancer
 
     private static BlockUIContainer BuildCard(string language, string codeText)
     {
-        var codeBackground = FlowDocumentThemeNormalizer.ResolveBrush("Brush.CodeBackground")
-            ?? new SolidColorBrush(Color.FromRgb(32, 32, 35));
-        var codeForeground = FlowDocumentThemeNormalizer.ResolveBrush("Brush.CodeForeground")
-            ?? new SolidColorBrush(Color.FromRgb(241, 245, 249));
-        var codeBorder = FlowDocumentThemeNormalizer.ResolveBrush("Brush.CodeBorder")
-            ?? new SolidColorBrush(Color.FromRgb(30, 41, 59));
-        var subtleText = FlowDocumentThemeNormalizer.ResolveBrush("Brush.SubtleText")
-            ?? new SolidColorBrush(Color.FromRgb(161, 161, 170));
+        var codeBackground = ThemeBrushResolver.Get("Brush.CodeBackground");
+        var codeForeground = ThemeBrushResolver.Get("Brush.CodeForeground");
+        var codeBorder = ThemeBrushResolver.Get("Brush.CodeBorder");
+        var subtleText = ThemeBrushResolver.Get("Brush.SubtleText");
 
         var cardState = new CodeBlockCardState { Text = codeText };
 

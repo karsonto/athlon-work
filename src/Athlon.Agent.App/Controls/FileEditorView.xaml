@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:app="clr-namespace:Athlon.Agent.App"
              xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
-             Background="#1E1E1E"
+             x:Name="EditorRoot"
+             Background="{DynamicResource Brush.Panel}"
              HorizontalAlignment="Stretch"
              VerticalAlignment="Stretch">
     <Grid HorizontalAlignment="Stretch"
@@ -15,8 +16,8 @@
 
         <Border Grid.Row="0"
                 Height="{x:Static app:AppLayoutMetrics.SplitPaneHeaderHeight}"
-                Background="{StaticResource Brush.Chrome}"
-                BorderBrush="{StaticResource Brush.Border}"
+                Background="{DynamicResource Brush.Chrome}"
+                BorderBrush="{DynamicResource Brush.Border}"
                 BorderThickness="0,0,0,1"
                 Padding="4,0,8,0">
             <ScrollViewer HorizontalScrollBarVisibility="Auto"
@@ -39,7 +40,7 @@
                                            Text="{Binding TabTitle}"
                                            VerticalAlignment="Center"
                                            Margin="10,4"
-                                           Foreground="{StaticResource Brush.Text}"
+                                           Foreground="{DynamicResource Brush.Text}"
                                            FontSize="12" />
                                 <Button Grid.Column="1"
                                         Content="×"
@@ -55,9 +56,10 @@
             </ScrollViewer>
         </Border>
 
-        <Border Grid.Row="1"
-                Background="#1E1E1E"
-                BorderBrush="{StaticResource Brush.Border}"
+        <Border x:Name="EditorSurface"
+                Grid.Row="1"
+                Background="{DynamicResource Brush.Panel}"
+                BorderBrush="{DynamicResource Brush.Border}"
                 BorderThickness="0,1,0,0"
                 Padding="0">
             <avalonEdit:TextEditor x:Name="CodeEditor"
@@ -69,8 +71,8 @@
                                    WordWrap="False"
                                    HorizontalScrollBarVisibility="Auto"
                                    VerticalScrollBarVisibility="Auto"
-                                   Background="#1E1E1E"
-                                   Foreground="{StaticResource Brush.Text}"
+                                   Background="{DynamicResource Brush.CodeBackground}"
+                                   Foreground="{DynamicResource Brush.Text}"
                                    BorderThickness="0" />
         </Border>
     </Grid>

@@ -12,8 +12,8 @@ public static class FlowDocumentThemeNormalizer
         ContextMenu? contextMenu,
         IReadOnlyList<FencedBlockInfo>? fencedBlocks = null)
     {
-        var codeBackground = ResolveBrush("Brush.CodeBackground") ?? new SolidColorBrush(Color.FromRgb(32, 32, 35));
-        var codeForeground = ResolveBrush("Brush.CodeForeground") ?? new SolidColorBrush(Color.FromRgb(241, 245, 249));
+        var codeBackground = ThemeBrushResolver.Get("Brush.CodeBackground");
+        var codeForeground = ThemeBrushResolver.Get("Brush.CodeForeground");
         NormalizeBlocks(document.Blocks, codeBackground, codeForeground, contextMenu);
         FlowDocumentCodeBlockEnhancer.Enhance(document, fencedBlocks);
     }
@@ -129,8 +129,7 @@ public static class FlowDocumentThemeNormalizer
         }
         else if (IsLowContrastBlueBrush(element.Foreground))
         {
-            element.Foreground = ResolveBrush("Brush.CodeHighlightBlue")
-                ?? new SolidColorBrush(Color.FromRgb(147, 197, 253));
+            element.Foreground = ThemeBrushResolver.Get("Brush.CodeHighlightBlue");
         }
     }
 
@@ -142,8 +141,7 @@ public static class FlowDocumentThemeNormalizer
         }
         else if (IsLowContrastBlueBrush(control.Foreground))
         {
-            control.Foreground = ResolveBrush("Brush.CodeHighlightBlue")
-                ?? new SolidColorBrush(Color.FromRgb(147, 197, 253));
+            control.Foreground = ThemeBrushResolver.Get("Brush.CodeHighlightBlue");
         }
     }
 
@@ -172,7 +170,7 @@ public static class FlowDocumentThemeNormalizer
             return;
         }
 
-        var borderBrush = ResolveBrush("Brush.Border") ?? new SolidColorBrush(Color.FromRgb(63, 63, 70));
+        var borderBrush = ThemeBrushResolver.Get("Brush.Border");
         container.Child = new Border
         {
             Height = 1,

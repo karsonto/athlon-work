@@ -43,7 +43,10 @@ public partial class FileEditorView : UserControl
 
     private void ApplyEditorChrome()
     {
-        CodeEditor.Background = new SolidColorBrush(EditorSyntaxHighlighting.EditorBackground);
+        var editorBackground = new SolidColorBrush(EditorSyntaxHighlighting.EditorBackground);
+        EditorRoot.Background = editorBackground;
+        EditorSurface.Background = editorBackground;
+        CodeEditor.Background = editorBackground;
         CodeEditor.Foreground = new SolidColorBrush(EditorSyntaxHighlighting.DefaultText);
         CodeEditor.LineNumbersForeground = new SolidColorBrush(EditorSyntaxHighlighting.LineNumber);
         CodeEditor.TextArea.Caret.CaretBrush = new SolidColorBrush(EditorSyntaxHighlighting.DefaultText);

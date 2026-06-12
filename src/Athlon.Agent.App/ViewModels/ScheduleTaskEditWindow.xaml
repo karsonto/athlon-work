@@ -5,8 +5,8 @@
         Width="520"
         Height="560"
         WindowStartupLocation="CenterOwner"
-        Background="{StaticResource Brush.AppBackground}"
-        Foreground="{StaticResource Brush.Text}"
+        Background="{DynamicResource Brush.AppBackground}"
+        Foreground="{DynamicResource Brush.Text}"
         FontFamily="Segoe UI"
         FontSize="14"
         ResizeMode="NoResize">
@@ -30,7 +30,7 @@
 
                 <TextBlock Text="工作目录" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
                 <TextBlock Text="必填。Agent 将在此目录下执行任务。"
-                           Foreground="{StaticResource Brush.SubtleText}"
+                           Foreground="{DynamicResource Brush.SubtleText}"
                            FontSize="11"
                            Margin="0,0,0,6" />
                 <TextBox x:Name="WorkspaceBox" Padding="10,8" Margin="0,0,0,16" />
@@ -53,8 +53,8 @@
                 </ComboBox>
 
                 <Border x:Name="DailyPanel"
-                        Background="{StaticResource Brush.Panel}"
-                        BorderBrush="{StaticResource Brush.Border}"
+                        Background="{DynamicResource Brush.Panel}"
+                        BorderBrush="{DynamicResource Brush.Border}"
                         BorderThickness="1"
                         CornerRadius="8"
                         Padding="16"
@@ -66,8 +66,8 @@
                 </Border>
 
                 <Border x:Name="IntervalPanel"
-                        Background="{StaticResource Brush.Panel}"
-                        BorderBrush="{StaticResource Brush.Border}"
+                        Background="{DynamicResource Brush.Panel}"
+                        BorderBrush="{DynamicResource Brush.Border}"
                         BorderThickness="1"
                         CornerRadius="8"
                         Padding="16"
@@ -80,8 +80,8 @@
                 </Border>
 
                 <Border x:Name="AtPanel"
-                        Background="{StaticResource Brush.Panel}"
-                        BorderBrush="{StaticResource Brush.Border}"
+                        Background="{DynamicResource Brush.Panel}"
+                        BorderBrush="{DynamicResource Brush.Border}"
                         BorderThickness="1"
                         CornerRadius="8"
                         Padding="16"
@@ -107,7 +107,7 @@
                     Content="保存"
                     Click="SaveButton_Click"
                     Style="{StaticResource GhostButtonStyle}"
-                    Foreground="{StaticResource Brush.Accent}" />
+                    Foreground="{DynamicResource Brush.Accent}" />
         </StackPanel>
     </Grid>
 </Window>

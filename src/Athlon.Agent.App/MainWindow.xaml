@@ -14,7 +14,7 @@
         Width="1366"
         MinHeight="720"
         MinWidth="1100"
-        Background="{StaticResource Brush.AppBackground}"
+        Background="{DynamicResource Brush.AppBackground}"
         WindowStyle="None"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen">
@@ -51,8 +51,8 @@
         <!-- Window chrome (minimize / maximize / close only) -->
         <Border Grid.Row="0"
                 Grid.ColumnSpan="3"
-                Background="{StaticResource Brush.Chrome}"
-                BorderBrush="{StaticResource Brush.Border}"
+                Background="{DynamicResource Brush.Chrome}"
+                BorderBrush="{DynamicResource Brush.Border}"
                 BorderThickness="0,0,0,1"
                 MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
             <Grid>
@@ -100,7 +100,7 @@
         <!-- Left sidebar — session list -->
         <Border Grid.Row="1"
                 Grid.Column="0"
-                Background="{StaticResource Brush.AppBackground}"
+                Background="{DynamicResource Brush.AppBackground}"
                 BorderThickness="0">
             <Grid>
                 <Grid.RowDefinitions>
@@ -134,7 +134,7 @@
                     <StackPanel>
                         <TextBlock Text="暂无 Agent 记录"
                                    FontSize="12"
-                                   Foreground="{StaticResource Brush.SubtleText}"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
                                    Margin="12,8">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
@@ -178,12 +178,12 @@
                                                            Text="{Binding Title}"
                                                            FontSize="11"
                                                            FontWeight="SemiBold"
-                                                           Foreground="{StaticResource Brush.DisabledText}"
+                                                           Foreground="{DynamicResource Brush.DisabledText}"
                                                            VerticalAlignment="Center" />
                                                 <TextBlock Grid.Column="2"
                                                            Text="{Binding Items.Count}"
                                                            FontSize="10"
-                                                           Foreground="{StaticResource Brush.SubtleText}"
+                                                           Foreground="{DynamicResource Brush.SubtleText}"
                                                            VerticalAlignment="Center" />
                                             </Grid>
                                         </Button>
@@ -220,12 +220,12 @@
                                                                      Height="8"
                                                                      Margin="0,0,10,0"
                                                                      VerticalAlignment="Center"
-                                                                     Fill="{StaticResource Brush.SubtleText}">
+                                                                     Fill="{DynamicResource Brush.SubtleText}">
                                                                 <Ellipse.Style>
                                                                     <Style TargetType="Ellipse">
                                                                         <Style.Triggers>
                                                                             <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                                                                <Setter Property="Fill" Value="{StaticResource Brush.Success}" />
+                                                                                <Setter Property="Fill" Value="{DynamicResource Brush.Success}" />
                                                                             </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
@@ -247,7 +247,7 @@
                                                                 <Button Command="{Binding StopSessionCommand}"
                                                                         Content="■"
                                                                         ToolTip="停止生成"
-                                                                        Foreground="{StaticResource Brush.Warning}">
+                                                                        Foreground="{DynamicResource Brush.Warning}">
                                                                     <Button.Style>
                                                                         <Style TargetType="Button" BasedOn="{StaticResource SessionActionButtonStyle}">
                                                                             <Setter Property="Visibility" Value="Collapsed" />
@@ -278,8 +278,8 @@
                 </ScrollViewer>
 
                 <StackPanel Grid.Row="2" Margin="12,0,12,12">
-                    <Border Background="{StaticResource Brush.PanelAlt}"
-                            BorderBrush="{StaticResource Brush.Border}"
+                    <Border Background="{DynamicResource Brush.PanelAlt}"
+                            BorderBrush="{DynamicResource Brush.Border}"
                             BorderThickness="1"
                             CornerRadius="8"
                             Padding="8,8"
@@ -298,14 +298,14 @@
                             <TextBlock Text="排队中"
                                        FontSize="10"
                                        FontWeight="SemiBold"
-                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
                                        Margin="0,0,0,6" />
                             <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
                                 <ItemsControl ItemsSource="{Binding QueuedTurns}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type vm:QueuedTurnViewModel}">
-                                            <Border Background="{StaticResource Brush.Panel}"
-                                                    BorderBrush="{StaticResource Brush.Border}"
+                                            <Border Background="{DynamicResource Brush.Panel}"
+                                                    BorderBrush="{DynamicResource Brush.Border}"
                                                     BorderThickness="1"
                                                     CornerRadius="8"
                                                     Padding="8,8"
@@ -318,7 +318,7 @@
                                                     <StackPanel Grid.Column="0">
                                                         <TextBlock Text="{Binding PreviewText}"
                                                                    FontSize="12"
-                                                                   Foreground="{StaticResource Brush.Text}"
+                                                                   Foreground="{DynamicResource Brush.Text}"
                                                                    TextWrapping="Wrap"
                                                                    TextTrimming="CharacterEllipsis"
                                                                    MaxHeight="40">
@@ -353,9 +353,9 @@
                                                                     <Border Width="44"
                                                                             Height="44"
                                                                             CornerRadius="8"
-                                                                            BorderBrush="{StaticResource Brush.Border}"
+                                                                            BorderBrush="{DynamicResource Brush.Border}"
                                                                             BorderThickness="1"
-                                                                            Background="{StaticResource Brush.PanelAlt}"
+                                                                            Background="{DynamicResource Brush.PanelAlt}"
                                                                             Margin="0,0,8,0"
                                                                             ToolTip="{Binding FileName}">
                                                                         <Grid>
@@ -402,7 +402,7 @@
 
             <!-- Chat -->
             <Grid Grid.Row="0"
-                  Background="{StaticResource Brush.ChatBackground}"
+                  Background="{DynamicResource Brush.ChatBackground}"
                   ClipToBounds="True">
                 <Grid.Style>
                     <Style TargetType="Grid">
@@ -421,7 +421,7 @@
 
                 <Border x:Name="EditorPaneHost"
                         Grid.Column="0"
-                        Background="{StaticResource Brush.AppBackground}"
+                        Background="{DynamicResource Brush.AppBackground}"
                         BorderThickness="0"
                         Visibility="Collapsed">
                     <Grid>
@@ -452,8 +452,8 @@
                 <!-- Chat header -->
                 <Border Grid.Row="0"
                         Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}"
-                        Background="{StaticResource Brush.Chrome}"
-                        BorderBrush="{StaticResource Brush.Border}"
+                        Background="{DynamicResource Brush.Chrome}"
+                        BorderBrush="{DynamicResource Brush.Border}"
                         BorderThickness="0,0,0,1"
                         Padding="24,0">
                     <Grid VerticalAlignment="Center">
@@ -464,7 +464,7 @@
                         <TextBlock Text="{Binding CurrentSessionTitle}"
                                    FontSize="14"
                                    FontWeight="Medium"
-                                   Foreground="{StaticResource Brush.TextSecondary}"
+                                   Foreground="{DynamicResource Brush.TextSecondary}"
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
                                    Margin="0,0,12,0" />
@@ -517,7 +517,7 @@
                                HorizontalAlignment="Center"
                                TextAlignment="Center" />
                     <TextBlock Text="Athlon Agent 可以帮您分析代码、生成原型、优化设计，或执行任何开发任务。"
-                               Foreground="{StaticResource Brush.SubtleText}"
+                               Foreground="{DynamicResource Brush.SubtleText}"
                                FontSize="14"
                                HorizontalAlignment="Center"
                                TextAlignment="Center"
@@ -608,7 +608,7 @@
                                                             <ColumnDefinition Width="Auto" />
                                                         </Grid.ColumnDefinitions>
                                                         <TextBlock Text="{Binding ChevronGlyph}"
-                                                                   Foreground="{StaticResource Brush.ToolThinkingText}"
+                                                                   Foreground="{DynamicResource Brush.ToolThinkingText}"
                                                                    FontSize="11"
                                                                    VerticalAlignment="Center"
                                                                    Margin="0,0,8,0" />
@@ -616,16 +616,16 @@
                                                             <TextBlock Text="{Binding CardTitle}"
                                                                        FontSize="12"
                                                                        FontWeight="SemiBold"
-                                                                       Foreground="{StaticResource Brush.ToolThinkingText}" />
+                                                                       Foreground="{DynamicResource Brush.ToolThinkingText}" />
                                                             <TextBlock Text="{Binding ToolHeader}"
                                                                        FontSize="11"
-                                                                       Foreground="{StaticResource Brush.SubtleText}"
+                                                                       Foreground="{DynamicResource Brush.SubtleText}"
                                                                        TextTrimming="CharacterEllipsis"
                                                                        Margin="0,2,0,0" />
                                                             <TextBlock Text="{Binding ToolArgumentsText}"
                                                                        FontSize="10"
                                                                        FontFamily="Consolas"
-                                                                       Foreground="{StaticResource Brush.ToolThinkingText}"
+                                                                       Foreground="{DynamicResource Brush.ToolThinkingText}"
                                                                        TextWrapping="Wrap"
                                                                        MaxHeight="56"
                                                                        Margin="0,4,0,0">
@@ -647,25 +647,25 @@
                                                                 <TextBlock.Style>
                                                                     <Style TargetType="TextBlock">
                                                                         <Setter Property="Visibility" Value="Collapsed" />
-                                                                        <Setter Property="Foreground" Value="#C4B5FD" />
+                                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionSkillBadgeText}" />
                                                                         <Style.Triggers>
                                                                             <DataTrigger Binding="{Binding ShowToolStatusLabel}" Value="True">
                                                                                 <Setter Property="Visibility" Value="Visible" />
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Preparing}">
-                                                                                <Setter Property="Foreground" Value="#86EFAC" />
+                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.ToolSuccessText}" />
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Running}">
-                                                                                <Setter Property="Foreground" Value="#86EFAC" />
+                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.ToolSuccessText}" />
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Succeeded}">
-                                                                                <Setter Property="Foreground" Value="{StaticResource Brush.ToolSuccessText}" />
+                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.ToolSuccessText}" />
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Failed}">
-                                                                                <Setter Property="Foreground" Value="{StaticResource Brush.ToolFailureText}" />
+                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.ToolFailureText}" />
                                                                             </DataTrigger>
                                                                             <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Cancelled}">
-                                                                                <Setter Property="Foreground" Value="{StaticResource Brush.ToolFailureText}" />
+                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.ToolFailureText}" />
                                                                             </DataTrigger>
                                                                         </Style.Triggers>
                                                                     </Style>
@@ -675,13 +675,13 @@
                                                         <TextBlock Grid.Column="2"
                                                                    Text="{Binding CreatedAt}"
                                                                    FontSize="10"
-                                                                   Foreground="{StaticResource Brush.SubtleText}"
+                                                                   Foreground="{DynamicResource Brush.SubtleText}"
                                                                    VerticalAlignment="Center"
                                                                    Margin="8,0,0,0" />
                                                     </Grid>
                                                 </Button>
                                                 </Border>
-                                                <Border BorderBrush="{StaticResource Brush.Border}"
+                                                <Border BorderBrush="{DynamicResource Brush.Border}"
                                                         BorderThickness="0,1,0,0">
                                                     <Border.Style>
                                                         <Style TargetType="Border">
@@ -711,12 +711,12 @@
                                                             <TextBlock Text="{Binding ToolArgumentsText}"
                                                                        FontSize="11"
                                                                        FontFamily="Consolas"
-                                                                       Foreground="{StaticResource Brush.ToolThinkingText}"
+                                                                       Foreground="{DynamicResource Brush.ToolThinkingText}"
                                                                        TextWrapping="Wrap" />
                                                         </ScrollViewer>
                                                         <TextBlock Text="{Binding ToolSummary}"
                                                                    FontSize="11"
-                                                                   Foreground="{StaticResource Brush.SubtleText}"
+                                                                   Foreground="{DynamicResource Brush.SubtleText}"
                                                                    TextWrapping="Wrap"
                                                                    Margin="0,0,0,8">
                                                             <TextBlock.Style>
@@ -746,7 +746,7 @@
                                                     <Setter Property="Visibility" Value="Visible" />
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                            <Setter Property="Background" Value="{StaticResource Brush.UserBubble}" />
+                                                            <Setter Property="Background" Value="{DynamicResource Brush.UserBubble}" />
                                                             <Setter Property="BorderThickness" Value="0" />
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding IsCollapsibleCard}" Value="True">
@@ -762,8 +762,8 @@
                                                 <!-- Reasoning block: collapsible thinking-style, default expanded -->
                                                 <Border CornerRadius="16"
                                                         BorderThickness="1"
-                                                        Background="{StaticResource Brush.ToolThinkingBg}"
-                                                        BorderBrush="{StaticResource Brush.ToolThinkingBorder}"
+                                                        Background="{DynamicResource Brush.ToolThinkingBg}"
+                                                        BorderBrush="{DynamicResource Brush.ToolThinkingBorder}"
                                                         Margin="0,0,0,12"
                                                         ClipToBounds="True">
                                                     <Border.Style>
@@ -785,7 +785,7 @@
                                                                     <ColumnDefinition Width="*" />
                                                                 </Grid.ColumnDefinitions>
                                                                 <TextBlock Text="{Binding ReasoningChevronGlyph}"
-                                                                           Foreground="{StaticResource Brush.ToolThinkingText}"
+                                                                           Foreground="{DynamicResource Brush.ToolThinkingText}"
                                                                            FontSize="11"
                                                                            VerticalAlignment="Center"
                                                                            Margin="0,0,8,0" />
@@ -793,10 +793,10 @@
                                                                     <TextBlock Text="思考过程"
                                                                                FontSize="12"
                                                                                FontWeight="SemiBold"
-                                                                               Foreground="{StaticResource Brush.ToolThinkingText}" />
+                                                                               Foreground="{DynamicResource Brush.ToolThinkingText}" />
                                                                     <TextBlock Text="思考中…"
                                                                                FontSize="11"
-                                                                               Foreground="{StaticResource Brush.Success}"
+                                                                               Foreground="{DynamicResource Brush.Success}"
                                                                                Margin="0,4,0,0">
                                                                         <TextBlock.Style>
                                                                             <Style TargetType="TextBlock">
@@ -812,7 +812,7 @@
                                                                 </StackPanel>
                                                             </Grid>
                                                         </Button>
-                                                        <Border BorderBrush="{StaticResource Brush.ToolThinkingBorder}"
+                                                        <Border BorderBrush="{DynamicResource Brush.ToolThinkingBorder}"
                                                                 BorderThickness="0,1,0,0">
                                                             <Border.Style>
                                                                 <Style TargetType="Border">
@@ -829,7 +829,7 @@
                                                                            Text="{Binding ReasoningContent}"
                                                                            TextWrapping="Wrap"
                                                                            FontSize="13"
-                                                                           Foreground="{StaticResource Brush.ToolThinkingText}"
+                                                                           Foreground="{DynamicResource Brush.ToolThinkingText}"
                                                                            HorizontalAlignment="Stretch">
                                                                     <TextBlock.Style>
                                                                         <Style TargetType="TextBlock">
@@ -864,7 +864,7 @@
                                                 </Border>
                                                 <TextBlock Text="{Binding UserAttachmentSummary}"
                                                            FontSize="11"
-                                                           Foreground="{StaticResource Brush.SubtleText}"
+                                                           Foreground="{DynamicResource Brush.SubtleText}"
                                                            Margin="0,0,0,8">
                                                     <TextBlock.Style>
                                                         <Style TargetType="TextBlock">
@@ -888,7 +888,7 @@
                                                     <TextBlock.Style>
                                                         <Style TargetType="TextBlock">
                                                             <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Setter Property="Foreground" Value="{StaticResource Brush.Text}" />
+                                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsStreaming}" Value="True">
                                                                     <Setter Property="Visibility" Value="Visible" />
@@ -910,7 +910,7 @@
                                                 </TextBlock>
                                                 <TextBlock Margin="0,6,0,0"
                                                            FontSize="12"
-                                                           Foreground="{StaticResource Brush.TextSecondary}"
+                                                           Foreground="{DynamicResource Brush.TextSecondary}"
                                                            Text="正在准备格式渲染…（点击立即渲染）"
                                                            Cursor="Hand">
                                                     <TextBlock.InputBindings>
@@ -988,7 +988,7 @@
                                                 </Style.Triggers>
                                             </Style>
                                         </Border.Style>
-                                        <TextBlock Text="U" Foreground="{StaticResource Brush.TextSecondary}" FontWeight="SemiBold"
+                                        <TextBlock Text="U" Foreground="{DynamicResource Brush.TextSecondary}" FontWeight="SemiBold"
                                                    HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" />
                                     </Border>
                                 </StackPanel>
@@ -1053,8 +1053,8 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Background="{StaticResource Brush.PanelAlt}"
-                                                BorderBrush="{StaticResource Brush.Border}"
+                                        <Border Background="{DynamicResource Brush.PanelAlt}"
+                                                BorderBrush="{DynamicResource Brush.Border}"
                                                 BorderThickness="1"
                                                 CornerRadius="8"
                                                 Margin="0,0,8,0"
@@ -1069,9 +1069,9 @@
                                                         Width="40"
                                                         Height="40"
                                                         CornerRadius="8"
-                                                        BorderBrush="{StaticResource Brush.Border}"
+                                                        BorderBrush="{DynamicResource Brush.Border}"
                                                         BorderThickness="1"
-                                                        Background="{StaticResource Brush.Panel}"
+                                                        Background="{DynamicResource Brush.Panel}"
                                                         Margin="0,0,8,0">
                                                     <Image Source="{Binding Thumbnail}"
                                                            Stretch="UniformToFill"
@@ -1101,7 +1101,7 @@
                                      TextChanged="ComposerTextBox_OnTextChanged"
                                      PreviewKeyDown="ComposerTextBox_OnPreviewKeyDown" />
                             <TextBlock Text="输入消息... (Shift+Enter 换行，Enter 发送)"
-                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
                                        Margin="8,8,0,0"
                                        IsHitTestVisible="False"
                                        FontSize="14">
@@ -1123,8 +1123,8 @@
                                Placement="Top"
                                StaysOpen="False"
                                AllowsTransparency="True">
-                            <Border Background="{StaticResource Brush.Panel}"
-                                    BorderBrush="{StaticResource Brush.Border}"
+                            <Border Background="{DynamicResource Brush.Panel}"
+                                    BorderBrush="{DynamicResource Brush.Border}"
                                     BorderThickness="1"
                                     CornerRadius="10"
                                     Padding="6"
@@ -1165,12 +1165,12 @@
                                                         Margin="0,0,8,0">
                                                     <Border.Style>
                                                         <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{StaticResource Brush.AtCompletionFileBadgeBg}" />
-                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.AtCompletionFileBadgeBorder}" />
+                                                            <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionFileBadgeBg}" />
+                                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionFileBadgeBorder}" />
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding Type}" Value="技能">
-                                                                    <Setter Property="Background" Value="{StaticResource Brush.AtCompletionSkillBadgeBg}" />
-                                                                    <Setter Property="BorderBrush" Value="{StaticResource Brush.AtCompletionSkillBadgeBorder}" />
+                                                                    <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionSkillBadgeBg}" />
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionSkillBadgeBorder}" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
@@ -1178,10 +1178,10 @@
                                                     <TextBlock Text="{Binding Type}" FontSize="11">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="{StaticResource Brush.AtCompletionFileBadgeText}" />
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionFileBadgeText}" />
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding Type}" Value="技能">
-                                                                        <Setter Property="Foreground" Value="{StaticResource Brush.AtCompletionSkillBadgeText}" />
+                                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionSkillBadgeText}" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
@@ -1192,7 +1192,7 @@
                                                     <TextBlock Text="{Binding PrimaryText}" FontSize="13" FontWeight="SemiBold" />
                                                     <TextBlock Text="{Binding SecondaryText}"
                                                                FontSize="11"
-                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               Foreground="{DynamicResource Brush.SubtleText}"
                                                                TextTrimming="CharacterEllipsis" />
                                                 </StackPanel>
                                             </Grid>
@@ -1234,7 +1234,7 @@
                         </Grid>
                         <TextBlock Grid.Row="3"
                                    Text="按 Enter 发送消息，Shift+Enter 换行"
-                                   Foreground="{StaticResource Brush.DisabledText}"
+                                   Foreground="{DynamicResource Brush.DisabledText}"
                                    FontSize="11"
                                    Margin="4,8,0,0" />
                     </Grid>
@@ -1247,7 +1247,7 @@
             <ScrollViewer Grid.Row="0"
                             Padding="40,32"
                             VerticalScrollBarVisibility="Auto"
-                            Background="{StaticResource Brush.ChatBackground}">
+                            Background="{DynamicResource Brush.ChatBackground}">
                 <ScrollViewer.Style>
                     <Style TargetType="ScrollViewer">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -1269,34 +1269,34 @@
                         <TextBlock Text="设置" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </StackPanel>
                     <TextBlock Text="配置模型、MCP、技能、工作区、上下文压缩与工具权限。"
-                               Foreground="{StaticResource Brush.SubtleText}"
+                               Foreground="{DynamicResource Brush.SubtleText}"
                                Margin="0,0,0,24" />
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
                             <TextBlock Text="Model" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
-                            <TextBlock Text="Provider" Foreground="{StaticResource Brush.SubtleText}" />
+                            <TextBlock Text="Provider" Foreground="{DynamicResource Brush.SubtleText}" />
                             <TextBox Text="{Binding Settings.Settings.Model.Provider, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
-                            <TextBlock Text="Endpoint" Foreground="{StaticResource Brush.SubtleText}" />
+                            <TextBlock Text="Endpoint" Foreground="{DynamicResource Brush.SubtleText}" />
                             <TextBox Text="{Binding Settings.Settings.Model.Endpoint, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
-                            <TextBlock Text="Model Name" Foreground="{StaticResource Brush.SubtleText}" />
+                            <TextBlock Text="Model Name" Foreground="{DynamicResource Brush.SubtleText}" />
                             <TextBox Text="{Binding Settings.Settings.Model.ModelName, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
-                            <TextBlock Text="Max Tokens" Foreground="{StaticResource Brush.SubtleText}" />
+                            <TextBlock Text="Max Tokens" Foreground="{DynamicResource Brush.SubtleText}" />
                             <TextBox Text="{Binding Settings.ModelMaxTokensText, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,6,0,6" />
                             <TextBlock Text="单次回复最大输出 token（留空则使用 API 默认值）。仅影响对话补全，不影响上下文摘要。"
-                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        Margin="0,0,0,12" />
                             <CheckBox IsChecked="{Binding Settings.Settings.Model.EnableStreaming, UpdateSourceTrigger=PropertyChanged}"
                                       Content="启用流式输出（SSE）"
                                       Margin="0,0,0,12" />
-                            <TextBlock Text="API Key" Foreground="{StaticResource Brush.SubtleText}" />
+                            <TextBlock Text="API Key" Foreground="{DynamicResource Brush.SubtleText}" />
                             <PasswordBox x:Name="ApiKeyPasswordBox"
                                            PasswordChanged="ApiKeyPasswordBox_OnPasswordChanged"
                                            Margin="0,6,0,6" />
                             <TextBlock Text="API Key 使用 Windows DPAPI 加密保存在用户目录。"
-                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap" />
                         </StackPanel>
                     </Border>
@@ -1420,15 +1420,15 @@
                         <StackPanel>
                             <TextBlock Text="Installed MCP Servers" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <TextBlock Text="{Binding Settings.McpConfigPath, StringFormat=MCP 服务从 {0} 读取；此页面仅控制每个服务是否启用。新增、删除和命令参数请直接修改 JSON 配置。}"
-                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12"
                                        Margin="0,0,0,14" />
                             <ItemsControl ItemsSource="{Binding Settings.McpServers}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Background="#1B1B1E"
-                                                BorderBrush="{StaticResource Brush.Border}"
+                                        <Border Background="{DynamicResource Brush.Panel}"
+                                                BorderBrush="{DynamicResource Brush.Border}"
                                                 BorderThickness="0,0,0,1"
                                                 Padding="8,10"
                                                 Margin="0,0,0,8">
@@ -1440,7 +1440,7 @@
                                                 </Grid.ColumnDefinitions>
 
                                                 <Grid Grid.Column="0" Width="40" Height="40" VerticalAlignment="Center">
-                                                    <Border Width="36" Height="36" CornerRadius="10" Background="#3F3F46">
+                                                    <Border Width="36" Height="36" CornerRadius="10" Background="{DynamicResource Brush.PanelAlt}">
                                                         <TextBlock Text="{Binding DisplayInitial}"
                                                                    HorizontalAlignment="Center"
                                                                    VerticalAlignment="Center"
@@ -1451,17 +1451,17 @@
                                                              HorizontalAlignment="Right"
                                                              VerticalAlignment="Bottom"
                                                              Margin="0,0,-2,-2"
-                                                             Stroke="#18181B"
+                                                             Stroke="{DynamicResource Brush.Border}"
                                                              StrokeThickness="2">
                                                         <Ellipse.Style>
                                                             <Style TargetType="Ellipse">
-                                                                <Setter Property="Fill" Value="#71717A" />
+                                                                <Setter Property="Fill" Value="{DynamicResource Brush.DisabledText}" />
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding IsStatusHealthy}" Value="True">
-                                                                        <Setter Property="Fill" Value="{StaticResource Brush.Success}" />
+                                                                        <Setter Property="Fill" Value="{DynamicResource Brush.Success}" />
                                                                     </DataTrigger>
                                                                     <DataTrigger Binding="{Binding IsStatusError}" Value="True">
-                                                                        <Setter Property="Fill" Value="{StaticResource Brush.Danger}" />
+                                                                        <Setter Property="Fill" Value="{DynamicResource Brush.Danger}" />
                                                                     </DataTrigger>
                                                                     <DataTrigger Binding="{Binding ShowStatusDot}" Value="False">
                                                                         <Setter Property="Visibility" Value="Collapsed" />
@@ -1475,7 +1475,7 @@
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,8,0">
                                                     <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
                                                     <TextBlock Text="{Binding ToolSummary}"
-                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               Foreground="{DynamicResource Brush.SubtleText}"
                                                                FontSize="12"
                                                                Margin="0,4,0,0" />
                                                 </StackPanel>
@@ -1497,15 +1497,15 @@
                         <StackPanel>
                             <TextBlock Text="Installed Skills" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <TextBlock Text="{Binding Settings.SkillsSettingsDescription}"
-                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12"
                                        Margin="0,0,0,14" />
                             <ItemsControl ItemsSource="{Binding Settings.Skills}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:SkillItemViewModel}">
-                                        <Border Background="#1B1B1E"
-                                                BorderBrush="{StaticResource Brush.Border}"
+                                        <Border Background="{DynamicResource Brush.Panel}"
+                                                BorderBrush="{DynamicResource Brush.Border}"
                                                 BorderThickness="0,0,0,1"
                                                 Padding="8,10"
                                                 Margin="0,0,0,8">
@@ -1528,7 +1528,7 @@
                                                         Width="36"
                                                         Height="36"
                                                         CornerRadius="10"
-                                                        Background="#3F3F46"
+                                                        Background="{DynamicResource Brush.PanelAlt}"
                                                         VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding DisplayInitial}"
                                                                HorizontalAlignment="Center"
@@ -1539,12 +1539,12 @@
                                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,8,0">
                                                     <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
                                                     <TextBlock Text="{Binding Description}"
-                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               Foreground="{DynamicResource Brush.SubtleText}"
                                                                FontSize="12"
                                                                Margin="0,4,0,0"
                                                                TextTrimming="CharacterEllipsis" />
                                                     <TextBlock Text="{Binding StatusText}"
-                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               Foreground="{DynamicResource Brush.SubtleText}"
                                                                FontSize="11"
                                                                Margin="0,2,0,0">
                                                         <TextBlock.Style>
@@ -1576,7 +1576,7 @@
                         <StackPanel>
                             <TextBlock Text="跳过目录" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <TextBlock Text="grep_files、glob_files、file_list 与侧栏工作区树会跳过这些目录名（路径任一段匹配即忽略）。每行一个，也可用逗号分隔。工作区单独配置 IgnorePatterns 时可覆盖此列表。"
-                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12"
                                        Margin="0,0,0,12" />
@@ -1588,14 +1588,14 @@
                                      FontFamily="Consolas"
                                      Margin="0,0,0,6" />
                             <TextBlock Text="默认包含 node_modules、dist、.next、build、bin、obj 等常见构建与依赖目录。"
-                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12" />
                         </StackPanel>
                     </Border>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,24">
-                        <TextBlock Text="{Binding SettingsStatus}" Foreground="{StaticResource Brush.SubtleText}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <TextBlock Text="{Binding SettingsStatus}" Foreground="{DynamicResource Brush.SubtleText}" VerticalAlignment="Center" Margin="0,0,12,0" />
                         <Button Content="保存设置" Command="{Binding SaveSettingsCommand}" Style="{StaticResource GhostButtonStyle}" />
                     </StackPanel>
                 </StackPanel>
@@ -1605,7 +1605,7 @@
             <ScrollViewer Grid.Row="0"
                           Padding="40,32"
                           VerticalScrollBarVisibility="Auto"
-                          Background="{StaticResource Brush.ChatBackground}">
+                          Background="{DynamicResource Brush.ChatBackground}">
                 <ScrollViewer.Style>
                     <Style TargetType="ScrollViewer">
                         <Setter Property="Visibility" Value="Collapsed" />
@@ -1631,7 +1631,7 @@
                                    VerticalAlignment="Center" />
                     </StackPanel>
                     <TextBlock Text="管理 AI Agent 定时执行的任务。"
-                               Foreground="{StaticResource Brush.SubtleText}"
+                               Foreground="{DynamicResource Brush.SubtleText}"
                                Margin="0,0,0,24" />
 
                     <!-- Global toggle card -->
@@ -1650,7 +1650,7 @@
                                                VerticalAlignment="Center" />
                                 </StackPanel>
                                 <TextBlock Text="{Binding SchedulePageVm.TaskSummary}"
-                                           Foreground="{StaticResource Brush.SubtleText}"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
                                            FontSize="12"
                                            Margin="0,6,0,0" />
                             </StackPanel>
@@ -1680,8 +1680,8 @@
                                             <Style TargetType="Button" BasedOn="{StaticResource FilterChipStyle}">
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                        <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent}" />
-                                                        <Setter Property="Foreground" Value="{StaticResource Brush.Accent}" />
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
                                                         <Setter Property="Background" Value="#1A3B82F6" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
@@ -1703,7 +1703,7 @@
                     </StackPanel>
 
                     <!-- Empty state -->
-                    <Border Background="{StaticResource Brush.PanelAlt}">
+                    <Border Background="{DynamicResource Brush.PanelAlt}">
                         <Border.Style>
                             <Style TargetType="Border" BasedOn="{StaticResource SettingsCardStyle}">
                                 <Setter Property="Visibility" Value="Collapsed" />
@@ -1728,7 +1728,7 @@
                                        HorizontalAlignment="Center"
                                        Margin="0,0,0,8" />
                             <TextBlock Text="点击上方「新建定时任务」按钮创建第一个任务，或告诉 AI Agent「每天 9 点提醒我」来自动创建。"
-                                       Foreground="{StaticResource Brush.SubtleText}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
                                        FontSize="13"
                                        TextWrapping="Wrap"
                                        TextAlignment="Center"
@@ -1774,7 +1774,7 @@
                                                 Width="44"
                                                 Height="44"
                                                 CornerRadius="10"
-                                                Background="#3F3F46"
+                                                Background="{DynamicResource Brush.PanelAlt}"
                                                 VerticalAlignment="Center">
                                             <TextBlock Text="{Binding StatusIcon}"
                                                        FontSize="22"
@@ -1789,36 +1789,36 @@
                                                            FontSize="15"
                                                            FontWeight="SemiBold"
                                                            VerticalAlignment="Center" />
-                                                <Border Background="#27272A"
+                                                <Border Background="{DynamicResource Brush.PanelAlt}"
                                                         CornerRadius="4"
                                                         Padding="6,2"
                                                         Margin="10,0,0,0"
                                                         VerticalAlignment="Center">
                                                     <TextBlock Text="{Binding ScheduleDescription}"
                                                                FontSize="11"
-                                                               Foreground="{StaticResource Brush.SubtleText}" />
+                                                               Foreground="{DynamicResource Brush.SubtleText}" />
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Text="{Binding PromptPreview}"
-                                                       Foreground="{StaticResource Brush.SubtleText}"
+                                                       Foreground="{DynamicResource Brush.SubtleText}"
                                                        FontSize="12"
                                                        Margin="0,6,0,0"
                                                        TextTrimming="CharacterEllipsis"
                                                        MaxWidth="400" />
                                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                                <Border Background="#27272A"
+                                                <Border Background="{DynamicResource Brush.PanelAlt}"
                                                         CornerRadius="4"
                                                         Padding="6,2"
                                                         Margin="0,0,8,0">
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="下次: "
                                                                    FontSize="11"
-                                                                   Foreground="{StaticResource Brush.SubtleText}" />
+                                                                   Foreground="{DynamicResource Brush.SubtleText}" />
                                                         <TextBlock Text="{Binding NextRunDisplay}"
                                                                    FontSize="11" />
                                                     </StackPanel>
                                                 </Border>
-                                                <Border Background="#27272A"
+                                                <Border Background="{DynamicResource Brush.PanelAlt}"
                                                         CornerRadius="4"
                                                         Padding="6,2">
                                                     <StackPanel Orientation="Horizontal">
@@ -1876,7 +1876,7 @@
                                                     ToolTip="停止运行"
                                                     Padding="8"
                                                     Margin="0,0,4,0"
-                                                    Foreground="{StaticResource Brush.Danger}">
+                                                    Foreground="{DynamicResource Brush.Danger}">
                                                 <Button.Style>
                                                     <Style TargetType="Button" BasedOn="{StaticResource ComposerIconButtonStyle}">
                                                         <Setter Property="Visibility" Value="Collapsed" />
@@ -1904,14 +1904,14 @@
                                                     ToolTip="删除"
                                                     Style="{StaticResource ComposerIconButtonStyle}"
                                                     Padding="8"
-                                                    Foreground="{StaticResource Brush.Danger}">
+                                                    Foreground="{DynamicResource Brush.Danger}">
                                                 <TextBlock Text="×" FontSize="16" />
                                             </Button>
                                         </StackPanel>
                                     </Grid>
 
                                     <!-- Result panel (expandable) -->
-                                    <Border Background="{StaticResource Brush.PanelAlt}"
+                                    <Border Background="{DynamicResource Brush.PanelAlt}"
                                             CornerRadius="8"
                                             Padding="14,12"
                                             Margin="0,12,0,0">
@@ -1932,7 +1932,7 @@
                                             </Grid.RowDefinitions>
                                             <StackPanel Grid.Row="0" Margin="0,0,0,8">
                                                 <StackPanel Orientation="Horizontal">
-                                                    <Border Background="#27272A"
+                                                    <Border Background="{DynamicResource Brush.PanelAlt}"
                                                             CornerRadius="4"
                                                             Padding="6,2"
                                                             Margin="0,0,8,0">
@@ -1944,7 +1944,7 @@
                                                     <TextBlock Text="上次运行结果"
                                                                FontSize="11"
                                                                FontWeight="SemiBold"
-                                                               Foreground="{StaticResource Brush.SubtleText}"
+                                                               Foreground="{DynamicResource Brush.SubtleText}"
                                                                VerticalAlignment="Center" />
                                                 <Button Command="{Binding OpenSessionCommand}"
                                                         Content="查看对话"
@@ -1975,25 +1975,25 @@
                                                             </Style.Triggers>
                                                         </Style>
                                                     </StackPanel.Style>
-                                                    <Border Background="#27272A"
+                                                    <Border Background="{DynamicResource Brush.PanelAlt}"
                                                             CornerRadius="4"
                                                             Padding="6,2"
                                                             Margin="0,0,8,0">
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="开始: "
                                                                        FontSize="11"
-                                                                       Foreground="{StaticResource Brush.SubtleText}" />
+                                                                       Foreground="{DynamicResource Brush.SubtleText}" />
                                                             <TextBlock Text="{Binding LastRunStartDisplay}"
                                                                        FontSize="11" />
                                                         </StackPanel>
                                                     </Border>
-                                                    <Border Background="#27272A"
+                                                    <Border Background="{DynamicResource Brush.PanelAlt}"
                                                             CornerRadius="4"
                                                             Padding="6,2">
                                                         <StackPanel Orientation="Horizontal">
                                                             <TextBlock Text="结束: "
                                                                        FontSize="11"
-                                                                       Foreground="{StaticResource Brush.SubtleText}" />
+                                                                       Foreground="{DynamicResource Brush.SubtleText}" />
                                                             <TextBlock Text="{Binding LastRunEndDisplay}"
                                                                        FontSize="11" />
                                                         </StackPanel>
@@ -2001,14 +2001,14 @@
                                                 </StackPanel>
                                             </StackPanel>
                                             <Border Grid.Row="1"
-                                                    Background="{StaticResource Brush.AppBackground}"
+                                                    Background="{DynamicResource Brush.AppBackground}"
                                                     CornerRadius="6"
                                                     Padding="12,10">
                                                 <TextBlock Text="{Binding LastMessage}"
                                                            FontSize="12"
                                                            FontFamily="Cascadia Code, Consolas, monospace"
                                                            TextWrapping="Wrap"
-                                                           Foreground="{StaticResource Brush.Text}" />
+                                                           Foreground="{DynamicResource Brush.Text}" />
                                             </Border>
                                         </Grid>
                                     </Border>
@@ -2025,29 +2025,29 @@
         <!-- 底部状态栏（主区域右侧） -->
         <Border Grid.Row="2"
                 Grid.Column="1"
-                Background="{StaticResource Brush.Chrome}"
-                BorderBrush="{StaticResource Brush.Border}"
+                Background="{DynamicResource Brush.Chrome}"
+                BorderBrush="{DynamicResource Brush.Border}"
                 BorderThickness="0,1,0,0"
                 Padding="24,10">
             <Grid>
                 <TextBlock Text="{Binding Sidebar.LocalModelStatus, StringFormat=● {0}}"
-                           Foreground="{StaticResource Brush.Success}"
+                           Foreground="{DynamicResource Brush.Success}"
                            VerticalAlignment="Center"
                            FontSize="12" />
                 <TextBlock Text="{Binding Settings.Settings.Model.ModelName, StringFormat=模型: {0}}"
-                           Foreground="{StaticResource Brush.SubtleText}"
+                           Foreground="{DynamicResource Brush.SubtleText}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            FontSize="12" />
                 <TextBlock Text="{Binding SessionUsageLine}"
-                           Foreground="{StaticResource Brush.SubtleText}"
+                           Foreground="{DynamicResource Brush.SubtleText}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            Margin="0,14,0,0"
                            FontSize="11"
                            TextTrimming="CharacterEllipsis" />
                 <TextBlock Text="{Binding LogsPath, StringFormat=Logs: {0}}"
-                           Foreground="{StaticResource Brush.SubtleText}"
+                           Foreground="{DynamicResource Brush.SubtleText}"
                            HorizontalAlignment="Right"
                            VerticalAlignment="Center"
                            FontSize="12"
@@ -2062,7 +2062,7 @@
                 Grid.Column="1"
                 Width="28"
                 HorizontalAlignment="Right"
-                Background="{StaticResource Brush.Chrome}"
+                Background="{DynamicResource Brush.Chrome}"
                 BorderThickness="0"
                 Panel.ZIndex="2"
                 Visibility="Collapsed"
@@ -2081,7 +2081,7 @@
         <Border x:Name="ContextSidebarPanel"
                 Grid.Row="1"
                 Grid.Column="2"
-                Background="{StaticResource Brush.AppBackground}"
+                Background="{DynamicResource Brush.AppBackground}"
                 BorderThickness="0">
             <Grid>
                 <Grid.RowDefinitions>
@@ -2095,7 +2095,7 @@
                         <TextBlock Text="上下文"
                                    FontSize="12"
                                    FontWeight="SemiBold"
-                                   Foreground="{StaticResource Brush.TextSecondary}"
+                                   Foreground="{DynamicResource Brush.TextSecondary}"
                                    VerticalAlignment="Center" />
                         <Button Command="{Binding ClearContextCommand}"
                                 HorizontalAlignment="Right"
@@ -2107,7 +2107,7 @@
                     </Grid>
                 </Border>
 
-                <UniformGrid Grid.Row="1" Columns="2" Background="{StaticResource Brush.Chrome}">
+                <UniformGrid Grid.Row="1" Columns="2" Background="{DynamicResource Brush.Chrome}">
                     <RadioButton x:Name="ContextTabFiles"
                                  GroupName="ContextTabs"
                                  Content="文件"
@@ -2132,8 +2132,8 @@
                     </ScrollViewer.Style>
                     <!-- Files tab -->
                     <StackPanel>
-                        <Border Background="{StaticResource Brush.PanelAlt}"
-                                BorderBrush="{StaticResource Brush.Border}"
+                        <Border Background="{DynamicResource Brush.PanelAlt}"
+                                BorderBrush="{DynamicResource Brush.Border}"
                                 BorderThickness="1"
                                 CornerRadius="8"
                                 Padding="10,8"
@@ -2145,7 +2145,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock Text="工作区"
-                                               Foreground="{StaticResource Brush.SubtleText}"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
                                                FontSize="11"
                                                Margin="0,0,0,2" />
                                     <TextBlock Text="{Binding ActiveWorkspaceName}"
@@ -2163,8 +2163,8 @@
                                         VerticalAlignment="Center" />
                             </Grid>
                         </Border>
-                        <Border Background="{StaticResource Brush.Panel}"
-                                BorderBrush="{StaticResource Brush.Border}"
+                        <Border Background="{DynamicResource Brush.Panel}"
+                                BorderBrush="{DynamicResource Brush.Border}"
                                 BorderThickness="1"
                                 CornerRadius="8"
                                 Padding="8">
@@ -2172,7 +2172,7 @@
                                       Background="Transparent"
                                       BorderThickness="0"
                                       FontSize="13"
-                                      Foreground="{StaticResource Brush.Text}"
+                                      Foreground="{DynamicResource Brush.Text}"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                       MouseDoubleClick="WorkspaceTree_OnMouseDoubleClick">
                                 <TreeView.ItemContainerStyle>
@@ -2227,9 +2227,9 @@
                     </ScrollViewer.Style>
                     <!-- Skills + MCP tab -->
                     <StackPanel>
-                        <TextBlock Text="技能" Foreground="{StaticResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
-                        <Border Background="{StaticResource Brush.Panel}"
-                                BorderBrush="{StaticResource Brush.Border}"
+                        <TextBlock Text="技能" Foreground="{DynamicResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <Border Background="{DynamicResource Brush.Panel}"
+                                BorderBrush="{DynamicResource Brush.Border}"
                                 BorderThickness="1"
                                 CornerRadius="8"
                                 Padding="10"
@@ -2242,14 +2242,14 @@
                                                    FontSize="13"
                                                    TextWrapping="Wrap"
                                                    TextTrimming="CharacterEllipsis"
-                                                   Foreground="{StaticResource Brush.Text}" />
+                                                   Foreground="{DynamicResource Brush.Text}" />
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </Border>
-                        <TextBlock Text="MCP 服务器" Foreground="{StaticResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
-                        <Border Background="{StaticResource Brush.Panel}"
-                                BorderBrush="{StaticResource Brush.Border}"
+                        <TextBlock Text="MCP 服务器" Foreground="{DynamicResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <Border Background="{DynamicResource Brush.Panel}"
+                                BorderBrush="{DynamicResource Brush.Border}"
                                 BorderThickness="1"
                                 CornerRadius="8"
                                 Padding="10">
@@ -2270,11 +2270,11 @@
                                                     <StackPanel Grid.Column="1">
                                                         <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
                                                                    TextTrimming="CharacterEllipsis" Style="{StaticResource McpStatusNameStyle}" />
-                                                        <TextBlock Text="{Binding Summary}" Foreground="{StaticResource Brush.SubtleText}"
+                                                        <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Brush.SubtleText}"
                                                                    FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0" />
                                                     </StackPanel>
                                                     <TextBlock Grid.Column="2" Text="{Binding Chevron}"
-                                                               Foreground="{StaticResource Brush.SubtleText}" FontSize="11"
+                                                               Foreground="{DynamicResource Brush.SubtleText}" FontSize="11"
                                                                VerticalAlignment="Center" Margin="8,0,0,0">
                                                         <TextBlock.Style>
                                                             <Style TargetType="TextBlock">
@@ -2302,7 +2302,7 @@
                                                 </ItemsControl.Style>
                                                 <ItemsControl.ItemTemplate>
                                                     <DataTemplate>
-                                                        <TextBlock Text="{Binding}" Foreground="{StaticResource Brush.SubtleText}"
+                                                        <TextBlock Text="{Binding}" Foreground="{DynamicResource Brush.SubtleText}"
                                                                    FontSize="11" Margin="0,1" TextTrimming="CharacterEllipsis" />
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
@@ -2364,19 +2364,20 @@
         <Border x:Name="ShutdownOverlay"
                 Panel.ZIndex="200"
                 Visibility="Collapsed"
-                Background="#CC101012">
+                Background="{DynamicResource Brush.AppBackground}"
+                Opacity="0.92">
             <StackPanel VerticalAlignment="Center"
                         HorizontalAlignment="Center"
                         MaxWidth="420">
                 <TextBlock Text="正在关闭…"
                            FontSize="18"
                            FontWeight="SemiBold"
-                           Foreground="{StaticResource Brush.SubtleText}"
+                           Foreground="{DynamicResource Brush.SubtleText}"
                            HorizontalAlignment="Center"
                            Margin="0,0,0,12" />
                 <TextBlock Text="{Binding ShutdownStatusText}"
                            FontSize="14"
-                           Foreground="{StaticResource Brush.SubtleText}"
+                           Foreground="{DynamicResource Brush.SubtleText}"
                            TextWrapping="Wrap"
                            TextAlignment="Center"
                            HorizontalAlignment="Center" />

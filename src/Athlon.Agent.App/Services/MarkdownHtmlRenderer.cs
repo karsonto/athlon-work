@@ -1,3 +1,4 @@
+using Athlon.Agent.App.Themes;
 using Markdig;
 
 namespace Athlon.Agent.App.Services;
@@ -15,16 +16,13 @@ public static class MarkdownHtmlRenderer
             ? string.Empty
             : Markdown.ToHtml(markdown, Pipeline);
 
-        var textColor = assistantTone ? "#F4F4F5" : "#EFF6FF";
-        var linkColor = assistantTone ? "#93C5FD" : "#DBEAFE";
-
         return $"""
             <!DOCTYPE html>
             <html lang="zh-CN">
             <head>
               <meta charset="UTF-8" />
               <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-              <style>{BuildStyles(textColor, linkColor)}</style>
+              <style>{BuildStyles(assistantTone)}</style>
             </head>
             <body>
               <div class="md-root">{body}</div>
@@ -41,7 +39,11 @@ public static class MarkdownHtmlRenderer
             return rawHtml;
         }
 
-        return """
+        var pageBackground = AppThemeManager.CurrentKind == AppThemeKind.Light
+            ? "#ffffff"
+            : "#101012";
+
+        return $"""
             <!DOCTYPE html>
             <html lang="zh-CN">
             <head>
@@ -49,7 +51,7 @@ public static class MarkdownHtmlRenderer
               <meta name="viewport" content="width=device-width, initial-scale=1.0" />
               <title>HTML 预览</title>
               <style>
-                body { margin: 0; min-height: 100vh; background: #ffffff; }
+                body {{ margin: 0; min-height: 100vh; background: {pageBackground}; }}
               </style>
             </head>
             <body>
@@ -62,9 +64,25 @@ public static class MarkdownHtmlRenderer
     private static readonly System.Text.RegularExpressions.Regex HtmlDocumentRegex =
         new(@"<html[\s>]|<!doctype", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-    private static string BuildStyles(string textColor, string linkColor) =>
-        BaseStyles.Replace("__TEXT_COLOR__", textColor, StringComparison.Ordinal)
-            .Replace("__LINK_COLOR__", linkColor, StringComparison.Ordinal);
+    private static string BuildStyles(bool assistantTone)
+    {
+        var palette = ThemeHtmlStyles.GetMarkdownPalette(assistantTone);
+
+        return BaseStyles
+            .Replace("__TEXT_COLOR__", palette.TextColor, StringComparison.Ordinal)
+            .Replace("__LINK_COLOR__", palette.LinkColor, StringComparison.Ordinal)
+            .Replace("__INLINE_CODE_BG__", palette.InlineCodeBackground, StringComparison.Ordinal)
+            .Replace("__TABLE_BORDER__", palette.TableBorder, StringComparison.Ordinal)
+            .Replace("__TABLE_HEADER_BG__", palette.TableHeaderBackground, StringComparison.Ordinal)
+            .Replace("__BLOCKQUOTE_COLOR__", palette.BlockquoteColor, StringComparison.Ordinal)
+            .Replace("__BLOCKQUOTE_BG__", palette.BlockquoteBackground, StringComparison.Ordinal)
+            .Replace("__CODE_BLOCK_BORDER__", palette.CodeBlockBorder, StringComparison.Ordinal)
+            .Replace("__CODE_BLOCK_BG__", palette.CodeBlockBackground, StringComparison.Ordinal)
+            .Replace("__CODE_HEADER_COLOR__", palette.CodeHeaderColor, StringComparison.Ordinal)
+            .Replace("__CODE_BTN_BORDER__", palette.CodeButtonBorder, StringComparison.Ordinal)
+            .Replace("__CODE_BTN_COLOR__", palette.CodeButtonColor, StringComparison.Ordinal)
+            .Replace("__CODE_PRE_COLOR__", palette.CodePreColor, StringComparison.Ordinal);
+    }
 
     private const string BaseStyles = """
         * { box-sizing: border-box; }
@@ -108,7 +126,7 @@ public static class MarkdownHtmlRenderer
         .md-root a { color: __LINK_COLOR__; text-decoration: underline; text-underline-offset: 2px; }
         .md-root code:not(pre code) {
           border-radius: 6px;
-          background: #27272A;
+          background: __INLINE_CODE_BG__;
           padding: 2px 6px;
           font-family: Consolas, "Cascadia Code", monospace;
           font-size: 0.9em;
@@ -120,26 +138,26 @@ public static class MarkdownHtmlRenderer
           font-size: 13px;
         }
         .md-root th, .md-root td {
-          border: 1px solid #3F3F46;
+          border: 1px solid __TABLE_BORDER__;
           padding: 8px 12px;
           text-align: left;
           vertical-align: top;
         }
-        .md-root th { background: #27272A; font-weight: 600; }
+        .md-root th { background: __TABLE_HEADER_BG__; font-weight: 600; }
         .md-root blockquote {
           margin: 12px 0;
           padding: 8px 14px;
           border-left: 3px solid #3B82F6;
-          color: #A1A1AA;
-          background: rgba(39, 39, 42, 0.5);
+          color: __BLOCKQUOTE_COLOR__;
+          background: __BLOCKQUOTE_BG__;
           border-radius: 0 8px 8px 0;
         }
         .code-block {
           margin: 16px 0;
-          border: 1px solid #1E293B;
+          border: 1px solid __CODE_BLOCK_BORDER__;
           border-radius: 16px;
           overflow: hidden;
-          background: #020617;
+          background: __CODE_BLOCK_BG__;
         }
         .code-block-header {
           display: flex;
@@ -147,21 +165,21 @@ public static class MarkdownHtmlRenderer
           justify-content: space-between;
           gap: 8px;
           padding: 8px 16px;
-          border-bottom: 1px solid #1E293B;
+          border-bottom: 1px solid __CODE_BLOCK_BORDER__;
           font-size: 12px;
-          color: #CBD5E1;
+          color: __CODE_HEADER_COLOR__;
         }
         .code-block-actions { display: flex; gap: 8px; }
         .code-btn {
-          border: 1px solid #334155;
+          border: 1px solid __CODE_BTN_BORDER__;
           border-radius: 6px;
           background: transparent;
-          color: #CBD5E1;
+          color: __CODE_BTN_COLOR__;
           padding: 4px 8px;
           font-size: 12px;
           cursor: pointer;
         }
-        .code-btn:hover { border-color: #64748B; color: #fff; }
+        .code-btn:hover { border-color: #64748B; color: __TEXT_COLOR__; }
         .code-btn.copied {
           border-color: rgba(16, 185, 129, 0.6);
           background: rgba(16, 185, 129, 0.1);
@@ -173,7 +191,7 @@ public static class MarkdownHtmlRenderer
           overflow-x: auto;
           font-size: 13px;
           line-height: 1.5;
-          color: #F1F5F9;
+          color: __CODE_PRE_COLOR__;
         }
         .code-block pre code {
           font-family: Consolas, "Cascadia Code", monospace;
