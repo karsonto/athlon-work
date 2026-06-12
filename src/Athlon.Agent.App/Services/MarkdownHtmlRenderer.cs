@@ -39,9 +39,7 @@ public static class MarkdownHtmlRenderer
             return rawHtml;
         }
 
-        var pageBackground = AppThemeManager.CurrentKind == AppThemeKind.Light
-            ? "#ffffff"
-            : "#101012";
+        var pageBackground = AppThemeColor.ToHex(AppThemeManager.Current.Chrome.PreviewContentBackground);
 
         return $$"""
             <!DOCTYPE html>
@@ -67,6 +65,8 @@ public static class MarkdownHtmlRenderer
     private static string BuildStyles(bool assistantTone)
     {
         var palette = ThemeHtmlStyles.GetMarkdownPalette(assistantTone);
+        var chrome = AppThemeManager.Current.Chrome;
+        var scrollThumb = AppThemeColor.ToRgba(chrome.ScrollThumb, chrome.ScrollThumbOpacity);
 
         return BaseStyles
             .Replace("__TEXT_COLOR__", palette.TextColor, StringComparison.Ordinal)
@@ -82,7 +82,8 @@ public static class MarkdownHtmlRenderer
             .Replace("__CODE_BTN_BG__", palette.CodeButtonBackground, StringComparison.Ordinal)
             .Replace("__CODE_BTN_BORDER__", palette.CodeButtonBorder, StringComparison.Ordinal)
             .Replace("__CODE_BTN_COLOR__", palette.CodeButtonColor, StringComparison.Ordinal)
-            .Replace("__CODE_PRE_COLOR__", palette.CodePreColor, StringComparison.Ordinal);
+            .Replace("__CODE_PRE_COLOR__", palette.CodePreColor, StringComparison.Ordinal)
+            .Replace("__SCROLL_THUMB__", scrollThumb, StringComparison.Ordinal);
     }
 
     private const string BaseStyles = """
@@ -103,7 +104,7 @@ public static class MarkdownHtmlRenderer
         ::-webkit-scrollbar-thumb {
           border: 2px solid transparent;
           border-radius: 9999px;
-          background: rgba(148, 163, 184, 0.55);
+          background: __SCROLL_THUMB__;
           background-clip: padding-box;
           min-height: 40px;
         }

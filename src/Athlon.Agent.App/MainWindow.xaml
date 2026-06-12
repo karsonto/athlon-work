@@ -1682,7 +1682,7 @@
                                                     <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                                         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
                                                         <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-                                                        <Setter Property="Background" Value="#1A3B82F6" />
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.AccentSubtle}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>

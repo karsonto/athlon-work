@@ -16,18 +16,13 @@ public static class FlowDocumentThemeNormalizer
     {
         var codeBackground = ThemeBrushResolver.Get("Brush.CodeBackground");
         var codeForeground = ThemeBrushResolver.Get("Brush.CodeForeground");
-        var textBrush = assistantTone
-            ? ThemeBrushResolver.Get("Brush.Text")
-            : Brushes.White;
+        var textBrush = ChatMessageToneColors.GetMessageTextBrush(assistantTone);
         var tableHeaderBackground = ThemeBrushResolver.Get("Brush.CodeBackgroundAlt");
         var tableBorder = ThemeBrushResolver.Get("Brush.TableBorder");
         NormalizeBlocks(document.Blocks, codeBackground, codeForeground, textBrush, tableHeaderBackground, tableBorder, contextMenu);
         FlowDocumentCodeBlockEnhancer.Enhance(document, fencedBlocks);
         FlowDocumentCodeBlockEnhancer.ReapplyTheme(document);
     }
-
-    public static Brush? ResolveBrush(string key) =>
-        Application.Current?.TryFindResource(key) as Brush;
 
     private static void NormalizeBlocks(
         BlockCollection blocks,

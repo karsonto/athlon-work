@@ -1,93 +1,217 @@
+<div align="center">
+
 # Athlon Agent
 
-Athlon Agent is a Windows AI Agent prototype built with .NET 8 WPF. The product goal is a Codex-like desktop agent that can chat with OpenAI-compatible models, inspect and edit a configured workspace, call built-in tools, and later connect to Skills and MCP servers.
+**A native Windows desktop AI coding agent — local-first, OpenAI-compatible, built with .NET 8 WPF.**
 
-## Current Status
+Chat with any LLM, explore and edit your workspace, run tools in an agent loop, schedule recurring tasks, and extend with Skills & MCP — all from a polished desktop app.
 
-- Codex-like WPF shell with chat timeline, settings view, right context sidebar, workspace selector, and multi-message tool output display.
-- OpenAI-compatible chat completions client with function calling support.
-- Shared `AgentRuntime` for prompt building, model calls, tool calls, and multi-step agent loops.
-- Built-in filesystem tools: `file_list`, `file_read`, `file_write`, `file_edit`, `grep_files`, `glob_files`, `execute_command`.
-- File-first persistence for settings, sessions, logs, credentials, and audit records.
-- API key persistence through Windows DPAPI instead of plain JSON.
-- Markdown chat rendering through `MdXaml` (Mermaid blocks stay as code; right-click **查看 Mermaid 图表** opens an offline preview dialog bundled with `mermaid.min.js`).
-- Skill YAML loading and Handlebars rendering foundation.
-- MCP configuration UI and stdio client skeleton.
-- GitHub Actions CI and Velopack release packaging (Setup.exe, Portable.zip, auto-update nupkg).
+[![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D4?logo=windows&logoColor=white)](https://github.com/karsonto/athlon-work)
+[![WPF](https://img.shields.io/badge/UI-WPF-68217A)](https://github.com/karsonto/athlon-work)
+[![CI](https://img.shields.io/github/actions/workflow/status/karsonto/athlon-work/ci.yml?branch=main&label=CI)](https://github.com/karsonto/athlon-work/actions)
 
-## Tech Stack
+[Features](#-features) · [Quick Start](#-quick-start) · [Screenshots](#-screenshots) · [Architecture](#-architecture) · [Contributing](#-contributing) · [Docs](#-documentation)
 
-- .NET 8 / C# / WPF
-- MVVM with `CommunityToolkit.Mvvm`
-- Dependency injection with `Microsoft.Extensions.DependencyInjection`
-- Markdown rendering with `MdXaml`
-- Logging with `Serilog`
-- YAML with `YamlDotNet`
-- Skill templates with `Handlebars.Net`
-- Tests with xUnit
-- Installer and auto-update packaging with Velopack
+If Athlon Agent saves you time, consider giving it a **⭐** — it helps others discover the project.
 
-## Project Structure
+</div>
+
+---
+
+## ✨ Why Athlon Agent?
+
+Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is different:
+
+| | |
+|---|---|
+| **Native Windows** | Real WPF UI — fast, crisp, no embedded browser for chat |
+| **Bring your own model** | OpenAI-compatible APIs (OpenAI, DeepSeek, Ollama, LM Studio, …) |
+| **Agent loop built-in** | Multi-step tool calling with filesystem, grep, glob, shell |
+| **Token-smart** | Optional dynamic context compaction, hygiene, and MCP tool search |
+| **Extensible** | Skills (AgentScope-style), MCP servers, sub-agents |
+| **Private by default** | Settings, sessions, and API keys stay under your user profile (DPAPI) |
+
+---
+
+## 🚀 Features
+
+### Chat & Workspace
+- Codex-like chat timeline with tool-call cards, reasoning display, and session history
+- Multi-workspace support with file tree, in-app editor (AvalonEdit), and workspace guard
+- Native Markdown rendering (MdXaml) with code-block copy, Mermaid offline preview
+- Light / dark themes with consistent Indigo accent ([theme conventions](docs/development/theme-and-ui-conventions.md))
+
+### Agent Runtime
+- Shared `AgentRuntime`: prompt building, streaming, tool dispatch, multi-round loops
+- Built-in tools: `file_list`, `file_read`, `file_write`, `file_edit`, `grep_files`, `glob_files`, `execute_command`
+- Sub-agent delegation (`call_assistant`) with configurable nesting depth
+- Long-term memory hooks and context compaction pipeline
+
+### Automation & Integration
+- **Scheduled tasks** — daily, interval, one-shot, or manual; per-task workspace & prompt
+- **Skills** — YAML + Handlebars templates in `~/.athlon-agent/skills/`
+- **MCP** — server configuration UI and stdio client foundation
+- **Velopack** packaging — Setup.exe, portable zip, intranet auto-update feed
+
+### Safety & Ops
+- API keys encrypted with Windows DPAPI (not plain JSON)
+- JSONL audit logs for tool calls and HTTP interactions
+- GitHub Actions CI + tag-based releases
+
+---
+
+## 📸 Screenshots
+
+> Add screenshots to `docs/images/` and embed them here — PRs welcome!
+
+<p align="center">
+  <img src="src/Athlon.Agent.App/Assets/app-icon-128.png" alt="Athlon Agent" width="128" />
+  <br />
+  <sub>Native WPF shell · dual themes · scheduled tasks · workspace editor</sub>
+</p>
+
+---
+
+## ⚡ Quick Start
+
+### Prerequisites
+
+- Windows 10/11
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+
+### Run from source
+
+```powershell
+git clone https://github.com/karsonto/athlon-work.git
+cd athlon-work
+dotnet run --project src/Athlon.Agent.App/Athlon.Agent.App.csproj
+```
+
+### First launch
+
+1. Open **Settings** and set your OpenAI-compatible **endpoint**, **model**, and **API key**.
+2. Add a **workspace** folder the agent can read and edit.
+3. Start chatting — the agent will use tools to explore files on demand.
+
+### Debug builds (skip license gate)
+
+```powershell
+$env:ATHLON_SKIP_LICENSE = "1"
+dotnet run --project src/Athlon.Agent.App/Athlon.Agent.App.csproj
+```
+
+---
+
+## 🏗 Architecture
+
+```mermaid
+flowchart TB
+    subgraph UI["Athlon.Agent.App (WPF)"]
+        MW[MainWindow / MVVM]
+        MD[MarkdownMessageView]
+        SCH[SchedulerService]
+    end
+
+    subgraph Core["Athlon.Agent.Core"]
+        RT[AgentRuntime]
+        CMP[Context Compaction]
+        MEM[Memory]
+    end
+
+    subgraph Infra["Athlon.Agent.Infrastructure"]
+        LLM[OpenAI-compatible client]
+        TOOLS[Filesystem tools]
+        STORE[File storage + DPAPI]
+    end
+
+    subgraph Ext["Extensions"]
+        SK[Skills]
+        MCP[MCP client]
+    end
+
+    MW --> RT
+    SCH --> RT
+    RT --> LLM
+    RT --> TOOLS
+    RT --> SK
+    RT --> MCP
+    RT --> CMP
+    MW --> STORE
+```
 
 ```text
 src/
-  Athlon.Agent.App/             WPF UI, views, view models, app startup
-  Athlon.Agent.Core/            Domain models, settings, agent runtime interfaces
-  Athlon.Agent.Infrastructure/  Storage, logging, model client, tools, DPAPI
+  Athlon.Agent.App/             WPF UI, view models, scheduler, themes
+  Athlon.Agent.Core/            Agent runtime, settings, compaction, memory
+  Athlon.Agent.Infrastructure/  LLM client, tools, storage, licensing
   Athlon.Agent.Mcp/             MCP client foundation
-  Athlon.Agent.Skills/          Skill loading and template rendering
+  Athlon.Agent.Skills/          Skill loading and Handlebars rendering
 tests/
   Athlon.Agent.Tests/           xUnit tests
-.github/workflows/
-  ci.yml                       Build validation on push / PR
-  release.yml                  Tag-based GitHub Release packaging
 ```
 
-## License (AD-bound)
+---
 
-Athlon Agent requires a signed license bound to the current Windows AD account (Sam `DOMAIN\user` and/or UPN `user@domain.com`). On startup the app verifies signature, expiry, and account match.
+## 🛠 Build & Test
 
-**License file locations** (first existing file wins):
-
-1. Next to `Athlon.Agent.App.exe`: `license.lic` (optional IT deployment)
-2. `%USERPROFILE%\.athlon-agent\config\license.lic` (user activation save path)
-
-If validation fails, an activation dialog lets the user paste or import a `.lic` file; on success the license is saved to the user config path.
-
-**Issue licenses** (admin machine with the private key):
-
-```bash
-cd tools/license
-pip install -r requirements.txt
-python generate_keys.py          # first time only; sync public.pem to LicensePublicKey.cs
-python generate_license.py --account "CONTOSO\\jdoe" --days 30 --output license.lic
+```powershell
+dotnet build Athlon.Agent.slnx
+dotnet test Athlon.Agent.slnx
 ```
 
-See [`tools/license/README.md`](tools/license/README.md) for full options (`--expires`, `--sam`, `--upn`).
+If the app is running and locks output files:
 
-**Debug skip** (Debug builds only): set environment variable `ATHLON_SKIP_LICENSE=1`.
+```powershell
+dotnet build src/Athlon.Agent.App/Athlon.Agent.App.csproj -p:OutDir=.\artifacts\verify\out\
+```
 
-This is offline signature validation for internal compliance, not DRM.
+### Release packaging (Velopack)
 
-## Local Data Path
+```powershell
+dotnet tool install -g vpk --version 0.0.1298
+.\build.bat 1.0.0
+```
 
-Runtime data is stored under the current Windows user profile, not `%LocalAppData%`:
+Outputs under `Releases/`: `AthlonAgent-Setup.exe`, portable zip, and update nupkg. See [Auto-Update](#auto-update-intranet) for intranet deployment.
+
+---
+
+## ⚙️ Configuration
+
+Runtime data lives under `%USERPROFILE%\.athlon-agent\`:
 
 ```text
-C:\Users\<UserName>\.athlon-agent\
-  config\        settings JSON and license.lic
-  skills\        AgentScope-style skill folders (<name>/SKILL.md + resources)
-  sessions\      Markdown session history and metadata
-  logs\          Serilog logs and startup diagnostics
-  credentials\   DPAPI encrypted API key files
-  audit\         JSONL tool-call audit logs
+.athlon-agent/
+  config/        settings.json, license.lic
+  sessions/      conversation history (JSONL + Markdown)
+  skills/        SKILL.md folders
+  logs/          Serilog logs
+  credentials/   DPAPI-encrypted API keys
+  audit/         tool-call audit JSONL
 ```
 
-The path is provided by `AppPathProvider` in `src/Athlon.Agent.Infrastructure/CommonInfrastructure.cs`. Keep new persistence code behind `IAppPathProvider` instead of hardcoding paths.
+### Model settings (in-app or `config/settings.json`)
+
+| Setting | Description |
+|---------|-------------|
+| Endpoint | OpenAI-compatible base URL |
+| Model | Chat model identifier |
+| API key | Stored with DPAPI locally |
+| Max tokens | Optional; empty = API default |
+
+### Built-in tools (summary)
+
+| Tool | Purpose |
+|------|---------|
+| `file_list` / `glob_files` / `grep_files` | Discover and search workspace |
+| `file_read` | Stream-read with line limits and offset |
+| `file_write` / `file_edit` | Create or patch files (with backup) |
+| `execute_command` | Shell via `cmd.exe /c` (deny-list + user stop) |
+
+Details: workspace guard, timeouts, and compaction → [Context compaction](docs/features/context-compaction.md).
 
 ### Agent turn timeout
-
-In `config/settings.json`, optional `AgentTurn.TimeoutMinutes` controls how long a single user message may run (agent tool loop included). Default is **`0`** (disabled — only user **Stop** ends the run). Positive values are clamped to **1–180**. Example for a two-hour run:
 
 ```json
 {
@@ -97,55 +221,16 @@ In `config/settings.json`, optional `AgentTurn.TimeoutMinutes` controls how long
 }
 ```
 
-Changes apply on the next send after saving or editing the file (restart the app if settings were only changed on disk while running).
+`0` = disabled (only manual Stop ends the run). Range: 1–180 minutes.
 
-## Run
+---
 
-```powershell
-dotnet run --project src/Athlon.Agent.App/Athlon.Agent.App.csproj
-```
+## 📦 Auto-Update (Intranet)
 
-## Build And Test
+The client checks an **internal HTTP update server** (not GitHub directly):
 
-```powershell
-dotnet build Athlon.Agent.slnx
-dotnet test Athlon.Agent.slnx
-```
-
-When the app is running and locks output files, build with a temporary output directory:
-
-```powershell
-dotnet build src/Athlon.Agent.App/Athlon.Agent.App.csproj -p:OutDir=F:\athlon-work\artifacts\verify\out\
-```
-
-## Packaging
-
-Local release packaging uses Velopack (`vpk`). Install the CLI once:
-
-```powershell
-dotnet tool install -g vpk --version 0.0.1298
-```
-
-Then build a release (optional version argument, default `1.0.0-dev`):
-
-```powershell
-.\build.bat 1.0.0
-```
-
-The script publishes a self-contained Windows x64 build to `publish/` and writes Velopack assets to `Releases/`:
-
-- `AthlonAgent-Setup.exe` — one-click installer (default: `%LocalAppData%\AthlonAgent`)
-- `AthlonAgent-Portable.zip` — portable build with auto-update support
-- `AthlonAgent-{version}-full.nupkg` — full update package
-- `releases.win.json` — update feed index
-
-## Auto-Update (Intranet)
-
-The client checks for updates from an **internal HTTP update server**, not GitHub directly.
-
-1. IT syncs the full `Releases/` directory from a GitHub Release to e.g. `https://update.corp.local/athlon-agent/`.
-2. Ensure `releases.win.json` and all `*.nupkg` files are reachable over HTTP/HTTPS.
-3. Configure the client in `%USERPROFILE%\.athlon-agent\config\settings.json`:
+1. Sync `Releases/` from a GitHub Release to e.g. `https://update.corp.local/athlon-agent/`.
+2. Configure `config/settings.json`:
 
 ```json
 {
@@ -156,147 +241,91 @@ The client checks for updates from an **internal HTTP update server**, not GitHu
 }
 ```
 
-Alternatively set environment variable `ATHLON_UPDATE_URL` (overrides `settings.json`).
-
-The app checks for updates on startup (Release builds only) and from **About → 检查更新**. Uninstalling via Windows does **not** delete `~/.athlon-agent` user data.
-
-## GitHub Release
-
-GitHub Actions builds and publishes release artifacts automatically when a tag like `v1.0.0` is pushed:
+Or set `ATHLON_UPDATE_URL`. Push a tag to trigger CI release:
 
 ```powershell
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The release workflow uploads everything under `Releases/`:
+---
 
-- `AthlonAgent-Setup.exe`
-- `AthlonAgent-Portable.zip`
-- `*.nupkg` and `releases.win.json` (for intranet sync)
+## 📚 Documentation
 
-Clients do not pull updates from GitHub; sync these files to your internal update server.
+| Doc | Description |
+|-----|-------------|
+| [Theme & UI conventions](docs/development/theme-and-ui-conventions.md) | Color tokens, theme switch rules (for contributors & AI) |
+| [Context compaction](docs/features/context-compaction.md) | Dynamic compaction, hygiene, eviction |
+| [License tooling](tools/license/README.md) | RSA license generation for enterprise deployments |
 
-## Model Configuration
+---
 
-Configure the model in the app Settings view:
+## 🤝 Contributing
 
-- Base URL: OpenAI-compatible endpoint, such as OpenAI, DeepSeek, Ollama, or LM Studio.
-- Model name: chat model identifier.
-- Max tokens: optional `max_tokens` for chat completions (empty = API default). Context summarization uses `contextCompaction.summaryMaxTokens` instead.
-- API key: stored locally with DPAPI under the user profile data path.
+Contributions are welcome — whether it's a bug fix, a new tool, UI polish, docs, or tests.
 
-The agent sends an environment prompt that includes active workspace path and available tools. It does not inject a static workspace file snapshot; the model should use `file_list`, `grep_files`, or `glob_files` for fresh file information.
+**Start here:** [CONTRIBUTING.md](CONTRIBUTING.md) — setup, architecture rules, PR checklist, and commit style.
 
-## Built-In Tool Rules
+Quick summary:
 
-- `file_list`: list current workspace files and directories.
-- `file_read`: stream-read file content with `N|line` prefixes; default 500 lines per call (max 2000), 32KB response cap, 2MB file size cap. Use `offset`/`limit` or `start_line`/`end_line` for large files; prefer `grep_files` first.
-- `file_write`: create or overwrite files after workspace guard validation.
-- `file_edit`: replace exact on-disk text (auto-strips accidental `file_read` line prefixes); optional `replace_all`.
-- `grep_files`: search file contents in the workspace.
-- `glob_files`: find workspace files by glob pattern.
-- `execute_command`: runs via `cmd.exe /c`; default wait **3600s (1 hour)**, max **3600s** (`timeout` argument). Command timeout returns a tool failure and does **not** stop the agent turn. User **Stop** kills the command process tree. Subject to command deny-list rules. For runs longer than one hour, split work or raise `AgentTurn.TimeoutMinutes` when a turn cap is configured.
+1. **Fork** the repo and create a branch from `main`
+2. **Follow** existing MVVM / service patterns — keep model logic out of WPF views
+3. **Read** [theme & UI conventions](docs/development/theme-and-ui-conventions.md) before UI changes
+4. **Run** `dotnet build` and `dotnet test` before opening a PR
+5. **Keep** persistence file-based via `IAppPathProvider` (no hardcoded `%LocalAppData%`)
 
-All file tools should respect workspace boundaries through `WorkspaceGuard`. Writes and edits create backups through `AtomicFile`.
+### Good first issues
 
-## Context Compression
+- Add tests for `AppPathProvider`, workspace guard, filesystem tools
+- MCP server lifecycle: connect, `tools/list`, `tools/call`, status UI
+- Command execution confirmation dialog
+- Session branch management
+- Screenshots for the README
 
-Before each model call, `PreCompletionPipeline` runs a **budget-aware parameter adjuster** (when `contextCompaction.dynamicCompaction.enabled` is true). Dynamic mode **raises LLM compact thresholds** toward **`targetUtilization` (default 0.80)** — static message/token compact limits do **not** apply while dynamic mode is on. Truncate/re-evict still honor static floors. After a full **3-level pass**, history lands near **`postCompactionUtilization` (default 0.30)**.
+### Notes for AI-assisted development
 
-| Pressure | Utilization vs target (default 80%) | Actions |
-|----------|-------------------------------------|---------|
-| Normal | &lt; ~55% absolute | none (no LLM compact) |
-| Elevated | ~55–72% absolute | none (no LLM compact) |
-| High | ≥ 72% (= target × 0.90) | truncateArgs + optional prefix re-evict (static keep floor) |
-| Critical | ≥ 80% (= target) | full 3-level pass → ~30% post-compaction |
-| Overflow | API `context_length` error | force compact → ~20% post-compaction + retry once |
+- Extend `AgentRuntime`, `AgentEnvironmentPromptBuilder`, and tools — not the WPF layer
+- UI logic → `Athlon.Agent.App/ViewModels/`
+- Theme colors → palette tokens only; subscribe `ThemeChanged` when caching brushes
+- `.pen` design files → Pencil MCP tools only
 
-By default, `contextCompaction.enabled` and `dynamicCompaction.enabled` are **false**: proactive compaction is off until you enable it in settings or `settings.json`. API overflow retry still compacts when needed.
+---
 
-When dynamic compaction is disabled (but proactive compaction is enabled), only the static thresholds below apply.
+## 🔐 License
 
-Static layers:
+Athlon Agent ships with **AD-account-bound license validation** for enterprise deployments. Each license is signed (RSA-2048) and tied to a Windows domain account.
 
-1. **truncateArgs** (non-LLM): when history reaches the truncate threshold (default: 25 messages / 40k estimated tokens), clips large tool argument strings on assistant messages outside the keep window (default: last 20 messages, max arg length 2000).
-2. **conversation compact**: when history reaches the compact threshold (default: 50 messages / 80k estimated tokens), archives the session to `sessions/<sessionId>/transcripts/transcript_<unix>.jsonl`, summarizes the prefix, then replaces it with an optional `Compaction` audit message plus a summary user placeholder (`__compaction_summary__`) and the preserved tail. Cutoff uses keep windows and never splits assistant/tool pairs. Semantic cutoff can inject `<must_preserve>` hints into the summary prompt for high-scoring prefix messages (user goals, file paths, write/edit commands).
-3. **tool result eviction** (after each tool invoke): if a tool result exceeds 80k characters, the full body is written to `sessions/<sessionId>/evicted/<toolCallId>.txt` and only a head/tail preview is kept in the in-memory tool message. `file_write`, `file_edit`, `grep_files`, `glob_files`, and `file_list` are excluded by default; `file_read` is included so oversized reads do not blow the context window.
+| Audience | How to run |
+|----------|------------|
+| **Developers** | Debug build + `ATHLON_SKIP_LICENSE=1` |
+| **Enterprise** | Issue `.lic` via [`tools/license/`](tools/license/README.md) |
 
-**Send-boundary hygiene** (always on by default, does not mutate `conversation.jsonl`): before each model API call, `RequestHistoryHygiene` compacts oversized tool payloads and completed tool arguments in the outbound request only. Footer `saved ~XK (hygiene)` reflects estimated tokens omitted at this layer.
+License lookup order:
 
-| Layer | Persists to session | When | Purpose |
-|-------|---------------------|------|---------|
-| Tool result eviction | Yes | After each tool invoke | Archive huge results to disk |
-| truncateArgs / prefix re-evict / LLM compact | Yes | Proactive compaction thresholds | Shrink stored history |
-| RequestHistoryHygiene | No | Every API request (incl. overflow retry) | Shrink outbound payload without changing logs |
+1. `license.lic` next to `Athlon.Agent.App.exe`
+2. `%USERPROFILE%\.athlon-agent\config\license.lic`
 
-On context-length API errors, the runtime forces compaction at **Overflow** pressure and retries once, rebuilding the iteration system prompt after compact. The retry uses the same hygiene path as the main loop.
+This is offline signature validation for internal compliance — not DRM. The **source code is open** for inspection, learning, and contribution; production use in licensed environments requires a valid license file.
 
-When compaction runs, the app appends a persisted `Compaction` role message and shows it in chat as a collapsible card (including pressure level and utilization when available). Summary placeholders are hidden in the UI but sent to the model as user messages. `Compaction` audit messages are not sent to the model API.
+---
 
-API `usage.prompt_tokens` (when returned) feeds a session-level EMA calibrator that adjusts token estimates over time.
+## 🗺 Roadmap
 
-Configure in `~/.athlon-agent/config/settings.json` under `contextCompaction`:
+- [ ] Full MCP server lifecycle (connect, list tools, call, reconnect)
+- [ ] Command execution confirmation UI
+- [ ] Session branching
+- [ ] Richer code-block actions (diff, run)
+- [ ] Optional code signing in release pipeline
+- [ ] README screenshots & demo GIF
 
-```json
-"contextCompaction": {
-  "enabled": false,
-  "contextWindowTokens": 65535,
-  "compactTriggerRatio": 0.7,
-  "triggerMessages": 50,
-  "triggerTokens": 80000,
-  "keepMessages": 20,
-  "includeReasoningInModelContext": false,
-  "summaryPrompt": "...",
-  "truncateArgs": { "triggerMessages": 25, "triggerTokens": 40000, "keepMessages": 20, "maxArgLength": 2000 },
-  "toolResultEviction": { "maxResultChars": 80000, "previewChars": 2000 },
-  "dynamicCompaction": {
-    "enabled": false,
-    "targetUtilization": 0.80,
-    "postCompactionUtilization": 0.30,
-    "safetyMarginRatio": 0.08,
-    "defaultReservedOutputTokens": 8192,
-    "truncateLeadRatio": 0.90,
-    "overflowPostCompactionUtilization": 0.20,
-    "enableSemanticCutoff": true,
-    "enableUsageCalibration": true
-  }
-}
-```
+---
 
-Compaction triggers when message count **or** estimated token thresholds are reached. With dynamic compaction enabled, pressure uses `TotalUtilization = (system + tools + margin + history) / (contextWindow − reservedOutput)`; static thresholds remain the floor. When dynamic compaction is disabled, the compact token threshold is `max(triggerTokens, contextWindowTokens × compactTriggerRatio)`.
+## ⭐ Star History
 
-By default, `includeReasoningInModelContext` is **false**: assistant thinking chains are shown in the UI and saved to `conversation.jsonl`, but are **not** sent back in API history (saves tokens). Set to `true` only if your model requires historical `reasoning_content`.
+If you find Athlon Agent useful, **star the repo** to support the project and help other developers discover it.
 
-## Session Disk Logs
+---
 
-Per session under `~/.athlon-agent/sessions/<sessionId>/`:
-
-| Path | Content |
-|------|---------|
-| `session.json` | Full session snapshot (updated after each message during a turn) |
-| `conversation.md` | Human-readable transcript (rewritten on each snapshot) |
-| `conversation.jsonl` | One JSON line per message as it is added |
-| `tool-calls/calls.jsonl` | One JSON line per tool invocation (name, args, result, duration) |
-| `http/interactions.jsonl` | One JSON line per chat/completions HTTP call (request redacted, response truncated) |
-| `transcripts/transcript_<unix>.jsonl` | Full history archive before auto-compact |
-
-HTTP log lines include timestamp, endpoint, purpose (`chat-completion` or `context-summary`), HTTP status, duration, sanitized request JSON, response body (truncated for large/error bodies), and error text. Global Serilog files remain under `~/.athlon-agent/logs`. Workspace tool side effects also append to `~/.athlon-agent/audit/audit-<date>.jsonl`.
-
-## Notes For Future AI Work
-
-- Prefer extending `AgentRuntime`, `AgentEnvironmentPromptBuilder`, and tool classes instead of adding model logic to the WPF layer.
-- Keep UI logic in focused files under `Athlon.Agent.App/ViewModels/` following the existing MVVM pattern.
-- Keep persistence file-based unless there is a strong product reason to introduce a database.
-- Do not reintroduce `%LocalAppData%` or `AthlonAgent` for default app data. Use `IAppPathProvider` (folder name: `.athlon-agent` under the user profile).
-- Before editing `.pen` design files, use the Pencil MCP tools only.
-- After substantive edits, run `dotnet build` and check lints for changed files.
-
-## High-Value Next Improvements
-
-- Add tests for `AppPathProvider`, workspace guard behavior, and filesystem tools.
-- Implement real MCP server lifecycle: connect, tools/list, tools/call, status updates, and error display.
-- Add command execution confirmation UI before `execute_command` runs.
-- Add session branch management.
-- Improve Markdown/code rendering with copy/run/diff actions for code blocks.
-- Add optional code signing to the Velopack release workflow.
+<p align="center">
+  <sub>Built with .NET 8 · WPF · CommunityToolkit.Mvvm · Serilog · MdXaml · Velopack</sub>
+</p>

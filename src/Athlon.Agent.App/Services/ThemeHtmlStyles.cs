@@ -1,99 +1,136 @@
 using Athlon.Agent.App.Themes;
 
+
+
 namespace Athlon.Agent.App.Services;
 
+
+
 internal static class ThemeHtmlStyles
+
 {
+
     internal sealed record MarkdownPalette(
+
         string TextColor,
+
         string LinkColor,
+
         string InlineCodeBackground,
+
         string TableBorder,
+
         string TableHeaderBackground,
+
         string BlockquoteColor,
+
         string BlockquoteBackground,
+
         string CodeBlockBorder,
+
         string CodeBlockBackground,
+
         string CodeHeaderColor,
+
         string CodeButtonBackground,
+
         string CodeButtonBorder,
+
         string CodeButtonColor,
+
         string CodePreColor);
 
+
+
     internal sealed record MermaidPalette(
+
         string PageBackground,
+
         string TextColor,
+
         string CardBackground,
+
         string CardBorder,
+
         string SubtleText,
+
         string ErrorBorder,
+
         string ErrorBackground,
+
         string ErrorText,
+
         string MermaidTheme);
 
+
+
     internal static MarkdownPalette GetMarkdownPalette(bool assistantTone)
+
     {
-        if (AppThemeManager.CurrentKind == AppThemeKind.Light)
-        {
-            return new MarkdownPalette(
-                TextColor: assistantTone ? ReportHtmlLightColors.Slate900 : "#FFFFFF",
-                LinkColor: assistantTone ? ReportHtmlLightColors.Indigo600 : "#DBEAFE",
-                InlineCodeBackground: ReportHtmlLightColors.Slate100,
-                TableBorder: ReportHtmlLightColors.Slate300,
-                TableHeaderBackground: ReportHtmlLightColors.Slate100,
-                BlockquoteColor: ReportHtmlLightColors.Slate600,
-                BlockquoteBackground: "rgba(241, 245, 249, 0.9)",
-                CodeBlockBorder: ReportHtmlLightColors.Slate300,
-                CodeBlockBackground: ReportHtmlLightColors.Slate50,
-                CodeHeaderColor: ReportHtmlLightColors.Slate600,
-                CodeButtonBackground: ReportHtmlLightColors.White,
-                CodeButtonBorder: ReportHtmlLightColors.Slate400,
-                CodeButtonColor: ReportHtmlLightColors.Slate900,
-                CodePreColor: ReportHtmlLightColors.Slate800);
-        }
+
+        var chrome = AppThemeManager.Current.Chrome;
 
         return new MarkdownPalette(
-            TextColor: assistantTone ? "#F4F4F5" : "#EFF6FF",
-            LinkColor: assistantTone ? "#93C5FD" : "#DBEAFE",
-            InlineCodeBackground: "#27272A",
-            TableBorder: "#3F3F46",
-            TableHeaderBackground: "#27272A",
-            BlockquoteColor: "#A1A1AA",
-            BlockquoteBackground: "rgba(39, 39, 42, 0.5)",
-            CodeBlockBorder: "#1E293B",
-            CodeBlockBackground: "#020617",
-            CodeHeaderColor: "#CBD5E1",
-            CodeButtonBackground: "#1E293B",
-            CodeButtonBorder: "#475569",
-            CodeButtonColor: "#E2E8F0",
-            CodePreColor: "#F1F5F9");
+
+            TextColor: ChatMessageToneColors.GetHtmlTextColor(assistantTone),
+
+            LinkColor: ChatMessageToneColors.GetHtmlLinkColor(assistantTone),
+
+            InlineCodeBackground: AppThemeColor.ToHex(chrome.CodeBackgroundAlt),
+
+            TableBorder: AppThemeColor.ToHex(chrome.TableBorder),
+
+            TableHeaderBackground: AppThemeColor.ToHex(chrome.CodeBackgroundAlt),
+
+            BlockquoteColor: AppThemeColor.ToHex(chrome.TextSecondary),
+
+            BlockquoteBackground: AppThemeColor.ToRgba(chrome.PanelAlt, 0.9),
+
+            CodeBlockBorder: AppThemeColor.ToHex(chrome.CodeBorder),
+
+            CodeBlockBackground: AppThemeColor.ToHex(chrome.CodeBackgroundAlt),
+
+            CodeHeaderColor: AppThemeColor.ToHex(chrome.SubtleText),
+
+            CodeButtonBackground: AppThemeColor.ToHex(chrome.Panel),
+
+            CodeButtonBorder: AppThemeColor.ToHex(chrome.BorderHover),
+
+            CodeButtonColor: AppThemeColor.ToHex(chrome.Text),
+
+            CodePreColor: AppThemeColor.ToHex(chrome.CodeForeground));
+
     }
+
+
 
     internal static MermaidPalette GetMermaidPalette()
+
     {
-        if (AppThemeManager.CurrentKind == AppThemeKind.Light)
-        {
-            return new MermaidPalette(
-                PageBackground: ReportHtmlLightColors.Slate100,
-                TextColor: ReportHtmlLightColors.Slate900,
-                CardBackground: ReportHtmlLightColors.White,
-                CardBorder: ReportHtmlLightColors.Slate200,
-                SubtleText: ReportHtmlLightColors.Slate500,
-                ErrorBorder: ReportHtmlLightColors.Rose600,
-                ErrorBackground: ReportHtmlLightColors.Rose50,
-                ErrorText: ReportHtmlLightColors.Rose700,
-                MermaidTheme: "default");
-        }
+
+        var chrome = AppThemeManager.Current.Chrome;
 
         return new MermaidPalette(
-            PageBackground: "#101012",
-            TextColor: "#F4F4F5",
-            CardBackground: "#18181B",
-            CardBorder: "#3F3F46",
-            SubtleText: "#A1A1AA",
-            ErrorBorder: "#E11D48",
-            ErrorBackground: "#2A1418",
-            ErrorText: "#FDA4AF",
-            MermaidTheme: "dark");
+
+            PageBackground: AppThemeColor.ToHex(chrome.AppBackground),
+
+            TextColor: AppThemeColor.ToHex(chrome.Text),
+
+            CardBackground: AppThemeColor.ToHex(chrome.Panel),
+
+            CardBorder: AppThemeColor.ToHex(chrome.Border),
+
+            SubtleText: AppThemeColor.ToHex(chrome.SubtleText),
+
+            ErrorBorder: AppThemeColor.ToHex(chrome.Danger),
+
+            ErrorBackground: AppThemeColor.ToHex(chrome.ToolFailureBg),
+
+            ErrorText: AppThemeColor.ToHex(chrome.ToolFailureText),
+
+            MermaidTheme: AppThemeManager.CurrentKind == AppThemeKind.Light ? "default" : "dark");
+
     }
+
 }
+

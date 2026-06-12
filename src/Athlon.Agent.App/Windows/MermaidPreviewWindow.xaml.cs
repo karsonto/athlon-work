@@ -2,16 +2,21 @@ using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Themes;
 using Microsoft.Web.WebView2.Core;
 
 namespace Athlon.Agent.App.Windows;
 
 public partial class MermaidPreviewWindow : Window
 {
+    private readonly IReadOnlyList<string> _diagrams;
+
     private MermaidPreviewWindow(IReadOnlyList<string> diagrams)
     {
+        _diagrams = diagrams;
         InitializeComponent();
-        Loaded += async (_, _) => await LoadPreviewAsync(diagrams);
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
     }
 
     public static void Show(string markdown, Window? owner)
@@ -43,7 +48,19 @@ public partial class MermaidPreviewWindow : Window
         window.ShowDialog();
     }
 
-    private async Task LoadPreviewAsync(IReadOnlyList<string> diagrams)
+    private async void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        AppThemeManager.ThemeChanged += OnThemeChanged;
+        await LoadPreviewAsync();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e) =>
+        AppThemeManager.ThemeChanged -= OnThemeChanged;
+
+    private void OnThemeChanged(object? sender, EventArgs e) =>
+        _ = LoadPreviewAsync();
+
+    private async Task LoadPreviewAsync()
     {
         try
         {
@@ -65,8 +82,7 @@ public partial class MermaidPreviewWindow : Window
                 assetsDir,
                 CoreWebView2HostResourceAccessKind.Allow);
 
-            var html = MermaidPreviewHtmlBuilder.BuildDocument(diagrams);
-            core.NavigateToString(html);
+            core.NavigateToString(MermaidPreviewHtmlBuilder.BuildDocument(_diagrams));
         }
         catch (Exception exception)
         {

@@ -1,36 +1,99 @@
+using System.Windows;
 using System.Windows.Media;
 using Athlon.Agent.App.Themes;
 
 namespace Athlon.Agent.App.Services;
 
-/// <summary>Resolves theme brushes from application resources with palette fallbacks.</summary>
+/// <summary>Single entry point for resolving theme brushes and colors at runtime.</summary>
 public static class ThemeBrushResolver
 {
+    public static Brush? TryFindBrush(string key) =>
+        Application.Current?.TryFindResource(key) as Brush;
+
+    public static Color GetColor(string key) => ResolveColor(key);
+
     public static Brush Get(string key)
     {
-        if (FlowDocumentThemeNormalizer.ResolveBrush(key) is Brush brush)
+        if (TryFindBrush(key) is Brush brush)
         {
             return brush;
         }
 
+        return AppThemeColor.ToFrozenBrush(ResolveColor(key));
+    }
+
+    private static Color ResolveColor(string key)
+    {
         var chrome = AppThemeManager.Current.Chrome;
-        var color = key switch
+        return key switch
         {
+            "Brush.AppBackground" => chrome.AppBackground,
+            "Brush.Chrome" => chrome.Chrome,
+            "Brush.Panel" => chrome.Panel,
+            "Brush.PanelAlt" => chrome.PanelAlt,
+            "Brush.Composer" => chrome.Composer,
+            "Brush.ComposerBorder" => chrome.ComposerBorder,
+            "Brush.Border" => chrome.Border,
+            "Brush.BorderHover" => chrome.BorderHover,
             "Brush.Text" => chrome.Text,
             "Brush.TextSecondary" => chrome.TextSecondary,
             "Brush.SubtleText" => chrome.SubtleText,
+            "Brush.DisabledText" => chrome.DisabledText,
+            "Brush.DisabledBackground" => chrome.DisabledBackground,
+            "Brush.Accent" => chrome.Accent,
+            "Brush.AccentHover" => chrome.AccentHover,
+            "Brush.AccentActive" => chrome.AccentActive,
+            "Brush.AccentSubtle" => chrome.AccentSubtle,
+            "Brush.SurfaceHover" => chrome.SurfaceHover,
+            "Brush.SurfaceActive" => chrome.SurfaceActive,
+            "Brush.UserBubble" => chrome.UserBubble,
+            "Brush.AssistantBubble" => chrome.AssistantBubble,
+            "Brush.Success" => chrome.Success,
+            "Brush.SuccessSubtle" => chrome.SuccessSubtle,
+            "Brush.Danger" => chrome.Danger,
+            "Brush.DangerHover" => chrome.DangerHover,
+            "Brush.ErrorSubtle" => chrome.ErrorSubtle,
+            "Brush.Warning" => chrome.Warning,
+            "Brush.WarningSubtle" => chrome.WarningSubtle,
+            "Brush.NavActiveBg" => chrome.NavActiveBg,
+            "Brush.ToolThinkingBorder" => chrome.ToolThinkingBorder,
+            "Brush.ToolThinkingBg" => chrome.ToolThinkingBg,
+            "Brush.ToolThinkingText" => chrome.ToolThinkingText,
+            "Brush.ToolSuccessBorder" => chrome.ToolSuccessBorder,
+            "Brush.ToolSuccessBg" => chrome.ToolSuccessBg,
+            "Brush.ToolSuccessText" => chrome.ToolSuccessText,
+            "Brush.ToolFailureBorder" => chrome.ToolFailureBorder,
+            "Brush.ToolFailureBg" => chrome.ToolFailureBg,
+            "Brush.ToolFailureText" => chrome.ToolFailureText,
+            "Brush.HoverNeutral" => chrome.HoverNeutral,
+            "Brush.HoverNeutralAlt" => chrome.HoverNeutralAlt,
+            "Brush.HoverActive" => chrome.HoverActive,
+            "Brush.HoverTool" => chrome.HoverTool,
+            "Brush.HoverToolPressed" => chrome.HoverToolPressed,
+            "Brush.HoverSurface" => chrome.HoverSurface,
+            "Brush.HoverSurfacePressed" => chrome.HoverSurfacePressed,
+            "Brush.SelectionActive" => chrome.SelectionActive,
+            "Brush.SelectionInactive" => chrome.SelectionInactive,
+            "Brush.SelectionBorder" => chrome.SelectionBorder,
+            "Brush.AtCompletionSkillBadgeBg" => chrome.AtCompletionSkillBadgeBg,
+            "Brush.AtCompletionSkillBadgeBorder" => chrome.AtCompletionSkillBadgeBorder,
+            "Brush.AtCompletionSkillBadgeText" => chrome.AtCompletionSkillBadgeText,
+            "Brush.AtCompletionFileBadgeBg" => chrome.AtCompletionFileBadgeBg,
+            "Brush.AtCompletionFileBadgeBorder" => chrome.AtCompletionFileBadgeBorder,
+            "Brush.AtCompletionFileBadgeText" => chrome.AtCompletionFileBadgeText,
             "Brush.CodeBackground" => chrome.CodeBackground,
             "Brush.CodeBackgroundAlt" => chrome.CodeBackgroundAlt,
             "Brush.CodeForeground" => chrome.CodeForeground,
             "Brush.CodeBorder" => chrome.CodeBorder,
             "Brush.CodeHighlightBlue" => chrome.CodeHighlightBlue,
             "Brush.TableBorder" => chrome.TableBorder,
-            "Brush.Border" => chrome.Border,
-            "Brush.Panel" => chrome.Panel,
-            "Brush.UserBubble" => chrome.UserBubble,
+            "Brush.MenuBackground" => chrome.MenuBackground,
+            "Brush.MenuHover" => chrome.MenuHover,
+            "Brush.ToastBackground" => chrome.ToastBackground,
+            "Brush.ToastBorder" => chrome.ToastBorder,
+            "Brush.PreviewContentBackground" => chrome.PreviewContentBackground,
+            "Brush.ScrollThumb" => chrome.ScrollThumb,
             _ => chrome.Text,
         };
-
-        return AppThemeColor.ToFrozenBrush(color);
     }
 }

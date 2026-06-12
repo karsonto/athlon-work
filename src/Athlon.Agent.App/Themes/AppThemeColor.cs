@@ -21,4 +21,9 @@ public static class AppThemeColor
         brush.Freeze();
         return brush;
     }
+
+    public static string ToHex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+
+    public static string ToRgba(Color color, double alpha) =>
+        $"rgba({color.R}, {color.G}, {color.B}, {alpha.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)})";
 }
