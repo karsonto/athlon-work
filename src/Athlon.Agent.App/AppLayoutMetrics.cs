@@ -24,7 +24,7 @@ public static class AppLayoutMetrics
     public const double ScrollBarGutter = 6;
 
     /// <summary>Hit target width/height of column/row splitters.</summary>
-    public const double SplitterHitSize = 12;
+    public const double SplitterHitSize = 18;
 
     /// <summary>Inset of the visible splitter line inside the hit target.</summary>
     public const double SplitterLineInset = 0;

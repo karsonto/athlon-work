@@ -442,7 +442,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="12" />
+                    <RowDefinition Height="{x:Static app:AppLayoutMetrics.SplitterHitSize}" />
                     <RowDefinition x:Name="ComposerRow"
                                    Height="168"
                                    MinHeight="120"
@@ -471,10 +471,16 @@
                         <StackPanel Grid.Column="1"
                                     Orientation="Horizontal"
                                     VerticalAlignment="Center">
+                            <Button Command="{Binding ToggleThemeCommand}"
+                                    ToolTip="{Binding ThemeToggleToolTip}"
+                                    Style="{StaticResource IconButtonStyle}">
+                                <TextBlock Text="{Binding ThemeToggleGlyph}" FontSize="14" />
+                            </Button>
                             <Button Command="{Binding NavigateCommand}"
                                     CommandParameter="Settings"
                                     ToolTip="设置"
-                                    Style="{StaticResource IconButtonStyle}">
+                                    Style="{StaticResource IconButtonStyle}"
+                                    Margin="4,0,0,0">
                                 <TextBlock Text="⚙" FontSize="14" />
                             </Button>
                             <Button Command="{Binding ToggleContextSidebarCommand}"

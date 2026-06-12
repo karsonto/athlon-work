@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Athlon 压缩策略与 Agent 运行流程详解</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f1f5f9;
+      --panel: #ffffff;
+      --panel2: #f8fafc;
+      --border: #e2e8f0;
+      --border-accent: #e0f2fe;
+      --text: #0f172a;
+      --muted: #64748b;
+      --blue: #0284c7;
+      --blue-dim: #e0f2fe;
+      --blue-text: #0369a1;
+      --green: #16a34a;
+      --green-dim: #dcfce7;
+      --green-text: #15803d;
+      --orange: #ea580c;
+      --orange-dim: #ffedd5;
+      --orange-text: #c2410c;
+      --purple: #9333ea;
+      --purple-dim: #f3e8ff;
+      --purple-text: #7e22ce;
+      --yellow: #ca8a04;
+      --red: #dc2626;
+      --cyan: #0891b2;
+      --mono: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    code {
+      font-family: var(--mono);
+      font-size: 0.92em;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #f1f5f9;
+      color: var(--blue-text);
+    }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      border: 2px solid transparent;
+      border-radius: 9999px;
+      background: rgba(148, 163, 184, 0.55);
+      background-clip: padding-box;
+    }
+    body {
+      font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(56, 189, 248, 0.10), transparent 35%),
+        linear-gradient(to bottom, #f8fbff, var(--bg));
+      color: var(--text);
+      line-height: 1.65;
+    }
+    header {
+      padding: 32px 40px 24px;
+      border-bottom: 1px solid var(--border-accent);
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(14, 165, 233, 0.08);
+    }
+    header h1 { font-size: 26px; font-weight: 700; margin-bottom: 10px; }
+    header p { color: var(--muted); max-width: 920px; font-size: 14px; }
+    header .badge {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: var(--blue-dim);
+      color: var(--blue-text);
+      font-size: 12px;
+      font-family: var(--mono);
+    }
+    main { padding: 28px 40px 60px; max-width: 1200px; }
+
+    h2 {
+      font-size: 18px;
+      margin: 36px 0 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 { font-size: 15px; margin: 22px 0 10px; color: #334155; }
+    p, li { font-size: 14px; color: #475569; }
+    ul { padding-left: 20px; margin: 8px 0 14px; }
+    .muted { color: var(--muted); font-size: 13px; }
+
+    /* flow */
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin: 16px 0;
+    }
+    .flow-step {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      min-width: 120px;
+      text-align: center;
+    }
+    .flow-step strong { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .flow-step.persist { border-color: #86efac; background: var(--green-dim); color: var(--green-text); }
+    .flow-step.send { border-color: #7dd3fc; background: var(--blue-dim); color: var(--blue-text); }
+    .flow-step.api { border-color: #d8b4fe; background: var(--purple-dim); color: var(--purple-text); }
+    .flow-arrow { color: var(--muted); font-size: 18px; }
+
+    /* cards */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 16px 0; }
+    @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    .card h4 { font-size: 14px; margin-bottom: 8px; }
+    .card .tag {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    .tag-always { background: var(--blue-dim); color: var(--blue-text); }
+    .tag-opt-in { background: var(--orange-dim); color: var(--orange-text); }
+    .tag-send { background: var(--purple-dim); color: var(--purple-text); }
+    .tag-persist { background: var(--green-dim); color: var(--green-text); }
+
+    /* table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 14px 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+      th { background: var(--panel2); color: var(--muted); font-weight: 600; }
+    td code { font-family: var(--mono); font-size: 12px; color: var(--blue-text); }
+
+    /* before/after */
+    .diff-pair {
+      display: grid;
+      grid-template-columns: 1fr 40px 1fr;
+      gap: 0;
+      margin: 14px 0;
+      align-items: stretch;
+    }
+    @media (max-width: 800px) {
+      .diff-pair { grid-template-columns: 1fr; }
+      .diff-arrow { display: none; }
+    }
+    .diff-box {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .diff-box .label {
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .diff-box.before .label { background: #fee2e2; color: #b91c1c; }
+    .diff-box.after .label { background: var(--green-dim); color: var(--green-text); }
+    .diff-box pre {
+      padding: 12px 14px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: #334155;
+      background: #f8fafc;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+    .diff-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--cyan);
+      font-size: 22px;
+      font-weight: bold;
+    }
+
+    /* metrics bar */
+    .metric-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 8px 0;
+      font-size: 13px;
+    }
+    .metric-row span:first-child { width: 140px; color: var(--muted); flex-shrink: 0; }
+    .bar-wrap {
+      flex: 1;
+      height: 22px;
+      background: #e2e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    .bar {
+      height: 100%;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      padding-left: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      min-width: 2px;
+      transition: width 0.4s ease;
+    }
+    .bar-sys { background: #64748b; }
+    .bar-hist { background: var(--blue); }
+    .bar-out { background: var(--orange); }
+    .bar-saved { background: var(--green); }
+
+    /* timeline */
+    .timeline { position: relative; margin: 20px 0 20px 20px; padding-left: 24px; border-left: 2px solid var(--border); }
+    .tl-item { position: relative; margin-bottom: 24px; }
+    .tl-item::before {
+      content: "";
+      position: absolute;
+      left: -31px;
+      top: 6px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--blue);
+      border: 2px solid var(--bg);
+    }
+    .tl-item.orange::before { background: var(--orange); }
+    .tl-item.green::before { background: var(--green); }
+    .tl-item.purple::before { background: var(--purple); }
+    .tl-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .tl-meta { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+    /* scenario tabs */
+    .tabs { display: flex; gap: 8px; margin: 16px 0 0; flex-wrap: wrap; }
+    .tab {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .tab.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue-text); }
+    .scenario { display: none; }
+    .scenario.active { display: block; }
+
+    .highlight { color: var(--yellow); }
+    .dim { color: var(--muted); }
+    footer {
+      margin-top: 48px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Athlon 压缩策略与 Agent 运行流程</h1>
+  <p>
+    基于当前源码（<code>AgentRuntime</code>、<code>PreCompletionPipeline</code>、<code>RequestHistoryHygiene</code> 等）整理。
+    用<strong>具体数字与消息片段</strong>说明：会话里存什么、发给 API 什么、每一步 token/字符如何变化。
+  </p>
+  <span class="badge">defaults · contextWindow=65535 · hygiene ON · compaction OFF</span>
+</header>
+
+<main>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>一、先建立心智模型：两条轨道</h2>
+
+<div class="grid-2">
+  <div class="card">
+    <span class="tag tag-persist">持久化轨道 · 改 conversation.jsonl</span>
+    <h4>会话压缩（Compaction）</h4>
+    <p>默认<strong>关闭</strong>（<code>contextCompaction.enabled=false</code>）。开启后才会主动 truncate / re-evict / LLM 摘要。API 报 context 超长时仍会<strong>强制 compact 一次</strong>。</p>
+  </div>
+  <div class="card">
+    <span class="tag tag-send">发送轨道 · 不改磁盘</span>
+    <h4>发送边界卫生（Hygiene）</h4>
+    <p>默认<strong>开启</strong>。每轮调用模型前，把即将发出的 <code>AgentModelMessage</code> 瘦身；磁盘上的 tool 结果仍是完整的。Footer 显示 <code>saved ~XK (hygiene)</code>。</p>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>层级</th>
+      <th>改会话文件？</th>
+      <th>何时触发</th>
+      <th>默认阈值（源码）</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>① Tool result eviction</strong></td>
+      <td>是</td>
+      <td>单次 tool 返回后</td>
+      <td>结果 &gt; <code>80,000</code> 字符 → 写 <code>evicted/*.txt</code>，会话留 preview <code>2,000</code> 字符</td>
+    </tr>
+    <tr>
+      <td><strong>② truncateArgs</strong></td>
+      <td>是</td>
+      <td>主动压缩开启后</td>
+      <td>≥ <code>25</code> 条消息 或 ≥ <code>40k</code> 估算 token；旧 assistant 的 tool 参数截到 <code>2,000</code> 字符</td>
+    </tr>
+    <tr>
+      <td><strong>③ prefix re-evict</strong></td>
+      <td>是</td>
+      <td>动态模式 High+；静态达 truncate 阈值时</td>
+      <td>进一步收紧前缀里已有的 <code>[Tool result evicted…]</code> placeholder</td>
+    </tr>
+    <tr>
+      <td><strong>④ LLM conversation compact</strong></td>
+      <td>是</td>
+      <td>静态 ≥50 条/80k token；动态 ≥80% 窗口</td>
+      <td>前缀送摘要模型 → 替换为 <code>__compaction_summary__</code> + 保留尾部 <code>20</code> 条</td>
+    </tr>
+    <tr>
+      <td><strong>⑤ RequestHistoryHygiene</strong></td>
+      <td><strong>否</strong></td>
+      <td><strong>每轮 API 前</strong>（含 overflow 重试）</td>
+      <td>tool 结果 &gt; <code>32KB</code> / <code>320</code> 行 / <code>8k</code> token → 发 API 时省略大部分行</td>
+    </tr>
+    <tr>
+      <td><strong>⑥ ToolStorm</strong></td>
+      <td>是（写 suppressed 结果）</td>
+      <td>同 turn 内重复 tool</td>
+      <td>相同 name+args 第 <code>3</code> 次起拦截（threshold=3）</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>二、Agent 单轮（Turn）完整流程</h2>
+
+<p class="muted">用户发一条消息 → 可能多轮 model↔tool 循环 → 直到 assistant 不再调 tool。</p>
+
+<div class="flow">
+  <div class="flow-step"><strong>0</strong>用户消息入库</div>
+  <span class="flow-arrow">→</span>
+  <div class="flow-step persist"><strong>循环开始</strong>PreCompletion</div>
+  <span class="flow-arrow">→</span>
+  <div class="flow-step send"><strong>构建</strong>Hygiene</div>
+  <span class="flow-arrow">→</span>
+  <div class="flow-step api"><strong>API</strong>CompleteAsync</div>
+  <span class="flow-arrow">→</span>
+  <div class="flow-step">有 tool？执行</div>
+  <span class="flow-arrow">↺</span>
+</div>
+
+<div class="timeline">
+  <div class="tl-item">
+    <div class="tl-title">① 用户消息持久化</div>
+    <div class="tl-meta">ChatMessage(User) → conversation.jsonl</div>
+    <p>例：<code>User: "读取 src/App.cs 并总结"</code> — 约 <span class="highlight">15 token</span> 进入历史。</p>
+  </div>
+  <div class="tl-item orange">
+    <div class="tl-title">② PreCompletionPipeline（每轮 model 调用前）</div>
+    <div class="tl-meta">若 compaction.enabled=false → 跳过（overflow 强制时除外）</div>
+    <p>可能改写 <code>session.Messages</code>：truncate、re-evict、LLM 摘要。见下文场景 A/B。</p>
+  </div>
+  <div class="tl-item purple">
+    <div class="tl-title">③ ModelMessagesForApiBuilder + Hygiene</div>
+    <div class="tl-meta">ModelMessageCache 增量构建 → RequestHistoryHygiene（不改磁盘）</div>
+    <p>例：磁盘上 tool 结果 120KB，发 API 时可能只剩 ~8KB + marker。见场景 C。</p>
+  </div>
+  <div class="tl-item">
+    <div class="tl-title">④ 调用模型 + 记录用量</div>
+    <div class="tl-meta">PromptPressureStore 记录真实 prompt_tokens；footer 更新</div>
+    <p>若 API 返回 <code>context_length</code> 错误 → compact 强制一次 → <strong>同样走 Hygiene</strong> 后重试。</p>
+  </div>
+  <div class="tl-item green">
+    <div class="tl-title">⑤ 执行 Tool（若有）</div>
+    <div class="tl-meta">ToolStorm 检查 → Invoke → ToolResultEviction → 写入 Tool 消息</div>
+    <p>例：<code>file_read</code> 返回 100KB → 会话里变 ~2KB preview + 磁盘 evicted 文件。见场景 D。</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>三、场景示例（带具体数据变化）</h2>
+
+<div class="tabs">
+  <button class="tab active" data-scenario="c">C · Hygiene（默认就生效）</button>
+  <button class="tab" data-scenario="d">D · Tool Eviction</button>
+  <button class="tab" data-scenario="a">A · 静态压缩</button>
+  <button class="tab" data-scenario="b">B · 动态压缩三级</button>
+  <button class="tab" data-scenario="e">E · Overflow 重试</button>
+</div>
+
+<!-- Scenario C: Hygiene -->
+<div id="scenario-c" class="scenario active">
+  <h3>场景 C：发送边界卫生（最常用，默认开启）</h3>
+  <p>假设历史中有一条 <code>file_read</code> 返回了 <strong>90,000 字符</strong>（约 36,000 估算 token）。磁盘会话<strong>不变</strong>。</p>
+
+  <div class="metric-row">
+    <span>发 API 前历史</span>
+    <div class="bar-wrap"><div class="bar bar-hist" style="width:88%">~36,000 tok（估算）</div></div>
+  </div>
+  <div class="metric-row">
+    <span>Hygiene 后发出</span>
+    <div class="bar-wrap"><div class="bar bar-saved" style="width:22%">~8,000 tok + marker</div></div>
+  </div>
+  <div class="metric-row">
+    <span>Footer 显示</span>
+    <div class="bar-wrap"><div class="bar bar-sys" style="width:40%">saved ~28K (hygiene)</div></div>
+  </div>
+
+  <div class="diff-pair">
+    <div class="diff-box before">
+      <div class="label">磁盘 &amp; 构建后（Hygiene 前）</div>
+      <pre>role: tool
+ToolCallId: tc-42
+Tool `file_read` succeeded.
+...
+&lt;90,000 字符文件内容 line 1…line 4500&gt;</pre>
+    </div>
+    <div class="diff-arrow">→</div>
+    <div class="diff-box after">
+      <div class="label">实际发给 API（Hygiene 后）</div>
+      <pre>role: tool
+line 1
+line 2
+…（头部 ~80 行 + signal 行）
+line 4499
+line 4500
+[cache hygiene: omitted 4180 line(s);
+ use narrower read/grep ranges for details]</pre>
+    </div>
+  </div>
+  <p class="muted">阈值来源：<code>MaxToolResultBytes=32KB</code>、<code>MaxToolResultLines=320</code>、<code>MaxToolResultTokens=8000</code>。已含 <code>[Tool result evicted</code> 的内容走轻量路径，避免重复大剪。</p>
+</div>
+
+<!-- Scenario D: Eviction -->
+<div id="scenario-d" class="scenario">
+  <h3>场景 D：Tool Result Eviction（持久化，tool 返回瞬间）</h3>
+  <p><code>grep_files</code> 不在排除列表… 实际上 <code>file_read</code> 会 eviction。<code>grep_files</code> 默认<strong>排除</strong>。以下用 <code>file_read</code>：</p>
+
+  <table>
+    <tr><th>时刻</th><th>会话消息大小</th><th>磁盘</th></tr>
+    <tr><td>tool 刚返回</td><td>100,000 字符</td><td>—</td></tr>
+    <tr><td>eviction 后</td><td>~2,200 字符 preview</td><td><code>sessions/{id}/evicted/{toolCallId}.txt</code> 存全文</td></tr>
+    <tr><td>下一轮发 API</td><td>会话仍 ~2.2KB；Hygiene 可能再略剪</td><td>不变</td></tr>
+  </table>
+
+  <div class="diff-pair">
+    <div class="diff-box before">
+      <div class="label">Tool 原始结果</div>
+      <pre>ToolCallId: tc-99
+Summary: read ok
+&lt;100,000 chars of file content&gt;</pre>
+    </div>
+    <div class="diff-arrow">→</div>
+    <div class="diff-box after">
+      <div class="label">写入 session（持久化）</div>
+      <pre>ToolCallId: tc-99
+[Tool result evicted — full output in
+ sessions/abc/evicted/tc-99.txt]
+--- head ---
+&lt;first 1000 chars&gt;
+--- tail ---
+&lt;last 1000 chars&gt;</pre>
+    </div>
+  </div>
+</div>
+
+<!-- Scenario A: Static -->
+<div id="scenario-a" class="scenario">
+  <h3>场景 A：静态压缩（dynamicCompaction.enabled = false，compaction.enabled = true）</h3>
+  <p>会话已累积 <strong>52 条</strong>消息，估算历史 <strong>82,000 token</strong>（超过 compact 阈值 50 条 / 80k）。</p>
+
+  <div class="timeline">
+    <div class="tl-item orange">
+      <div class="tl-title">Step 1 · truncateArgs（若已达 25 条/40k）</div>
+      <p>前缀 assistant 消息里 <code>file_edit</code> 的 <code>content</code> 参数从 15,000 字符 → <strong>2,000 字符 + "...(argument truncated)"</strong></p>
+    </div>
+    <div class="tl-item orange">
+      <div class="tl-title">Step 2 · prefix re-evict（v1.1.22+ 静态路径）</div>
+      <p>达 truncate 阈值时，前缀 evicted placeholder 的 head/tail 再收紧（previewChars/2）。</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-title">Step 3 · LLM 摘要 compact</div>
+      <p>前缀 32 条 → 摘要 LLM；保留最近 <strong>20 条</strong> tail。</p>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>指标</th><th>压缩前</th><th>压缩后（示意）</th></tr>
+    <tr><td>消息条数</td><td>52</td><td>1 compaction audit + 1 summary placeholder + 20 tail ≈ 22</td></tr>
+    <tr><td>估算历史 token</td><td>82,000</td><td>~18,000（取决于摘要长度）</td></tr>
+    <tr><td>Compaction audit</td><td>—</td><td><code>TokensBefore: 82000 · TokensAfter: 18000</code></td></tr>
+  </table>
+
+  <div class="diff-pair">
+    <div class="diff-box before">
+      <div class="label">Messages[0..31] 前缀（52 条中的前 32 条）</div>
+      <pre>User: 分析项目结构
+Assistant: [tool_calls: file_list, glob_files…]
+Tool: [8000 lines listing…]
+…（共 32 条对话）</pre>
+    </div>
+    <div class="diff-arrow">→</div>
+    <div class="diff-box after">
+      <div class="label">替换为</div>
+      <pre>Compaction: TokensBefore 82000 → 18000
+Summary: 用户要求分析项目结构；已列出
+ src/ tests/；发现 AgentRuntime 负责
+ 主循环；后续讨论了压缩策略…
+
+User: __compaction_summary__（占位）
++ 最近 20 条原始消息不变</pre>
+    </div>
+  </div>
+  <p class="muted">摘要输入过长时，<code>CompactTextForSummary</code> 会先瘦身再送摘要 LLM（audit 里可见 SummaryInputCharsBefore/After）。</p>
+</div>
+
+<!-- Scenario B: Dynamic -->
+<div id="scenario-b" class="scenario">
+  <h3>场景 B：动态压缩（dynamicCompaction.enabled = true）</h3>
+  <p>假设 <code>contextWindowTokens=65535</code>，固定开销（system+tools）≈ <strong>12,000 token</strong>，可用历史预算 ≈ 53k。当前历史估算 42k → 利用率 ≈ <strong>64%</strong>（Normal，不压）。</p>
+
+  <table>
+    <tr><th>利用率</th><th>压力级别</th><th>动作</th></tr>
+    <tr><td>&lt; ~55%</td><td>Normal</td><td>无（除非静态 floor 已达）</td></tr>
+    <tr><td>≥ 72%（80%×0.9）</td><td>High</td><td>truncateArgs + prefix re-evict</td></tr>
+    <tr><td>≥ 80%</td><td>Critical</td><td>上述 + LLM compact → 压到 ~30% 窗口</td></tr>
+    <tr><td>API overflow</td><td>Overflow</td><td>强制 compact → ~20% 窗口后重试</td></tr>
+  </table>
+
+  <h4>数值推演：历史从 42k 涨到 46k（≈72%）</h4>
+  <div class="metric-row"><span>① truncate 后</span><div class="bar-wrap"><div class="bar bar-hist" style="width:70%">~38,000 tok</div></div></div>
+  <div class="metric-row"><span>② re-evict 后</span><div class="bar-wrap"><div class="bar bar-hist" style="width:62%">~33,000 tok</div></div></div>
+
+  <h4>继续涨到 48k（≥80% Critical）→ LLM compact</h4>
+  <div class="metric-row"><span>目标保留</span><div class="bar-wrap"><div class="bar bar-saved" style="width:30%">~30% × 65k ≈ 16k hist</div></div></div>
+  <p>动态模式用 <code>PromptPressureStore</code>：若 API 上一轮回报 <code>prompt_tokens=52000</code> 而估算只有 46000，预算按<strong>真实值</strong>校正，更早触发压缩。</p>
+</div>
+
+<!-- Scenario E: Overflow -->
+<div id="scenario-e" class="scenario">
+  <h3>场景 E：Context 超长 → Overflow 重试</h3>
+  <ol>
+    <li>第一次 <code>CompleteAsync</code> 抛 <code>context_length exceeded</code></li>
+    <li><code>PreCompletionPipeline(ForceCompact, Overflow)</code> — LLM 摘要，目标 ~20% 利用率</li>
+    <li><code>modelMessageCache.Invalidate()</code></li>
+    <li><code>ModelMessagesForApiBuilder.Build</code> — <strong>必须经 Hygiene</strong>（v1.1.22 修复点）</li>
+    <li>第二次 API 调用；footer 累计 hygiene savings</li>
+  </ol>
+  <div class="card" style="margin-top:12px">
+    <h4>数据变化示意</h4>
+    <pre style="font-family:var(--mono);font-size:12px;color:#334155;background:#f8fafc;padding:12px;border-radius:8px">
+Attempt 1:  prompt ≈ 68,000 tok  →  API Error: context_length
+Compact:     120 msgs → 22 msgs,  TokensBefore 61000 → TokensAfter 14000
+Attempt 2:   hygiene 再减 tool 尾部 →  prompt ≈ 13,500 tok  →  Success
+    </pre>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>四、一轮 Tool 循环的数据流（细化）</h2>
+
+<p>假设第 2 轮 model 调用：assistant 要了 <code>grep_files</code> + <code>read_file</code>。</p>
+
+<table>
+  <thead>
+    <tr><th>步骤</th><th>session.Messages 变化</th><th>发 API 的 payload</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Assistant 带 2 个 tool_calls 入库</td>
+      <td>+1 条 Assistant（含 toolCallsJson）</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>执行 grep（12KB 结果）</td>
+      <td>+1 Tool 消息 12KB</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>执行 read（95KB，触发 eviction）</td>
+      <td>+1 Tool ~2KB preview</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>PreCompletion（未达阈值）</td>
+      <td>不变</td>
+      <td>—</td>
+    </tr>
+    <tr>
+      <td>Build + Hygiene</td>
+      <td>不变</td>
+      <td>grep 12KB→可能压到 8KB；read preview 2KB 基本不变</td>
+    </tr>
+    <tr>
+      <td>CompleteAsync</td>
+      <td>—</td>
+      <td>system + 全历史（已卫生）+ tools schema</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>五、默认开关速查</h2>
+
+<div class="grid-3">
+  <div class="card">
+    <span class="tag tag-always">默认 ON</span>
+    <h4>RequestHistoryHygiene</h4>
+    <p>每轮 API 前瘦身 tool 内容</p>
+  </div>
+  <div class="card">
+    <span class="tag tag-always">默认 ON</span>
+    <h4>ToolStorm + Eviction</h4>
+    <p>重复 tool 拦截；超大结果落盘</p>
+  </div>
+  <div class="card">
+    <span class="tag tag-opt-in">默认 OFF</span>
+    <h4>contextCompaction.enabled</h4>
+    <p>主动 truncate/compact；动态另需 dynamicCompaction.enabled</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<h2>六、相关源码入口</h2>
+
+<table>
+  <tr><th>文件</th><th>职责</th></tr>
+  <tr><td><code>AgentRuntime.SendAsyncTurnAsync</code></td><td>主循环：PreCompletion → Build+Hygiene → API → Tool</td></tr>
+  <tr><td><code>PreCompletionPipeline</code></td><td>静态 RunLegacyAsync / 动态三级递进</td></tr>
+  <tr><td><code>ModelMessagesForApiBuilder</code></td><td>统一 API 消息构建 + Hygiene</td></tr>
+  <tr><td><code>ConversationCompactor</code></td><td>LLM 摘要、audit 消息、RecordCompaction</td></tr>
+  <tr><td><code>ContextCompactionSettings</code></td><td>所有阈值默认值</td></tr>
+</table>
+
+<footer>
+  生成说明：对照 Athlon v1.1.22 源码。在浏览器中直接打开本文件即可。
+  配置修改见 <code>~/.athlon-agent/config/settings.json</code> 或应用内「上下文与 Token ROI」设置卡片。
+</footer>
+
+</main>
+
+<script>
+  document.querySelectorAll('.tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.scenario').forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('scenario-' + btn.dataset.scenario).classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>

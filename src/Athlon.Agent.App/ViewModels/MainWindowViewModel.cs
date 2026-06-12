@@ -13,6 +13,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 
 using Athlon.Agent.App;
+using Athlon.Agent.App.Themes;
 
 namespace Athlon.Agent.App.ViewModels;
 
@@ -110,8 +111,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ApplySessionWorkspace();
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         PendingImageAttachments.CollectionChanged += OnPendingImagesChanged;
+        AppThemeManager.ThemeChanged += OnAppThemeChanged;
         _ = InitializeAsync();
     }
+
+    public bool IsLightTheme => AppThemeManager.CurrentKind == AppThemeKind.Light;
+
+    public string ThemeToggleGlyph => IsLightTheme ? "🌙" : "☀";
+
+    public string ThemeToggleToolTip => IsLightTheme ? "切换到深色模式" : "切换到浅色模式";
 
     public bool HasChatMessages => Messages.Count > 0;
 
@@ -257,10 +265,30 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task ToggleThemeAsync()
+    {
+        var next = AppThemeManager.CurrentKind == AppThemeKind.Light
+            ? AppThemeKind.Dark
+            : AppThemeKind.Light;
+        AppThemeManager.SetTheme(next, _appSettings.Ui);
+        NotifyThemeToggleStateChanged();
+        await _uiLayout.PersistNowAsync();
+    }
+
+    [RelayCommand]
     private async Task ToggleContextSidebarAsync()
     {
         SetContextSidebarVisible(!_appSettings.Ui.ContextSidebarVisible);
         await _uiLayout.PersistNowAsync();
+    }
+
+    private void OnAppThemeChanged(object? sender, EventArgs e) => NotifyThemeToggleStateChanged();
+
+    private void NotifyThemeToggleStateChanged()
+    {
+        OnPropertyChanged(nameof(IsLightTheme));
+        OnPropertyChanged(nameof(ThemeToggleGlyph));
+        OnPropertyChanged(nameof(ThemeToggleToolTip));
     }
 
     public void SetContextSidebarVisible(bool visible)
@@ -1014,6 +1042,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        AppThemeManager.ThemeChanged -= OnAppThemeChanged;
         _turnHost.TurnCompleted -= OnTurnCompleted;
         _turnHost.TurnStateChanged -= OnTurnStateChanged;
         ShutdownAsync().GetAwaiter().GetResult();
