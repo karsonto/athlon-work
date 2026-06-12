@@ -9,6 +9,9 @@ on:
 permissions:
   contents: write
 
+env:
+  VELOPACK_VERSION: 0.0.1298
+
 jobs:
   release:
     name: Build And Publish Release
@@ -23,18 +26,6 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore
-        run: dotnet restore src/Athlon.Agent.App/Athlon.Agent.App.csproj
-
-      - name: Publish self-contained x64
-        run: dotnet publish src/Athlon.Agent.App/Athlon.Agent.App.csproj -c Release -r win-x64 --self-contained true -o publish
-
-      - name: Install Inno Setup
-        shell: pwsh
-        run: |
-          choco install innosetup -y
-          "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
       - name: Get version
         id: version
         shell: pwsh
@@ -47,28 +38,37 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           Write-Host "Version: $version"
 
-      - name: Build installer
+      - name: Restore
+        run: dotnet restore src/Athlon.Agent.App/Athlon.Agent.App.csproj
+
+      - name: Publish self-contained x64
+        run: dotnet publish src/Athlon.Agent.App/Athlon.Agent.App.csproj -c Release -r win-x64 --self-contained true -o publish -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version ${{ env.VELOPACK_VERSION }}
+
+      - name: Download previous release for delta
+        if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
+        continue-on-error: true
         run: |
-          New-Item -ItemType Directory -Force -Path installer | Out-Null
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=${{ steps.version.outputs.version }}" setup.iss
+          New-Item -ItemType Directory -Force -Path Releases | Out-Null
+          vpk download github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --outputDir Releases
+
+      - name: Pack Velopack release
+        run: |
+          vpk pack -u AthlonAgent -v ${{ steps.version.outputs.version }} -p publish -e Athlon.Agent.App.exe --packTitle "Athlon Agent" --icon src/Athlon.Agent.App/Assets/app-icon.ico --outputDir Releases
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "Inno Setup build failed."
+            Write-Error "Velopack pack failed."
             exit 1
           }
-          Get-ChildItem installer\*.exe
-
-      - name: Build portable zip
-        shell: pwsh
-        run: Compress-Archive -Path publish/* -DestinationPath AthlonAgent-Portable-x64.zip
+          Get-ChildItem Releases
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: |
-            installer/*.exe
-            AthlonAgent-Portable-x64.zip
+          files: Releases/**
           draft: false
           prerelease: false
           generate_release_notes: true
@@ -76,14 +76,17 @@ jobs:
             ## Download
 
             ### Installer
-            - File: `AthlonAgent_Setup_v*.exe`
+            - File: `AthlonAgent-Setup.exe`
+            - One-click install to `%LocalAppData%\AthlonAgent`
             - Includes .NET 8 runtime
-            - Creates Start Menu and optional desktop shortcut
 
             ### Portable
-            - File: `AthlonAgent-Portable-x64.zip`
-            - Extract and run `Athlon.Agent.App.exe`
-            - Includes .NET 8 runtime
+            - File: `AthlonAgent-Portable.zip`
+            - Extract and run; supports auto-update when configured
+
+            ### Intranet deployment
+            Sync the entire `Releases/` directory to your internal update server so `releases.win.json` and `*.nupkg` are HTTP-accessible.
+            Configure the client `Update.BaseUrl` in `settings.json` to point at that directory.
 
             ## System Requirements
             - Windows 10 / Windows 11 x64
@@ -94,7 +97,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: AthlonAgent-Release-${{ steps.version.outputs.version }}
-          path: |
-            installer/*.exe
-            AthlonAgent-Portable-x64.zip
+          path: Releases/**
           retention-days: 30

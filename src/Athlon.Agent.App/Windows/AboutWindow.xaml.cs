@@ -6,8 +6,11 @@ namespace Athlon.Agent.App.Windows;
 
 public partial class AboutWindow : Window
 {
-    public AboutWindow()
+    private readonly AppUpdateService _updateService;
+
+    public AboutWindow(AppUpdateService updateService)
     {
+        _updateService = updateService;
         InitializeComponent();
         ProductNameText.Text = AppVersionInfo.ProductName;
         VersionText.Text = $"Version {AppVersionInfo.VersionDisplay}";
@@ -19,6 +22,15 @@ public partial class AboutWindow : Window
         {
             DragMove();
         }
+    }
+
+    private async void CheckUpdateButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        UpdateStatusText.Visibility = Visibility.Visible;
+        UpdateStatusText.Text = "正在检查更新…";
+
+        var result = await _updateService.CheckAndPromptAsync();
+        UpdateStatusText.Text = result.Message;
     }
 
     private void CloseButton_OnClick(object sender, RoutedEventArgs e) => Close();

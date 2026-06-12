@@ -43,6 +43,7 @@ public partial class App : Application
             services.AddSingleton<ComposerAtCompletionService>();
             services.AddSingleton<SchedulerService>();
             services.AddSingleton<ApplicationShutdownService>();
+            services.AddSingleton<AppUpdateService>();
             services.AddSingleton<ClipboardImageAttachmentReader>();
             services.AddSingleton<MainWindowViewModel>();
             services.AddSingleton<MainWindow>();
@@ -59,6 +60,8 @@ public partial class App : Application
             MainWindow.Show();
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             StartupTrace("MainWindow shown");
+
+            _ = _services.GetRequiredService<AppUpdateService>().CheckOnStartupAsync();
         }
         catch (Exception exception)
         {

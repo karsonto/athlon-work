@@ -59,6 +59,15 @@ public sealed class AppSettings
     public SubAgentSettings SubAgent { get; set; } = new();
     public MemorySettings Memory { get; set; } = new();
     public ScheduleSettings Schedule { get; set; } = new();
+    public UpdateSettings Update { get; set; } = new();
+}
+
+public sealed class UpdateSettings
+{
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Base URL of the intranet update feed (must serve releases.win.json).</summary>
+    public string BaseUrl { get; set; } = "";
 }
 
 public sealed class FileReadSettings

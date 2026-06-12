@@ -14,17 +14,22 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly ClipboardImageAttachmentReader _clipboardImageReader;
+    private readonly AppUpdateService _updateService;
     private readonly ChatAutoScrollController _chatScroll;
     private readonly MainWindowLayoutBinder _layoutBinder;
     private bool _shutdownInProgress;
 
-    public MainWindow(MainWindowViewModel viewModel, ClipboardImageAttachmentReader clipboardImageReader)
+    public MainWindow(
+        MainWindowViewModel viewModel,
+        ClipboardImageAttachmentReader clipboardImageReader,
+        AppUpdateService updateService)
     {
         App.StartupTrace("MainWindow constructor entered");
         InitializeComponent();
         App.StartupTrace("MainWindow InitializeComponent completed");
         _viewModel = viewModel;
         _clipboardImageReader = clipboardImageReader;
+        _updateService = updateService;
         _chatScroll = new ChatAutoScrollController(Dispatcher, () => _viewModel.IsBusy);
         _layoutBinder = new MainWindowLayoutBinder(_viewModel, new MainWindowLayoutElements
         {
@@ -215,7 +220,7 @@ public partial class MainWindow : Window
 
     private void HelpAboutMenuItem_OnClick(object sender, RoutedEventArgs e)
     {
-        var about = new Windows.AboutWindow
+        var about = new Windows.AboutWindow(_updateService)
         {
             Owner = this
         };

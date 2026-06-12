@@ -13,7 +13,7 @@ Athlon Agent is a Windows AI Agent prototype built with .NET 8 WPF. The product 
 - Markdown chat rendering through `MdXaml` (Mermaid blocks stay as code; right-click **查看 Mermaid 图表** opens an offline preview dialog bundled with `mermaid.min.js`).
 - Skill YAML loading and Handlebars rendering foundation.
 - MCP configuration UI and stdio client skeleton.
-- GitHub Actions CI and release packaging for installer exe and portable zip.
+- GitHub Actions CI and Velopack release packaging (Setup.exe, Portable.zip, auto-update nupkg).
 
 ## Tech Stack
 
@@ -25,7 +25,7 @@ Athlon Agent is a Windows AI Agent prototype built with .NET 8 WPF. The product 
 - YAML with `YamlDotNet`
 - Skill templates with `Handlebars.Net`
 - Tests with xUnit
-- Installer packaging with Inno Setup 6
+- Installer and auto-update packaging with Velopack
 
 ## Project Structure
 
@@ -120,13 +120,45 @@ dotnet build src/Athlon.Agent.App/Athlon.Agent.App.csproj -p:OutDir=F:\athlon-wo
 
 ## Packaging
 
-Local installer packaging requires Inno Setup 6:
+Local release packaging uses Velopack (`vpk`). Install the CLI once:
 
 ```powershell
-.\build.bat
+dotnet tool install -g vpk --version 0.0.1298
 ```
 
-The script publishes a self-contained Windows x64 build to `publish/` and creates an installer under `installer/`.
+Then build a release (optional version argument, default `1.0.0-dev`):
+
+```powershell
+.\build.bat 1.0.0
+```
+
+The script publishes a self-contained Windows x64 build to `publish/` and writes Velopack assets to `Releases/`:
+
+- `AthlonAgent-Setup.exe` — one-click installer (default: `%LocalAppData%\AthlonAgent`)
+- `AthlonAgent-Portable.zip` — portable build with auto-update support
+- `AthlonAgent-{version}-full.nupkg` — full update package
+- `releases.win.json` — update feed index
+
+## Auto-Update (Intranet)
+
+The client checks for updates from an **internal HTTP update server**, not GitHub directly.
+
+1. IT syncs the full `Releases/` directory from a GitHub Release to e.g. `https://update.corp.local/athlon-agent/`.
+2. Ensure `releases.win.json` and all `*.nupkg` files are reachable over HTTP/HTTPS.
+3. Configure the client in `%USERPROFILE%\.athlon-agent\config\settings.json`:
+
+```json
+{
+  "Update": {
+    "Enabled": true,
+    "BaseUrl": "https://update.corp.local/athlon-agent"
+  }
+}
+```
+
+Alternatively set environment variable `ATHLON_UPDATE_URL` (overrides `settings.json`).
+
+The app checks for updates on startup (Release builds only) and from **About → 检查更新**. Uninstalling via Windows does **not** delete `~/.athlon-agent` user data.
 
 ## GitHub Release
 
@@ -137,10 +169,13 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The release workflow uploads:
+The release workflow uploads everything under `Releases/`:
 
-- `AthlonAgent_Setup_v*.exe`
-- `AthlonAgent-Portable-x64.zip`
+- `AthlonAgent-Setup.exe`
+- `AthlonAgent-Portable.zip`
+- `*.nupkg` and `releases.win.json` (for intranet sync)
+
+Clients do not pull updates from GitHub; sync these files to your internal update server.
 
 ## Model Configuration
 
@@ -264,4 +299,4 @@ HTTP log lines include timestamp, endpoint, purpose (`chat-completion` or `conte
 - Add command execution confirmation UI before `execute_command` runs.
 - Add session branch management.
 - Improve Markdown/code rendering with copy/run/diff actions for code blocks.
-- Add installer icon, version metadata, and optional code signing to the release workflow.
+- Add optional code signing to the Velopack release workflow.
