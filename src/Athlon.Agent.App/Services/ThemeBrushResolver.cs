@@ -26,6 +26,7 @@ public static class ThemeBrushResolver
             "Brush.CodeHighlightBlue" => chrome.CodeHighlightBlue,
             "Brush.TableBorder" => chrome.TableBorder,
             "Brush.Border" => chrome.Border,
+            "Brush.Panel" => chrome.Panel,
             "Brush.UserBubble" => chrome.UserBubble,
             _ => chrome.Text,
         };

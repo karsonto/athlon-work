@@ -112,11 +112,18 @@ public partial class MarkdownMessageView : UserControl
         }
     }
 
-    private void RefreshDisplayMarkdown()
+    private void RefreshDisplayMarkdown(bool forceRebuild = false)
     {
         var source = Markdown ?? string.Empty;
         _fencedBlocks = MarkdownDisplayNormalizer.ExtractFencedBlocks(source);
-        MarkdownViewer.Markdown = MarkdownDisplayNormalizer.NormalizeForDisplay(source);
+        var display = MarkdownDisplayNormalizer.NormalizeForDisplay(source);
+
+        if (forceRebuild)
+        {
+            MarkdownViewer.Markdown = string.Empty;
+        }
+
+        MarkdownViewer.Markdown = display;
     }
 
     private void ApplyMaxHeight()
@@ -360,7 +367,7 @@ public partial class MarkdownMessageView : UserControl
     private void OnAppThemeChanged(object? sender, EventArgs e)
     {
         ApplyTheme();
-        RefreshDisplayMarkdown();
+        RefreshDisplayMarkdown(forceRebuild: true);
     }
 
     private void ApplyFlowDocumentContextMenu()
@@ -369,7 +376,7 @@ public partial class MarkdownMessageView : UserControl
         {
             document.ContextMenu = _contextMenu;
             document.Tag = null;
-            FlowDocumentThemeNormalizer.Normalize(document, _contextMenu, _fencedBlocks);
+            FlowDocumentThemeNormalizer.Normalize(document, _contextMenu, _fencedBlocks, AssistantTone);
         }
     }
 

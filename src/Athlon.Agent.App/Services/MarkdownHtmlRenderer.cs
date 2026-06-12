@@ -79,6 +79,7 @@ public static class MarkdownHtmlRenderer
             .Replace("__CODE_BLOCK_BORDER__", palette.CodeBlockBorder, StringComparison.Ordinal)
             .Replace("__CODE_BLOCK_BG__", palette.CodeBlockBackground, StringComparison.Ordinal)
             .Replace("__CODE_HEADER_COLOR__", palette.CodeHeaderColor, StringComparison.Ordinal)
+            .Replace("__CODE_BTN_BG__", palette.CodeButtonBackground, StringComparison.Ordinal)
             .Replace("__CODE_BTN_BORDER__", palette.CodeButtonBorder, StringComparison.Ordinal)
             .Replace("__CODE_BTN_COLOR__", palette.CodeButtonColor, StringComparison.Ordinal)
             .Replace("__CODE_PRE_COLOR__", palette.CodePreColor, StringComparison.Ordinal);
@@ -97,13 +98,14 @@ public static class MarkdownHtmlRenderer
           overflow-x: hidden;
           overflow-y: auto;
         }
-        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar { width: 12px; height: 12px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb {
           border: 2px solid transparent;
           border-radius: 9999px;
           background: rgba(148, 163, 184, 0.55);
           background-clip: padding-box;
+          min-height: 40px;
         }
         .md-root {
           width: 100%;
@@ -173,13 +175,17 @@ public static class MarkdownHtmlRenderer
         .code-btn {
           border: 1px solid __CODE_BTN_BORDER__;
           border-radius: 6px;
-          background: transparent;
+          background: __CODE_BTN_BG__;
           color: __CODE_BTN_COLOR__;
           padding: 4px 8px;
           font-size: 12px;
           cursor: pointer;
         }
-        .code-btn:hover { border-color: #64748B; color: __TEXT_COLOR__; }
+        .code-btn:hover {
+          border-color: __CODE_BTN_BORDER__;
+          background: __CODE_BLOCK_BG__;
+          color: __CODE_BTN_COLOR__;
+        }
         .code-btn.copied {
           border-color: rgba(16, 185, 129, 0.6);
           background: rgba(16, 185, 129, 0.1);

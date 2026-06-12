@@ -1,15 +1,14 @@
 namespace Athlon.Agent.App.Themes;
 
 /// <summary>
-/// Light-theme color tokens from <c>F:\athlon\report\html</c> (Tailwind slate / sky / violet).
+/// Light-theme color tokens from <c>F:\athlon\report\html</c> (Tailwind slate / indigo / violet).
 /// Sources: <c>src/index.css</c>, <c>App.tsx</c>, <c>AppHeader.tsx</c>, <c>ChatPane.tsx</c>, <c>Sidebar.tsx</c>, <c>Composer.tsx</c>.
 /// </summary>
 internal static class ReportHtmlLightColors
 {
     // Chat gradients (ChatPane / EmptyConversation)
-    public const string ChatGradientTop = "#F8FBFF";
-    public const string ChatGradientBottom = "#F1F5F9";
-    public const string HomeGradientBottom = "#EFF6FF";
+    public const string ChatGradientTop = "#F4F8FF";
+    public const string ChatGradientBottom = "#E8EDF4";
 
     // Slate
     public const string Slate50 = "#F8FAFC";
@@ -23,13 +22,13 @@ internal static class ReportHtmlLightColors
     public const string Slate800 = "#1E293B";
     public const string Slate900 = "#0F172A";
 
-    // Sky (accent / user bubble / links)
-    public const string Sky50 = "#F0F9FF";
-    public const string Sky100 = "#E0F2FE";
-    public const string Sky200 = "#BAE6FD";
-    public const string Sky500 = "#0EA5E9";
-    public const string Sky600 = "#0284C7";
-    public const string Sky700 = "#0369A1";
+    // Indigo (accent / user bubble / links — aligned with dark theme)
+    public const string Indigo50 = "#EEF2FF";
+    public const string Indigo100 = "#E0E7FF";
+    public const string Indigo200 = "#C7D2FE";
+    public const string Indigo500 = "#6366F1";
+    public const string Indigo600 = "#4F46E5";
+    public const string Indigo700 = "#4338CA";
 
     // Violet (reasoning / tool-thinking)
     public const string Violet50 = "#F5F3FF";
@@ -42,12 +41,14 @@ internal static class ReportHtmlLightColors
     public const string Green600 = "#16A34A";
     public const string Green700 = "#15803D";
     public const string Green50 = "#F0FDF4";
+    public const string Green200 = "#BBF7D0";
     public const string Rose600 = "#E11D48";
     public const string Rose700 = "#BE123C";
     public const string Rose50 = "#FFF1F2";
+    public const string Rose200 = "#FECDD3";
     public const string Amber500 = "#F59E0B";
 
-    // Scrollbar (index.css)
-    public const string ScrollThumb = "#94A3B8";
-    public const double ScrollThumbOpacity = 0.55;
+    // Scrollbar — Slate500 @ 40% for ~3.2:1 contrast on Slate100
+    public const string ScrollThumb = "#64748B";
+    public const double ScrollThumbOpacity = 0.40;
 }

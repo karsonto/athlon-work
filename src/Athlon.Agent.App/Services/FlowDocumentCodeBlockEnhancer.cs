@@ -46,6 +46,11 @@ public static class FlowDocumentCodeBlockEnhancer
         document.Tag = CodeBlockCardTag;
     }
 
+    public static void ReapplyTheme(FlowDocument document)
+    {
+        ReapplyThemeBlocks(document.Blocks);
+    }
+
     public static CodeBlockCardState? FindCardState(DependencyObject? element)
     {
         var current = element;
@@ -319,26 +324,109 @@ public static class FlowDocumentCodeBlockEnhancer
         }
     }
 
+    private static void ReapplyThemeBlocks(BlockCollection blocks)
+    {
+        foreach (var block in blocks)
+        {
+            switch (block)
+            {
+                case BlockUIContainer { Tag: CodeBlockCardTag, Child: Border outerBorder }:
+                    ApplyCardTheme(outerBorder);
+                    break;
+                case Section section:
+                    ReapplyThemeBlocks(section.Blocks);
+                    break;
+                case List list:
+                    foreach (ListItem item in list.ListItems)
+                    {
+                        ReapplyThemeBlocks(item.Blocks);
+                    }
+
+                    break;
+                case Table table:
+                    foreach (var rowGroup in table.RowGroups)
+                    {
+                        foreach (var row in rowGroup.Rows)
+                        {
+                            foreach (var cell in row.Cells)
+                            {
+                                ReapplyThemeBlocks(cell.Blocks);
+                            }
+                        }
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    private static void ApplyCardTheme(Border outerBorder)
+    {
+        var codeBackground = ThemeBrushResolver.Get("Brush.CodeBackground");
+        var codeForeground = ThemeBrushResolver.Get("Brush.CodeForeground");
+        var codeBorder = ThemeBrushResolver.Get("Brush.CodeBorder");
+        var headerBackground = ThemeBrushResolver.Get("Brush.Panel");
+        var headerText = ThemeBrushResolver.Get("Brush.SubtleText");
+        var copyButtonStyle = Application.Current.TryFindResource("CodeBlockActionButtonStyle") as Style;
+
+        outerBorder.Background = codeBackground;
+        outerBorder.BorderBrush = codeBorder;
+
+        if (outerBorder.Child is not Grid grid)
+        {
+            return;
+        }
+
+        foreach (var child in grid.Children)
+        {
+            switch (child)
+            {
+                case Border { Child: DockPanel headerDock } headerBorder:
+                    headerBorder.Background = headerBackground;
+                    foreach (var headerChild in headerDock.Children)
+                    {
+                        switch (headerChild)
+                        {
+                            case Button copyButton:
+                                copyButton.Style = copyButtonStyle;
+                                break;
+                            case TextBlock languageLabel:
+                                languageLabel.Foreground = headerText;
+                                break;
+                        }
+                    }
+
+                    break;
+                case Border { Height: 1 } divider:
+                    divider.Background = codeBorder;
+                    break;
+                case ScrollViewer bodyScroll:
+                    bodyScroll.Background = codeBackground;
+                    if (bodyScroll.Content is TextBox body)
+                    {
+                        body.Foreground = codeForeground;
+                    }
+
+                    break;
+            }
+        }
+    }
+
     private static BlockUIContainer BuildCard(string language, string codeText)
     {
         var codeBackground = ThemeBrushResolver.Get("Brush.CodeBackground");
         var codeForeground = ThemeBrushResolver.Get("Brush.CodeForeground");
         var codeBorder = ThemeBrushResolver.Get("Brush.CodeBorder");
-        var subtleText = ThemeBrushResolver.Get("Brush.SubtleText");
+        var headerBackground = ThemeBrushResolver.Get("Brush.Panel");
+        var headerText = ThemeBrushResolver.Get("Brush.SubtleText");
+        var copyButtonStyle = Application.Current.TryFindResource("CodeBlockActionButtonStyle") as Style;
 
         var cardState = new CodeBlockCardState { Text = codeText };
 
         var copyButton = new Button
         {
             Content = "复制",
-            Padding = new Thickness(8, 4, 8, 4),
-            FontSize = 12,
-            Cursor = System.Windows.Input.Cursors.Hand,
-            Background = Brushes.Transparent,
-            BorderBrush = codeBorder,
-            Foreground = subtleText,
-            Focusable = false,
-            IsTabStop = false,
+            Style = copyButtonStyle,
         };
         copyButton.Click += (_, _) =>
         {
@@ -352,21 +440,24 @@ public static class FlowDocumentCodeBlockEnhancer
             }
         };
 
-        var header = new DockPanel
-        {
-            Margin = new Thickness(16, 8, 16, 8),
-            LastChildFill = true,
-        };
+        var headerContent = new DockPanel { LastChildFill = true };
 
         DockPanel.SetDock(copyButton, Dock.Right);
-        header.Children.Add(copyButton);
-        header.Children.Add(new TextBlock
+        headerContent.Children.Add(copyButton);
+        headerContent.Children.Add(new TextBlock
         {
             Text = language,
             FontSize = 12,
-            Foreground = subtleText,
+            Foreground = headerText,
             VerticalAlignment = VerticalAlignment.Center,
         });
+
+        var header = new Border
+        {
+            Background = headerBackground,
+            Padding = new Thickness(16, 8, 16, 8),
+            Child = headerContent,
+        };
 
         var body = new TextBox
         {

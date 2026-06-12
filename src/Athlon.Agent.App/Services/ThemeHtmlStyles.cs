@@ -15,6 +15,7 @@ internal static class ThemeHtmlStyles
         string CodeBlockBorder,
         string CodeBlockBackground,
         string CodeHeaderColor,
+        string CodeButtonBackground,
         string CodeButtonBorder,
         string CodeButtonColor,
         string CodePreColor);
@@ -36,17 +37,18 @@ internal static class ThemeHtmlStyles
         {
             return new MarkdownPalette(
                 TextColor: assistantTone ? ReportHtmlLightColors.Slate900 : "#FFFFFF",
-                LinkColor: assistantTone ? ReportHtmlLightColors.Sky600 : "#DBEAFE",
-                InlineCodeBackground: ReportHtmlLightColors.Slate200,
+                LinkColor: assistantTone ? ReportHtmlLightColors.Indigo600 : "#DBEAFE",
+                InlineCodeBackground: ReportHtmlLightColors.Slate100,
                 TableBorder: ReportHtmlLightColors.Slate300,
                 TableHeaderBackground: ReportHtmlLightColors.Slate100,
                 BlockquoteColor: ReportHtmlLightColors.Slate600,
                 BlockquoteBackground: "rgba(241, 245, 249, 0.9)",
-                CodeBlockBorder: ReportHtmlLightColors.Slate200,
+                CodeBlockBorder: ReportHtmlLightColors.Slate300,
                 CodeBlockBackground: ReportHtmlLightColors.Slate50,
                 CodeHeaderColor: ReportHtmlLightColors.Slate600,
-                CodeButtonBorder: ReportHtmlLightColors.Slate300,
-                CodeButtonColor: ReportHtmlLightColors.Slate700,
+                CodeButtonBackground: ReportHtmlLightColors.White,
+                CodeButtonBorder: ReportHtmlLightColors.Slate400,
+                CodeButtonColor: ReportHtmlLightColors.Slate900,
                 CodePreColor: ReportHtmlLightColors.Slate800);
         }
 
@@ -61,8 +63,9 @@ internal static class ThemeHtmlStyles
             CodeBlockBorder: "#1E293B",
             CodeBlockBackground: "#020617",
             CodeHeaderColor: "#CBD5E1",
-            CodeButtonBorder: "#334155",
-            CodeButtonColor: "#CBD5E1",
+            CodeButtonBackground: "#1E293B",
+            CodeButtonBorder: "#475569",
+            CodeButtonColor: "#E2E8F0",
             CodePreColor: "#F1F5F9");
     }
 

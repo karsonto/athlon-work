@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using Athlon.Agent.App.Themes;
 
 namespace Athlon.Agent.App.Services;
 
@@ -10,35 +11,49 @@ public static class FlowDocumentThemeNormalizer
     public static void Normalize(
         FlowDocument document,
         ContextMenu? contextMenu,
-        IReadOnlyList<FencedBlockInfo>? fencedBlocks = null)
+        IReadOnlyList<FencedBlockInfo>? fencedBlocks = null,
+        bool assistantTone = true)
     {
         var codeBackground = ThemeBrushResolver.Get("Brush.CodeBackground");
         var codeForeground = ThemeBrushResolver.Get("Brush.CodeForeground");
-        NormalizeBlocks(document.Blocks, codeBackground, codeForeground, contextMenu);
+        var textBrush = assistantTone
+            ? ThemeBrushResolver.Get("Brush.Text")
+            : Brushes.White;
+        var tableHeaderBackground = ThemeBrushResolver.Get("Brush.CodeBackgroundAlt");
+        var tableBorder = ThemeBrushResolver.Get("Brush.TableBorder");
+        NormalizeBlocks(document.Blocks, codeBackground, codeForeground, textBrush, tableHeaderBackground, tableBorder, contextMenu);
         FlowDocumentCodeBlockEnhancer.Enhance(document, fencedBlocks);
+        FlowDocumentCodeBlockEnhancer.ReapplyTheme(document);
     }
 
     public static Brush? ResolveBrush(string key) =>
         Application.Current?.TryFindResource(key) as Brush;
 
-    private static void NormalizeBlocks(BlockCollection blocks, Brush codeBackground, Brush codeForeground, ContextMenu? contextMenu)
+    private static void NormalizeBlocks(
+        BlockCollection blocks,
+        Brush codeBackground,
+        Brush codeForeground,
+        Brush textBrush,
+        Brush tableHeaderBackground,
+        Brush tableBorder,
+        ContextMenu? contextMenu)
     {
         foreach (var block in blocks.ToArray())
         {
-            NormalizeTextElementColors(block, codeBackground, codeForeground);
+            NormalizeTextElementColors(block, codeBackground, codeForeground, textBrush);
 
             switch (block)
             {
                 case Section section:
-                    NormalizeBlocks(section.Blocks, codeBackground, codeForeground, contextMenu);
+                    NormalizeBlocks(section.Blocks, codeBackground, codeForeground, textBrush, tableHeaderBackground, tableBorder, contextMenu);
                     break;
                 case Paragraph paragraph:
-                    NormalizeInlines(paragraph.Inlines, codeBackground, codeForeground);
+                    NormalizeInlines(paragraph.Inlines, codeBackground, codeForeground, textBrush);
                     break;
                 case List list:
                     foreach (ListItem item in list.ListItems)
                     {
-                        NormalizeBlocks(item.Blocks, codeBackground, codeForeground, contextMenu);
+                        NormalizeBlocks(item.Blocks, codeBackground, codeForeground, textBrush, tableHeaderBackground, tableBorder, contextMenu);
                     }
                     break;
                 case Table table:
@@ -48,8 +63,8 @@ public static class FlowDocumentThemeNormalizer
                         {
                             foreach (var cell in row.Cells)
                             {
-                                NormalizeTextElementColors(cell, codeBackground, codeForeground);
-                                NormalizeBlocks(cell.Blocks, codeBackground, codeForeground, contextMenu);
+                                ApplyTableCellTheme(cell, codeBackground, tableHeaderBackground, tableBorder, textBrush);
+                                NormalizeBlocks(cell.Blocks, codeBackground, codeForeground, textBrush, tableHeaderBackground, tableBorder, contextMenu);
                             }
                         }
                     }
@@ -62,16 +77,33 @@ public static class FlowDocumentThemeNormalizer
         }
     }
 
-    private static void NormalizeInlines(InlineCollection inlines, Brush codeBackground, Brush codeForeground)
+    private static void NormalizeInlines(InlineCollection inlines, Brush codeBackground, Brush codeForeground, Brush textBrush)
     {
         foreach (var inline in inlines)
         {
-            NormalizeTextElementColors(inline, codeBackground, codeForeground);
+            NormalizeTextElementColors(inline, codeBackground, codeForeground, textBrush);
 
             if (inline is Span span)
             {
-                NormalizeInlines(span.Inlines, codeBackground, codeForeground);
+                NormalizeInlines(span.Inlines, codeBackground, codeForeground, textBrush);
             }
+        }
+    }
+
+    private static void ApplyTableCellTheme(
+        TableCell cell,
+        Brush tableBackground,
+        Brush tableHeaderBackground,
+        Brush tableBorder,
+        Brush textBrush)
+    {
+        var isHeader = cell.Tag as string == "TableHeader";
+        cell.Background = isHeader ? tableHeaderBackground : tableBackground;
+        cell.BorderBrush = tableBorder;
+
+        if (NeedsThemeTextForeground(cell.Foreground))
+        {
+            cell.Foreground = textBrush;
         }
     }
 
@@ -82,16 +114,26 @@ public static class FlowDocumentThemeNormalizer
             return;
         }
 
+        var insideCodeCard = IsInsideCodeBlockCard(element);
+
         switch (element)
         {
             case Control control when IsLightBrush(control.Background):
                 control.Background = codeBackground;
-                NormalizeControlForeground(control, codeForeground);
+                if (!insideCodeCard || control is not Button)
+                {
+                    NormalizeControlForeground(control, codeForeground);
+                }
+
                 control.ContextMenu = contextMenu;
                 break;
             case Control control:
                 control.ContextMenu = contextMenu;
-                NormalizeControlForeground(control, codeForeground);
+                if (!insideCodeCard || control is not Button)
+                {
+                    NormalizeControlForeground(control, codeForeground);
+                }
+
                 break;
             case Border border when IsLightBrush(border.Background):
                 border.Background = codeBackground;
@@ -116,21 +158,49 @@ public static class FlowDocumentThemeNormalizer
         }
     }
 
-    private static void NormalizeTextElementColors(TextElement element, Brush codeBackground, Brush codeForeground)
+    private static void NormalizeTextElementColors(
+        TextElement element,
+        Brush codeBackground,
+        Brush codeForeground,
+        Brush textBrush)
     {
-        if (IsLightBrush(element.Background))
+        var tag = element.Tag as string;
+        var isCode = tag is "CodeSpan" or "CodeBlock";
+
+        if (IsLightBrush(element.Background) || (!isCode && IsDarkBrush(element.Background) && AppThemeManager.CurrentKind == AppThemeKind.Light))
         {
             element.Background = codeBackground;
         }
 
-        if (IsDarkBrush(element.Foreground))
+        if (isCode)
         {
             element.Foreground = codeForeground;
+            return;
         }
-        else if (IsLowContrastBlueBrush(element.Foreground))
+
+        if (IsLowContrastBlueBrush(element.Foreground))
         {
             element.Foreground = ThemeBrushResolver.Get("Brush.CodeHighlightBlue");
+            return;
         }
+
+        if (NeedsThemeTextForeground(element.Foreground))
+        {
+            element.Foreground = textBrush;
+        }
+    }
+
+    private static bool NeedsThemeTextForeground(Brush? brush)
+    {
+        if (brush is not SolidColorBrush solid)
+        {
+            return false;
+        }
+
+        var luminance = 0.299 * solid.Color.R + 0.587 * solid.Color.G + 0.114 * solid.Color.B;
+        return AppThemeManager.CurrentKind == AppThemeKind.Dark
+            ? luminance < 128
+            : luminance > 180;
     }
 
     private static void NormalizeControlForeground(Control control, Brush codeForeground)
@@ -143,6 +213,22 @@ public static class FlowDocumentThemeNormalizer
         {
             control.Foreground = ThemeBrushResolver.Get("Brush.CodeHighlightBlue");
         }
+    }
+
+    private static bool IsInsideCodeBlockCard(DependencyObject? element)
+    {
+        var current = element;
+        while (current is not null)
+        {
+            if (current is FrameworkElement { Tag: CodeBlockCardState })
+            {
+                return true;
+            }
+
+            current = LogicalTreeHelper.GetParent(current) ?? VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
     }
 
     private static bool IsLightBrush(Brush? brush) =>
