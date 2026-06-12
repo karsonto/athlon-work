@@ -442,7 +442,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="{x:Static app:AppLayoutMetrics.SplitterHitSize}" />
+                    <RowDefinition Height="{x:Static app:AppLayoutMetrics.SplitterHitRowHeight}" />
                     <RowDefinition x:Name="ComposerRow"
                                    Height="168"
                                    MinHeight="120"

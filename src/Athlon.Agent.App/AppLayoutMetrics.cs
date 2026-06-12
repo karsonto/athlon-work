@@ -26,6 +26,9 @@ public static class AppLayoutMetrics
     /// <summary>Hit target width/height of column/row splitters.</summary>
     public const double SplitterHitSize = 18;
 
+    /// <summary><see cref="SplitterHitSize"/> as <see cref="GridLength"/> for row definitions.</summary>
+    public static readonly GridLength SplitterHitRowHeight = new(SplitterHitSize);
+
     /// <summary>Inset of the visible splitter line inside the hit target.</summary>
     public const double SplitterLineInset = 0;
 }
