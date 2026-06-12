@@ -43,7 +43,7 @@ public static class MarkdownHtmlRenderer
             ? "#ffffff"
             : "#101012";
 
-        return $"""
+        return """
             <!DOCTYPE html>
             <html lang="zh-CN">
             <head>
@@ -51,7 +51,7 @@ public static class MarkdownHtmlRenderer
               <meta name="viewport" content="width=device-width, initial-scale=1.0" />
               <title>HTML 预览</title>
               <style>
-                body {{ margin: 0; min-height: 100vh; background: {pageBackground}; }}
+                body { margin: 0; min-height: 100vh; background: """ + pageBackground + """; }
               </style>
             </head>
             <body>
