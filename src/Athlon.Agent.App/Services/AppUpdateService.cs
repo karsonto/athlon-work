@@ -5,7 +5,7 @@ using Velopack.Sources;
 
 namespace Athlon.Agent.App.Services;
 
-internal sealed class AppUpdateService
+public sealed class AppUpdateService
 {
     private const string UpdateUrlEnvironmentVariable = "ATHLON_UPDATE_URL";
 
@@ -156,7 +156,7 @@ internal sealed class AppUpdateService
     }
 }
 
-internal sealed record AppUpdateCheckResult(AppUpdateCheckStatus Status, string Message)
+public sealed record AppUpdateCheckResult(AppUpdateCheckStatus Status, string Message)
 {
     public static AppUpdateCheckResult Skipped(string reason) =>
         new(AppUpdateCheckStatus.Skipped, reason);
@@ -174,7 +174,7 @@ internal sealed record AppUpdateCheckResult(AppUpdateCheckStatus Status, string 
         new(AppUpdateCheckStatus.Failed, message);
 }
 
-internal enum AppUpdateCheckStatus
+public enum AppUpdateCheckStatus
 {
     Skipped,
     UpToDate,
