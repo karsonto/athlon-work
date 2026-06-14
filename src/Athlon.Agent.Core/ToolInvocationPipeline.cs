@@ -25,6 +25,9 @@ internal sealed class ToolInvocationPipeline(
         ToolResult result;
         try
         {
+            // Set up ambient output stream so tools (e.g. ExecuteCommandTool) can push
+            // incremental stdout/stderr to the UI while still running.
+            using var outputStream = new AmbientToolOutputStream(callbacks, toolCall.Id);
             result = await Task.Run(
                     () => resolveToolRouter().InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken),
                     cancellationToken)

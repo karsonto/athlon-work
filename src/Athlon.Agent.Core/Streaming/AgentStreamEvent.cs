@@ -27,6 +27,9 @@ public abstract record AgentStreamEvent
 
     public sealed record ToolCallResult(string ToolCallId, string Content, string MessageId) : AgentStreamEvent;
 
+    /// <summary>Incremental stdout/stderr output while a tool is still running.</summary>
+    public sealed record ToolCallOutput(string ToolCallId, string Delta) : AgentStreamEvent;
+
     /// <summary>Non-streaming persisted messages (compaction notices, fallbacks).</summary>
     public sealed record ChatMessageAppended(ChatMessage Message) : AgentStreamEvent;
 

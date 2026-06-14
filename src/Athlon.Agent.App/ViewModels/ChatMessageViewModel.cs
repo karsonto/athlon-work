@@ -521,6 +521,27 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ToolSummary = "已停止";
     }
 
+    /// <summary>Appends incremental stdout/stderr output while the tool is still running.</summary>
+    public void AppendToolOutput(string delta)
+    {
+        if (!IsTool || string.IsNullOrEmpty(delta))
+        {
+            return;
+        }
+
+        Content += delta;
+        if (_toolDetailFull.Length < MaxToolDetailDisplayChars * 2)
+        {
+            _toolDetailFull += delta;
+            RefreshToolDetailDisplay();
+        }
+
+        if (!IsExpanded)
+        {
+            IsExpanded = true;
+        }
+    }
+
     private void AssignToolDetail(string detail)
     {
         _toolDetailFull = detail ?? string.Empty;

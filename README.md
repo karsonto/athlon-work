@@ -189,6 +189,7 @@ Runtime data lives under `%USERPROFILE%\.athlon-agent\`:
   logs/          Serilog logs
   credentials/   DPAPI-encrypted API keys
   audit/         tool-call audit JSONL
+  training-data/ SFT + DPO training data (JSONL, opt-in)
 ```
 
 ### Model settings (in-app or `config/settings.json`)
@@ -257,6 +258,7 @@ git push origin v1.0.0
 | [Theme & UI conventions](docs/development/theme-and-ui-conventions.md) | Color tokens, theme switch rules (for contributors & AI) |
 | [Context compaction](docs/features/context-compaction.md) | Dynamic compaction, hygiene, eviction |
 | [License tooling](tools/license/README.md) | RSA license generation for enterprise deployments |
+| [Training data flywheel](docs/development/training-data-flywheel.md) | Auto-extracting SFT/DPO training data from agent interactions |
 
 ---
 
@@ -288,6 +290,10 @@ Quick summary:
 - UI logic → `Athlon.Agent.App/ViewModels/`
 - Theme colors → palette tokens only; subscribe `ThemeChanged` when caching brushes
 - `.pen` design files → Pencil MCP tools only
+- **Training data collection** — every tool call, error, and user correction flows through `CorrectionDetector` and produces SFT/DPO samples automatically. When extending the agent loop:
+  - Add new `CorrectionDetector.Detect*()` methods for new trajectory types
+  - Wire extraction into `TurnTrajectoryExtractor.Extract*Samples()` 
+  - Register in `TrainingSampleStore.RecordTurnAsync()` (see [training data flywheel](docs/development/training-data-flywheel.md))
 
 ---
 

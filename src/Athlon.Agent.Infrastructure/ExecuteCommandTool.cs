@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
@@ -119,10 +120,14 @@ public sealed class ExecuteCommandTool(
         CancellationToken userCancelToken)
     {
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        var combinedToken = CancellationTokenSource.CreateLinkedTokenSource(userCancelToken, timeoutCts.Token).Token;
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(userCancelToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(userCancelToken);
-        var exitTask = process.WaitForExitAsync(userCancelToken);
+        var stdoutAccum = new StringBuilder();
+        var stderrAccum = new StringBuilder();
+
+        var stdoutTask = ReadStdoutLinesAsync(process, stdoutAccum, combinedToken);
+        var stderrTask = ReadStderrLinesAsync(process, stderrAccum, combinedToken);
+        var exitTask = process.WaitForExitAsync(combinedToken);
         var runTask = Task.WhenAll(stdoutTask, stderrTask, exitTask);
         var timeoutTask = Task.Delay(Timeout.InfiniteTimeSpan, timeoutCts.Token);
 
@@ -134,7 +139,49 @@ public sealed class ExecuteCommandTool(
         }
 
         await runTask.ConfigureAwait(false);
-        return new ProcessRunResult(await stdoutTask.ConfigureAwait(false), await stderrTask.ConfigureAwait(false), TimedOut: false);
+        return new ProcessRunResult(stdoutAccum.ToString(), stderrAccum.ToString(), TimedOut: false);
+    }
+
+    /// <summary>Reads stdout line by line, accumulating and pushing each line through the ambient output stream.</summary>
+    private static async Task ReadStdoutLinesAsync(
+        Process process,
+        StringBuilder accumulator,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            string? line;
+            while ((line = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
+            {
+                accumulator.AppendLine(line);
+                AmbientToolOutputStream.CurrentStream?.WriteLine(line);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when user cancels or timeout fires — stop reading.
+        }
+    }
+
+    /// <summary>Reads stderr line by line, same streaming pattern as stdout.</summary>
+    private static async Task ReadStderrLinesAsync(
+        Process process,
+        StringBuilder accumulator,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            string? line;
+            while ((line = await process.StandardError.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
+            {
+                accumulator.AppendLine(line);
+                AmbientToolOutputStream.CurrentStream?.WriteLine(line);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Expected when user cancels or timeout fires — stop reading.
+        }
     }
 
     private static string FormatOutput(string? stdout, string? stderr) =>

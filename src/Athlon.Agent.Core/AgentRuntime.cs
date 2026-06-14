@@ -28,7 +28,20 @@ public sealed class AgentRuntime(
         toolResultEvictor,
         () => AmbientToolRouterScope.CurrentRouter ?? toolRouter,
         logger);
+    private TrainingData.ITrainingDataCollector? _trainingDataCollector;
     private AgentTurnCoordinator? _turnCoordinator;
+
+    private TrainingData.ITrainingDataCollector? ResolveTrainingDataCollector()
+    {
+        if (_trainingDataCollector is not null)
+            return _trainingDataCollector;
+
+        if (!settings.TrainingData.Enabled)
+            return null;
+
+        _trainingDataCollector = new TrainingData.TrainingSampleStore(settings.TrainingData, logger);
+        return _trainingDataCollector;
+    }
     private AgentTurnCoordinator TurnCoordinator => _turnCoordinator ??= new AgentTurnCoordinator(
         modelClient,
         tokenEstimatorCalibrator,
@@ -180,6 +193,7 @@ public sealed class AgentRuntime(
                     await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
                     _logger.Information("Saved session {SessionId} with {MessageCount} messages", session.Id, session.Messages.Count);
                     FireAndForgetMemoryFlush(session);
+                    await RecordTrainingDataAsync(session, cancellationToken);
                     return session;
                 }
 
@@ -479,6 +493,22 @@ public sealed class AgentRuntime(
     private static bool ContainsAny(string value, params string[] terms)
     {
         return terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task RecordTrainingDataAsync(AgentSession session, CancellationToken cancellationToken)
+    {
+        var collector = ResolveTrainingDataCollector();
+        if (collector is null)
+            return;
+
+        try
+        {
+            await collector.RecordTurnAsync(session, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("Training data recording failed: {Error}", ex.Message);
+        }
     }
 
     private void FireAndForgetMemoryFlush(AgentSession session)

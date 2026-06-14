@@ -11,6 +11,7 @@ public sealed class SessionStreamingUiContext
     private readonly Dictionary<string, ChatMessageViewModel> _assistantBubbles = new(StringComparer.Ordinal);
     private readonly Dictionary<int, ChatMessageViewModel> _toolBubblesByIndex = new();
     private readonly Dictionary<string, int> _toolCallIdToIndex = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ChatMessageViewModel> _outputToolBubbles = new(StringComparer.Ordinal);
 
     public Action RequestScroll { get; set; } = () => { };
 
@@ -81,11 +82,15 @@ public sealed class SessionStreamingUiContext
                             string.IsNullOrWhiteSpace(endedTool.ToolName) ? "unknown" : endedTool.ToolName,
                             ToolCallArgumentsParser.ParseJson(endedTool.ToolArgumentsText)));
                     _toolBubblesByIndex.Remove(endIndex);
+                    _outputToolBubbles[toolCallId] = endedTool;
                 }
 
                 break;
             case AgentStreamEvent.ToolCallResult(var toolCallId, var content, var messageId):
                 HandleToolCallResult(toolCallId, content, messageId, messages);
+                break;
+            case AgentStreamEvent.ToolCallOutput(var toolCallId, var delta):
+                HandleToolCallOutput(toolCallId, delta, messages);
                 break;
             case AgentStreamEvent.ChatMessageAppended(var message):
                 HandleChatMessageAppended(message, messages);
@@ -103,6 +108,7 @@ public sealed class SessionStreamingUiContext
         _assistantBubbles.Clear();
         _toolBubblesByIndex.Clear();
         _toolCallIdToIndex.Clear();
+        _outputToolBubbles.Clear();
     }
 
     private void HandleChatMessageAppended(ChatMessage message, ObservableCollection<ChatMessageViewModel> messages)
@@ -171,6 +177,8 @@ public sealed class SessionStreamingUiContext
         string messageId,
         ObservableCollection<ChatMessageViewModel> messages)
     {
+        _outputToolBubbles.Remove(toolCallId);
+
         var existing = FindToolMessage(messages, toolCallId);
         var toolMessage = ChatMessage.CreateWithId(messageId, MessageRole.Tool, content);
         if (existing is not null)
@@ -195,6 +203,35 @@ public sealed class SessionStreamingUiContext
         {
             messages.Add(new ChatMessageViewModel(toolMessage));
             RequestScroll();
+        }
+    }
+
+    private void HandleToolCallOutput(
+        string toolCallId,
+        string delta,
+        ObservableCollection<ChatMessageViewModel> messages)
+    {
+        // Fast path: tool bubble tracked by callId (already promoted to Running state)
+        if (_outputToolBubbles.TryGetValue(toolCallId, out var tracked))
+        {
+            tracked.AppendToolOutput(delta);
+            return;
+        }
+
+        // Fallback: search in the tool-bubbles-by-index (still in Preparing state)
+        var preparing = _toolBubblesByIndex.Values.FirstOrDefault(bubble =>
+            string.Equals(bubble.ToolCallId, toolCallId, StringComparison.Ordinal));
+        if (preparing is not null)
+        {
+            preparing.AppendToolOutput(delta);
+            return;
+        }
+
+        // Last resort: search the Messages collection
+        var existing = FindToolMessage(messages, toolCallId);
+        if (existing is not null)
+        {
+            existing.AppendToolOutput(delta);
         }
     }
 

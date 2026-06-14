@@ -1619,6 +1619,31 @@
                         </StackPanel>
                     </Border>
 
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="训练数据采集"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="自动从修正轨迹、溢出恢复轨迹、工具选型 DPO 中提取训练数据，写入 ~/.athlon-agent/training-data/。仅当 agent 调用工具失败→用户修正→重试成功、或超时→继续→完成时产出样本，不影响正常使用。"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"
+                                           Margin="0,6,0,0" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1"
+                                      Style="{StaticResource McpToggleSwitchStyle}"
+                                      IsChecked="{Binding Settings.Settings.TrainingData.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                      ToolTip="启用训练数据采集"
+                                      VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,24">
                         <TextBlock Text="{Binding SettingsStatus}" Foreground="{DynamicResource Brush.SubtleText}" VerticalAlignment="Center" Margin="0,0,12,0" />
                         <Button Content="保存设置" Command="{Binding SaveSettingsCommand}" Style="{StaticResource GhostButtonStyle}" />
@@ -2059,18 +2084,19 @@
                            Foreground="{DynamicResource Brush.Success}"
                            VerticalAlignment="Center"
                            FontSize="12" />
-                <TextBlock Text="{Binding Settings.Settings.Model.ModelName, StringFormat=模型: {0}}"
-                           Foreground="{DynamicResource Brush.SubtleText}"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           FontSize="12" />
-                <TextBlock Text="{Binding SessionUsageLine}"
-                           Foreground="{DynamicResource Brush.SubtleText}"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center"
-                           Margin="0,14,0,0"
-                           FontSize="11"
-                           TextTrimming="CharacterEllipsis" />
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Settings.Settings.Model.ModelName, StringFormat=模型: {0}}"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               HorizontalAlignment="Center"
+                               FontSize="12" />
+                    <TextBlock Text="{Binding SessionUsageLine}"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               HorizontalAlignment="Center"
+                               Margin="0,2,0,0"
+                               FontSize="11"
+                               TextTrimming="CharacterEllipsis" />
+                </StackPanel>
                 <TextBlock Text="{Binding LogsPath, StringFormat=Logs: {0}}"
                            Foreground="{DynamicResource Brush.SubtleText}"
                            HorizontalAlignment="Right"
