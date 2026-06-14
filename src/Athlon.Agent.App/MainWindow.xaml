@@ -1287,10 +1287,10 @@
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                         <Button Command="{Binding NavigateCommand}"
                                 CommandParameter="Chat"
-                                Style="{StaticResource GhostButtonStyle}"
-                                Padding="8,4"
-                                Margin="0,0,12,0"
-                                Content="← 返回对话" />
+                                Style="{StaticResource GhostIconButtonStyle}"
+                                Margin="0,0,8,0"
+                                ToolTip="返回对话"
+                                Content="←" />
                         <TextBlock Text="设置" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </StackPanel>
                     <TextBlock Text="配置模型、MCP、技能、工作区、上下文压缩与工具权限。"
@@ -1646,10 +1646,10 @@
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                         <Button Command="{Binding NavigateCommand}"
                                 CommandParameter="Chat"
-                                Style="{StaticResource GhostButtonStyle}"
-                                Padding="8,4"
-                                Margin="0,0,12,0"
-                                Content="← 返回对话" />
+                                Style="{StaticResource GhostIconButtonStyle}"
+                                Margin="0,0,8,0"
+                                ToolTip="返回对话"
+                                Content="←" />
                         <TextBlock Text="定时任务"
                                    FontSize="28"
                                    FontWeight="SemiBold"
