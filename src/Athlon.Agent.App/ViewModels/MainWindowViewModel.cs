@@ -39,6 +39,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly SessionHistoryCoordinator _sessionHistory;
     private readonly WorkspaceSessionBridge _workspaceBridge = new();
     private readonly ISessionUsageAccumulator _sessionUsageAccumulator;
+
+    // In-memory caches to avoid re-reading session.json/conversation.jsonl on repeat clicks.
+    private readonly Dictionary<string, AgentSession> _sessionCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, IReadOnlyList<ChatMessage>> _displayCache = new(StringComparer.Ordinal);
+
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
     private SessionTurnUiController _activeUi;
@@ -466,6 +471,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _uiCache.Remove(item.Id);
         await _storage.DeleteSessionAsync(item.Id);
+        InvalidateSessionCache(item.Id);
 
         if (string.Equals(_session.Id, item.Id, StringComparison.Ordinal))
         {
@@ -951,6 +957,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
 
         await _storage.SaveSessionAsync(toSave);
+        InvalidateSessionCache(toSave.Id);
     }
 
     private async Task SaveSessionInBackgroundAsync(AgentSession session)
@@ -992,11 +999,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SettingsStatus = "正在加载对话…";
         try
         {
-            var loaded = await _storage.LoadSessionAsync(sessionId);
-            if (loaded is null)
+            if (!_sessionCache.TryGetValue(sessionId, out var loaded))
             {
-                SettingsStatus = "无法加载该对话。";
-                return;
+                loaded = await _storage.LoadSessionAsync(sessionId);
+                if (loaded is null)
+                {
+                    SettingsStatus = "无法加载该对话。";
+                    return;
+                }
+
+                _sessionCache[sessionId] = loaded;
             }
 
             SwitchDisplayedSession(loaded);
@@ -1006,7 +1018,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             // conversation.jsonl is the display source of truth; session.json may be saved
             // before the assistant reply (e.g. scheduled tasks) and only contain the user turn.
-            var displayMessages = await _storage.LoadConversationDisplayAsync(sessionId);
+            if (!_displayCache.TryGetValue(sessionId, out var displayMessages))
+            {
+                displayMessages = await _storage.LoadConversationDisplayAsync(sessionId);
+                _displayCache[sessionId] = displayMessages;
+            }
+
             if (displayMessages.Count > 0)
             {
                 await _activeUi.HydrateDisplayAsync(_session, displayMessages);
@@ -1029,6 +1046,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             IsLoadingSession = false;
             NotifyCommandStatesChanged();
         }
+    }
+
+    private void InvalidateSessionCache(string sessionId)
+    {
+        _sessionCache.Remove(sessionId);
+        _displayCache.Remove(sessionId);
     }
 
     private void ConfigureWorkspaceWatcher() =>
