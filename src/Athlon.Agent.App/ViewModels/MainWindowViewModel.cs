@@ -399,6 +399,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         PendingImageAttachments.Clear();
 
         await _storage.SaveSessionAsync(_session);
+        InvalidateSessionCache(_session.Id);
         SettingsStatus = "上下文已清空。";
         NotifyCommandStatesChanged();
     }
