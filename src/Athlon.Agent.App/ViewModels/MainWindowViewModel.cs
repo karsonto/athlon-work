@@ -215,6 +215,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool isBusy;
 
     [ObservableProperty]
+    private bool isLoadingSession;
+
+    [ObservableProperty]
     private string shutdownStatusText = "正在关闭…";
 
     [ObservableProperty]
@@ -985,38 +988,47 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task LoadSessionInternalAsync(string sessionId)
     {
-        var loaded = await _storage.LoadSessionAsync(sessionId);
-        if (loaded is null)
+        IsLoadingSession = true;
+        SettingsStatus = "正在加载对话…";
+        try
         {
-            SettingsStatus = "无法加载该对话。";
-            return;
-        }
+            var loaded = await _storage.LoadSessionAsync(sessionId);
+            if (loaded is null)
+            {
+                SettingsStatus = "无法加载该对话。";
+                return;
+            }
 
-        SwitchDisplayedSession(loaded);
-        CurrentSessionTitle = _session.Title;
-        ComposerText = string.Empty;
-        PendingImageAttachments.Clear();
+            SwitchDisplayedSession(loaded);
+            CurrentSessionTitle = _session.Title;
+            ComposerText = string.Empty;
+            PendingImageAttachments.Clear();
 
-        // conversation.jsonl is the display source of truth; session.json may be saved
-        // before the assistant reply (e.g. scheduled tasks) and only contain the user turn.
-        var displayMessages = await _storage.LoadConversationDisplayAsync(sessionId);
-        if (displayMessages.Count > 0)
-        {
-            _activeUi.HydrateDisplay(_session, displayMessages);
-        }
-        else if (_session.Messages.Count > 0)
-        {
-            _activeUi.HydrateFromSession(_session);
-        }
-        else
-        {
-            _activeUi.HydrateFromSession(_session);
-        }
+            // conversation.jsonl is the display source of truth; session.json may be saved
+            // before the assistant reply (e.g. scheduled tasks) and only contain the user turn.
+            var displayMessages = await _storage.LoadConversationDisplayAsync(sessionId);
+            if (displayMessages.Count > 0)
+            {
+                await _activeUi.HydrateDisplayAsync(_session, displayMessages);
+            }
+            else if (_session.Messages.Count > 0)
+            {
+                await _activeUi.HydrateFromSessionAsync(_session);
+            }
+            else
+            {
+                await _activeUi.HydrateFromSessionAsync(_session);
+            }
 
-        ApplySessionWorkspace();
-        UpdateDisplayedBusyState();
-        SettingsStatus = $"已加载对话：{_session.Title}";
-        NotifyCommandStatesChanged();
+            ApplySessionWorkspace();
+            UpdateDisplayedBusyState();
+            SettingsStatus = $"已加载对话：{_session.Title}";
+        }
+        finally
+        {
+            IsLoadingSession = false;
+            NotifyCommandStatesChanged();
+        }
     }
 
     private void ConfigureWorkspaceWatcher() =>

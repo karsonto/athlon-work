@@ -263,13 +263,37 @@ public sealed class SessionTurnUiController
     public void HydrateDisplay(AgentSession session, IReadOnlyList<ChatMessage> displayMessages) =>
         RunOnUiSync(() => RebuildDisplayFromMessages(displayMessages));
 
+    public Task HydrateFromSessionAsync(AgentSession session) =>
+        RunOnUiAsync(() => RebuildDisplayFromMessages(session.Messages));
+
+    public Task HydrateDisplayAsync(AgentSession session, IReadOnlyList<ChatMessage> displayMessages) =>
+        RunOnUiAsync(() => RebuildDisplayFromMessages(displayMessages));
+
     private void RebuildDisplayFromMessages(IReadOnlyList<ChatMessage> displayMessages)
     {
         Messages.Clear();
         _streaming.Reset();
-        foreach (var viewModel in ChatTimelineHydrator.BuildDisplayMessages(displayMessages))
+
+        const int batchSize = 20;
+        var viewModels = ChatTimelineHydrator.BuildDisplayMessages(displayMessages);
+        if (viewModels.Count <= batchSize)
         {
-            Messages.Add(viewModel);
+            foreach (var viewModel in viewModels)
+            {
+                Messages.Add(viewModel);
+            }
+        }
+        else
+        {
+            // Batch-add to reduce UI layout passes for long conversations
+            for (var i = 0; i < viewModels.Count; i += batchSize)
+            {
+                var batch = viewModels.Skip(i).Take(batchSize);
+                foreach (var viewModel in batch)
+                {
+                    Messages.Add(viewModel);
+                }
+            }
         }
 
         RequestScrollImmediate();

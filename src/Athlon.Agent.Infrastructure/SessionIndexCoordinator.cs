@@ -119,7 +119,7 @@ internal sealed class SessionIndexCoordinator
             }
 
             entries[entry.Id] = entry;
-            var ordered = entries.Values.OrderByDescending(item => item.UpdatedAt).ToArray();
+            var ordered = entries.Values.OrderByDescending(item => item.UpdatedAt).ThenBy(item => item.Id).ToArray();
             await _jsonFileStore.SaveAsync(indexPath, ordered, cancellationToken).ConfigureAwait(false);
             return true;
         }
@@ -160,7 +160,7 @@ internal sealed class SessionIndexCoordinator
             }
         }
 
-        var ordered = result.Values.OrderByDescending(item => item.UpdatedAt).ToArray();
+        var ordered = result.Values.OrderByDescending(item => item.UpdatedAt).ThenBy(item => item.Id).ToArray();
         Directory.CreateDirectory(_paths.SessionsPath);
         await _jsonFileStore.SaveAsync(Path.Combine(_paths.SessionsPath, "index.json"), ordered, cancellationToken)
             .ConfigureAwait(false);

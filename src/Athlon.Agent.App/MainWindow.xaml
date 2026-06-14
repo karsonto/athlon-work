@@ -526,6 +526,31 @@
                                Margin="0,12,0,0" />
                 </StackPanel>
 
+                <!-- Loading indicator -->
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            IsHitTestVisible="False">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsLoadingSession}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="⏳"
+                               FontSize="36"
+                               HorizontalAlignment="Center"
+                               Opacity="0.7"
+                               Margin="0,0,0,12" />
+                    <TextBlock Text="正在加载对话…"
+                               FontSize="16"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+
                 <!-- Messages (ChatPane bubbles) -->
                 <ListBox x:Name="ChatMessagesList"
                              ItemsSource="{Binding Messages}"
