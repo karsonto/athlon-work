@@ -80,6 +80,33 @@
                             HorizontalAlignment="Right"
                             VerticalAlignment="Stretch"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button Command="{Binding SsoLogoutCommand}"
+                            ToolTip="点击退出登录"
+                            Margin="0,0,4,0"
+                            Padding="12,0"
+                            MinWidth="46"
+                            Height="32"
+                            FontSize="13"
+                            Foreground="{DynamicResource Brush.SubtleText}"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Setter Property="Content" Value="{Binding SsoDisplayName}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSsoUserVisible}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                        <Setter Property="Background" Value="{DynamicResource Brush.HoverNeutral}" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     <Button Content="−"
                             ToolTip="最小化"
                             Click="MinimizeButton_OnClick"

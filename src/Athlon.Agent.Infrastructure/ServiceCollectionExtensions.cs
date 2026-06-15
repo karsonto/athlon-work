@@ -11,8 +11,10 @@ using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Licensing;
 using Athlon.Agent.Core.SubAgents;
+using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure.Licensing;
 using Athlon.Agent.Infrastructure.Prompt;
+using Athlon.Agent.Infrastructure.Sso;
 using Athlon.Agent.Infrastructure.SubAgents;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
@@ -43,6 +45,9 @@ public static class ServiceCollectionExtensions
         services.AddAthlonEnvironmentPrompt();
         services.AddSingleton<IJsonFileStore>(jsonFileStore);
         services.AddSingleton<ICredentialStore, DpapiCredentialStore>();
+        services.AddSingleton<IImpSsoSessionStore, ImpSsoSessionStore>();
+        services.AddHttpClient<IImpSsoAuthService, ImpSsoAuthService>(
+            static client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddSingleton<IAppLogger>(logger);
         services.AddSingleton<IFileStorageService, FileStorageService>();
         services.AddHttpClient<IAgentModelClient, OpenAiCompatibleChatModelClient>(

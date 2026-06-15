@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.SubAgents;
+using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Core.TrainingData;
 
 namespace Athlon.Agent.Core;
@@ -62,6 +63,7 @@ public sealed class AppSettings
     public ScheduleSettings Schedule { get; set; } = new();
     public UpdateSettings Update { get; set; } = new();
     public TrainingDataSettings TrainingData { get; set; } = new();
+    public SsoSettings Sso { get; set; } = new();
 }
 
 public sealed class UpdateSettings

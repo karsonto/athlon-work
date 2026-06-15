@@ -6,6 +6,7 @@ using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.Sso;
 using Athlon.Agent.Mcp;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -25,6 +26,19 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         try
         {
+            var startupSettings = AppSettingsLoader.Load();
+
+            if (startupSettings.Sso.Enabled)
+            {
+                if (!ImpSsoStartupGate.EnsureAuthenticated(startupSettings.Sso))
+                {
+                    Shutdown(-1);
+                    return;
+                }
+
+                StartupTrace("SSO gate passed");
+            }
+
             if (!LicenseStartupGate.EnsureLicensed())
             {
                 Shutdown(-1);

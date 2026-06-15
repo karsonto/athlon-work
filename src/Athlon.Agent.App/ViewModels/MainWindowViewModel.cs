@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Sso;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Skills;
@@ -24,6 +25,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IActiveWorkspaceContext _workspaceContext;
     private readonly IMcpRegistry _mcpRegistry;
     private readonly AppSettings _appSettings;
+    private readonly IImpSsoSessionStore? _ssoSessionStore;
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly ISkillRuntime _skillRuntime;
     private readonly IImageAttachmentReader _imageAttachmentReader;
@@ -65,6 +67,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         WorkspaceFileEditorService workspaceFileEditorService,
         ApplicationShutdownService shutdownService,
         AppSettings settings,
+        IImpSsoSessionStore ssoSessionStore,
         ISessionUsageAccumulator sessionUsageAccumulator,
         SchedulerService scheduler)
     {
@@ -83,6 +86,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _shutdownService = shutdownService;
         _scheduler = scheduler;
         _appSettings = settings;
+        _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
         _uiLayout = new UiLayoutSettingsBridge(storage, settings);
         _sessionHistory = new SessionHistoryCoordinator(storage);
         _sessionUsageAccumulator = sessionUsageAccumulator;
@@ -112,6 +116,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _uiLayout.ClampInitialLayout();
 
         LogsPath = paths.LogsPath;
+
+        InitializeSsoDisplay();
 
         ApplySessionWorkspace();
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
@@ -252,6 +258,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private int selectedAtCompletionIndex = -1;
 
+    [ObservableProperty]
+    private string ssoDisplayName = string.Empty;
+
+    [ObservableProperty]
+    private bool isSsoUserVisible;
+
     public ObservableCollection<AtCompletionItemViewModel> AtCompletionItems { get; } = new();
     public ObservableCollection<PendingImageAttachmentViewModel> PendingImageAttachments { get; } = new();
     public bool HasPendingImages => PendingImageAttachments.Count > 0;
@@ -270,6 +282,49 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             Settings.SyncSkillsFromCatalog();
         }
+    }
+
+    [RelayCommand]
+    private void SsoLogout()
+    {
+        if (!_appSettings.Sso.Enabled)
+        {
+            return;
+        }
+
+        var result = MessageBox.Show(
+            "确定要退出登录吗？",
+            AppVersionInfo.ProductName,
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (result != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        _ssoSessionStore?.Clear();
+        Application.Current.Shutdown(0);
+    }
+
+    private void InitializeSsoDisplay()
+    {
+        if (!_appSettings.Sso.Enabled || _ssoSessionStore is null)
+        {
+            SsoDisplayName = string.Empty;
+            IsSsoUserVisible = false;
+            return;
+        }
+
+        var session = _ssoSessionStore.GetCachedSession();
+        if (session is null || _ssoSessionStore.IsExpired(session))
+        {
+            SsoDisplayName = string.Empty;
+            IsSsoUserVisible = false;
+            return;
+        }
+
+        SsoDisplayName = session.DisplayName;
+        IsSsoUserVisible = !string.IsNullOrWhiteSpace(SsoDisplayName);
     }
 
     [RelayCommand]
