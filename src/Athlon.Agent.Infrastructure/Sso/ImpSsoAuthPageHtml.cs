@@ -235,22 +235,37 @@ internal static class ImpSsoAuthPageHtml
               }
             }
 
-            function startAutoCloseCountdown(seconds) {
-              var remaining = seconds;
-              if (successCountdown) {
-                successCountdown.textContent = String(remaining);
-              }
-              var timer = setInterval(function () {
-                remaining -= 1;
-                if (remaining > 0) {
-                  if (successCountdown) {
-                    successCountdown.textContent = String(remaining);
-                  }
+            function closeWindow() {
+              window.close();
+              setTimeout(function () {
+                if (window.closed) {
                   return;
                 }
-                clearInterval(timer);
-                window.close();
-              }, 1000);
+                try {
+                  window.open('', '_self');
+                  window.close();
+                } catch (e) {
+                  // ignored
+                }
+              }, 100);
+            }
+
+            function startAutoCloseCountdown(seconds) {
+              var remaining = seconds;
+
+              function tick() {
+                if (successCountdown) {
+                  successCountdown.textContent = String(remaining);
+                }
+                if (remaining <= 1) {
+                  setTimeout(closeWindow, 1000);
+                  return;
+                }
+                remaining -= 1;
+                setTimeout(tick, 1000);
+              }
+
+              tick();
             }
 
             var hash = window.location.hash || '';
