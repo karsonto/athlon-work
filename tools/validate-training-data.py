@@ -39,7 +39,7 @@ def validate_file(filepath: str) -> dict:
 
     scores = []
 
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, "r", encoding="utf-8-sig") as f:
         for line_no, line in enumerate(f, 1):
             line = line.strip()
             if not line:
@@ -194,15 +194,15 @@ def main():
 
     data_dir = Path(args.dir)
     if not data_dir.exists():
-        print(f"❌ Directory not found: {data_dir}")
+        print(f"[ERROR] Directory not found: {data_dir}")
         sys.exit(1)
 
     jsonl_files = sorted(data_dir.glob("sft-traces-*.jsonl")) + sorted(data_dir.glob("dpo-preference-*.jsonl"))
     if not jsonl_files:
-        print(f"❌ No sft-traces-*.jsonl or dpo-preference-*.jsonl files found in {data_dir}")
+        print(f"[ERROR] No sft-traces-*.jsonl or dpo-preference-*.jsonl files found in {data_dir}")
         sys.exit(1)
 
-    print(f"📁 Found {len(jsonl_files)} JSONL file(s) in {data_dir}")
+    print(f"[INFO] Found {len(jsonl_files)} JSONL file(s) in {data_dir}")
     print()
 
     grand_total = {
@@ -224,7 +224,7 @@ def main():
         grand_total["has_dpo"] += stats["has_dpo"]
         grand_total["total_tokens_est"] += stats["total_tokens_est"]
 
-        status = "✅" if len(stats["errors"]) == 0 else "⚠️"
+        status = "[OK]" if len(stats["errors"]) == 0 else "[WARN]"
         print(f"  {status} {filepath.name}")
         print(f"      Lines: {stats['total_lines']} total, {stats['valid_lines']} valid"
               f"  ({stats['total_lines'] - stats['valid_lines']} errors)")
@@ -235,7 +235,7 @@ def main():
         print(f"      Role distribution: {dict(stats['role_counts'])}")
         if stats["errors"]:
             for err in stats["errors"][:5]:
-                print(f"      ⚠️  {err}")
+                print(f"      [WARN] {err}")
             if len(stats["errors"]) > 5:
                 print(f"      ... and {len(stats['errors']) - 5} more error(s)")
         print()
@@ -246,7 +246,7 @@ def main():
 
     # Grand summary
     print("=" * 60)
-    print("📊  SUMMARY")
+    print("[SUMMARY]")
     print("=" * 60)
     print(f"  Files:            {len(jsonl_files)}")
     print(f"  Total lines:      {grand_total['total_lines']:,}")
@@ -260,11 +260,11 @@ def main():
 
     if grand_total["total_errors"] > 0:
         print()
-        print("⚠️  Validation FAILED — fix errors above before training.")
+        print("[WARN] Validation FAILED - fix errors above before training.")
         sys.exit(1)
     else:
         print()
-        print("✅  Validation PASSED — data is ready for HuggingFace datasets.load_dataset().")
+        print("[OK] Validation PASSED - data is ready for HuggingFace datasets.load_dataset().")
 
 
 if __name__ == "__main__":
