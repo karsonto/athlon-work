@@ -28,6 +28,9 @@ public partial class App : Application
         {
             var startupSettings = AppSettingsLoader.Load();
 
+            StartupUpdateGate.CheckBeforeStartupGates(startupSettings);
+            StartupTrace("Startup update gate passed");
+
             if (startupSettings.Sso.Enabled)
             {
                 if (!ImpSsoStartupGate.EnsureAuthenticated(startupSettings.Sso))
@@ -74,8 +77,6 @@ public partial class App : Application
             MainWindow.Show();
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             StartupTrace("MainWindow shown");
-
-            _ = _services.GetRequiredService<AppUpdateService>().CheckOnStartupAsync();
         }
         catch (Exception exception)
         {

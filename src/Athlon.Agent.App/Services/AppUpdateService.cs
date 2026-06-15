@@ -1,14 +1,11 @@
 using System.Windows;
 using Athlon.Agent.Core;
 using Velopack;
-using Velopack.Sources;
 
 namespace Athlon.Agent.App.Services;
 
 public sealed class AppUpdateService
 {
-    private const string UpdateUrlEnvironmentVariable = "ATHLON_UPDATE_URL";
-
     private readonly AppSettings _settings;
 
     public AppUpdateService(AppSettings settings)
@@ -16,58 +13,16 @@ public sealed class AppUpdateService
         _settings = settings;
     }
 
-    public async Task CheckOnStartupAsync()
-    {
-#if DEBUG
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(UpdateUrlEnvironmentVariable)))
-        {
-            return;
-        }
-#endif
-
-        try
-        {
-            var updateInfo = await CheckForUpdatesAsync();
-            if (updateInfo is null)
-            {
-                return;
-            }
-
-            if (!TryResolveUpdateBaseUrl(out var baseUrl, out _))
-            {
-                return;
-            }
-
-            await Application.Current.Dispatcher.InvokeAsync(() =>
-            {
-                var result = MessageBox.Show(
-                    $"发现新版本 {updateInfo.TargetFullRelease.Version}，是否现在下载并安装？",
-                    AppVersionInfo.ProductName,
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information);
-
-                if (result == MessageBoxResult.Yes)
-                {
-                    _ = DownloadAndApplyAsync(baseUrl, updateInfo);
-                }
-            });
-        }
-        catch (Exception ex)
-        {
-            App.StartupTrace($"Update check on startup failed: {ex}");
-        }
-    }
-
     public async Task<AppUpdateCheckResult> CheckAndPromptAsync()
     {
-        if (!TryResolveUpdateBaseUrl(out var baseUrl, out var skipReason))
+        if (!AppUpdateCoordinator.TryResolveUpdateBaseUrl(_settings, out var baseUrl, out var skipReason))
         {
             return AppUpdateCheckResult.Skipped(skipReason);
         }
 
         try
         {
-            var updateInfo = await CheckForUpdatesAsync(baseUrl);
+            var updateInfo = await AppUpdateCoordinator.CheckForUpdatesAsync(baseUrl).ConfigureAwait(false);
             if (updateInfo is null)
             {
                 return AppUpdateCheckResult.UpToDate();
@@ -84,75 +39,13 @@ public sealed class AppUpdateService
                 return AppUpdateCheckResult.UpdateAvailableNotApplied(updateInfo.TargetFullRelease.Version.ToString());
             }
 
-            await DownloadAndApplyAsync(baseUrl, updateInfo);
+            await AppUpdateCoordinator.DownloadAndApplyAsync(baseUrl, updateInfo).ConfigureAwait(false);
             return AppUpdateCheckResult.UpdateApplied();
         }
         catch (Exception ex)
         {
             return AppUpdateCheckResult.Failed(ex.Message);
         }
-    }
-
-    private async Task<UpdateInfo?> CheckForUpdatesAsync()
-    {
-        if (!TryResolveUpdateBaseUrl(out var baseUrl, out _))
-        {
-            return null;
-        }
-
-        return await CheckForUpdatesAsync(baseUrl);
-    }
-
-    private static async Task<UpdateInfo?> CheckForUpdatesAsync(string baseUrl)
-    {
-        var manager = CreateUpdateManager(baseUrl);
-        if (!manager.IsInstalled)
-        {
-            return null;
-        }
-
-        return await manager.CheckForUpdatesAsync();
-    }
-
-    private static async Task DownloadAndApplyAsync(string baseUrl, UpdateInfo updateInfo)
-    {
-        var manager = CreateUpdateManager(baseUrl);
-        await manager.DownloadUpdatesAsync(updateInfo);
-        manager.ApplyUpdatesAndRestart(updateInfo);
-    }
-
-    private static UpdateManager CreateUpdateManager(string baseUrl)
-    {
-        var normalized = baseUrl.TrimEnd('/');
-        return new UpdateManager(new SimpleWebSource(normalized));
-    }
-
-    private bool TryResolveUpdateBaseUrl(out string baseUrl, out string skipReason)
-    {
-        baseUrl = "";
-        skipReason = "";
-
-        var envUrl = Environment.GetEnvironmentVariable(UpdateUrlEnvironmentVariable);
-        if (!string.IsNullOrWhiteSpace(envUrl))
-        {
-            baseUrl = envUrl.Trim();
-            return true;
-        }
-
-        if (!_settings.Update.Enabled)
-        {
-            skipReason = "自动更新已禁用。";
-            return false;
-        }
-
-        if (string.IsNullOrWhiteSpace(_settings.Update.BaseUrl))
-        {
-            skipReason = "未配置更新源。请在 settings.json 中设置 Update.BaseUrl，或设置环境变量 ATHLON_UPDATE_URL。";
-            return false;
-        }
-
-        baseUrl = _settings.Update.BaseUrl.Trim();
-        return true;
     }
 }
 

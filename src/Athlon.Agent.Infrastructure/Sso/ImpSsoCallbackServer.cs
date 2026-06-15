@@ -7,11 +7,16 @@ namespace Athlon.Agent.Infrastructure.Sso;
 
 public sealed class ImpSsoCallbackServer : IDisposable
 {
+    private static readonly TimeSpan StopDrainTimeout = TimeSpan.FromSeconds(5);
+
     private readonly SsoSettings _settings;
+    private readonly object _inflightLock = new();
+    private int _inflightRequestCount;
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
     private TaskCompletionSource<ImpSsoCallbackPayload>? _callbackTcs;
+    private bool _disposed;
 
     public ImpSsoCallbackServer(SsoSettings settings)
     {
@@ -22,6 +27,8 @@ public sealed class ImpSsoCallbackServer : IDisposable
         TimeSpan timeout,
         CancellationToken cancellationToken = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         _callbackTcs = new TaskCompletionSource<ImpSsoCallbackPayload>(
             TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -75,12 +82,13 @@ public sealed class ImpSsoCallbackServer : IDisposable
                 break;
             }
 
-            _ = Task.Run(() => HandleRequestAsync(context), cancellationToken);
+            _ = HandleRequestAsync(context);
         }
     }
 
     private async Task HandleRequestAsync(HttpListenerContext context)
     {
+        BeginInflightRequest();
         try
         {
             var path = context.Request.Url?.AbsolutePath ?? "";
@@ -113,6 +121,10 @@ public sealed class ImpSsoCallbackServer : IDisposable
                 // ignored
             }
         }
+        finally
+        {
+            EndInflightRequest();
+        }
     }
 
     private async Task HandleCompleteAsync(HttpListenerContext context)
@@ -131,8 +143,9 @@ public sealed class ImpSsoCallbackServer : IDisposable
             return;
         }
 
-        _callbackTcs?.TrySetResult(payload);
+        // Return ok to the browser before unblocking the waiter, which stops the listener.
         await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { ok = true }).ConfigureAwait(false);
+        _callbackTcs?.TrySetResult(payload);
     }
 
     private async Task WriteAuthPageAsync(HttpListenerResponse response)
@@ -202,22 +215,103 @@ public sealed class ImpSsoCallbackServer : IDisposable
         response.Close();
     }
 
-    public Task StopAsync()
+    public async Task StopAsync()
     {
         _cts?.Cancel();
+
         if (_listener is { IsListening: true })
         {
-            _listener.Stop();
+            try
+            {
+                _listener.Stop();
+            }
+            catch (HttpListenerException)
+            {
+                // Listener already closed.
+            }
         }
 
-        return _listenTask ?? Task.CompletedTask;
+        if (_listenTask is not null)
+        {
+            try
+            {
+                await _listenTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when stopping.
+            }
+            catch (HttpListenerException)
+            {
+                // Expected when stopping.
+            }
+            catch (ObjectDisposedException)
+            {
+                // Expected when stopping.
+            }
+        }
+
+        await WaitForInflightRequestsAsync().ConfigureAwait(false);
+
+        try
+        {
+            _listener?.Close();
+        }
+        catch (ObjectDisposedException)
+        {
+            // Already closed.
+        }
+
+        _listener = null;
+    }
+
+    private void BeginInflightRequest()
+    {
+        lock (_inflightLock)
+        {
+            _inflightRequestCount++;
+        }
+    }
+
+    private void EndInflightRequest()
+    {
+        lock (_inflightLock)
+        {
+            _inflightRequestCount--;
+            if (_inflightRequestCount == 0)
+            {
+                Monitor.PulseAll(_inflightLock);
+            }
+        }
+    }
+
+    private async Task WaitForInflightRequestsAsync()
+    {
+        var deadline = DateTime.UtcNow.Add(StopDrainTimeout);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (_inflightLock)
+            {
+                if (_inflightRequestCount == 0)
+                {
+                    return;
+                }
+            }
+
+            await Task.Delay(50).ConfigureAwait(false);
+        }
     }
 
     public void Dispose()
     {
-        _cts?.Cancel();
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        StopAsync().GetAwaiter().GetResult();
         _cts?.Dispose();
-        _listener?.Close();
-        _listener = null;
+        _cts = null;
     }
 }
