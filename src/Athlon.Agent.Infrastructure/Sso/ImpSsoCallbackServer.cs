@@ -34,10 +34,11 @@ public sealed class ImpSsoCallbackServer : IDisposable
 
         await StartAsync(cancellationToken).ConfigureAwait(false);
 
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(timeout);
-        await using var registration = timeoutCts.Token.Register(() =>
-            _callbackTcs.TrySetException(new TimeoutException("IMP 登录超时，请重试。")));
+        using var timeoutCts = new CancellationTokenSource(timeout);
+        await using var cancelRegistration = cancellationToken.Register(() =>
+            _callbackTcs!.TrySetCanceled(cancellationToken));
+        await using var timeoutRegistration = timeoutCts.Token.Register(() =>
+            _callbackTcs!.TrySetException(new TimeoutException("IMP 登录超时，请重试。")));
 
         try
         {

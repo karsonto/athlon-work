@@ -37,13 +37,15 @@ public static class ImpSsoStartupGate
 
         store.Clear();
 
+        using var loginCts = new CancellationTokenSource();
         ImpSsoLoginWaitingWindow? waitingWindow = null;
         try
         {
             waitingWindow = new ImpSsoLoginWaitingWindow();
+            waitingWindow.Closing += (_, _) => loginCts.Cancel();
             waitingWindow.Show();
 
-            return RunBrowserLoginWithMessagePump(settings, store);
+            return RunBrowserLoginWithMessagePump(settings, store, loginCts.Token);
         }
         catch (Exception ex)
         {
@@ -64,10 +66,14 @@ public static class ImpSsoStartupGate
     /// Runs SSO login off the UI thread while pumping the dispatcher so the waiting window stays responsive.
     /// Blocking <c>GetResult()</c> on the UI thread would deadlock when async continuations capture the WPF sync context.
     /// </summary>
-    private static bool RunBrowserLoginWithMessagePump(SsoSettings settings, ImpSsoSessionStore store)
+    private static bool RunBrowserLoginWithMessagePump(
+        SsoSettings settings,
+        ImpSsoSessionStore store,
+        CancellationToken cancellationToken)
     {
         var loginTask = Task.Run(async () =>
-            await PerformBrowserLoginAsync(settings, store).ConfigureAwait(false));
+            await PerformBrowserLoginAsync(settings, store, cancellationToken).ConfigureAwait(false),
+            cancellationToken);
 
         var frame = new DispatcherFrame();
         loginTask.ContinueWith(
@@ -78,6 +84,11 @@ public static class ImpSsoStartupGate
 
         Dispatcher.PushFrame(frame);
 
+        if (loginTask.IsCanceled)
+        {
+            return false;
+        }
+
         if (loginTask.IsFaulted)
         {
             ExceptionDispatchInfo.Capture(loginTask.Exception!.GetBaseException()).Throw();
@@ -86,29 +97,40 @@ public static class ImpSsoStartupGate
         return loginTask.Result;
     }
 
-    private static async Task<bool> PerformBrowserLoginAsync(SsoSettings settings, ImpSsoSessionStore store)
+    private static async Task<bool> PerformBrowserLoginAsync(
+        SsoSettings settings,
+        ImpSsoSessionStore store,
+        CancellationToken cancellationToken)
     {
-        using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        var authService = new ImpSsoAuthService(httpClient);
-        using var callbackServer = new ImpSsoCallbackServer(settings);
-
-        var waitTask = callbackServer.WaitForCallbackAsync(LoginTimeout);
-        var loginUrl = authService.BuildImpLoginUrl(settings);
-        Process.Start(new ProcessStartInfo
+        try
         {
-            FileName = loginUrl,
-            UseShellExecute = true
-        });
+            using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+            var authService = new ImpSsoAuthService(httpClient);
+            using var callbackServer = new ImpSsoCallbackServer(settings);
 
-        var payload = await waitTask.ConfigureAwait(false);
-        var result = await authService.CompleteLoginAsync(payload, settings).ConfigureAwait(false);
-        if (result.IsValid && result.Session is not null)
-        {
-            store.SaveSession(result.Session);
-            return true;
+            var waitTask = callbackServer.WaitForCallbackAsync(LoginTimeout, cancellationToken);
+            var loginUrl = authService.BuildImpLoginUrl(settings);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = loginUrl,
+                UseShellExecute = true
+            });
+
+            var payload = await waitTask.ConfigureAwait(false);
+            var result = await authService.CompleteLoginAsync(payload, settings, cancellationToken)
+                .ConfigureAwait(false);
+            if (result.IsValid && result.Session is not null)
+            {
+                store.SaveSession(result.Session);
+                return true;
+            }
+
+            return HandleFailure(settings, result);
         }
-
-        return HandleFailure(settings, result);
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     private static bool HandleFailure(SsoSettings settings, ImpSsoCheckResult result)

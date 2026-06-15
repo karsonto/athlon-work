@@ -3,25 +3,116 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="IMP SSO 登录"
         Icon="/Assets/app-icon.ico"
-        Height="220"
-        Width="520"
-        WindowStartupLocation="CenterScreen"
+        Width="300"
+        SizeToContent="Height"
+        WindowStartupLocation="Manual"
         ResizeMode="NoResize"
-        ShowInTaskbar="True"
+        ShowInTaskbar="False"
         Topmost="True"
-        Background="{DynamicResource Brush.AppBackground}">
-    <StackPanel Margin="28" VerticalAlignment="Center">
-        <TextBlock Text="正在等待 IMP 登录"
-                   FontSize="18"
-                   FontWeight="SemiBold"
-                   Foreground="{DynamicResource Brush.Text}" />
-        <TextBlock Text="已在浏览器中打开登录页面，请完成登录。"
-                   Margin="0,14,0,0"
-                   TextWrapping="Wrap"
-                   Foreground="{DynamicResource Brush.SubtleText}" />
-        <TextBlock Text="登录成功后此窗口将自动关闭，主界面随后出现。"
-                   Margin="0,8,0,0"
-                   TextWrapping="Wrap"
-                   Foreground="{DynamicResource Brush.SubtleText}" />
-    </StackPanel>
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent">
+    <Border Background="#FFFFFF"
+            BorderBrush="#E2E8F0"
+            BorderThickness="1"
+            CornerRadius="12"
+            Padding="14,12"
+            SnapsToDevicePixels="True">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="20"
+                              ShadowDepth="2"
+                              Direction="270"
+                              Opacity="0.14"
+                              Color="#0F172A" />
+        </Border.Effect>
+        <Grid>
+            <Grid Margin="0,0,18,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Grid Grid.Column="0"
+                      Width="28"
+                      Height="28"
+                      Margin="0,2,12,0"
+                      VerticalAlignment="Top"
+                      RenderTransformOrigin="0.5,0.5">
+                    <Ellipse Width="28"
+                             Height="28"
+                             Stroke="#E2E8F0"
+                             StrokeThickness="2.5" />
+                    <Ellipse Width="28"
+                             Height="28"
+                             Stroke="#6366F1"
+                             StrokeThickness="2.5"
+                             StrokeDashArray="3.5 18"
+                             StrokeStartLineCap="Round"
+                             StrokeEndLineCap="Round">
+                        <Ellipse.RenderTransform>
+                            <RotateTransform Angle="0" />
+                        </Ellipse.RenderTransform>
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard RepeatBehavior="Forever">
+                                        <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                         From="0"
+                                                         To="360"
+                                                         Duration="0:0:0.8" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+                </Grid>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="正在等待 IMP 登录"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               Foreground="#0F172A" />
+                    <TextBlock Text="请在浏览器中完成登录，成功后自动继续。"
+                               Margin="0,4,0,0"
+                               FontSize="12"
+                               LineHeight="18"
+                               TextWrapping="Wrap"
+                               Foreground="#475569" />
+                </StackPanel>
+            </Grid>
+
+            <Button Content="×"
+                    Width="22"
+                    Height="22"
+                    Padding="0"
+                    Margin="0,-4,-4,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Panel.ZIndex="1"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Foreground="#64748B"
+                    FontSize="16"
+                    Cursor="Hand"
+                    ToolTip="取消登录"
+                    Click="OnCloseClick">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Root"
+                                Background="Transparent"
+                                CornerRadius="6">
+                            <ContentPresenter HorizontalAlignment="Center"
+                                              VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Root" Property="Background" Value="#F1F5F9" />
+                                <Setter Property="Foreground" Value="#0F172A" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </Grid>
+    </Border>
 </Window>
