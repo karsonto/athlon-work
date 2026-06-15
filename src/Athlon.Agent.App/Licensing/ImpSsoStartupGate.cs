@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net.Http;
 using System.Windows;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure;
