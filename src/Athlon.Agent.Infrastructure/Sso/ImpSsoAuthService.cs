@@ -8,10 +8,10 @@ public sealed class ImpSsoAuthService(HttpClient httpClient) : IImpSsoAuthServic
 {
     public string BuildImpLoginUrl(SsoSettings settings)
     {
-        var callbackUrl = Uri.EscapeDataString(settings.CallbackUrl);
         var appId = Uri.EscapeDataString(settings.AppId);
+        var msg = Uri.EscapeDataString(settings.Msg);
         return $"https://{settings.ImpDomain}/icbcasia/imp/index.html" +
-               $"?subAppUrl={callbackUrl}&appId={appId}&toLogin=true";
+               $"?toLogin=true&appId={appId}&msg={msg}#/login";
     }
 
     public async Task<ImpSsoCheckResult> CheckSsoTokenAsync(

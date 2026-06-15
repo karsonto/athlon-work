@@ -92,6 +92,25 @@ public sealed class ImpSsoResponseParserTests
 public sealed class ImpSsoAuthServiceMappingTests
 {
     [Fact]
+    public void BuildImpLoginUrl_UsesMsgAndLoginHashFormat()
+    {
+        using var http = new HttpClient();
+        var service = new ImpSsoAuthService(http);
+        var settings = new SsoSettings
+        {
+            ImpDomain = "imp.icbcasiauat.com",
+            AppId = "252",
+            Msg = "123456789"
+        };
+
+        var url = service.BuildImpLoginUrl(settings);
+
+        Assert.Equal(
+            "https://imp.icbcasiauat.com/icbcasia/imp/index.html?toLogin=true&appId=252&msg=123456789#/login",
+            url);
+    }
+
+    [Fact]
     public void MapParsedResult_SetsOneDayExpiryFromSettings()
     {
         var settings = new SsoSettings { SessionValidityHours = 24 };

@@ -150,52 +150,7 @@ public sealed class ImpSsoCallbackServer : IDisposable
 
     private async Task WriteAuthPageAsync(HttpListenerResponse response)
     {
-        var completePath = _settings.CompletePath;
-        var html = $$"""
-            <!DOCTYPE html>
-            <html>
-            <head><meta charset="utf-8"><title>SSO 登录中</title></head>
-            <body>
-            <p>正在完成登录，请稍候...</p>
-            <script>
-            (function () {
-              var hash = window.location.hash || '';
-              if (hash.indexOf('#/?') === 0) hash = hash.substring(3);
-              else if (hash.indexOf('#/') === 0) hash = hash.substring(2);
-              else if (hash.charAt(0) === '#') hash = hash.substring(1);
-              var params = new URLSearchParams(hash);
-              var payload = {
-                appId: params.get('appId'),
-                userId: params.get('userId'),
-                locale: params.get('locale'),
-                token: params.get('token'),
-                role: params.get('role'),
-                depname: params.get('depname'),
-                channel_type: params.get('channel_type'),
-                msg: params.get('msg')
-              };
-              if (!payload.token) {
-                document.body.innerHTML = '<p>登录失败：未收到 token。</p>';
-                return;
-              }
-              fetch('{{completePath}}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-              })
-              .then(function (r) { return r.json(); })
-              .then(function () {
-                document.body.innerHTML = '<p>登录成功，可以关闭此窗口。</p>';
-              })
-              .catch(function () {
-                document.body.innerHTML = '<p>登录失败，请返回应用重试。</p>';
-              });
-            })();
-            </script>
-            </body>
-            </html>
-            """;
-
+        var html = ImpSsoAuthPageHtml.Build(_settings.CompletePath);
         var bytes = Encoding.UTF8.GetBytes(html);
         response.StatusCode = (int)HttpStatusCode.OK;
         response.ContentType = "text/html; charset=utf-8";
