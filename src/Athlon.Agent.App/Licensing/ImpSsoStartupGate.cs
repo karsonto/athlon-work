@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Net.Http;
+using System.Runtime.ExceptionServices;
 using System.Windows;
+using System.Windows.Threading;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.Sso;
@@ -35,19 +37,53 @@ public static class ImpSsoStartupGate
 
         store.Clear();
 
+        ImpSsoLoginWaitingWindow? waitingWindow = null;
         try
         {
-            return PerformBrowserLoginAsync(settings, store).GetAwaiter().GetResult();
+            waitingWindow = new ImpSsoLoginWaitingWindow();
+            waitingWindow.Show();
+
+            return RunBrowserLoginWithMessagePump(settings, store);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(
+            ShowStartupMessage(
                 $"IMP SSO 登录失败：{ex.Message}",
                 "Athlon Agent",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             return false;
         }
+        finally
+        {
+            waitingWindow?.Close();
+        }
+    }
+
+    /// <summary>
+    /// Runs SSO login off the UI thread while pumping the dispatcher so the waiting window stays responsive.
+    /// Blocking <c>GetResult()</c> on the UI thread would deadlock when async continuations capture the WPF sync context.
+    /// </summary>
+    private static bool RunBrowserLoginWithMessagePump(SsoSettings settings, ImpSsoSessionStore store)
+    {
+        var loginTask = Task.Run(async () =>
+            await PerformBrowserLoginAsync(settings, store).ConfigureAwait(false));
+
+        var frame = new DispatcherFrame();
+        loginTask.ContinueWith(
+            _ => frame.Continue = false,
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+        Dispatcher.PushFrame(frame);
+
+        if (loginTask.IsFaulted)
+        {
+            ExceptionDispatchInfo.Capture(loginTask.Exception!.GetBaseException()).Throw();
+        }
+
+        return loginTask.Result;
     }
 
     private static async Task<bool> PerformBrowserLoginAsync(SsoSettings settings, ImpSsoSessionStore store)
@@ -64,8 +100,8 @@ public static class ImpSsoStartupGate
             UseShellExecute = true
         });
 
-        var payload = await waitTask;
-        var result = await authService.CompleteLoginAsync(payload, settings);
+        var payload = await waitTask.ConfigureAwait(false);
+        var result = await authService.CompleteLoginAsync(payload, settings).ConfigureAwait(false);
         if (result.IsValid && result.Session is not null)
         {
             store.SaveSession(result.Session);
@@ -79,7 +115,7 @@ public static class ImpSsoStartupGate
     {
         if (result.Status == ImpSsoCheckStatus.NoRole)
         {
-            MessageBox.Show(
+            ShowStartupMessage(
                 result.Message,
                 "Athlon Agent",
                 MessageBoxButton.OK,
@@ -88,12 +124,28 @@ public static class ImpSsoStartupGate
             return false;
         }
 
-        MessageBox.Show(
+        ShowStartupMessage(
             string.IsNullOrWhiteSpace(result.Message) ? "IMP SSO 登录失败。" : result.Message,
             "Athlon Agent",
             MessageBoxButton.OK,
             MessageBoxImage.Error);
         return false;
+    }
+
+    private static void ShowStartupMessage(
+        string message,
+        string caption,
+        MessageBoxButton button,
+        MessageBoxImage image)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            MessageBox.Show(message, caption, button, image);
+            return;
+        }
+
+        dispatcher.Invoke(() => MessageBox.Show(message, caption, button, image));
     }
 
     private static void OpenUrl(string url)

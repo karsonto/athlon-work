@@ -25,7 +25,7 @@ public sealed class ImpSsoCallbackServer : IDisposable
         _callbackTcs = new TaskCompletionSource<ImpSsoCallbackPayload>(
             TaskCreationOptions.RunContinuationsAsynchronously);
 
-        await StartAsync(cancellationToken);
+        await StartAsync(cancellationToken).ConfigureAwait(false);
 
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutCts.CancelAfter(timeout);
@@ -34,11 +34,11 @@ public sealed class ImpSsoCallbackServer : IDisposable
 
         try
         {
-            return await _callbackTcs.Task;
+            return await _callbackTcs.Task.ConfigureAwait(false);
         }
         finally
         {
-            await StopAsync();
+            await StopAsync().ConfigureAwait(false);
         }
     }
 
@@ -60,7 +60,7 @@ public sealed class ImpSsoCallbackServer : IDisposable
             HttpListenerContext context;
             try
             {
-                context = await _listener.GetContextAsync().WaitAsync(cancellationToken);
+                context = await _listener.GetContextAsync().WaitAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -87,14 +87,14 @@ public sealed class ImpSsoCallbackServer : IDisposable
             if (string.Equals(path, _settings.CallbackPath, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase))
             {
-                await WriteAuthPageAsync(context.Response);
+                await WriteAuthPageAsync(context.Response).ConfigureAwait(false);
                 return;
             }
 
             if (string.Equals(path, _settings.CompletePath, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
             {
-                await HandleCompleteAsync(context);
+                await HandleCompleteAsync(context).ConfigureAwait(false);
                 return;
             }
 
@@ -118,7 +118,7 @@ public sealed class ImpSsoCallbackServer : IDisposable
     private async Task HandleCompleteAsync(HttpListenerContext context)
     {
         using var reader = new StreamReader(context.Request.InputStream, context.Request.ContentEncoding);
-        var body = await reader.ReadToEndAsync();
+        var body = await reader.ReadToEndAsync().ConfigureAwait(false);
         ImpSsoCallbackPayload? payload = null;
         if (!string.IsNullOrWhiteSpace(body))
         {
@@ -127,12 +127,12 @@ public sealed class ImpSsoCallbackServer : IDisposable
 
         if (payload is null || string.IsNullOrWhiteSpace(payload.Token))
         {
-            await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new { ok = false });
+            await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new { ok = false }).ConfigureAwait(false);
             return;
         }
 
         _callbackTcs?.TrySetResult(payload);
-        await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { ok = true });
+        await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { ok = true }).ConfigureAwait(false);
     }
 
     private async Task WriteAuthPageAsync(HttpListenerResponse response)
@@ -187,7 +187,7 @@ public sealed class ImpSsoCallbackServer : IDisposable
         response.StatusCode = (int)HttpStatusCode.OK;
         response.ContentType = "text/html; charset=utf-8";
         response.ContentLength64 = bytes.Length;
-        await response.OutputStream.WriteAsync(bytes);
+        await response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
         response.Close();
     }
 
@@ -198,7 +198,7 @@ public sealed class ImpSsoCallbackServer : IDisposable
         response.StatusCode = (int)statusCode;
         response.ContentType = "application/json";
         response.ContentLength64 = bytes.Length;
-        await response.OutputStream.WriteAsync(bytes);
+        await response.OutputStream.WriteAsync(bytes).ConfigureAwait(false);
         response.Close();
     }
 
