@@ -202,7 +202,7 @@ internal static class ImpSsoAuthPageHtml
                 </svg>
               </div>
               <div class="state-title">登录成功</div>
-              <div class="state-desc">身份验证已完成，请关闭此页面返回应用。</div>
+              <div class="state-desc">身份验证已完成，页面将在 <span id="success-countdown">3</span> 秒后自动关闭。</div>
             </div>
 
             <div id="state-error" class="state-panel" hidden>
@@ -224,6 +224,7 @@ internal static class ImpSsoAuthPageHtml
             var success = document.getElementById('state-success');
             var error = document.getElementById('state-error');
             var errorMessage = document.getElementById('error-message');
+            var successCountdown = document.getElementById('success-countdown');
 
             function showState(state, message) {
               loading.hidden = state !== 'loading';
@@ -232,6 +233,24 @@ internal static class ImpSsoAuthPageHtml
               if (message && errorMessage) {
                 errorMessage.textContent = message;
               }
+            }
+
+            function startAutoCloseCountdown(seconds) {
+              var remaining = seconds;
+              if (successCountdown) {
+                successCountdown.textContent = String(remaining);
+              }
+              var timer = setInterval(function () {
+                remaining -= 1;
+                if (remaining > 0) {
+                  if (successCountdown) {
+                    successCountdown.textContent = String(remaining);
+                  }
+                  return;
+                }
+                clearInterval(timer);
+                window.close();
+              }, 1000);
             }
 
             var hash = window.location.hash || '';
@@ -271,6 +290,7 @@ internal static class ImpSsoAuthPageHtml
             .then(function (data) {
               if (data && data.ok === false) throw new Error('验证未通过');
               showState('success');
+              startAutoCloseCountdown(3);
             })
             .catch(function () {
               showState('error', '无法完成身份验证，请关闭此页面并在应用中重试。');
