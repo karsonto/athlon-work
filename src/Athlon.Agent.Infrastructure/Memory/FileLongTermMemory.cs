@@ -6,7 +6,6 @@ namespace Athlon.Agent.Infrastructure.Memory;
 
 public sealed class FileLongTermMemory(
     IAppPathProvider paths,
-    IFileStorageService storage,
     AppSettings settings,
     IAppLogger logger) : ILongTermMemory
 {

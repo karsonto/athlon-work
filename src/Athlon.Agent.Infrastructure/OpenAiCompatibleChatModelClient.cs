@@ -82,8 +82,8 @@ public sealed class OpenAiCompatibleChatModelClient(
                 _logger.Warning(
                     "Model HTTP failed {StatusCode} for session {SessionId}: {Body}",
                     statusCode,
-                    sessionId,
-                    HttpLogSanitizer.Truncate(responseBody));
+                    sessionId ?? "(none)",
+                    HttpLogSanitizer.Truncate(responseBody) ?? string.Empty);
                 throw new HttpRequestException($"{error}. Body: {HttpLogSanitizer.Truncate(responseBody)}");
             }
 

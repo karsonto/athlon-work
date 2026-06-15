@@ -65,7 +65,7 @@ public sealed class SessionHttpLogService(IAppPathProvider paths, IJsonFileStore
             "HTTP {Purpose} logged for session {SessionId} status={StatusCode} duration={DurationMs}ms",
             entry.Purpose,
             sessionId,
-            entry.StatusCode,
+            entry.StatusCode?.ToString() ?? "n/a",
             entry.DurationMs);
     }
 }

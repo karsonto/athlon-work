@@ -1275,11 +1275,16 @@ public sealed record AtCompletionItemViewModel(
     string InsertText,
     string MatchText);
 
-public sealed class PendingImageAttachmentViewModel(ImageAttachment attachment)
+public sealed class PendingImageAttachmentViewModel
 {
-    public ImageAttachment Attachment { get; } = attachment;
-    public string FileName => attachment.FileName;
-    public string MimeType => attachment.MimeType;
+    public PendingImageAttachmentViewModel(ImageAttachment attachment)
+    {
+        Attachment = attachment;
+    }
+
+    public ImageAttachment Attachment { get; }
+    public string FileName => Attachment.FileName;
+    public string MimeType => Attachment.MimeType;
     public System.Windows.Media.ImageSource? Thumbnail =>
-        Services.ImageAttachmentUi.TryCreateThumbnail(attachment);
+        Services.ImageAttachmentUi.TryCreateThumbnail(Attachment);
 }

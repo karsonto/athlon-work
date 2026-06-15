@@ -134,6 +134,12 @@ internal static class ImpSsoAuthPageHtml
               max-width: 300px;
             }
 
+            .close-hint {
+              margin-top: -6px;
+              font-size: 12px;
+              color: var(--subtle);
+            }
+
             .icon-circle {
               width: 52px;
               height: 52px;
@@ -202,7 +208,8 @@ internal static class ImpSsoAuthPageHtml
                 </svg>
               </div>
               <div class="state-title">登录成功</div>
-              <div class="state-desc">身份验证已完成，页面将在 <span id="success-countdown">3</span> 秒后自动关闭。</div>
+              <div id="success-message" class="state-desc">身份验证已完成，页面将在 <span id="success-countdown">3</span> 秒后自动关闭。</div>
+              <div id="success-close-hint" class="close-hint" hidden>如果浏览器阻止自动关闭，请手动关闭当前标签页。</div>
             </div>
 
             <div id="state-error" class="state-panel" hidden>
@@ -224,7 +231,9 @@ internal static class ImpSsoAuthPageHtml
             var success = document.getElementById('state-success');
             var error = document.getElementById('state-error');
             var errorMessage = document.getElementById('error-message');
+            var successMessage = document.getElementById('success-message');
             var successCountdown = document.getElementById('success-countdown');
+            var successCloseHint = document.getElementById('success-close-hint');
 
             function showState(state, message) {
               loading.hidden = state !== 'loading';
@@ -235,37 +244,60 @@ internal static class ImpSsoAuthPageHtml
               }
             }
 
+            function showCloseBlocked() {
+              if (window.closed) {
+                return;
+              }
+              if (successMessage) {
+                successMessage.textContent = '身份验证已完成。浏览器已阻止自动关闭。';
+              }
+              if (successCloseHint) {
+                successCloseHint.hidden = false;
+              }
+            }
+
             function closeWindow() {
-              window.close();
+              try {
+                window.open('', '_self', '');
+              } catch (e) {
+                // ignored
+              }
+
+              try {
+                window.close();
+              } catch (e) {
+                // ignored
+              }
+
               setTimeout(function () {
                 if (window.closed) {
                   return;
                 }
                 try {
-                  window.open('', '_self');
                   window.close();
                 } catch (e) {
                   // ignored
                 }
-              }, 100);
+                setTimeout(showCloseBlocked, 500);
+              }, 150);
             }
 
             function startAutoCloseCountdown(seconds) {
               var remaining = seconds;
-
-              function tick() {
-                if (successCountdown) {
-                  successCountdown.textContent = String(remaining);
-                }
-                if (remaining <= 1) {
-                  setTimeout(closeWindow, 1000);
-                  return;
-                }
-                remaining -= 1;
-                setTimeout(tick, 1000);
+              if (successCountdown) {
+                successCountdown.textContent = String(remaining);
               }
 
-              tick();
+              var timer = setInterval(function () {
+                remaining -= 1;
+                if (successCountdown) {
+                  successCountdown.textContent = String(Math.max(remaining, 0));
+                }
+                if (remaining <= 0) {
+                  clearInterval(timer);
+                  closeWindow();
+                }
+              }, 1000);
             }
 
             var hash = window.location.hash || '';

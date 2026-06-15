@@ -13,6 +13,7 @@ using Serilog.Events;
 
 namespace Athlon.Agent.Infrastructure;
 
+[SupportedOSPlatform("windows")]
 public sealed class DpapiCredentialStore(IAppPathProvider paths) : ICredentialStore
 {
     public Task SaveSecretAsync(string name, string secret, CancellationToken cancellationToken = default)
