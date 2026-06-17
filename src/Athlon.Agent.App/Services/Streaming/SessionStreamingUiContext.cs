@@ -11,6 +11,7 @@ public sealed class SessionStreamingUiContext
     private readonly Dictionary<string, ChatMessageViewModel> _assistantBubbles = new(StringComparer.Ordinal);
     private readonly Dictionary<int, ChatMessageViewModel> _toolBubblesByIndex = new();
     private readonly Dictionary<string, int> _toolCallIdToIndex = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _pendingToolCallArgs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ChatMessageViewModel> _outputToolBubbles = new(StringComparer.Ordinal);
 
     public Action RequestScroll { get; set; } = () => { };
@@ -60,6 +61,15 @@ public sealed class SessionStreamingUiContext
                 {
                     _toolCallIdToIndex[toolCallId] = toolIndex;
                     EnsureToolBubble(toolIndex, toolCallId, toolName, messages);
+                    // Replay any buffered args that arrived before ToolCallStart
+                    if (_pendingToolCallArgs.TryGetValue(toolCallId, out var bufferedArgs))
+                    {
+                        _pendingToolCallArgs.Remove(toolCallId);
+                        if (_toolBubblesByIndex.TryGetValue(toolIndex, out var bufferedBubble))
+                        {
+                            bufferedBubble.UpdateStreamingToolCall(toolCallId, bufferedBubble.ToolName, bufferedArgs);
+                        }
+                    }
                 }
 
                 break;
@@ -68,6 +78,14 @@ public sealed class SessionStreamingUiContext
                     && _toolBubblesByIndex.TryGetValue(argsIndex, out var toolBubble))
                 {
                     toolBubble.UpdateStreamingToolCall(toolCallId, toolBubble.ToolName, argsJson);
+                }
+                else
+                {
+                    // Buffer args in case ToolCallStart hasn't arrived yet
+                    if (_pendingToolCallArgs.TryGetValue(toolCallId, out var existing))
+                        _pendingToolCallArgs[toolCallId] = existing + argsJson;
+                    else
+                        _pendingToolCallArgs[toolCallId] = argsJson;
                 }
 
                 RequestScroll();
@@ -108,6 +126,7 @@ public sealed class SessionStreamingUiContext
         _assistantBubbles.Clear();
         _toolBubblesByIndex.Clear();
         _toolCallIdToIndex.Clear();
+        _pendingToolCallArgs.Clear();
         _outputToolBubbles.Clear();
     }
 
