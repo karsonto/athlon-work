@@ -932,13 +932,18 @@
                                                         </Style>
                                                     </TextBlock.Style>
                                                 </TextBlock>
-                                                <TextBlock Text="{Binding Content}"
-                                                           TextWrapping="Wrap"
-                                                           FontSize="14"
-                                                           HorizontalAlignment="Stretch"
-                                                           xml:space="preserve">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
+                                                <TextBox Text="{Binding Content}"
+                                                         TextWrapping="Wrap"
+                                                         FontSize="14"
+                                                         HorizontalAlignment="Stretch"
+                                                         IsReadOnly="True"
+                                                         Background="Transparent"
+                                                         BorderThickness="0"
+                                                         IsReadOnlyCaretVisible="False"
+                                                         IsTabStop="False"
+                                                         Padding="0">
+                                                    <TextBox.Style>
+                                                        <Style TargetType="TextBox">
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                             <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
                                                             <Style.Triggers>
@@ -958,8 +963,8 @@
                                                                 </MultiDataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
+                                                    </TextBox.Style>
+                                                </TextBox>
                                                 <TextBlock Margin="0,6,0,0"
                                                            FontSize="12"
                                                            Foreground="{DynamicResource Brush.TextSecondary}"
