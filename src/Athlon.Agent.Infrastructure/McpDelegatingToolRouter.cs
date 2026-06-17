@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Memory;
 
 namespace Athlon.Agent.Infrastructure;
@@ -19,10 +20,22 @@ internal sealed class McpDelegatingToolRouter(
             settings,
             refreshMcpCatalogAsync ?? (() => mcpRegistry.RefreshAsync(settings.McpServers, CancellationToken.None))));
 
-    private IEnumerable<IAgentTool> ActiveLocalTools =>
-        settings.Memory.Enabled
-            ? _allLocalTools
-            : _allLocalTools.Where(tool => tool is not ILongTermMemoryTool);
+    private IEnumerable<IAgentTool> ActiveLocalTools => _allLocalTools.Where(IsToolEnabled);
+
+    private bool IsToolEnabled(IAgentTool tool)
+    {
+        if (!settings.Memory.Enabled && tool is ILongTermMemoryTool)
+        {
+            return false;
+        }
+
+        if (!settings.Knowledge.Enabled && tool is IGlobalKnowledgeTool)
+        {
+            return false;
+        }
+
+        return true;
+    }
 
     public IReadOnlyList<ToolDefinition> ListTools()
     {

@@ -1,4 +1,6 @@
 ﻿using System.ComponentModel;
+using System.IO;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -257,6 +259,80 @@ public partial class MainWindow : Window
         }
     }
 
+    private void KnowledgeEmbeddingApiKeyPasswordBox_OnPasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is PasswordBox passwordBox)
+        {
+            _viewModel.KnowledgeEmbeddingApiKey = passwordBox.Password;
+        }
+    }
+
+    private void KnowledgeTree_OnSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (e.NewValue is KnowledgeTreeNodeViewModel node)
+        {
+            _viewModel.KnowledgePageVm.SelectTreeNode(node);
+        }
+    }
+
+    private void KnowledgeTree_OnPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is not DependencyObject source)
+        {
+            return;
+        }
+
+        var treeViewItem = FindAncestor<TreeViewItem>(source);
+        if (treeViewItem is null)
+        {
+            return;
+        }
+
+        treeViewItem.IsSelected = true;
+        treeViewItem.Focus();
+    }
+
+    private void KnowledgeSaveModuleButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (FocusManager.GetFocusedElement(this) is FrameworkElement focusedElement)
+        {
+            var bindingExpression = focusedElement.GetBindingExpression(TextBox.TextProperty);
+            // #region agent log
+            DebugLog("pre-fix", "H1", "MainWindow.KnowledgeSaveModuleButton_OnClick:focused-binding", new
+            {
+                focusedType = focusedElement.GetType().Name,
+                hasTextBinding = bindingExpression is not null,
+                focusedTextLength = focusedElement is TextBox textBox ? textBox.Text.Length : (int?)null
+            });
+            // #endregion
+            focusedElement.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+            return;
+        }
+
+        // #region agent log
+        DebugLog("pre-fix", "H1", "MainWindow.KnowledgeSaveModuleButton_OnClick:no-focused-element", new
+        {
+            senderType = sender.GetType().Name
+        });
+        // #endregion
+    }
+
+    private void KnowledgeDocuments_OnDragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void KnowledgeDocuments_OnDrop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
+        {
+            await _viewModel.KnowledgePageVm.ImportDocumentsAsync(files);
+        }
+
+        e.Handled = true;
+    }
+
     private void ComposerTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
@@ -373,6 +449,29 @@ public partial class MainWindow : Window
         var index = Math.Clamp(_viewModel.SelectedAtCompletionIndex, 0, AtCompletionListBox.Items.Count - 1);
         AtCompletionListBox.SelectedIndex = index;
         AtCompletionListBox.ScrollIntoView(AtCompletionListBox.Items[index]);
+    }
+
+    private static void DebugLog(string runId, string hypothesisId, string message, object data)
+    {
+        try
+        {
+            var payload = new
+            {
+                sessionId = "6740f2",
+                id = Guid.NewGuid().ToString("N"),
+                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                location = "MainWindow.xaml.cs",
+                message,
+                data,
+                runId,
+                hypothesisId
+            };
+            File.AppendAllText("F:/athlon-work/debug-6740f2.log", JsonSerializer.Serialize(payload) + Environment.NewLine);
+        }
+        catch
+        {
+            // Debug logging must never affect app behavior.
+        }
     }
 
     private bool TryAcceptAtCompletion()

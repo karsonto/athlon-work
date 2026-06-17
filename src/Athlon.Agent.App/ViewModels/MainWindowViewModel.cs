@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Infrastructure;
@@ -69,7 +70,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         AppSettings settings,
         IImpSsoSessionStore ssoSessionStore,
         ISessionUsageAccumulator sessionUsageAccumulator,
-        SchedulerService scheduler)
+        SchedulerService scheduler,
+        IKnowledgeStore knowledgeStore,
+        IKnowledgeIndexer knowledgeIndexer,
+        IKnowledgeSearchService knowledgeSearchService)
     {
         _storage = storage;
         _credentialStore = credentialStore;
@@ -100,6 +104,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _turnHost.TurnStateChanged += OnTurnStateChanged;
         Settings = new SettingsViewModel(settings, _mcpRegistry, skillCatalog, paths);
         SchedulePageVm = new ScheduleViewModel(settings, storage, scheduler, OpenSessionByIdAsync);
+        KnowledgePageVm = new KnowledgeViewModel(knowledgeStore, knowledgeIndexer, knowledgeSearchService);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
@@ -113,9 +118,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
         };
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
+        HasStoredKnowledgeEmbeddingApiKey = _credentialStore
+            .HasSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName)
+            .GetAwaiter()
+            .GetResult();
         _uiLayout.ClampInitialLayout();
 
         LogsPath = paths.LogsPath;
+        _ = KnowledgePageVm.SetSessionAsync(_displayedSessionId);
 
         InitializeSsoDisplay();
 
@@ -250,6 +260,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool hasStoredApiKey;
 
     [ObservableProperty]
+    private string knowledgeEmbeddingApiKey = string.Empty;
+
+    [ObservableProperty]
+    private bool hasStoredKnowledgeEmbeddingApiKey;
+
+    [ObservableProperty]
     private string activeWorkspaceName = "No workspace";
 
     [ObservableProperty]
@@ -271,8 +287,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public bool IsChatPage => CurrentPage == "Chat";
     public bool IsSettingsPage => CurrentPage == "Settings";
     public bool IsSchedulePage => CurrentPage == "Schedule";
+    public bool IsKnowledgePage => CurrentPage == "Knowledge";
 
     public ScheduleViewModel SchedulePageVm { get; }
+    public KnowledgeViewModel KnowledgePageVm { get; }
 
     [RelayCommand]
     private void Navigate(string page)
@@ -423,6 +441,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         PendingImageAttachments.Clear();
         UpdateDisplayedBusyState();
         CurrentPage = "Chat";
+        _ = KnowledgePageVm.SetSessionAsync(_displayedSessionId);
         ApplySessionWorkspace();
         _ = SaveSessionInBackgroundAsync(previousSession);
         RequestRefreshSessionHistory();
@@ -665,6 +684,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(QueuedTurns));
         OnPropertyChanged(nameof(HasQueuedTurns));
         UpdateDisplayedBusyState();
+        _ = KnowledgePageVm.SetSessionAsync(_displayedSessionId);
     }
 
     private void OnTurnStateChanged(object? sender, string sessionId)
@@ -761,6 +781,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             ApiKey = string.Empty;
             HasStoredApiKey = true;
             OnPropertyChanged(nameof(ApiKey));
+        }
+
+        if (!string.IsNullOrWhiteSpace(KnowledgeEmbeddingApiKey))
+        {
+            await _credentialStore.SaveSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName, KnowledgeEmbeddingApiKey);
+            KnowledgeEmbeddingApiKey = string.Empty;
+            HasStoredKnowledgeEmbeddingApiKey = true;
+            OnPropertyChanged(nameof(KnowledgeEmbeddingApiKey));
         }
 
         Settings.Settings.Model.LegacyApiKeyCredentialName = null;
@@ -1069,6 +1097,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             SwitchDisplayedSession(loaded);
             CurrentSessionTitle = _session.Title;
+            await KnowledgePageVm.SetSessionAsync(_displayedSessionId);
             ComposerText = string.Empty;
             PendingImageAttachments.Clear();
 
@@ -1168,6 +1197,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsChatPage));
         OnPropertyChanged(nameof(IsSettingsPage));
         OnPropertyChanged(nameof(IsSchedulePage));
+        OnPropertyChanged(nameof(IsKnowledgePage));
         if (string.Equals(value, "Settings", StringComparison.Ordinal))
         {
             Settings.SyncSkillsFromCatalog();
@@ -1175,6 +1205,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         else if (string.Equals(value, "Schedule", StringComparison.Ordinal))
         {
             SchedulePageVm.SyncFromSettings();
+        }
+        else if (string.Equals(value, "Knowledge", StringComparison.Ordinal))
+        {
+            _ = KnowledgePageVm.RefreshAsync();
         }
     }
 

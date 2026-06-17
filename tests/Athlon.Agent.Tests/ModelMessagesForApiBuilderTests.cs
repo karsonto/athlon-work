@@ -30,7 +30,8 @@ public sealed class ModelMessagesForApiBuilderTests
             new ContextCompactionSettings());
 
         var toolMessage = result.Messages.First(message => message.Role == "tool");
-        Assert.Contains("[cache hygiene:", toolMessage.Content, StringComparison.Ordinal);
+        var content = Assert.IsType<string>(toolMessage.Content);
+        Assert.Contains("[cache hygiene:", content, StringComparison.Ordinal);
         Assert.True(result.EstimatedSavingsTokens > 0);
     }
 }

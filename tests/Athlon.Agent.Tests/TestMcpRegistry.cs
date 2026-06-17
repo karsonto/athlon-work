@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Mcp;
 
 namespace Athlon.Agent.Tests;
 

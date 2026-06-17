@@ -65,7 +65,8 @@ public sealed class AgentRuntimeOverflowTests
         Assert.Contains(
             modelClient.RetryRequest!.Messages,
             message => message.Role == "tool"
-                && message.Content.Contains("[cache hygiene:", StringComparison.Ordinal));
+                && message.Content is string content
+                && content.Contains("[cache hygiene:", StringComparison.Ordinal));
     }
 
     [Fact]

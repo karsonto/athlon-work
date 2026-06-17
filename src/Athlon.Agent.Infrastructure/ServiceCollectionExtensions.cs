@@ -12,6 +12,8 @@ using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Licensing;
 using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Core.Sso;
+using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Infrastructure.Knowledge;
 using Athlon.Agent.Infrastructure.Licensing;
 using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Infrastructure.Sso;
@@ -63,6 +65,13 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISessionHttpLogService, SessionHttpLogService>();
         services.AddSingleton<WorkspaceGuard>();
         services.AddSingleton<WorkspaceFileEditorService>();
+        services.AddSingleton<KnowledgeDocumentExtractor>();
+        services.AddSingleton<KnowledgeChunker>();
+        services.AddSingleton<IKnowledgeStore, SqliteKnowledgeStore>();
+        services.AddSingleton<IKnowledgeIndexer, KnowledgeIndexerService>();
+        services.AddSingleton<IKnowledgeSearchService, KnowledgeSearchService>();
+        services.AddHttpClient<IEmbeddingClient, OpenAiCompatibleEmbeddingClient>(
+            static client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddSingleton<AuditLogService>();
         services.AddSingleton<ExecuteCommandProcessRegistry>();
         services.AddSingleton<IAgentTool, FileListTool>();
@@ -72,6 +81,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, GrepFilesTool>();
         services.AddSingleton<IAgentTool, GlobFilesTool>();
         services.AddSingleton<IAgentTool, ExecuteCommandTool>();
+        services.AddSingleton<IAgentTool, KnowledgeSearchTool>();
         services.AddSingleton<IAgentTool, LoadSkillThroughPathTool>();
         services.AddSingleton<Lazy<ChildAgentToolRouter>>(static sp => new Lazy<ChildAgentToolRouter>(() =>
             new ChildAgentToolRouter(

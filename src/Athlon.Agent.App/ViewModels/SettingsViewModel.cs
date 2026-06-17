@@ -178,6 +178,42 @@ public sealed partial class SettingsViewModel : ObservableObject
         set => Settings.Model.MaxTokens = ParseOptionalPositiveInt(value);
     }
 
+    public string KnowledgeEmbeddingDimensionText
+    {
+        get => Settings.Knowledge.Embedding.Dimension.ToString();
+        set => Settings.Knowledge.Embedding.Dimension = ParsePositiveInt(value, Settings.Knowledge.Embedding.Dimension);
+    }
+
+    public string KnowledgeEmbeddingBatchSizeText
+    {
+        get => Settings.Knowledge.Embedding.BatchSize.ToString();
+        set => Settings.Knowledge.Embedding.BatchSize = ParsePositiveInt(value, Settings.Knowledge.Embedding.BatchSize);
+    }
+
+    public string KnowledgeChunkTargetCharsText
+    {
+        get => Settings.Knowledge.Chunking.TargetChars.ToString();
+        set => Settings.Knowledge.Chunking.TargetChars = ParsePositiveInt(value, Settings.Knowledge.Chunking.TargetChars);
+    }
+
+    public string KnowledgeChunkOverlapCharsText
+    {
+        get => Settings.Knowledge.Chunking.OverlapChars.ToString();
+        set => Settings.Knowledge.Chunking.OverlapChars = ParseNonNegativeInt(value, Settings.Knowledge.Chunking.OverlapChars);
+    }
+
+    public string KnowledgeSearchTopKText
+    {
+        get => Settings.Knowledge.Search.TopK.ToString();
+        set => Settings.Knowledge.Search.TopK = ParsePositiveInt(value, Settings.Knowledge.Search.TopK);
+    }
+
+    public string KnowledgeSearchMinScoreText
+    {
+        get => Settings.Knowledge.Search.MinScore.ToString("0.###");
+        set => Settings.Knowledge.Search.MinScore = ParseDouble(value, Settings.Knowledge.Search.MinScore, 0, 1);
+    }
+
     public string IgnoreDirectoriesText
     {
         get => string.Join(Environment.NewLine, Settings.WorkspaceIgnore.DirectoryNames);
@@ -253,6 +289,26 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
 
         return int.TryParse(text.Trim(), out var value) && value > 0 ? value : fallback;
+    }
+
+    private static int ParseNonNegativeInt(string? text, int fallback)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return fallback;
+        }
+
+        return int.TryParse(text.Trim(), out var value) && value >= 0 ? value : fallback;
+    }
+
+    private static double ParseDouble(string? text, double fallback, double min, double max)
+    {
+        if (string.IsNullOrWhiteSpace(text) || !double.TryParse(text.Trim(), out var value))
+        {
+            return fallback;
+        }
+
+        return Math.Clamp(value, min, max);
     }
 
     private static double ParsePercent(string? text, double fallbackRatio)

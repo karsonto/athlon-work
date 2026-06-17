@@ -24,11 +24,9 @@ public sealed class CompactionTests
 
         Assert.Equal(120_000, effective);
         Assert.True(effective > estimated);
-        Assert.True(ConversationCutoffPlanner.ShouldCompact(messages, effective, settings with
-        {
-            TriggerMessages = 0,
-            TriggerTokens = effective - 1
-        }, force: false));
+        settings.TriggerMessages = 0;
+        settings.TriggerTokens = effective - 1;
+        Assert.True(ConversationCutoffPlanner.ShouldCompact(messages, effective, settings, force: false));
     }
 
     [Fact]

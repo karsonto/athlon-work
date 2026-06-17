@@ -18,6 +18,83 @@
         WindowStyle="None"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style x:Key="KnowledgeNavIconStyle" TargetType="ContentControl">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContentControl">
+                        <Viewbox Stretch="Uniform">
+                            <Grid Width="28" Height="28">
+                                <Border CornerRadius="9">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#FF8B5CF6" Offset="0" />
+                                            <GradientStop Color="#FF06B6D4" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <Path Data="M7,7.2 C9.3,5.8 11.5,5.8 13.6,7.1 L13.6,21.6 C11.6,20.3 9.4,20.2 7,21.5 Z"
+                                      Fill="#FFFFFFFF"
+                                      Opacity="0.95" />
+                                <Path Data="M14.4,7.1 C16.5,5.8 18.7,5.8 21,7.2 L21,21.5 C18.6,20.2 16.4,20.3 14.4,21.6 Z"
+                                      Fill="#FFE0F2FE"
+                                      Opacity="0.96" />
+                                <Path Data="M9,10.1 L12,9.4 M9,13 L12,12.5 M16,9.4 L19,10.1 M16,12.5 L19,13"
+                                      Stroke="#FF0EA5E9"
+                                      StrokeThickness="0.9"
+                                      Opacity="0.75" />
+                                <Path Data="M20.6,4.5 L21.5,6.3 L23.5,7.2 L21.5,8 L20.6,9.8 L19.8,8 L17.8,7.2 L19.8,6.3 Z"
+                                      Fill="#FFFDE68A" />
+                            </Grid>
+                        </Viewbox>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="ScheduleNavIconStyle" TargetType="ContentControl">
+            <Setter Property="Width" Value="24" />
+            <Setter Property="Height" Value="24" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContentControl">
+                        <Viewbox Stretch="Uniform">
+                            <Grid Width="28" Height="28">
+                                <Border CornerRadius="14">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#FFF97316" Offset="0" />
+                                            <GradientStop Color="#FFEC4899" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                                <Ellipse Width="17"
+                                         Height="17"
+                                         Stroke="#FFFFFFFF"
+                                         StrokeThickness="2.2"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center" />
+                                <Path Data="M14,9.3 L14,14.6 L18,17"
+                                      Stroke="#FFFFFFFF"
+                                      StrokeThickness="2.1" />
+                                <Path Data="M8.2,5.8 L6.6,4.2 M19.8,5.8 L21.4,4.2"
+                                      Stroke="#FFFFF7ED"
+                                      StrokeThickness="1.8"
+                                      Opacity="0.9" />
+                                <Ellipse Width="3.2"
+                                         Height="3.2"
+                                         Fill="#FFFFF7ED"
+                                         HorizontalAlignment="Center"
+                                         VerticalAlignment="Center" />
+                            </Grid>
+                        </Viewbox>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Key="B" Modifiers="Control+Alt" Command="{Binding ToggleContextSidebarCommand}" />
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveActiveEditorCommand}" />
@@ -410,13 +487,29 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Knowledge navigation button -->
+                    <Button Command="{Binding NavigateCommand}"
+                            CommandParameter="Knowledge"
+                            Style="{StaticResource NavBottomButtonStyle}"
+                            ToolTip="知识库"
+                            Margin="0,0,0,8">
+                        <StackPanel Orientation="Horizontal">
+                            <ContentControl Style="{StaticResource KnowledgeNavIconStyle}"
+                                            Margin="0,0,10,0"
+                                            VerticalAlignment="Center" />
+                            <TextBlock Text="知识库" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+
                     <!-- Schedule navigation button -->
                     <Button Command="{Binding NavigateCommand}"
                             CommandParameter="Schedule"
                             Style="{StaticResource NavBottomButtonStyle}"
                             ToolTip="定时任务">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="⏰" FontSize="16" Margin="0,0,10,0" VerticalAlignment="Center" />
+                            <ContentControl Style="{StaticResource ScheduleNavIconStyle}"
+                                            Margin="0,0,10,0"
+                                            VerticalAlignment="Center" />
                             <TextBlock Text="定时任务" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
@@ -1378,6 +1471,105 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                        <ContentControl Style="{StaticResource KnowledgeNavIconStyle}"
+                                                        Width="22"
+                                                        Height="22"
+                                                        Margin="0,0,10,0"
+                                                        VerticalAlignment="Center" />
+                                        <TextBlock Text="全局知识库"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Text="启用后 Agent 才会暴露 knowledge_search 工具。每个会话默认不启用任何知识空间，需要在知识库页面显式勾选。"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               TextWrapping="Wrap"
+                                               FontSize="12"
+                                               Margin="0,6,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          IsChecked="{Binding Settings.Settings.Knowledge.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                          ToolTip="启用全局知识库工具"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+
+                            <TextBlock Text="Embedding Endpoint" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding Settings.Settings.Knowledge.Embedding.Endpoint, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,6,0,10" />
+                            <TextBlock Text="Embedding Model" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding Settings.Settings.Knowledge.Embedding.Model, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,6,0,10" />
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="向量维度" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding Settings.KnowledgeEmbeddingDimensionText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Batch Size" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding Settings.KnowledgeEmbeddingBatchSizeText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="切片目标字符" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding Settings.KnowledgeChunkTargetCharsText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="切片重叠字符" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding Settings.KnowledgeChunkOverlapCharsText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="TopK" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding Settings.KnowledgeSearchTopKText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Min Score" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding Settings.KnowledgeSearchMinScoreText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="Embedding API Key" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <PasswordBox x:Name="KnowledgeEmbeddingApiKeyPasswordBox"
+                                         PasswordChanged="KnowledgeEmbeddingApiKeyPasswordBox_OnPasswordChanged"
+                                         Margin="0,6,0,6" />
+                            <TextBlock Text="{Binding HasStoredKnowledgeEmbeddingApiKey, StringFormat=已保存知识库 Embedding API Key：{0}}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       FontSize="12" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
                             <TextBlock Text="上下文与 Token ROI" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
@@ -1683,6 +1875,203 @@
                 </StackPanel>
             </ScrollViewer>
 
+            <!-- Knowledge Base -->
+            <Grid Grid.Row="0"
+                  Background="{DynamicResource Brush.ChatBackground}">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsKnowledgePage}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}"
+                        Background="{DynamicResource Brush.Chrome}"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="0,0,0,1"
+                        Padding="24,0">
+                    <Grid VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Command="{Binding NavigateCommand}"
+                                    CommandParameter="Chat"
+                                    Style="{StaticResource GhostIconButtonStyle}"
+                                    Margin="0,0,8,0"
+                                    ToolTip="返回对话"
+                                    Content="←" />
+                            <ContentControl Style="{StaticResource KnowledgeNavIconStyle}"
+                                            Width="28"
+                                            Height="28"
+                                            Margin="0,0,10,0"
+                                            VerticalAlignment="Center" />
+                            <TextBlock Text="全局知识库"
+                                       FontSize="20"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1" DataContext="{Binding KnowledgePageVm}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="380" MinWidth="280" MaxWidth="560" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0"
+                            Background="{DynamicResource Brush.Panel}"
+                            BorderBrush="{DynamicResource Brush.Border}"
+                            BorderThickness="0,0,1,0"
+                            Padding="14">
+                        <DockPanel LastChildFill="True">
+                            <StackPanel DockPanel.Dock="Top">
+                                <TextBlock Text="知识空间"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,10" />
+                                <TextBlock Text="名称" Foreground="{DynamicResource Brush.SubtleText}" />
+                                <TextBox Text="{Binding ModuleName, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,4,0,8" />
+                                <TextBlock Text="描述" Foreground="{DynamicResource Brush.SubtleText}" />
+                                <TextBox Text="{Binding ModuleDescription, UpdateSourceTrigger=PropertyChanged}"
+                                         AcceptsReturn="True"
+                                         MinHeight="62"
+                                         TextWrapping="Wrap"
+                                         Margin="0,4,0,10" />
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                    <Button Content="新增"
+                                            Command="{Binding AddModuleCommand}"
+                                            Style="{StaticResource GhostButtonStyle}"
+                                            Margin="0,0,8,0" />
+                                    <Button Content="保存"
+                                            Command="{Binding SaveSelectedModuleCommand}"
+                                            Click="KnowledgeSaveModuleButton_OnClick"
+                                            Style="{StaticResource GhostButtonStyle}" />
+                                </StackPanel>
+                                <TextBlock Text="文档"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,8" />
+                                <TextBlock Text="将文件拖拽到下方树形区域可上传到当前知识空间。"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"
+                                           Margin="0,0,0,8" />
+                            </StackPanel>
+                            <TreeView ItemsSource="{Binding DocumentTree}"
+                                      BorderThickness="0"
+                                      Background="Transparent"
+                                      AllowDrop="True"
+                                      DragOver="KnowledgeDocuments_OnDragOver"
+                                      Drop="KnowledgeDocuments_OnDrop"
+                                      PreviewMouseRightButtonDown="KnowledgeTree_OnPreviewMouseRightButtonDown"
+                                      SelectedItemChanged="KnowledgeTree_OnSelectedItemChanged">
+                                <TreeView.ItemContainerStyle>
+                                    <Style TargetType="TreeViewItem">
+                                        <Setter Property="IsExpanded" Value="True" />
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                        <Setter Property="Margin" Value="0,2" />
+                                        <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TreeView}}" />
+                                        <Setter Property="ContextMenu">
+                                            <Setter.Value>
+                                                <ContextMenu Style="{StaticResource MarkdownContextMenuStyle}">
+                                                    <MenuItem Header="{Binding PlacementTarget.DataContext.DeleteMenuHeader, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                                              Command="{Binding PlacementTarget.Tag.DeleteTreeNodeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                </ContextMenu>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </TreeView.ItemContainerStyle>
+                                <TreeView.ItemTemplate>
+                                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                        <StackPanel Orientation="Horizontal" Margin="0,3">
+                                            <TextBlock Text="{Binding Glyph}" Margin="0,0,6,0" />
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           FontWeight="SemiBold"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding MetaText}"
+                                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                                           FontSize="12"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </HierarchicalDataTemplate>
+                                </TreeView.ItemTemplate>
+                            </TreeView>
+                        </DockPanel>
+                    </Border>
+
+                    <GridSplitter Grid.Column="0"
+                                  Style="{StaticResource LayoutColumnSplitterStyle}"
+                                  ResizeDirection="Columns"
+                                  ResizeBehavior="CurrentAndNext"
+                                  Panel.ZIndex="2" />
+
+                    <ScrollViewer Grid.Column="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Padding="22">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding StatusText}"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Content="重新索引"
+                                            Command="{Binding ReindexSelectedDocumentCommand}"
+                                            Style="{StaticResource GhostButtonStyle}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel>
+                                    <TextBlock Text="检索测试"
+                                               FontSize="16"
+                                               FontWeight="SemiBold"
+                                               Margin="0,0,0,10" />
+                                    <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                             AcceptsReturn="True"
+                                             MinHeight="72"
+                                             TextWrapping="Wrap"
+                                             Margin="0,0,0,10" />
+                                    <Button Content="测试检索"
+                                            Command="{Binding TestSearchCommand}"
+                                            Style="{StaticResource GhostButtonStyle}"
+                                            HorizontalAlignment="Left"
+                                            Margin="0,0,0,10" />
+                                    <TextBox Text="{Binding SearchResults}"
+                                             IsReadOnly="True"
+                                             AcceptsReturn="True"
+                                             TextWrapping="Wrap"
+                                             MinHeight="180"
+                                             VerticalScrollBarVisibility="Auto"
+                                             FontFamily="Consolas" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+
             <!-- Scheduled Tasks -->
             <ScrollViewer Grid.Row="0"
                           Padding="40,32"
@@ -1707,6 +2096,11 @@
                                 Margin="0,0,8,0"
                                 ToolTip="返回对话"
                                 Content="←" />
+                        <ContentControl Style="{StaticResource ScheduleNavIconStyle}"
+                                        Width="32"
+                                        Height="32"
+                                        Margin="0,0,10,0"
+                                        VerticalAlignment="Center" />
                         <TextBlock Text="定时任务"
                                    FontSize="28"
                                    FontWeight="SemiBold"
@@ -1725,7 +2119,11 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel>
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="⏰" FontSize="20" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                    <ContentControl Style="{StaticResource ScheduleNavIconStyle}"
+                                                    Width="26"
+                                                    Height="26"
+                                                    Margin="0,0,10,0"
+                                                    VerticalAlignment="Center" />
                                     <TextBlock Text="定时任务"
                                                FontSize="16"
                                                FontWeight="SemiBold"

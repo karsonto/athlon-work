@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using Athlon.Agent.Core.Sso;
+using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.Sso;
 
 namespace Athlon.Agent.Tests;

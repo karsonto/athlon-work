@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Core.Sso;
@@ -51,6 +52,7 @@ public sealed class AppSettings
     public McpSearchSettings McpSearch { get; set; } = new();
     public List<SkillSettings> Skills { get; set; } = new();
     public List<WorkspaceSettings> Workspaces { get; set; } = new();
+    public KnowledgeSettings Knowledge { get; set; } = new();
     public UiSettings Ui { get; set; } = new();
     public LoggingSettings Logging { get; set; } = new();
     public ContextCompactionSettings ContextCompaction { get; set; } = new();

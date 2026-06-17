@@ -1,6 +1,7 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Memory;
+using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Tests;
 
