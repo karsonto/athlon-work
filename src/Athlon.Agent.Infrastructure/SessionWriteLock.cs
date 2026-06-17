@@ -18,6 +18,17 @@ internal static class SessionWriteLock
         return new Releaser(gate);
     }
 
+    public static void RemoveSession(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+            return;
+
+        if (Gates.TryRemove(sessionId, out var gate))
+        {
+            gate.Dispose();
+        }
+    }
+
     private sealed class Releaser(SemaphoreSlim gate) : IDisposable
     {
         public void Dispose() => gate.Release();

@@ -124,7 +124,7 @@ public sealed class ConversationCompactor(
         catch (Exception ex)
         {
             _logger.Error(ex, "Summarization LLM call failed for session {SessionId}", session.Id);
-            summary = "(Summarization failed: " + ex.Message + ")";
+            summary = "(Conversation summarization was temporarily unavailable)";
         }
 
         var summaryMessage = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath);

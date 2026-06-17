@@ -57,6 +57,20 @@ internal static class ConversationDisplayLog
             ? contentElement.GetString() ?? string.Empty
             : string.Empty;
 
+        string? toolCallsJson = null;
+        if (root.TryGetProperty("toolCalls", out var toolCallsElement)
+            && toolCallsElement.ValueKind == JsonValueKind.String)
+        {
+            toolCallsJson = toolCallsElement.GetString();
+        }
+
+        string? reasoningContent = null;
+        if (root.TryGetProperty("reasoningContent", out var reasoningElement)
+            && reasoningElement.ValueKind == JsonValueKind.String)
+        {
+            reasoningContent = reasoningElement.GetString();
+        }
+
         var createdAt = root.TryGetProperty("time", out var timeElement) && timeElement.TryGetDateTimeOffset(out var parsedTime)
             ? parsedTime
             : DateTimeOffset.UtcNow;
@@ -83,8 +97,8 @@ internal static class ConversationDisplayLog
             content,
             createdAt,
             parentId,
-            null,
-            null,
+            toolCallsJson,
+            reasoningContent,
             imageAttachments);
     }
 }

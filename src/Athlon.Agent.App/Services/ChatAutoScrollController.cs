@@ -15,7 +15,7 @@ public sealed class ChatAutoScrollController
     private readonly Dispatcher _dispatcher;
     private ListBox? _chatMessagesList;
     private ScrollViewer? _scrollViewer;
-    private DispatcherTimer? _scrollThrottleTimer;
+    private readonly DispatcherTimer _scrollThrottleTimer;
     private bool _autoScrollEnabled = true;
     private bool _isProgrammaticScroll;
     private bool _chatPointerDown;
@@ -25,6 +25,11 @@ public sealed class ChatAutoScrollController
     {
         _dispatcher = dispatcher;
         _isBusy = isBusy;
+        _scrollThrottleTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
+        {
+            Interval = ScrollThrottleInterval
+        };
+        _scrollThrottleTimer.Tick += OnScrollThrottleTimerTick;
     }
 
     public void Attach(ListBox chatMessagesList)
@@ -76,18 +81,7 @@ public sealed class ChatAutoScrollController
             return;
         }
 
-        if (_scrollThrottleTimer is not null)
-        {
-            _scrollThrottleTimer.Stop();
-            _scrollThrottleTimer.Start();
-            return;
-        }
-
-        _scrollThrottleTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
-        {
-            Interval = ScrollThrottleInterval
-        };
-        _scrollThrottleTimer.Tick += OnScrollThrottleTimerTick;
+        _scrollThrottleTimer.Stop();
         _scrollThrottleTimer.Start();
     }
 
@@ -145,14 +139,7 @@ public sealed class ChatAutoScrollController
 
     private void StopScrollThrottleTimer()
     {
-        if (_scrollThrottleTimer is null)
-        {
-            return;
-        }
-
         _scrollThrottleTimer.Stop();
-        _scrollThrottleTimer.Tick -= OnScrollThrottleTimerTick;
-        _scrollThrottleTimer = null;
     }
 
     private void ExecuteScrollToEnd()

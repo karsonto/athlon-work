@@ -28,7 +28,16 @@ public static class SessionTurnReconciler
             .Where(call => !string.IsNullOrWhiteSpace(call.Id))
             .Where(call => !answeredToolCallIds.Contains(call.Id))
             .GroupBy(call => call.Id, StringComparer.Ordinal)
-            .Select(group => group.First())
+            .Select(group =>
+            {
+                if (group.Count() > 1)
+                {
+                    // Duplicate toolCallId detected — use the last instance
+                    // (likely has the most complete arguments)
+                    return group.Last();
+                }
+                return group.Single();
+            })
             .ToList();
 
         var hasAssistantText = !string.IsNullOrWhiteSpace(snapshot.AssistantContent)

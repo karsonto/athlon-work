@@ -32,7 +32,14 @@ public sealed class AmbientToolOutputStream : IDisposable
             return;
 
         var evt = new AgentStreamEvent.ToolCallOutput(_toolCallId, line + Environment.NewLine);
-        _ = onEvent(evt);
+        try
+        {
+            _ = onEvent(evt);
+        }
+        catch
+        {
+            // Fire-and-forget: swallow UI-side exceptions (e.g. dispatcher shutting down)
+        }
     }
 
     public void Dispose()

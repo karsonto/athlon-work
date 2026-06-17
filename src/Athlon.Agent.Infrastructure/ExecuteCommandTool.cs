@@ -95,11 +95,12 @@ public sealed class ExecuteCommandTool(
             cancellationToken.ThrowIfCancellationRequested();
 
             var content = FormatOutput(run.Stdout, run.Stderr);
+            var exitCode = process.HasExited ? process.ExitCode : -1;
             await audit.WriteAsync(
                 "execute_command",
-                new { command, cwd, process.ExitCode, elapsedMs = sw.ElapsedMilliseconds },
+                new { command, cwd, exitCode, elapsedMs = sw.ElapsedMilliseconds },
                 cancellationToken).ConfigureAwait(false);
-            return process.ExitCode == 0
+            return exitCode == 0
                 ? ToolResult.Success($"Command exited 0 in {sw.ElapsedMilliseconds}ms", content, sw.Elapsed)
                 : ToolResult.Failure("Command failed", content, sw.Elapsed);
         }

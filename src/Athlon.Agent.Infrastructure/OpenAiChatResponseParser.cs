@@ -168,7 +168,7 @@ internal static class OpenAiChatResponseParser
                     {
                         var index = partial.TryGetProperty("index", out var indexElement) && indexElement.TryGetInt32(out var parsedIndex)
                             ? parsedIndex
-                            : toolCalls.Count;
+                            : -(toolCalls.Count + 1);  // 唯一负索引，防止碰撞
                         if (!toolCalls.TryGetValue(index, out var state))
                         {
                             state = new StreamingToolCallState();
@@ -220,6 +220,12 @@ internal static class OpenAiChatResponseParser
         {
             logger.Warning("Streaming response did not contain SSE data lines, fallback to JSON body parsing.");
             var body = fallbackBuilder.ToString().Trim();
+            // Skip any non-JSON prefix (HTTP headers, etc.) before the first '{'
+            var jsonStart = body.IndexOf('{');
+            if (jsonStart > 0)
+            {
+                body = body[jsonStart..];
+            }
             setResponseBody(body);
             return await EmitParsedResponseAsync(body, onTextDelta, onReasoningDelta, onToolCallDelta);
         }

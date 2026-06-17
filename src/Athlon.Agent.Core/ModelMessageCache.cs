@@ -15,6 +15,7 @@ public sealed class ModelMessageCache
     private int _hygienizedMessageCount;
     private int _hygienizedSavings;
     private string? _rawPrefixFingerprint;
+    private readonly object _buildLock = new();
 
     public void Invalidate()
     {
@@ -104,33 +105,36 @@ public sealed class ModelMessageCache
         IReadOnlyList<ChatMessage> history,
         bool includeReasoningInModelContext)
     {
-        if (_messages is not null
-            && string.Equals(_environmentPrompt, environmentPrompt, StringComparison.Ordinal)
-            && _includeReasoning == includeReasoningInModelContext
-            && history.Count >= _processedHistoryCount)
+        lock (_buildLock)
         {
-            if (history.Count == _processedHistoryCount)
+            if (_messages is not null
+                && string.Equals(_environmentPrompt, environmentPrompt, StringComparison.Ordinal)
+                && _includeReasoning == includeReasoningInModelContext
+                && history.Count >= _processedHistoryCount)
             {
+                if (history.Count == _processedHistoryCount)
+                {
+                    return _messages;
+                }
+
+                for (var index = _processedHistoryCount; index < history.Count; index++)
+                {
+                    index = ModelMessageBuilder.AppendHistoryMessage(
+                        _messages,
+                        history,
+                        index,
+                        includeReasoningInModelContext);
+                }
+
+                _processedHistoryCount = history.Count;
                 return _messages;
             }
 
-            for (var index = _processedHistoryCount; index < history.Count; index++)
-            {
-                index = ModelMessageBuilder.AppendHistoryMessage(
-                    _messages,
-                    history,
-                    index,
-                    includeReasoningInModelContext);
-            }
-
+            _messages = ModelMessageBuilder.BuildForSession(environmentPrompt, history, includeReasoningInModelContext);
+            _environmentPrompt = environmentPrompt;
+            _includeReasoning = includeReasoningInModelContext;
             _processedHistoryCount = history.Count;
             return _messages;
         }
-
-        _messages = ModelMessageBuilder.BuildForSession(environmentPrompt, history, includeReasoningInModelContext);
-        _environmentPrompt = environmentPrompt;
-        _includeReasoning = includeReasoningInModelContext;
-        _processedHistoryCount = history.Count;
-        return _messages;
     }
 }

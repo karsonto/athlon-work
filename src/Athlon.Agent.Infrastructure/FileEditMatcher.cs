@@ -154,8 +154,20 @@ internal static partial class FileEditMatcher
     private static string ToCrlf(string text) =>
         text.Contains("\r\n", StringComparison.Ordinal) ? text : text.Replace("\n", "\r\n", StringComparison.Ordinal);
 
-    private static int CountOccurrences(string content, string oldText) =>
-        string.IsNullOrEmpty(oldText) ? 0 : content.Split(oldText, StringSplitOptions.None).Length - 1;
+    private static int CountOccurrences(string content, string oldText)
+    {
+        if (string.IsNullOrEmpty(oldText))
+            return 0;
+
+        var count = 0;
+        var index = 0;
+        while ((index = content.IndexOf(oldText, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += oldText.Length;
+        }
+        return count;
+    }
 
     private static string ReplaceFirst(string content, string oldText, string newText)
     {

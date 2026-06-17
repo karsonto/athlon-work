@@ -11,9 +11,16 @@ namespace Athlon.Agent.App.Services;
 /// <summary>Mutable session handle shared with turn callbacks so compaction sees the latest messages.</summary>
 public sealed class LiveAgentSession
 {
-    public LiveAgentSession(AgentSession value) => Value = value;
+    private readonly object _lock = new();
+    private AgentSession _value;
 
-    public AgentSession Value { get; set; }
+    public LiveAgentSession(AgentSession value) => _value = value;
+
+    public AgentSession Value
+    {
+        get { lock (_lock) return _value; }
+        set { lock (_lock) _value = value; }
+    }
 }
 
 /// <summary>Per-session chat UI state (messages + streaming buffers) for parallel turns.</summary>

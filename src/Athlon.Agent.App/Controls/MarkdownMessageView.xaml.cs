@@ -66,8 +66,29 @@ public partial class MarkdownMessageView : UserControl
     /// bubbles to the chat ListBox ScrollViewer and makes the right scrollbar jump.
     /// Inner HostScroll / code-block scrollers still handle the event on the way up.
     /// </summary>
-    private static void OnMarkdownRequestBringIntoView(object sender, RequestBringIntoViewEventArgs e) =>
-        e.Handled = true;
+    private static void OnMarkdownRequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
+    {
+        // Only suppress programmatic scroll requests (no user-initiated source).
+        // Allow genuine user interaction (e.g. keyboard navigation, accessibility)
+        // to bubble up to the chat ScrollViewer.
+        if (!e.Handled && sender is DependencyObject element)
+        {
+            // Check if this was triggered by a keyboard/input event rather than programmatic scroll
+            if (element is System.Windows.UIElement uiElement)
+            {
+                // If no keyboard focus within, it's likely programmatic — suppress
+                var hasFocus = uiElement.IsKeyboardFocusWithin;
+                if (!hasFocus)
+                {
+                    e.Handled = true;
+                }
+            }
+            else
+            {
+                e.Handled = true;
+            }
+        }
+    }
 
     public string Markdown
     {

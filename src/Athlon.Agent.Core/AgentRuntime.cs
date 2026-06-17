@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
@@ -235,7 +236,16 @@ public sealed class AgentRuntime(
         }
         catch (OperationCanceledException)
         {
-            await storage.SaveSessionAsync(session, CancellationToken.None);
+            // Save with a short timeout to avoid hanging on shutdown
+            using var saveCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                await storage.SaveSessionAsync(session, saveCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                // Save timed out — proceed with cancellation
+            }
             throw;
         }
     }
@@ -427,7 +437,9 @@ public sealed class AgentRuntime(
             return true;
         }
 
-        return session.Messages.Count < messageIdsBefore.Count;
+        // When count comparison is inconclusive (e.g. count >= before), do a set comparison
+        var messageIdsAfter = session.Messages.Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
+        return messageIdsAfter.Count != messageIdsBefore.Count;
     }
 
     private static async Task NotifySessionUpdatedAsync(AgentTurnCallbacks? callbacks, AgentSession session)
@@ -486,8 +498,16 @@ public sealed class AgentRuntime(
 
     private static bool ShouldListWorkspaceFiles(string userInput)
     {
+        if (string.IsNullOrWhiteSpace(userInput))
+            return false;
+
         var input = userInput.Trim();
-        return ContainsAny(input, "有哪些文件", "什么文件", "文件列表", "目录下", "目录里", "工作区文件", "list files", "what files", "which files");
+        // 中文短语直接子串匹配（中文没有词边界概念）
+        if (ContainsAny(input, "有哪些文件", "文件列表", "目录下", "目录里", "工作区文件"))
+            return true;
+
+        // 英文用正则词边界匹配，防止误触发
+        return Regex.IsMatch(input, @"\b(list files|what files|which files)\b", RegexOptions.IgnoreCase);
     }
 
     private static bool ContainsAny(string value, params string[] terms)
