@@ -8,7 +8,7 @@ namespace Athlon.Agent.Tests;
 public sealed class KnowledgeStoreTests
 {
     [Fact]
-    public async Task SqliteKnowledgeStore_RoundTripsModulesDocumentsChunksAndSessionSelection()
+    public async Task SqliteKnowledgeStore_RoundTripsModulesDocumentsAndChunks()
     {
         var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-" + Guid.NewGuid().ToString("N"));
         var paths = new TestPathProvider(root);
@@ -38,12 +38,9 @@ public sealed class KnowledgeStoreTests
                 Embedding = [1, 0]
             }
         ]);
-        await store.SaveSessionSelectionAsync("session-1", new HashSet<string> { module.Id });
-
         var modules = await store.ListModulesAsync();
         var documents = await store.ListDocumentsAsync(module.Id);
         var chunks = await store.ListSearchableChunksAsync(new HashSet<string> { module.Id });
-        var selection = await store.GetSessionSelectionAsync("session-1");
 
         Assert.Single(modules);
         Assert.Equal(1, modules[0].DocumentCount);
@@ -52,7 +49,6 @@ public sealed class KnowledgeStoreTests
         Assert.Single(chunks);
         var embedding = Assert.IsType<float[]>(chunks[0].Embedding);
         Assert.Equal([1, 0], embedding);
-        Assert.Contains(module.Id, selection);
     }
 
     [Fact]
@@ -73,9 +69,11 @@ public sealed class KnowledgeStoreTests
         await store.ReplaceChunksAsync(docB.Id, [
             new KnowledgeChunk { DocumentId = docB.Id, ModuleId = moduleB.Id, Content = "不应返回", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
         ]);
-        await store.SaveSessionSelectionAsync("session-1", new HashSet<string> { moduleA.Id });
 
-        var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), settings);
+        var sessionKnowledgeState = new SessionKnowledgeState(paths, new JsonFileStore());
+        await sessionKnowledgeState.SaveAsync("session-1", new SessionKnowledgeSnapshot(true, new HashSet<string> { moduleA.Id }));
+
+        var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), sessionKnowledgeState, settings);
         var hits = await service.SearchAsync("session-1", "query");
 
         Assert.Single(hits);
@@ -101,7 +99,7 @@ public sealed class KnowledgeStoreTests
             new KnowledgeChunk { DocumentId = docB.Id, ModuleId = module.Id, Content = "文档 B 内容", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
         ]);
 
-        var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), settings);
+        var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), RouterTestDependencies.CreateSessionKnowledgeState(), settings);
         var hits = await service.SearchInScopeAsync(
             "query",
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { module.Id },

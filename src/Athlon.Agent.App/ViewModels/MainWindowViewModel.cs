@@ -73,7 +73,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SchedulerService scheduler,
         IKnowledgeStore knowledgeStore,
         IKnowledgeIndexer knowledgeIndexer,
-        IKnowledgeSearchService knowledgeSearchService)
+        IKnowledgeSearchService knowledgeSearchService,
+        ISessionKnowledgeState sessionKnowledgeState)
     {
         _storage = storage;
         _credentialStore = credentialStore;
@@ -105,6 +106,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Settings = new SettingsViewModel(settings, _mcpRegistry, skillCatalog, paths);
         SchedulePageVm = new ScheduleViewModel(settings, storage, scheduler, OpenSessionByIdAsync);
         KnowledgePageVm = new KnowledgeViewModel(knowledgeStore, knowledgeIndexer, knowledgeSearchService);
+        ComposerKnowledge = new ComposerKnowledgeViewModel(sessionKnowledgeState, knowledgeStore, settings);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
@@ -122,10 +124,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             .HasSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName)
             .GetAwaiter()
             .GetResult();
+        ComposerKnowledge.SetEmbeddingApiKeyAvailable(HasStoredKnowledgeEmbeddingApiKey);
         _uiLayout.ClampInitialLayout();
 
         LogsPath = paths.LogsPath;
         _ = KnowledgePageVm.SetSessionAsync(_displayedSessionId);
+        _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
 
         InitializeSsoDisplay();
 
@@ -292,6 +296,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public ScheduleViewModel SchedulePageVm { get; }
     public KnowledgeViewModel KnowledgePageVm { get; }
 
+    public ComposerKnowledgeViewModel ComposerKnowledge { get; }
+
     [RelayCommand]
     private void Navigate(string page)
     {
@@ -442,6 +448,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         UpdateDisplayedBusyState();
         CurrentPage = "Chat";
         _ = KnowledgePageVm.SetSessionAsync(_displayedSessionId);
+        _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
         ApplySessionWorkspace();
         _ = SaveSessionInBackgroundAsync(previousSession);
         RequestRefreshSessionHistory();
@@ -685,6 +692,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasQueuedTurns));
         UpdateDisplayedBusyState();
         _ = KnowledgePageVm.SetSessionAsync(_displayedSessionId);
+        _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
     }
 
     private void OnTurnStateChanged(object? sender, string sessionId)
@@ -788,6 +796,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             await _credentialStore.SaveSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName, KnowledgeEmbeddingApiKey);
             KnowledgeEmbeddingApiKey = string.Empty;
             HasStoredKnowledgeEmbeddingApiKey = true;
+            ComposerKnowledge.SetEmbeddingApiKeyAvailable(true);
             OnPropertyChanged(nameof(KnowledgeEmbeddingApiKey));
         }
 

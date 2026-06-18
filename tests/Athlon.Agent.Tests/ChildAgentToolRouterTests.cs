@@ -17,7 +17,12 @@ public sealed class ChildAgentToolRouterTests
         var registry = new StubMcpRegistry([new ToolDefinition("mcp__srv__search", "mcp", new Dictionary<string, string>())]);
 
         var settings = new AppSettings { Memory = new MemorySettings { Enabled = true } };
-        var router = new ChildAgentToolRouter([subAgent, other], registry, settings);
+        var router = new ChildAgentToolRouter(
+            [subAgent, other],
+            registry,
+            settings,
+            RouterTestDependencies.CreateSessionContext(),
+            RouterTestDependencies.CreateSessionKnowledgeState());
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
         Assert.DoesNotContain("call_assistant", names);
@@ -33,7 +38,12 @@ public sealed class ChildAgentToolRouterTests
         var registry = new StubMcpRegistry([]);
         var settings = new AppSettings { Memory = new MemorySettings { Enabled = false } };
 
-        var router = new ChildAgentToolRouter([memorySearch, other], registry, settings);
+        var router = new ChildAgentToolRouter(
+            [memorySearch, other],
+            registry,
+            settings,
+            RouterTestDependencies.CreateSessionContext(),
+            RouterTestDependencies.CreateSessionKnowledgeState());
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
         Assert.DoesNotContain("memory_search", names);
@@ -46,7 +56,12 @@ public sealed class ChildAgentToolRouterTests
         var registry = new StubMcpRegistry([]);
         registry.Definitions.Add(new ToolDefinition("mcp__srv__ping", "ping", new Dictionary<string, string>()));
         var settings = new AppSettings { Memory = new MemorySettings { Enabled = true } };
-        var router = new ChildAgentToolRouter(Array.Empty<IAgentTool>(), registry, settings);
+        var router = new ChildAgentToolRouter(
+            Array.Empty<IAgentTool>(),
+            registry,
+            settings,
+            RouterTestDependencies.CreateSessionContext(),
+            RouterTestDependencies.CreateSessionKnowledgeState());
 
         var result = await router.InvokeAsync(new ToolInvocation("mcp__srv__ping", new Dictionary<string, string>()));
 

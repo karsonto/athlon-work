@@ -1358,7 +1358,68 @@
                                             ToolTip="上传图片（支持 Ctrl+V 粘贴）">
                                         <TextBlock Text="+" FontSize="18" FontWeight="SemiBold" Margin="0,-2,0,0" />
                                     </Button>
+                                    <CheckBox Style="{StaticResource McpToggleSwitchStyle}"
+                                              Margin="10,0,0,0"
+                                              VerticalAlignment="Center"
+                                              IsChecked="{Binding ComposerKnowledge.IsKnowledgeEnabledForChat, UpdateSourceTrigger=PropertyChanged}"
+                                              IsEnabled="{Binding ComposerKnowledge.IsKnowledgeToggleEnabled}"
+                                              ToolTip="{Binding ComposerKnowledge.KnowledgeToggleToolTip}" />
+                                    <Button x:Name="KnowledgePickerButton"
+                                            Command="{Binding ComposerKnowledge.ToggleKnowledgePickerCommand}"
+                                            Margin="8,0,0,0"
+                                            Padding="10,4"
+                                            VerticalAlignment="Center">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ComposerKnowledge.ShowKnowledgePicker}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                        <TextBlock Text="{Binding ComposerKnowledge.KnowledgePickerLabel}" FontSize="12" />
+                                    </Button>
                                 </StackPanel>
+                                <Popup PlacementTarget="{Binding ElementName=KnowledgePickerButton}"
+                                       Placement="Top"
+                                       IsOpen="{Binding ComposerKnowledge.IsKnowledgePickerOpen, Mode=TwoWay}"
+                                       StaysOpen="False"
+                                       AllowsTransparency="True">
+                                    <Border Background="{DynamicResource Brush.Panel}"
+                                            BorderBrush="{DynamicResource Brush.Border}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="8"
+                                            MinWidth="300"
+                                            MaxWidth="420"
+                                            MaxHeight="280">
+                                        <StackPanel>
+                                            <TextBlock Text="选择知识空间"
+                                                       FontWeight="SemiBold"
+                                                       Margin="0,0,0,8" />
+                                            <ListBox ItemsSource="{Binding ComposerKnowledge.Modules}"
+                                                     BorderThickness="0"
+                                                     Background="Transparent"
+                                                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                                <ListBox.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
+                                                                  Margin="0,4">
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                                <TextBlock Text="{Binding MetaText}"
+                                                                           FontSize="11"
+                                                                           Foreground="{DynamicResource Brush.SubtleText}" />
+                                                            </StackPanel>
+                                                        </CheckBox>
+                                                    </DataTemplate>
+                                                </ListBox.ItemTemplate>
+                                            </ListBox>
+                                        </StackPanel>
+                                    </Border>
+                                </Popup>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button Command="{Binding StopCommand}"
                                             ToolTip="暂停当前回复"
@@ -1472,10 +1533,6 @@
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
                             <Grid Margin="0,0,0,14">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
                                 <StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                                         <ContentControl Style="{StaticResource KnowledgeNavIconStyle}"
@@ -1483,22 +1540,17 @@
                                                         Height="22"
                                                         Margin="0,0,10,0"
                                                         VerticalAlignment="Center" />
-                                        <TextBlock Text="全局知识库"
+                                        <TextBlock Text="知识库 Embedding"
                                                    FontSize="16"
                                                    FontWeight="SemiBold"
                                                    VerticalAlignment="Center" />
                                     </StackPanel>
-                                    <TextBlock Text="启用后 Agent 才会暴露 knowledge_search 工具。每个会话默认不启用任何知识空间，需要在知识库页面显式勾选。"
+                                    <TextBlock Text="配置向量检索所需的基础设施。在聊天输入区为每个会话单独开启知识库并选择知识空间。"
                                                Foreground="{DynamicResource Brush.SubtleText}"
                                                TextWrapping="Wrap"
                                                FontSize="12"
                                                Margin="0,6,0,0" />
                                 </StackPanel>
-                                <CheckBox Grid.Column="1"
-                                          Style="{StaticResource McpToggleSwitchStyle}"
-                                          IsChecked="{Binding Settings.Settings.Knowledge.Enabled, UpdateSourceTrigger=PropertyChanged}"
-                                          ToolTip="启用全局知识库工具"
-                                          VerticalAlignment="Center" />
                             </Grid>
 
                             <TextBlock Text="Embedding Endpoint" Foreground="{DynamicResource Brush.SubtleText}" />

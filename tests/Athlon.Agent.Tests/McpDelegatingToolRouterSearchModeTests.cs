@@ -27,7 +27,9 @@ public sealed class McpDelegatingToolRouterSearchModeTests
             static tools => tools,
             Array.Empty<IAgentTool>(),
             registry,
-            settings);
+            settings,
+            RouterTestDependencies.CreateSessionContext(),
+            RouterTestDependencies.CreateSessionKnowledgeState());
 
         var tools = router.ListTools();
 

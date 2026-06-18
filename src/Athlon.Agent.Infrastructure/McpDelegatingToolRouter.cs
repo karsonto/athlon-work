@@ -9,6 +9,8 @@ internal sealed class McpDelegatingToolRouter(
     IEnumerable<IAgentTool> allLocalTools,
     IMcpRegistry mcpRegistry,
     AppSettings settings,
+    IActiveAgentSessionContext activeSessionContext,
+    ISessionKnowledgeState sessionKnowledgeState,
     Func<Task>? refreshMcpCatalogAsync = null,
     IAppLogger? logger = null) : IToolRouter
 {
@@ -29,9 +31,9 @@ internal sealed class McpDelegatingToolRouter(
             return false;
         }
 
-        if (!settings.Knowledge.Enabled && tool is IGlobalKnowledgeTool)
+        if (tool is IGlobalKnowledgeTool)
         {
-            return false;
+            return sessionKnowledgeState.ShouldExposeKnowledgeTool(activeSessionContext.SessionId);
         }
 
         return true;

@@ -166,7 +166,12 @@ public sealed class AgentRuntimeProgressTests
             new AgentModelResponse("done", Array.Empty<AgentToolCall>()));
 
         var registry = new FakeMcpRegistry();
-        var composite = new Athlon.Agent.Infrastructure.CompositeToolRouter(Array.Empty<IAgentTool>(), registry, new AppSettings());
+        var composite = new Athlon.Agent.Infrastructure.CompositeToolRouter(
+            Array.Empty<IAgentTool>(),
+            registry,
+            new AppSettings(),
+            RouterTestDependencies.CreateSessionContext(),
+            RouterTestDependencies.CreateSessionKnowledgeState());
         var runtime = new AgentRuntime(
             modelClient,
             storage,

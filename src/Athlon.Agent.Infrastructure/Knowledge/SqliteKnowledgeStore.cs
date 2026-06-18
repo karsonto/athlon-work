@@ -69,14 +69,6 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
                     ON knowledge_chunks(module_id);
                 CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_document
                     ON knowledge_chunks(document_id);
-
-                CREATE TABLE IF NOT EXISTS session_knowledge_selections (
-                    session_id TEXT NOT NULL,
-                    module_id TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    PRIMARY KEY (session_id, module_id),
-                    FOREIGN KEY (module_id) REFERENCES knowledge_modules(id) ON DELETE CASCADE
-                );
                 """, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -306,54 +298,6 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             result.Add(ReadChunk(reader));
-        }
-
-        return result;
-    }
-
-    public async Task SaveSessionSelectionAsync(string sessionId, IReadOnlySet<string> moduleIds, CancellationToken cancellationToken = default)
-    {
-        await InitializeAsync(cancellationToken).ConfigureAwait(false);
-        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        await using (var delete = connection.CreateCommand())
-        {
-            delete.Transaction = (SqliteTransaction)transaction;
-            delete.CommandText = "DELETE FROM session_knowledge_selections WHERE session_id = $sessionId;";
-            Add(delete, "$sessionId", sessionId);
-            await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        foreach (var moduleId in moduleIds)
-        {
-            await using var insert = connection.CreateCommand();
-            insert.Transaction = (SqliteTransaction)transaction;
-            insert.CommandText = """
-                INSERT OR IGNORE INTO session_knowledge_selections (session_id, module_id, created_at)
-                VALUES ($sessionId, $moduleId, $createdAt);
-                """;
-            Add(insert, "$sessionId", sessionId);
-            Add(insert, "$moduleId", moduleId);
-            Add(insert, "$createdAt", FormatDate(DateTimeOffset.UtcNow));
-            await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task<IReadOnlySet<string>> GetSessionSelectionAsync(string sessionId, CancellationToken cancellationToken = default)
-    {
-        await InitializeAsync(cancellationToken).ConfigureAwait(false);
-        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT module_id FROM session_knowledge_selections WHERE session_id = $sessionId;";
-        Add(command, "$sessionId", sessionId);
-
-        var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
-        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
-        {
-            result.Add(reader.GetString(0));
         }
 
         return result;

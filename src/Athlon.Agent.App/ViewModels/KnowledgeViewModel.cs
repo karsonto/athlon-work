@@ -16,7 +16,6 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private readonly IKnowledgeIndexer _indexer;
     private readonly IKnowledgeSearchService _searchService;
     private string _sessionId = "";
-    private bool _suppressSelectionSave;
     private string? _activeSearchModuleId;
     private string? _activeSearchDocumentId;
 
@@ -50,7 +49,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private string _documentPreview = "选择一个文档查看抽取文本预览。";
 
     [ObservableProperty]
-    private string _statusText = "知识库未启用时仍可管理内容，但 Agent 不会暴露 knowledge_search 工具。";
+    private string _statusText = "在聊天输入区开启知识库开关后，Agent 才会暴露 knowledge_search 工具。";
 
     [ObservableProperty]
     private string _searchQuery = "";
@@ -91,16 +90,11 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         });
         // #endregion
         await _store.InitializeAsync();
-        var enabled = string.IsNullOrWhiteSpace(_sessionId)
-            ? new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            : await _store.GetSessionSelectionAsync(_sessionId);
-
-        _suppressSelectionSave = true;
         Modules.Clear();
         DocumentTree.Clear();
         foreach (var summary in await _store.ListModulesAsync())
         {
-            var moduleItem = new KnowledgeModuleItemViewModel(summary, enabled.Contains(summary.Module.Id), OnModuleSelectionChangedAsync);
+            var moduleItem = new KnowledgeModuleItemViewModel(summary);
             Modules.Add(moduleItem);
             var moduleNode = KnowledgeTreeNodeViewModel.ForModule(moduleItem);
             foreach (var document in await _store.ListDocumentsAsync(summary.Module.Id))
@@ -110,7 +104,6 @@ public sealed partial class KnowledgeViewModel : ObservableObject
 
             DocumentTree.Add(moduleNode);
         }
-        _suppressSelectionSave = false;
 
         SelectedModule = !string.IsNullOrWhiteSpace(preferredModuleId)
             ? Modules.FirstOrDefault(module => string.Equals(module.Module.Id, preferredModuleId, StringComparison.OrdinalIgnoreCase))
@@ -512,23 +505,6 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         StatusText = progress.Message;
     }
 
-    private async Task OnModuleSelectionChangedAsync()
-    {
-        if (_suppressSelectionSave || string.IsNullOrWhiteSpace(_sessionId))
-        {
-            return;
-        }
-
-        var enabled = Modules
-            .Where(module => module.IsEnabledForSession)
-            .Select(module => module.Module.Id)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        await _store.SaveSessionSelectionAsync(_sessionId, enabled);
-        StatusText = enabled.Count == 0
-            ? "当前会话未启用任何知识空间。"
-            : $"当前会话已启用 {enabled.Count} 个知识空间。";
-    }
-
     private static string ReadDocumentPreview(KnowledgeDocument? document)
     {
         if (document is null)
@@ -571,31 +547,19 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     }
 }
 
-public sealed partial class KnowledgeModuleItemViewModel : ObservableObject
+public sealed class KnowledgeModuleItemViewModel
 {
-    private readonly Func<Task> _onSelectionChanged;
-
-    public KnowledgeModuleItemViewModel(KnowledgeModuleSummary summary, bool enabledForSession, Func<Task> onSelectionChanged)
+    public KnowledgeModuleItemViewModel(KnowledgeModuleSummary summary)
     {
         Module = summary.Module;
         DocumentCount = summary.DocumentCount;
         ChunkCount = summary.ChunkCount;
-        _isEnabledForSession = enabledForSession;
-        _onSelectionChanged = onSelectionChanged;
     }
 
     public KnowledgeModule Module { get; }
     public int DocumentCount { get; }
     public int ChunkCount { get; }
     public string MetaText => $"{DocumentCount} 个文档 · {ChunkCount} 个切片";
-
-    [ObservableProperty]
-    private bool _isEnabledForSession;
-
-    partial void OnIsEnabledForSessionChanged(bool value)
-    {
-        _ = _onSelectionChanged();
-    }
 }
 
 public sealed class KnowledgeDocumentItemViewModel(KnowledgeDocument document)

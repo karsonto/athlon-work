@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
@@ -80,7 +81,12 @@ public sealed class CompositeToolRouterMemoryTests
             new StubMemoryTool("memory_search"),
             new StubMemoryTool("memory_get")
         };
-        return new CompositeToolRouter(tools, new StubMcpRegistry([]), settings);
+        return new CompositeToolRouter(
+            tools,
+            new StubMcpRegistry([]),
+            settings,
+            RouterTestDependencies.CreateSessionContext(),
+            RouterTestDependencies.CreateSessionKnowledgeState());
     }
 
     private sealed class StubNamedTool(string name) : IAgentTool

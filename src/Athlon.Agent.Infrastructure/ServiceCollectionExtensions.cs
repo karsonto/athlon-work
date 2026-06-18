@@ -70,6 +70,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IKnowledgeStore, SqliteKnowledgeStore>();
         services.AddSingleton<IKnowledgeIndexer, KnowledgeIndexerService>();
         services.AddSingleton<IKnowledgeSearchService, KnowledgeSearchService>();
+        services.AddSingleton<ISessionKnowledgeState, SessionKnowledgeState>();
         services.AddHttpClient<IEmbeddingClient, OpenAiCompatibleEmbeddingClient>(
             static client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddSingleton<AuditLogService>();
@@ -87,7 +88,9 @@ public static class ServiceCollectionExtensions
             new ChildAgentToolRouter(
                 sp.GetServices<IAgentTool>(),
                 sp.GetRequiredService<IMcpRegistry>(),
-                sp.GetRequiredService<AppSettings>())));
+                sp.GetRequiredService<AppSettings>(),
+                sp.GetRequiredService<IActiveAgentSessionContext>(),
+                sp.GetRequiredService<ISessionKnowledgeState>())));
         services.AddSingleton<SubAgentSystemPromptOrchestrator>();
         services.AddSingleton<ISubAgentSessionStore, FileSubAgentSessionStore>();
         if (settings.SubAgent.Enabled)

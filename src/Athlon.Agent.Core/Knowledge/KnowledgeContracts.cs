@@ -28,8 +28,6 @@ public interface IKnowledgeStore
     Task DeleteDocumentAsync(string documentId, CancellationToken cancellationToken = default);
     Task ReplaceChunksAsync(string documentId, IReadOnlyList<KnowledgeChunk> chunks, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<KnowledgeChunk>> ListSearchableChunksAsync(IReadOnlySet<string> moduleIds, CancellationToken cancellationToken = default);
-    Task SaveSessionSelectionAsync(string sessionId, IReadOnlySet<string> moduleIds, CancellationToken cancellationToken = default);
-    Task<IReadOnlySet<string>> GetSessionSelectionAsync(string sessionId, CancellationToken cancellationToken = default);
 }
 
 public interface IKnowledgeIndexer

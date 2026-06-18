@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Infrastructure.SubAgents;
@@ -6,13 +7,17 @@ namespace Athlon.Agent.Infrastructure.SubAgents;
 public sealed class ChildAgentToolRouter(
     IEnumerable<IAgentTool> localTools,
     IMcpRegistry mcpRegistry,
-    AppSettings settings) : IToolRouter
+    AppSettings settings,
+    IActiveAgentSessionContext activeSessionContext,
+    ISessionKnowledgeState sessionKnowledgeState) : IToolRouter
 {
     private readonly McpDelegatingToolRouter _inner = new(
         static tools => tools.Where(tool => tool is not IExcludedFromChildAgentToolkit),
         localTools,
         mcpRegistry,
-        settings);
+        settings,
+        activeSessionContext,
+        sessionKnowledgeState);
 
     public IReadOnlyList<ToolDefinition> ListTools() => _inner.ListTools();
 

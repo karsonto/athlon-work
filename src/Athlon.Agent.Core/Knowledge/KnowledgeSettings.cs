@@ -2,7 +2,6 @@ namespace Athlon.Agent.Core.Knowledge;
 
 public sealed class KnowledgeSettings
 {
-    public bool Enabled { get; set; } = false;
     public string DirectoryName { get; set; } = "knowledge-base";
     public string DatabaseFileName { get; set; } = "knowledge.db";
     public KnowledgeEmbeddingSettings Embedding { get; set; } = new();

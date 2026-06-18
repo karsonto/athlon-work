@@ -6,6 +6,7 @@ namespace Athlon.Agent.Infrastructure.Knowledge;
 public sealed class KnowledgeSearchService(
     IKnowledgeStore store,
     IEmbeddingClient embeddingClient,
+    ISessionKnowledgeState sessionKnowledgeState,
     AppSettings settings) : IKnowledgeSearchService
 {
     public async Task<IReadOnlyList<KnowledgeSearchHit>> SearchAsync(
@@ -19,7 +20,7 @@ public sealed class KnowledgeSearchService(
             return Array.Empty<KnowledgeSearchHit>();
         }
 
-        var selectedModules = await store.GetSessionSelectionAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        var selectedModules = await sessionKnowledgeState.GetModuleIdsAsync(sessionId, cancellationToken).ConfigureAwait(false);
         if (selectedModules.Count == 0)
         {
             return Array.Empty<KnowledgeSearchHit>();
