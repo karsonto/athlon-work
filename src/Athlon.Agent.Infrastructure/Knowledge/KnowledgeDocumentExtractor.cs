@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using UglyToad.PdfPig;
 
 namespace Athlon.Agent.Infrastructure.Knowledge;
 
@@ -20,14 +21,16 @@ public sealed class KnowledgeDocumentExtractor
                 entry.FullName.StartsWith("xl/worksheets/", StringComparison.OrdinalIgnoreCase)
                 || entry.FullName.Equals("xl/sharedStrings.xml", StringComparison.OrdinalIgnoreCase)),
             ".pptx" => ExtractOpenXmlText(path, entry => entry.FullName.StartsWith("ppt/slides/slide", StringComparison.OrdinalIgnoreCase)),
-            ".pdf" => ExtractBasicPdfText(path),
+            ".pdf" => ExtractPdfText(path),
             _ => throw new NotSupportedException($"不支持的知识库文件类型：{extension}")
         };
 
         text = NormalizeText(text);
         if (string.IsNullOrWhiteSpace(text))
         {
-            throw new InvalidOperationException("未能从文件中抽取到可索引文本。");
+            throw new InvalidOperationException(extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase)
+                ? "未能从 PDF 中抽取到可索引文本。该 PDF 可能是扫描件/图片型文件，或缺少可解析的文字映射；请先使用 OCR 生成带文本层的 PDF，或上传可复制文字的文档。"
+                : "未能从文件中抽取到可索引文本。");
         }
 
         return new ExtractedKnowledgeDocument(text, Path.GetFileNameWithoutExtension(path));
@@ -60,25 +63,20 @@ public sealed class KnowledgeDocumentExtractor
         return builder.ToString();
     }
 
-    private static string ExtractBasicPdfText(string path)
+    private static string ExtractPdfText(string path)
     {
-        // Minimal PDF fallback: extract literal strings from content streams.
-        // This is intentionally conservative; failed or image-only PDFs surface as indexing failures.
-        var bytes = File.ReadAllBytes(path);
-        var raw = Encoding.Latin1.GetString(bytes);
         var builder = new StringBuilder();
-        foreach (Match match in Regex.Matches(raw, @"\((?<text>(?:\\.|[^\\)]){2,})\)"))
+        using var document = PdfDocument.Open(path);
+        foreach (var page in document.GetPages())
         {
-            var text = match.Groups["text"].Value
-                .Replace("\\(", "(", StringComparison.Ordinal)
-                .Replace("\\)", ")", StringComparison.Ordinal)
-                .Replace("\\n", "\n", StringComparison.Ordinal)
-                .Replace("\\r", "\r", StringComparison.Ordinal)
-                .Replace("\\t", "\t", StringComparison.Ordinal);
-            if (text.Any(char.IsLetterOrDigit))
+            if (string.IsNullOrWhiteSpace(page.Text))
             {
-                builder.AppendLine(text);
+                continue;
             }
+
+            builder.AppendLine($"# Page {page.Number}");
+            builder.AppendLine(page.Text);
+            builder.AppendLine();
         }
 
         return builder.ToString();

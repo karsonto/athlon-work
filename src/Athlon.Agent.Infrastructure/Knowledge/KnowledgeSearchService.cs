@@ -25,13 +25,35 @@ public sealed class KnowledgeSearchService(
             return Array.Empty<KnowledgeSearchHit>();
         }
 
+        return await SearchInScopeAsync(query, selectedModules, documentId: null, topK, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<KnowledgeSearchHit>> SearchInScopeAsync(
+        string query,
+        IReadOnlySet<string> moduleIds,
+        string? documentId = null,
+        int? topK = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(query) || moduleIds.Count == 0)
+        {
+            return Array.Empty<KnowledgeSearchHit>();
+        }
+
         var queryVector = (await embeddingClient.EmbedAsync([query], cancellationToken).ConfigureAwait(false)).FirstOrDefault()?.Vector;
         if (queryVector is null || queryVector.Length == 0)
         {
             return Array.Empty<KnowledgeSearchHit>();
         }
 
-        var chunks = await store.ListSearchableChunksAsync(selectedModules, cancellationToken).ConfigureAwait(false);
+        var chunks = await store.ListSearchableChunksAsync(moduleIds, cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(documentId))
+        {
+            chunks = chunks
+                .Where(chunk => string.Equals(chunk.DocumentId, documentId, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+        }
+
         if (chunks.Count == 0)
         {
             return Array.Empty<KnowledgeSearchHit>();

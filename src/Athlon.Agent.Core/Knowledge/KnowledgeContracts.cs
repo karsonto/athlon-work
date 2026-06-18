@@ -2,6 +2,13 @@ namespace Athlon.Agent.Core.Knowledge;
 
 public sealed record EmbeddingVector(string Text, float[] Vector);
 
+public sealed record KnowledgeIndexingProgress(
+    string Stage,
+    string Message,
+    int Processed,
+    int Total,
+    double Percent);
+
 public interface IEmbeddingClient
 {
     Task<IReadOnlyList<EmbeddingVector>> EmbedAsync(
@@ -30,11 +37,13 @@ public interface IKnowledgeIndexer
     Task<KnowledgeDocument> ImportDocumentAsync(
         string moduleId,
         string sourcePath,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IProgress<KnowledgeIndexingProgress>? progress = null);
 
     Task ReindexDocumentAsync(
         string documentId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IProgress<KnowledgeIndexingProgress>? progress = null);
 }
 
 public interface IKnowledgeSearchService
@@ -42,6 +51,13 @@ public interface IKnowledgeSearchService
     Task<IReadOnlyList<KnowledgeSearchHit>> SearchAsync(
         string sessionId,
         string query,
+        int? topK = null,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<KnowledgeSearchHit>> SearchInScopeAsync(
+        string query,
+        IReadOnlySet<string> moduleIds,
+        string? documentId = null,
         int? topK = null,
         CancellationToken cancellationToken = default);
 }

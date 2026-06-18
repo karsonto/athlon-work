@@ -17,6 +17,8 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private readonly IKnowledgeSearchService _searchService;
     private string _sessionId = "";
     private bool _suppressSelectionSave;
+    private string? _activeSearchModuleId;
+    private string? _activeSearchDocumentId;
 
     public KnowledgeViewModel(
         IKnowledgeStore store,
@@ -54,7 +56,16 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private string _searchQuery = "";
 
     [ObservableProperty]
-    private string _searchResults = "当前会话默认不启用任何知识空间；勾选知识空间后可测试检索。";
+    private string _searchResults = "在左侧选择知识空间或具体文档后可测试检索。";
+
+    [ObservableProperty]
+    private bool _isIndexing;
+
+    [ObservableProperty]
+    private double _indexingProgress;
+
+    [ObservableProperty]
+    private string _indexingProgressText = "";
 
     public async Task SetSessionAsync(string sessionId)
     {
@@ -105,6 +116,8 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             ? Modules.FirstOrDefault(module => string.Equals(module.Module.Id, preferredModuleId, StringComparison.OrdinalIgnoreCase))
             : null;
         SelectedModule ??= Modules.FirstOrDefault();
+        _activeSearchModuleId = SelectedModule?.Module.Id;
+        _activeSearchDocumentId = null;
         await LoadDocumentsAsync(SelectedModule?.Module.Id);
         // #region agent log
         DebugLog("pre-fix", "H2,H3,H4", "KnowledgeViewModel.RefreshAsync:end", new
@@ -131,15 +144,19 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         {
             SelectedModule = node.Module;
             SelectedDocument = null;
+            _activeSearchModuleId = node.Module.Module.Id;
+            _activeSearchDocumentId = null;
             DocumentPreview = "选择一个文档查看抽取文本预览。";
             return;
         }
 
         if (node.Document is not null)
         {
-            SelectedDocument = node.Document;
             SelectedModule = Modules.FirstOrDefault(module =>
                 string.Equals(module.Module.Id, node.Document.Document.ModuleId, StringComparison.OrdinalIgnoreCase));
+            SelectedDocument = node.Document;
+            _activeSearchModuleId = node.Document.Document.ModuleId;
+            _activeSearchDocumentId = node.Document.Document.Id;
         }
     }
 
@@ -266,12 +283,24 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             return;
         }
 
-        foreach (var fileName in fileNames.Where(File.Exists))
+        var files = fileNames.Where(File.Exists).ToArray();
+        if (files.Length == 0)
         {
+            return;
+        }
+
+        IsIndexing = true;
+        IndexingProgress = 0;
+        IndexingProgressText = "准备索引...";
+        for (var index = 0; index < files.Length; index++)
+        {
+            var fileName = files[index];
             try
             {
                 StatusText = $"正在索引 {Path.GetFileName(fileName)} ...";
-                await _indexer.ImportDocumentAsync(SelectedModule.Module.Id, fileName);
+                var progress = new Progress<KnowledgeIndexingProgress>(value =>
+                    UpdateIndexingProgress(value, index, files.Length));
+                await _indexer.ImportDocumentAsync(SelectedModule.Module.Id, fileName, progress: progress);
             }
             catch (Exception exception)
             {
@@ -281,6 +310,9 @@ public sealed partial class KnowledgeViewModel : ObservableObject
 
         await RefreshAsync(SelectedModule.Module.Id);
         StatusText = "上传处理完成。";
+        IndexingProgress = 100;
+        IndexingProgressText = "索引完成";
+        IsIndexing = false;
     }
 
     [RelayCommand]
@@ -358,14 +390,25 @@ public sealed partial class KnowledgeViewModel : ObservableObject
 
         try
         {
+            IsIndexing = true;
+            IndexingProgress = 0;
+            IndexingProgressText = "准备重新索引...";
             StatusText = $"正在重新索引 {SelectedDocument.Document.FileName} ...";
-            await _indexer.ReindexDocumentAsync(SelectedDocument.Document.Id);
+            var progress = new Progress<KnowledgeIndexingProgress>(value =>
+                UpdateIndexingProgress(value, fileIndex: 0, fileCount: 1));
+            await _indexer.ReindexDocumentAsync(SelectedDocument.Document.Id, progress: progress);
             await RefreshAsync(SelectedModule?.Module.Id);
             StatusText = "重新索引完成。";
+            IndexingProgress = 100;
+            IndexingProgressText = "重新索引完成";
         }
         catch (Exception exception)
         {
             MessageBox.Show($"重新索引失败：{exception.Message}", "知识库", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            IsIndexing = false;
         }
     }
 
@@ -378,20 +421,28 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_sessionId))
+        var moduleId = _activeSearchModuleId ?? SelectedModule?.Module.Id;
+        if (string.IsNullOrWhiteSpace(moduleId))
         {
-            SearchResults = "当前没有可用会话，无法应用会话级知识空间选择。";
+            SearchResults = "请先在左侧选择一个知识空间或文档。";
             return;
         }
 
-        var hits = await _searchService.SearchAsync(_sessionId, SearchQuery);
+        var documentId = _activeSearchDocumentId;
+        var scopeText = ResolveSearchScopeText(moduleId, documentId);
+        var hits = await _searchService.SearchInScopeAsync(
+            SearchQuery,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { moduleId },
+            documentId);
         if (hits.Count == 0)
         {
-            SearchResults = "没有命中结果。当前会话可能尚未启用知识空间，或知识空间内没有已索引切片。";
+            SearchResults = $"没有命中结果。检索范围：{scopeText}。";
             return;
         }
 
         var builder = new StringBuilder();
+        builder.AppendLine($"检索范围：{scopeText}");
+        builder.AppendLine();
         foreach (var hit in hits)
         {
             builder.AppendLine($"score={hit.Score:0.000} | {hit.ModuleName} / {hit.FileName} / {hit.TitlePath}");
@@ -427,7 +478,38 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             Documents.Add(new KnowledgeDocumentItemViewModel(document));
         }
 
-        SelectedDocument = Documents.FirstOrDefault();
+        var selectedDocument = SelectedDocument?.Document;
+        SelectedDocument = selectedDocument is not null && string.Equals(selectedDocument.ModuleId, moduleId, StringComparison.OrdinalIgnoreCase)
+            ? Documents.FirstOrDefault(document => string.Equals(document.Document.Id, selectedDocument.Id, StringComparison.OrdinalIgnoreCase))
+            : null;
+    }
+
+    private string ResolveSearchScopeText(string moduleId, string? documentId)
+    {
+        var moduleName = Modules.FirstOrDefault(module =>
+            string.Equals(module.Module.Id, moduleId, StringComparison.OrdinalIgnoreCase))?.Module.Name ?? moduleId;
+        if (string.IsNullOrWhiteSpace(documentId))
+        {
+            return $"知识空间「{moduleName}」";
+        }
+
+        var documentName = SelectedDocument is not null
+            && string.Equals(SelectedDocument.Document.Id, documentId, StringComparison.OrdinalIgnoreCase)
+                ? SelectedDocument.Document.FileName
+                : Documents.FirstOrDefault(document =>
+                    string.Equals(document.Document.Id, documentId, StringComparison.OrdinalIgnoreCase))?.Document.FileName ?? documentId;
+        return $"文档「{documentName}」";
+    }
+
+    private void UpdateIndexingProgress(KnowledgeIndexingProgress progress, int fileIndex, int fileCount)
+    {
+        fileCount = Math.Max(1, fileCount);
+        var overallPercent = ((fileIndex + progress.Percent / 100d) / fileCount) * 100d;
+        IndexingProgress = Math.Clamp(overallPercent, 0, 100);
+        IndexingProgressText = fileCount == 1
+            ? $"{progress.Stage}：{progress.Message}"
+            : $"文件 {fileIndex + 1}/{fileCount} · {progress.Stage}：{progress.Message}";
+        StatusText = progress.Message;
     }
 
     private async Task OnModuleSelectionChangedAsync()

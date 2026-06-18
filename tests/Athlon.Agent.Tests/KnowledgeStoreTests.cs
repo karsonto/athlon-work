@@ -83,10 +83,89 @@ public sealed class KnowledgeStoreTests
         Assert.Equal("a.md", hits[0].FileName);
     }
 
+    [Fact]
+    public async Task KnowledgeSearchService_SearchInScope_FiltersByDocument()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-document-search-" + Guid.NewGuid().ToString("N"));
+        var paths = new TestPathProvider(root);
+        var settings = new AppSettings();
+        settings.Knowledge.Search.MinScore = 0;
+        var store = new SqliteKnowledgeStore(paths, settings);
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "模块" });
+        var docA = await store.SaveDocumentAsync(new KnowledgeDocument { ModuleId = module.Id, FileName = "a.md", FileType = ".md" });
+        var docB = await store.SaveDocumentAsync(new KnowledgeDocument { ModuleId = module.Id, FileName = "b.md", FileType = ".md" });
+        await store.ReplaceChunksAsync(docA.Id, [
+            new KnowledgeChunk { DocumentId = docA.Id, ModuleId = module.Id, Content = "文档 A 内容", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
+        ]);
+        await store.ReplaceChunksAsync(docB.Id, [
+            new KnowledgeChunk { DocumentId = docB.Id, ModuleId = module.Id, Content = "文档 B 内容", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
+        ]);
+
+        var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), settings);
+        var hits = await service.SearchInScopeAsync(
+            "query",
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { module.Id },
+            docB.Id);
+
+        Assert.Single(hits);
+        Assert.Equal("b.md", hits[0].FileName);
+    }
+
+    [Fact]
+    public async Task KnowledgeIndexerService_ReportsEmbeddingProgressByBatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-index-progress-" + Guid.NewGuid().ToString("N"));
+        var paths = new TestPathProvider(root);
+        paths.EnsureCreated();
+        var settings = new AppSettings();
+        settings.Knowledge.Embedding.BatchSize = 2;
+        settings.Knowledge.Chunking.TargetChars = 500;
+        settings.Knowledge.Chunking.OverlapChars = 0;
+        var store = new SqliteKnowledgeStore(paths, settings);
+        var indexer = new KnowledgeIndexerService(
+            paths,
+            settings,
+            store,
+            new FakeEmbeddingClient([1, 0]),
+            new KnowledgeDocumentExtractor(),
+            new KnowledgeChunker(settings),
+            new NoOpLogger());
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "模块" });
+        var sourcePath = Path.Combine(root, "source.md");
+        await File.WriteAllTextAsync(
+            sourcePath,
+            string.Join("\n\n", Enumerable.Range(0, 5).Select(index => $"# Section {index}\n{new string('a', 550)}")));
+        var reports = new List<KnowledgeIndexingProgress>();
+
+        await indexer.ImportDocumentAsync(
+            module.Id,
+            sourcePath,
+            progress: new RecordingProgress(reports));
+
+        var embeddingReports = reports.Where(report => report.Stage == "向量化").ToArray();
+        Assert.Contains(embeddingReports, report => report.Processed == 2);
+        Assert.Contains(embeddingReports, report => report.Processed >= 5);
+        Assert.Equal(100, reports.Last().Percent);
+    }
+
     private sealed class FakeEmbeddingClient(float[] vector) : IEmbeddingClient
     {
         public Task<IReadOnlyList<EmbeddingVector>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<EmbeddingVector>>(texts.Select(text => new EmbeddingVector(text, vector)).ToArray());
+    }
+
+    private sealed class NoOpLogger : IAppLogger
+    {
+        public void Debug(string messageTemplate, params object[] values) { }
+        public void Information(string messageTemplate, params object[] values) { }
+        public void Warning(string messageTemplate, params object[] values) { }
+        public void Error(Exception exception, string messageTemplate, params object[] values) { }
+        public IAppLogger ForContext(string sourceContext) => this;
+    }
+
+    private sealed class RecordingProgress(List<KnowledgeIndexingProgress> reports) : IProgress<KnowledgeIndexingProgress>
+    {
+        public void Report(KnowledgeIndexingProgress value) => reports.Add(value);
     }
 
     private sealed class TestPathProvider(string root) : IAppPathProvider
