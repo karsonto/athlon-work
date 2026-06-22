@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Windows.Threading;
 using Athlon.Agent.App.Services.Streaming;
 using Athlon.Agent.App.ViewModels;
@@ -31,6 +32,9 @@ public sealed class SessionTurnUiController
     private readonly Dispatcher _dispatcher;
     private readonly SessionStreamingUiContext _streaming = new();
     private readonly StreamingTokenBuffer _tokenBuffer;
+    // Cache ViewModels by message ID so switching back to a previously-viewed
+    // session reuses MarkdownMessageView / FlowDocument instead of rebuilding everything.
+    private readonly Dictionary<string, ChatMessageViewModel> _viewModelCache = new(StringComparer.Ordinal);
 
     private Action _requestScroll = NoOpScroll;
     private Action _requestScrollImmediate = NoOpScroll;
@@ -176,6 +180,7 @@ public sealed class SessionTurnUiController
         {
             ResetForTurn();
             Messages.Clear();
+            _viewModelCache.Clear();
         });
     }
 
@@ -281,8 +286,16 @@ public sealed class SessionTurnUiController
         Messages.Clear();
         _streaming.Reset();
 
-        const int batchSize = 20;
-        var viewModels = ChatTimelineHydrator.BuildDisplayMessages(displayMessages);
+        // Prune cache: remove entries that belong to old sessions (not in the new display list)
+        var currentIds = new HashSet<string>(displayMessages.Select(m => m.Id), StringComparer.Ordinal);
+        var staleKeys = _viewModelCache.Keys.Where(k => !currentIds.Contains(k)).ToList();
+        foreach (var key in staleKeys)
+        {
+            _viewModelCache.Remove(key);
+        }
+
+        const int batchSize = 50;
+        var viewModels = ChatTimelineHydrator.BuildDisplayMessages(displayMessages, _viewModelCache);
         if (viewModels.Count <= batchSize)
         {
             foreach (var viewModel in viewModels)
@@ -303,7 +316,14 @@ public sealed class SessionTurnUiController
             }
         }
 
-        RequestScrollImmediate();
+        // Cache ViewModels for future session switches
+        foreach (var viewModel in viewModels)
+        {
+            _viewModelCache[viewModel.MessageId] = viewModel;
+        }
+
+        // Defer scroll to after layout completes
+        _dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => RequestScrollImmediate());
     }
 
     private bool ContainsMessageId(string messageId) =>

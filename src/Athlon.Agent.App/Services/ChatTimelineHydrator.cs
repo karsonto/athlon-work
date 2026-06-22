@@ -6,13 +6,23 @@ namespace Athlon.Agent.App.Services;
 
 internal static class ChatTimelineHydrator
 {
-    public static List<ChatMessageViewModel> BuildDisplayMessages(IReadOnlyList<ChatMessage> displayMessages)
+    public static List<ChatMessageViewModel> BuildDisplayMessages(
+        IReadOnlyList<ChatMessage> displayMessages,
+        Dictionary<string, ChatMessageViewModel>? viewModelCache = null)
     {
         var result = new List<ChatMessageViewModel>();
         var answeredToolCallIds = BuildAnsweredToolCallIds(displayMessages);
 
         foreach (var message in ChatTimelineOrder.OrderForDisplay(displayMessages))
         {
+            // Reuse cached ViewModel if available to avoid full FlowDocument rebuild
+            if (viewModelCache?.TryGetValue(message.Id, out var cached) == true)
+            {
+                // Re-add to result; the ViewModel's bindings will reattach when ListBox item is created
+                result.Add(cached);
+                continue;
+            }
+
             AddMessageToDisplay(result, message, answeredToolCallIds);
         }
 

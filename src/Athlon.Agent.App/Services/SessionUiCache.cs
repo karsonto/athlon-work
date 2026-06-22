@@ -5,7 +5,7 @@ namespace Athlon.Agent.App.Services;
 
 public sealed class SessionUiCache
 {
-    private const int MaxCachedSessions = 3;
+    private const int MaxCachedSessions = 8;
 
     private readonly ConcurrentDictionary<string, SessionTurnUiController> _controllers = new(StringComparer.Ordinal);
     private readonly LinkedList<string> _lru = new();
