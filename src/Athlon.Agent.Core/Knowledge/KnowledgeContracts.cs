@@ -27,6 +27,7 @@ public interface IKnowledgeStore
     Task<KnowledgeDocument> SaveDocumentAsync(KnowledgeDocument document, CancellationToken cancellationToken = default);
     Task DeleteDocumentAsync(string documentId, CancellationToken cancellationToken = default);
     Task ReplaceChunksAsync(string documentId, IReadOnlyList<KnowledgeChunk> chunks, CancellationToken cancellationToken = default);
+    Task<KnowledgeDocument> CommitIndexedDocumentAsync(KnowledgeDocument document, IReadOnlyList<KnowledgeChunk> chunks, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<KnowledgeChunk>> ListSearchableChunksAsync(IReadOnlySet<string> moduleIds, CancellationToken cancellationToken = default);
 }
 

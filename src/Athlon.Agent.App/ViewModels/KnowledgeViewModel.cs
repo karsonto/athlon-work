@@ -267,6 +267,8 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         IsIndexing = true;
         IndexingProgress = 0;
         IndexingProgressText = "准备索引...";
+        var succeeded = 0;
+        var failed = 0;
         for (var index = 0; index < files.Length; index++)
         {
             var fileName = files[index];
@@ -276,18 +278,22 @@ public sealed partial class KnowledgeViewModel : ObservableObject
                 var progress = new Progress<KnowledgeIndexingProgress>(value =>
                     UpdateIndexingProgress(value, index, files.Length));
                 await _indexer.ImportDocumentAsync(SelectedModule.Module.Id, fileName, progress: progress);
+                succeeded++;
             }
             catch (Exception exception)
             {
+                failed++;
                 MessageBox.Show($"无法索引 {Path.GetFileName(fileName)}：{exception.Message}", "知识库索引失败", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 
         InvalidateCache();
         await RefreshAsync(SelectedModule.Module.Id);
-        StatusText = "上传处理完成。";
-        IndexingProgress = 100;
-        IndexingProgressText = "索引完成";
+        StatusText = failed == 0
+            ? $"上传处理完成，共 {succeeded} 个文档。"
+            : $"上传完成：成功 {succeeded} 个，失败 {failed} 个。";
+        IndexingProgress = failed == 0 ? 100 : Math.Clamp(IndexingProgress, 0, 99);
+        IndexingProgressText = failed == 0 ? "索引完成" : "部分文档索引失败";
         IsIndexing = false;
     }
 

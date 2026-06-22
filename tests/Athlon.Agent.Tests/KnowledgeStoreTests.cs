@@ -187,6 +187,76 @@ public sealed class KnowledgeStoreTests
         Assert.Equal(100, reports.Last().Percent);
     }
 
+    [Fact]
+    public async Task ImportDocumentAsync_WhenExtractionFails_DoesNotPersistDocument()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-import-fail-" + Guid.NewGuid().ToString("N"));
+        var paths = new TestPathProvider(root);
+        paths.EnsureCreated();
+        var settings = new AppSettings();
+        var store = new SqliteKnowledgeStore(paths, settings);
+        var indexer = new KnowledgeIndexerService(
+            paths,
+            settings,
+            store,
+            new FakeEmbeddingClient([1, 0]),
+            new KnowledgeDocumentExtractor(),
+            new KnowledgeChunker(settings),
+            new NoOpLogger());
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "模块" });
+        var sourcePath = Path.Combine(root, "empty.txt");
+        await File.WriteAllTextAsync(sourcePath, "   ");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            indexer.ImportDocumentAsync(module.Id, sourcePath));
+
+        var documents = await store.ListDocumentsAsync(module.Id);
+        Assert.Empty(documents);
+        Assert.False(Directory.EnumerateFiles(store.GetOriginalsDirectory(module.Id), "*", SearchOption.TopDirectoryOnly).Any());
+        Assert.False(Directory.EnumerateFiles(store.GetExtractedDirectory(module.Id), "*", SearchOption.TopDirectoryOnly).Any());
+    }
+
+    [Fact]
+    public async Task CommitIndexedDocumentAsync_WritesDocumentAndChunksAtomically()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-commit-" + Guid.NewGuid().ToString("N"));
+        var paths = new TestPathProvider(root);
+        paths.EnsureCreated();
+        var settings = new AppSettings();
+        var store = new SqliteKnowledgeStore(paths, settings);
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "模块" });
+        var document = new KnowledgeDocument
+        {
+            ModuleId = module.Id,
+            FileName = "demo.md",
+            FileType = ".md",
+            OriginalPath = Path.Combine(root, "demo.md"),
+            ExtractedPath = Path.Combine(root, "demo.extracted.md"),
+            Status = KnowledgeDocumentStatus.Indexed,
+            ChunkCount = 1
+        };
+        var chunks = new[]
+        {
+            new KnowledgeChunk
+            {
+                DocumentId = document.Id,
+                ModuleId = module.Id,
+                Content = "hello",
+                EmbeddingModel = "test",
+                EmbeddingDimension = 2,
+                Embedding = [1, 0]
+            }
+        };
+
+        await store.CommitIndexedDocumentAsync(document, chunks);
+
+        var saved = await store.GetDocumentAsync(document.Id);
+        Assert.NotNull(saved);
+        Assert.Equal(KnowledgeDocumentStatus.Indexed, saved!.Status);
+        var searchable = await store.ListSearchableChunksAsync(new HashSet<string>(StringComparer.OrdinalIgnoreCase) { module.Id });
+        Assert.Single(searchable);
+    }
+
     private sealed class FakeEmbeddingClient(float[] vector) : IEmbeddingClient
     {
         public Task<IReadOnlyList<EmbeddingVector>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken = default) =>

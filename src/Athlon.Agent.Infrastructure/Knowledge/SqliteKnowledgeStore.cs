@@ -265,6 +265,84 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<KnowledgeDocument> CommitIndexedDocumentAsync(
+        KnowledgeDocument document,
+        IReadOnlyList<KnowledgeChunk> chunks,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken).ConfigureAwait(false);
+        document.Id = string.IsNullOrWhiteSpace(document.Id) ? Guid.NewGuid().ToString("N") : document.Id;
+        document.CreatedAt = document.CreatedAt == default ? DateTimeOffset.UtcNow : document.CreatedAt;
+        document.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await using var connection = await OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        await using (var saveDocument = connection.CreateCommand())
+        {
+            saveDocument.Transaction = (SqliteTransaction)transaction;
+            saveDocument.CommandText = """
+                INSERT INTO knowledge_documents
+                    (id, module_id, file_name, file_type, original_path, extracted_path, content_hash,
+                     status, last_error, chunk_count, created_at, updated_at)
+                VALUES
+                    ($id, $moduleId, $fileName, $fileType, $originalPath, $extractedPath, $contentHash,
+                     $status, $lastError, $chunkCount, $createdAt, $updatedAt)
+                ON CONFLICT(id) DO UPDATE SET
+                    module_id = excluded.module_id,
+                    file_name = excluded.file_name,
+                    file_type = excluded.file_type,
+                    original_path = excluded.original_path,
+                    extracted_path = excluded.extracted_path,
+                    content_hash = excluded.content_hash,
+                    status = excluded.status,
+                    last_error = excluded.last_error,
+                    chunk_count = excluded.chunk_count,
+                    updated_at = excluded.updated_at;
+                """;
+            AddDocumentParameters(saveDocument, document);
+            await saveDocument.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using (var delete = connection.CreateCommand())
+        {
+            delete.Transaction = (SqliteTransaction)transaction;
+            delete.CommandText = "DELETE FROM knowledge_chunks WHERE document_id = $documentId;";
+            Add(delete, "$documentId", document.Id);
+            await delete.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        foreach (var chunk in chunks)
+        {
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = (SqliteTransaction)transaction;
+            insert.CommandText = """
+                INSERT INTO knowledge_chunks
+                    (id, document_id, module_id, chunk_index, title_path, page_number, content,
+                     token_count, embedding_model, embedding_dimension, embedding_blob, created_at)
+                VALUES
+                    ($id, $documentId, $moduleId, $chunkIndex, $titlePath, $pageNumber, $content,
+                     $tokenCount, $embeddingModel, $embeddingDimension, $embeddingBlob, $createdAt);
+                """;
+            Add(insert, "$id", string.IsNullOrWhiteSpace(chunk.Id) ? Guid.NewGuid().ToString("N") : chunk.Id);
+            Add(insert, "$documentId", document.Id);
+            Add(insert, "$moduleId", chunk.ModuleId);
+            Add(insert, "$chunkIndex", chunk.ChunkIndex);
+            Add(insert, "$titlePath", chunk.TitlePath);
+            Add(insert, "$pageNumber", chunk.PageNumber);
+            Add(insert, "$content", chunk.Content);
+            Add(insert, "$tokenCount", chunk.TokenCount);
+            Add(insert, "$embeddingModel", chunk.EmbeddingModel);
+            Add(insert, "$embeddingDimension", chunk.EmbeddingDimension);
+            Add(insert, "$embeddingBlob", chunk.Embedding is null ? null : SerializeVector(chunk.Embedding));
+            Add(insert, "$createdAt", FormatDate(chunk.CreatedAt == default ? DateTimeOffset.UtcNow : chunk.CreatedAt));
+            await insert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return document;
+    }
+
     public async Task<IReadOnlyList<KnowledgeChunk>> ListSearchableChunksAsync(IReadOnlySet<string> moduleIds, CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
