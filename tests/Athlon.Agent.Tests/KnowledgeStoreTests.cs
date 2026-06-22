@@ -171,19 +171,18 @@ public sealed class KnowledgeStoreTests
             new NoOpLogger());
         var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "模块" });
         var sourcePath = Path.Combine(root, "source.md");
-        await File.WriteAllTextAsync(
-            sourcePath,
-            string.Join("\n\n", Enumerable.Range(0, 5).Select(index => $"# Section {index}\n{new string('a', 550)}")));
+        await File.WriteAllTextAsync(sourcePath, new string('a', 1200));
         var reports = new List<KnowledgeIndexingProgress>();
 
-        await indexer.ImportDocumentAsync(
+        var document = await indexer.ImportDocumentAsync(
             module.Id,
             sourcePath,
             progress: new RecordingProgress(reports));
 
+        Assert.Equal(3, document.ChunkCount);
         var embeddingReports = reports.Where(report => report.Stage == "向量化").ToArray();
         Assert.Contains(embeddingReports, report => report.Processed == 2);
-        Assert.Contains(embeddingReports, report => report.Processed >= 5);
+        Assert.Contains(embeddingReports, report => report.Processed >= 3);
         Assert.Equal(100, reports.Last().Percent);
     }
 

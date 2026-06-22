@@ -1584,11 +1584,19 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Text="切片目标字符" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBlock Text="按固定字符数硬切，与段落无关"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               FontSize="11"
+                                               Margin="0,2,0,0" />
                                     <TextBox Text="{Binding Settings.KnowledgeChunkTargetCharsText, UpdateSourceTrigger=PropertyChanged}"
                                              Margin="0,6,0,0" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="切片重叠字符" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBlock Text="相邻切片重叠的字符数"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               FontSize="11"
+                                               Margin="0,2,0,0" />
                                     <TextBox Text="{Binding Settings.KnowledgeChunkOverlapCharsText, UpdateSourceTrigger=PropertyChanged}"
                                              Margin="0,6,0,0" />
                                 </StackPanel>
