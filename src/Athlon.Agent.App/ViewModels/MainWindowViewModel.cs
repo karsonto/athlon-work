@@ -128,7 +128,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _uiLayout.ClampInitialLayout();
 
         LogsPath = paths.LogsPath;
-        _ = KnowledgePageVm.SetSessionAsync(_displayedSessionId);
+        KnowledgePageVm.SetSession(_displayedSessionId);
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
 
         InitializeSsoDisplay();
@@ -447,7 +447,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         PendingImageAttachments.Clear();
         UpdateDisplayedBusyState();
         CurrentPage = "Chat";
-        _ = KnowledgePageVm.SetSessionAsync(_displayedSessionId);
+        KnowledgePageVm.SetSession(_displayedSessionId);
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
         ApplySessionWorkspace();
         _ = SaveSessionInBackgroundAsync(previousSession);
@@ -691,7 +691,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(QueuedTurns));
         OnPropertyChanged(nameof(HasQueuedTurns));
         UpdateDisplayedBusyState();
-        _ = KnowledgePageVm.SetSessionAsync(_displayedSessionId);
+        KnowledgePageVm.SetSession(_displayedSessionId);
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
     }
 
@@ -1106,7 +1106,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             SwitchDisplayedSession(loaded);
             CurrentSessionTitle = _session.Title;
-            await KnowledgePageVm.SetSessionAsync(_displayedSessionId);
+            KnowledgePageVm.SetSession(_displayedSessionId);
             ComposerText = string.Empty;
             PendingImageAttachments.Clear();
 
@@ -1217,7 +1217,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
         else if (string.Equals(value, "Knowledge", StringComparison.Ordinal))
         {
-            _ = KnowledgePageVm.RefreshAsync();
+            _ = KnowledgePageVm.RefreshIfStaleAsync();
         }
     }
 

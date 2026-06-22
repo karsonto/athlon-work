@@ -14,6 +14,9 @@ public static class FlowDocumentCodeBlockEnhancer
 {
     public const string CodeBlockCardTag = "CodeBlockCard";
 
+    /// <summary>Raised when selection changes inside a code-block card body TextBox.</summary>
+    public static event EventHandler? CodeBlockInteractionChanged;
+
     public static void Enhance(FlowDocument document, IReadOnlyList<FencedBlockInfo>? fencedBlocks)
     {
         if (document.Blocks.Count == 0)
@@ -33,17 +36,28 @@ public static class FlowDocumentCodeBlockEnhancer
             return;
         }
 
+        var enhancedAny = false;
         for (var i = candidates.Count - 1; i >= 0; i--)
         {
             var candidate = candidates[i];
             var language = ResolveLanguage(fencedBlocks, i);
             var fencedBlock = fencedBlocks is not null && i < fencedBlocks.Count ? fencedBlocks[i] : null;
             var codeText = ResolveCodeText(candidate.Block, fencedBlock);
+            if (string.IsNullOrWhiteSpace(codeText))
+            {
+                candidate.ParentBlocks.Remove(candidate.Block);
+                continue;
+            }
+
             var card = BuildCard(language, codeText);
             InsertBlockAt(candidate.ParentBlocks, candidate.Index, candidate.Block, card);
+            enhancedAny = true;
         }
 
-        document.Tag = CodeBlockCardTag;
+        if (enhancedAny)
+        {
+            document.Tag = CodeBlockCardTag;
+        }
     }
 
     public static void ReapplyTheme(FlowDocument document)
@@ -478,6 +492,7 @@ public static class FlowDocumentCodeBlockEnhancer
             IsTabStop = false,
             Cursor = System.Windows.Input.Cursors.IBeam,
         };
+        body.SelectionChanged += (_, _) => CodeBlockInteractionChanged?.Invoke(body, EventArgs.Empty);
 
         var bodyScroll = new ScrollViewer
         {

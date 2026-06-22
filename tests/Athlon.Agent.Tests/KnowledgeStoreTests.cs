@@ -52,6 +52,47 @@ public sealed class KnowledgeStoreTests
     }
 
     [Fact]
+    public async Task ListModulesAsync_counts_documents_and_chunks_with_subquery_sql()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-counts-" + Guid.NewGuid().ToString("N"));
+        var paths = new TestPathProvider(root);
+        var settings = new AppSettings();
+        var store = new SqliteKnowledgeStore(paths, settings);
+
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "计数测试" });
+        var docA = await store.SaveDocumentAsync(new KnowledgeDocument
+        {
+            ModuleId = module.Id,
+            FileName = "a.md",
+            FileType = ".md",
+            OriginalPath = Path.Combine(root, "a.md"),
+            Status = KnowledgeDocumentStatus.Indexed
+        });
+        var docB = await store.SaveDocumentAsync(new KnowledgeDocument
+        {
+            ModuleId = module.Id,
+            FileName = "b.md",
+            FileType = ".md",
+            OriginalPath = Path.Combine(root, "b.md"),
+            Status = KnowledgeDocumentStatus.Indexed
+        });
+
+        await store.ReplaceChunksAsync(docA.Id, [
+            new KnowledgeChunk { DocumentId = docA.Id, ModuleId = module.Id, ChunkIndex = 0, Content = "a1", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [1, 0] },
+            new KnowledgeChunk { DocumentId = docA.Id, ModuleId = module.Id, ChunkIndex = 1, Content = "a2", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [0, 1] }
+        ]);
+        await store.ReplaceChunksAsync(docB.Id, [
+            new KnowledgeChunk { DocumentId = docB.Id, ModuleId = module.Id, ChunkIndex = 0, Content = "b1", EmbeddingModel = "t", EmbeddingDimension = 2, Embedding = [1, 1] }
+        ]);
+
+        var modules = await store.ListModulesAsync();
+
+        Assert.Single(modules);
+        Assert.Equal(2, modules[0].DocumentCount);
+        Assert.Equal(3, modules[0].ChunkCount);
+    }
+
+    [Fact]
     public async Task KnowledgeSearchService_FiltersBySessionModulesAndRanksByCosine()
     {
         var root = Path.Combine(Path.GetTempPath(), "athlon-knowledge-search-" + Guid.NewGuid().ToString("N"));

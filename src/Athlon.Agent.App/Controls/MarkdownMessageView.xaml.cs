@@ -55,6 +55,7 @@ public partial class MarkdownMessageView : UserControl
         ContextMenu = _contextMenu;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        FlowDocumentCodeBlockEnhancer.CodeBlockInteractionChanged += OnCodeBlockInteractionChanged;
         AddHandler(
             FrameworkElement.RequestBringIntoViewEvent,
             new RequestBringIntoViewEventHandler(OnMarkdownRequestBringIntoView),
@@ -66,29 +67,40 @@ public partial class MarkdownMessageView : UserControl
     /// bubbles to the chat ListBox ScrollViewer and makes the right scrollbar jump.
     /// Inner HostScroll / code-block scrollers still handle the event on the way up.
     /// </summary>
-    private static void OnMarkdownRequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
+    private void OnMarkdownRequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
     {
-        // Only suppress programmatic scroll requests (no user-initiated source).
-        // Allow genuine user interaction (e.g. keyboard navigation, accessibility)
-        // to bubble up to the chat ScrollViewer.
-        if (!e.Handled && sender is DependencyObject element)
+        if (e.Handled || sender is not MarkdownMessageView markdownView)
         {
-            // Check if this was triggered by a keyboard/input event rather than programmatic scroll
-            if (element is System.Windows.UIElement uiElement)
-            {
-                // If no keyboard focus within, it's likely programmatic — suppress
-                var hasFocus = uiElement.IsKeyboardFocusWithin;
-                if (!hasFocus)
-                {
-                    e.Handled = true;
-                }
-            }
-            else
-            {
-                e.Handled = true;
-            }
+            return;
+        }
+
+        if (e.OriginalSource is DependencyObject source
+            && IsDescendantOf(markdownView, source))
+        {
+            e.Handled = true;
         }
     }
+
+    private static bool IsDescendantOf(DependencyObject ancestor, DependencyObject? node)
+    {
+        var current = node;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, ancestor))
+            {
+                return true;
+            }
+
+            current = current is FrameworkElement or Visual
+                ? LogicalTreeHelper.GetParent(current) ?? VisualTreeHelper.GetParent(current)
+                : null;
+        }
+
+        return false;
+    }
+
+    private void OnCodeBlockInteractionChanged(object? sender, EventArgs e) =>
+        ContentInteractionChanged?.Invoke(null, EventArgs.Empty);
 
     public string Markdown
     {
@@ -181,6 +193,7 @@ public partial class MarkdownMessageView : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         AppThemeManager.ThemeChanged -= OnAppThemeChanged;
+        FlowDocumentCodeBlockEnhancer.CodeBlockInteractionChanged -= OnCodeBlockInteractionChanged;
 
         if (_documentHooked)
         {

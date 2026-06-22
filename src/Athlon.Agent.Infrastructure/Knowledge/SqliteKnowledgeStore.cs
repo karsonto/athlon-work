@@ -84,12 +84,9 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT m.id, m.name, m.description, m.created_at, m.updated_at,
-                   COUNT(DISTINCT d.id) AS document_count,
-                   COUNT(c.id) AS chunk_count
+                   (SELECT COUNT(*) FROM knowledge_documents d WHERE d.module_id = m.id) AS document_count,
+                   (SELECT COUNT(*) FROM knowledge_chunks c WHERE c.module_id = m.id) AS chunk_count
             FROM knowledge_modules m
-            LEFT JOIN knowledge_documents d ON d.module_id = m.id
-            LEFT JOIN knowledge_chunks c ON c.module_id = m.id
-            GROUP BY m.id, m.name, m.description, m.created_at, m.updated_at
             ORDER BY m.name COLLATE NOCASE;
             """;
 

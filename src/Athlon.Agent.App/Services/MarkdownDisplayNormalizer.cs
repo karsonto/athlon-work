@@ -37,8 +37,72 @@ public static partial class MarkdownDisplayNormalizer
             output.Add(line);
         }
 
-        return string.Join('\n', output);
+        return JoinWithSingleNewlineHardBreaks(output);
     }
+
+    /// <summary>
+    /// Inserts Markdown hard-break markers (two trailing spaces) for single newlines so MdXaml
+    /// renders them as visible line breaks. Skips fenced and 4-space indented code blocks.
+    /// </summary>
+    private static string JoinWithSingleNewlineHardBreaks(IReadOnlyList<string> lines)
+    {
+        if (lines.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var result = new StringBuilder();
+        var inFence = false;
+
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (i > 0)
+            {
+                result.Append(
+                    ShouldUseHardBreakBetween(lines[i - 1], lines[i], inFence)
+                        ? "  \n"
+                        : '\n');
+            }
+
+            var line = lines[i];
+            if (IsFenceLine(line))
+            {
+                inFence = !inFence;
+            }
+
+            result.Append(line);
+        }
+
+        return result.ToString();
+    }
+
+    private static bool ShouldUseHardBreakBetween(string previousLine, string nextLine, bool inFence)
+    {
+        if (inFence)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(previousLine) || string.IsNullOrEmpty(nextLine))
+        {
+            return false;
+        }
+
+        if (IsIndentedCodeLine(previousLine) && IsIndentedCodeLine(nextLine))
+        {
+            return false;
+        }
+
+        if (previousLine.EndsWith("  ", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsIndentedCodeLine(string line) =>
+        line.Length >= 5 && line.StartsWith("    ", StringComparison.Ordinal);
 
     public static IReadOnlyList<FencedBlockInfo> ExtractFencedBlocks(string? markdown)
     {

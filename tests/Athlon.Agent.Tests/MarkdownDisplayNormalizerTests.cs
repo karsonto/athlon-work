@@ -79,6 +79,43 @@ public sealed class MarkdownDisplayNormalizerTests
     }
 
     [Fact]
+    public void NormalizeForDisplay_converts_single_newlines_to_hard_breaks()
+    {
+        const string markdown = "line one\nline two\n\nparagraph two";
+
+        var normalized = MarkdownDisplayNormalizer.NormalizeForDisplay(markdown);
+
+        Assert.Contains("line one  \nline two", normalized, StringComparison.Ordinal);
+        Assert.Contains("line two\n\nparagraph two", normalized, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NormalizeForDisplay_converts_triple_quote_single_newline_to_hard_break()
+    {
+        const string markdown = "\"\"\"\nnext line";
+
+        var normalized = MarkdownDisplayNormalizer.NormalizeForDisplay(markdown);
+
+        Assert.Equal("\"\"\"  \nnext line", normalized);
+    }
+
+    [Fact]
+    public void NormalizeForDisplay_preserves_newlines_inside_fenced_code()
+    {
+        const string markdown = """
+            ```text
+            line one
+            line two
+            ```
+            """;
+
+        var normalized = MarkdownDisplayNormalizer.NormalizeForDisplay(markdown);
+
+        Assert.DoesNotContain("line one  \n", normalized, StringComparison.Ordinal);
+        Assert.Contains("line one\nline two", normalized, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ExtractFencedBlocks_parses_language_and_content()
     {
         const string markdown = """

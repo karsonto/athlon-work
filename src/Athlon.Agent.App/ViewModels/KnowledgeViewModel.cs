@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
-using System.Text.Json;
 using System.Windows;
 using Athlon.Agent.Core.Knowledge;
 using Microsoft.Win32;
@@ -18,6 +17,9 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private string _sessionId = "";
     private string? _activeSearchModuleId;
     private string? _activeSearchDocumentId;
+    private bool _isStale = true;
+    private IReadOnlyDictionary<string, List<KnowledgeDocument>> _documentsByModuleId =
+        new Dictionary<string, List<KnowledgeDocument>>(StringComparer.OrdinalIgnoreCase);
 
     public KnowledgeViewModel(
         IKnowledgeStore store,
@@ -61,14 +63,28 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private bool _isIndexing;
 
     [ObservableProperty]
+    private bool _isLoading;
+
+    [ObservableProperty]
     private double _indexingProgress;
 
     [ObservableProperty]
     private string _indexingProgressText = "";
 
-    public async Task SetSessionAsync(string sessionId)
+    public void SetSession(string sessionId)
     {
         _sessionId = sessionId;
+    }
+
+    public void InvalidateCache() => _isStale = true;
+
+    public async Task RefreshIfStaleAsync()
+    {
+        if (!_isStale && Modules.Count > 0)
+        {
+            return;
+        }
+
         await RefreshAsync();
     }
 
@@ -80,50 +96,51 @@ public sealed partial class KnowledgeViewModel : ObservableObject
 
     private async Task RefreshAsync(string? preferredModuleId)
     {
-        // #region agent log
-        DebugLog("pre-fix", "H2,H3,H4", "KnowledgeViewModel.RefreshAsync:start", new
+        IsLoading = true;
+        try
         {
-            preferredModuleId,
-            selectedModuleId = SelectedModule?.Module.Id,
-            modulesBefore = Modules.Count,
-            treeBefore = DocumentTree.Count
-        });
-        // #endregion
-        await _store.InitializeAsync();
-        Modules.Clear();
-        DocumentTree.Clear();
-        foreach (var summary in await _store.ListModulesAsync())
-        {
-            var moduleItem = new KnowledgeModuleItemViewModel(summary);
-            Modules.Add(moduleItem);
-            var moduleNode = KnowledgeTreeNodeViewModel.ForModule(moduleItem);
-            foreach (var document in await _store.ListDocumentsAsync(summary.Module.Id))
+            await _store.InitializeAsync();
+            var moduleSummaries = await _store.ListModulesAsync();
+            var allDocuments = await _store.ListDocumentsAsync();
+            _documentsByModuleId = allDocuments
+                .GroupBy(document => document.ModuleId, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.ToList(),
+                    StringComparer.OrdinalIgnoreCase);
+
+            Modules.Clear();
+            DocumentTree.Clear();
+            foreach (var summary in moduleSummaries)
             {
-                moduleNode.Children.Add(KnowledgeTreeNodeViewModel.ForDocument(new KnowledgeDocumentItemViewModel(document)));
+                var moduleItem = new KnowledgeModuleItemViewModel(summary);
+                Modules.Add(moduleItem);
+                var moduleNode = KnowledgeTreeNodeViewModel.ForModule(moduleItem);
+                if (_documentsByModuleId.TryGetValue(summary.Module.Id, out var moduleDocuments))
+                {
+                    foreach (var document in moduleDocuments)
+                    {
+                        moduleNode.Children.Add(
+                            KnowledgeTreeNodeViewModel.ForDocument(new KnowledgeDocumentItemViewModel(document)));
+                    }
+                }
+
+                DocumentTree.Add(moduleNode);
             }
 
-            DocumentTree.Add(moduleNode);
+            SelectedModule = !string.IsNullOrWhiteSpace(preferredModuleId)
+                ? Modules.FirstOrDefault(module => string.Equals(module.Module.Id, preferredModuleId, StringComparison.OrdinalIgnoreCase))
+                : null;
+            SelectedModule ??= Modules.FirstOrDefault();
+            _activeSearchModuleId = SelectedModule?.Module.Id;
+            _activeSearchDocumentId = null;
+            LoadDocumentsFromCache(SelectedModule?.Module.Id);
+            _isStale = false;
         }
-
-        SelectedModule = !string.IsNullOrWhiteSpace(preferredModuleId)
-            ? Modules.FirstOrDefault(module => string.Equals(module.Module.Id, preferredModuleId, StringComparison.OrdinalIgnoreCase))
-            : null;
-        SelectedModule ??= Modules.FirstOrDefault();
-        _activeSearchModuleId = SelectedModule?.Module.Id;
-        _activeSearchDocumentId = null;
-        await LoadDocumentsAsync(SelectedModule?.Module.Id);
-        // #region agent log
-        DebugLog("pre-fix", "H2,H3,H4", "KnowledgeViewModel.RefreshAsync:end", new
+        finally
         {
-            preferredModuleId,
-            moduleCount = Modules.Count,
-            treeRootCount = DocumentTree.Count,
-            selectedModuleId = SelectedModule?.Module.Id,
-            selectedModuleNameLength = SelectedModule?.Module.Name.Length,
-            documentCount = Documents.Count,
-            treeChildCounts = DocumentTree.Select(node => node.Children.Count).ToArray()
-        });
-        // #endregion
+            IsLoading = false;
+        }
     }
 
     public void SelectTreeNode(KnowledgeTreeNodeViewModel? node)
@@ -167,6 +184,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             Description = ModuleDescription.Trim()
         });
 
+        InvalidateCache();
         await RefreshAsync(module.Id);
         StatusText = $"已创建知识空间「{module.Name}」。";
     }
@@ -174,16 +192,6 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveSelectedModuleAsync()
     {
-        // #region agent log
-        DebugLog("pre-fix", "H1,H2", "KnowledgeViewModel.SaveSelectedModuleAsync:entry", new
-        {
-            hasSelectedModule = SelectedModule is not null,
-            selectedModuleId = SelectedModule?.Module.Id,
-            nameLength = ModuleName.Length,
-            descriptionLength = ModuleDescription.Length
-        });
-        // #endregion
-
         if (string.IsNullOrWhiteSpace(ModuleName))
         {
             MessageBox.Show("知识空间名称不能为空。", "知识库", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -196,38 +204,12 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             module.Name = ModuleName.Trim();
             module.Description = ModuleDescription.Trim();
             var saved = await _store.SaveModuleAsync(module);
-            // #region agent log
-            DebugLog("pre-fix", "H2", "KnowledgeViewModel.SaveSelectedModuleAsync:after-store-save", new
-            {
-                moduleId = module.Id,
-                savedId = saved.Id,
-                savedNameLength = saved.Name.Length,
-                savedDescriptionLength = saved.Description.Length
-            });
-            // #endregion
+            InvalidateCache();
             await RefreshAsync(saved.Id);
             StatusText = $"知识空间已保存：{SelectedModule?.Module.Name ?? "未选择"}";
-            // #region agent log
-            DebugLog("pre-fix", "H3,H4", "KnowledgeViewModel.SaveSelectedModuleAsync:after-refresh", new
-            {
-                moduleId = saved.Id,
-                statusTextLength = StatusText.Length,
-                selectedModuleId = SelectedModule?.Module.Id,
-                selectedModuleNameLength = SelectedModule?.Module.Name.Length,
-                treeRootCount = DocumentTree.Count,
-                treeNamesLengths = DocumentTree.Select(node => node.DisplayName.Length).ToArray()
-            });
-            // #endregion
         }
         catch (Exception exception)
         {
-            // #region agent log
-            DebugLog("pre-fix", "H2", "KnowledgeViewModel.SaveSelectedModuleAsync:error", new
-            {
-                exceptionType = exception.GetType().Name,
-                exception.Message
-            });
-            // #endregion
             MessageBox.Show($"保存知识空间失败：{exception.Message}", "知识库", MessageBoxButton.OK, MessageBoxImage.Warning);
             StatusText = $"保存知识空间失败：{exception.Message}";
         }
@@ -301,6 +283,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             }
         }
 
+        InvalidateCache();
         await RefreshAsync(SelectedModule.Module.Id);
         StatusText = "上传处理完成。";
         IndexingProgress = 100;
@@ -353,6 +336,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         SelectedModule = null;
         SelectedDocument = null;
         DocumentPreview = "选择一个文档查看抽取文本预览。";
+        InvalidateCache();
         await RefreshAsync();
         StatusText = $"已删除知识空间「{name}」。";
     }
@@ -369,6 +353,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         await _store.DeleteDocumentAsync(document.Document.Id);
         SelectedDocument = null;
         DocumentPreview = "选择一个文档查看抽取文本预览。";
+        InvalidateCache();
         await RefreshAsync(moduleId);
         StatusText = $"已删除文档「{fileName}」。";
     }
@@ -390,6 +375,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             var progress = new Progress<KnowledgeIndexingProgress>(value =>
                 UpdateIndexingProgress(value, fileIndex: 0, fileCount: 1));
             await _indexer.ReindexDocumentAsync(SelectedDocument.Document.Id, progress: progress);
+            InvalidateCache();
             await RefreshAsync(SelectedModule?.Module.Id);
             StatusText = "重新索引完成。";
             IndexingProgress = 100;
@@ -450,7 +436,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     {
         ModuleName = value?.Module.Name ?? "";
         ModuleDescription = value?.Module.Description ?? "";
-        _ = LoadDocumentsAsync(value?.Module.Id);
+        LoadDocumentsFromCache(value?.Module.Id);
     }
 
     partial void OnSelectedDocumentChanged(KnowledgeDocumentItemViewModel? value)
@@ -458,15 +444,16 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         DocumentPreview = ReadDocumentPreview(value?.Document);
     }
 
-    private async Task LoadDocumentsAsync(string? moduleId)
+    private void LoadDocumentsFromCache(string? moduleId)
     {
         Documents.Clear();
-        if (string.IsNullOrWhiteSpace(moduleId))
+        if (string.IsNullOrWhiteSpace(moduleId)
+            || !_documentsByModuleId.TryGetValue(moduleId, out var moduleDocuments))
         {
             return;
         }
 
-        foreach (var document in await _store.ListDocumentsAsync(moduleId))
+        foreach (var document in moduleDocuments)
         {
             Documents.Add(new KnowledgeDocumentItemViewModel(document));
         }
@@ -521,29 +508,6 @@ public sealed partial class KnowledgeViewModel : ObservableObject
 
         var text = File.ReadAllText(document.ExtractedPath);
         return text.Length <= 5000 ? text : text[..5000] + "\n... (truncated)";
-    }
-
-    private static void DebugLog(string runId, string hypothesisId, string message, object data)
-    {
-        try
-        {
-            var payload = new
-            {
-                sessionId = "6740f2",
-                id = Guid.NewGuid().ToString("N"),
-                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                location = "KnowledgeViewModel.cs",
-                message,
-                data,
-                runId,
-                hypothesisId
-            };
-            File.AppendAllText("F:/athlon-work/debug-6740f2.log", JsonSerializer.Serialize(payload) + Environment.NewLine);
-        }
-        catch
-        {
-            // Debug logging must never affect app behavior.
-        }
     }
 }
 
