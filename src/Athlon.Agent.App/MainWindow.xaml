@@ -2162,12 +2162,27 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
-                                    <TextBlock Text="← 在树形区域新建或选择一个知识空间"
-                                               Foreground="{DynamicResource Brush.SubtleText}"
-                                               FontSize="13"
-                                               TextWrapping="Wrap"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Center" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="还没有知识空间"
+                                                   Foreground="{DynamicResource Brush.Text}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,0,0,6" />
+                                        <TextBlock Text="点击下方按钮创建第一个知识空间。"
+                                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap"
+                                                   HorizontalAlignment="Center"
+                                                   TextAlignment="Center"
+                                                   Margin="0,0,0,12" />
+                                        <Button Content="新建知识空间"
+                                                Command="{Binding AddModuleCommand}"
+                                                Style="{StaticResource GhostButtonStyle}"
+                                                HorizontalAlignment="Center"
+                                                Padding="16,6" />
+                                    </StackPanel>
                                 </Border>
 
                                 <!-- Module form (only visible when a module is selected) -->
