@@ -593,21 +593,50 @@
                                     VerticalAlignment="Center">
                             <Button Command="{Binding ToggleThemeCommand}"
                                     ToolTip="{Binding ThemeToggleToolTip}"
-                                    Style="{StaticResource IconButtonStyle}">
-                                <TextBlock Text="{Binding ThemeToggleGlyph}" FontSize="14" />
+                                    Style="{StaticResource HeaderIconButtonStyle}"
+                                    AutomationProperties.Name="{Binding ThemeToggleToolTip}">
+                                <Button.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="White" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsLightTheme}" Value="True">
+                                                <Setter Property="Foreground" Value="#FFFACC15" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Resources>
+                                <TextBlock Text="{Binding ThemeToggleGlyph}"
+                                           FontFamily="Segoe UI Symbol"
+                                           FontSize="16"
+                                           FontWeight="SemiBold" />
                             </Button>
                             <Button Command="{Binding NavigateCommand}"
                                     CommandParameter="Settings"
                                     ToolTip="设置"
-                                    Style="{StaticResource IconButtonStyle}"
+                                    Style="{StaticResource HeaderIconButtonStyle}"
+                                    Foreground="White"
                                     Margin="4,0,0,0">
-                                <TextBlock Text="⚙" FontSize="14" />
+                                <Button.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="White" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsLightTheme}" Value="True">
+                                                <Setter Property="Foreground" Value="#FF111827" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Resources>
+                                <TextBlock Text="&#xE713;"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="15" />
                             </Button>
                             <Button Command="{Binding ToggleContextSidebarCommand}"
-                                    Style="{StaticResource IconButtonStyle}"
+                                    Style="{StaticResource HeaderIconButtonStyle}"
+                                    Foreground="#FF2563EB"
                                     Margin="4,0,0,0"
                                     ToolTip="{Binding ContextSidebarToggleToolTip}">
-                                <controls:RightSidebarToggleIcon IsPanelOpen="{Binding IsContextSidebarVisible}" />
+                                <controls:RightSidebarToggleIcon Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                 IsPanelOpen="{Binding IsContextSidebarVisible}" />
                             </Button>
                         </StackPanel>
                     </Grid>
@@ -2971,17 +3000,22 @@
                                 <TreeView.ItemContainerStyle>
                                     <Style TargetType="TreeViewItem" BasedOn="{StaticResource WorkspaceTreeViewItemStyle}">
                                         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                        <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TreeView}}" />
                                         <EventSetter Event="Expanded" Handler="WorkspaceTreeItem_OnExpanded" />
                                         <Setter Property="ContextMenu">
                                             <Setter.Value>
                                                 <ContextMenu Style="{StaticResource MarkdownContextMenuStyle}">
                                                     <MenuItem Header="在编辑器中打开"
                                                               Style="{StaticResource MarkdownContextMenuItemStyle}"
-                                                              Command="{Binding DataContext.OpenWorkspaceTreeNodeInEditorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              Command="{Binding PlacementTarget.Tag.OpenWorkspaceTreeNodeInEditorCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                    <MenuItem Header="{Binding PlacementTarget.DataContext.OpenInExplorerMenuHeader, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                                              Command="{Binding PlacementTarget.Tag.OpenWorkspaceTreeNodeInExplorerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                                     <MenuItem Header="删除"
                                                               Style="{StaticResource MarkdownContextMenuItemStyle}"
-                                                              Command="{Binding DataContext.DeleteWorkspaceItemCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              Command="{Binding PlacementTarget.Tag.DeleteWorkspaceItemCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                                 </ContextMenu>
                                             </Setter.Value>

@@ -25,6 +25,7 @@ public sealed class WorkspaceTreeNodeViewModel
     public bool IsPlaceholder { get; }
     public bool IsExpanderPlaceholder { get; }
     public WorkspaceFileIconKind IconKind { get; }
+    public string OpenInExplorerMenuHeader => IsDirectory ? "打开该目录" : "打开文件所在文件夹";
     public bool IsExpanded { get; set; }
     public ObservableCollection<WorkspaceTreeNodeViewModel> Children { get; }
 

@@ -143,7 +143,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public bool IsLightTheme => AppThemeManager.CurrentKind == AppThemeKind.Light;
 
-    public string ThemeToggleGlyph => IsLightTheme ? "🌙" : "☀";
+    public string ThemeToggleGlyph => IsLightTheme ? "☾" : "☀";
 
     public string ThemeToggleToolTip => IsLightTheme ? "切换到深色模式" : "切换到浅色模式";
 
@@ -836,6 +836,46 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         && !node.IsPlaceholder
         && !node.IsExpanderPlaceholder
         && !node.IsDirectory
+        && !string.IsNullOrWhiteSpace(node.FullPath);
+
+    [RelayCommand(CanExecute = nameof(CanOpenWorkspaceTreeNodeInExplorer))]
+    private void OpenWorkspaceTreeNodeInExplorer(WorkspaceTreeNodeViewModel? node)
+    {
+        if (!CanOpenWorkspaceTreeNodeInExplorer(node) || node is null || string.IsNullOrWhiteSpace(node.FullPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var fullPath = Path.GetFullPath(node.FullPath);
+            // 对文件取其所在目录，对文件夹直接用其自身
+            var targetPath = node.IsDirectory ? fullPath : Path.GetDirectoryName(fullPath);
+            if (targetPath is null)
+            {
+                return;
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = targetPath,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception exception)
+        {
+            MessageBox.Show(
+                $"无法打开文件夹：{exception.Message}",
+                "打开失败",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private bool CanOpenWorkspaceTreeNodeInExplorer(WorkspaceTreeNodeViewModel? node) =>
+        node is not null
+        && !node.IsPlaceholder
+        && !node.IsExpanderPlaceholder
         && !string.IsNullOrWhiteSpace(node.FullPath);
 
     [RelayCommand]
