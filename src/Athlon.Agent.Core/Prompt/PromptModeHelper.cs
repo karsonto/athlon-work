@@ -1,6 +1,6 @@
 namespace Athlon.Agent.Core.Prompt;
 
-internal static class PromptModeHelper
+public static class PromptModeHelper
 {
     public static bool IsChatOnly(EnvironmentPromptContext context) =>
         !context.HasWorkspace;
