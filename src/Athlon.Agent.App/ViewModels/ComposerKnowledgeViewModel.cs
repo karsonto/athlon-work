@@ -34,23 +34,22 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
     public ICollectionView FilteredModulesView { get; }
 
     [ObservableProperty]
-    private bool _isKnowledgeEnabledForChat;
-
-    [ObservableProperty]
     private bool _isKnowledgePickerOpen;
 
     [ObservableProperty]
     private string _moduleSearchText = "";
 
-    public bool IsKnowledgeToggleEnabled => IsEmbeddingConfigured();
+    public bool IsKnowledgeButtonEnabled => IsEmbeddingConfigured();
 
-    public bool ShowKnowledgePicker => IsKnowledgeEnabledForChat;
+    public bool IsKnowledgeActive => SelectedModuleCount > 0;
 
-    public bool ShowKnowledgeChips => IsKnowledgeEnabledForChat && SelectedModules.Count > 0;
+    public bool ShowKnowledgeChips => SelectedModuleCount > 0;
 
-    public string KnowledgeToggleToolTip => IsEmbeddingConfigured()
-        ? "为当前会话启用知识库检索工具"
-        : "请先在设置页配置 Embedding Endpoint、Model 和 API Key";
+    public string KnowledgeButtonToolTip => !IsEmbeddingConfigured()
+        ? "请先在设置页配置 Embedding Endpoint、Model 和 API Key"
+        : IsKnowledgeActive
+            ? $"知识库已启用 · {SelectedModuleCount} 个知识空间"
+            : "点击选择知识空间";
 
     public string KnowledgePickerLabel => SelectedModuleCount == 0
         ? "选择知识空间"
@@ -61,8 +60,8 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
     public void SetEmbeddingApiKeyAvailable(bool hasStoredApiKey)
     {
         _hasStoredEmbeddingApiKey = hasStoredApiKey;
-        OnPropertyChanged(nameof(IsKnowledgeToggleEnabled));
-        OnPropertyChanged(nameof(KnowledgeToggleToolTip));
+        OnPropertyChanged(nameof(IsKnowledgeButtonEnabled));
+        OnPropertyChanged(nameof(KnowledgeButtonToolTip));
     }
 
     public async Task LoadForSessionAsync(string sessionId)
@@ -73,7 +72,6 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
         var snapshot = _sessionKnowledgeState.GetSnapshot(sessionId);
 
         _suppressSave = true;
-        IsKnowledgeEnabledForChat = snapshot.Enabled;
         Modules.Clear();
         foreach (var summary in await _store.ListModulesAsync())
         {
@@ -116,33 +114,14 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
             SelectedModules.Add(m);
         }
         OnPropertyChanged(nameof(ShowKnowledgeChips));
+        OnPropertyChanged(nameof(IsKnowledgeActive));
+        OnPropertyChanged(nameof(KnowledgeButtonToolTip));
     }
 
     [RelayCommand]
     private void ToggleKnowledgePicker()
     {
-        if (!IsKnowledgeEnabledForChat)
-        {
-            return;
-        }
-
         IsKnowledgePickerOpen = !IsKnowledgePickerOpen;
-    }
-
-    partial void OnIsKnowledgeEnabledForChatChanged(bool value)
-    {
-        if (_suppressSave)
-        {
-            return;
-        }
-
-        _ = PersistStateAsync();
-        OnPropertyChanged(nameof(ShowKnowledgePicker));
-        OnPropertyChanged(nameof(ShowKnowledgeChips));
-        if (!value)
-        {
-            IsKnowledgePickerOpen = false;
-        }
     }
 
     private async Task OnModuleSelectionChangedAsync()
@@ -167,7 +146,7 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
             .Where(module => module.IsSelected)
             .Select(module => module.ModuleId)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var snapshot = new SessionKnowledgeSnapshot(IsKnowledgeEnabledForChat, moduleIds);
+        var snapshot = new SessionKnowledgeSnapshot(SelectedModuleCount > 0, moduleIds);
         await _sessionKnowledgeState.SaveAsync(_sessionId, snapshot);
         NotifyPickerStateChanged();
     }
@@ -177,6 +156,8 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
         OnPropertyChanged(nameof(SelectedModuleCount));
         OnPropertyChanged(nameof(KnowledgePickerLabel));
         OnPropertyChanged(nameof(ShowKnowledgeChips));
+        OnPropertyChanged(nameof(IsKnowledgeActive));
+        OnPropertyChanged(nameof(KnowledgeButtonToolTip));
     }
 
     private bool IsEmbeddingConfigured() =>

@@ -1388,28 +1388,41 @@
                                             ToolTip="上传图片（支持 Ctrl+V 粘贴）">
                                         <TextBlock Text="+" FontSize="18" FontWeight="SemiBold" Margin="0,-2,0,0" />
                                     </Button>
-                                    <CheckBox Style="{StaticResource McpToggleSwitchStyle}"
-                                              Margin="10,0,0,0"
-                                              VerticalAlignment="Center"
-                                              IsChecked="{Binding ComposerKnowledge.IsKnowledgeEnabledForChat, UpdateSourceTrigger=PropertyChanged}"
-                                              IsEnabled="{Binding ComposerKnowledge.IsKnowledgeToggleEnabled}"
-                                              ToolTip="{Binding ComposerKnowledge.KnowledgeToggleToolTip}" />
                                     <Button x:Name="KnowledgePickerButton"
                                             Command="{Binding ComposerKnowledge.ToggleKnowledgePickerCommand}"
                                             Margin="8,0,0,0"
-                                            Padding="10,4"
-                                            VerticalAlignment="Center">
+                                            Padding="10,5"
+                                            VerticalAlignment="Center"
+                                            IsEnabled="{Binding ComposerKnowledge.IsKnowledgeButtonEnabled}"
+                                            ToolTip="{Binding ComposerKnowledge.KnowledgeButtonToolTip}">
                                         <Button.Style>
                                             <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
-                                                <Setter Property="Visibility" Value="Collapsed" />
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding ComposerKnowledge.ShowKnowledgePicker}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    <DataTrigger Binding="{Binding ComposerKnowledge.IsKnowledgeActive}" Value="True">
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
                                                     </DataTrigger>
+                                                    <Trigger Property="IsEnabled" Value="False">
+                                                        <Setter Property="Opacity" Value="0.45" />
+                                                    </Trigger>
                                                 </Style.Triggers>
                                             </Style>
                                         </Button.Style>
-                                        <TextBlock Text="{Binding ComposerKnowledge.KnowledgePickerLabel}" FontSize="12" />
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Data="M5,5 L19,5 A1,1 0 0 1 20,6 L20,18 A1,1 0 0 1 19,19 L5,19 A1,1 0 0 1 4,18 L4,6 A1,1 0 0 1 5,5 Z M6,6 L6,18 L18,18 L18,6 Z M8,9 L16,9 M8,12 L16,12 M8,15 L13,15"
+                                                  Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
+                                                  StrokeThickness="1.3"
+                                                  StrokeLineJoin="Round"
+                                                  Fill="Transparent"
+                                                  Width="15"
+                                                  Height="15"
+                                                  Margin="0,0,6,0"
+                                                  VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding ComposerKnowledge.KnowledgePickerLabel}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
                                     </Button>
                                 </StackPanel>
                                 <Popup PlacementTarget="{Binding ElementName=KnowledgePickerButton}"
