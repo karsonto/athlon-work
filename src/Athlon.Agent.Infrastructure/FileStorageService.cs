@@ -349,11 +349,6 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         settings.Model.LegacyApiKeyCredentialName = null;
         Directory.CreateDirectory(paths.ConfigPath);
         await jsonFileStore.SaveAsync(Path.Combine(paths.ConfigPath, "settings.json"), settings, cancellationToken);
-        await jsonFileStore.SaveAsync(Path.Combine(paths.ConfigPath, "models.json"), settings.Model, cancellationToken);
-        await McpConfigFileService.SaveServersAsync(paths, settings.McpServers, cancellationToken);
-        await SkillConfigFileService.SaveSkillsAsync(paths, settings.Skills, cancellationToken);
-        await jsonFileStore.SaveAsync(Path.Combine(paths.ConfigPath, "workspaces.json"), settings.Workspaces, cancellationToken);
-        await jsonFileStore.SaveAsync(Path.Combine(paths.ConfigPath, "logging.json"), settings.Logging, cancellationToken);
     }
 
     public async Task<AppSettings> LoadSettingsAsync(CancellationToken cancellationToken = default)
@@ -371,18 +366,6 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         if (RemoveLegacyMyDocumentsWorkspace(settings))
         {
             await SaveSettingsAsync(settings, cancellationToken);
-        }
-
-        var mcpServers = await McpConfigFileService.LoadServersAsync(paths, cancellationToken);
-        if (mcpServers.Count > 0)
-        {
-            settings.McpServers = mcpServers;
-        }
-
-        var skills = await SkillConfigFileService.LoadSkillsAsync(paths, cancellationToken);
-        if (skills.Count > 0)
-        {
-            settings.Skills = skills;
         }
 
         return settings;

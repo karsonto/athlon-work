@@ -70,12 +70,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     public AppSettings Settings { get; }
-    public string McpConfigPath => McpConfigFileService.GetPath(_paths);
     public string SettingsConfigPath => Path.Combine(_paths.ConfigPath, "settings.json");
     public string SkillsDirectoryPath => _paths.SkillsPath;
-    public string SkillsConfigPath => SkillConfigFileService.GetPath(_paths);
     public string SkillsSettingsDescription =>
-        $"技能从 {SkillsDirectoryPath} 自动加载；此页面控制每个技能是否启用。关闭后不会出现在系统提示与 @skill 补全中。保存设置后写入 {SkillsConfigPath}。";
+        $"技能从 {SkillsDirectoryPath} 自动加载；此页面控制每个技能是否启用。关闭后不会出现在系统提示与 @skill 补全中。保存设置后写入 {SettingsConfigPath}。";
     public string[] Sections { get; } = { "Models", "MCP", "Skills", "Workspace", "Tool Permissions", "Appearance" };
     public ObservableCollection<McpServerItemViewModel> McpServers { get; } = new();
     public ObservableCollection<SkillItemViewModel> Skills { get; } = new();

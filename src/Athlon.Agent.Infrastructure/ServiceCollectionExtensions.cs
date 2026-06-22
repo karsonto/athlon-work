@@ -133,19 +133,6 @@ public static class ServiceCollectionExtensions
             return null;
         }
 
-        var paths = new AppPathProvider();
-        var mcpServers = McpConfigFileService.LoadServers(paths);
-        if (mcpServers.Count > 0)
-        {
-            settings.McpServers = mcpServers;
-        }
-
-        var skills = SkillConfigFileService.LoadSkills(paths);
-        if (skills.Count > 0)
-        {
-            settings.Skills = skills;
-        }
-
         return settings;
     }
 }
