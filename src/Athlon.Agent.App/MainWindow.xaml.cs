@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
@@ -317,14 +317,36 @@ public partial class MainWindow : Window
         // #endregion
     }
 
+    private void KnowledgeDocuments_OnDragEnter(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.Copy;
+            KnowledgeDragOverlay.Opacity = 1;
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
+
+        e.Handled = true;
+    }
+
     private void KnowledgeDocuments_OnDragOver(object sender, DragEventArgs e)
     {
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
+    private void KnowledgeDocuments_OnDragLeave(object sender, DragEventArgs e)
+    {
+        KnowledgeDragOverlay.Opacity = 0;
+        e.Handled = true;
+    }
+
     private async void KnowledgeDocuments_OnDrop(object sender, DragEventArgs e)
     {
+        KnowledgeDragOverlay.Opacity = 0;
         if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
         {
             await _viewModel.KnowledgePageVm.ImportDocumentsAsync(files);

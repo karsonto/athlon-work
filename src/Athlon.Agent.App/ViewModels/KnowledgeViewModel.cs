@@ -11,6 +11,9 @@ namespace Athlon.Agent.App.ViewModels;
 
 public sealed partial class KnowledgeViewModel : ObservableObject
 {
+    /// <summary>当知识空间/文档发生变更时触发，供 ComposerKnowledgeViewModel 等外部消费者刷新。</summary>
+    public event Action? KnowledgeDataChanged;
+
     private readonly IKnowledgeStore _store;
     private readonly IKnowledgeIndexer _indexer;
     private readonly IKnowledgeSearchService _searchService;
@@ -51,13 +54,13 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private string _documentPreview = "选择一个文档查看抽取文本预览。";
 
     [ObservableProperty]
-    private string _statusText = "在聊天输入区开启知识库开关后，Agent 才会暴露 knowledge_search 工具。";
+    private string _statusText = "在聊天输入区开启知识库开关后，Agent 才会使用知识库检索来回答你的问题。";
 
     [ObservableProperty]
     private string _searchQuery = "";
 
     [ObservableProperty]
-    private string _searchResults = "在左侧选择知识空间或具体文档后可测试检索。";
+    private string _searchResults = "在左侧选择知识空间或文档后，输入问题可测试检索效果。";
 
     [ObservableProperty]
     private bool _isIndexing;
@@ -70,6 +73,8 @@ public sealed partial class KnowledgeViewModel : ObservableObject
 
     [ObservableProperty]
     private string _indexingProgressText = "";
+
+    public bool HasModuleSelected => SelectedModule is not null;
 
     public void SetSession(string sessionId)
     {
@@ -187,6 +192,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         InvalidateCache();
         await RefreshAsync(module.Id);
         StatusText = $"已创建知识空间「{module.Name}」。";
+        KnowledgeDataChanged?.Invoke();;
     }
 
     [RelayCommand]
@@ -207,6 +213,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             InvalidateCache();
             await RefreshAsync(saved.Id);
             StatusText = $"知识空间已保存：{SelectedModule?.Module.Name ?? "未选择"}";
+            KnowledgeDataChanged?.Invoke();
         }
         catch (Exception exception)
         {
@@ -295,6 +302,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         IndexingProgress = failed == 0 ? 100 : Math.Clamp(IndexingProgress, 0, 99);
         IndexingProgressText = failed == 0 ? "索引完成" : "部分文档索引失败";
         IsIndexing = false;
+        KnowledgeDataChanged?.Invoke();
     }
 
     [RelayCommand]
@@ -345,6 +353,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         InvalidateCache();
         await RefreshAsync();
         StatusText = $"已删除知识空间「{name}」。";
+        KnowledgeDataChanged?.Invoke();
     }
 
     private async Task DeleteDocumentAsync(KnowledgeDocumentItemViewModel document)
@@ -362,6 +371,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         InvalidateCache();
         await RefreshAsync(moduleId);
         StatusText = $"已删除文档「{fileName}」。";
+        KnowledgeDataChanged?.Invoke();;
     }
 
     [RelayCommand]
@@ -386,6 +396,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             StatusText = "重新索引完成。";
             IndexingProgress = 100;
             IndexingProgressText = "重新索引完成";
+            KnowledgeDataChanged?.Invoke();
         }
         catch (Exception exception)
         {
@@ -443,6 +454,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         ModuleName = value?.Module.Name ?? "";
         ModuleDescription = value?.Module.Description ?? "";
         LoadDocumentsFromCache(value?.Module.Id);
+        OnPropertyChanged(nameof(HasModuleSelected));
     }
 
     partial void OnSelectedDocumentChanged(KnowledgeDocumentItemViewModel? value)

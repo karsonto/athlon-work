@@ -1180,6 +1180,7 @@
                             <RowDefinition Height="*" MinHeight="56" />
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <ScrollViewer Grid.Row="0"
                                       HorizontalScrollBarVisibility="Auto"
@@ -1394,12 +1395,65 @@
                                             Padding="8"
                                             MinWidth="300"
                                             MaxWidth="420"
-                                            MaxHeight="280">
+                                            MaxHeight="360">
                                         <StackPanel>
                                             <TextBlock Text="选择知识空间"
                                                        FontWeight="SemiBold"
                                                        Margin="0,0,0,8" />
-                                            <ListBox ItemsSource="{Binding ComposerKnowledge.Modules}"
+                                            <TextBox x:Name="KnowledgeSearchBox"
+                                                     Text="{Binding ComposerKnowledge.ModuleSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                                     Margin="0,0,0,8"
+                                                     Padding="8,6"
+                                                     FontSize="12">
+                                                <TextBox.Style>
+                                                    <Style TargetType="TextBox">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.Chrome}" />
+                                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+                                                        <Setter Property="BorderThickness" Value="1" />
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="TextBox">
+                                                                    <Border Background="{TemplateBinding Background}"
+                                                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                                                            CornerRadius="6">
+                                                                        <Grid>
+                                                                            <ScrollViewer x:Name="PART_ContentHost" Padding="{TemplateBinding Padding}" />
+                                                                            <TextBlock Text="搜索知识空间..."
+                                                                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                                                                       FontSize="12"
+                                                                                       IsHitTestVisible="False"
+                                                                                       Padding="8,6"
+                                                                                       Visibility="Collapsed">
+                                                                                <TextBlock.Style>
+                                                                                    <Style TargetType="TextBlock">
+                                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                                        <Style.Triggers>
+                                                                                            <DataTrigger Binding="{Binding Text.Length, RelativeSource={RelativeSource AncestorType=TextBox}}" Value="0">
+                                                                                                <Setter Property="Visibility" Value="Visible" />
+                                                                                            </DataTrigger>
+                                                                                        </Style.Triggers>
+                                                                                    </Style>
+                                                                                </TextBlock.Style>
+                                                                            </TextBlock>
+                                                                        </Grid>
+                                                                    </Border>
+                                                                    <ControlTemplate.Triggers>
+                                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                                                                        </Trigger>
+                                                                        <Trigger Property="IsFocused" Value="True">
+                                                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                                                                        </Trigger>
+                                                                    </ControlTemplate.Triggers>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </TextBox.Style>
+                                            </TextBox>
+                                            <ListBox ItemsSource="{Binding ComposerKnowledge.FilteredModulesView}"
                                                      BorderThickness="0"
                                                      Background="Transparent"
                                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
@@ -1443,7 +1497,53 @@
                                     </Button>
                                 </StackPanel>
                         </Grid>
-                        <TextBlock Grid.Row="3"
+                        <!-- Knowledge chips row -->
+                        <StackPanel Grid.Row="3"
+                                    Orientation="Horizontal"
+                                    Margin="4,0,4,4"
+                                    x:Name="KnowledgeChipsPanel">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ComposerKnowledge.ShowKnowledgeChips}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <ItemsControl ItemsSource="{Binding ComposerKnowledge.SelectedModules}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{DynamicResource Brush.AccentSubtle}"
+                                                BorderBrush="{DynamicResource Brush.Accent}"
+                                                BorderThickness="1"
+                                                CornerRadius="12"
+                                                Padding="10,4"
+                                                Margin="0,0,6,0">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="📚"
+                                                           FontSize="11"
+                                                           Margin="0,0,6,0"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="12"
+                                                           Foreground="{DynamicResource Brush.Accent}"
+                                                           FontWeight="Medium"
+                                                           VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <TextBlock Grid.Row="4"
                                    Text="按 Enter 发送消息，Shift+Enter 换行"
                                    Foreground="{DynamicResource Brush.DisabledText}"
                                    FontSize="11"
@@ -1976,7 +2076,7 @@
                                             Height="28"
                                             Margin="0,0,10,0"
                                             VerticalAlignment="Center" />
-                            <TextBlock Text="全局知识库"
+                            <TextBlock Text="知识库"
                                        FontSize="20"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center" />
@@ -2001,34 +2101,75 @@
                                            FontSize="16"
                                            FontWeight="SemiBold"
                                            Margin="0,0,0,10" />
-                                <TextBlock Text="名称" Foreground="{DynamicResource Brush.SubtleText}" />
-                                <TextBox Text="{Binding ModuleName, UpdateSourceTrigger=PropertyChanged}"
-                                         Margin="0,4,0,8" />
-                                <TextBlock Text="描述" Foreground="{DynamicResource Brush.SubtleText}" />
-                                <TextBox Text="{Binding ModuleDescription, UpdateSourceTrigger=PropertyChanged}"
-                                         AcceptsReturn="True"
-                                         MinHeight="62"
-                                         TextWrapping="Wrap"
-                                         Margin="0,4,0,10" />
-                                <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
-                                    <Button Content="新增"
-                                            Command="{Binding AddModuleCommand}"
-                                            Style="{StaticResource GhostButtonStyle}"
-                                            Margin="0,0,8,0" />
-                                    <Button Content="刷新"
-                                            Command="{Binding RefreshCommand}"
-                                            Style="{StaticResource GhostButtonStyle}"
-                                            Margin="0,0,8,0" />
-                                    <Button Content="保存"
-                                            Command="{Binding SaveSelectedModuleCommand}"
-                                            Click="KnowledgeSaveModuleButton_OnClick"
-                                            Style="{StaticResource GhostButtonStyle}" />
+
+                                <!-- Empty state: no module selected -->
+                                <Border x:Name="KnowledgeModuleEmptyState"
+                                        BorderThickness="2"
+                                        BorderBrush="{DynamicResource Brush.Border}"
+                                        CornerRadius="10"
+                                        Padding="16"
+                                        MinHeight="80"
+                                        Margin="0,0,0,14">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasModuleSelected}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="← 在树形区域新建或选择一个知识空间"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               FontSize="13"
+                                               TextWrapping="Wrap"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Center" />
+                                </Border>
+
+                                <!-- Module form (only visible when a module is selected) -->
+                                <StackPanel x:Name="KnowledgeModuleForm">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasModuleSelected}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <TextBlock Text="名称" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ModuleName, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,4,0,8" />
+                                    <TextBlock Text="描述" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ModuleDescription, UpdateSourceTrigger=PropertyChanged}"
+                                             AcceptsReturn="True"
+                                             MinHeight="62"
+                                             TextWrapping="Wrap"
+                                             Margin="0,4,0,10" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                        <Button Content="新增"
+                                                Command="{Binding AddModuleCommand}"
+                                                Style="{StaticResource GhostButtonStyle}"
+                                                Margin="0,0,8,0" />
+                                        <Button Content="刷新"
+                                                Command="{Binding RefreshCommand}"
+                                                Style="{StaticResource GhostButtonStyle}"
+                                                Margin="0,0,8,0" />
+                                        <Button Content="保存"
+                                                Command="{Binding SaveSelectedModuleCommand}"
+                                                Click="KnowledgeSaveModuleButton_OnClick"
+                                                Style="{StaticResource GhostButtonStyle}" />
+                                    </StackPanel>
                                 </StackPanel>
+
                                 <TextBlock Text="文档"
                                            FontSize="16"
                                            FontWeight="SemiBold"
                                            Margin="0,0,0,8" />
-                                <TextBlock Text="将文件拖拽到下方树形区域可上传到当前知识空间。"
+                                <TextBlock Text="将文件拖拽到下方区域可上传到当前知识空间。"
                                            Foreground="{DynamicResource Brush.SubtleText}"
                                            TextWrapping="Wrap"
                                            FontSize="12"
@@ -2052,49 +2193,70 @@
                                                FontSize="12" />
                                 </StackPanel>
                             </StackPanel>
-                            <TreeView ItemsSource="{Binding DocumentTree}"
-                                      BorderThickness="0"
-                                      Background="Transparent"
-                                      AllowDrop="True"
-                                      DragOver="KnowledgeDocuments_OnDragOver"
-                                      Drop="KnowledgeDocuments_OnDrop"
-                                      PreviewMouseRightButtonDown="KnowledgeTree_OnPreviewMouseRightButtonDown"
-                                      SelectedItemChanged="KnowledgeTree_OnSelectedItemChanged">
-                                <TreeView.ItemContainerStyle>
-                                    <Style TargetType="TreeViewItem">
-                                        <Setter Property="IsExpanded" Value="True" />
-                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                                        <Setter Property="Margin" Value="0,2" />
-                                        <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TreeView}}" />
-                                        <Setter Property="ContextMenu">
-                                            <Setter.Value>
-                                                <ContextMenu Style="{StaticResource MarkdownContextMenuStyle}">
-                                                    <MenuItem Header="{Binding PlacementTarget.DataContext.DeleteMenuHeader, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                              Style="{StaticResource MarkdownContextMenuItemStyle}"
-                                                              Command="{Binding PlacementTarget.Tag.DeleteTreeNodeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                                </ContextMenu>
-                                            </Setter.Value>
-                                        </Setter>
-                                    </Style>
-                                </TreeView.ItemContainerStyle>
-                                <TreeView.ItemTemplate>
-                                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                                        <StackPanel Orientation="Horizontal" Margin="0,3">
-                                            <TextBlock Text="{Binding Glyph}" Margin="0,0,6,0" />
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding DisplayName}"
-                                                           FontWeight="SemiBold"
-                                                           TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="{Binding MetaText}"
-                                                           Foreground="{DynamicResource Brush.SubtleText}"
-                                                           FontSize="12"
-                                                           TextTrimming="CharacterEllipsis" />
+                            <Grid>
+                                <TreeView ItemsSource="{Binding DocumentTree}"
+                                          BorderThickness="0"
+                                          Background="Transparent"
+                                          AllowDrop="True"
+                                          DragEnter="KnowledgeDocuments_OnDragEnter"
+                                          DragOver="KnowledgeDocuments_OnDragOver"
+                                          DragLeave="KnowledgeDocuments_OnDragLeave"
+                                          Drop="KnowledgeDocuments_OnDrop"
+                                          PreviewMouseRightButtonDown="KnowledgeTree_OnPreviewMouseRightButtonDown"
+                                          SelectedItemChanged="KnowledgeTree_OnSelectedItemChanged">
+                                    <TreeView.ItemContainerStyle>
+                                        <Style TargetType="TreeViewItem">
+                                            <Setter Property="IsExpanded" Value="True" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                            <Setter Property="Margin" Value="0,2" />
+                                            <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TreeView}}" />
+                                            <Setter Property="ContextMenu">
+                                                <Setter.Value>
+                                                    <ContextMenu Style="{StaticResource MarkdownContextMenuStyle}">
+                                                        <MenuItem Header="{Binding PlacementTarget.DataContext.DeleteMenuHeader, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                                                  Command="{Binding PlacementTarget.Tag.DeleteTreeNodeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                    </ContextMenu>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </TreeView.ItemContainerStyle>
+                                    <TreeView.ItemTemplate>
+                                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                            <StackPanel Orientation="Horizontal" Margin="0,3">
+                                                <TextBlock Text="{Binding Glyph}" Margin="0,0,6,0" />
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding DisplayName}"
+                                                               FontWeight="SemiBold"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding MetaText}"
+                                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                                               FontSize="12"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
                                             </StackPanel>
-                                        </StackPanel>
-                                    </HierarchicalDataTemplate>
-                                </TreeView.ItemTemplate>
-                            </TreeView>
+                                        </HierarchicalDataTemplate>
+                                    </TreeView.ItemTemplate>
+                                </TreeView>
+
+                                <!-- Drag-drop overlay indicator -->
+                                <Border x:Name="KnowledgeDragOverlay"
+                                        IsHitTestVisible="False"
+                                        CornerRadius="8"
+                                        BorderThickness="2"
+                                        BorderBrush="{DynamicResource Brush.Accent}"
+                                        Background="{DynamicResource Brush.AccentSubtle}"
+                                        Opacity="0"
+                                        Visibility="Visible">
+                                    <TextBlock Text="松开以上传文件到当前知识空间"
+                                               Foreground="{DynamicResource Brush.Accent}"
+                                               FontWeight="SemiBold"
+                                               FontSize="14"
+                                               VerticalAlignment="Center"
+                                               HorizontalAlignment="Center" />
+                                </Border>
+                            </Grid>
                         </DockPanel>
                     </Border>
 
@@ -2146,12 +2308,51 @@
                                            FontSize="12" />
                             </StackPanel>
 
+                            <!-- Document Preview Card -->
+                            <Border Style="{StaticResource SettingsCardStyle}"
+                                    Padding="16">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <TextBlock Text="📄"
+                                                   FontSize="16"
+                                                   Margin="0,0,8,0"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Text="文档预览"
+                                                   FontSize="15"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <Border Background="{DynamicResource Brush.Chrome}"
+                                            CornerRadius="8"
+                                            Padding="14"
+                                            MaxHeight="320"
+                                            MinHeight="80">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled">
+                                            <TextBlock Text="{Binding DocumentPreview}"
+                                                       Foreground="{DynamicResource Brush.Text}"
+                                                       TextWrapping="Wrap"
+                                                       FontSize="13"
+                                                       FontFamily="Consolas"
+                                                       LineHeight="20" />
+                                        </ScrollViewer>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Search Test Card -->
                             <Border Style="{StaticResource SettingsCardStyle}">
                                 <StackPanel>
-                                    <TextBlock Text="检索测试"
-                                               FontSize="16"
-                                               FontWeight="SemiBold"
-                                               Margin="0,0,0,10" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <TextBlock Text="🔍"
+                                                   FontSize="15"
+                                                   Margin="0,0,8,0"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Text="检索测试"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
                                     <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                                              AcceptsReturn="True"
                                              MinHeight="72"
@@ -2162,13 +2363,20 @@
                                             Style="{StaticResource GhostButtonStyle}"
                                             HorizontalAlignment="Left"
                                             Margin="0,0,0,10" />
-                                    <TextBox Text="{Binding SearchResults}"
-                                             IsReadOnly="True"
-                                             AcceptsReturn="True"
-                                             TextWrapping="Wrap"
-                                             MinHeight="180"
-                                             VerticalScrollBarVisibility="Auto"
-                                             FontFamily="Consolas" />
+                                    <Border Background="{DynamicResource Brush.Chrome}"
+                                            CornerRadius="8"
+                                            Padding="14"
+                                            MinHeight="120"
+                                            MaxHeight="340">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled">
+                                            <TextBlock Text="{Binding SearchResults}"
+                                                       Foreground="{DynamicResource Brush.Text}"
+                                                       TextWrapping="Wrap"
+                                                       FontSize="13"
+                                                       LineHeight="20" />
+                                        </ScrollViewer>
+                                    </Border>
                                 </StackPanel>
                             </Border>
                         </StackPanel>

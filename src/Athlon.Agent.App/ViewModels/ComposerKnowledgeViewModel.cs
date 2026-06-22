@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Windows.Data;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Knowledge;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -23,9 +25,13 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
         _sessionKnowledgeState = sessionKnowledgeState;
         _store = store;
         _settings = settings;
+        FilteredModulesView = CollectionViewSource.GetDefaultView(Modules);
+        FilteredModulesView.Filter = FilterModules;
     }
 
     public ObservableCollection<ComposerKnowledgeModuleItemViewModel> Modules { get; } = new();
+    public ObservableCollection<ComposerKnowledgeModuleItemViewModel> SelectedModules { get; } = new();
+    public ICollectionView FilteredModulesView { get; }
 
     [ObservableProperty]
     private bool _isKnowledgeEnabledForChat;
@@ -33,9 +39,14 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
     [ObservableProperty]
     private bool _isKnowledgePickerOpen;
 
+    [ObservableProperty]
+    private string _moduleSearchText = "";
+
     public bool IsKnowledgeToggleEnabled => IsEmbeddingConfigured();
 
     public bool ShowKnowledgePicker => IsKnowledgeEnabledForChat;
+
+    public bool ShowKnowledgeChips => IsKnowledgeEnabledForChat && SelectedModules.Count > 0;
 
     public string KnowledgeToggleToolTip => IsEmbeddingConfigured()
         ? "为当前会话启用知识库检索工具"
@@ -74,6 +85,37 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
 
         _suppressSave = false;
         NotifyPickerStateChanged();
+        UpdateSelectedModules();
+        RefreshFilteredView();
+    }
+
+    partial void OnModuleSearchTextChanged(string value)
+    {
+        RefreshFilteredView();
+    }
+
+    private void RefreshFilteredView()
+    {
+        FilteredModulesView.Refresh();
+    }
+
+    private bool FilterModules(object o)
+    {
+        if (string.IsNullOrWhiteSpace(ModuleSearchText))
+            return true;
+        if (o is not ComposerKnowledgeModuleItemViewModel item)
+            return false;
+        return item.Name.Contains(ModuleSearchText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void UpdateSelectedModules()
+    {
+        SelectedModules.Clear();
+        foreach (var m in Modules.Where(m => m.IsSelected))
+        {
+            SelectedModules.Add(m);
+        }
+        OnPropertyChanged(nameof(ShowKnowledgeChips));
     }
 
     [RelayCommand]
@@ -96,6 +138,7 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
 
         _ = PersistStateAsync();
         OnPropertyChanged(nameof(ShowKnowledgePicker));
+        OnPropertyChanged(nameof(ShowKnowledgeChips));
         if (!value)
         {
             IsKnowledgePickerOpen = false;
@@ -110,6 +153,7 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
         }
 
         await PersistStateAsync();
+        UpdateSelectedModules();
     }
 
     private async Task PersistStateAsync()
@@ -132,6 +176,7 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(SelectedModuleCount));
         OnPropertyChanged(nameof(KnowledgePickerLabel));
+        OnPropertyChanged(nameof(ShowKnowledgeChips));
     }
 
     private bool IsEmbeddingConfigured() =>

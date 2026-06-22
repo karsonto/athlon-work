@@ -106,6 +106,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         Settings = new SettingsViewModel(settings, _mcpRegistry, skillCatalog, paths);
         SchedulePageVm = new ScheduleViewModel(settings, storage, scheduler, OpenSessionByIdAsync);
         KnowledgePageVm = new KnowledgeViewModel(knowledgeStore, knowledgeIndexer, knowledgeSearchService);
+        KnowledgePageVm.KnowledgeDataChanged += OnKnowledgeDataChanged;
         ComposerKnowledge = new ComposerKnowledgeViewModel(sessionKnowledgeState, knowledgeStore, settings);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
@@ -708,6 +709,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         });
     }
 
+    private void OnKnowledgeDataChanged()
+    {
+        _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
+    }
+
     private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)
     {
         Application.Current?.Dispatcher.InvokeAsync(async () =>
@@ -1174,6 +1180,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         AppThemeManager.ThemeChanged -= OnAppThemeChanged;
         _turnHost.TurnCompleted -= OnTurnCompleted;
         _turnHost.TurnStateChanged -= OnTurnStateChanged;
+        KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;
         ShutdownAsync().GetAwaiter().GetResult();
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         _copyNoticeCts?.Cancel();
