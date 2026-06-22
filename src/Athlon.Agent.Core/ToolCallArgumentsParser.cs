@@ -19,11 +19,14 @@ public static class ToolCallArgumentsParser
                 return new Dictionary<string, string>();
             }
 
-            return json.RootElement.EnumerateObject().ToDictionary(
-                property => property.Name,
-                property => property.Value.ValueKind == JsonValueKind.String
-                    ? property.Value.GetString() ?? string.Empty
-                    : property.Value.GetRawText());
+            return json.RootElement.EnumerateObject()
+                .GroupBy(p => p.Name, StringComparer.Ordinal)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Last().Value.ValueKind == JsonValueKind.String
+                        ? g.Last().Value.GetString() ?? string.Empty
+                        : g.Last().Value.GetRawText(),
+                    StringComparer.Ordinal);
         }
         catch (JsonException)
         {
