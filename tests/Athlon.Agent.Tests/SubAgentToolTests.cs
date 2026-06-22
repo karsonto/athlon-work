@@ -127,7 +127,8 @@ public sealed class SubAgentToolTests
                 new EmptyMcpRegistry(),
                 settings,
                 RouterTestDependencies.CreateSessionContext(),
-                RouterTestDependencies.CreateSessionKnowledgeState()));
+                RouterTestDependencies.CreateSessionKnowledgeState(),
+                RouterTestDependencies.CreateWorkspaceGuard()));
         var prompt = new SubAgentSystemPromptOrchestrator(
             settings,
             new StubHostEnvironment(),

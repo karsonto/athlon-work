@@ -9,6 +9,23 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
         builder.AppendLine("Tools:");
+
+        if (PromptModeHelper.IsChatOnly(context))
+        {
+            if (PromptModeHelper.HasKnowledgeTool(context))
+            {
+                builder.AppendLine("Only knowledge_search is available. Use it to search knowledge modules enabled for this session.");
+                builder.AppendLine("If no results are found, tell the user honestly.");
+            }
+            else
+            {
+                builder.AppendLine("No tools are available in this session. Answer directly; do not attempt function calling.");
+            }
+
+            builder.AppendLine();
+            return;
+        }
+
         builder.AppendLine(
             "Native tools are provided via function calling. Use each tool's schema. Do not guess file contents.");
         builder.AppendLine();

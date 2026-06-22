@@ -90,7 +90,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IMcpRegistry>(),
                 sp.GetRequiredService<AppSettings>(),
                 sp.GetRequiredService<IActiveAgentSessionContext>(),
-                sp.GetRequiredService<ISessionKnowledgeState>())));
+                sp.GetRequiredService<ISessionKnowledgeState>(),
+                sp.GetRequiredService<WorkspaceGuard>())));
         services.AddSingleton<SubAgentSystemPromptOrchestrator>();
         services.AddSingleton<ISubAgentSessionStore, FileSubAgentSessionStore>();
         if (settings.SubAgent.Enabled)

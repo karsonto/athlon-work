@@ -86,7 +86,8 @@ public sealed class CompositeToolRouterMemoryTests
             new StubMcpRegistry([]),
             settings,
             RouterTestDependencies.CreateSessionContext(),
-            RouterTestDependencies.CreateSessionKnowledgeState());
+            RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateWorkspaceGuard());
     }
 
     private sealed class StubNamedTool(string name) : IAgentTool

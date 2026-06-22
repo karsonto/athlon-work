@@ -10,9 +10,15 @@ public sealed class WorkspacePolicySection : IEnvironmentPromptSection
     {
         if (!context.HasWorkspace)
         {
-            builder.AppendLine("当前工作区尚未设定。");
-            builder.AppendLine("文件工具仍可使用：绝对路径将按系统路径解析；相对路径将基于当前进程目录。");
-            builder.AppendLine("如需稳定结果，请先让用户设置 Workspace，或优先使用绝对路径。");
+            builder.AppendLine("当前未配置工作区，处于纯对话模式。");
+            builder.AppendLine("你无法访问本地文件、执行命令或使用 MCP 工具。");
+            builder.AppendLine("如需进行代码编辑、文件操作或命令执行，请引导用户在应用中配置工作区。");
+            if (PromptModeHelper.HasKnowledgeTool(context))
+            {
+                builder.AppendLine("当前会话已启用知识库检索（knowledge_search），可用于回答与已上传文档相关的问题。");
+                builder.AppendLine("文件与命令类工具仍不可用。");
+            }
+
             builder.AppendLine();
             return;
         }

@@ -29,7 +29,8 @@ public sealed class McpDelegatingToolRouterSearchModeTests
             registry,
             settings,
             RouterTestDependencies.CreateSessionContext(),
-            RouterTestDependencies.CreateSessionKnowledgeState());
+            RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateWorkspaceGuard());
 
         var tools = router.ListTools();
 

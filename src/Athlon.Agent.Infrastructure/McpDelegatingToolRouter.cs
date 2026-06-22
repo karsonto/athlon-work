@@ -11,6 +11,7 @@ internal sealed class McpDelegatingToolRouter(
     AppSettings settings,
     IActiveAgentSessionContext activeSessionContext,
     ISessionKnowledgeState sessionKnowledgeState,
+    WorkspaceGuard workspaceGuard,
     Func<Task>? refreshMcpCatalogAsync = null,
     IAppLogger? logger = null) : IToolRouter
 {
@@ -22,10 +23,18 @@ internal sealed class McpDelegatingToolRouter(
             settings,
             refreshMcpCatalogAsync ?? (() => mcpRegistry.RefreshAsync(settings.McpServers, CancellationToken.None))));
 
+    private bool IsChatOnlyMode => !workspaceGuard.HasConfiguredWorkspace;
+
     private IEnumerable<IAgentTool> ActiveLocalTools => _allLocalTools.Where(IsToolEnabled);
 
     private bool IsToolEnabled(IAgentTool tool)
     {
+        if (IsChatOnlyMode)
+        {
+            return tool is IGlobalKnowledgeTool
+                && sessionKnowledgeState.ShouldExposeKnowledgeTool(activeSessionContext.SessionId);
+        }
+
         if (!settings.Memory.Enabled && tool is ILongTermMemoryTool)
         {
             return false;
@@ -42,6 +51,11 @@ internal sealed class McpDelegatingToolRouter(
     public IReadOnlyList<ToolDefinition> ListTools()
     {
         var local = new ToolRouter(ActiveLocalTools).ListTools();
+        if (IsChatOnlyMode)
+        {
+            return local;
+        }
+
         var useSearch = ShouldUseMcpSearch();
         if (!useSearch)
         {
@@ -61,6 +75,17 @@ internal sealed class McpDelegatingToolRouter(
 
     public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
+        if (IsChatOnlyMode)
+        {
+            if (IsSearchGatewayTool(invocation.ToolName)
+                || McpToolNameCodec.TryDecode(invocation.ToolName, out _, out _))
+            {
+                return Task.FromResult(ToolResult.Failure(
+                    "Tool not available",
+                    "This tool is not available without a configured workspace."));
+            }
+        }
+
         if (IsSearchGatewayTool(invocation.ToolName))
         {
             var gateway = _searchGatewayTools.Value.FirstOrDefault(

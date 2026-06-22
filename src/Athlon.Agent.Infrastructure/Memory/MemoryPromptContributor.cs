@@ -17,7 +17,7 @@ public sealed class MemoryPromptContributor(ILongTermMemory longTermMemory, AppS
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
-        if (!_cfg.Enabled)
+        if (!_cfg.Enabled || PromptModeHelper.IsChatOnly(context))
             return;
 
         // Read synchronously — this runs in the prompt builder hot path.

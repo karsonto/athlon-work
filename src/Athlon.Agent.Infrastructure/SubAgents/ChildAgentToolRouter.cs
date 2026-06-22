@@ -9,7 +9,8 @@ public sealed class ChildAgentToolRouter(
     IMcpRegistry mcpRegistry,
     AppSettings settings,
     IActiveAgentSessionContext activeSessionContext,
-    ISessionKnowledgeState sessionKnowledgeState) : IToolRouter
+    ISessionKnowledgeState sessionKnowledgeState,
+    WorkspaceGuard workspaceGuard) : IToolRouter
 {
     private readonly McpDelegatingToolRouter _inner = new(
         static tools => tools.Where(tool => tool is not IExcludedFromChildAgentToolkit),
@@ -17,7 +18,8 @@ public sealed class ChildAgentToolRouter(
         mcpRegistry,
         settings,
         activeSessionContext,
-        sessionKnowledgeState);
+        sessionKnowledgeState,
+        workspaceGuard);
 
     public IReadOnlyList<ToolDefinition> ListTools() => _inner.ListTools();
 

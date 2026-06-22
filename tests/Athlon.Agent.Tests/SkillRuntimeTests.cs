@@ -146,15 +146,31 @@ public sealed class SkillRuntimeTests
     public void AgentEnvironmentPromptBuilder_IncludesLoadSkillGuidance_WhenSkillsPresent()
     {
         var root = CreateSkillRoot("prompt-skill", "demo_skill", "Demo skill", "Instructions.");
+        var workspaceRoot = Path.Combine(Path.GetTempPath(), $"athlon-skill-prompt-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(workspaceRoot);
         try
         {
             var catalog = new AgentSkillCatalog(new FileSystemSkillRepository(root));
             catalog.Reload();
+            var settings = new AppSettings
+            {
+                Workspaces =
+                [
+                    new WorkspaceSettings
+                    {
+                        Name = "demo",
+                        RootPath = workspaceRoot
+                    }
+                ]
+            };
             var builder = PromptTestHelpers.CreateBuilder(
                 new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
-                catalog: catalog);
+                settings,
+                catalog);
 
-            var prompt = builder.Build(AgentSession.Create("skill-prompt"), Array.Empty<ToolDefinition>());
+            var prompt = builder.Build(
+                AgentSession.Create("skill-prompt").WithWorkspace(workspaceRoot),
+                Array.Empty<ToolDefinition>());
 
             Assert.Contains("## Available Skills", prompt, StringComparison.Ordinal);
             Assert.Contains("<available_skills>", prompt, StringComparison.Ordinal);
@@ -169,6 +185,10 @@ public sealed class SkillRuntimeTests
         finally
         {
             Directory.Delete(root, true);
+            if (Directory.Exists(workspaceRoot))
+            {
+                Directory.Delete(workspaceRoot, recursive: true);
+            }
         }
     }
 

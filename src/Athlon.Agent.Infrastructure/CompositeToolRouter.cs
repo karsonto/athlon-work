@@ -8,7 +8,8 @@ public sealed class CompositeToolRouter(
     IMcpRegistry mcpRegistry,
     AppSettings settings,
     IActiveAgentSessionContext activeSessionContext,
-    ISessionKnowledgeState sessionKnowledgeState) : IToolRouter
+    ISessionKnowledgeState sessionKnowledgeState,
+    WorkspaceGuard workspaceGuard) : IToolRouter
 {
     private readonly McpDelegatingToolRouter _inner = new(
         static tools => tools,
@@ -16,7 +17,8 @@ public sealed class CompositeToolRouter(
         mcpRegistry,
         settings,
         activeSessionContext,
-        sessionKnowledgeState);
+        sessionKnowledgeState,
+        workspaceGuard);
 
     public IReadOnlyList<ToolDefinition> ListTools() => _inner.ListTools();
 

@@ -8,6 +8,11 @@ public sealed class EncodingPolicySection : IEnvironmentPromptSection
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
+        if (PromptModeHelper.IsChatOnly(context))
+        {
+            return;
+        }
+
         builder.AppendLine("Encoding and locale:");
         builder.AppendLine("- Use UTF-8 for all file content, patches, command output, and text you write unless a tool result explicitly states another encoding.");
         builder.AppendLine("- Assume workspace files and tool I/O are UTF-8; do not convert Chinese or other non-ASCII text to escape sequences or legacy code pages.");

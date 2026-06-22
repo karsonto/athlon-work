@@ -8,6 +8,11 @@ public sealed class FileToolsPolicySection : IEnvironmentPromptSection
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
+        if (PromptModeHelper.IsChatOnly(context))
+        {
+            return;
+        }
+
         builder.AppendLine("File tools:");
         builder.AppendLine("- For large files, use grep_files or glob_files to locate content before file_read.");
         builder.AppendLine("- Use file_read with offset and limit to read in chunks; do not assume a single read covers the whole file.");

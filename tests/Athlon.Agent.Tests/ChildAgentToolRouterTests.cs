@@ -22,7 +22,8 @@ public sealed class ChildAgentToolRouterTests
             registry,
             settings,
             RouterTestDependencies.CreateSessionContext(),
-            RouterTestDependencies.CreateSessionKnowledgeState());
+            RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateWorkspaceGuard());
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
         Assert.DoesNotContain("call_assistant", names);
@@ -43,7 +44,8 @@ public sealed class ChildAgentToolRouterTests
             registry,
             settings,
             RouterTestDependencies.CreateSessionContext(),
-            RouterTestDependencies.CreateSessionKnowledgeState());
+            RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateWorkspaceGuard());
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
         Assert.DoesNotContain("memory_search", names);
@@ -61,7 +63,8 @@ public sealed class ChildAgentToolRouterTests
             registry,
             settings,
             RouterTestDependencies.CreateSessionContext(),
-            RouterTestDependencies.CreateSessionKnowledgeState());
+            RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateWorkspaceGuard());
 
         var result = await router.InvokeAsync(new ToolInvocation("mcp__srv__ping", new Dictionary<string, string>()));
 

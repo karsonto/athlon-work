@@ -171,7 +171,8 @@ public sealed class AgentRuntimeProgressTests
             registry,
             new AppSettings(),
             RouterTestDependencies.CreateSessionContext(),
-            RouterTestDependencies.CreateSessionKnowledgeState());
+            RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateWorkspaceGuard());
         var runtime = new AgentRuntime(
             modelClient,
             storage,
