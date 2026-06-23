@@ -206,7 +206,7 @@ public sealed class ImpSsoCallbackServer : IDisposable
             return;
         }
 
-        TaskCompletionSource? responseTcs;
+        TaskCompletionSource? responseTcs = null;
         var isDuplicate = false;
         lock (_pendingLock)
         {
