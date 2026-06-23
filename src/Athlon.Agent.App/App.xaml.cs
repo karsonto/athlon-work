@@ -109,9 +109,10 @@ public partial class App : Application
             StartupTrace($"OnExit cleanup failed: {ex}");
         }
 
-        if (_services is not null)
+        if (_services is IDisposable disposable)
         {
-            _services.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            try { disposable.Dispose(); }
+            catch (Exception ex) { StartupTrace($"OnExit Dispose failed: {ex}"); }
         }
 
         base.OnExit(e);

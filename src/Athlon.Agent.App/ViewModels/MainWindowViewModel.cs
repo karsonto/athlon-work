@@ -120,12 +120,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(HasOpenEditorTabs));
             }
         };
-        HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
-        HasStoredKnowledgeEmbeddingApiKey = _credentialStore
-            .HasSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName)
-            .GetAwaiter()
-            .GetResult();
-        ComposerKnowledge.SetEmbeddingApiKeyAvailable(HasStoredKnowledgeEmbeddingApiKey);
         _uiLayout.ClampInitialLayout();
 
         LogsPath = paths.LogsPath;
@@ -160,6 +154,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public async Task InitializeAsync()
     {
+        HasStoredKnowledgeEmbeddingApiKey = await _credentialStore
+            .HasSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName)
+            .ConfigureAwait(false);
+        ComposerKnowledge.SetEmbeddingApiKeyAvailable(HasStoredKnowledgeEmbeddingApiKey);
+
+        HasStoredApiKey = await _credentialStore.HasSecretAsync(ModelSettings.ApiKeySecretName)
+            .ConfigureAwait(false);
+
         await RefreshMcpRuntimeAsync();
 
         await RefreshSessionHistoryAsync();
@@ -1221,31 +1223,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _turnHost.TurnCompleted -= OnTurnCompleted;
         _turnHost.TurnStateChanged -= OnTurnStateChanged;
         KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;
-        ShutdownAsync().GetAwaiter().GetResult();
+        _ = ShutdownAsync(); // fire-and-forget; ShutdownAsync handles its own exceptions
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();
         _uiLayout.Dispose();
         _sessionHistory.Dispose();
         _workspaceBridge.Dispose();
-    }
-
-    private bool EnsureCurrentApiKeySecret(AppSettings settings)
-    {
-        var hasCurrentSecret = _credentialStore.HasSecretAsync(ModelSettings.ApiKeySecretName).GetAwaiter().GetResult();
-        if (hasCurrentSecret || string.IsNullOrWhiteSpace(settings.Model.LegacyApiKeyCredentialName))
-        {
-            return hasCurrentSecret;
-        }
-
-        var legacySecret = _credentialStore.GetSecretAsync(settings.Model.LegacyApiKeyCredentialName).GetAwaiter().GetResult();
-        if (string.IsNullOrWhiteSpace(legacySecret))
-        {
-            return false;
-        }
-
-        _credentialStore.SaveSecretAsync(ModelSettings.ApiKeySecretName, legacySecret).GetAwaiter().GetResult();
-        return true;
     }
 
     partial void OnCurrentPageChanged(string value)
