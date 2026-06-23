@@ -26,19 +26,11 @@ public partial class AboutWindow : Window
 
     private async void CheckUpdateButton_OnClick(object sender, RoutedEventArgs e)
     {
-        try
-        {
-            UpdateStatusText.Visibility = Visibility.Visible;
-            UpdateStatusText.Text = "正在检查更新…";
+        UpdateStatusText.Visibility = Visibility.Visible;
+        UpdateStatusText.Text = "正在检查更新…";
 
-            var result = await _updateService.CheckAndPromptAsync();
-            UpdateStatusText.Text = result.Message;
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[AboutWindow] CheckUpdate error: {ex}");
-            MessageBox.Show(this, $"检查更新失败：{ex.Message}", "更新检查", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+        var result = await _updateService.CheckAndPromptAsync();
+        UpdateStatusText.Text = result.Message;
     }
 
     private void CloseButton_OnClick(object sender, RoutedEventArgs e) => Close();

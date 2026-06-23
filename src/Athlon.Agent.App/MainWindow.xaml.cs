@@ -1,6 +1,4 @@
 using System.ComponentModel;
-using System.IO;
-using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -85,58 +83,51 @@ public partial class MainWindow : Window
 
     private async void OnMainWindowClosing(object? sender, CancelEventArgs e)
     {
-        try
+        if (_shutdownInProgress)
         {
-            if (_shutdownInProgress)
-            {
-                return;
-            }
+            return;
+        }
 
-            if (!_viewModel.ConfirmCloseEditorTabs())
+        if (!_viewModel.ConfirmCloseEditorTabs())
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        if (_viewModel.HasPendingShutdownWork)
+        {
+            var confirm = MessageBox.Show(
+                this,
+                "有对话正在生成或消息排队中，退出将停止所有任务。确定退出？",
+                "退出 Athlon Agent",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes)
             {
                 e.Cancel = true;
                 return;
             }
-
-            if (_viewModel.HasPendingShutdownWork)
-            {
-                var confirm = MessageBox.Show(
-                    this,
-                    "有对话正在生成或消息排队中，退出将停止所有任务。确定退出？",
-                    "退出 Athlon Agent",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question);
-                if (confirm != MessageBoxResult.Yes)
-                {
-                    e.Cancel = true;
-                    return;
-                }
-            }
-
-            e.Cancel = true;
-            ShutdownOverlay.Visibility = Visibility.Visible;
-            IsEnabled = false;
-
-            try
-            {
-                var progress = new Progress<string>(status =>
-                {
-                    Dispatcher.Invoke(() => _viewModel.ShutdownStatusText = status);
-                });
-                await _viewModel.ShutdownAsync(progress).ConfigureAwait(true);
-            }
-            catch
-            {
-                // Proceed with exit even if cleanup fails.
-            }
-
-            _shutdownInProgress = true;
-            Application.Current.Shutdown();
         }
-        catch (Exception ex)
+
+        e.Cancel = true;
+        ShutdownOverlay.Visibility = Visibility.Visible;
+        IsEnabled = false;
+
+        try
         {
-            System.Diagnostics.Debug.WriteLine($"[MainWindow] Shutdown error: {ex}");
+            var progress = new Progress<string>(status =>
+            {
+                Dispatcher.Invoke(() => _viewModel.ShutdownStatusText = status);
+            });
+            await _viewModel.ShutdownAsync(progress).ConfigureAwait(true);
         }
+        catch
+        {
+            // Proceed with exit even if cleanup fails.
+        }
+
+        _shutdownInProgress = true;
+        Application.Current.Shutdown();
     }
 
     private void NavigationSidebarSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
@@ -303,25 +294,9 @@ public partial class MainWindow : Window
     {
         if (FocusManager.GetFocusedElement(this) is FrameworkElement focusedElement)
         {
-            var bindingExpression = focusedElement.GetBindingExpression(TextBox.TextProperty);
-            // #region agent log
-            DebugLog("pre-fix", "H1", "MainWindow.KnowledgeSaveModuleButton_OnClick:focused-binding", new
-            {
-                focusedType = focusedElement.GetType().Name,
-                hasTextBinding = bindingExpression is not null,
-                focusedTextLength = focusedElement is TextBox textBox ? textBox.Text.Length : (int?)null
-            });
-            // #endregion
             focusedElement.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
             return;
         }
-
-        // #region agent log
-        DebugLog("pre-fix", "H1", "MainWindow.KnowledgeSaveModuleButton_OnClick:no-focused-element", new
-        {
-            senderType = sender.GetType().Name
-        });
-        // #endregion
     }
 
     private void KnowledgeDocuments_OnDragEnter(object sender, DragEventArgs e)
@@ -353,20 +328,13 @@ public partial class MainWindow : Window
 
     private async void KnowledgeDocuments_OnDrop(object sender, DragEventArgs e)
     {
-        try
+        KnowledgeDragOverlay.Opacity = 0;
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
         {
-            KnowledgeDragOverlay.Opacity = 0;
-            if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
-            {
-                await _viewModel.KnowledgePageVm.ImportDocumentsAsync(files);
-            }
+            await _viewModel.KnowledgePageVm.ImportDocumentsAsync(files);
+        }
 
-            e.Handled = true;
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[MainWindow] Drag-drop error: {ex}");
-        }
+        e.Handled = true;
     }
 
     private void ComposerTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
@@ -485,29 +453,6 @@ public partial class MainWindow : Window
         var index = Math.Clamp(_viewModel.SelectedAtCompletionIndex, 0, AtCompletionListBox.Items.Count - 1);
         AtCompletionListBox.SelectedIndex = index;
         AtCompletionListBox.ScrollIntoView(AtCompletionListBox.Items[index]);
-    }
-
-    private static void DebugLog(string runId, string hypothesisId, string message, object data)
-    {
-        try
-        {
-            var payload = new
-            {
-                sessionId = "6740f2",
-                id = Guid.NewGuid().ToString("N"),
-                timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                location = "MainWindow.xaml.cs",
-                message,
-                data,
-                runId,
-                hypothesisId
-            };
-            File.AppendAllText("F:/athlon-work/debug-6740f2.log", JsonSerializer.Serialize(payload) + Environment.NewLine);
-        }
-        catch
-        {
-            // Debug logging must never affect app behavior.
-        }
     }
 
     private bool TryAcceptAtCompletion()

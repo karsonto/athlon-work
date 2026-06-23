@@ -140,6 +140,11 @@ public partial class MarkdownMessageView : UserControl
     {
         if (d is MarkdownMessageView view)
         {
+            if (!view.IsLoaded)
+            {
+                return;
+            }
+
             view.RefreshDisplayMarkdown();
         }
     }

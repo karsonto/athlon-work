@@ -495,4 +495,4 @@ public sealed class SessionTurnUiController
         _dispatcher.Invoke(action);
     }
 }
-
+

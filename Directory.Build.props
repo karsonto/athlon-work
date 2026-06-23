@@ -2,12 +2,5 @@
   <PropertyGroup>
     <DefaultItemExcludes>$(DefaultItemExcludes);**\artifacts\**;**\.vs\**</DefaultItemExcludes>
     <VelopackVersion>0.0.1298</VelopackVersion>
-    <!-- Code analysis -->
-    <AnalysisLevel>latest</AnalysisLevel>
-    <AnalysisMode>Recommended</AnalysisMode>
-    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-    <EnableNETAnalyzers>true</EnableNETAnalyzers>
-    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-    <CodeAnalysisTreatWarningsAsErrors>false</CodeAnalysisTreatWarningsAsErrors>
   </PropertyGroup>
 </Project>
