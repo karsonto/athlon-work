@@ -11,11 +11,15 @@ public sealed class ImpSsoCallbackServer : IDisposable
 
     private readonly SsoSettings _settings;
     private readonly object _inflightLock = new();
+    private readonly object _pendingLock = new();
     private int _inflightRequestCount;
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
     private TaskCompletionSource<ImpSsoCallbackPayload>? _callbackTcs;
+    private HttpListenerContext? _pendingCompleteContext;
+    private TaskCompletionSource? _pendingResponseTcs;
+    private bool _callbackReceived;
     private bool _disposed;
 
     public ImpSsoCallbackServer(SsoSettings settings)
@@ -40,14 +44,69 @@ public sealed class ImpSsoCallbackServer : IDisposable
         await using var timeoutRegistration = timeoutCts.Token.Register(() =>
             _callbackTcs!.TrySetException(new TimeoutException("IMP 登录超时，请重试。")));
 
+        return await _callbackTcs.Task.ConfigureAwait(false);
+    }
+
+    public async Task CompleteBrowserResponseAsync(
+        ImpSsoCheckResult result,
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        HttpListenerContext? context;
+        TaskCompletionSource? responseTcs;
+        lock (_pendingLock)
+        {
+            context = _pendingCompleteContext;
+            responseTcs = _pendingResponseTcs;
+            _pendingCompleteContext = null;
+            _pendingResponseTcs = null;
+        }
+
+        if (context is null || responseTcs is null)
+        {
+            return;
+        }
+
+        var message = result.IsValid
+            ? "登录成功"
+            : string.IsNullOrWhiteSpace(result.Message) ? "验证未通过。" : result.Message;
+        var statusCode = result.IsValid ? HttpStatusCode.OK : HttpStatusCode.Unauthorized;
+        await WriteJsonAsync(context.Response, statusCode, new { ok = result.IsValid, message })
+            .ConfigureAwait(false);
+        responseTcs.TrySetResult();
+    }
+
+    public Task AbortPendingBrowserResponseAsync()
+    {
+        HttpListenerContext? context;
+        TaskCompletionSource? responseTcs;
+        lock (_pendingLock)
+        {
+            context = _pendingCompleteContext;
+            responseTcs = _pendingResponseTcs;
+            _pendingCompleteContext = null;
+            _pendingResponseTcs = null;
+        }
+
+        if (context is null || responseTcs is null)
+        {
+            return Task.CompletedTask;
+        }
+
         try
         {
-            return await _callbackTcs.Task.ConfigureAwait(false);
+            context.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
+            context.Response.Close();
         }
-        finally
+        catch
         {
-            await StopAsync().ConfigureAwait(false);
+            // ignored
         }
+
+        responseTcs.TrySetResult();
+        return Task.CompletedTask;
     }
 
     private Task StartAsync(CancellationToken cancellationToken)
@@ -140,13 +199,44 @@ public sealed class ImpSsoCallbackServer : IDisposable
 
         if (payload is null || string.IsNullOrWhiteSpace(payload.Token))
         {
-            await WriteJsonAsync(context.Response, HttpStatusCode.BadRequest, new { ok = false }).ConfigureAwait(false);
+            await WriteJsonAsync(
+                context.Response,
+                HttpStatusCode.BadRequest,
+                new { ok = false, message = "回调缺少 token。" }).ConfigureAwait(false);
             return;
         }
 
-        // Return ok to the browser before unblocking the waiter, which stops the listener.
-        await WriteJsonAsync(context.Response, HttpStatusCode.OK, new { ok = true }).ConfigureAwait(false);
+        TaskCompletionSource? responseTcs;
+        var isDuplicate = false;
+        lock (_pendingLock)
+        {
+            if (_callbackReceived)
+            {
+                isDuplicate = true;
+            }
+            else
+            {
+                _callbackReceived = true;
+                _pendingCompleteContext = context;
+                responseTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _pendingResponseTcs = responseTcs;
+            }
+        }
+
+        if (isDuplicate)
+        {
+            await WriteJsonAsync(
+                context.Response,
+                HttpStatusCode.Conflict,
+                new { ok = false, message = "登录已在处理中" }).ConfigureAwait(false);
+            return;
+        }
+
         _callbackTcs?.TrySetResult(payload);
+        if (responseTcs is not null)
+        {
+            await responseTcs.Task.ConfigureAwait(false);
+        }
     }
 
     private async Task WriteAuthPageAsync(HttpListenerResponse response)

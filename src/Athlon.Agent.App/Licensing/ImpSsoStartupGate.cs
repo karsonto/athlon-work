@@ -102,11 +102,11 @@ public static class ImpSsoStartupGate
         ImpSsoSessionStore store,
         CancellationToken cancellationToken)
     {
+        using var callbackServer = new ImpSsoCallbackServer(settings);
         try
         {
             using var httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
             var authService = new ImpSsoAuthService(httpClient);
-            using var callbackServer = new ImpSsoCallbackServer(settings);
 
             var waitTask = callbackServer.WaitForCallbackAsync(LoginTimeout, cancellationToken);
             var loginUrl = authService.BuildImpLoginUrl(settings);
@@ -119,6 +119,10 @@ public static class ImpSsoStartupGate
             var payload = await waitTask.ConfigureAwait(false);
             var result = await authService.CompleteLoginAsync(payload, settings, cancellationToken)
                 .ConfigureAwait(false);
+
+            await callbackServer.CompleteBrowserResponseAsync(result, cancellationToken)
+                .ConfigureAwait(false);
+
             if (result.IsValid && result.Session is not null)
             {
                 store.SaveSession(result.Session);
@@ -129,7 +133,12 @@ public static class ImpSsoStartupGate
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            await callbackServer.AbortPendingBrowserResponseAsync().ConfigureAwait(false);
             return false;
+        }
+        finally
+        {
+            await callbackServer.StopAsync().ConfigureAwait(false);
         }
     }
 

@@ -331,16 +331,23 @@ internal static class ImpSsoAuthPageHtml
               body: JSON.stringify(payload)
             })
             .then(function (r) {
-              if (!r.ok) throw new Error('服务器响应异常');
-              return r.json();
+              return r.json().then(function (data) {
+                return { ok: r.ok, data: data };
+              });
             })
-            .then(function (data) {
-              if (data && data.ok === false) throw new Error('验证未通过');
-              showState('success');
-              startAutoCloseCountdown(3);
+            .then(function (result) {
+              if (result.data && result.data.ok === true) {
+                showState('success');
+                startAutoCloseCountdown(3);
+                return;
+              }
+              var msg = (result.data && result.data.message)
+                ? result.data.message
+                : '验证未通过，请返回应用重新登录。';
+              showState('error', msg);
             })
             .catch(function () {
-              showState('error', '无法完成身份验证，请关闭此页面并在应用中重试。');
+              showState('error', '无法连接本地验证服务，请关闭此页面并在应用中重试。');
             });
           })();
           </script>

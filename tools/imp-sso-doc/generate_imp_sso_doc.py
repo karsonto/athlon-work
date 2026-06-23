@@ -238,9 +238,10 @@ def build_document() -> Document:
         [
             "token 在 URL hash 中，HttpListener 无法直接读取",
             "GET /sso/auth → 返回 ImpSsoAuthPageHtml 认证页（含加载/成功/失败状态）",
-            "浏览器 JS 解析 hash → POST /sso/complete（JSON body）",
-            "服务端校验 token 非空后返回 {ok: true}，同时唤醒 Agent 等待线程",
-            "Agent 收到 payload 后校验 appId，再调用 check_ssotoken 二次校验",
+            "浏览器 JS 解析 hash → POST /sso/complete（JSON body），连接保持挂起",
+            "Agent 收到 payload 后校验 appId，调用 check_ssotoken 二次校验",
+            "验票完成后 CompleteBrowserResponseAsync 返回 {ok, message}，浏览器与桌面端状态一致",
+            "重复 POST 返回 409；登录流程结束后由调用方显式 StopAsync 关闭监听器",
         ],
     )
 
@@ -342,8 +343,8 @@ def build_document() -> Document:
     add_bullets(
         document,
         [
-            "首次 IMP 登录 → GET /sso/auth → POST /sso/complete → check_ssotoken 一次 → 进入主界面",
-            "浏览器认证页显示登录成功状态",
+            "首次 IMP 登录 → GET /sso/auth → POST /sso/complete（挂起）→ check_ssotoken → 返回最终 JSON → 进入主界面",
+            "浏览器认证页在 IMP 验票完成后显示成功或失败状态",
             "24h 内再次启动免浏览器、免 IMP",
             "超过 24h 重新 IMP 登录",
             "SSO + License 双门控",
