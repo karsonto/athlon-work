@@ -85,51 +85,58 @@ public partial class MainWindow : Window
 
     private async void OnMainWindowClosing(object? sender, CancelEventArgs e)
     {
-        if (_shutdownInProgress)
+        try
         {
-            return;
-        }
+            if (_shutdownInProgress)
+            {
+                return;
+            }
 
-        if (!_viewModel.ConfirmCloseEditorTabs())
-        {
-            e.Cancel = true;
-            return;
-        }
-
-        if (_viewModel.HasPendingShutdownWork)
-        {
-            var confirm = MessageBox.Show(
-                this,
-                "有对话正在生成或消息排队中，退出将停止所有任务。确定退出？",
-                "退出 Athlon Agent",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-            if (confirm != MessageBoxResult.Yes)
+            if (!_viewModel.ConfirmCloseEditorTabs())
             {
                 e.Cancel = true;
                 return;
             }
-        }
 
-        e.Cancel = true;
-        ShutdownOverlay.Visibility = Visibility.Visible;
-        IsEnabled = false;
-
-        try
-        {
-            var progress = new Progress<string>(status =>
+            if (_viewModel.HasPendingShutdownWork)
             {
-                Dispatcher.Invoke(() => _viewModel.ShutdownStatusText = status);
-            });
-            await _viewModel.ShutdownAsync(progress).ConfigureAwait(true);
-        }
-        catch
-        {
-            // Proceed with exit even if cleanup fails.
-        }
+                var confirm = MessageBox.Show(
+                    this,
+                    "有对话正在生成或消息排队中，退出将停止所有任务。确定退出？",
+                    "退出 Athlon Agent",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (confirm != MessageBoxResult.Yes)
+                {
+                    e.Cancel = true;
+                    return;
+                }
+            }
 
-        _shutdownInProgress = true;
-        Application.Current.Shutdown();
+            e.Cancel = true;
+            ShutdownOverlay.Visibility = Visibility.Visible;
+            IsEnabled = false;
+
+            try
+            {
+                var progress = new Progress<string>(status =>
+                {
+                    Dispatcher.Invoke(() => _viewModel.ShutdownStatusText = status);
+                });
+                await _viewModel.ShutdownAsync(progress).ConfigureAwait(true);
+            }
+            catch
+            {
+                // Proceed with exit even if cleanup fails.
+            }
+
+            _shutdownInProgress = true;
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] Shutdown error: {ex}");
+        }
     }
 
     private void NavigationSidebarSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
@@ -346,13 +353,20 @@ public partial class MainWindow : Window
 
     private async void KnowledgeDocuments_OnDrop(object sender, DragEventArgs e)
     {
-        KnowledgeDragOverlay.Opacity = 0;
-        if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
+        try
         {
-            await _viewModel.KnowledgePageVm.ImportDocumentsAsync(files);
-        }
+            KnowledgeDragOverlay.Opacity = 0;
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
+            {
+                await _viewModel.KnowledgePageVm.ImportDocumentsAsync(files);
+            }
 
-        e.Handled = true;
+            e.Handled = true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[MainWindow] Drag-drop error: {ex}");
+        }
     }
 
     private void ComposerTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)

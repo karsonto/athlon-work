@@ -29,8 +29,15 @@ public partial class HtmlPreviewWindow : Window
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        AppThemeManager.ThemeChanged += OnThemeChanged;
-        await LoadPreviewAsync();
+        try
+        {
+            AppThemeManager.ThemeChanged += OnThemeChanged;
+            await LoadPreviewAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[HtmlPreviewWindow] Load error: {ex}");
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e) =>
