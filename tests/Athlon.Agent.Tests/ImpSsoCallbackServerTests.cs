@@ -9,6 +9,8 @@ using Athlon.Agent.Infrastructure.Sso;
 namespace Athlon.Agent.Tests;
 
 [SupportedOSPlatform("windows")]
+[Trait("Category", TestCategories.Integration)]
+[Trait("Category", TestCategories.UsesHttp)]
 public sealed class ImpSsoCallbackServerTests
 {
     [Fact]

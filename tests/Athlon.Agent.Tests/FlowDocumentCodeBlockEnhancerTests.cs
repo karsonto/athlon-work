@@ -6,6 +6,8 @@ using MdXaml;
 
 namespace Athlon.Agent.Tests;
 
+[Collection(TestCollections.Sta)]
+[Trait("Category", TestCategories.UsesSta)]
 public sealed class FlowDocumentCodeBlockEnhancerTests
 {
     [Fact]

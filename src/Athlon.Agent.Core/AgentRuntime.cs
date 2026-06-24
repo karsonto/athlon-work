@@ -193,7 +193,7 @@ public sealed class AgentRuntime(
                     await PersistMessageAsync(session, assistant, cancellationToken);
                     await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
                     _logger.Information("Saved session {SessionId} with {MessageCount} messages", session.Id, session.Messages.Count);
-                    FireAndForgetMemoryFlush(session);
+                    FireAndForgetMemoryFlush(session, cancellationToken);
                     await RecordTrainingDataAsync(session, cancellationToken);
                     return session;
                 }
@@ -217,7 +217,7 @@ public sealed class AgentRuntime(
                         maxModelToolRounds,
                         session.Id);
                     await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
-                    FireAndForgetMemoryFlush(session);
+                    FireAndForgetMemoryFlush(session, cancellationToken);
                     return session;
                 }
 
@@ -531,7 +531,7 @@ public sealed class AgentRuntime(
         }
     }
 
-    private void FireAndForgetMemoryFlush(AgentSession session)
+    private void FireAndForgetMemoryFlush(AgentSession session, CancellationToken cancellationToken)
     {
         if (!settings.Memory.Enabled)
             return;
@@ -541,13 +541,17 @@ public sealed class AgentRuntime(
         {
             try
             {
-                await memoryProcessor.ProcessAsync(capturedSession.Messages, CancellationToken.None);
+                await memoryProcessor.ProcessAsync(capturedSession.Messages, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.Debug("Post-turn memory flush cancelled for session {SessionId}", capturedSession.Id);
             }
             catch (Exception ex)
             {
                 _logger.Warning("Post-turn memory flush failed: {Error}", ex.Message);
             }
-        }, CancellationToken.None);
+        }, cancellationToken);
     }
 
     private IToolRouter ResolveToolRouter() => AmbientToolRouterScope.CurrentRouter ?? toolRouter;

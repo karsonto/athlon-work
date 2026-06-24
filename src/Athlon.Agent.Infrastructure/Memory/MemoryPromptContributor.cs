@@ -11,7 +11,12 @@ namespace Athlon.Agent.Infrastructure.Memory;
 /// </summary>
 public sealed class MemoryPromptContributor(ILongTermMemory longTermMemory, AppSettings settings) : IPreReasoningPromptContributor
 {
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
     private readonly MemorySettings _cfg = settings.Memory;
+    private readonly object _cacheLock = new();
+    private string _cachedMemoryContent = string.Empty;
+    private DateTimeOffset _nextRefreshAt = DateTimeOffset.MinValue;
+    private Task? _refreshTask;
 
     public int Priority => 40; // after workspace files, before skills
 
@@ -20,9 +25,8 @@ public sealed class MemoryPromptContributor(ILongTermMemory longTermMemory, AppS
         if (!_cfg.Enabled || PromptModeHelper.IsChatOnly(context))
             return;
 
-        // Read synchronously — this runs in the prompt builder hot path.
-        // The file read is fast (MEMORY.md is small, ~4000 tokens).
-        var memoryContent = longTermMemory.ReadCuratedAsync().GetAwaiter().GetResult();
+        StartRefreshIfNeeded();
+        var memoryContent = _cachedMemoryContent;
         if (string.IsNullOrWhiteSpace(memoryContent))
             return;
 
@@ -35,5 +39,33 @@ public sealed class MemoryPromptContributor(ILongTermMemory longTermMemory, AppS
         builder.AppendLine(memoryContent.Trim());
         builder.AppendLine("</long_term_memory>");
         builder.AppendLine();
+    }
+
+    private void StartRefreshIfNeeded()
+    {
+        lock (_cacheLock)
+        {
+            var now = DateTimeOffset.UtcNow;
+            if (_refreshTask is { IsCompleted: false } || now < _nextRefreshAt)
+            {
+                return;
+            }
+
+            _nextRefreshAt = now.Add(RefreshInterval);
+            _refreshTask = RefreshCacheAsync();
+        }
+    }
+
+    private async Task RefreshCacheAsync()
+    {
+        try
+        {
+            var memoryContent = await longTermMemory.ReadCuratedAsync().ConfigureAwait(false);
+            _cachedMemoryContent = memoryContent;
+        }
+        catch
+        {
+            // Keep the last good snapshot; prompt construction must not fail on memory I/O.
+        }
     }
 }

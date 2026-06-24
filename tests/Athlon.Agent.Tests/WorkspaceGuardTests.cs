@@ -3,6 +3,7 @@ using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
 
+[Trait("Category", TestCategories.UsesProcessGlobalState)]
 public sealed class WorkspaceGuardTests
 {
     [Fact]

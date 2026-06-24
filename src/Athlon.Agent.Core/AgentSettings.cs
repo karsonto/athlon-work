@@ -152,6 +152,9 @@ public sealed class McpServerSettings
 
     /// <summary>Working directory for stdio MCP server process (Claude Desktop <c>cwd</c>).</summary>
     public string WorkingDirectory { get; set; } = string.Empty;
+
+    /// <summary>Application-level timeout for a single MCP tool call.</summary>
+    public int ToolCallTimeoutSeconds { get; set; } = 120;
 }
 
 public sealed class McpSearchSettings

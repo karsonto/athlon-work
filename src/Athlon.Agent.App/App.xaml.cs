@@ -120,6 +120,13 @@ public partial class App : Application
 
     internal static void StartupTrace(string message)
     {
+        if (Current is App { _services: { } services }
+            && services.GetService<IAppLogger>() is { } logger)
+        {
+            logger.ForContext("Startup").Information("{StartupMessage}", message);
+            return;
+        }
+
         var paths = new AppPathProvider();
         paths.EnsureCreated();
         File.AppendAllText(Path.Combine(paths.LogsPath, "startup.log"), $"{AppTimeZone.Now:O} {message}{Environment.NewLine}");

@@ -1,12 +1,17 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Athlon.Agent.App.Themes;
 
 namespace Athlon.Agent.Tests;
 
+[Collection(TestCollections.Sta)]
+[Trait("Category", TestCategories.UsesSta)]
 public sealed class AppThemeResourceBuilderTests
 {
+    private static readonly Lazy<Dispatcher> StaDispatcher = new(StartStaDispatcher);
+
     [Fact]
     public void ApplyPalette_inserts_brushes_before_control_styles()
     {
@@ -53,24 +58,23 @@ public sealed class AppThemeResourceBuilderTests
 
     private static void RunOnStaThread(Action action)
     {
-        Exception? failure = null;
+        StaDispatcher.Value.Invoke(action);
+    }
+
+    private static Dispatcher StartStaDispatcher()
+    {
+        var ready = new TaskCompletionSource<Dispatcher>(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
         {
-            try
-            {
-                action();
-            }
-            catch (Exception ex)
-            {
-                failure = ex;
-            }
-        });
+            var dispatcher = Dispatcher.CurrentDispatcher;
+            ready.SetResult(dispatcher);
+            Dispatcher.Run();
+        })
+        {
+            IsBackground = true
+        };
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
-        Assert.True(thread.Join(TimeSpan.FromSeconds(10)), "STA test thread did not finish.");
-        if (failure is not null)
-        {
-            throw failure;
-        }
+        return ready.Task.GetAwaiter().GetResult();
     }
 }

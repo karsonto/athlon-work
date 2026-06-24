@@ -71,9 +71,13 @@ internal sealed class SessionIndexCoordinator
             {
                 var cached = await _jsonFileStore.LoadAsync<List<SessionIndexEntry>>(indexPath, cancellationToken)
                     .ConfigureAwait(false);
-                if (cached is { Count: > 0 } && IsSessionIndexFresh(indexPath, cached))
+                if (cached is { Count: > 0 })
                 {
-                    return FilterTopLevelSessions(cached);
+                    var merged = MergePendingEntries(cached);
+                    if (IsSessionIndexFresh(indexPath, merged))
+                    {
+                        return FilterTopLevelSessions(merged);
+                    }
                 }
             }
 
@@ -171,6 +175,34 @@ internal sealed class SessionIndexCoordinator
         }
     }
 
+    private IReadOnlyList<SessionIndexEntry> MergePendingEntries(IReadOnlyList<SessionIndexEntry> entries)
+    {
+        Dictionary<string, SessionIndexEntry>? pendingSnapshot = null;
+        lock (_scheduleLock)
+        {
+            if (_pending.Count > 0)
+            {
+                pendingSnapshot = new Dictionary<string, SessionIndexEntry>(_pending, StringComparer.Ordinal);
+            }
+        }
+
+        if (pendingSnapshot is null)
+        {
+            return entries;
+        }
+
+        var merged = entries.ToDictionary(entry => entry.Id, StringComparer.Ordinal);
+        foreach (var pending in pendingSnapshot.Values)
+        {
+            if (!merged.TryGetValue(pending.Id, out var existing) || pending.UpdatedAt >= existing.UpdatedAt)
+            {
+                merged[pending.Id] = pending;
+            }
+        }
+
+        return merged.Values.OrderByDescending(item => item.UpdatedAt).ThenBy(item => item.Id).ToArray();
+    }
+
     private async Task<IReadOnlyList<SessionIndexEntry>> RebuildSessionIndexAsync(CancellationToken cancellationToken)
     {
         var result = new Dictionary<string, SessionIndexEntry>(StringComparer.Ordinal);
@@ -208,32 +240,10 @@ internal sealed class SessionIndexCoordinator
     private static bool IsSessionIndexFresh(string indexPath, IReadOnlyList<SessionIndexEntry> entries)
     {
         var indexTime = File.GetLastWriteTimeUtc(indexPath);
-        var indexedSessionJsonPaths = entries
-            .Select(entry => Path.GetFullPath(Path.Combine(entry.Path, "session.json")))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
         var sessionsRoot = Path.GetDirectoryName(indexPath);
         if (string.IsNullOrWhiteSpace(sessionsRoot) || !Directory.Exists(sessionsRoot))
         {
             return true;
-        }
-
-        foreach (var sessionJson in Directory.EnumerateFiles(sessionsRoot, "session.json", SearchOption.AllDirectories))
-        {
-            if (AmbientSubAgentStorageScope.IsSubAgentSessionPath(sessionJson))
-            {
-                continue;
-            }
-
-            if (!indexedSessionJsonPaths.Contains(Path.GetFullPath(sessionJson)))
-            {
-                return false;
-            }
-
-            if (File.GetLastWriteTimeUtc(sessionJson) > indexTime)
-            {
-                return false;
-            }
         }
 
         foreach (var entry in entries)

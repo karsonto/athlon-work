@@ -8,6 +8,9 @@ namespace Athlon.Agent.App.Services;
 
 public sealed class ClipboardImageAttachmentReader(IImageAttachmentReader imageAttachmentReader)
 {
+    public bool HasPotentialImages() =>
+        Clipboard.ContainsFileDropList() || Clipboard.ContainsImage();
+
     public async Task<IReadOnlyList<ImageAttachment>> TryReadImagesAsync(
         CancellationToken cancellationToken = default)
     {
@@ -42,9 +45,6 @@ public sealed class ClipboardImageAttachmentReader(IImageAttachmentReader imageA
         var attachment = CreateFromBitmap(bitmap);
         return attachment is null ? Array.Empty<ImageAttachment>() : [attachment];
     }
-
-    public IReadOnlyList<ImageAttachment> TryReadImages() =>
-        TryReadImagesAsync().GetAwaiter().GetResult();
 
     internal static ImageAttachment? CreateFromBitmap(BitmapSource bitmap, string? fileName = null)
     {

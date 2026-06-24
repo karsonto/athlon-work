@@ -4,6 +4,8 @@ using Athlon.Agent.App.Services;
 
 namespace Athlon.Agent.Tests;
 
+[Collection(TestCollections.Sta)]
+[Trait("Category", TestCategories.UsesSta)]
 public sealed class ClipboardImageAttachmentReaderTests
 {
     [Fact]

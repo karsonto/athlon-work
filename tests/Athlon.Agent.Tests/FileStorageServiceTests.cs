@@ -6,7 +6,7 @@ namespace Athlon.Agent.Tests;
 public sealed class FileStorageServiceTests
 {
     [Fact]
-    public async Task SaveSessionAsync_WritesMarkdownAndMetadata()
+    public async Task SaveSessionAsync_WritesMetadata()
     {
         using var temp = new TempDirectoryScope("athlon-session");
         var root = temp.Root;

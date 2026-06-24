@@ -3,6 +3,8 @@ using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
 
+[Trait("Category", TestCategories.Integration)]
+[Trait("Category", TestCategories.UsesShell)]
 public sealed class ExecuteCommandToolTests
 {
     [Fact]
@@ -107,6 +109,24 @@ public sealed class ExecuteCommandToolTests
         {
             Directory.Delete(root, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_LargeOutput_TruncatesCapturedContent()
+    {
+        var tool = CreateTool();
+        var result = await tool.InvokeAsync(new ToolInvocation(
+            "execute_command",
+            new Dictionary<string, string>
+            {
+                ["command"] = "for /L %i in (1,1,5000) do @echo 01234567890123456789012345678901234567890123456789",
+                ["timeout"] = "30"
+            }));
+
+        Assert.True(result.Succeeded, result.Error ?? result.Summary);
+        var content = Assert.IsType<string>(result.Content);
+        Assert.Contains("Output truncated", content, StringComparison.OrdinalIgnoreCase);
+        Assert.True(content.Length < ExecuteCommandTool.MaxCapturedOutputChars + 1_000);
     }
 
     [Fact]

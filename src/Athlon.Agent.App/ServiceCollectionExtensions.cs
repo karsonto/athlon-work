@@ -17,6 +17,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ComposerCoordinator>();
         services.AddSingleton<SessionHistoryCoordinator>();
         services.AddSingleton<SessionNavigationStore>();
+        services.AddSingleton<ApiKeySecretMigrationService>();
         services.AddSingleton(sp => new LayoutCoordinator(
             sp.GetRequiredService<IFileStorageService>(),
             sp.GetRequiredService<AppSettings>()));

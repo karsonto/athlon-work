@@ -59,7 +59,6 @@ public sealed class SessionDiskLogTests
 
             var sessionDir = Path.Combine(paths.SessionsPath, session.Id);
             Assert.True(File.Exists(Path.Combine(sessionDir, "session.json")));
-            Assert.True(File.Exists(Path.Combine(sessionDir, "conversation.md")));
             Assert.True(File.Exists(Path.Combine(sessionDir, "conversation.jsonl")));
             Assert.True(File.Exists(Path.Combine(sessionDir, "tool-calls", "calls.jsonl")));
 

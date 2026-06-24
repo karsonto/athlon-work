@@ -7,6 +7,8 @@ using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.Tests;
 
+[Collection(TestCollections.Sta)]
+[Trait("Category", TestCategories.UsesSta)]
 public sealed class SessionTurnUiControllerCompactionTests
 {
     [Fact]

@@ -312,7 +312,6 @@ public sealed class SessionTurnHost
                     _request.ImageAttachments,
                     callbacks,
                     turnToken).ConfigureAwait(false);
-                await _host._storage.SaveSessionAsync(_session).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -324,13 +323,10 @@ public sealed class SessionTurnHost
                 {
                     _session = reloaded;
                 }
-
-                await _host._storage.SaveSessionAsync(_session).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
                 error = ex;
-                await _host._storage.SaveSessionAsync(_session).ConfigureAwait(false);
             }
             finally
             {
@@ -346,10 +342,10 @@ public sealed class SessionTurnHost
                     {
                         await _host._storage.AppendConversationMessageAsync(_session.Id, message).ConfigureAwait(false);
                     }
-
-                    await _host._storage.SaveSessionAsync(_session).ConfigureAwait(false);
                 }
 
+                _session = SessionHistoryCoordinator.DeriveSessionTitle(_session);
+                await _host._storage.SaveSessionAsync(_session).ConfigureAwait(false);
                 _request.Ui.FinalizeTurn(
                     _session,
                     persistedTurnMessages,

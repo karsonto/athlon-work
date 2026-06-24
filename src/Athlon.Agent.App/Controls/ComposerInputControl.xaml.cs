@@ -11,6 +11,7 @@ public partial class ComposerInputControl : UserControl
 {
     private readonly ExecutedRoutedEventHandler _pasteHandler;
     private MainWindowViewModel? _viewModel;
+    private bool _isReplayingPaste;
 
     public ComposerInputControl()
     {
@@ -42,15 +43,6 @@ public partial class ComposerInputControl : UserControl
         if (_viewModel is null)
         {
             return;
-        }
-
-        if (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
-        {
-            if (TryPasteImagesFromClipboard())
-            {
-                e.Handled = true;
-                return;
-            }
         }
 
         if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
@@ -98,27 +90,46 @@ public partial class ComposerInputControl : UserControl
         }
     }
 
-    private void ComposerTextBox_OnPastePreviewExecuted(object sender, ExecutedRoutedEventArgs e)
+    private async void ComposerTextBox_OnPastePreviewExecuted(object sender, ExecutedRoutedEventArgs e)
     {
         if (e.Command != ApplicationCommands.Paste)
         {
             return;
         }
 
-        if (TryPasteImagesFromClipboard())
+        if (_isReplayingPaste)
         {
-            e.Handled = true;
+            return;
+        }
+
+        if (_viewModel is null || ClipboardImageReader is null || !ClipboardImageReader.HasPotentialImages())
+        {
+            return;
+        }
+
+        e.Handled = true;
+        if (!await TryPasteImagesFromClipboardAsync().ConfigureAwait(true))
+        {
+            try
+            {
+                _isReplayingPaste = true;
+                ComposerTextBox.Paste();
+            }
+            finally
+            {
+                _isReplayingPaste = false;
+            }
         }
     }
 
-    private bool TryPasteImagesFromClipboard()
+    private async Task<bool> TryPasteImagesFromClipboardAsync()
     {
         if (_viewModel is null || ClipboardImageReader is null)
         {
             return false;
         }
 
-        var images = ClipboardImageReader.TryReadImages();
+        var images = await ClipboardImageReader.TryReadImagesAsync().ConfigureAwait(true);
         if (images.Count == 0)
         {
             return false;

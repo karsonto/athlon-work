@@ -29,10 +29,6 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
             var sessionDir = GetSessionDirectory(session);
 
             await jsonFileStore.SaveAsync(Path.Combine(sessionDir, "session.json"), session, cancellationToken);
-            await AtomicFile.WriteAllTextAsync(
-                Path.Combine(sessionDir, "conversation.md"),
-                SessionMarkdownWriter.WriteConversation(session),
-                cancellationToken);
             _logger.Information("Session persisted to {SessionDir}", sessionDir);
         }
 
@@ -218,6 +214,18 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
         if (!Directory.Exists(paths.SessionsPath))
         {
             return null;
+        }
+
+        var indexedEntry = (await ListSessionsAsync(cancellationToken).ConfigureAwait(false))
+            .FirstOrDefault(entry => string.Equals(entry.Id, sessionId, StringComparison.Ordinal));
+        if (indexedEntry is not null)
+        {
+            var indexedPath = Path.Combine(indexedEntry.Path, "session.json");
+            if (File.Exists(indexedPath))
+            {
+                var session = await jsonFileStore.LoadAsync<AgentSession>(indexedPath, cancellationToken);
+                return session is null ? null : ChatMessageMemorySanitizer.SanitizeSession(session);
+            }
         }
 
         foreach (var file in Directory.EnumerateFiles(paths.SessionsPath, "session.json", SearchOption.AllDirectories))

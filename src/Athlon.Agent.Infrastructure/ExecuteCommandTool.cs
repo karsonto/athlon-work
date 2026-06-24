@@ -12,6 +12,7 @@ public sealed class ExecuteCommandTool(
 {
     public const int DefaultTimeoutSeconds = 3600;
     public const int MaxTimeoutSeconds = 3600;
+    public const int MaxCapturedOutputChars = 200_000;
 
     public ToolDefinition Definition { get; } = new(
         "execute_command",
@@ -123,8 +124,8 @@ public sealed class ExecuteCommandTool(
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
         var combinedToken = CancellationTokenSource.CreateLinkedTokenSource(userCancelToken, timeoutCts.Token).Token;
 
-        var stdoutAccum = new StringBuilder();
-        var stderrAccum = new StringBuilder();
+        var stdoutAccum = new BoundedOutputBuffer(MaxCapturedOutputChars);
+        var stderrAccum = new BoundedOutputBuffer(MaxCapturedOutputChars);
 
         var stdoutTask = ReadStdoutLinesAsync(process, stdoutAccum, combinedToken);
         var stderrTask = ReadStderrLinesAsync(process, stderrAccum, combinedToken);
@@ -146,7 +147,7 @@ public sealed class ExecuteCommandTool(
     /// <summary>Reads stdout line by line, accumulating and pushing each line through the ambient output stream.</summary>
     private static async Task ReadStdoutLinesAsync(
         Process process,
-        StringBuilder accumulator,
+        BoundedOutputBuffer accumulator,
         CancellationToken cancellationToken)
     {
         try
@@ -154,8 +155,11 @@ public sealed class ExecuteCommandTool(
             string? line;
             while ((line = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
             {
-                accumulator.AppendLine(line);
-                AmbientToolOutputStream.CurrentStream?.WriteLine(line);
+                var captured = accumulator.AppendLine(line);
+                if (captured)
+                {
+                    AmbientToolOutputStream.CurrentStream?.WriteLine(line);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -167,7 +171,7 @@ public sealed class ExecuteCommandTool(
     /// <summary>Reads stderr line by line, same streaming pattern as stdout.</summary>
     private static async Task ReadStderrLinesAsync(
         Process process,
-        StringBuilder accumulator,
+        BoundedOutputBuffer accumulator,
         CancellationToken cancellationToken)
     {
         try
@@ -175,8 +179,11 @@ public sealed class ExecuteCommandTool(
             string? line;
             while ((line = await process.StandardError.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
             {
-                accumulator.AppendLine(line);
-                AmbientToolOutputStream.CurrentStream?.WriteLine(line);
+                var captured = accumulator.AppendLine(line);
+                if (captured)
+                {
+                    AmbientToolOutputStream.CurrentStream?.WriteLine(line);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -191,4 +198,50 @@ public sealed class ExecuteCommandTool(
             : (stdout ?? string.Empty) + Environment.NewLine + stderr;
 
     private sealed record ProcessRunResult(string? Stdout, string? Stderr, bool TimedOut);
+
+    private sealed class BoundedOutputBuffer(int maxChars)
+    {
+        private readonly StringBuilder _builder = new();
+        private bool _truncated;
+
+        public bool AppendLine(string line)
+        {
+            if (_truncated)
+            {
+                return false;
+            }
+
+            var remaining = maxChars - _builder.Length;
+            if (remaining <= 0)
+            {
+                AppendTruncationNotice();
+                return false;
+            }
+
+            var lineWithNewLine = line + Environment.NewLine;
+            if (lineWithNewLine.Length <= remaining)
+            {
+                _builder.Append(lineWithNewLine);
+                return true;
+            }
+
+            _builder.Append(lineWithNewLine.AsSpan(0, Math.Max(0, remaining)));
+            AppendTruncationNotice();
+            return false;
+        }
+
+        private void AppendTruncationNotice()
+        {
+            if (_truncated)
+            {
+                return;
+            }
+
+            _truncated = true;
+            _builder.AppendLine();
+            _builder.AppendLine($"[Output truncated after {maxChars} characters. Redirect large output to a file and inspect it with file tools.]");
+        }
+
+        public override string ToString() => _builder.ToString();
+    }
 }

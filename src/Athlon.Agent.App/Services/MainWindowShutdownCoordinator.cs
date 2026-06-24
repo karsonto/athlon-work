@@ -8,7 +8,7 @@ public sealed class MainWindowShutdownCoordinator
 {
     public async Task<bool> TryCloseAsync(Window window, MainWindowViewModel viewModel, CancelEventArgs e)
     {
-        if (!viewModel.ConfirmCloseEditorTabs())
+        if (!await viewModel.ConfirmCloseEditorTabsAsync().ConfigureAwait(true))
         {
             e.Cancel = true;
             return false;

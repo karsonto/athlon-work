@@ -94,7 +94,7 @@ public static class ImpSsoStartupGate
             ExceptionDispatchInfo.Capture(loginTask.Exception!.GetBaseException()).Throw();
         }
 
-        return loginTask.Result;
+        return loginTask.GetAwaiter().GetResult();
     }
 
     private static async Task<bool> PerformBrowserLoginAsync(

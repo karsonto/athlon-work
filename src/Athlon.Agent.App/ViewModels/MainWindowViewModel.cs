@@ -23,6 +23,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly IFileStorageService _storage;
     private readonly ICredentialStore _credentialStore;
+    private readonly ApiKeySecretMigrationService _apiKeySecretMigration;
     private readonly IActiveWorkspaceContext _workspaceContext;
     private readonly IMcpRegistry _mcpRegistry;
     private readonly AppSettings _appSettings;
@@ -46,11 +47,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private string _displayedSessionId;
     private SessionTurnUiController _activeUi;
     private bool _shutdownCompleted;
+    private bool _disposed;
     private Controls.WebChatView? _savedChatView;
 
     public MainWindowViewModel(
         IFileStorageService storage,
         ICredentialStore credentialStore,
+        ApiKeySecretMigrationService apiKeySecretMigration,
         IActiveWorkspaceContext workspaceContext,
         IMcpRegistry mcpRegistry,
         IImageAttachmentReader imageAttachmentReader,
@@ -78,6 +81,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         _storage = storage;
         _credentialStore = credentialStore;
+        _apiKeySecretMigration = apiKeySecretMigration;
         _workspaceContext = workspaceContext;
         _mcpRegistry = mcpRegistry;
         _imageAttachmentReader = imageAttachmentReader;
@@ -119,7 +123,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(HasOpenEditorTabs));
             }
         };
-        HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
         ComposerKnowledge.SetEmbeddingApiKeyAvailable(HasStoredKnowledgeEmbeddingApiKey);
         _layout.ClampInitialLayout();
 
@@ -155,6 +158,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public async Task InitializeAsync()
     {
+        HasStoredApiKey = await _apiKeySecretMigration
+            .EnsureCurrentApiKeySecretAsync(_appSettings)
+            .ConfigureAwait(true);
         HasStoredKnowledgeEmbeddingApiKey = await _credentialStore
             .HasSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName)
             .ConfigureAwait(true);
@@ -661,7 +667,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)
     {
-        Application.Current?.Dispatcher.InvokeAsync(async () =>
+        Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
             {
@@ -670,10 +676,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 UpdateDisplayedBusyState();
             }
 
-            await SaveSessionCoreAsync(
-                string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal)
-                    ? _session
-                    : e.Session);
+            _sessionNavigation.Invalidate(e.SessionId);
             RequestRefreshSessionHistory();
             if (_sessionTurns.QueuedTurnPresenter.TryProcessNext(e, out var queueError))
             {
@@ -835,10 +838,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private void CloseEditorTab(EditorDocumentViewModel? document) =>
-        FileEditor.CloseTabCommand.Execute(document);
+    private async Task CloseEditorTab(EditorDocumentViewModel? document) =>
+        await FileEditor.CloseTabAsync(document).ConfigureAwait(true);
 
-    public bool ConfirmCloseEditorTabs() => FileEditor.TryCloseAllTabs();
+    public Task<bool> ConfirmCloseEditorTabsAsync() => FileEditor.TryCloseAllTabsAsync();
 
     public void UpdateEditorPaneWidth(double width) =>
         _layout.UpdateEditorPaneWidth(width);
@@ -1099,13 +1102,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
-        if (_shutdownCompleted)
+        if (_disposed)
         {
-            UnsubscribeEvents();
             return;
         }
 
-        ShutdownAsync().GetAwaiter().GetResult();
+        _disposed = true;
         UnsubscribeEvents();
     }
 
@@ -1122,24 +1124,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _layout.Dispose();
         _sessionHistory.Dispose();
         _workspaceBridge.Dispose();
-    }
-
-    private bool EnsureCurrentApiKeySecret(AppSettings settings)
-    {
-        var hasCurrentSecret = _credentialStore.HasSecretAsync(ModelSettings.ApiKeySecretName).GetAwaiter().GetResult();
-        if (hasCurrentSecret || string.IsNullOrWhiteSpace(settings.Model.LegacyApiKeyCredentialName))
-        {
-            return hasCurrentSecret;
-        }
-
-        var legacySecret = _credentialStore.GetSecretAsync(settings.Model.LegacyApiKeyCredentialName).GetAwaiter().GetResult();
-        if (string.IsNullOrWhiteSpace(legacySecret))
-        {
-            return false;
-        }
-
-        _credentialStore.SaveSecretAsync(ModelSettings.ApiKeySecretName, legacySecret).GetAwaiter().GetResult();
-        return true;
     }
 
     partial void OnCurrentPageChanged(string value)

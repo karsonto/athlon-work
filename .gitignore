@@ -18,6 +18,8 @@ TestResults/
 *.trx
 *.coverage
 *.coveragexml
+*_wpftmp.csproj
+*_wpftmp/
 
 # Publish and installer outputs
 publish/

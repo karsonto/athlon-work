@@ -20,20 +20,28 @@ public static class AppThemeManager
             _ => DarkAppThemePalette.Create(),
         };
 
-        if (Application.Current?.Resources is ResourceDictionary root)
+        if (Application.Current is { } app)
         {
-            AppThemeResourceBuilder.ApplyPalette(root, Current.Chrome);
-        }
-
-        if (Application.Current is { Windows: { } windows })
-        {
-            foreach (Window window in windows)
+            if (app.Dispatcher.CheckAccess())
             {
-                AppThemeResourceBuilder.ApplyPalette(window.Resources, Current.Chrome);
+                ApplyToApplication(app);
+            }
+            else
+            {
+                app.Dispatcher.Invoke(() => ApplyToApplication(app));
             }
         }
 
         ThemeChanged?.Invoke(null, EventArgs.Empty);
+    }
+
+    private static void ApplyToApplication(Application app)
+    {
+        AppThemeResourceBuilder.ApplyPalette(app.Resources, Current.Chrome);
+        foreach (Window window in app.Windows)
+        {
+            AppThemeResourceBuilder.ApplyPalette(window.Resources, Current.Chrome);
+        }
     }
 
     public static void ApplyFromSettings(UiSettings ui) => Apply(ParseKind(ui.Theme));

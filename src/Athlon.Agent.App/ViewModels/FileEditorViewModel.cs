@@ -86,7 +86,12 @@ public sealed partial class FileEditorViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void CloseTab(EditorDocumentViewModel? document)
+    private async Task CloseTab(EditorDocumentViewModel? document)
+    {
+        await CloseTabAsync(document).ConfigureAwait(true);
+    }
+
+    public async Task CloseTabAsync(EditorDocumentViewModel? document)
     {
         document ??= ActiveDocument;
         if (document is null)
@@ -108,7 +113,7 @@ public sealed partial class FileEditorViewModel : ObservableObject
 
             if (answer == MessageBoxResult.Yes)
             {
-                var saved = SaveDocumentAsync(document).GetAwaiter().GetResult();
+                var saved = await SaveDocumentAsync(document).ConfigureAwait(true);
                 if (!saved)
                 {
                     return;
@@ -147,7 +152,7 @@ public sealed partial class FileEditorViewModel : ObservableObject
         return true;
     }
 
-    public bool TryCloseAllTabs()
+    public async Task<bool> TryCloseAllTabsAsync()
     {
         while (Tabs.Count > 0)
         {
@@ -166,7 +171,7 @@ public sealed partial class FileEditorViewModel : ObservableObject
 
                 if (answer == MessageBoxResult.Yes)
                 {
-                    var saved = SaveDocumentAsync(document).GetAwaiter().GetResult();
+                    var saved = await SaveDocumentAsync(document).ConfigureAwait(true);
                     if (!saved)
                     {
                         return false;

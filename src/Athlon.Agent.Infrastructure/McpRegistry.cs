@@ -29,6 +29,8 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
     private readonly ConcurrentDictionary<string, IMcpClient> _clients = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, McpServerStatus> _statuses = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, IReadOnlyList<McpTool>> _tools = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, string> _configFingerprints = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, int> _toolCallTimeoutSeconds = new(StringComparer.OrdinalIgnoreCase);
     private readonly McpSearchIndexCache _searchIndexCache = new();
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private IReadOnlyList<McpCatalogEntry>? _catalogCache;
@@ -130,6 +132,8 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 if (!enabled.ContainsKey(existing) && _clients.TryRemove(existing, out var removed))
                 {
                     _tools.TryRemove(existing, out _);
+                    _configFingerprints.TryRemove(existing, out _);
+                    _toolCallTimeoutSeconds.TryRemove(existing, out _);
                     _statuses[existing] = new McpServerStatus(existing, McpConnectionState.Disabled, "stdio", Array.Empty<McpTool>());
                     try { await removed.DisposeAsync(); } catch { /* ignore */ }
                 }
@@ -138,6 +142,15 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
             // Start/refresh enabled servers (always recreate so saved config changes apply).
             foreach (var (name, server) in enabled)
             {
+                var fingerprint = CreateConfigFingerprint(server);
+                _toolCallTimeoutSeconds[name] = Math.Clamp(server.ToolCallTimeoutSeconds, 1, 3600);
+                if (_clients.ContainsKey(name)
+                    && _configFingerprints.TryGetValue(name, out var existingFingerprint)
+                    && string.Equals(existingFingerprint, fingerprint, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
                 if (_clients.TryRemove(name, out var existing))
                 {
                     try { await existing.DisposeAsync(); } catch { /* ignore */ }
@@ -167,6 +180,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 }
 
                 _clients[name] = client;
+                _configFingerprints[name] = fingerprint;
                 try
                 {
                     var tools = await client.ListToolsAsync(cancellationToken);
@@ -203,7 +217,10 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 : JsonSerializer.Serialize(args);
             argumentsJson = NormalizeMcpArgumentsJson(serverName, toolName, argumentsJson, workspaceContext.RootPath);
 
-            var resultJson = await client.CallToolAsync(toolName, argumentsJson, cancellationToken);
+            using var timeoutCts = new CancellationTokenSource(
+                TimeSpan.FromSeconds(_toolCallTimeoutSeconds.GetValueOrDefault(serverName, 120)));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
+            var resultJson = await client.CallToolAsync(toolName, argumentsJson, linkedCts.Token);
             _statuses[serverName] = client.Status;
             if (McpResultIsError(resultJson))
             {
@@ -211,6 +228,15 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
             }
 
             return ToolResult.Success($"MCP tool {toolName} returned.", resultJson);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            _statuses[serverName] = client.Status with
+            {
+                State = McpConnectionState.Error,
+                LastError = $"Tool call timed out after {_toolCallTimeoutSeconds.GetValueOrDefault(serverName, 120)}s."
+            };
+            return ToolResult.Failure("MCP tool call timed out", _statuses[serverName].LastError ?? "MCP tool call timed out.");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -241,6 +267,9 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
 
     private static bool IsSupportedTransport(string? transportType) =>
         McpTransportKinds.IsStdio(transportType) || McpTransportKinds.IsStreamableHttp(transportType);
+
+    private static string CreateConfigFingerprint(McpServerSettings server) =>
+        JsonSerializer.Serialize(server, JsonFileStore.Options);
 
     private static string NormalizeMcpArgumentsJson(string serverName, string toolName, string argumentsJson, string? workspaceRoot)
     {
