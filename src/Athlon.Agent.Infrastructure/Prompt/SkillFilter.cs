@@ -7,14 +7,18 @@ public static class SkillFilter
 {
     public static IReadOnlyList<AgentSkill> GetEnabledSkills(IAgentSkillCatalog catalog, AppSettings settings)
     {
-        var disabled = settings.Skills
-            .Where(skill => !skill.Enabled && !string.IsNullOrWhiteSpace(skill.Name))
-            .Select(skill => skill.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
         return catalog.Skills
-            .Where(skill => !disabled.Contains(skill.Name))
+            .Where(skill => IsEnabled(skill, settings))
             .OrderBy(skill => skill.Name, StringComparer.Ordinal)
             .ToArray();
     }
+
+    public static bool IsEnabled(AgentSkill skill, AppSettings settings) =>
+        !IsDisabled(skill.Name, settings);
+
+    public static bool IsDisabled(string skillName, AppSettings settings) =>
+        settings.Skills.Any(skill =>
+            !skill.Enabled
+            && !string.IsNullOrWhiteSpace(skill.Name)
+            && string.Equals(skill.Name, skillName, StringComparison.OrdinalIgnoreCase));
 }

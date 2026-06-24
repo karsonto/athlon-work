@@ -59,19 +59,13 @@ public sealed class SkillRuntime(IAgentSkillCatalog catalog, AppSettings setting
                 $"Skill not found: '{skillId}'. Please check the skill name. Available: {available}");
         }
 
-        if (IsDisabled(skill.Name))
+        if (SkillFilter.IsDisabled(skill.Name, settings))
         {
             throw new ArgumentException($"Skill '{skillId}' is disabled in settings.");
         }
 
         return skill;
     }
-
-    private bool IsDisabled(string skillName) =>
-        settings.Skills.Any(skill =>
-            !skill.Enabled
-            && !string.IsNullOrWhiteSpace(skill.Name)
-            && string.Equals(skill.Name, skillName, StringComparison.OrdinalIgnoreCase));
 
     private static bool TryResolveResourceContent(AgentSkill skill, string normalizedPath, out string content)
     {

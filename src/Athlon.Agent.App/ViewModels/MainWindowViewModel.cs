@@ -28,10 +28,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly AppSettings _appSettings;
     private readonly IImpSsoSessionStore? _ssoSessionStore;
     private readonly IAgentSkillCatalog _skillCatalog;
-    private readonly ISkillRuntime _skillRuntime;
     private readonly IImageAttachmentReader _imageAttachmentReader;
-    private readonly IImageAttachmentStore _imageAttachmentStore;
-    private readonly IAppPathProvider _paths;
     private readonly SessionTurnCoordinator _sessionTurns;
     private readonly ComposerCoordinator _composer;
     private readonly LayoutCoordinator _layout;
@@ -41,12 +38,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly ApplicationShutdownService _shutdownService;
     private readonly SchedulerService _scheduler;
     private readonly SessionHistoryCoordinator _sessionHistory;
+    private readonly SessionNavigationStore _sessionNavigation;
     private readonly WorkspaceSessionBridge _workspaceBridge = new();
     private readonly ISessionUsageAccumulator _sessionUsageAccumulator;
-
-    // In-memory caches to avoid re-reading session.json/conversation.jsonl on repeat clicks.
-    private readonly Dictionary<string, AgentSession> _sessionCache = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IReadOnlyList<ChatMessage>> _displayCache = new(StringComparer.Ordinal);
 
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -60,10 +54,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IActiveWorkspaceContext workspaceContext,
         IMcpRegistry mcpRegistry,
         IImageAttachmentReader imageAttachmentReader,
-        IImageAttachmentStore imageAttachmentStore,
         IAppPathProvider paths,
         IAgentSkillCatalog skillCatalog,
-        ISkillRuntime skillRuntime,
         SessionTurnCoordinator sessionTurns,
         ComposerCoordinator composer,
         LayoutCoordinator layout,
@@ -75,6 +67,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         AppSettings settings,
         IImpSsoSessionStore ssoSessionStore,
         ISessionUsageAccumulator sessionUsageAccumulator,
+        SessionHistoryCoordinator sessionHistory,
+        SessionNavigationStore sessionNavigation,
         SchedulerService scheduler,
         SettingsViewModel settingsViewModel,
         KnowledgeViewModel knowledgePageVm,
@@ -87,8 +81,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _workspaceContext = workspaceContext;
         _mcpRegistry = mcpRegistry;
         _imageAttachmentReader = imageAttachmentReader;
-        _imageAttachmentStore = imageAttachmentStore;
-        _paths = paths;
         _sessionTurns = sessionTurns;
         _composer = composer;
         _layout = layout;
@@ -99,10 +91,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _scheduler = scheduler;
         _appSettings = settings;
         _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
-        _sessionHistory = new SessionHistoryCoordinator(storage);
+        _sessionHistory = sessionHistory;
+        _sessionNavigation = sessionNavigation;
         _sessionUsageAccumulator = sessionUsageAccumulator;
         _skillCatalog = skillCatalog;
-        _skillRuntime = skillRuntime;
         _displayedSessionId = _session.Id;
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         WireSessionUsageUi(_activeUi);
@@ -405,7 +397,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ApplySessionWorkspace();
         _ = SaveSessionInBackgroundAsync(previousSession);
         await _storage.SaveSessionAsync(_session);
-        InvalidateSessionCache(_session.Id);
+        _sessionNavigation.Invalidate(_session.Id);
         await RefreshSessionHistoryAsync();
         NotifyCommandStatesChanged();
     }
@@ -434,7 +426,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         PendingImageAttachments.Clear();
 
         await _storage.SaveSessionAsync(_session);
-        InvalidateSessionCache(_session.Id);
+        _sessionNavigation.Invalidate(_session.Id);
         SettingsStatus = "上下文已清空。";
         NotifyCommandStatesChanged();
     }
@@ -507,7 +499,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _uiCache.Remove(item.Id);
         await _storage.DeleteSessionAsync(item.Id);
-        InvalidateSessionCache(item.Id);
+        _sessionNavigation.Invalidate(item.Id);
 
         if (string.Equals(_session.Id, item.Id, StringComparison.Ordinal))
         {
@@ -989,19 +981,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task SaveSessionCoreAsync(AgentSession session)
     {
-        if (session.Messages.Count == 0)
+        var toSave = await _sessionNavigation.SaveIfNotEmptyAsync(session);
+        if (toSave is null)
         {
             return;
         }
 
-        var toSave = SessionHistoryCoordinator.DeriveSessionTitle(session);
         if (string.Equals(toSave.Id, _displayedSessionId, StringComparison.Ordinal))
         {
             _session = toSave;
         }
-
-        await _storage.SaveSessionAsync(toSave);
-        InvalidateSessionCache(toSave.Id);
     }
 
     private async Task SaveSessionInBackgroundAsync(AgentSession session)
@@ -1043,35 +1032,22 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SettingsStatus = "正在加载对话…";
         try
         {
-            if (!_sessionCache.TryGetValue(sessionId, out var loaded))
+            var snapshot = await _sessionNavigation.LoadSnapshotAsync(sessionId);
+            if (snapshot is null)
             {
-                loaded = await _storage.LoadSessionAsync(sessionId);
-                if (loaded is null)
-                {
-                    SettingsStatus = "无法加载该对话。";
-                    return;
-                }
-
-                _sessionCache[sessionId] = loaded;
+                SettingsStatus = "无法加载该对话。";
+                return;
             }
 
-            SwitchDisplayedSession(loaded, renderExistingMessages: false);
+            SwitchDisplayedSession(snapshot.Session, renderExistingMessages: false);
             CurrentSessionTitle = _session.Title;
             KnowledgePageVm.SetSession(_displayedSessionId);
             ComposerText = string.Empty;
             PendingImageAttachments.Clear();
 
-            // conversation.jsonl is the display source of truth; session.json may be saved
-            // before the assistant reply (e.g. scheduled tasks) and only contain the user turn.
-            if (!_displayCache.TryGetValue(sessionId, out var displayMessages))
+            if (snapshot.DisplayMessages.Count > 0)
             {
-                displayMessages = await _storage.LoadConversationDisplayAsync(sessionId);
-                _displayCache[sessionId] = displayMessages;
-            }
-
-            if (displayMessages.Count > 0)
-            {
-                await _activeUi.HydrateDisplayAsync(_session, displayMessages);
+                await _activeUi.HydrateDisplayAsync(_session, snapshot.DisplayMessages);
             }
             else if (_session.Messages.Count > 0)
             {
@@ -1092,12 +1068,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             IsLoadingSession = false;
             NotifyCommandStatesChanged();
         }
-    }
-
-    private void InvalidateSessionCache(string sessionId)
-    {
-        _sessionCache.Remove(sessionId);
-        _displayCache.Remove(sessionId);
     }
 
     private void ConfigureWorkspaceWatcher() =>

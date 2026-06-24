@@ -15,6 +15,8 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<IChatScrollService, ChatScrollService>();
         services.AddSingleton<ComposerCoordinator>();
+        services.AddSingleton<SessionHistoryCoordinator>();
+        services.AddSingleton<SessionNavigationStore>();
         services.AddSingleton(sp => new LayoutCoordinator(
             sp.GetRequiredService<IFileStorageService>(),
             sp.GetRequiredService<AppSettings>()));

@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Threading;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -36,10 +37,6 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
         _skillCatalog.Reload();
         Skills.Clear();
 
-        var disabled = new HashSet<string>(
-            settings.Skills.Where(skill => !skill.Enabled).Select(skill => skill.Name),
-            StringComparer.OrdinalIgnoreCase);
-
         if (_skillCatalog.Skills.Count == 0)
         {
             Skills.Add($"未安装技能 ({_paths.SkillsPath})");
@@ -48,7 +45,7 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
         {
             foreach (var skill in _skillCatalog.Skills.OrderBy(skill => skill.Name, StringComparer.Ordinal))
             {
-                var status = disabled.Contains(skill.Name) ? "○" : "●";
+                var status = SkillFilter.IsEnabled(skill, settings) ? "●" : "○";
                 Skills.Add($"{status} {skill.Name}");
             }
         }

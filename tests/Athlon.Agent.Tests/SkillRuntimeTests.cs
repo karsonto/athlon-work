@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
 using Athlon.Agent.Skills.Repository;
 
@@ -7,6 +8,22 @@ namespace Athlon.Agent.Tests;
 
 public sealed class SkillRuntimeTests
 {
+    [Fact]
+    public void SkillFilter_IsDisabled_MatchesConfiguredSkillNamesCaseInsensitively()
+    {
+        var settings = new AppSettings
+        {
+            Skills =
+            {
+                new SkillSettings { Name = "demo_skill", Enabled = false },
+                new SkillSettings { Name = "", Enabled = false }
+            }
+        };
+
+        Assert.True(SkillFilter.IsDisabled("DEMO_SKILL", settings));
+        Assert.False(SkillFilter.IsDisabled("other_skill", settings));
+    }
+
     [Fact]
     public void AgentSkillCatalog_GetSkillById_MatchesName()
     {
