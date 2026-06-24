@@ -8,6 +8,7 @@
         xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
+        xmlns:views="clr-namespace:Athlon.Agent.App.Views"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Athlon Agent"
@@ -21,81 +22,11 @@
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
-        <Style x:Key="KnowledgeNavIconStyle" TargetType="ContentControl">
-            <Setter Property="Width" Value="24" />
-            <Setter Property="Height" Value="24" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ContentControl">
-                        <Viewbox Stretch="Uniform">
-                            <Grid Width="28" Height="28">
-                                <Border CornerRadius="9">
-                                    <Border.Background>
-                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                            <GradientStop Color="#FF8B5CF6" Offset="0" />
-                                            <GradientStop Color="#FF06B6D4" Offset="1" />
-                                        </LinearGradientBrush>
-                                    </Border.Background>
-                                </Border>
-                                <Path Data="M7,7.2 C9.3,5.8 11.5,5.8 13.6,7.1 L13.6,21.6 C11.6,20.3 9.4,20.2 7,21.5 Z"
-                                      Fill="#FFFFFFFF"
-                                      Opacity="0.95" />
-                                <Path Data="M14.4,7.1 C16.5,5.8 18.7,5.8 21,7.2 L21,21.5 C18.6,20.2 16.4,20.3 14.4,21.6 Z"
-                                      Fill="#FFE0F2FE"
-                                      Opacity="0.96" />
-                                <Path Data="M9,10.1 L12,9.4 M9,13 L12,12.5 M16,9.4 L19,10.1 M16,12.5 L19,13"
-                                      Stroke="#FF0EA5E9"
-                                      StrokeThickness="0.9"
-                                      Opacity="0.75" />
-                                <Path Data="M20.6,4.5 L21.5,6.3 L23.5,7.2 L21.5,8 L20.6,9.8 L19.8,8 L17.8,7.2 L19.8,6.3 Z"
-                                      Fill="#FFFDE68A" />
-                            </Grid>
-                        </Viewbox>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
-        <Style x:Key="ScheduleNavIconStyle" TargetType="ContentControl">
-            <Setter Property="Width" Value="24" />
-            <Setter Property="Height" Value="24" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ContentControl">
-                        <Viewbox Stretch="Uniform">
-                            <Grid Width="28" Height="28">
-                                <Border CornerRadius="14">
-                                    <Border.Background>
-                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                            <GradientStop Color="#FFF97316" Offset="0" />
-                                            <GradientStop Color="#FFEC4899" Offset="1" />
-                                        </LinearGradientBrush>
-                                    </Border.Background>
-                                </Border>
-                                <Ellipse Width="17"
-                                         Height="17"
-                                         Stroke="#FFFFFFFF"
-                                         StrokeThickness="2.2"
-                                         HorizontalAlignment="Center"
-                                         VerticalAlignment="Center" />
-                                <Path Data="M14,9.3 L14,14.6 L18,17"
-                                      Stroke="#FFFFFFFF"
-                                      StrokeThickness="2.1" />
-                                <Path Data="M8.2,5.8 L6.6,4.2 M19.8,5.8 L21.4,4.2"
-                                      Stroke="#FFFFF7ED"
-                                      StrokeThickness="1.8"
-                                      Opacity="0.9" />
-                                <Ellipse Width="3.2"
-                                         Height="3.2"
-                                         Fill="#FFFFF7ED"
-                                         HorizontalAlignment="Center"
-                                         VerticalAlignment="Center" />
-                            </Grid>
-                        </Viewbox>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/ChatNavIconStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Key="B" Modifiers="Control+Alt" Command="{Binding ToggleContextSidebarCommand}" />
@@ -215,320 +146,7 @@
         </Border>
 
         <!-- Left sidebar — session list -->
-        <Border Grid.Row="1"
-                Grid.Column="0"
-                Background="{DynamicResource Brush.AppBackground}"
-                BorderThickness="0">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderRowHeight}" />
-                    <RowDefinition Height="*" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-
-                <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}" Padding="20,0">
-                    <Grid>
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Image Source="/Assets/app-icon-48.png"
-                                   Width="24"
-                                   Height="24"
-                                   Margin="0,0,8,0"
-                                   VerticalAlignment="Center"
-                                   RenderOptions.BitmapScalingMode="HighQuality" />
-                            <TextBlock Text="Athlon" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <Button Command="{Binding NewSessionCommand}"
-                                HorizontalAlignment="Right"
-                                VerticalAlignment="Center"
-                                ToolTip="新建会话"
-                                Style="{StaticResource NewSessionButtonStyle}">
-                            <TextBlock Text="+" FontSize="16" FontWeight="SemiBold" Margin="0,-1,0,0" />
-                        </Button>
-                    </Grid>
-                </Border>
-
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="12,8">
-                    <StackPanel>
-                        <TextBlock Text="暂无 Agent 记录"
-                                   FontSize="12"
-                                   Foreground="{DynamicResource Brush.SubtleText}"
-                                   Margin="12,8">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding HasAgentRecords}" Value="False">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                        <ItemsControl ItemsSource="{Binding AgentRecordGroups}">
-                            <ItemsControl.Style>
-                                <Style TargetType="ItemsControl">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding HasAgentRecords}" Value="False">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </ItemsControl.Style>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:AgentRecordGroupViewModel}">
-                                    <StackPanel>
-                                        <Button Command="{Binding ToggleExpandedCommand}"
-                                                Style="{StaticResource AgentRecordGroupHeaderStyle}">
-                                            <Grid Width="{Binding RelativeSource={RelativeSource AncestorType=ScrollViewer}, Path=ActualWidth}">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0"
-                                                           Text="{Binding ExpandGlyph}"
-                                                           FontSize="10"
-                                                           Margin="0,0,6,0"
-                                                           VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{Binding Title}"
-                                                           FontSize="11"
-                                                           FontWeight="SemiBold"
-                                                           Foreground="{DynamicResource Brush.DisabledText}"
-                                                           VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="2"
-                                                           Text="{Binding Items.Count}"
-                                                           FontSize="10"
-                                                           Foreground="{DynamicResource Brush.SubtleText}"
-                                                           VerticalAlignment="Center" />
-                                            </Grid>
-                                        </Button>
-                                        <ItemsControl ItemsSource="{Binding Items}">
-                                            <ItemsControl.Style>
-                                                <Style TargetType="ItemsControl">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsExpanded}" Value="False">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </ItemsControl.Style>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate DataType="{x:Type vm:SessionHistoryItemViewModel}">
-                                                    <Border>
-                                                        <Border.Style>
-                                                            <Style TargetType="Border" BasedOn="{StaticResource SessionItemBorderStyle}">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                                                        <Setter Property="BorderThickness" Value="3,1,1,1" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Border.Style>
-                                                        <Grid>
-                                                            <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="Auto" />
-                                                                <ColumnDefinition Width="*" />
-                                                                <ColumnDefinition Width="Auto" />
-                                                            </Grid.ColumnDefinitions>
-                                                            <Ellipse Width="8"
-                                                                     Height="8"
-                                                                     Margin="0,0,10,0"
-                                                                     VerticalAlignment="Center"
-                                                                     Fill="{DynamicResource Brush.SubtleText}">
-                                                                <Ellipse.Style>
-                                                                    <Style TargetType="Ellipse">
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                                                                <Setter Property="Fill" Value="{DynamicResource Brush.Success}" />
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </Ellipse.Style>
-                                                            </Ellipse>
-                                                            <Button Grid.Column="1"
-                                                                    Command="{Binding DataContext.LoadSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                    CommandParameter="{Binding}"
-                                                                    Style="{StaticResource SessionHistoryButtonStyle}"
-                                                                    Padding="0,0,8,0">
-                                                                <StackPanel HorizontalAlignment="Stretch">
-                                                                    <TextBlock Text="{Binding Title}" Style="{StaticResource SessionNameTextStyle}" />
-                                                                    <TextBlock Text="{Binding MetaText}" Style="{StaticResource SessionMetaTextStyle}" />
-                                                                </StackPanel>
-                                                            </Button>
-                                                            <StackPanel Grid.Column="2"
-                                                                        Orientation="Horizontal"
-                                                                        VerticalAlignment="Center">
-                                                                <Button Command="{Binding StopSessionCommand}"
-                                                                        Content="■"
-                                                                        ToolTip="停止生成"
-                                                                        Foreground="{DynamicResource Brush.Warning}">
-                                                                    <Button.Style>
-                                                                        <Style TargetType="Button" BasedOn="{StaticResource SessionActionButtonStyle}">
-                                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                                            <Style.Triggers>
-                                                                                <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                                </DataTrigger>
-                                                                            </Style.Triggers>
-                                                                        </Style>
-                                                                    </Button.Style>
-                                                                </Button>
-                                                                <Button Command="{Binding DataContext.DeleteSessionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                        CommandParameter="{Binding}"
-                                                                        Content="×"
-                                                                        ToolTip="删除"
-                                                                        Style="{StaticResource SessionActionButtonStyle}" />
-                                                            </StackPanel>
-                                                        </Grid>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
-
-                <StackPanel Grid.Row="2" Margin="12,0,12,12">
-                    <Border Background="{DynamicResource Brush.PanelAlt}"
-                            BorderBrush="{DynamicResource Brush.Border}"
-                            BorderThickness="1"
-                            CornerRadius="8"
-                            Padding="8,8"
-                            Margin="0,0,0,8">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding HasQueuedTurns}" Value="True">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <StackPanel>
-                            <TextBlock Text="排队中"
-                                       FontSize="10"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource Brush.SubtleText}"
-                                       Margin="0,0,0,6" />
-                            <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding QueuedTurns}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type vm:QueuedTurnViewModel}">
-                                            <Border Background="{DynamicResource Brush.Panel}"
-                                                    BorderBrush="{DynamicResource Brush.Border}"
-                                                    BorderThickness="1"
-                                                    CornerRadius="8"
-                                                    Padding="8,8"
-                                                    Margin="0,0,0,8">
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <StackPanel Grid.Column="0">
-                                                        <TextBlock Text="{Binding PreviewText}"
-                                                                   FontSize="12"
-                                                                   Foreground="{DynamicResource Brush.Text}"
-                                                                   TextWrapping="Wrap"
-                                                                   TextTrimming="CharacterEllipsis"
-                                                                   MaxHeight="40">
-                                                            <TextBlock.Style>
-                                                                <Style TargetType="TextBlock">
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding PreviewText}" Value="">
-                                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </TextBlock.Style>
-                                                        </TextBlock>
-                                                        <ItemsControl ItemsSource="{Binding ImageItems}" Margin="0,6,0,0">
-                                                            <ItemsControl.Style>
-                                                                <Style TargetType="ItemsControl">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding HasImages}" Value="True">
-                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </ItemsControl.Style>
-                                                            <ItemsControl.ItemsPanel>
-                                                                <ItemsPanelTemplate>
-                                                                    <StackPanel Orientation="Horizontal" />
-                                                                </ItemsPanelTemplate>
-                                                            </ItemsControl.ItemsPanel>
-                                                            <ItemsControl.ItemTemplate>
-                                                                <DataTemplate DataType="{x:Type vm:QueuedTurnImageViewModel}">
-                                                                    <Border Width="44"
-                                                                            Height="44"
-                                                                            CornerRadius="8"
-                                                                            BorderBrush="{DynamicResource Brush.Border}"
-                                                                            BorderThickness="1"
-                                                                            Background="{DynamicResource Brush.PanelAlt}"
-                                                                            Margin="0,0,8,0"
-                                                                            ToolTip="{Binding FileName}">
-                                                                        <Grid>
-                                                                            <Image Source="{Binding Thumbnail}"
-                                                                                   Stretch="UniformToFill"
-                                                                                   Margin="2" />
-                                                                        </Grid>
-                                                                    </Border>
-                                                                </DataTemplate>
-                                                            </ItemsControl.ItemTemplate>
-                                                        </ItemsControl>
-                                                    </StackPanel>
-                                                    <Button Grid.Column="1"
-                                                            Content="×"
-                                                            Command="{Binding DataContext.RemoveQueuedTurnCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding}"
-                                                            ToolTip="从队列移除"
-                                                            Style="{StaticResource SessionDeleteButtonStyle}" />
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Knowledge navigation button -->
-                    <Button Command="{Binding NavigateCommand}"
-                            CommandParameter="Knowledge"
-                            Style="{StaticResource NavBottomButtonStyle}"
-                            ToolTip="知识库"
-                            Margin="0,0,0,8">
-                        <StackPanel Orientation="Horizontal">
-                            <ContentControl Style="{StaticResource KnowledgeNavIconStyle}"
-                                            Margin="0,0,10,0"
-                                            VerticalAlignment="Center" />
-                            <TextBlock Text="知识库" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-
-                    <!-- Schedule navigation button -->
-                    <Button Command="{Binding NavigateCommand}"
-                            CommandParameter="Schedule"
-                            Style="{StaticResource NavBottomButtonStyle}"
-                            ToolTip="定时任务">
-                        <StackPanel Orientation="Horizontal">
-                            <ContentControl Style="{StaticResource ScheduleNavIconStyle}"
-                                            Margin="0,0,10,0"
-                                            VerticalAlignment="Center" />
-                            <TextBlock Text="定时任务" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
-            </Grid>
-        </Border>
+        <views:NavigationSidebarView Grid.Row="1" Grid.Column="0" />
 
         <!-- Main column: chat / settings + composer + footer -->
         <Grid Grid.Row="1" Grid.Column="1">
@@ -613,10 +231,10 @@
                                     AutomationProperties.Name="{Binding ThemeToggleToolTip}">
                                 <Button.Resources>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="White" />
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsLightTheme}" Value="True">
-                                                <Setter Property="Foreground" Value="#FFFACC15" />
+                                            <DataTrigger Binding="{Binding IsLightTheme}" Value="False">
+                                                <Setter Property="Foreground" Value="#FFFFFFFF" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -630,14 +248,13 @@
                                     CommandParameter="Settings"
                                     ToolTip="设置"
                                     Style="{StaticResource HeaderIconButtonStyle}"
-                                    Foreground="White"
                                     Margin="4,0,0,0">
                                 <Button.Resources>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="White" />
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
                                         <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsLightTheme}" Value="True">
-                                                <Setter Property="Foreground" Value="#FF111827" />
+                                            <DataTrigger Binding="{Binding IsLightTheme}" Value="False">
+                                                <Setter Property="Foreground" Value="#FFFFFFFF" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
@@ -659,8 +276,20 @@
                 </Border>
 
                 <Grid Grid.Row="1" ClipToBounds="True">
-                <!-- Empty state -->
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="720" Margin="24">
+                <!-- WebView2 聊天渲染器：始终保持可见，避免 Collapsed 导致 WebView2 无法渲染 -->
+                <controls:WebChatView x:Name="ChatWebView"
+                                      Margin="0"
+                                      ClipToBounds="True"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch" />
+
+                <!-- Empty state（叠在 WebView 上方） -->
+                <StackPanel HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            MaxWidth="720"
+                            Margin="24"
+                            Panel.ZIndex="1"
+                            IsHitTestVisible="False">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -694,7 +323,8 @@
                 <!-- Loading indicator -->
                 <StackPanel HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            IsHitTestVisible="False">
+                            IsHitTestVisible="False"
+                            Panel.ZIndex="2">
                     <StackPanel.Style>
                         <Style TargetType="StackPanel">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -715,494 +345,7 @@
                                Foreground="{DynamicResource Brush.SubtleText}"
                                HorizontalAlignment="Center" />
                 </StackPanel>
-
-                <!-- Messages (ChatPane bubbles) -->
-                <ListBox x:Name="ChatMessagesList"
-                             ItemsSource="{Binding Messages}"
-                             Padding="24,24"
-                             ClipToBounds="True">
-                        <i:Interaction.Behaviors>
-                            <behaviors:ChatAutoScrollBehavior />
-                        </i:Interaction.Behaviors>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <!-- 对齐 report/html：用户 justify-end，助手 justify-start -->
-                                <StackPanel Margin="0,0,0,16"
-                                            Orientation="Horizontal"
-                                            ClipToBounds="True">
-                                    <StackPanel.Style>
-                                        <Style TargetType="StackPanel">
-                                            <Setter Property="HorizontalAlignment" Value="Left" />
-                                            <Setter Property="Margin" Value="0,0,0,16" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                    <Setter Property="HorizontalAlignment" Value="Right" />
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding IsCollapsibleCard}" Value="True">
-                                                    <Setter Property="Margin" Value="0,0,0,4" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </StackPanel.Style>
-
-                                    <Image RenderOptions.BitmapScalingMode="HighQuality">
-                                        <Image.Style>
-                                            <Style TargetType="Image" BasedOn="{StaticResource MessageAvatarAssistantImageStyle}">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding IsCollapsibleCard}" Value="True">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Image.Style>
-                                    </Image>
-
-                                    <StackPanel Orientation="Vertical"
-                                                MaxWidth="640"
-                                                ClipToBounds="True">
-                                        <StackPanel.Style>
-                                            <Style TargetType="StackPanel">
-                                                <Setter Property="HorizontalAlignment" Value="Stretch" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                        <Setter Property="HorizontalAlignment" Value="Left" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </StackPanel.Style>
-                                        <!-- Tool message card -->
-                                        <Border>
-                                            <Border.Style>
-                                                <Style TargetType="Border" BasedOn="{StaticResource ToolCardBorderStyle}">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsCollapsibleCard}" Value="True">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <StackPanel>
-                                                <Border Style="{StaticResource ToolCardHeaderBorderStyle}">
-                                                    <Button Command="{Binding ToggleToolExpandCommand}"
-                                                            Style="{StaticResource CollapsibleHeaderButtonStyle}"
-                                                            Padding="0"
-                                                            Background="Transparent">
-                                                    <Grid>
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBlock Text="{Binding ChevronGlyph}"
-                                                                   Foreground="{DynamicResource Brush.ToolThinkingText}"
-                                                                   FontSize="11"
-                                                                   VerticalAlignment="Center"
-                                                                   Margin="0,0,8,0" />
-                                                        <StackPanel Grid.Column="1">
-                                                            <TextBlock Text="{Binding CardTitle}"
-                                                                       FontSize="12"
-                                                                       FontWeight="SemiBold"
-                                                                       Foreground="{DynamicResource Brush.ToolThinkingText}" />
-                                                            <TextBlock Text="{Binding ToolHeader}"
-                                                                       FontSize="11"
-                                                                       Foreground="{DynamicResource Brush.SubtleText}"
-                                                                       TextTrimming="CharacterEllipsis"
-                                                                       Margin="0,2,0,0" />
-                                                            <TextBlock Text="{Binding ToolArgumentsText}"
-                                                                       FontSize="10"
-                                                                       FontFamily="Consolas"
-                                                                       Foreground="{DynamicResource Brush.ToolThinkingText}"
-                                                                       TextWrapping="Wrap"
-                                                                       MaxHeight="56"
-                                                                       Margin="0,4,0,0">
-                                                                <TextBlock.Style>
-                                                                    <Style TargetType="TextBlock">
-                                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding IsToolArgumentsStreaming}" Value="True">
-                                                                                <Setter Property="Visibility" Value="Visible" />
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </TextBlock.Style>
-                                                            </TextBlock>
-                                                            <TextBlock Text="{Binding ToolStatusLabel}"
-                                                                       FontSize="11"
-                                                                       FontWeight="SemiBold"
-                                                                       Margin="0,4,0,0">
-                                                                <TextBlock.Style>
-                                                                    <Style TargetType="TextBlock">
-                                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionSkillBadgeText}" />
-                                                                        <Style.Triggers>
-                                                                            <DataTrigger Binding="{Binding ShowToolStatusLabel}" Value="True">
-                                                                                <Setter Property="Visibility" Value="Visible" />
-                                                                            </DataTrigger>
-                                                                            <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Preparing}">
-                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.ToolSuccessText}" />
-                                                                            </DataTrigger>
-                                                                            <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Running}">
-                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.ToolSuccessText}" />
-                                                                            </DataTrigger>
-                                                                            <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Succeeded}">
-                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.ToolSuccessText}" />
-                                                                            </DataTrigger>
-                                                                            <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Failed}">
-                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.ToolFailureText}" />
-                                                                            </DataTrigger>
-                                                                            <DataTrigger Binding="{Binding ToolCallStatus}" Value="{x:Static vm:ToolCallDisplayStatus.Cancelled}">
-                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.ToolFailureText}" />
-                                                                            </DataTrigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </TextBlock.Style>
-                                                            </TextBlock>
-                                                        </StackPanel>
-                                                        <TextBlock Grid.Column="2"
-                                                                   Text="{Binding CreatedAt}"
-                                                                   FontSize="10"
-                                                                   Foreground="{DynamicResource Brush.SubtleText}"
-                                                                   VerticalAlignment="Center"
-                                                                   Margin="8,0,0,0" />
-                                                    </Grid>
-                                                </Button>
-                                                </Border>
-                                                <Border BorderBrush="{DynamicResource Brush.Border}"
-                                                        BorderThickness="0,1,0,0">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsExpanded}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <StackPanel Margin="12,10">
-                                                        <ScrollViewer MaxHeight="160"
-                                                                      VerticalScrollBarVisibility="Auto"
-                                                                      HorizontalScrollBarVisibility="Disabled"
-                                                                      Margin="0,0,0,8">
-                                                            <ScrollViewer.Style>
-                                                                <Style TargetType="ScrollViewer">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding ShowToolArgumentsPanel}" Value="True">
-                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </ScrollViewer.Style>
-                                                            <TextBlock Text="{Binding ToolArgumentsText}"
-                                                                       FontSize="11"
-                                                                       FontFamily="Consolas"
-                                                                       Foreground="{DynamicResource Brush.ToolThinkingText}"
-                                                                       TextWrapping="Wrap" />
-                                                        </ScrollViewer>
-                                                        <TextBlock Text="{Binding ToolSummary}"
-                                                                   FontSize="11"
-                                                                   Foreground="{DynamicResource Brush.SubtleText}"
-                                                                   TextWrapping="Wrap"
-                                                                   Margin="0,0,0,8">
-                                                            <TextBlock.Style>
-                                                                <Style TargetType="TextBlock">
-                                                                    <Style.Triggers>
-                                                                        <Trigger Property="Text" Value="">
-                                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                                        </Trigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </TextBlock.Style>
-                                                        </TextBlock>
-                                                        <controls:MarkdownMessageView Markdown="{Binding ToolDetailDisplay}"
-                                                                                      AssistantTone="True"
-                                                                                      MaxContentHeight="0"
-                                                                                      HorizontalAlignment="Stretch" />
-                                                    </StackPanel>
-                                                </Border>
-                                            </StackPanel>
-                                        </Border>
-
-                                        <!-- User / assistant message bubble -->
-                                        <StackPanel>
-                                        <Border ClipToBounds="True">
-                                            <Border.Style>
-                                                <Style TargetType="Border" BasedOn="{StaticResource MessageBubbleAssistantStyle}">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                            <Setter Property="Background" Value="{DynamicResource Brush.UserBubble}" />
-                                                            <Setter Property="BorderThickness" Value="0" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding IsCollapsibleCard}" Value="True">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding IsHiddenPlaceholder}" Value="True">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <StackPanel>
-                                                <!-- Reasoning block: collapsible thinking-style, default expanded -->
-                                                <Border CornerRadius="16"
-                                                        BorderThickness="1"
-                                                        Background="{DynamicResource Brush.ToolThinkingBg}"
-                                                        BorderBrush="{DynamicResource Brush.ToolThinkingBorder}"
-                                                        Margin="0,0,0,12"
-                                                        ClipToBounds="True">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding HasReasoning}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <StackPanel>
-                                                        <Button Command="{Binding ToggleReasoningExpandCommand}"
-                                                                Style="{StaticResource CollapsibleHeaderButtonStyle}">
-                                                            <Grid>
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="Auto" />
-                                                                    <ColumnDefinition Width="*" />
-                                                                </Grid.ColumnDefinitions>
-                                                                <TextBlock Text="{Binding ReasoningChevronGlyph}"
-                                                                           Foreground="{DynamicResource Brush.ToolThinkingText}"
-                                                                           FontSize="11"
-                                                                           VerticalAlignment="Center"
-                                                                           Margin="0,0,8,0" />
-                                                                <StackPanel Grid.Column="1">
-                                                                    <TextBlock Text="思考过程"
-                                                                               FontSize="12"
-                                                                               FontWeight="SemiBold"
-                                                                               Foreground="{DynamicResource Brush.ToolThinkingText}" />
-                                                                    <TextBlock Text="思考中…"
-                                                                               FontSize="11"
-                                                                               Foreground="{DynamicResource Brush.Success}"
-                                                                               Margin="0,4,0,0">
-                                                                        <TextBlock.Style>
-                                                                            <Style TargetType="TextBlock">
-                                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                                                <Style.Triggers>
-                                                                                    <DataTrigger Binding="{Binding IsReasoningStreaming}" Value="True">
-                                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                                    </DataTrigger>
-                                                                                </Style.Triggers>
-                                                                            </Style>
-                                                                        </TextBlock.Style>
-                                                                    </TextBlock>
-                                                                </StackPanel>
-                                                            </Grid>
-                                                        </Button>
-                                                        <Border BorderBrush="{DynamicResource Brush.ToolThinkingBorder}"
-                                                                BorderThickness="0,1,0,0">
-                                                            <Border.Style>
-                                                                <Style TargetType="Border">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding IsReasoningExpanded}" Value="True">
-                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Border.Style>
-                                                            <Grid>
-                                                                <TextBlock Margin="12,10"
-                                                                           Text="{Binding ReasoningContent}"
-                                                                           TextWrapping="Wrap"
-                                                                           FontSize="13"
-                                                                           Foreground="{DynamicResource Brush.ToolThinkingText}"
-                                                                           HorizontalAlignment="Stretch">
-                                                                    <TextBlock.Style>
-                                                                        <Style TargetType="TextBlock">
-                                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                                            <Style.Triggers>
-                                                                                <DataTrigger Binding="{Binding IsReasoningStreaming}" Value="True">
-                                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                                </DataTrigger>
-                                                                            </Style.Triggers>
-                                                                        </Style>
-                                                                    </TextBlock.Style>
-                                                                </TextBlock>
-                                                                <controls:MarkdownMessageView Margin="12,10"
-                                                                                              Markdown="{Binding ReasoningContent}"
-                                                                                              AssistantTone="True"
-                                                                                              MaxContentHeight="0"
-                                                                                              HorizontalAlignment="Stretch">
-                                                                    <controls:MarkdownMessageView.Style>
-                                                                        <Style TargetType="controls:MarkdownMessageView">
-                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                            <Style.Triggers>
-                                                                                <DataTrigger Binding="{Binding IsReasoningStreaming}" Value="True">
-                                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                                </DataTrigger>
-                                                                            </Style.Triggers>
-                                                                        </Style>
-                                                                    </controls:MarkdownMessageView.Style>
-                                                                </controls:MarkdownMessageView>
-                                                            </Grid>
-                                                        </Border>
-                                                    </StackPanel>
-                                                </Border>
-                                                <TextBlock Text="{Binding UserAttachmentSummary}"
-                                                           FontSize="11"
-                                                           Foreground="{DynamicResource Brush.SubtleText}"
-                                                           Margin="0,0,0,8">
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding UserAttachmentSummary}" Value="">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                                <TextBox Text="{Binding Content}"
-                                                         TextWrapping="Wrap"
-                                                         FontSize="14"
-                                                         HorizontalAlignment="Stretch"
-                                                         IsReadOnly="True"
-                                                         Background="Transparent"
-                                                         BorderThickness="0"
-                                                         IsReadOnlyCaretVisible="False"
-                                                         IsTabStop="False"
-                                                         Padding="0">
-                                                    <TextBox.Style>
-                                                        <Style TargetType="TextBox">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsStreaming}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                    <Setter Property="Foreground" Value="White" />
-                                                                </DataTrigger>
-                                                                <MultiDataTrigger>
-                                                                    <MultiDataTrigger.Conditions>
-                                                                        <Condition Binding="{Binding IsMarkdownDeferred}" Value="True" />
-                                                                        <Condition Binding="{Binding IsMarkdownRenderingEnabled}" Value="False" />
-                                                                    </MultiDataTrigger.Conditions>
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </MultiDataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBox.Style>
-                                                </TextBox>
-                                                <TextBlock Margin="0,6,0,0"
-                                                           FontSize="12"
-                                                           Foreground="{DynamicResource Brush.TextSecondary}"
-                                                           Text="正在准备格式渲染…（点击立即渲染）"
-                                                           Cursor="Hand">
-                                                    <TextBlock.InputBindings>
-                                                        <MouseBinding MouseAction="LeftClick"
-                                                                      Command="{Binding EnableMarkdownRenderingCommand}" />
-                                                    </TextBlock.InputBindings>
-                                                    <TextBlock.Style>
-                                                        <Style TargetType="TextBlock">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                            <Style.Triggers>
-                                                                <MultiDataTrigger>
-                                                                    <MultiDataTrigger.Conditions>
-                                                                        <Condition Binding="{Binding IsMarkdownDeferred}" Value="True" />
-                                                                        <Condition Binding="{Binding IsMarkdownRenderingEnabled}" Value="False" />
-                                                                    </MultiDataTrigger.Conditions>
-                                                                    <Setter Property="Visibility" Value="Visible" />
-                                                                </MultiDataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </TextBlock.Style>
-                                                </TextBlock>
-                                                <controls:MarkdownMessageView Markdown="{Binding Content}"
-                                                                              AssistantTone="{Binding AssistantTone}"
-                                                                              MaxContentHeight="0"
-                                                                              HorizontalAlignment="Stretch">
-                                                    <controls:MarkdownMessageView.Style>
-                                                        <Style TargetType="controls:MarkdownMessageView">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                </DataTrigger>
-                                                                <DataTrigger Binding="{Binding IsStreaming}" Value="True">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                </DataTrigger>
-                                                                <MultiDataTrigger>
-                                                                    <MultiDataTrigger.Conditions>
-                                                                        <Condition Binding="{Binding IsMarkdownDeferred}" Value="True" />
-                                                                        <Condition Binding="{Binding IsMarkdownRenderingEnabled}" Value="False" />
-                                                                    </MultiDataTrigger.Conditions>
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                </MultiDataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </controls:MarkdownMessageView.Style>
-                                                </controls:MarkdownMessageView>
-                                            </StackPanel>
-                                        </Border>
-                                        <TextBlock Text="{Binding CreatedAt}">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock" BasedOn="{StaticResource MessageMetaTextStyle}">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsCollapsibleCard}" Value="False">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                        <DataTrigger Binding="{Binding IsHiddenPlaceholder}" Value="True">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                        </StackPanel>
-                                    </StackPanel>
-
-                                    <Border>
-                                        <Border.Style>
-                                            <Style TargetType="Border" BasedOn="{StaticResource MessageAvatarUserStyle}">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
-                                        <TextBlock Text="U" Foreground="{DynamicResource Brush.TextSecondary}" FontWeight="SemiBold"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12" />
-                                    </Border>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                        <ListBox.Style>
-                            <Style TargetType="ListBox" BasedOn="{StaticResource ChatMessageListBoxStyle}">
-                                <Setter Property="Visibility" Value="Visible" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Messages.Count}" Value="0">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ListBox.Style>
-                    </ListBox>
                 </Grid>
-
                 <GridSplitter x:Name="ComposerSplitter"
                               Grid.Row="2"
                               Style="{StaticResource LayoutRowSplitterStyle}"
@@ -2164,7 +1307,7 @@
                                                FontSize="12" />
                                 </StackPanel>
                             </StackPanel>
-                            <controls:KnowledgeDocumentsDropZone DataContext="{Binding KnowledgePageVm}" />
+                            <controls:KnowledgeDocumentsDropZone />
                         </DockPanel>
                     </Border>
 

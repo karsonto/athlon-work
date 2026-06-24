@@ -52,6 +52,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private string _displayedSessionId;
     private SessionTurnUiController _activeUi;
     private bool _shutdownCompleted;
+    private Controls.WebChatView? _savedChatView;
 
     public MainWindowViewModel(
         IFileStorageService storage,
@@ -345,7 +346,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         await _layout.PersistNowAsync();
     }
 
-    private void OnAppThemeChanged(object? sender, EventArgs e) => NotifyThemeToggleStateChanged();
+    private void OnAppThemeChanged(object? sender, EventArgs e)
+    {
+        NotifyThemeToggleStateChanged();
+    }
 
     private void NotifyThemeToggleStateChanged()
     {
@@ -365,6 +369,15 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public void UpdateComposerHeight(double height) =>
         _layout.UpdateComposerHeight(height);
+
+    /// <summary>将 WebChatView 绑定到当前活跃 UI 控制器，用于消息的增量渲染。</summary>
+    public void AttachChatView(Controls.WebChatView chatView)
+    {
+        _savedChatView = chatView;
+        _uiCache.AttachChatViewToAll(chatView);
+        _activeUi.ChatView = chatView;
+        _ = chatView.LoadMessagesAsync(_activeUi.Messages);
+    }
 
     private void NotifyContextSidebarLayoutChanged()
     {
@@ -614,6 +627,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         WireSessionUsageUi(_activeUi);
         _activeUi.SetDisplayed(true);
+        // 切换会话时重新绑定 WebChatView（如果已经初始化）
+        if (_activeUi.ChatView is null)
+        {
+            _activeUi.ChatView = _savedChatView;
+        }
+
+        if (_savedChatView is not null)
+        {
+            _ = _savedChatView.LoadMessagesAsync(_activeUi.Messages);
+        }
+
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         OnPropertyChanged(nameof(Messages));
         OnPropertyChanged(nameof(HasChatMessages));
@@ -1060,6 +1084,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             ApplySessionWorkspace();
             UpdateDisplayedBusyState();
             SettingsStatus = $"已加载对话：{_session.Title}";
+
+            if (_savedChatView is not null)
+            {
+                await _savedChatView.LoadMessagesAsync(_activeUi.Messages);
+            }
         }
         finally
         {

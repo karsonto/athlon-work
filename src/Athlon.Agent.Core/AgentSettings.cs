@@ -79,7 +79,7 @@ public sealed class UpdateSettings
 public sealed class FileReadSettings
 {
     public long MaxFileBytes { get; set; } = 2 * 1024 * 1024;
-    public int DefaultLineLimit { get; set; } = 1_000;
+    public int DefaultLineLimit { get; set; } = 500;
     public int MaxLinesPerCall { get; set; } = 2_000;
     public int MaxResponseChars { get; set; } = 32_768;
     public int MaxLineChars { get; set; } = 1_0240;

@@ -265,6 +265,8 @@ public sealed class ImpSsoCallbackServer : IDisposable
     {
         _cts?.Cancel();
 
+        await WaitForInflightRequestsAsync().ConfigureAwait(false);
+
         if (_listener is { IsListening: true })
         {
             try
@@ -296,8 +298,6 @@ public sealed class ImpSsoCallbackServer : IDisposable
                 // Expected when stopping.
             }
         }
-
-        await WaitForInflightRequestsAsync().ConfigureAwait(false);
 
         try
         {

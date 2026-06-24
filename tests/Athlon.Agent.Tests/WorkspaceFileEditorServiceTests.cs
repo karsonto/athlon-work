@@ -16,7 +16,9 @@ public sealed class WorkspaceFileEditorServiceTests
             var outside = Path.Combine(root, "outside.txt");
             await File.WriteAllTextAsync(outside, "hello");
 
-            var service = CreateService(workspaceRoot, root);
+            var appDataRoot = Path.Combine(Path.GetTempPath(), $".athlon-agent-editor-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(appDataRoot);
+            var service = CreateService(workspaceRoot, appDataRoot);
             var result = await service.TryOpenAsync(outside);
 
             Assert.False(result.Succeeded);

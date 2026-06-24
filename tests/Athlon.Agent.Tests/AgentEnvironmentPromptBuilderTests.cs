@@ -1,4 +1,6 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
 using Athlon.Agent.Skills.Repository;
 
@@ -11,42 +13,81 @@ public sealed class AgentEnvironmentPromptBuilderTests
     {
         var skillsPath = @"C:\Users\test\.athlon-agent\skills";
         var appDataPath = @"C:\Users\test\.athlon-agent";
-        var builder = PromptTestHelpers.CreateBuilder(new PromptTestHelpers.FakeHostEnvironment(skillsPath, appDataPath));
+        var workspaceRoot = Path.Combine(Path.GetTempPath(), $"athlon-prompt-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(workspaceRoot);
 
-        var prompt = builder.Build(AgentSession.Create("prompt-test"), Array.Empty<ToolDefinition>());
+        try
+        {
+            var settings = new AppSettings
+            {
+                Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = workspaceRoot } }
+            };
+            var builder = PromptTestHelpers.CreateBuilder(
+                new PromptTestHelpers.FakeHostEnvironment(skillsPath, appDataPath),
+                settings);
+            var session = AgentSession.Create("prompt-test").WithWorkspace(workspaceRoot);
 
-        Assert.Contains("Host: Win", prompt, StringComparison.Ordinal);
-        Assert.Contains("UTC+8", prompt, StringComparison.Ordinal);
-        Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", prompt);
-        Assert.Contains("Encoding and locale:", prompt, StringComparison.Ordinal);
-        Assert.Contains("UTF-8", prompt, StringComparison.Ordinal);
-        Assert.Contains(@"TESTDOMAIN\karson", prompt, StringComparison.Ordinal);
-        Assert.Contains($"skills={skillsPath}", prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain($"none installed under {skillsPath}", prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("~/.athlon-agent/skills", prompt, StringComparison.Ordinal);
-        Assert.Contains("Windows: cmd.exe only, not PowerShell.", prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("prefer PowerShell", prompt, StringComparison.OrdinalIgnoreCase);
+            var prompt = builder.Build(session, Array.Empty<ToolDefinition>());
+
+            Assert.Contains("Host: Win", prompt, StringComparison.Ordinal);
+            Assert.Contains("UTC+8", prompt, StringComparison.Ordinal);
+            Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", prompt);
+            Assert.Contains("Encoding and locale:", prompt, StringComparison.Ordinal);
+            Assert.Contains("UTF-8", prompt, StringComparison.Ordinal);
+            Assert.Contains(@"TESTDOMAIN\karson", prompt, StringComparison.Ordinal);
+            Assert.Contains($"skills={skillsPath}", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain($"none installed under {skillsPath}", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain("~/.athlon-agent/skills", prompt, StringComparison.Ordinal);
+            Assert.Contains("Windows: cmd.exe only, not PowerShell.", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain("prefer PowerShell", prompt, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(workspaceRoot))
+            {
+                Directory.Delete(workspaceRoot, recursive: true);
+            }
+        }
     }
 
     [Fact]
     public void Build_SummarizesNativeTools_ListsMcpTools()
     {
-        var builder = PromptTestHelpers.CreateBuilder(
-            new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"));
+        var workspaceRoot = Path.Combine(Path.GetTempPath(), $"athlon-prompt-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(workspaceRoot);
 
-        var tools = new[]
+        try
         {
-            new ToolDefinition("file_read", "Read a file", new Dictionary<string, string>()),
-            new ToolDefinition("mcp_enabled-server__echo", "Echo via MCP", new Dictionary<string, string>(), Source: "mcp")
-        };
+            var settings = new AppSettings
+            {
+                Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = workspaceRoot } }
+            };
+            var builder = PromptTestHelpers.CreateBuilder(
+                new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
+                settings);
 
-        var prompt = builder.Build(AgentSession.Create("mcp-prompt-test"), tools);
+            var tools = new[]
+            {
+                new ToolDefinition("file_read", "Read a file", new Dictionary<string, string>()),
+                new ToolDefinition("mcp_enabled-server__echo", "Echo via MCP", new Dictionary<string, string>(), Source: "mcp")
+            };
 
-        Assert.Contains("Native tools are provided via function calling", prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("file_list, file_read", prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("- file_read: Read a file", prompt, StringComparison.Ordinal);
-        Assert.Contains("Available MCP tools:", prompt, StringComparison.Ordinal);
-        Assert.Contains("- mcp_enabled-server__echo: Echo via MCP", prompt, StringComparison.Ordinal);
+            var session = AgentSession.Create("mcp-prompt-test").WithWorkspace(workspaceRoot);
+            var prompt = builder.Build(session, tools);
+
+            Assert.Contains("Native tools are provided via function calling", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain("file_list, file_read", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain("- file_read: Read a file", prompt, StringComparison.Ordinal);
+            Assert.Contains("Available MCP tools:", prompt, StringComparison.Ordinal);
+            Assert.Contains("- mcp_enabled-server__echo: Echo via MCP", prompt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(workspaceRoot))
+            {
+                Directory.Delete(workspaceRoot, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -97,11 +138,15 @@ public sealed class AgentEnvironmentPromptBuilderTests
 
         try
         {
-            var builder = PromptTestHelpers.CreateBuilder(
+            var orchestrator = PromptTestHelpers.CreateOrchestrator(
                 new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
-                settings);
+                settings,
+                preReasoningContributors: [new WorkspaceFilesPromptContributor()]);
+            var session = AgentSession.Create("agents-md").WithWorkspace(root);
+            var tools = Array.Empty<ToolDefinition>();
+            var frozen = orchestrator.PrepareForTurn(session, tools);
+            var prompt = orchestrator.BuildForReasoningIteration(frozen, session, tools);
 
-            var prompt = builder.Build(AgentSession.Create("agents-md"), Array.Empty<ToolDefinition>());
             Assert.Contains("## AGENTS.md", prompt, StringComparison.Ordinal);
             Assert.Contains("# Project rules", prompt, StringComparison.Ordinal);
         }

@@ -10,7 +10,7 @@ public sealed class McpArgumentsJsonTests
         var arguments = McpArgumentsJson.ParseDictionary("{\"x\":1,\"name\":\"hi\"}");
 
         Assert.NotNull(arguments);
-        Assert.Equal(1L, arguments!["x"]);
+        Assert.Equal(1, Convert.ToInt64(arguments!["x"]));
         Assert.Equal("hi", arguments["name"]);
     }
 

@@ -75,9 +75,13 @@ public static class FlowDocumentCodeBlockEnhancer
                 return state;
             }
 
-            current = current is FrameworkElement or Visual
-                ? LogicalTreeHelper.GetParent(current) ?? VisualTreeHelper.GetParent(current)
-                : null;
+            var parent = LogicalTreeHelper.GetParent(current);
+            if (parent is null && current is Visual visual)
+            {
+                parent = VisualTreeHelper.GetParent(visual);
+            }
+
+            current = parent;
         }
 
         return null;
@@ -327,10 +331,13 @@ public static class FlowDocumentCodeBlockEnhancer
             }
             default:
             {
-                var childCount = VisualTreeHelper.GetChildrenCount(element);
-                if (childCount == 1)
+                if (element is Visual visualElement)
                 {
-                    return ExtractUiText(VisualTreeHelper.GetChild(element, 0));
+                    var childCount = VisualTreeHelper.GetChildrenCount(visualElement);
+                    if (childCount == 1)
+                    {
+                        return ExtractUiText(VisualTreeHelper.GetChild(visualElement, 0));
+                    }
                 }
 
                 return string.Empty;
@@ -381,7 +388,7 @@ public static class FlowDocumentCodeBlockEnhancer
         var codeBorder = ThemeBrushResolver.Get("Brush.CodeBorder");
         var headerBackground = ThemeBrushResolver.Get("Brush.Panel");
         var headerText = ThemeBrushResolver.Get("Brush.SubtleText");
-        var copyButtonStyle = Application.Current.TryFindResource("CodeBlockActionButtonStyle") as Style;
+        var copyButtonStyle = Application.Current?.TryFindResource("CodeBlockActionButtonStyle") as Style;
 
         outerBorder.Background = codeBackground;
         outerBorder.BorderBrush = codeBorder;
@@ -433,7 +440,7 @@ public static class FlowDocumentCodeBlockEnhancer
         var codeBorder = ThemeBrushResolver.Get("Brush.CodeBorder");
         var headerBackground = ThemeBrushResolver.Get("Brush.Panel");
         var headerText = ThemeBrushResolver.Get("Brush.SubtleText");
-        var copyButtonStyle = Application.Current.TryFindResource("CodeBlockActionButtonStyle") as Style;
+        var copyButtonStyle = Application.Current?.TryFindResource("CodeBlockActionButtonStyle") as Style;
 
         var cardState = new CodeBlockCardState { Text = codeText };
 
@@ -447,7 +454,7 @@ public static class FlowDocumentCodeBlockEnhancer
             if (!string.IsNullOrEmpty(codeText))
             {
                 Clipboard.SetText(codeText);
-                if (Application.Current.MainWindow?.DataContext is ViewModels.MainWindowViewModel vm)
+                if (Application.Current?.MainWindow?.DataContext is ViewModels.MainWindowViewModel vm)
                 {
                     vm.ShowCopyNotice("已复制");
                 }

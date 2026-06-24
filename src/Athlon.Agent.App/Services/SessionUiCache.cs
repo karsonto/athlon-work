@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Windows.Threading;
+using Athlon.Agent.App.Controls;
 
 namespace Athlon.Agent.App.Services;
 
@@ -13,6 +14,19 @@ public sealed class SessionUiCache
     private readonly Dispatcher _dispatcher;
 
     public SessionUiCache(Dispatcher dispatcher) => _dispatcher = dispatcher;
+
+    public void AttachChatViewToAll(Controls.WebChatView? chatView)
+    {
+        if (chatView is null)
+        {
+            return;
+        }
+
+        foreach (var controller in _controllers.Values)
+        {
+            controller.ChatView = chatView;
+        }
+    }
 
     public SessionTurnUiController GetOrCreate(
         string sessionId,

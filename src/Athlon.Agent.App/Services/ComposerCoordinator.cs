@@ -11,17 +11,20 @@ public sealed class ComposerCoordinator
 {
     private readonly ComposerAtCompletionService _atCompletion;
     private readonly IAgentSkillCatalog _skillCatalog;
+    private readonly AppSettings _settings;
     private readonly IImageAttachmentStore _imageAttachmentStore;
     private readonly IAppPathProvider _paths;
 
     public ComposerCoordinator(
         ComposerAtCompletionService atCompletion,
         IAgentSkillCatalog skillCatalog,
+        AppSettings settings,
         IImageAttachmentStore imageAttachmentStore,
         IAppPathProvider paths)
     {
         _atCompletion = atCompletion;
         _skillCatalog = skillCatalog;
+        _settings = settings;
         _imageAttachmentStore = imageAttachmentStore;
         _paths = paths;
     }
@@ -30,10 +33,10 @@ public sealed class ComposerCoordinator
         string? activeWorkspace,
         IReadOnlyCollection<string> ignorePatterns,
         bool reloadSkills = false) =>
-        _atCompletion.RefreshSources(_skillCatalog, activeWorkspace, ignorePatterns, reloadSkills);
+        _atCompletion.RefreshSources(_skillCatalog, _settings, activeWorkspace, ignorePatterns, reloadSkills);
 
     public void EnsureFileIndexBuilt(string? activeWorkspace, IReadOnlyCollection<string> ignorePatterns) =>
-        _atCompletion.EnsureFileIndexBuilt(_skillCatalog, activeWorkspace, ignorePatterns);
+        _atCompletion.EnsureFileIndexBuilt(_skillCatalog, _settings, activeWorkspace, ignorePatterns);
 
     public void UpdateAtCompletion(
         string composerText,

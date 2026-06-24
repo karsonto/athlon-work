@@ -8,7 +8,8 @@ public sealed class RequestHistoryHygieneTests
     [Fact]
     public void CompactTextForSummary_skips_heavy_compaction_for_evicted_placeholder()
     {
-        var evicted = "[Tool result evicted to disk]\n" + new string('z', 100_000);
+        var evicted = "[Tool result evicted to disk]\n"
+            + string.Join('\n', Enumerable.Repeat("log line content", 5000));
         var result = RequestHistoryHygiene.CompactTextForSummary(evicted, new RequestHistoryHygieneSettings());
 
         Assert.DoesNotContain("[cache hygiene: omitted", result.Text, StringComparison.Ordinal);
@@ -31,7 +32,7 @@ public sealed class RequestHistoryHygieneTests
 
         Assert.True(result.EstimatedSavingsTokens > 0);
         Assert.Contains("cache hygiene", text);
-        Assert.DoesNotContain("line 400", text);
+        Assert.DoesNotContain("line 250", text);
     }
 
     [Fact]

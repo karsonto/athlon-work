@@ -2,11 +2,11 @@
 
 # Athlon Agent
 
-**A native Windows desktop AI coding agent — local-first, OpenAI-compatible, built with .NET 8 WPF.**
+**A native Windows desktop AI coding agent — local-first, OpenAI-compatible, built with .NET 10 WPF.**
 
 Chat with any LLM, explore and edit your workspace, run tools in an agent loop, schedule recurring tasks, and extend with Skills & MCP — all from a polished desktop app.
 
-[![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/platform-Windows-0078D4?logo=windows&logoColor=white)](https://github.com/karsonto/athlon-work)
 [![WPF](https://img.shields.io/badge/UI-WPF-68217A)](https://github.com/karsonto/athlon-work)
 [![CI](https://img.shields.io/github/actions/workflow/status/karsonto/athlon-work/ci.yml?branch=main&label=CI)](https://github.com/karsonto/athlon-work/actions)
@@ -78,7 +78,7 @@ Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is
 ### Prerequisites
 
 - Windows 10/11
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 ### Run from source
 
@@ -333,5 +333,5 @@ If you find Athlon Agent useful, **star the repo** to support the project and he
 ---
 
 <p align="center">
-  <sub>Built with .NET 8 · WPF · CommunityToolkit.Mvvm · Serilog · MdXaml · Velopack</sub>
+  <sub>Built with .NET 10 · WPF · CommunityToolkit.Mvvm · Serilog · MdXaml · Velopack</sub>
 </p>

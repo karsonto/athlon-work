@@ -29,7 +29,7 @@ public sealed class AgentStreamAdapterTests
         var second = adapter.OnTextDelta(MessageId, "world");
 
         Assert.Single(first.OfType<AgentStreamEvent.TextMessageStart>());
-        Assert.Equal(2, second.OfType<AgentStreamEvent.TextMessageContent>().Count());
+        Assert.Single(second.OfType<AgentStreamEvent.TextMessageContent>());
         Assert.True(adapter.State.HasActiveTextMessage());
     }
 
@@ -74,7 +74,7 @@ public sealed class AgentStreamAdapterTests
 
         Assert.Single(first.OfType<AgentStreamEvent.ToolCallStart>());
         Assert.Empty(second.OfType<AgentStreamEvent.ToolCallStart>());
-        Assert.Equal(2, second.OfType<AgentStreamEvent.ToolCallArgs>().Count());
+        Assert.Single(second.OfType<AgentStreamEvent.ToolCallArgs>());
     }
 
     [Fact]

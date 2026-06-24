@@ -6,6 +6,16 @@ namespace Athlon.Agent.Tests;
 
 public sealed class CompactionTests
 {
+    private static ContextCompactionSettings CreateDynamicCompactionSettings(Action<ContextCompactionSettings>? configure = null)
+    {
+        var settings = new ContextCompactionSettings
+        {
+            DynamicCompaction = new DynamicCompactionSettings { Enabled = true }
+        };
+        configure?.Invoke(settings);
+        return settings;
+    }
+
     [Fact]
     public void ResolveEffectiveEstimate_uses_prompt_pressure_floor_when_higher_than_estimate()
     {
@@ -15,10 +25,10 @@ public sealed class CompactionTests
         var budget = new ContextBudgetSnapshot(
             200_000,
             8192,
-            120_000,
-            estimated,
             20_000,
-            (double)(estimated + 20_000) / 200_000);
+            estimated,
+            120_000,
+            (double)(120_000 + 20_000) / 200_000);
 
         var effective = ContextTokenEstimator.ResolveEffectiveEstimate(messages, settings, budget);
 
@@ -429,7 +439,7 @@ public sealed class CompactionTests
     [Fact]
     public void DynamicCompactionPlan_TruncatesWhenStaticThresholdReached()
     {
-        var settings = new ContextCompactionSettings();
+        var settings = CreateDynamicCompactionSettings();
         var conversation = Enumerable.Range(0, 30)
             .Select(index => ChatMessage.Create(MessageRole.User, $"message-{index}"))
             .ToList();
@@ -452,7 +462,7 @@ public sealed class CompactionTests
     [Fact]
     public void DynamicCompactionPlan_DoesNotCompactOnStaticMessageCountWhenUtilizationLow()
     {
-        var settings = new ContextCompactionSettings();
+        var settings = CreateDynamicCompactionSettings();
         var conversation = Enumerable.Range(0, 55)
             .Select(index => ChatMessage.Create(MessageRole.User, $"m-{index}"))
             .ToList();
@@ -475,7 +485,11 @@ public sealed class CompactionTests
     [Fact]
     public void DynamicCompactionPlan_CompactsWhenTotalWindowNearLimitBeforeStaticHistoryThreshold()
     {
-        var settings = new ContextCompactionSettings();
+        var settings = CreateDynamicCompactionSettings(s =>
+        {
+            s.TriggerTokens = 500_000;
+            s.TriggerMessages = 0;
+        });
         var conversation = new[] { ChatMessage.Create(MessageRole.User, new string('x', 400_000)) };
         var estimated = ContextTokenEstimator.Estimate(conversation);
         Assert.False(ContextPressureEvaluator.MeetsStaticCompactThreshold(conversation, settings));
@@ -496,7 +510,7 @@ public sealed class CompactionTests
     [Fact]
     public void ResolveKeepTokenBudget_NeverBelowStaticKeepTokens()
     {
-        var settings = new ContextCompactionSettings { KeepTokens = 80_000 };
+        var settings = CreateDynamicCompactionSettings(s => s.KeepTokens = 80_000);
         var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
         var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
 
@@ -513,7 +527,7 @@ public sealed class CompactionTests
     [Fact]
     public void ResolveKeepTokenBudget_AfterFullPassTargetsThirtyPercent()
     {
-        var settings = new ContextCompactionSettings();
+        var settings = CreateDynamicCompactionSettings();
         var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
         var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
 
@@ -534,7 +548,7 @@ public sealed class CompactionTests
     [Fact]
     public void ResolveKeepTokenBudget_TruncateOnlyUsesStaticKeepFloor()
     {
-        var settings = new ContextCompactionSettings();
+        var settings = CreateDynamicCompactionSettings();
         var conversation = Enumerable.Range(0, 25)
             .Select(index => ChatMessage.Create(MessageRole.User, $"message-{index}"))
             .ToList();
@@ -557,7 +571,7 @@ public sealed class CompactionTests
     [Fact]
     public void ResolveKeepTokenBudget_OverflowUsesReducedPostCompactionTarget()
     {
-        var settings = new ContextCompactionSettings();
+        var settings = CreateDynamicCompactionSettings();
         var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
         var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, 5_000, 0.05);
         var dynamic = settings.DynamicCompaction;
@@ -579,7 +593,7 @@ public sealed class CompactionTests
     [Fact]
     public void DynamicCompactionPlan_Elevated_AppliesTruncateOnlyWhenStaticTriggered()
     {
-        var settings = new ContextCompactionSettings();
+        var settings = CreateDynamicCompactionSettings();
         var conversation = Enumerable.Range(0, 30)
             .Select(index => ChatMessage.Create(MessageRole.User, $"message-{index}"))
             .ToList();

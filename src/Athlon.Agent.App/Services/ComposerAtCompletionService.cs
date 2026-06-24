@@ -1,6 +1,8 @@
 using System.IO;
 using Athlon.Agent.App.ViewModels;
+using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
 
 namespace Athlon.Agent.App.Services;
@@ -19,6 +21,7 @@ public sealed class ComposerAtCompletionService
 
     public void RefreshSources(
         IAgentSkillCatalog skillCatalog,
+        AppSettings settings,
         string? activeWorkspace,
         IReadOnlyCollection<string> ignorePatterns,
         bool reloadSkills = false)
@@ -28,7 +31,7 @@ public sealed class ComposerAtCompletionService
             skillCatalog.Reload();
         }
 
-        _skillSnapshot = BuildSkillIndex(skillCatalog);
+        _skillSnapshot = BuildSkillIndex(skillCatalog, settings);
 
         if (string.IsNullOrWhiteSpace(activeWorkspace) || !Directory.Exists(activeWorkspace))
         {
@@ -46,6 +49,7 @@ public sealed class ComposerAtCompletionService
 
     public void EnsureFileIndexBuilt(
         IAgentSkillCatalog skillCatalog,
+        AppSettings settings,
         string? activeWorkspace,
         IReadOnlyCollection<string> ignorePatterns)
     {
@@ -54,7 +58,7 @@ public sealed class ComposerAtCompletionService
             return;
         }
 
-        RefreshSources(skillCatalog, activeWorkspace, ignorePatterns);
+        RefreshSources(skillCatalog, settings, activeWorkspace, ignorePatterns);
     }
 
     public IReadOnlyList<AtCompletionItemViewModel> FilterMatches(string query) =>
@@ -84,10 +88,10 @@ public sealed class ComposerAtCompletionService
         return replacement.EndsWith(' ') ? replacement : replacement + " ";
     }
 
-    private static IReadOnlyList<AtCompletionItemViewModel> BuildSkillIndex(IAgentSkillCatalog skillCatalog)
+    private static IReadOnlyList<AtCompletionItemViewModel> BuildSkillIndex(IAgentSkillCatalog skillCatalog, AppSettings settings)
     {
         var items = new List<AtCompletionItemViewModel>();
-        foreach (var skill in skillCatalog.Skills)
+        foreach (var skill in SkillFilter.GetEnabledSkills(skillCatalog, settings))
         {
             items.Add(new AtCompletionItemViewModel(
                 Type: "技能",

@@ -24,7 +24,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '10.0.x'
 
       - name: Get version
         id: version
@@ -78,7 +78,7 @@ jobs:
             ### Installer
             - File: `AthlonAgent-Setup.exe`
             - One-click install to `%LocalAppData%\AthlonAgent`
-            - Includes .NET 8 runtime
+            - Includes .NET 10 runtime
 
             ### Portable
             - File: `AthlonAgent-Portable.zip`

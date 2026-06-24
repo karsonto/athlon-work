@@ -8,15 +8,28 @@ public sealed class FileStorageServiceTests
     [Fact]
     public async Task SaveSessionAsync_WritesMarkdownAndMetadata()
     {
-        var paths = new AppPathProvider();
-        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-session-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        var logger = new NoOpLogger();
         var storage = new FileStorageService(logger, paths, new JsonFileStore());
         var session = AgentSession.Create("test-session").WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
 
-        await storage.SaveSessionAsync(session);
-        var sessions = await storage.ListSessionsAsync();
+        try
+        {
+            await storage.SaveSessionAsync(session);
 
-        Assert.Contains(sessions, item => item.Id == session.Id);
+            var sessionJsonPath = Path.Combine(root, "sessions", session.Id, "session.json");
+            Assert.True(File.Exists(sessionJsonPath));
+            var sessions = await storage.ListSessionsAsync();
+            Assert.Contains(sessions, item => item.Id == session.Id);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -24,7 +37,7 @@ public sealed class FileStorageServiceTests
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-session-{Guid.NewGuid():N}");
         var paths = new TestAppPathProvider(root);
-        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
+        var logger = new NoOpLogger();
         var storage = new FileStorageService(logger, paths, new JsonFileStore());
         var session = AgentSession.Create("chinese-session")
             .WithMessage(ChatMessage.Create(MessageRole.User, "我是用户"));
@@ -46,6 +59,16 @@ public sealed class FileStorageServiceTests
                 Directory.Delete(root, recursive: true);
             }
         }
+    }
+
+    private sealed class NoOpLogger : IAppLogger
+    {
+        public void Debug(string messageTemplate, params object[] values) { }
+        public void Information(string messageTemplate, params object[] values) { }
+        public void Warning(string messageTemplate, params object[] values) { }
+        public void Error(Exception exception, string messageTemplate, params object[] values) { }
+        public IAppLogger ForContext(string sourceContext) => this;
+        public void Dispose() { }
     }
 
     private sealed class TestAppPathProvider(string root) : IAppPathProvider

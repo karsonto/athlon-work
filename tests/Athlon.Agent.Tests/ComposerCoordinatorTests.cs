@@ -18,6 +18,7 @@ public sealed class ComposerCoordinatorTests
         var coordinator = new ComposerCoordinator(
             new ComposerAtCompletionService(),
             new AgentSkillCatalog(new FileSystemSkillRepository(skillRoot)),
+            new AppSettings(),
             new StubImageAttachmentStore(),
             new AppPathProvider());
 
@@ -50,6 +51,7 @@ public sealed class ComposerCoordinatorTests
         var coordinator = new ComposerCoordinator(
             new ComposerAtCompletionService(),
             new AgentSkillCatalog(new FileSystemSkillRepository(skillRoot)),
+            new AppSettings(),
             new StubImageAttachmentStore(),
             new AppPathProvider());
 
@@ -67,9 +69,74 @@ public sealed class ComposerCoordinatorTests
         Assert.Empty(items);
     }
 
+    [Fact]
+    public void UpdateAtCompletion_OnlyShowsEnabledSkills()
+    {
+        var settings = new AppSettings
+        {
+            Skills =
+            [
+                new SkillSettings { Name = "enabled-skill", Enabled = true },
+                new SkillSettings { Name = "disabled-skill", Enabled = false }
+            ]
+        };
+        var coordinator = new ComposerCoordinator(
+            new ComposerAtCompletionService(),
+            new StubSkillCatalog(
+            [
+                CreateSkill("enabled-skill"),
+                CreateSkill("disabled-skill")
+            ]),
+            settings,
+            new StubImageAttachmentStore(),
+            new AppPathProvider());
+
+        var items = new ObservableCollection<AtCompletionItemViewModel>();
+        var isOpen = false;
+        var selected = -1;
+
+        coordinator.UpdateAtCompletion(
+            "@",
+            caretIndex: 1,
+            activeWorkspace: null,
+            ignorePatterns: [],
+            items,
+            open => isOpen = open,
+            index => selected = index,
+            selected);
+
+        Assert.True(isOpen);
+        Assert.Equal(0, selected);
+        Assert.Contains(items, item => item.PrimaryText == "enabled-skill");
+        Assert.DoesNotContain(items, item => item.PrimaryText == "disabled-skill");
+    }
+
+    private static AgentSkill CreateSkill(string name) =>
+        new(
+            new Dictionary<string, object>
+            {
+                ["name"] = name,
+                ["description"] = $"{name} description"
+            },
+            $"# {name}");
+
     private sealed class StubImageAttachmentStore : IImageAttachmentStore
     {
         public ImageAttachment SaveFromFile(string sessionId, string sourcePath) =>
             new(Path.GetFileName(sourcePath), "image/png", LocalPath: sourcePath);
+    }
+
+    private sealed class StubSkillCatalog(IReadOnlyList<AgentSkill> skills) : IAgentSkillCatalog
+    {
+        public IReadOnlyList<AgentSkill> Skills { get; } = skills;
+
+        public AgentSkill? GetSkill(string name) =>
+            Skills.FirstOrDefault(skill => string.Equals(skill.Name, name, StringComparison.Ordinal));
+
+        public AgentSkill? GetSkillById(string skillId) => GetSkill(skillId);
+
+        public void Reload()
+        {
+        }
     }
 }

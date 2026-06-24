@@ -146,10 +146,13 @@ public static class FlowDocumentThemeNormalizer
                 break;
         }
 
-        var childCount = VisualTreeHelper.GetChildrenCount(element);
-        for (var i = 0; i < childCount; i++)
+        if (element is Visual visualElement)
         {
-            NormalizeElementColors(VisualTreeHelper.GetChild(element, i), codeBackground, codeForeground, contextMenu);
+            var childCount = VisualTreeHelper.GetChildrenCount(visualElement);
+            for (var i = 0; i < childCount; i++)
+            {
+                NormalizeElementColors(VisualTreeHelper.GetChild(visualElement, i), codeBackground, codeForeground, contextMenu);
+            }
         }
     }
 
@@ -220,7 +223,13 @@ public static class FlowDocumentThemeNormalizer
                 return true;
             }
 
-            current = LogicalTreeHelper.GetParent(current) ?? VisualTreeHelper.GetParent(current);
+            var parent = LogicalTreeHelper.GetParent(current);
+            if (parent is null && current is Visual visual)
+            {
+                parent = VisualTreeHelper.GetParent(visual);
+            }
+
+            current = parent;
         }
 
         return false;

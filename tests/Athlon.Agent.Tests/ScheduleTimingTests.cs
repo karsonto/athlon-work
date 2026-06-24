@@ -7,7 +7,7 @@ public sealed class ScheduleTimingTests
     [Fact]
     public void ComputeNextDaily_WhenTimeNotYetReachedToday_ReturnsToday()
     {
-        var utcNow = new DateTime(2025, 6, 11, 1, 0, 0, DateTimeKind.Utc);
+        var utcNow = new DateTime(2025, 6, 11, 0, 30, 0, DateTimeKind.Utc);
         var task = new ScheduledTask { TimeOfDay = "09:00" };
 
         var next = ScheduleTiming.ComputeNextDaily(task, utcNow);

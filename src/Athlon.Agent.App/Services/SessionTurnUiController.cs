@@ -1,6 +1,9 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
+using System.Threading;
 using System.Windows.Threading;
+using Athlon.Agent.App.Controls;
 using Athlon.Agent.App.Services.Streaming;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -28,6 +31,8 @@ public sealed class LiveAgentSession
 public sealed class SessionTurnUiController
 {
     private static readonly Action NoOpScroll = () => { };
+    private const int MaxMessagesInMemory = 200;
+    private const int TrimThreshold = 250;
 
     private readonly Dispatcher _dispatcher;
     private readonly SessionStreamingUiContext _streaming = new();
@@ -35,6 +40,8 @@ public sealed class SessionTurnUiController
     // Cache ViewModels by message ID so switching back to a previously-viewed
     // session reuses MarkdownMessageView / FlowDocument instead of rebuilding everything.
     private readonly Dictionary<string, ChatMessageViewModel> _viewModelCache = new(StringComparer.Ordinal);
+    private int _bulkChatViewSyncDepth;
+    private int _syncChatViewGeneration;
 
     private Action _requestScroll = NoOpScroll;
     private Action _requestScrollImmediate = NoOpScroll;
@@ -48,6 +55,7 @@ public sealed class SessionTurnUiController
         RequestScroll = requestScroll ?? NoOpScroll;
         RequestScrollImmediate = requestScrollImmediate ?? requestScroll ?? NoOpScroll;
         Messages = new ObservableCollection<ChatMessageViewModel>();
+        Messages.CollectionChanged += OnMessagesCollectionChanged;
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages { get; }
@@ -71,6 +79,9 @@ public sealed class SessionTurnUiController
             _streaming.RequestScrollImmediate = _requestScrollImmediate;
         }
     }
+
+    /// <summary>WebChatView 实例（由 MainWindow 在初始化后注入），用于增量渲染消息。</summary>
+    public WebChatView? ChatView { get; set; }
 
     public bool IsDisplayed { get; private set; }
 
@@ -149,7 +160,30 @@ public sealed class SessionTurnUiController
                     return RunOnUiAsync(() =>
                     {
                         FlushBufferedStreamingToUi();
+                        DispatchToChatView(streamEvent);
                         _streaming.Process(streamEvent, Messages);
+                        if (IsDisplayed && ChatView is not null)
+                        {
+                            if (streamEvent is AgentStreamEvent.TextMessageEnd(var endMessageId))
+                            {
+                                var assistant = Messages.LastOrDefault(message =>
+                                    string.Equals(message.MessageId, endMessageId, StringComparison.Ordinal));
+                                if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
+                                {
+                                    _ = ChatView.ApplyAssistantMarkdownAsync(assistant);
+                                }
+                            }
+                            else if (streamEvent is AgentStreamEvent.ToolCallResult(var toolCallId, _, _))
+                            {
+                                var toolMessage = Messages.LastOrDefault(message =>
+                                    message.IsTool
+                                    && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
+                                if (toolMessage is not null)
+                                {
+                                    _ = ChatView.ApplyToolResultMarkdownAsync(toolMessage);
+                                }
+                            }
+                        }
                     });
             }
         }
@@ -159,7 +193,9 @@ public sealed class SessionTurnUiController
     {
         RunOnUiSync(() =>
         {
-            Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments)));
+            var vm = new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments));
+            Messages.Add(vm);
+            TrimMessagesIfNeeded();
             RequestScrollImmediate();
         });
     }
@@ -179,8 +215,17 @@ public sealed class SessionTurnUiController
         RunOnUiSync(() =>
         {
             ResetForTurn();
-            Messages.Clear();
-            _viewModelCache.Clear();
+            _bulkChatViewSyncDepth++;
+            try
+            {
+                Messages.Clear();
+                _viewModelCache.Clear();
+            }
+            finally
+            {
+                _bulkChatViewSyncDepth--;
+                SyncChatView(immediate: true);
+            }
         });
     }
 
@@ -196,7 +241,7 @@ public sealed class SessionTurnUiController
             FlushBufferedStreamingToUi();
             FlushStreamingTokens();
 
-            var (pendingTokens, pendingReasoning) = _tokenBuffer.PeekPending();
+            var (pendingTokens, pendingReasoning, _, _) = _tokenBuffer.PeekPending();
 
             var assistantContent = _streaming.ActiveAssistantBubble?.Content;
             if (pendingTokens.Length > 0)
@@ -265,7 +310,17 @@ public sealed class SessionTurnUiController
 
             _streaming.Reset();
             ReconcilePendingToolsFromSession(session);
-            ApplyPersistedTurnMessages(persistedTurnMessages, timedOut, turnTimeoutMinutes, errorMessage);
+            _bulkChatViewSyncDepth++;
+            try
+            {
+                ApplyPersistedTurnMessages(persistedTurnMessages, timedOut, turnTimeoutMinutes, errorMessage);
+            }
+            finally
+            {
+                _bulkChatViewSyncDepth--;
+                FinalizeStreamingDisplay();
+                RequestScrollImmediate();
+            }
         });
     }
 
@@ -283,6 +338,7 @@ public sealed class SessionTurnUiController
 
     private void RebuildDisplayFromMessages(IReadOnlyList<ChatMessage> displayMessages)
     {
+        _bulkChatViewSyncDepth++;
         Messages.Clear();
         _streaming.Reset();
 
@@ -322,8 +378,151 @@ public sealed class SessionTurnUiController
             _viewModelCache[viewModel.MessageId] = viewModel;
         }
 
-        // Defer scroll to after layout completes
-        _dispatcher.BeginInvoke(DispatcherPriority.Loaded, () => RequestScrollImmediate());
+        TrimMessagesIfNeeded();
+        _bulkChatViewSyncDepth--;
+        SyncChatView(immediate: true);
+        RequestScrollImmediate();
+    }
+
+    private void OnMessagesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (ChatView is null || _bulkChatViewSyncDepth > 0)
+        {
+            return;
+        }
+
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Reset:
+                SyncChatView();
+                break;
+            case NotifyCollectionChangedAction.Add:
+                if (e.NewItems?.Count == 1 && e.NewItems[0] is ChatMessageViewModel single)
+                {
+                    if (single.IsUser)
+                    {
+                        DispatchUserMessageToChatView(single);
+                    }
+                    else if (!IsStreamingChatItem(single))
+                    {
+                        SyncChatView();
+                    }
+                }
+                else
+                {
+                    SyncChatView();
+                }
+
+                break;
+            case NotifyCollectionChangedAction.Remove:
+            case NotifyCollectionChangedAction.Replace:
+            case NotifyCollectionChangedAction.Move:
+                SyncChatView();
+                break;
+        }
+    }
+
+    private static bool IsStreamingChatItem(ChatMessageViewModel message) =>
+        message.IsStreaming || message.StreamToolIndex is not null;
+
+    private void FinalizeStreamingDisplay()
+    {
+        if (!IsDisplayed || ChatView is null)
+        {
+            return;
+        }
+
+        var lastUserIndex = -1;
+        for (var i = Messages.Count - 1; i >= 0; i--)
+        {
+            if (Messages[i].IsUser)
+            {
+                lastUserIndex = i;
+                break;
+            }
+        }
+
+        for (var i = lastUserIndex + 1; i < Messages.Count; i++)
+        {
+            var message = Messages[i];
+            if (message.IsHiddenPlaceholder)
+            {
+                continue;
+            }
+
+            if (message.IsTool || message.IsCompaction)
+            {
+                var detail = !string.IsNullOrWhiteSpace(message.ToolDetailExpandedDisplay)
+                    ? message.ToolDetailExpandedDisplay
+                    : !string.IsNullOrWhiteSpace(message.ToolDetail)
+                        ? message.ToolDetail
+                        : message.ToolSummary;
+                if (!string.IsNullOrWhiteSpace(detail))
+                {
+                    _ = ChatView.ApplyToolResultMarkdownAsync(message);
+                }
+
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(message.Content))
+            {
+                _ = ChatView.ApplyAssistantMarkdownAsync(message);
+            }
+        }
+    }
+
+    private void SyncChatView(bool immediate = false)
+    {
+        if (ChatView is null)
+        {
+            return;
+        }
+
+        if (immediate)
+        {
+            Interlocked.Increment(ref _syncChatViewGeneration);
+            _ = ChatView.LoadMessagesAsync(Messages);
+            return;
+        }
+
+        var generation = Interlocked.Increment(ref _syncChatViewGeneration);
+        _dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            if (generation != _syncChatViewGeneration || ChatView is null)
+            {
+                return;
+            }
+
+            _ = ChatView.LoadMessagesAsync(Messages);
+        });
+    }
+
+    private void TrimMessagesIfNeeded()
+    {
+        if (Messages.Count <= TrimThreshold)
+            return;
+
+        // 保留最新的 MaxMessagesInMemory 条
+        var excess = Messages.Count - MaxMessagesInMemory;
+        for (var i = 0; i < excess; i++)
+        {
+            var removed = Messages[0];
+            Messages.RemoveAt(0);
+            // 从 ViewModelCache 也移除，但保留 Compact 消息
+            if (!removed.IsCompaction)
+            {
+                _viewModelCache.Remove(removed.MessageId);
+            }
+        }
+
+        // 在顶部插入一条占位消息，点击可加载更早消息
+        if (excess > 0)
+        {
+            Messages.Insert(0, new ChatMessageViewModel(
+                ChatMessage.Create(MessageRole.System, $"<!-- 查看更多历史消息 ({excess} 条已折叠) -->"),
+                isFoldedHistoryPlaceholder: true));
+        }
     }
 
     private bool ContainsMessageId(string messageId) =>
@@ -336,11 +535,62 @@ public sealed class SessionTurnUiController
     private static bool ShouldHideMessageFromChat(ChatMessage message) =>
         ChatTimelineHydrator.ShouldHideMessageFromChat(message);
 
-    private void FlushBufferedStreamingToUi() =>
-        _tokenBuffer.FlushAll(Messages, IsDisplayed, RequestScroll);
+    private void FlushBufferedStreamingToUi()
+    {
+        foreach (var streamEvent in _tokenBuffer.DrainPendingStreamEvents())
+        {
+            DispatchToChatView(streamEvent);
+            _streaming.Process(streamEvent, Messages);
+        }
 
-    private void FlushStreamingTokens() =>
+        FlushStreamingTokens();
+    }
+
+    private void FlushStreamingTokens()
+    {
+        var (pendingTokens, pendingReasoning, textMessageId, reasoningMessageId) = _tokenBuffer.PeekPending();
         _tokenBuffer.FlushTokens(Messages, IsDisplayed, RequestScroll);
+        if (!IsDisplayed || ChatView is null)
+        {
+            return;
+        }
+
+        if (pendingReasoning.Length > 0 && reasoningMessageId is not null)
+        {
+            _ = ChatView.DispatchEventAsync(new AgentStreamEvent.ReasoningMessageContent(reasoningMessageId, pendingReasoning));
+        }
+
+        if (pendingTokens.Length > 0 && textMessageId is not null)
+        {
+            _ = ChatView.DispatchEventAsync(new AgentStreamEvent.TextMessageContent(textMessageId, pendingTokens));
+        }
+    }
+
+    private void DispatchToChatView(AgentStreamEvent streamEvent)
+    {
+        if (!IsDisplayed || ChatView is null || !ShouldDispatchToChatView(streamEvent))
+        {
+            return;
+        }
+
+        _ = ChatView.DispatchEventAsync(streamEvent);
+    }
+
+    private void DispatchUserMessageToChatView(ChatMessageViewModel message)
+    {
+        if (!IsDisplayed || ChatView is null)
+        {
+            return;
+        }
+
+        _ = ChatView.DispatchUserMessageAsync(message);
+    }
+
+    private static bool ShouldDispatchToChatView(AgentStreamEvent streamEvent) =>
+        streamEvent is not AgentStreamEvent.UsageRecorded
+            and not AgentStreamEvent.ContextHygieneApplied
+            and not AgentStreamEvent.ChatMessageAppended
+            and not AgentStreamEvent.ClearEmptyAssistantPlaceholder;
 
     private ChatMessageViewModel? FindToolMessage(string? toolCallId)
     {

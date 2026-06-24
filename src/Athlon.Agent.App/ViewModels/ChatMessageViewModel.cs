@@ -20,8 +20,11 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     private StringBuilder? _streamingReasoningBuilder;
     private DispatcherTimer? _deferredMarkdownTimer;
 
-    public ChatMessageViewModel(ChatMessage message, bool expandTool = false)
+    private readonly bool _isFoldedHistoryPlaceholder;
+
+    public ChatMessageViewModel(ChatMessage message, bool expandTool = false, bool isFoldedHistoryPlaceholder = false)
     {
+        _isFoldedHistoryPlaceholder = isFoldedHistoryPlaceholder;
         MessageId = message.Id;
         Role = message.Role.ToString();
         Content = message.Content;
@@ -35,7 +38,9 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         UserAttachmentSummary = message.ImageAttachments is { Count: > 0 }
             ? $"已附图片 {message.ImageAttachments.Count} 张"
             : string.Empty;
-        IsHiddenPlaceholder = IsUser && (CompactionMessageContent.IsSummaryPlaceholder(message.Content)
+        IsHiddenPlaceholder = isFoldedHistoryPlaceholder
+            ? false
+            : IsUser && (CompactionMessageContent.IsSummaryPlaceholder(message.Content)
             || SummaryMessageBuilder.IsSummaryMessage(message))
             || IsAssistantToolCallsOnly(message);
         DisplayRole = IsUser
@@ -148,7 +153,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public bool IsTool { get; }
     public bool IsCompaction { get; }
     public string UserAttachmentSummary { get; }
-    public bool IsCollapsibleCard => IsTool || IsCompaction;
+    public bool IsCollapsibleCard => IsTool || IsCompaction || _isFoldedHistoryPlaceholder;
     public bool IsHiddenPlaceholder { get; }
     public bool AssistantTone => !IsUser;
     public string CompactionCardTitle { get; } = string.Empty;
@@ -197,6 +202,9 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public bool ShowToolArgumentsPanel => IsToolArgumentsStreaming || HasToolArguments;
 
     public string ChevronGlyph => IsExpanded ? "▼" : "▶";
+
+    public string ToolDetailExpandedDisplay =>
+        TruncateToolDetailForDisplay(_toolDetailFull, MaxToolDetailDisplayChars);
 
     partial void OnIsExpandedChanged(bool value)
     {
@@ -534,11 +542,6 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         {
             _toolDetailFull += delta;
             RefreshToolDetailDisplay();
-        }
-
-        if (!IsExpanded)
-        {
-            IsExpanded = true;
         }
     }
 

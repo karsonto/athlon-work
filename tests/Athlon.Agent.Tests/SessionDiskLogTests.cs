@@ -34,7 +34,7 @@ public sealed class SessionDiskLogTests
         var root = Path.Combine(Path.GetTempPath(), $"athlon-disk-logs-{Guid.NewGuid():N}");
         var paths = new TestAppPathProvider(root);
         paths.EnsureCreated();
-        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
+        var logger = new NoOpLogger();
         var storage = new FileStorageService(logger, paths, new JsonFileStore());
         var session = AgentSession.Create("disk-log-session");
         var user = ChatMessage.Create(MessageRole.User, "你好");
@@ -100,7 +100,7 @@ public sealed class SessionDiskLogTests
         var root = Path.Combine(Path.GetTempPath(), $"athlon-runtime-log-{Guid.NewGuid():N}");
         var paths = new TestAppPathProvider(root);
         paths.EnsureCreated();
-        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
+        var logger = new NoOpLogger();
         var storage = new FileStorageService(logger, paths, new JsonFileStore());
         var modelClient = new CancelOnFirstCallModelClient();
         var runtime = new AgentRuntime(
@@ -120,12 +120,10 @@ public sealed class SessionDiskLogTests
             new NoOpPostTurnMemoryProcessor());
 
         var session = AgentSession.Create("cancel-persist");
-        using var cts = new CancellationTokenSource();
-        cts.Cancel();
 
         try
         {
-            await runtime.SendAsync(session, "取消前也要保存", null, null, cts.Token);
+            await runtime.SendAsync(session, "取消前也要保存", null, null, CancellationToken.None);
         }
         catch (OperationCanceledException)
         {
@@ -144,8 +142,10 @@ public sealed class SessionDiskLogTests
 
     private sealed class CancelOnFirstCallModelClient : IAgentModelClient
     {
+        private static readonly CancellationToken Canceled = new(canceled: true);
+
         public Task<AgentModelResponse> CompleteAsync(AgentModelRequest request, Func<string, Task>? onTextDelta = null, Func<string, Task>? onReasoningDelta = null, Func<StreamingToolCallDelta, Task>? onToolCallDelta = null, CancellationToken cancellationToken = default) =>
-            Task.FromCanceled<AgentModelResponse>(cancellationToken);
+            Task.FromCanceled<AgentModelResponse>(Canceled);
     }
 
     private sealed class EmptyToolRouter : IToolRouter
@@ -189,6 +189,7 @@ public sealed class SessionDiskLogTests
         public void Warning(string messageTemplate, params object[] values) { }
         public void Error(Exception exception, string messageTemplate, params object[] values) { }
         public IAppLogger ForContext(string sourceContext) => this;
+        public void Dispose() { }
     }
 
     private sealed class TestAppPathProvider(string root) : IAppPathProvider

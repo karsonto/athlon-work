@@ -954,6 +954,7 @@
     </Style>
 
     <Style x:Key="ChatMessageListBoxItemStyle" TargetType="{x:Type ListBoxItem}">
+        <Setter Property="MinHeight" Value="48" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
@@ -974,10 +975,13 @@
         <Setter Property="Padding" Value="0" />
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
         <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
-        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Item" />
+        <!-- VirtualizingPanel 配置 -->
         <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
         <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
-        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Pixel" />
+        <Setter Property="VirtualizingPanel.ScrollUnit" Value="Item" />
+        <!-- 前后各缓存两屏，减少快速滚动时的空白 -->
+        <Setter Property="VirtualizingPanel.CacheLength" Value="2,2" />
+        <Setter Property="VirtualizingPanel.CacheLengthUnit" Value="Page" />
         <Setter Property="ItemContainerStyle" Value="{StaticResource ChatMessageListBoxItemStyle}" />
     </Style>
 

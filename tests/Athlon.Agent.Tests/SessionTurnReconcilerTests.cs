@@ -51,9 +51,10 @@ public sealed class SessionTurnReconcilerTests
 
         var result = SessionTurnReconciler.Reconcile(session, snapshot);
 
-        Assert.Equal(3, result.Session.Messages.Count);
-        Assert.Single(result.PersistedMessages, message => message.Role == MessageRole.Tool);
+        Assert.Equal(4, result.Session.Messages.Count);
+        Assert.Equal(2, result.PersistedMessages.Count);
         Assert.Contains("用户停止", result.Session.Messages[2].Content, StringComparison.Ordinal);
+        Assert.Contains("生成已停止", result.Session.Messages[3].Content, StringComparison.Ordinal);
     }
 
     [Fact]

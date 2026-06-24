@@ -67,11 +67,26 @@ internal sealed class StreamingTokenBuffer
         }
     }
 
-    public (string Tokens, string Reasoning) PeekPending()
+    public (string Tokens, string Reasoning, string? TextMessageId, string? ReasoningMessageId) PeekPending()
     {
         lock (_bufferLock)
         {
-            return (_streamingTokenBuffer.ToString(), _streamingReasoningBuffer.ToString());
+            return (_streamingTokenBuffer.ToString(), _streamingReasoningBuffer.ToString(), _pendingTextMessageId, _pendingReasoningMessageId);
+        }
+    }
+
+    public IReadOnlyList<AgentStreamEvent> DrainPendingStreamEvents()
+    {
+        lock (_bufferLock)
+        {
+            if (_pendingStreamEvents.Count == 0)
+            {
+                return Array.Empty<AgentStreamEvent>();
+            }
+
+            var events = _pendingStreamEvents.ToList();
+            _pendingStreamEvents.Clear();
+            return events;
         }
     }
 

@@ -25,7 +25,7 @@ public sealed class ExecuteCommandToolTests
             "execute_command",
             new Dictionary<string, string>
             {
-                ["command"] = "timeout /t 3 /nobreak >nul",
+                ["command"] = "ping -n 6 127.0.0.1 >nul",
                 ["timeout"] = "1"
             }));
 
@@ -139,20 +139,31 @@ public sealed class ExecuteCommandToolTests
     [Fact]
     public async Task InvokeAsync_Utf8Console_ReturnsChineseStdout()
     {
-        var tool = CreateTool();
-        var result = await tool.InvokeAsync(new ToolInvocation(
-            "execute_command",
-            new Dictionary<string, string> { ["command"] = "echo 你好Athlon" }));
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-utf8-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        await File.WriteAllTextAsync(Path.Combine(root, "msg.txt"), "你好Athlon", System.Text.Encoding.UTF8);
+        try
+        {
+            var tool = CreateTool(root);
+            var result = await tool.InvokeAsync(new ToolInvocation(
+                "execute_command",
+                new Dictionary<string, string> { ["command"] = "type msg.txt" }));
 
-        Assert.True(result.Succeeded, result.Error ?? result.Content);
-        Assert.Contains("你好Athlon", result.Content, StringComparison.Ordinal);
+            Assert.True(result.Succeeded, result.Error ?? result.Summary);
+            Assert.Contains("你好Athlon", result.Content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     private static ExecuteCommandTool CreateTool(string? workspaceRoot = null)
     {
-        var paths = new AppPathProvider();
-        paths.EnsureCreated();
-        var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
+        var root = Path.Combine(Path.GetTempPath(), $".athlon-agent-exec-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var paths = new TestPathProvider(root);
+        var logger = new NoOpLogger();
         var audit = new AuditLogService(logger, paths, new JsonFileStore());
         var context = new ActiveWorkspaceContext();
         if (!string.IsNullOrWhiteSpace(workspaceRoot))
@@ -162,5 +173,28 @@ public sealed class ExecuteCommandToolTests
 
         var guard = new WorkspaceGuard(context, new AppSettings(), paths);
         return new ExecuteCommandTool(new AppSettings(), guard, audit, new ExecuteCommandProcessRegistry());
+    }
+
+    private sealed class NoOpLogger : IAppLogger
+    {
+        public void Debug(string messageTemplate, params object[] values) { }
+        public void Information(string messageTemplate, params object[] values) { }
+        public void Warning(string messageTemplate, params object[] values) { }
+        public void Error(Exception exception, string messageTemplate, params object[] values) { }
+        public IAppLogger ForContext(string sourceContext) => this;
+    }
+
+    private sealed class TestPathProvider(string rootPath) : IAppPathProvider
+    {
+        public string RootPath { get; } = rootPath;
+        public string ConfigPath => Path.Combine(rootPath, "config");
+        public string SessionsPath => Path.Combine(rootPath, "sessions");
+        public string AuditPath => Path.Combine(rootPath, "audit");
+        public string LogsPath => Path.Combine(rootPath, "logs");
+        public string CredentialsPath => Path.Combine(rootPath, "credentials");
+        public string SkillsPath => Path.Combine(rootPath, "skills");
+        public void EnsureCreated() => Directory.CreateDirectory(rootPath);
+        public string ResolveSkillPath(string path) =>
+            string.IsNullOrWhiteSpace(path) ? path : Path.Combine(SkillsPath, path);
     }
 }

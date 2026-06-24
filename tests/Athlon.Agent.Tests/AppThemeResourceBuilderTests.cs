@@ -12,7 +12,7 @@ public sealed class AppThemeResourceBuilderTests
     {
         RunOnStaThread(() =>
         {
-            var app = new global::Athlon.Agent.App.App();
+            var app = EnsureApplication();
             var root = (ResourceDictionary)app.Resources;
 
             AppThemeResourceBuilder.ApplyPalette(root, DarkAppThemePalette.Create().Chrome);
@@ -21,7 +21,6 @@ public sealed class AppThemeResourceBuilderTests
             Assert.NotNull(palette);
             Assert.Equal(0, root.MergedDictionaries.IndexOf(palette!));
             Assert.IsType<SolidColorBrush>(palette![AppThemeResourceBuilder.TextBrushKey]);
-            app.Shutdown();
         });
     }
 
@@ -30,15 +29,26 @@ public sealed class AppThemeResourceBuilderTests
     {
         RunOnStaThread(() =>
         {
-            var app = new global::Athlon.Agent.App.App();
+            var app = EnsureApplication();
             AppThemeManager.Apply(AppThemeKind.Dark);
 
             var textBlock = new TextBlock { Text = "Athlon Agent" };
             textBlock.Measure(new Size(200, 40));
 
             Assert.IsType<SolidColorBrush>(textBlock.Foreground);
-            app.Shutdown();
         });
+    }
+
+    private static global::Athlon.Agent.App.App EnsureApplication()
+    {
+        if (System.Windows.Application.Current is global::Athlon.Agent.App.App existing)
+        {
+            return existing;
+        }
+
+        var app = new global::Athlon.Agent.App.App();
+        app.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        return app;
     }
 
     private static void RunOnStaThread(Action action)

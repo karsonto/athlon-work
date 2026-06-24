@@ -275,6 +275,13 @@ public sealed class FlowDocumentCodeBlockEnhancerTests
         var tcs = new TaskCompletionSource<Dispatcher>();
         var thread = new Thread(() =>
         {
+            if (System.Windows.Application.Current is null)
+            {
+                var app = new global::Athlon.Agent.App.App();
+                app.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+                Athlon.Agent.App.Themes.AppThemeManager.Apply(Athlon.Agent.App.Themes.AppThemeKind.Dark);
+            }
+
             var dispatcher = Dispatcher.CurrentDispatcher;
             tcs.SetResult(dispatcher);
             Dispatcher.Run();

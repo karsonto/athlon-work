@@ -86,7 +86,9 @@ public sealed class LicenseValidatorTests
             keys,
             DefaultAccount,
             expiresAt: DateTimeOffset.UtcNow.AddDays(30),
-            adAccount: "CONTOSO\\other");
+            adAccount: "CONTOSO\\other",
+            adAccountSam: "CONTOSO\\other",
+            adAccountUpn: "other@contoso.com");
 
         var validator = new LicenseValidator(DefaultAccount, keys.PublicKey);
         var result = validator.ValidateContent(content);

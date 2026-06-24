@@ -31,7 +31,7 @@ public sealed class FileReadToolTests
             new ToolInvocation("file_read", new Dictionary<string, string> { ["path"] = "demo.txt" }));
 
         Assert.False(result.Succeeded);
-        Assert.Contains("exceeds", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("exceeds", result.Summary + result.Error, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -89,7 +89,7 @@ public sealed class FileReadToolTests
             DefaultLineLimit = 2_000,
             MaxLinesPerCall = 2_000
         });
-        await File.WriteAllTextAsync(env.FilePath, "aaaa\nbbbb\ncccc\ndddd\n");
+        await File.WriteAllTextAsync(env.FilePath, string.Join('\n', Enumerable.Range(1, 10).Select(_ => new string('x', 30))));
 
         var result = await env.Tool.InvokeAsync(
             new ToolInvocation("file_read", new Dictionary<string, string> { ["path"] = "demo.txt" }));

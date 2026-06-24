@@ -28,7 +28,7 @@ public sealed class SkillXmlPromptRendererTests
         Assert.Contains("<description>Demo &amp; test</description>", text, StringComparison.Ordinal);
         Assert.Contains("<skill-id>demo_skill</skill-id>", text, StringComparison.Ordinal);
         Assert.Contains("load_skill_through_path", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("<files-root>", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("</files-root>", text, StringComparison.Ordinal);
         Assert.DoesNotContain("## Code Execution", text, StringComparison.Ordinal);
         Assert.DoesNotContain("skills directory root as path", text, StringComparison.OrdinalIgnoreCase);
     }

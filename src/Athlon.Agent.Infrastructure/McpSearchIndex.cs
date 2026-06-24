@@ -172,6 +172,6 @@ public static partial class McpSearchIndex
     [GeneratedRegex("[a-z0-9][a-z0-9_./-]{1,}", RegexOptions.IgnoreCase)]
     private static partial Regex LatinTokenPattern();
 
-    // Runtime Regex: GeneratedRegex does not support \p{Script=Han} (SYSLIB1042).
-    private static readonly Regex HanSegmentPattern = new(@"\p{Script=Han}+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    // Runtime Regex: avoid \p{Script=Han} — not supported on all .NET regex engines (e.g. net10).
+    private static readonly Regex HanSegmentPattern = new(@"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 }

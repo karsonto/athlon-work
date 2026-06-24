@@ -1,11 +1,9 @@
 using System.ComponentModel;
-using System.Linq;
 using System.Windows;
-using Athlon.Agent.App.Behaviors;
 using Athlon.Agent.App.Controls;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
-using Microsoft.Xaml.Behaviors;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Athlon.Agent.App;
 
@@ -17,7 +15,6 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     private readonly MainWindowLayoutBinder _layoutBinder;
     private readonly MainWindowShutdownCoordinator _shutdownCoordinator;
     private bool _shutdownInProgress;
-    private ChatAutoScrollBehavior? _chatScrollBehavior;
     private readonly PropertyChangedEventHandler _viewModelPropertyChangedHandler;
     private readonly EventHandler _contextSidebarLayoutChangedHandler;
     private readonly RoutedEventHandler _loadedHandler;
@@ -76,9 +73,21 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     {
         _layoutBinder.ApplyAll();
         ComposerInput.ClipboardImageReader = _clipboardImageReader;
-        _chatScrollBehavior = Interaction.GetBehaviors(ChatMessagesList)
-            .OfType<ChatAutoScrollBehavior>()
-            .FirstOrDefault();
+        _viewModel.AttachChatView(ChatWebView);
+        RegisterChatScrollService();
+    }
+
+    private void RegisterChatScrollService()
+    {
+        if (Application.Current is not App { Services: { } services })
+        {
+            return;
+        }
+
+        var chatScrollService = services.GetService<IChatScrollService>();
+        chatScrollService?.Register(
+            () => _ = ChatWebView.ScrollToBottomAsync(),
+            () => _ = ChatWebView.ScrollToBottomAsync());
     }
 
     private void OnMainWindowClosed(object? sender, EventArgs e)
@@ -124,11 +133,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     {
         if (e.PropertyName == nameof(MainWindowViewModel.HasChatMessages))
         {
-            ExecuteOnUiThread(() =>
-            {
-                _layoutBinder.ApplyContextSidebar();
-                _chatScrollBehavior?.OnHasChatMessagesChanged(_viewModel.HasChatMessages);
-            });
+            ExecuteOnUiThread(_layoutBinder.ApplyContextSidebar);
         }
 
         if (e.PropertyName == nameof(MainWindowViewModel.HasOpenEditorTabs))
@@ -138,7 +143,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 
         if (e.PropertyName == nameof(MainWindowViewModel.IsBusy))
         {
-            ExecuteOnUiThread(() => _chatScrollBehavior?.OnStreamingStateChanged(_viewModel.IsBusy));
+            // WebView2 内部处理流式状态变化，无需额外操作
         }
     }
 

@@ -20,6 +20,11 @@ public sealed class SessionUiCacheTests
             cache.GetOrCreate("session-2");
             cache.GetOrCreate("session-3");
             cache.GetOrCreate("session-4");
+            cache.GetOrCreate("session-5");
+            cache.GetOrCreate("session-6");
+            cache.GetOrCreate("session-7");
+            cache.GetOrCreate("session-8");
+            cache.GetOrCreate("session-9");
 
             Assert.False(cache.TryGet("session-1", out _));
             Assert.Empty(first.Messages);

@@ -1,3 +1,4 @@
+using System.Net;
 using Athlon.Agent.App.Themes;
 using Markdig;
 
@@ -10,11 +11,27 @@ public static class MarkdownHtmlRenderer
         .UseSoftlineBreakAsHardlineBreak()
         .Build();
 
+    /// <summary>将 Markdown 转为 HTML 片段；解析失败时回退为转义后的纯文本。</summary>
+    public static string ToHtmlFragment(string? markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return Markdown.ToHtml(markdown, Pipeline);
+        }
+        catch (ArgumentException)
+        {
+            return $"<pre>{WebUtility.HtmlEncode(markdown)}</pre>";
+        }
+    }
+
     public static string BuildDocument(string markdown, bool assistantTone = true)
     {
-        var body = string.IsNullOrWhiteSpace(markdown)
-            ? string.Empty
-            : Markdown.ToHtml(markdown, Pipeline);
+        var body = ToHtmlFragment(markdown);
 
         return $"""
             <!DOCTYPE html>
@@ -67,6 +84,9 @@ public static class MarkdownHtmlRenderer
         var palette = ThemeHtmlStyles.GetMarkdownPalette(assistantTone);
         var chrome = AppThemeManager.Current.Chrome;
         var scrollThumb = AppThemeColor.ToRgba(chrome.ScrollThumb, chrome.ScrollThumbOpacity);
+        var codeSyntaxOverrides = AppThemeManager.CurrentKind == AppThemeKind.Light
+            ? LightCodeSyntaxOverrides
+            : string.Empty;
 
         return BaseStyles
             .Replace("__TEXT_COLOR__", palette.TextColor, StringComparison.Ordinal)
@@ -83,7 +103,8 @@ public static class MarkdownHtmlRenderer
             .Replace("__CODE_BTN_BORDER__", palette.CodeButtonBorder, StringComparison.Ordinal)
             .Replace("__CODE_BTN_COLOR__", palette.CodeButtonColor, StringComparison.Ordinal)
             .Replace("__CODE_PRE_COLOR__", palette.CodePreColor, StringComparison.Ordinal)
-            .Replace("__SCROLL_THUMB__", scrollThumb, StringComparison.Ordinal);
+            .Replace("__SCROLL_THUMB__", scrollThumb, StringComparison.Ordinal)
+            .Replace("__CODE_SYNTAX_OVERRIDES__", codeSyntaxOverrides, StringComparison.Ordinal);
     }
 
     private const string BaseStyles = """
@@ -199,10 +220,56 @@ public static class MarkdownHtmlRenderer
           font-size: 13px;
           line-height: 1.5;
           color: __CODE_PRE_COLOR__;
+          background: __CODE_BLOCK_BG__;
         }
         .code-block pre code {
           font-family: Consolas, "Cascadia Code", monospace;
           white-space: pre;
+          background: transparent;
+        }
+        __CODE_SYNTAX_OVERRIDES__
+        """;
+
+    private const string LightCodeSyntaxOverrides = """
+        .code-block pre,
+        .code-block pre code,
+        .code-block pre code.hljs {
+          color: #24292F !important;
+          background: #F8FAFC !important;
+        }
+        .code-block .hljs-comment,
+        .code-block .hljs-quote {
+          color: #57606A !important;
+        }
+        .code-block .hljs-keyword,
+        .code-block .hljs-selector-tag,
+        .code-block .hljs-subst {
+          color: #CF222E !important;
+        }
+        .code-block .hljs-string,
+        .code-block .hljs-doctag,
+        .code-block .hljs-regexp {
+          color: #0A3069 !important;
+        }
+        .code-block .hljs-title,
+        .code-block .hljs-section,
+        .code-block .hljs-selector-id {
+          color: #8250DF !important;
+        }
+        .code-block .hljs-variable,
+        .code-block .hljs-template-variable,
+        .code-block .hljs-attribute,
+        .code-block .hljs-name {
+          color: #953800 !important;
+        }
+        .code-block .hljs-number,
+        .code-block .hljs-literal,
+        .code-block .hljs-type,
+        .code-block .hljs-built_in,
+        .code-block .hljs-builtin-name,
+        .code-block .hljs-symbol,
+        .code-block .hljs-bullet {
+          color: #0550AE !important;
         }
         """;
 
@@ -220,6 +287,13 @@ public static class MarkdownHtmlRenderer
               if (pre.closest('.code-block')) return;
               var code = pre.querySelector('code');
               if (!code) return;
+
+              if (typeof hljs !== 'undefined' && !code.dataset.hljsDone) {
+                try {
+                  hljs.highlightElement(code);
+                  code.dataset.hljsDone = '1';
+                } catch (e) {}
+              }
 
               var raw = code.textContent || '';
               var className = code.className || '';

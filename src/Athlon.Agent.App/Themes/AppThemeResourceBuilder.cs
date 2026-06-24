@@ -5,12 +5,14 @@ namespace Athlon.Agent.App.Themes;
 
 internal static class AppThemeResourceBuilder
 {
+    internal const string PaletteMarkerKey = "__AthlonChromePalette__";
     internal const string TextBrushKey = "Brush.Text";
 
     public static ResourceDictionary BuildChromeResources(UiChromeColors c)
     {
         var resources = new ResourceDictionary
         {
+            [PaletteMarkerKey] = true,
             ["Brush.AppBackground"] = Brush(c.AppBackground),
             ["Brush.Chrome"] = Brush(c.Chrome),
             ["Brush.Panel"] = Brush(c.Panel),
@@ -77,55 +79,53 @@ internal static class AppThemeResourceBuilder
             ["Brush.ToastBorder"] = Brush(c.ToastBorder),
             ["Brush.PreviewContentBackground"] = Brush(c.PreviewContentBackground),
             ["Brush.ScrollThumb"] = Brush(c.ScrollThumb, c.ScrollThumbOpacity),
-            ["Brush.ChatBackground"] = ChatGradient(c),
+            ["Brush.ChatBackground"] = Brush(c.ChatBackgroundTop),
         };
         return resources;
     }
 
     public static void ApplyPalette(ResourceDictionary root, UiChromeColors chrome)
     {
-        var palette = FindPaletteDictionary(root) ?? InsertPaletteDictionary(root);
-        CopyPaletteEntries(palette, BuildChromeResources(chrome));
+        var newPalette = BuildChromeResources(chrome);
+        var existing = FindPaletteDictionary(root);
+        if (existing is null)
+        {
+            root.MergedDictionaries.Insert(0, newPalette);
+            return;
+        }
+
+        var index = root.MergedDictionaries.IndexOf(existing);
+        if (index < 0)
+        {
+            root.MergedDictionaries.Insert(0, newPalette);
+            return;
+        }
+
+        // Keep the palette dictionary instance stable. Removing and reinserting the
+        // dictionary briefly invalidates DynamicResource lookups, which is visible as
+        // a full-surface flash during theme switches.
+        foreach (var key in newPalette.Keys)
+        {
+            existing[key] = newPalette[key];
+        }
     }
 
     internal static ResourceDictionary? FindPaletteDictionary(ResourceDictionary root)
     {
-        if (root.Contains(TextBrushKey))
-        {
-            return root;
-        }
-
         foreach (var merged in root.MergedDictionaries)
         {
-            if (merged.Contains(TextBrushKey))
+            if (merged.Contains(PaletteMarkerKey))
             {
                 return merged;
             }
         }
 
-        return null;
-    }
-
-    private static ResourceDictionary InsertPaletteDictionary(ResourceDictionary root)
-    {
-        var palette = new ResourceDictionary();
-        root.MergedDictionaries.Insert(0, palette);
-        return palette;
-    }
-
-    private static void CopyPaletteEntries(ResourceDictionary target, ResourceDictionary source)
-    {
-        foreach (var key in source.Keys)
+        if (root.Contains(PaletteMarkerKey))
         {
-            target[key] = source[key];
+            return root;
         }
-    }
 
-    private static LinearGradientBrush ChatGradient(UiChromeColors c)
-    {
-        var brush = new LinearGradientBrush(c.ChatBackgroundTop, c.ChatBackgroundBottom, new Point(0, 0), new Point(0, 1));
-        brush.Freeze();
-        return brush;
+        return null;
     }
 
     private static SolidColorBrush Brush(Color color, double? opacity = null) =>

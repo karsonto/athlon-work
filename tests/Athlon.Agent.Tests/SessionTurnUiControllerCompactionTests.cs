@@ -31,6 +31,7 @@ public sealed class SessionTurnUiControllerCompactionTests
         ]);
 
         var compactionMessage = compactedSession.Messages[0];
+        ui.SetDisplayed(true);
         var callbacks = ui.BuildCallbacks(new LiveAgentSession(compactedSession));
         await callbacks.OnStreamEvent!(new AgentStreamEvent.ChatMessageAppended(compactionMessage));
 

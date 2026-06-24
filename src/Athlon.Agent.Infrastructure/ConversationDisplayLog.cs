@@ -17,8 +17,7 @@ internal static class ConversationDisplayLog
             using var document = JsonDocument.Parse(line);
             var root = document.RootElement;
             if (root.TryGetProperty("role", out var roleElement)
-                && roleElement.ValueKind == JsonValueKind.String
-                && Enum.TryParse<MessageRole>(roleElement.GetString(), ignoreCase: true, out var role)
+                && TryGetRole(roleElement, out _)
                 && root.TryGetProperty("createdAt", out _))
             {
                 return JsonSerializer.Deserialize<ChatMessage>(line, JsonFileStore.JsonLineOptions);
@@ -47,8 +46,7 @@ internal static class ConversationDisplayLog
         }
 
         if (!root.TryGetProperty("role", out var roleElement)
-            || roleElement.ValueKind != JsonValueKind.String
-            || !Enum.TryParse<MessageRole>(roleElement.GetString(), ignoreCase: true, out var role))
+            || !TryGetRole(roleElement, out var role))
         {
             return null;
         }
@@ -100,5 +98,24 @@ internal static class ConversationDisplayLog
             toolCallsJson,
             reasoningContent,
             imageAttachments);
+    }
+
+    private static bool TryGetRole(JsonElement roleElement, out MessageRole role)
+    {
+        if (roleElement.ValueKind == JsonValueKind.String)
+        {
+            return Enum.TryParse(roleElement.GetString(), ignoreCase: true, out role);
+        }
+
+        if (roleElement.ValueKind == JsonValueKind.Number
+            && roleElement.TryGetInt32(out var numeric)
+            && Enum.IsDefined(typeof(MessageRole), numeric))
+        {
+            role = (MessageRole)numeric;
+            return true;
+        }
+
+        role = default;
+        return false;
     }
 }

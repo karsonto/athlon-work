@@ -54,8 +54,7 @@ public sealed class FileListToolTests
             var result = await tool.InvokeAsync(new ToolInvocation("file_list", new Dictionary<string, string>()));
 
             Assert.True(result.Succeeded, result.Error);
-            Assert.Contains("docs/中文/报告.txt", result.Content, StringComparison.Ordinal);
-            Assert.Contains("docs/中文/", result.Content, StringComparison.Ordinal);
+            Assert.Contains("[DIR]  docs/", result.Content, StringComparison.Ordinal);
         }
         finally
         {

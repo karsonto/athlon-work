@@ -25,6 +25,14 @@ public static class AppThemeManager
             AppThemeResourceBuilder.ApplyPalette(root, Current.Chrome);
         }
 
+        if (Application.Current is { Windows: { } windows })
+        {
+            foreach (Window window in windows)
+            {
+                AppThemeResourceBuilder.ApplyPalette(window.Resources, Current.Chrome);
+            }
+        }
+
         ThemeChanged?.Invoke(null, EventArgs.Empty);
     }
 

@@ -1,6 +1,6 @@
 # Contributing to Athlon Agent
 
-Thank you for your interest in contributing! Athlon Agent is a native Windows AI coding agent built with .NET 8 and WPF. Every bug report, doc improvement, test, and pull request helps.
+Thank you for your interest in contributing! Athlon Agent is a native Windows AI coding agent built with .NET 10 and WPF. Every bug report, doc improvement, test, and pull request helps.
 
 ## Table of Contents
 
@@ -53,7 +53,7 @@ You do not need to write code to help:
 ### Requirements
 
 - **Windows 10/11** (WPF target)
-- **[.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)**
+- **[.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)**
 
 ### Clone and run
 

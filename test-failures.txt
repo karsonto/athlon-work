@@ -1,0 +1,542 @@
+﻿F:\athlon-work\tests\Athlon.Agent.Tests\bin\Release\net10.0-windows\Athlon.Agent.Tests.dll (.NETCoreApp,Version=v10.0)鐨勬祴璇曡繍琛?
+鎬诲叡 1 涓祴璇曟枃浠朵笌鎸囧畾妯″紡鐩稿尮閰嶃€?
+dotnet : [xUnit.net 00:00:00.21]     Athlon.Agent.Tests.McpArgumentsJsonTests.ParseDictionary_ReturnsObjectProperties 
+[FAIL]
+所在位置 C:\Users\karson\AppData\Local\Temp\ps-script-998efdf4-25f7-4122-8f66-21bce2e3c8ba.ps1:100 字符: 22
++ ... hlon-work"; dotnet test tests/Athlon.Agent.Tests/Athlon.Agent.Tests.c ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([xUnit.net 00:0...operties [FAIL]:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  澶辫触 Athlon.Agent.Tests.McpArgumentsJsonTests.ParseDictionary_ReturnsObjectProperties [5 ms]
+  閿欒娑堟伅:
+   Assert.Equal() Failure: Values differ
+Expected: 1
+Actual:   1
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.McpArgumentsJsonTests.ParseDictionary_ReturnsObjectProperties() in F:\athlon-work\tests\Athlon.Agent.Tests\McpArgumentsJsonTests.cs:line 13
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.22]     
+Athlon.Agent.Tests.AgentEnvironmentPromptBuilderTests.Build_IncludesWindowsHostEnvironmentAndSkillsDirectory [FAIL]
+[xUnit.net 00:00:00.22]     Athlon.Agent.Tests.AgentEnvironmentPromptBuilderTests.Build_WithWorkspace_InjectsAgentsMd 
+[FAIL]
+  澶辫触 Athlon.Agent.Tests.AgentEnvironmentPromptBuilderTests.Build_IncludesWindowsHostEnvironmentAndSkillsDirectory [10 ms]
+  閿欒娑堟伅:
+   Assert.Contains() Failure: Sub-string not found
+String:    "You are Athlon Agent, a helpful Windows d"路路路
+Not found: "Encoding and locale:"
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.AgentEnvironmentPromptBuilderTests.Build_IncludesWindowsHostEnvironmentAndSkillsDirectory() in F:\athlon-work\tests\Athlon.Agent.Tests\AgentEnvironmentPromptBuilderTests.cs:line 21
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  澶辫触 Athlon.Agent.Tests.AgentEnvironmentPromptBuilderTests.Build_WithWorkspace_InjectsAgentsMd [1 ms]
+  閿欒娑堟伅:
+   Assert.Contains() Failure: Sub-string not found
+String:    "You are Athlon Agent, a Windows desktop c"路路路
+Not found: "## AGENTS.md"
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.AgentEnvironmentPromptBuilderTests.Build_WithWorkspace_InjectsAgentsMd() in F:\athlon-work\tests\Athlon.Agent.Tests\AgentEnvironmentPromptBuilderTests.cs:line 105
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.22]     
+Athlon.Agent.Tests.AgentEnvironmentPromptBuilderTests.Build_SummarizesNativeTools_ListsMcpTools [FAIL]
+  澶辫触 Athlon.Agent.Tests.AgentEnvironmentPromptBuilderTests.Build_SummarizesNativeTools_ListsMcpTools [1 ms]
+  閿欒娑堟伅:
+   Assert.Contains() Failure: Sub-string not found
+String:    "You are Athlon Agent, a helpful Windows d"路路路
+Not found: "Native tools are provided via function ca"路路路
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.AgentEnvironmentPromptBuilderTests.Build_SummarizesNativeTools_ListsMcpTools() in F:\athlon-work\tests\Athlon.Agent.Tests\AgentEnvironmentPromptBuilderTests.cs:line 45
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.22]     Athlon.Agent.Tests.FileListToolTests.InvokeAsync_ReturnsWorkspaceRelativePaths [FAIL]
+  澶辫触 Athlon.Agent.Tests.FileListToolTests.InvokeAsync_ReturnsWorkspaceRelativePaths [7 ms]
+  閿欒娑堟伅:
+   Assert.Contains() Failure: Sub-string not found
+String:    "[DIR]  docs/\r\n(Paths above are exact on-d"路路路
+Not found: "docs/涓枃/鎶ュ憡.txt"
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.FileListToolTests.InvokeAsync_ReturnsWorkspaceRelativePaths() in F:\athlon-work\tests\Athlon.Agent.Tests\FileListToolTests.cs:line 57
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:00.23]     Athlon.Agent.Tests.WorkspaceFileEditorServiceTests.TryOpenAsync_RejectsOutsideWorkspace 
+[FAIL]
+[xUnit.net 00:00:00.23]     
+Athlon.Agent.Tests.AppThemeResourceBuilderTests.ApplyPalette_inserts_brushes_before_control_styles [FAIL]
+  澶辫触 Athlon.Agent.Tests.WorkspaceFileEditorServiceTests.TryOpenAsync_RejectsOutsideWorkspace [16 ms]
+  閿欒娑堟伅:
+   Assert.False() Failure
+Expected: False
+Actual:   True
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.WorkspaceFileEditorServiceTests.TryOpenAsync_RejectsOutsideWorkspace() in F:\athlon-work\tests\Athlon.Agent.Tests\WorkspaceFileEditorServiceTests.cs:line 22
+--- End of stack trace from previous location ---
+  澶辫触 Athlon.Agent.Tests.AppThemeResourceBuilderTests.ApplyPalette_inserts_brushes_before_control_styles [70 ms]
+  閿欒娑堟伅:
+   Assert.Equal() Failure: Values differ
+Expected: 0
+Actual:   -1
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.AppThemeResourceBuilderTests.RunOnStaThread(Action action) in F:\athlon-work\tests\Athlon.Agent.Tests\AppThemeResourceBuilderTests.cs:line 63
+   at Athlon.Agent.Tests.AppThemeResourceBuilderTests.ApplyPalette_inserts_brushes_before_control_styles() in F:\athlon-work\tests\Athlon.Agent.Tests\AppThemeResourceBuilderTests.cs:line 13
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.24]     
+Athlon.Agent.Tests.AppThemeResourceBuilderTests.ApplyPalette_allows_textblock_measure_before_main_window [FAIL]
+  澶辫触 Athlon.Agent.Tests.AppThemeResourceBuilderTests.ApplyPalette_allows_textblock_measure_before_main_window [4 ms]
+  閿欒娑堟伅:
+   System.InvalidOperationException : 涓嶈兘鍦ㄥ悓涓€ AppDomain 涓垱寤哄涓?System.Windows.Application 瀹炰緥銆?
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.AppThemeResourceBuilderTests.RunOnStaThread(Action action) in F:\athlon-work\tests\Athlon.Agent.Tests\AppThemeResourceBuilderTests.cs:line 63
+   at Athlon.Agent.Tests.AppThemeResourceBuilderTests.ApplyPalette_allows_textblock_measure_before_main_window() in F:\athlon-work\tests\Athlon.Agent.Tests\AppThemeResourceBuilderTests.cs:line 31
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.25]     Athlon.Agent.Tests.SessionDiskLogTests.AgentRuntime_PersistsUserMessageBeforeModelReturns 
+[FAIL]
+  澶辫触 Athlon.Agent.Tests.SessionDiskLogTests.AgentRuntime_PersistsUserMessageBeforeModelReturns [62 ms]
+  閿欒娑堟伅:
+   System.IO.IOException : The process cannot access the file 'app-20260624.log' because it is being used by another process.
+  鍫嗘爤璺熻釜:
+     at System.IO.FileSystem.RemoveDirectoryRecursive(String fullPath, WIN32_FIND_DATA& findData, Boolean topLevel)
+   at System.IO.FileSystem.RemoveDirectory(String fullPath, Boolean recursive)
+   at Athlon.Agent.Tests.SessionDiskLogTests.AgentRuntime_PersistsUserMessageBeforeModelReturns() in F:\athlon-work\tests\Athlon.Agent.Tests\SessionDiskLogTests.cs:line 140
+   at Athlon.Agent.Tests.SessionDiskLogTests.AgentRuntime_PersistsUserMessageBeforeModelReturns()
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:00.25]     Athlon.Agent.Tests.FileStorageServiceTests.SaveSessionAsync_WritesMarkdownAndMetadata 
+[FAIL]
+  澶辫触 Athlon.Agent.Tests.FileStorageServiceTests.SaveSessionAsync_WritesMarkdownAndMetadata [110 ms]
+  閿欒娑堟伅:
+   Assert.Contains() Failure: Filter not matched in collection
+Collection: [SessionIndexEntry { Id = a26dbd8019a34ea6828651b25c2bf0d4, Title = 鍒嗘瀽椤圭洰浼樺寲鐐? Path = C:\Users\karson\.athlon-agent\sessions\a26dbd8019a34ea6828651b25c2bf0d4, UpdatedAt = 24/6/2026 涓婂崍1:59:11 +00:00 }]
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.FileStorageServiceTests.SaveSessionAsync_WritesMarkdownAndMetadata() in F:\athlon-work\tests\Athlon.Agent.Tests\FileStorageServiceTests.cs:line 19
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:00.26]     Athlon.Agent.Tests.SessionUiCacheTests.Touch_evicts_oldest_session_and_clears_messages 
+[FAIL]
+  澶辫触 Athlon.Agent.Tests.SessionUiCacheTests.Touch_evicts_oldest_session_and_clears_messages [14 ms]
+  閿欒娑堟伅:
+   Assert.False() Failure
+Expected: False
+Actual:   True
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.SessionUiCacheTests.<>c__DisplayClass0_0.<Touch_evicts_oldest_session_and_clears_messages>b__0() in F:\athlon-work\tests\Athlon.Agent.Tests\SessionUiCacheTests.cs:line 24
+   at System.Windows.Threading.DispatcherOperation.InvokeDelegateCore()
+   at System.Windows.Threading.DispatcherOperation.InvokeImpl()
+--- End of stack trace from previous location ---
+   at Athlon.Agent.Tests.SessionUiCacheTests.Touch_evicts_oldest_session_and_clears_messages() in F:\athlon-work\tests\Athlon.Agent.Tests\SessionUiCacheTests.cs:line 16
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:00.26]     Athlon.Agent.Tests.McpSearchIndexTests.Search_finds_relevant_tool_for_query [FAIL]
+[xUnit.net 00:00:00.26]     
+Athlon.Agent.Tests.McpSearchIndexTests.SearchCatalog_uses_registry_cache_without_rebuilding_each_call [FAIL]
+  澶辫触 Athlon.Agent.Tests.McpSearchIndexTests.Search_finds_relevant_tool_for_query [6 ms]
+  閿欒娑堟伅:
+   System.TypeInitializationException : The type initializer for 'Athlon.Agent.Infrastructure.McpSearchIndex' threw an exception.
+---- System.Text.RegularExpressions.RegexParseException : Invalid pattern '\p{Script=Han}+' at offset 10. Incomplete \p{X} character escape.
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Infrastructure.McpSearchIndex.Tokenize(String text) in F:\athlon-work\src\Athlon.Agent.Infrastructure\McpSearchIndex.cs:line 146
+   at Athlon.Agent.Infrastructure.McpSearchIndex.Search(IReadOnlyList`1 catalog, String query, Int32 topK, Double minScore) in F:\athlon-work\src\Athlon.Agent.Infrastructure\McpSearchIndex.cs:line 21
+   at Athlon.Agent.Tests.McpSearchIndexTests.Search_finds_relevant_tool_for_query() in F:\athlon-work\tests\Athlon.Agent.Tests\McpSearchIndexTests.cs:line 32
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace -----
+   at System.Text.RegularExpressions.RegexParser.ParseProperty()
+   at System.Text.RegularExpressions.RegexParser.ScanBackslash(Boolean scanOnly)
+   at System.Text.RegularExpressions.RegexParser.ScanRegex()
+   at System.Text.RegularExpressions.RegexParser.Parse(String pattern, RegexOptions options, CultureInfo culture)
+   at System.Text.RegularExpressions.Regex..ctor(String pattern, RegexOptions options, TimeSpan matchTimeout, CultureInfo culture)
+   at System.Text.RegularExpressions.Regex..ctor(String pattern, RegexOptions options)
+   at Athlon.Agent.Infrastructure.McpSearchIndex..cctor() in F:\athlon-work\src\Athlon.Agent.Infrastructure\McpSearchIndex.cs:line 176
+  澶辫触 Athlon.Agent.Tests.McpSearchIndexTests.SearchCatalog_uses_registry_cache_without_rebuilding_each_call [1 ms]
+  閿欒娑堟伅:
+   System.TypeInitializationException : The type initializer for 'Athlon.Agent.Infrastructure.McpSearchIndex' threw an exception.
+---- System.Text.RegularExpressions.RegexParseException : Invalid pattern '\p{Script=Han}+' at offset 10. Incomplete \p{X} character escape.
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Infrastructure.McpSearchIndex.Tokenize(String text) in F:\athlon-work\src\Athlon.Agent.Infrastructure\McpSearchIndex.cs:line 146
+   at Athlon.Agent.Infrastructure.McpSearchIndex.Search(IReadOnlyList`1 catalog, String query, Int32 topK, Double minScore) in F:\athlon-work\src\Athlon.Agent.Infrastructure\McpSearchIndex.cs:line 21
+   at Athlon.Agent.Tests.TestMcpRegistry.SearchCatalog(String query, Int32 topK, Double minScore, String serverName) in F:\athlon-work\tests\Athlon.Agent.Tests\TestMcpRegistry.cs:line 29
+   at Athlon.Agent.Tests.McpSearchIndexTests.SearchCatalog_uses_registry_cache_without_rebuilding_each_call() in F:\athlon-work\tests\Athlon.Agent.Tests\McpSearchIndexTests.cs:line 16
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+----- Inner Stack Trace -----
+   at System.Text.RegularExpressions.RegexParser.ParseProperty()
+   at System.Text.RegularExpressions.RegexParser.ScanBackslash(Boolean scanOnly)
+   at System.Text.RegularExpressions.RegexParser.ScanRegex()
+   at System.Text.RegularExpressions.RegexParser.Parse(String pattern, RegexOptions options, CultureInfo culture)
+   at System.Text.RegularExpressions.Regex..ctor(String pattern, RegexOptions options, TimeSpan matchTimeout, CultureInfo culture)
+   at System.Text.RegularExpressions.Regex..ctor(String pattern, RegexOptions options)
+   at Athlon.Agent.Infrastructure.McpSearchIndex..cctor() in F:\athlon-work\src\Athlon.Agent.Infrastructure\McpSearchIndex.cs:line 176
+[xUnit.net 00:00:00.28]     
+Athlon.Agent.Tests.SessionTurnUiControllerCompactionTests.Compaction_DoesNotRemoveExistingDisplayMessages [FAIL]
+[xUnit.net 00:00:00.29]     Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_StopsWhenResponseCharLimitReached [FAIL]
+  澶辫触 Athlon.Agent.Tests.SessionTurnUiControllerCompactionTests.Compaction_DoesNotRemoveExistingDisplayMessages [15 ms]
+  閿欒娑堟伅:
+   Assert.Equal() Failure: Values differ
+Expected: 4
+Actual:   3
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.SessionTurnUiControllerCompactionTests.Compaction_DoesNotRemoveExistingDisplayMessages() in F:\athlon-work\tests\Athlon.Agent.Tests\SessionTurnUiControllerCompactionTests.cs:line 37
+--- End of stack trace from previous location ---
+  澶辫触 Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_StopsWhenResponseCharLimitReached [19 ms]
+  閿欒娑堟伅:
+   Assert.Contains() Failure: Sub-string not found
+String:    "1|aaaa\r\n2|bbbb\r\n3|cccc\r\n4|dddd\r\n\r\n--- fil"路路路
+Not found: "truncated: true"
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_StopsWhenResponseCharLimitReached() in F:\athlon-work\tests\Athlon.Agent.Tests\FileReadToolTests.cs:line 99
+   at Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_StopsWhenResponseCharLimitReached() in F:\athlon-work\tests\Athlon.Agent.Tests\FileReadToolTests.cs:line 99
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:00.30]     
+Athlon.Agent.Tests.FileStorageServiceTests.SaveSessionAsync_WritesChineseLiteralsInSessionJson [FAIL]
+  澶辫触 Athlon.Agent.Tests.FileStorageServiceTests.SaveSessionAsync_WritesChineseLiteralsInSessionJson [24 ms]
+  閿欒娑堟伅:
+   System.IO.IOException : The process cannot access the file 'app-20260624.log' because it is being used by another process.
+  鍫嗘爤璺熻釜:
+     at System.IO.FileSystem.RemoveDirectoryRecursive(String fullPath, WIN32_FIND_DATA& findData, Boolean topLevel)
+   at System.IO.FileSystem.RemoveDirectory(String fullPath, Boolean recursive)
+   at Athlon.Agent.Tests.FileStorageServiceTests.SaveSessionAsync_WritesChineseLiteralsInSessionJson() in F:\athlon-work\tests\Athlon.Agent.Tests\FileStorageServiceTests.cs:line 46
+   at Athlon.Agent.Tests.FileStorageServiceTests.SaveSessionAsync_WritesChineseLiteralsInSessionJson()
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:00.30]     Athlon.Agent.Tests.SessionDiskLogTests.FileStorage_WritesConversationToolAndSessionLogs 
+[FAIL]
+  澶辫触 Athlon.Agent.Tests.SessionDiskLogTests.FileStorage_WritesConversationToolAndSessionLogs [52 ms]
+  閿欒娑堟伅:
+   System.IO.IOException : The process cannot access the file 'app-20260624.log' because it is being used by another process.
+  鍫嗘爤璺熻釜:
+     at System.IO.FileSystem.RemoveDirectoryRecursive(String fullPath, WIN32_FIND_DATA& findData, Boolean topLevel)
+   at System.IO.FileSystem.RemoveDirectory(String fullPath, Boolean recursive)
+   at Athlon.Agent.Tests.SessionDiskLogTests.FileStorage_WritesConversationToolAndSessionLogs() in F:\athlon-work\tests\Athlon.Agent.Tests\SessionDiskLogTests.cs:line 92
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:00.30]     Athlon.Agent.Tests.AgentStreamAdapterTests.Duplicate_toolCallDelta_only_starts_tool_once 
+[FAIL]
+[xUnit.net 00:00:00.31]     Athlon.Agent.Tests.AgentStreamAdapterTests.TextDelta_opens_single_message_and_appends 
+[FAIL]
+  澶辫触 Athlon.Agent.Tests.AgentStreamAdapterTests.Duplicate_toolCallDelta_only_starts_tool_once [2 ms]
+  閿欒娑堟伅:
+   Assert.Equal() Failure: Values differ
+Expected: 2
+Actual:   1
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.AgentStreamAdapterTests.Duplicate_toolCallDelta_only_starts_tool_once() in F:\athlon-work\tests\Athlon.Agent.Tests\AgentStreamAdapterTests.cs:line 77
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  澶辫触 Athlon.Agent.Tests.AgentStreamAdapterTests.TextDelta_opens_single_message_and_appends [< 1 ms]
+  閿欒娑堟伅:
+   Assert.Equal() Failure: Values differ
+Expected: 2
+Actual:   1
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.AgentStreamAdapterTests.TextDelta_opens_single_message_and_appends() in F:\athlon-work\tests\Athlon.Agent.Tests\AgentStreamAdapterTests.cs:line 32
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.31]     Athlon.Agent.Tests.SkillXmlPromptRendererTests.AppendSkillPrompt_RendersCoreXmlFields 
+[FAIL]
+  澶辫触 Athlon.Agent.Tests.SkillXmlPromptRendererTests.AppendSkillPrompt_RendersCoreXmlFields [4 ms]
+  閿欒娑堟伅:
+   Assert.DoesNotContain() Failure: Sub-string found
+                                鈫?(pos 453)
+String: 路路路"<skill> may include <files-root> with the"路路路
+Found:  "<files-root>"
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.SkillXmlPromptRendererTests.AppendSkillPrompt_RendersCoreXmlFields() in F:\athlon-work\tests\Athlon.Agent.Tests\SkillXmlPromptRendererTests.cs:line 31
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.31]     
+Athlon.Agent.Tests.ScheduleTimingTests.ComputeNextDaily_WhenTimeNotYetReachedToday_ReturnsToday [FAIL]
+  澶辫触 Athlon.Agent.Tests.ScheduleTimingTests.ComputeNextDaily_WhenTimeNotYetReachedToday_ReturnsToday [1 ms]
+  閿欒娑堟伅:
+   Assert.Equal() Failure: Values differ
+Expected: 2025-06-11T00:00:00.0000000+08:00
+Actual:   2025-06-12T00:00:00.0000000+08:00
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.ScheduleTimingTests.ComputeNextDaily_WhenTimeNotYetReachedToday_ReturnsToday() in F:\athlon-work\tests\Athlon.Agent.Tests\ScheduleTimingTests.cs:line 19
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.34]     
+Athlon.Agent.Tests.RequestHistoryHygieneTests.ApplyToModelMessages_truncates_large_tool_payload [FAIL]
+[xUnit.net 00:00:00.34]     
+Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_TruncatesWhenStaticThresholdReached [FAIL]
+  澶辫触 Athlon.Agent.Tests.RequestHistoryHygieneTests.ApplyToModelMessages_truncates_large_tool_payload [< 1 ms]
+  閿欒娑堟伅:
+   Assert.DoesNotContain() Failure: Sub-string found
+                                   鈫?(pos 767)
+String: 路路路"7\nline 398\nline 399\nline 400\nline 401\nlin"路路路
+Found:  "line 400"
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.RequestHistoryHygieneTests.ApplyToModelMessages_truncates_large_tool_payload() in F:\athlon-work\tests\Athlon.Agent.Tests\RequestHistoryHygieneTests.cs:line 34
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  澶辫触 Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_TruncatesWhenStaticThresholdReached [3 ms]
+  閿欒娑堟伅:
+   Assert.True() Failure
+Expected: True
+Actual:   False
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_TruncatesWhenStaticThresholdReached() in F:\athlon-work\tests\Athlon.Agent.Tests\CompactionTests.cs:line 448
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.34]     
+Athlon.Agent.Tests.RequestHistoryHygieneTests.CompactTextForSummary_skips_heavy_compaction_for_evicted_placeholder 
+[FAIL]
+[xUnit.net 00:00:00.34]     
+Athlon.Agent.Tests.SessionTurnReconcilerTests.Reconcile_MissingToolResult_PersistsFailureToolMessage [FAIL]
+  澶辫触 Athlon.Agent.Tests.RequestHistoryHygieneTests.CompactTextForSummary_skips_heavy_compaction_for_evicted_placeholder [3 ms]
+  閿欒娑堟伅:
+   Assert.DoesNotContain() Failure: Sub-string found
+                                 鈫?(pos 30)
+String: 路路路"lt evicted to disk]\n[cache hygiene: omitt"路路路
+Found:  "[cache hygiene: omitted"
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.RequestHistoryHygieneTests.CompactTextForSummary_skips_heavy_compaction_for_evicted_placeholder() in F:\athlon-work\tests\Athlon.Agent.Tests\RequestHistoryHygieneTests.cs:line 14
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  澶辫触 Athlon.Agent.Tests.SessionTurnReconcilerTests.Reconcile_MissingToolResult_PersistsFailureToolMessage [< 1 ms]
+  閿欒娑堟伅:
+   Assert.Equal() Failure: Values differ
+Expected: 3
+Actual:   4
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.SessionTurnReconcilerTests.Reconcile_MissingToolResult_PersistsFailureToolMessage() in F:\athlon-work\tests\Athlon.Agent.Tests\SessionTurnReconcilerTests.cs:line 54
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.35]     Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_RejectsFileOverMaxBytes [FAIL]
+  澶辫触 Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_RejectsFileOverMaxBytes [8 ms]
+  閿欒娑堟伅:
+   Assert.Contains() Failure: Sub-string not found
+String:    "C:\\Users\\karson\\AppData\\Local\\Temp\\athlon"路路路
+Not found: "exceeds"
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_RejectsFileOverMaxBytes() in F:\athlon-work\tests\Athlon.Agent.Tests\FileReadToolTests.cs:line 34
+   at Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_RejectsFileOverMaxBytes() in F:\athlon-work\tests\Athlon.Agent.Tests\FileReadToolTests.cs:line 34
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:00.36]     Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_DefaultLimitIs500Lines [FAIL]
+  澶辫触 Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_DefaultLimitIs500Lines [8 ms]
+  閿欒娑堟伅:
+   Assert.Contains() Failure: Sub-string not found
+String:    "1|line-1\r\n2|line-2\r\n3|line-3\r\n4|line-4\r\n5"路路路
+Not found: "lines_returned: 500"
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_DefaultLimitIs500Lines() in F:\athlon-work\tests\Athlon.Agent.Tests\FileReadToolTests.cs:line 48
+   at Athlon.Agent.Tests.FileReadToolTests.InvokeAsync_DefaultLimitIs500Lines() in F:\athlon-work\tests\Athlon.Agent.Tests\FileReadToolTests.cs:line 50
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:00.37]     
+Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_Elevated_AppliesTruncateOnlyWhenStaticTriggered [FAIL]
+  澶辫触 Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_Elevated_AppliesTruncateOnlyWhenStaticTriggered [< 1 ms]
+  閿欒娑堟伅:
+   Assert.True() Failure
+Expected: True
+Actual:   False
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_Elevated_AppliesTruncateOnlyWhenStaticTriggered() in F:\athlon-work\tests\Athlon.Agent.Tests\CompactionTests.cs:line 596
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.39]     
+Athlon.Agent.Tests.CompactionTests.ResolveKeepTokenBudget_OverflowUsesReducedPostCompactionTarget [FAIL]
+[xUnit.net 00:00:00.39]     
+Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_DoesNotCompactOnStaticMessageCountWhenUtilizationLow [FAIL]
+  澶辫触 Athlon.Agent.Tests.CompactionTests.ResolveKeepTokenBudget_OverflowUsesReducedPostCompactionTarget [< 1 ms]
+  閿欒娑堟伅:
+   Assert.Equal() Failure: Values differ
+Expected: 18361
+Actual:   9
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.CompactionTests.ResolveKeepTokenBudget_OverflowUsesReducedPostCompactionTarget() in F:\athlon-work\tests\Athlon.Agent.Tests\CompactionTests.cs:line 576
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  澶辫触 Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_DoesNotCompactOnStaticMessageCountWhenUtilizationLow [< 1 ms]
+  閿欒娑堟伅:
+   Assert.False() Failure
+Expected: False
+Actual:   True
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_DoesNotCompactOnStaticMessageCountWhenUtilizationLow() in F:\athlon-work\tests\Athlon.Agent.Tests\CompactionTests.cs:line 472
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.39]     
+Athlon.Agent.Tests.CompactionTests.ResolveKeepTokenBudget_AfterFullPassTargetsThirtyPercent [FAIL]
+[xUnit.net 00:00:00.39]     Athlon.Agent.Tests.CompactionTests.ResolveKeepTokenBudget_TruncateOnlyUsesStaticKeepFloor 
+[FAIL]
+[xUnit.net 00:00:00.39]     
+Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_CompactsWhenTotalWindowNearLimitBeforeStaticHistoryThreshold 
+[FAIL]
+  澶辫触 Athlon.Agent.Tests.CompactionTests.ResolveKeepTokenBudget_AfterFullPassTargetsThirtyPercent [< 1 ms]
+  閿欒娑堟伅:
+   Assert.Equal() Failure: Values differ
+Expected: 37542
+Actual:   9
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.CompactionTests.ResolveKeepTokenBudget_AfterFullPassTargetsThirtyPercent() in F:\athlon-work\tests\Athlon.Agent.Tests\CompactionTests.cs:line 531
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  澶辫触 Athlon.Agent.Tests.CompactionTests.ResolveKeepTokenBudget_TruncateOnlyUsesStaticKeepFloor [< 1 ms]
+  閿欒娑堟伅:
+   Assert.Equal() Failure: Values differ
+Expected: 512
+Actual:   220
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.CompactionTests.ResolveKeepTokenBudget_TruncateOnlyUsesStaticKeepFloor() in F:\athlon-work\tests\Athlon.Agent.Tests\CompactionTests.cs:line 554
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  澶辫触 Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_CompactsWhenTotalWindowNearLimitBeforeStaticHistoryThreshold [< 1 ms]
+  閿欒娑堟伅:
+   Assert.False() Failure
+Expected: False
+Actual:   True
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.CompactionTests.DynamicCompactionPlan_CompactsWhenTotalWindowNearLimitBeforeStaticHistoryThreshold() in F:\athlon-work\tests\Athlon.Agent.Tests\CompactionTests.cs:line 481
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.39]     
+Athlon.Agent.Tests.CompactionTests.ResolveEffectiveEstimate_uses_prompt_pressure_floor_when_higher_than_estimate [FAIL]
+[xUnit.net 00:00:00.41]     
+Athlon.Agent.Tests.ExecuteCommandToolTests.InvokeAsync_TimesOut_ReturnsFailureWithoutThrowing [FAIL]
+  澶辫触 Athlon.Agent.Tests.CompactionTests.ResolveEffectiveEstimate_uses_prompt_pressure_floor_when_higher_than_estimate [< 1 ms]
+  閿欒娑堟伅:
+   Assert.Equal() Failure: Values differ
+Expected: 120000
+Actual:   20000
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.CompactionTests.ResolveEffectiveEstimate_uses_prompt_pressure_floor_when_higher_than_estimate() in F:\athlon-work\tests\Athlon.Agent.Tests\CompactionTests.cs:line 25
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  澶辫触 Athlon.Agent.Tests.ExecuteCommandToolTests.InvokeAsync_TimesOut_ReturnsFailureWithoutThrowing [75 ms]
+  閿欒娑堟伅:
+   Assert.Contains() Failure: Sub-string not found
+String:    "Command failed"
+Not found: "timed out"
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.ExecuteCommandToolTests.InvokeAsync_TimesOut_ReturnsFailureWithoutThrowing() in F:\athlon-work\tests\Athlon.Agent.Tests\ExecuteCommandToolTests.cs:line 33
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:00.54]     Athlon.Agent.Tests.LicenseValidatorTests.ValidateContent_rejects_account_mismatch [FAIL]
+[xUnit.net 00:00:00.56]     
+Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Enhance_uses_read_only_textbox_for_selectable_code_body [FAIL]
+[xUnit.net 00:00:00.57]     Athlon.Agent.Tests.ExecuteCommandToolTests.InvokeAsync_Utf8Console_ReturnsChineseStdout 
+[FAIL]
+  澶辫触 Athlon.Agent.Tests.LicenseValidatorTests.ValidateContent_rejects_account_mismatch [27 ms]
+  閿欒娑堟伅:
+   Assert.False() Failure
+Expected: False
+Actual:   True
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.LicenseValidatorTests.ValidateContent_rejects_account_mismatch() in F:\athlon-work\tests\Athlon.Agent.Tests\LicenseValidatorTests.cs:line 94
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  澶辫触 Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Enhance_uses_read_only_textbox_for_selectable_code_body [426 ms]
+  閿欒娑堟伅:
+   System.InvalidOperationException : 鈥淪ystem.Windows.Documents.FlowDocument鈥濅笉鏄?Visual 鎴?Visual3D銆?
+  鍫嗘爤璺熻釜:
+     at MS.Internal.Media.VisualTreeUtils.AsVisual(DependencyObject element, Visual& visual, Visual3D& visual3D)
+   at System.Windows.Media.VisualTreeHelper.GetParent(DependencyObject reference)
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.IsInsideCodeBlockCard(DependencyObject element) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 223
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.NormalizeElementColors(DependencyObject element, Brush codeBackground, Brush codeForeground, ContextMenu contextMenu) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 112
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.NormalizeBlocks(BlockCollection blocks, Brush codeBackground, Brush codeForeground, Brush textBrush, Brush tableHeaderBackground, Brush tableBorder, ContextMenu contextMenu) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 69
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.Normalize(FlowDocument document, ContextMenu contextMenu, IReadOnlyList`1 fencedBlocks, Boolean assistantTone) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 22
+   at Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.<>c.<Enhance_uses_read_only_textbox_for_selectable_code_body>b__3_0() in F:\athlon-work\tests\Athlon.Agent.Tests\FlowDocumentCodeBlockEnhancerTests.cs:line 112
+   at System.Windows.Threading.DispatcherOperation.InvokeDelegateCore()
+   at System.Windows.Threading.DispatcherOperation.InvokeImpl()
+--- End of stack trace from previous location ---
+   at Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Enhance_uses_read_only_textbox_for_selectable_code_body() in F:\athlon-work\tests\Athlon.Agent.Tests\FlowDocumentCodeBlockEnhancerTests.cs:line 100
+--- End of stack trace from previous location ---
+  澶辫触 Athlon.Agent.Tests.ExecuteCommandToolTests.InvokeAsync_Utf8Console_ReturnsChineseStdout [46 ms]
+  閿欒娑堟伅:
+   Assert.Contains() Failure: Sub-string not found
+String:    "锟斤拷锟紸thlon\r\n"
+Not found: "浣犲ソAthlon"
+  鍫嗘爤璺熻釜:
+     at Athlon.Agent.Tests.ExecuteCommandToolTests.InvokeAsync_Utf8Console_ReturnsChineseStdout() in F:\athlon-work\tests\Athlon.Agent.Tests\ExecuteCommandToolTests.cs:line 148
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:00.59]     
+Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Enhance_wraps_fenced_code_block_with_card_tag [FAIL]
+[xUnit.net 00:00:00.59]     
+Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.CodeBlockSelectionChanged_fires_when_textbox_selection_changes 
+[FAIL]
+[xUnit.net 00:00:00.60]     
+Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Normalize_softens_rule_double_to_single_border [FAIL]
+[xUnit.net 00:00:00.61]     
+Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Enhance_uses_fenced_source_when_flowdocument_text_is_missing 
+[FAIL]
+  澶辫触 Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Enhance_wraps_fenced_code_block_with_card_tag [4 ms]
+  閿欒娑堟伅:
+   System.InvalidOperationException : 鈥淪ystem.Windows.Documents.FlowDocument鈥濅笉鏄?Visual 鎴?Visual3D銆?
+  鍫嗘爤璺熻釜:
+     at MS.Internal.Media.VisualTreeUtils.AsVisual(DependencyObject element, Visual& visual, Visual3D& visual3D)
+   at System.Windows.Media.VisualTreeHelper.GetParent(DependencyObject reference)
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.IsInsideCodeBlockCard(DependencyObject element) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 223
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.NormalizeElementColors(DependencyObject element, Brush codeBackground, Brush codeForeground, ContextMenu contextMenu) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 112
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.NormalizeBlocks(BlockCollection blocks, Brush codeBackground, Brush codeForeground, Brush textBrush, Brush tableHeaderBackground, Brush tableBorder, ContextMenu contextMenu) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 69
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.Normalize(FlowDocument document, ContextMenu contextMenu, IReadOnlyList`1 fencedBlocks, Boolean assistantTone) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 22
+   at Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.<>c.<Enhance_wraps_fenced_code_block_with_card_tag>b__0_0() in F:\athlon-work\tests\Athlon.Agent.Tests\FlowDocumentCodeBlockEnhancerTests.cs:line 29
+   at System.Windows.Threading.DispatcherOperation.InvokeDelegateCore()
+   at System.Windows.Threading.DispatcherOperation.InvokeImpl()
+--- End of stack trace from previous location ---
+   at Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Enhance_wraps_fenced_code_block_with_card_tag() in F:\athlon-work\tests\Athlon.Agent.Tests\FlowDocumentCodeBlockEnhancerTests.cs:line 16
+--- End of stack trace from previous location ---
+  澶辫触 Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.CodeBlockSelectionChanged_fires_when_textbox_selection_changes [4 ms]
+  閿欒娑堟伅:
+   System.InvalidOperationException : 鈥淪ystem.Windows.Documents.FlowDocument鈥濅笉鏄?Visual 鎴?Visual3D銆?
+  鍫嗘爤璺熻釜:
+     at MS.Internal.Media.VisualTreeUtils.AsVisual(DependencyObject element, Visual& visual, Visual3D& visual3D)
+   at System.Windows.Media.VisualTreeHelper.GetParent(DependencyObject reference)
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.IsInsideCodeBlockCard(DependencyObject element) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 223
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.NormalizeElementColors(DependencyObject element, Brush codeBackground, Brush codeForeground, ContextMenu contextMenu) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 112
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.NormalizeBlocks(BlockCollection blocks, Brush codeBackground, Brush codeForeground, Brush textBrush, Brush tableHeaderBackground, Brush tableBorder, ContextMenu contextMenu) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 69
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.Normalize(FlowDocument document, ContextMenu contextMenu, IReadOnlyList`1 fencedBlocks, Boolean assistantTone) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 22
+   at Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.<>c.<CodeBlockSelectionChanged_fires_when_textbox_selection_changes>b__6_0() in F:\athlon-work\tests\Athlon.Agent.Tests\FlowDocumentCodeBlockEnhancerTests.cs:line 211
+   at System.Windows.Threading.DispatcherOperation.InvokeDelegateCore()
+   at System.Windows.Threading.DispatcherOperation.InvokeImpl()
+--- End of stack trace from previous location ---
+   at Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.CodeBlockSelectionChanged_fires_when_textbox_selection_changes() in F:\athlon-work\tests\Athlon.Agent.Tests\FlowDocumentCodeBlockEnhancerTests.cs:line 194
+--- End of stack trace from previous location ---
+  澶辫触 Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Normalize_softens_rule_double_to_single_border [5 ms]
+  閿欒娑堟伅:
+   System.InvalidOperationException : 鈥淪ystem.Windows.Documents.FlowDocument鈥濅笉鏄?Visual 鎴?Visual3D銆?
+  鍫嗘爤璺熻釜:
+     at MS.Internal.Media.VisualTreeUtils.AsVisual(DependencyObject element, Visual& visual, Visual3D& visual3D)
+   at System.Windows.Media.VisualTreeHelper.GetParent(DependencyObject reference)
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.IsInsideCodeBlockCard(DependencyObject element) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 223
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.NormalizeElementColors(DependencyObject element, Brush codeBackground, Brush codeForeground, ContextMenu contextMenu) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 112
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.NormalizeBlocks(BlockCollection blocks, Brush codeBackground, Brush codeForeground, Brush textBrush, Brush tableHeaderBackground, Brush tableBorder, ContextMenu contextMenu) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 69
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.Normalize(FlowDocument document, ContextMenu contextMenu, IReadOnlyList`1 fencedBlocks, Boolean assistantTone) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 22
+   at Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.<>c.<Normalize_softens_rule_double_to_single_border>b__8_0() in F:\athlon-work\tests\Athlon.Agent.Tests\FlowDocumentCodeBlockEnhancerTests.cs:line 263
+   at System.Windows.Threading.DispatcherOperation.InvokeDelegateCore()
+   at System.Windows.Threading.DispatcherOperation.InvokeImpl()
+--- End of stack trace from previous location ---
+   at Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Normalize_softens_rule_double_to_single_border() in F:\athlon-work\tests\Athlon.Agent.Tests\FlowDocumentCodeBlockEnhancerTests.cs:line 257
+--- End of stack trace from previous location ---
+  澶辫触 Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Enhance_uses_fenced_source_when_flowdocument_text_is_missing [4 ms]
+  閿欒娑堟伅:
+   System.InvalidOperationException : 鈥淪ystem.Windows.Documents.FlowDocument鈥濅笉鏄?Visual 鎴?Visual3D銆?
+  鍫嗘爤璺熻釜:
+     at MS.Internal.Media.VisualTreeUtils.AsVisual(DependencyObject element, Visual& visual, Visual3D& visual3D)
+   at System.Windows.Media.VisualTreeHelper.GetParent(DependencyObject reference)
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.IsInsideCodeBlockCard(DependencyObject element) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 223
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.NormalizeElementColors(DependencyObject element, Brush codeBackground, Brush codeForeground, ContextMenu contextMenu) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 112
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.NormalizeBlocks(BlockCollection blocks, Brush codeBackground, Brush codeForeground, Brush textBrush, Brush tableHeaderBackground, Brush tableBorder, ContextMenu contextMenu) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 69
+   at Athlon.Agent.App.Services.FlowDocumentThemeNormalizer.Normalize(FlowDocument document, ContextMenu contextMenu, IReadOnlyList`1 fencedBlocks, Boolean assistantTone) in F:\athlon-work\src\Athlon.Agent.App\Services\FlowDocumentThemeNormalizer.cs:line 22
+   at Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.<>c.<Enhance_uses_fenced_source_when_flowdocument_text_is_missing>b__1_0() in F:\athlon-work\tests\Athlon.Agent.Tests\FlowDocumentCodeBlockEnhancerTests.cs:line 64
+   at System.Windows.Threading.DispatcherOperation.InvokeDelegateCore()
+   at System.Windows.Threading.DispatcherOperation.InvokeImpl()
+--- End of stack trace from previous location ---
+   at Athlon.Agent.Tests.FlowDocumentCodeBlockEnhancerTests.Enhance_uses_fenced_source_when_flowdocument_text_is_missing() in F:\athlon-work\tests\Athlon.Agent.Tests\FlowDocumentCodeBlockEnhancerTests.cs:line 49
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:05.52]     
+Athlon.Agent.Tests.ImpSsoCallbackServerTests.StopAsync_WaitsForPendingResponse_BeforeClosingListener [FAIL]
+  澶辫触 Athlon.Agent.Tests.ImpSsoCallbackServerTests.StopAsync_WaitsForPendingResponse_BeforeClosingListener [5 s]
+  閿欒娑堟伅:
+   System.ObjectDisposedException : Cannot access a disposed object.
+Object name: 'System.Threading.ThreadPoolBoundHandle'.
+  鍫嗘爤璺熻釜:
+     at System.Threading.ThreadPoolBoundHandle.AllocateNativeOverlappedPortableCore(IOCompletionCallback callback, Object state, Object pinData, Boolean flowExecutionContext)
+   at System.Threading.ThreadPoolBoundHandle.AllocateNativeOverlapped(IOCompletionCallback callback, Object state, Object pinData)
+   at System.Net.HttpResponseStreamAsyncResult..ctor(Object asyncObject, Object userState, AsyncCallback callback, Byte[] buffer, Int32 offset, Int32 size, Boolean chunked, Boolean sentHeaders, ThreadPoolBoundHandle boundHandle)
+   at System.Net.HttpResponseStream.BeginWriteCore(Byte[] buffer, Int32 offset, Int32 size, AsyncCallback callback, Object state)
+   at System.Net.HttpResponseStream.BeginWrite(Byte[] buffer, Int32 offset, Int32 count, AsyncCallback callback, Object state)
+   at System.IO.Stream.<>c.<BeginEndWriteAsync>b__63_0(Stream stream, ReadWriteParameters args, AsyncCallback callback, Object state)
+   at System.Threading.Tasks.TaskFactory`1.FromAsyncTrim[TInstance,TArgs](TInstance thisRef, TArgs args, Func`5 beginMethod, Func`3 endMethod)
+   at System.IO.Stream.BeginEndWriteAsync(Byte[] buffer, Int32 offset, Int32 count)
+   at System.IO.Stream.WriteAsync(ReadOnlyMemory`1 buffer, CancellationToken cancellationToken)
+   at Athlon.Agent.Infrastructure.Sso.ImpSsoCallbackServer.WriteJsonAsync(HttpListenerResponse response, HttpStatusCode statusCode, Object payload) in F:\athlon-work\src\Athlon.Agent.Infrastructure\Sso\ImpSsoCallbackServer.cs:line 260
+   at Athlon.Agent.Infrastructure.Sso.ImpSsoCallbackServer.CompleteBrowserResponseAsync(ImpSsoCheckResult result, CancellationToken cancellationToken) in F:\athlon-work\src\Athlon.Agent.Infrastructure\Sso\ImpSsoCallbackServer.cs:line 76
+   at Athlon.Agent.Tests.ImpSsoCallbackServerTests.StopAsync_WaitsForPendingResponse_BeforeClosingListener() in F:\athlon-work\tests\Athlon.Agent.Tests\ImpSsoCallbackServerTests.cs:line 125
+--- End of stack trace from previous location ---
+
+澶辫触!  - 澶辫触:    43锛岄€氳繃:   344锛屽凡璺宠繃:     0锛屾€昏:   387锛屾寔缁椂闂? 5 s - Athlon.Agent.Tests.dll (net10.0)
