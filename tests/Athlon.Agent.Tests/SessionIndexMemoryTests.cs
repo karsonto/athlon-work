@@ -160,6 +160,45 @@ public sealed class SessionIndexMemoryTests
     }
 
     [Fact]
+    public async Task ListSessionsAsync_rebuilds_when_cached_index_misses_new_session()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-stale-index-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore());
+
+        var existingDir = Path.Combine(paths.SessionsPath, "existing");
+        Directory.CreateDirectory(existingDir);
+        await WriteSessionJsonAsync(existingDir, "existing", "Existing chat");
+        var cached = new List<SessionIndexEntry>
+        {
+            new("existing", "Existing chat", existingDir, DateTimeOffset.UtcNow.AddMinutes(-1))
+        };
+        await File.WriteAllTextAsync(
+            Path.Combine(paths.SessionsPath, "index.json"),
+            JsonSerializer.Serialize(cached, JsonFileStore.Options));
+
+        var newSession = AgentSession.Create("New Chat");
+
+        try
+        {
+            await storage.SaveSessionAsync(newSession);
+
+            var sessions = await storage.ListSessionsAsync();
+
+            Assert.Contains(sessions, item => item.Id == "existing");
+            Assert.Contains(sessions, item => item.Id == newSession.Id);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task LoadSessionAsync_does_not_load_subagent_session_by_id()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-load-{Guid.NewGuid():N}");
@@ -234,5 +273,15 @@ public sealed class SessionIndexMemoryTests
 
         public string ResolveSkillPath(string path) =>
             string.IsNullOrWhiteSpace(path) ? path : Path.Combine(SkillsPath, path);
+    }
+
+    private sealed class NoOpLogger : IAppLogger
+    {
+        public void Debug(string messageTemplate, params object[] values) { }
+        public void Information(string messageTemplate, params object[] values) { }
+        public void Warning(string messageTemplate, params object[] values) { }
+        public void Error(Exception exception, string messageTemplate, params object[] values) { }
+        public IAppLogger ForContext(string sourceContext) => this;
+        public void Dispose() { }
     }
 }

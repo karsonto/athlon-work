@@ -288,6 +288,34 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
     private static bool IsSessionIndexFresh(string indexPath, IReadOnlyList<SessionIndexEntry> entries)
     {
         var indexTime = File.GetLastWriteTimeUtc(indexPath);
+        var indexedSessionJsonPaths = entries
+            .Select(entry => Path.GetFullPath(Path.Combine(entry.Path, "session.json")))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var sessionsRoot = Path.GetDirectoryName(indexPath);
+        if (string.IsNullOrWhiteSpace(sessionsRoot) || !Directory.Exists(sessionsRoot))
+        {
+            return true;
+        }
+
+        foreach (var sessionJson in Directory.EnumerateFiles(sessionsRoot, "session.json", SearchOption.AllDirectories))
+        {
+            if (AmbientSubAgentStorageScope.IsSubAgentSessionPath(sessionJson))
+            {
+                continue;
+            }
+
+            if (!indexedSessionJsonPaths.Contains(Path.GetFullPath(sessionJson)))
+            {
+                return false;
+            }
+
+            if (File.GetLastWriteTimeUtc(sessionJson) > indexTime)
+            {
+                return false;
+            }
+        }
+
         foreach (var entry in entries)
         {
             var sessionJson = Path.Combine(entry.Path, "session.json");

@@ -390,7 +390,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public Task PersistUiLayoutForSidebarAsync() => _layout.PersistNowAsync();
 
     [RelayCommand]
-    private Task NewSession()
+    private async Task NewSession()
     {
         var previousSession = _session;
         _session = AgentSession.Create("New Chat");
@@ -404,9 +404,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
         ApplySessionWorkspace();
         _ = SaveSessionInBackgroundAsync(previousSession);
-        RequestRefreshSessionHistory();
+        await _storage.SaveSessionAsync(_session);
+        InvalidateSessionCache(_session.Id);
+        await RefreshSessionHistoryAsync();
         NotifyCommandStatesChanged();
-        return Task.CompletedTask;
     }
 
     [RelayCommand(CanExecute = nameof(CanClearContext))]
