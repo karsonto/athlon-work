@@ -619,7 +619,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
     }
 
-    private void SwitchDisplayedSession(AgentSession session)
+    private void SwitchDisplayedSession(AgentSession session, bool renderExistingMessages = true)
     {
         _activeUi.SetDisplayed(false);
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
@@ -634,7 +634,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             _activeUi.ChatView = _savedChatView;
         }
 
-        if (_savedChatView is not null)
+        if (renderExistingMessages && _savedChatView is not null)
         {
             _ = _savedChatView.LoadMessagesAsync(_activeUi.Messages);
         }
@@ -1055,7 +1055,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 _sessionCache[sessionId] = loaded;
             }
 
-            SwitchDisplayedSession(loaded);
+            SwitchDisplayedSession(loaded, renderExistingMessages: false);
             CurrentSessionTitle = _session.Title;
             KnowledgePageVm.SetSession(_displayedSessionId);
             ComposerText = string.Empty;
@@ -1086,10 +1086,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             UpdateDisplayedBusyState();
             SettingsStatus = $"已加载对话：{_session.Title}";
 
-            if (_savedChatView is not null)
-            {
-                await _savedChatView.LoadMessagesAsync(_activeUi.Messages);
-            }
         }
         finally
         {
