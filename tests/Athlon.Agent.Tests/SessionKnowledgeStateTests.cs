@@ -79,7 +79,7 @@ public sealed class SessionKnowledgeStateTests
     {
         var paths = new TestPathProvider(root);
         paths.EnsureCreated();
-        return new SessionKnowledgeState(paths, new JsonFileStore());
+        return new SessionKnowledgeState(paths, new JsonFileStore(), new AgentRunContextAccessor());
     }
 
     private static string CreateTempRoot() =>

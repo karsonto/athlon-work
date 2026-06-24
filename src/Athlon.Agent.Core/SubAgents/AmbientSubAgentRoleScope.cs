@@ -1,5 +1,6 @@
 namespace Athlon.Agent.Core.SubAgents;
 
+[Obsolete("Use IAgentRunContextAccessor.Push with AgentRunContext instead.")]
 public sealed class AmbientSubAgentRoleScope : IDisposable
 {
     private static readonly AsyncLocal<string?> Current = new();

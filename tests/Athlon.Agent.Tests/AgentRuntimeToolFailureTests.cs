@@ -16,6 +16,10 @@ public sealed class AgentRuntimeToolFailureTests
             }),
             new AgentModelResponse("recovered after tool failure", Array.Empty<AgentToolCall>()));
 
+        var settings = new AppSettings();
+        var logger = new NoOpLogger();
+        var (pipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
+            new NoOpPreCompletionPipeline(), storage, new TokenEstimatorCalibrator(settings), settings, logger);
         var runtime = new AgentRuntime(
             modelClient,
             storage,
@@ -23,13 +27,16 @@ public sealed class AgentRuntimeToolFailureTests
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
-            new TokenEstimatorCalibrator(new AppSettings()),
+            new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
             new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
-            new AppSettings(),
-            new NoOpLogger(),
+            new AgentRunContextAccessor(),
+            pipeline,
+            compaction,
+            settings,
+            logger,
             new NoOpPostTurnMemoryProcessor());
 
         var session = AgentSession.Create("tool-failure-test");

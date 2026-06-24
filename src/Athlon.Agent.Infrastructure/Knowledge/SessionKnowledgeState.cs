@@ -5,7 +5,10 @@ using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Infrastructure.Knowledge;
 
-public sealed class SessionKnowledgeState(IAppPathProvider paths, IJsonFileStore jsonFileStore) : ISessionKnowledgeState
+public sealed class SessionKnowledgeState(
+    IAppPathProvider paths,
+    IJsonFileStore jsonFileStore,
+    IAgentRunContextAccessor runContextAccessor) : ISessionKnowledgeState
 {
     private static readonly SessionKnowledgeSnapshot EmptySnapshot = SessionKnowledgeSnapshot.Empty;
     private readonly ConcurrentDictionary<string, SessionKnowledgeSnapshot> _cache = new(StringComparer.OrdinalIgnoreCase);
@@ -74,7 +77,7 @@ public sealed class SessionKnowledgeState(IAppPathProvider paths, IJsonFileStore
 
     private string GetKnowledgeFilePath(string sessionId)
     {
-        var sessionDir = AmbientSubAgentStorageScope.ResolveSessionDirectory(paths.SessionsPath, sessionId);
+        var sessionDir = runContextAccessor.ResolveSessionDirectory(paths.SessionsPath, sessionId);
         return Path.Combine(sessionDir, "knowledge.json");
     }
 

@@ -104,7 +104,7 @@ public sealed class FileEditToolTests
         Directory.CreateDirectory(appDataRoot);
         var context = new ActiveWorkspaceContext();
         context.SetWorkspace(workspaceRoot);
-        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
         var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
         return new FileEditTool(guard, audit);
     }

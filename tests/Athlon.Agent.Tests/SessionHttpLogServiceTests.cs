@@ -14,7 +14,7 @@ public sealed class SessionHttpLogServiceTests
 
         try
         {
-            var service = new SessionHttpLogService(paths, new JsonFileStore(), new NoOpLogger());
+            var service = new SessionHttpLogService(paths, new JsonFileStore(), new AgentRunContextAccessor(), new NoOpLogger());
             await service.LogInteractionAsync(
                 "session-1",
                 new SessionHttpInteractionLog(

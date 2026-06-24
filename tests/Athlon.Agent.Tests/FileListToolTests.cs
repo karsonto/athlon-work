@@ -18,7 +18,7 @@ public sealed class FileListToolTests
             context.SetWorkspace(root);
             var appDataRoot = Path.Combine(Path.GetDirectoryName(root)!, ".athlon-agent-test");
             Directory.CreateDirectory(appDataRoot);
-            var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+            var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
             var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
             var tool = new FileListTool(guard, audit);
 
@@ -47,7 +47,7 @@ public sealed class FileListToolTests
             context.SetWorkspace(root);
             var appDataRoot = Path.Combine(Path.GetDirectoryName(root)!, ".athlon-agent-test");
             Directory.CreateDirectory(appDataRoot);
-            var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+            var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
             var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
             var tool = new FileListTool(guard, audit);
 
@@ -77,7 +77,7 @@ public sealed class FileListToolTests
             context.SetWorkspace(workspaceRoot);
             var appDataRoot = Path.Combine(Path.GetDirectoryName(root)!, ".athlon-agent-test");
             Directory.CreateDirectory(appDataRoot);
-            var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+            var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
             var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
             var tool = new FileListTool(guard, audit);
 

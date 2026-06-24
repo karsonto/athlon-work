@@ -11,6 +11,14 @@ public sealed class AgentLoopOptionsTests
     {
         var storage = new NoOpStorage();
         var model = new LoopTestModelClient();
+        var settings = new AppSettings();
+        var logger = new LoopNoOpAppLogger();
+        var (pipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
+            new NoOpPreCompletionPipeline(),
+            storage,
+            new NoOpTokenEstimator(),
+            settings,
+            logger);
         var runtime = new AgentRuntime(
             model,
             storage,
@@ -23,8 +31,11 @@ public sealed class AgentLoopOptionsTests
             new PromptPressureStore(),
             new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
-            new AppSettings(),
-            new LoopNoOpAppLogger(),
+            new AgentRunContextAccessor(),
+            pipeline,
+            compaction,
+            settings,
+            logger,
             new NoOpPostTurnMemoryProcessor());
 
         var session = AgentSession.Create("loop-test");

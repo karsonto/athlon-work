@@ -1,5 +1,4 @@
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -12,20 +11,22 @@ internal sealed class SessionIndexCoordinator
 
     private readonly IAppPathProvider _paths;
     private readonly IJsonFileStore _jsonFileStore;
+    private readonly IAgentRunContextAccessor _runContextAccessor;
     private readonly SemaphoreSlim _indexLock = new(1, 1);
     private readonly object _scheduleLock = new();
     private readonly Dictionary<string, SessionIndexEntry> _pending = new(StringComparer.Ordinal);
     private CancellationTokenSource? _debounceCts;
 
-    public SessionIndexCoordinator(IAppPathProvider paths, IJsonFileStore jsonFileStore)
+    public SessionIndexCoordinator(IAppPathProvider paths, IJsonFileStore jsonFileStore, IAgentRunContextAccessor runContextAccessor)
     {
         _paths = paths;
         _jsonFileStore = jsonFileStore;
+        _runContextAccessor = runContextAccessor;
     }
 
     public void ScheduleUpdate(AgentSession session)
     {
-        var sessionDir = AmbientSubAgentStorageScope.ResolveSessionDirectory(_paths.SessionsPath, session.Id);
+        var sessionDir = _runContextAccessor.ResolveSessionDirectory(_paths.SessionsPath, session.Id);
         var entry = new SessionIndexEntry(session.Id, session.Title, sessionDir, session.UpdatedAt);
         ScheduleUpdate(entry);
     }
@@ -213,7 +214,7 @@ internal sealed class SessionIndexCoordinator
 
         foreach (var file in Directory.EnumerateFiles(_paths.SessionsPath, "session.json", SearchOption.AllDirectories))
         {
-            if (AmbientSubAgentStorageScope.IsSubAgentSessionPath(file))
+            if (AgentRunContext.IsSubAgentSessionPath(file))
             {
                 continue;
             }
@@ -265,7 +266,7 @@ internal sealed class SessionIndexCoordinator
 
     private static SessionIndexEntry[] FilterTopLevelSessions(IEnumerable<SessionIndexEntry> entries) =>
         entries
-            .Where(entry => !AmbientSubAgentStorageScope.IsSubAgentSessionPath(Path.Combine(entry.Path, "session.json")))
+            .Where(entry => !AgentRunContext.IsSubAgentSessionPath(Path.Combine(entry.Path, "session.json")))
             .OrderByDescending(item => item.UpdatedAt)
             .ThenBy(item => item.Id)
             .ToArray();

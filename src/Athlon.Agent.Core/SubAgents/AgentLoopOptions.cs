@@ -5,6 +5,7 @@ public sealed class AgentLoopOptions
     public int? MaxModelToolRounds { get; init; }
 }
 
+[Obsolete("Use IAgentRunContextAccessor.Push with AgentRunContext instead.")]
 public sealed class AgentLoopOptionsScope : IDisposable
 {
     private static readonly AsyncLocal<AgentLoopOptions?> Ambient = new();

@@ -75,7 +75,7 @@ public sealed class GlobFilesToolTests
     {
         var context = new ActiveWorkspaceContext();
         context.SetWorkspace(workspaceRoot);
-        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
         var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
         return new GlobFilesTool(guard, audit);
     }

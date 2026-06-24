@@ -25,6 +25,10 @@ public sealed class AgentRuntimeCompactionTests
         var pipeline = new InjectingPreCompletionPipeline(compactionAudit);
 
         var storage = new CapturingStorage();
+        var settings = new AppSettings();
+        var logger = new NoOpLogger();
+        var (turnPipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
+            pipeline, storage, new TokenEstimatorCalibrator(settings), settings, logger);
 
         var runtime = new AgentRuntime(
 
@@ -40,7 +44,7 @@ public sealed class AgentRuntimeCompactionTests
 
             new PassThroughToolResultEvictor(),
 
-            new TokenEstimatorCalibrator(new AppSettings()),
+            new TokenEstimatorCalibrator(settings),
 
             new SessionUsageAccumulator(),
 
@@ -49,10 +53,12 @@ public sealed class AgentRuntimeCompactionTests
             new SessionToolStormStore(),
 
             new NoOpActiveAgentSessionContext(),
+            new AgentRunContextAccessor(),
+            turnPipeline,
+            compaction,
+            settings,
 
-            new AppSettings(),
-
-            new NoOpLogger(),
+            logger,
             new NoOpPostTurnMemoryProcessor());
 
         ChatMessage? notified = null;

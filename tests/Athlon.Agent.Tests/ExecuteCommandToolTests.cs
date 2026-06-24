@@ -191,7 +191,7 @@ public sealed class ExecuteCommandToolTests
             context.SetWorkspace(workspaceRoot);
         }
 
-        var guard = new WorkspaceGuard(context, new AppSettings(), paths);
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), paths);
         return new ExecuteCommandTool(new AppSettings(), guard, audit, new ExecuteCommandProcessRegistry());
     }
 

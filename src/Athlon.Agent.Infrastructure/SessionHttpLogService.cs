@@ -25,7 +25,11 @@ public sealed class ActiveAgentSessionContext : IActiveAgentSessionContext
     }
 }
 
-public sealed class SessionHttpLogService(IAppPathProvider paths, IJsonFileStore jsonFileStore, IAppLogger logger) : ISessionHttpLogService
+public sealed class SessionHttpLogService(
+    IAppPathProvider paths,
+    IJsonFileStore jsonFileStore,
+    IAgentRunContextAccessor runContextAccessor,
+    IAppLogger logger) : ISessionHttpLogService
 {
     private readonly IAppLogger _logger = logger.ForContext("SessionHttpLog");
 
@@ -37,7 +41,7 @@ public sealed class SessionHttpLogService(IAppPathProvider paths, IJsonFileStore
             return;
         }
 
-        var sessionDir = AmbientSubAgentStorageScope.ResolveSessionDirectory(paths.SessionsPath, sessionId);
+        var sessionDir = runContextAccessor.ResolveSessionDirectory(paths.SessionsPath, sessionId);
         var httpDir = Path.Combine(sessionDir, "http");
         Directory.CreateDirectory(httpDir);
         var path = Path.Combine(httpDir, "interactions.jsonl");

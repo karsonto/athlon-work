@@ -10,7 +10,10 @@ public sealed record ToolDefinition(
     string Description,
     IReadOnlyDictionary<string, string> Parameters,
     bool RequiresApproval = false,
-    string Source = "native");
+    string Source = "native",
+    ToolGroup Group = ToolGroup.Builtin,
+    int? MaxOutputChars = null,
+    ToolInvocationPolicy InvocationPolicy = ToolInvocationPolicy.Allow);
 public sealed record ToolInvocation(string ToolName, IReadOnlyDictionary<string, string> Arguments, string? Explanation = null);
 public sealed record ToolResult(bool Succeeded, string Summary, string? Content = null, string? Error = null, TimeSpan? Duration = null)
 {
@@ -38,6 +41,12 @@ public sealed class ToolRouter(IEnumerable<IAgentTool> tools) : IToolRouter
         if (!_tools.TryGetValue(invocation.ToolName, out var tool))
         {
             return Task.FromResult(ToolResult.Failure("Tool not found", $"No tool named '{invocation.ToolName}' is registered."));
+        }
+
+        var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(tool.Definition);
+        if (blocked is not null)
+        {
+            return Task.FromResult(blocked);
         }
 
         return tool.InvokeAsync(invocation, cancellationToken);

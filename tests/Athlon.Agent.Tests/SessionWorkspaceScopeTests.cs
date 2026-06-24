@@ -16,7 +16,7 @@ public sealed class SessionWorkspaceScopeTests
 
         var context = new ActiveWorkspaceContext();
         context.SetWorkspace(otherRoot);
-        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(Path.Combine(root, ".athlon-agent")));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(Path.Combine(root, ".athlon-agent")));
 
         using (SessionWorkspaceScope.Enter(workspaceRoot, [".git"]))
         {
@@ -38,7 +38,7 @@ public sealed class SessionWorkspaceScopeTests
         Directory.CreateDirectory(second);
 
         var context = new ActiveWorkspaceContext();
-        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(Path.Combine(root, ".athlon-agent")));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(Path.Combine(root, ".athlon-agent")));
 
         using (SessionWorkspaceScope.Enter(first))
         {

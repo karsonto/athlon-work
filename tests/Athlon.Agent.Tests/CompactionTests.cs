@@ -304,7 +304,7 @@ public sealed class CompactionTests
                 }
             };
 
-            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore());
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
             var session = AgentSession.Create("compact-session")
                 .WithMessages(new[]
                 {
@@ -709,7 +709,7 @@ public sealed class CompactionTests
 
         try
         {
-            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore());
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
             var audit = CompactionMessageContent.CreateCompactionMessage(
                 CompactionMessageContent.CreateConversationCompact(100, 80, 3, "fake.jsonl", "summary"));
             var session = AgentSession.Create("rt").WithMessage(audit);

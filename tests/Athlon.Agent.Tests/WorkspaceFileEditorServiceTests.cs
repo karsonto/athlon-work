@@ -86,7 +86,7 @@ public sealed class WorkspaceFileEditorServiceTests
     {
         var context = new ActiveWorkspaceContext();
         context.SetWorkspace(workspaceRoot);
-        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
         return new WorkspaceFileEditorService(guard, new AppSettings());
     }
 

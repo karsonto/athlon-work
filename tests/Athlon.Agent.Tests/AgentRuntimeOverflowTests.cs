@@ -28,9 +28,13 @@ public sealed class AgentRuntimeOverflowTests
             new NoOpLogger());
 
         var modelClient = new OverflowCapturingModelClient();
+        var storage = new NoOpStorage();
+        var logger = new NoOpLogger();
+        var (turnPipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
+            pipeline, storage, new TokenEstimatorCalibrator(settings), settings, logger);
         var runtime = new AgentRuntime(
             modelClient,
-            new NoOpStorage(),
+            storage,
             new NoOpToolRouter(),
             PromptTestHelpers.CreateStaticOrchestrator(),
             pipeline,
@@ -40,8 +44,11 @@ public sealed class AgentRuntimeOverflowTests
             new PromptPressureStore(),
             new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
+            new AgentRunContextAccessor(),
+            turnPipeline,
+            compaction,
             settings,
-            new NoOpLogger(),
+            logger,
             new NoOpPostTurnMemoryProcessor());
 
         var session = AgentSession.Create("overflow-hygiene");
@@ -89,9 +96,13 @@ public sealed class AgentRuntimeOverflowTests
             new NoOpLogger());
 
         var modelClient = new OverflowThenSuccessModelClient();
+        var storage = new NoOpStorage();
+        var logger = new NoOpLogger();
+        var (turnPipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
+            pipeline, storage, new TokenEstimatorCalibrator(settings), settings, logger);
         var runtime = new AgentRuntime(
             modelClient,
-            new NoOpStorage(),
+            storage,
             new NoOpToolRouter(),
             PromptTestHelpers.CreateStaticOrchestrator(),
             pipeline,
@@ -101,8 +112,11 @@ public sealed class AgentRuntimeOverflowTests
             new PromptPressureStore(),
             new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
+            new AgentRunContextAccessor(),
+            turnPipeline,
+            compaction,
             settings,
-            new NoOpLogger(),
+            logger,
             new NoOpPostTurnMemoryProcessor());
 
         var session = AgentSession.Create("overflow");

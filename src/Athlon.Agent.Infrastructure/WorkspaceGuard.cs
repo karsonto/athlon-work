@@ -2,7 +2,11 @@ using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, AppSettings settings, IAppPathProvider paths)
+public sealed class WorkspaceGuard(
+    IActiveWorkspaceContext workspaceContext,
+    IAgentRunContextAccessor runContextAccessor,
+    AppSettings settings,
+    IAppPathProvider paths)
 {
     public bool HasConfiguredWorkspace => TryGetWorkspaceRoot(out _);
 
@@ -41,6 +45,12 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
 
     public IReadOnlyList<string> GetIgnorePatterns()
     {
+        var runContext = runContextAccessor.Current;
+        if (runContext?.WorkspaceIgnorePatterns is { Count: > 0 } runPatterns)
+        {
+            return runPatterns;
+        }
+
         var scoped = SessionWorkspaceScope.CurrentState;
         if (scoped is not null && scoped.IgnorePatterns.Count > 0)
         {
@@ -67,6 +77,13 @@ public sealed class WorkspaceGuard(IActiveWorkspaceContext workspaceContext, App
 
     private bool TryGetWorkspaceRootInternal(out string rootPath)
     {
+        var runRoot = runContextAccessor.Current?.WorkspaceRoot;
+        if (runRoot is { Length: > 0 })
+        {
+            rootPath = runRoot;
+            return true;
+        }
+
         var scoped = SessionWorkspaceScope.CurrentState;
         if (scoped?.RootPath is { Length: > 0 } scopedRoot)
         {

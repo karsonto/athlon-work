@@ -44,7 +44,7 @@ public sealed class ToolArgumentsPathTests
             Directory.CreateDirectory(appDataRoot);
             var context = new ActiveWorkspaceContext();
             context.SetWorkspace(root);
-            var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+            var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
             var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
             var tool = new FileReadTool(guard, audit, new AppSettings());
             var result = await tool.InvokeAsync(

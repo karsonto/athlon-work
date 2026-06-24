@@ -10,6 +10,7 @@ using Athlon.Agent.Infrastructure.Memory;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Licensing;
+using Athlon.Agent.Core.Middleware;
 using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Core.Knowledge;
@@ -60,6 +61,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IImageAttachmentStore, ImageAttachmentStore>();
         services.AddSingleton<IMcpRegistry, McpRegistry>();
         services.AddSingleton<IToolRouter, CompositeToolRouter>();
+        services.AddSingleton<IAgentRunContextAccessor, AgentRunContextAccessor>();
         services.AddSingleton<IActiveWorkspaceContext, ActiveWorkspaceContext>();
         services.AddSingleton<IActiveAgentSessionContext, ActiveAgentSessionContext>();
         services.AddSingleton<ISessionHttpLogService, SessionHttpLogService>();
@@ -116,6 +118,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, MemorySearchTool>();
         services.AddSingleton<IAgentTool, MemoryGetTool>();
         services.AddSingleton<IPreReasoningPromptContributor, MemoryPromptContributor>();
+        services.AddSingleton<CompactionTurnMiddleware>();
+        services.AddSingleton<IAgentTurnMiddleware, CompactionTurnMiddleware>();
+        services.AddSingleton<IAgentTurnMiddleware, PostTurnMemoryMiddleware>();
+        services.AddSingleton<IAgentTurnMiddleware, ToolStormTurnMiddleware>();
+        services.AddSingleton<AgentTurnMiddlewarePipeline>();
         return services;
     }
 

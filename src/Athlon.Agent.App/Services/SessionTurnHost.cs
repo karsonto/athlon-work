@@ -304,7 +304,8 @@ public sealed class SessionTurnHost
             {
                 _request.Ui.ResetForTurn();
                 var liveSession = new LiveAgentSession(_session);
-                var callbacks = _request.Ui.BuildCallbacks(liveSession);
+                var eventBridge = new AgentRunEventBridge();
+                var callbacks = eventBridge.BuildCallbacks(_request.Ui, liveSession);
                 var turnToken = _linked?.Token ?? _cancellation!.Token;
                 _session = await _host._orchestrator.SendAsync(
                     _session,

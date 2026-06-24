@@ -18,7 +18,7 @@ public sealed class WorkspaceGuardTests
         var context = new ActiveWorkspaceContext();
         context.SetWorkspace(workspaceRoot);
         var settings = new AppSettings();
-        var guard = new WorkspaceGuard(context, settings, new TestPathProvider(appDataRoot));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), settings, new TestPathProvider(appDataRoot));
 
         var workspaceFile = Path.Combine(workspaceRoot, "a.txt");
         var skillFile = Path.Combine(appDataRoot, "skills", "demo", "SKILL.md");
@@ -39,7 +39,7 @@ public sealed class WorkspaceGuardTests
 
         var context = new ActiveWorkspaceContext();
         context.SetWorkspace(workspaceRoot);
-        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(Path.Combine(root, ".athlon-agent")));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(Path.Combine(root, ".athlon-agent")));
 
         var fullPath = guard.Normalize("src/demo.txt");
         Assert.True(File.Exists(fullPath));
@@ -56,7 +56,7 @@ public sealed class WorkspaceGuardTests
 
         var context = new ActiveWorkspaceContext();
         context.SetWorkspace(workspaceRoot);
-        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(Path.Combine(root, ".athlon-agent")));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(Path.Combine(root, ".athlon-agent")));
 
         var fullPath = guard.Normalize("athlon-work/src/demo.txt");
         Assert.Equal(Path.Combine(workspaceRoot, "src", "demo.txt"), fullPath);
@@ -75,7 +75,7 @@ public sealed class WorkspaceGuardTests
         context.SetWorkspace(workspaceRoot);
         var appDataRoot = Path.Combine(root, ".athlon-agent");
         Directory.CreateDirectory(appDataRoot);
-        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
         var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
         var tool = new FileWriteTool(guard, audit);
 
@@ -111,7 +111,7 @@ public sealed class WorkspaceGuardTests
 
         var context = new ActiveWorkspaceContext();
         var settings = new AppSettings();
-        var guard = new WorkspaceGuard(context, settings, new TestPathProvider(appDataRoot));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), settings, new TestPathProvider(appDataRoot));
 
         Assert.True(guard.IsInsideWorkspace(Path.Combine(appDataRoot, "skills", "demo", "SKILL.md")));
         Assert.False(guard.IsInsideWorkspace(Path.Combine(root, "workspace", "a.txt")));
@@ -129,7 +129,7 @@ public sealed class WorkspaceGuardTests
         File.WriteAllText(Path.Combine(currentDir, "src", "demo.txt"), "ok");
 
         var context = new ActiveWorkspaceContext();
-        var guard = new WorkspaceGuard(context, new AppSettings(), new TestPathProvider(appDataRoot));
+        var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
 
         var originalCwd = Environment.CurrentDirectory;
         try

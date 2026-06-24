@@ -21,6 +21,10 @@ public sealed class AgentRuntimeProgressTests
             new AgentModelResponse("done", Array.Empty<AgentToolCall>()));
 
         var toolRouter = new ScriptedToolRouter();
+        var settings = new AppSettings();
+        var logger = new NoOpLogger();
+        var (pipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
+            new NoOpPreCompletionPipeline(), storage, new TokenEstimatorCalibrator(settings), settings, logger);
         var runtime = new AgentRuntime(
             modelClient,
             storage,
@@ -28,13 +32,16 @@ public sealed class AgentRuntimeProgressTests
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
-            new TokenEstimatorCalibrator(new AppSettings()),
+            new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
             new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
-            new AppSettings(),
-            new NoOpLogger(),
+            new AgentRunContextAccessor(),
+            pipeline,
+            compaction,
+            settings,
+            logger,
             new NoOpPostTurnMemoryProcessor());
 
         var events = new List<string>();
@@ -82,6 +89,10 @@ public sealed class AgentRuntimeProgressTests
     {
         var storage = new NoOpStorage();
         var modelClient = new DeltaModelClient("hello", ["he", "llo"]);
+        var settings = new AppSettings();
+        var logger = new NoOpLogger();
+        var (pipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
+            new NoOpPreCompletionPipeline(), storage, new TokenEstimatorCalibrator(settings), settings, logger);
         var runtime = new AgentRuntime(
             modelClient,
             storage,
@@ -89,13 +100,16 @@ public sealed class AgentRuntimeProgressTests
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
-            new TokenEstimatorCalibrator(new AppSettings()),
+            new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
             new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
-            new AppSettings(),
-            new NoOpLogger(),
+            new AgentRunContextAccessor(),
+            pipeline,
+            compaction,
+            settings,
+            logger,
             new NoOpPostTurnMemoryProcessor());
 
         var tokens = new List<string>();
@@ -132,6 +146,10 @@ public sealed class AgentRuntimeProgressTests
             new AgentModelResponse("done", Array.Empty<AgentToolCall>()));
         var toolRouter = new ThreadCaptureToolRouter();
 
+        var settings = new AppSettings();
+        var logger = new NoOpLogger();
+        var (pipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
+            new NoOpPreCompletionPipeline(), storage, new TokenEstimatorCalibrator(settings), settings, logger);
         var runtime = new AgentRuntime(
             modelClient,
             storage,
@@ -139,13 +157,16 @@ public sealed class AgentRuntimeProgressTests
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
-            new TokenEstimatorCalibrator(new AppSettings()),
+            new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
             new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
-            new AppSettings(),
-            new NoOpLogger(),
+            new AgentRunContextAccessor(),
+            pipeline,
+            compaction,
+            settings,
+            logger,
             new NoOpPostTurnMemoryProcessor());
 
         await runtime.SendAsync(AgentSession.Create("thread-test"), "run tool");
@@ -173,6 +194,10 @@ public sealed class AgentRuntimeProgressTests
             RouterTestDependencies.CreateSessionContext(),
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateWorkspaceGuard());
+        var mcpSettings = new AppSettings();
+        var logger = new NoOpLogger();
+        var (pipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
+            new NoOpPreCompletionPipeline(), storage, new TokenEstimatorCalibrator(mcpSettings), mcpSettings, logger);
         var runtime = new AgentRuntime(
             modelClient,
             storage,
@@ -180,13 +205,16 @@ public sealed class AgentRuntimeProgressTests
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
-            new TokenEstimatorCalibrator(new AppSettings()),
+            new TokenEstimatorCalibrator(mcpSettings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
             new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
-            new AppSettings(),
-            new NoOpLogger(),
+            new AgentRunContextAccessor(),
+            pipeline,
+            compaction,
+            mcpSettings,
+            logger,
             new NoOpPostTurnMemoryProcessor());
 
         await runtime.SendAsync(AgentSession.Create("mcp-route-test"), "call mcp");

@@ -12,7 +12,7 @@ public sealed class FileStorageServiceTests
         var root = temp.Root;
         var paths = new TestAppPathProvider(root);
         var logger = new NoOpLogger();
-        var storage = new FileStorageService(logger, paths, new JsonFileStore());
+        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
         var session = AgentSession.Create("test-session").WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
 
         await storage.SaveSessionAsync(session);
@@ -30,7 +30,7 @@ public sealed class FileStorageServiceTests
         var root = temp.Root;
         var paths = new TestAppPathProvider(root);
         var logger = new NoOpLogger();
-        var storage = new FileStorageService(logger, paths, new JsonFileStore());
+        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
         var session = AgentSession.Create("chinese-session")
             .WithMessage(ChatMessage.Create(MessageRole.User, "我是用户"));
 
@@ -50,7 +50,7 @@ public sealed class FileStorageServiceTests
         var root = temp.Root;
         var paths = new TestAppPathProvider(root);
         var logger = new NoOpLogger();
-        var storage = new FileStorageService(logger, paths, new JsonFileStore());
+        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
         var session = AgentSession.Create("delete-me")
             .WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
 

@@ -14,10 +14,14 @@ using Serilog.Events;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths, IJsonFileStore jsonFileStore) : IFileStorageService
+public sealed class FileStorageService(
+    IAppLogger logger,
+    IAppPathProvider paths,
+    IJsonFileStore jsonFileStore,
+    IAgentRunContextAccessor runContextAccessor) : IFileStorageService
 {
     private readonly IAppLogger _logger = logger.ForContext("Storage");
-    private readonly SessionIndexCoordinator _indexCoordinator = new(paths, jsonFileStore);
+    private readonly SessionIndexCoordinator _indexCoordinator = new(paths, jsonFileStore, runContextAccessor);
 
     public string RootPath => paths.RootPath;
 
@@ -230,7 +234,7 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
 
         foreach (var file in Directory.EnumerateFiles(paths.SessionsPath, "session.json", SearchOption.AllDirectories))
         {
-            if (AmbientSubAgentStorageScope.IsSubAgentSessionPath(file))
+            if (AgentRunContext.IsSubAgentSessionPath(file))
             {
                 continue;
             }
@@ -343,7 +347,7 @@ public sealed class FileStorageService(IAppLogger logger, IAppPathProvider paths
     private string GetSessionDirectory(AgentSession session) => GetSessionDirectory(session.Id);
 
     private string GetSessionDirectory(string sessionId) =>
-        AmbientSubAgentStorageScope.ResolveSessionDirectory(paths.SessionsPath, sessionId);
+        runContextAccessor.ResolveSessionDirectory(paths.SessionsPath, sessionId);
 
     private string GetSessionTranscriptsDirectory(string sessionId) =>
         Path.Combine(GetSessionDirectory(sessionId), "transcripts");

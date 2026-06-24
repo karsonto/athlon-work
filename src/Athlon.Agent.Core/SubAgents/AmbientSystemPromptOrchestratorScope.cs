@@ -2,6 +2,7 @@ using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Core.SubAgents;
 
+[Obsolete("Use IAgentRunContextAccessor.Push with AgentRunContext instead.")]
 public sealed class AmbientSystemPromptOrchestratorScope : IDisposable
 {
     private static readonly AsyncLocal<ISystemPromptOrchestrator?> Current = new();

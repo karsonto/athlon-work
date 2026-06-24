@@ -35,7 +35,7 @@ public sealed class SessionDiskLogTests
         var paths = new TestAppPathProvider(root);
         paths.EnsureCreated();
         var logger = new NoOpLogger();
-        var storage = new FileStorageService(logger, paths, new JsonFileStore());
+        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
         var session = AgentSession.Create("disk-log-session");
         var user = ChatMessage.Create(MessageRole.User, "你好");
         session = session.WithMessage(user);
@@ -100,8 +100,16 @@ public sealed class SessionDiskLogTests
         var paths = new TestAppPathProvider(root);
         paths.EnsureCreated();
         var logger = new NoOpLogger();
-        var storage = new FileStorageService(logger, paths, new JsonFileStore());
+        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
         var modelClient = new CancelOnFirstCallModelClient();
+        var settings = new AppSettings();
+        var runtimeLogger = new NoOpLogger();
+        var (turnPipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
+            new NoOpPreCompletionPipeline(),
+            storage,
+            new TokenEstimatorCalibrator(settings),
+            settings,
+            runtimeLogger);
         var runtime = new AgentRuntime(
             modelClient,
             storage,
@@ -109,13 +117,16 @@ public sealed class SessionDiskLogTests
             PromptTestHelpers.CreateStaticOrchestrator(),
             new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
-            new TokenEstimatorCalibrator(new AppSettings()),
+            new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
             new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
-            new AppSettings(),
-            new NoOpLogger(),
+            new AgentRunContextAccessor(),
+            turnPipeline,
+            compaction,
+            settings,
+            runtimeLogger,
             new NoOpPostTurnMemoryProcessor());
 
         var session = AgentSession.Create("cancel-persist");

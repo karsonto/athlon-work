@@ -25,7 +25,10 @@ public sealed class ExecuteCommandTool(
             ["cwd"] = ToolPathDescriptions.OptionalWorkspaceRelativeCwd,
             ["timeout"] = $"Timeout in seconds (default {DefaultTimeoutSeconds}, max {MaxTimeoutSeconds})"
         },
-        RequiresApproval: true);
+        RequiresApproval: true,
+        Group: ToolGroup.Builtin,
+        MaxOutputChars: MaxCapturedOutputChars,
+        InvocationPolicy: ToolInvocationPolicy.Ask);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {

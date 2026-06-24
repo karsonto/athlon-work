@@ -27,7 +27,7 @@ public sealed class ToolResultEvictorTests
                 }
             };
 
-            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore());
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
             var evictor = new ToolResultEvictor(settings, storage);
             var toolCall = new AgentToolCall("call-1", "execute_command", new Dictionary<string, string>());
             var result = ToolResult.Success("done", new string('z', 500));
@@ -89,7 +89,7 @@ public sealed class ToolResultEvictorTests
                 }
             };
 
-            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore());
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
             var evictor = new ToolResultEvictor(settings, storage);
             var toolCall = new AgentToolCall("call-read", "file_read", new Dictionary<string, string>());
             var result = ToolResult.Success("read", new string('r', 500));

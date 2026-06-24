@@ -1,5 +1,6 @@
 namespace Athlon.Agent.Core.SubAgents;
 
+[Obsolete("Use IAgentRunContextAccessor.Push with AgentRunContext instead.")]
 public sealed class AmbientToolRouterScope : IDisposable
 {
     private static readonly AsyncLocal<IToolRouter?> Current = new();

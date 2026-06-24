@@ -173,7 +173,7 @@ public sealed class FileReadToolTests
             var settings = new AppSettings { FileRead = fileRead ?? new FileReadSettings() };
             var context = new ActiveWorkspaceContext();
             context.SetWorkspace(root);
-            var guard = new WorkspaceGuard(context, settings, new TestPathProvider(appDataRoot));
+            var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), settings, new TestPathProvider(appDataRoot));
             var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
             var tool = new FileReadTool(guard, audit, settings);
             return new FileReadTestEnvironment(root, tool, filePath);

@@ -12,6 +12,7 @@ internal sealed class AgentTurnCoordinator(
     ISessionUsageAccumulator sessionUsageAccumulator,
     IPromptPressureStore promptPressureStore,
     AppSettings settings,
+    IAgentRunContextAccessor runContextAccessor,
     Func<ISystemPromptOrchestrator> resolveSystemPromptOrchestrator,
     Func<AgentSession, AgentTurnCallbacks?, PreCompletionOptions, string, IReadOnlyList<ToolDefinition>, ContextPressureLevel, CancellationToken, Task<AgentSession>> runPreCompletionPipelineAsync,
     IAppLogger logger)
@@ -104,11 +105,11 @@ internal sealed class AgentTurnCoordinator(
         promptPressureStore.Record(session.Id, response.Usage.PromptTokens.Value);
 
         var snapshot = sessionUsageAccumulator.Record(session.Id, response.Usage, contextSavingsTokens);
-        var parentContext = AmbientSubAgentStorageScope.Current;
-        if (parentContext is not null)
+        var parentSessionId = runContextAccessor.Current?.ParentSessionId;
+        if (parentSessionId is not null)
         {
-            sessionUsageAccumulator.RecordRollup(parentContext.ParentSessionId, response.Usage, contextSavingsTokens);
-            snapshot = sessionUsageAccumulator.Get(parentContext.ParentSessionId);
+            sessionUsageAccumulator.RecordRollup(parentSessionId, response.Usage, contextSavingsTokens);
+            snapshot = sessionUsageAccumulator.Get(parentSessionId);
         }
 
         if (callbacks?.OnUsageRecorded is { } onUsage)

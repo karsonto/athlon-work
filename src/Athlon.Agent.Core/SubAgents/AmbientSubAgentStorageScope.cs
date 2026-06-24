@@ -4,6 +4,7 @@ namespace Athlon.Agent.Core.SubAgents;
 /// Redirects session file I/O for a sub-agent run to
 /// {sessions}/{parentId}/subagents/default/{subSessionId}/.
 /// </summary>
+[Obsolete("Use IAgentRunContextAccessor.Push with AgentRunContext instead.")]
 public sealed class AmbientSubAgentStorageScope : IDisposable
 {
     private static readonly AsyncLocal<SubAgentStorageContext?> Ambient = new();

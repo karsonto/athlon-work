@@ -103,10 +103,33 @@ internal sealed class McpDelegatingToolRouter(
                     $"Tool {invocation.ToolName} is not advertised in search mode. Use {McpSearchGatewayTools.SearchToolName} and {McpSearchGatewayTools.CallToolName}."));
             }
 
+            var mcpDefinition = mcpRegistry.ListToolDefinitions()
+                .FirstOrDefault(tool => string.Equals(tool.Name, invocation.ToolName, StringComparison.OrdinalIgnoreCase));
+            if (mcpDefinition is not null)
+            {
+                var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(mcpDefinition);
+                if (blocked is not null)
+                {
+                    return Task.FromResult(blocked);
+                }
+            }
+
             return mcpRegistry.InvokeAsync(serverName, toolName, invocation.Arguments, cancellationToken);
         }
 
-        return new ToolRouter(ActiveLocalTools).InvokeAsync(invocation, cancellationToken);
+        var localRouter = new ToolRouter(ActiveLocalTools);
+        var localDefinition = localRouter.ListTools()
+            .FirstOrDefault(tool => string.Equals(tool.Name, invocation.ToolName, StringComparison.OrdinalIgnoreCase));
+        if (localDefinition is not null)
+        {
+            var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(localDefinition);
+            if (blocked is not null)
+            {
+                return Task.FromResult(blocked);
+            }
+        }
+
+        return localRouter.InvokeAsync(invocation, cancellationToken);
     }
 
     private bool ShouldUseMcpSearch()

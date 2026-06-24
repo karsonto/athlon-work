@@ -15,13 +15,13 @@ public sealed class KnowledgeStoreTests
         var settings = new AppSettings();
         var store = new SqliteKnowledgeStore(paths, settings);
 
-        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "产品资料" });
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "????" });
         var document = await store.SaveDocumentAsync(new KnowledgeDocument
         {
             ModuleId = module.Id,
-            FileName = "产品说明.md",
+            FileName = "????.md",
             FileType = ".md",
-            OriginalPath = Path.Combine(root, "产品说明.md"),
+            OriginalPath = Path.Combine(root, "????.md"),
             Status = KnowledgeDocumentStatus.Indexed
         });
 
@@ -31,8 +31,8 @@ public sealed class KnowledgeStoreTests
                 DocumentId = document.Id,
                 ModuleId = module.Id,
                 ChunkIndex = 0,
-                TitlePath = "配置",
-                Content = "配置 Endpoint 和 API Key",
+                TitlePath = "??",
+                Content = "?? Endpoint ? API Key",
                 EmbeddingModel = "test",
                 EmbeddingDimension = 2,
                 Embedding = [1, 0]
@@ -59,7 +59,7 @@ public sealed class KnowledgeStoreTests
         var settings = new AppSettings();
         var store = new SqliteKnowledgeStore(paths, settings);
 
-        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "计数测试" });
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "????" });
         var docA = await store.SaveDocumentAsync(new KnowledgeDocument
         {
             ModuleId = module.Id,
@@ -100,25 +100,25 @@ public sealed class KnowledgeStoreTests
         var settings = new AppSettings();
         settings.Knowledge.Search.MinScore = 0;
         var store = new SqliteKnowledgeStore(paths, settings);
-        var moduleA = await store.SaveModuleAsync(new KnowledgeModule { Name = "模块 A" });
-        var moduleB = await store.SaveModuleAsync(new KnowledgeModule { Name = "模块 B" });
+        var moduleA = await store.SaveModuleAsync(new KnowledgeModule { Name = "?? A" });
+        var moduleB = await store.SaveModuleAsync(new KnowledgeModule { Name = "?? B" });
         var docA = await store.SaveDocumentAsync(new KnowledgeDocument { ModuleId = moduleA.Id, FileName = "a.md", FileType = ".md" });
         var docB = await store.SaveDocumentAsync(new KnowledgeDocument { ModuleId = moduleB.Id, FileName = "b.md", FileType = ".md" });
         await store.ReplaceChunksAsync(docA.Id, [
-            new KnowledgeChunk { DocumentId = docA.Id, ModuleId = moduleA.Id, Content = "命中内容", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
+            new KnowledgeChunk { DocumentId = docA.Id, ModuleId = moduleA.Id, Content = "????", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
         ]);
         await store.ReplaceChunksAsync(docB.Id, [
-            new KnowledgeChunk { DocumentId = docB.Id, ModuleId = moduleB.Id, Content = "不应返回", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
+            new KnowledgeChunk { DocumentId = docB.Id, ModuleId = moduleB.Id, Content = "????", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
         ]);
 
-        var sessionKnowledgeState = new SessionKnowledgeState(paths, new JsonFileStore());
+        var sessionKnowledgeState = new SessionKnowledgeState(paths, new JsonFileStore(), new AgentRunContextAccessor());
         await sessionKnowledgeState.SaveAsync("session-1", new SessionKnowledgeSnapshot(true, new HashSet<string> { moduleA.Id }));
 
         var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), sessionKnowledgeState, settings);
         var hits = await service.SearchAsync("session-1", "query");
 
         Assert.Single(hits);
-        Assert.Equal("模块 A", hits[0].ModuleName);
+        Assert.Equal("?? A", hits[0].ModuleName);
         Assert.Equal("a.md", hits[0].FileName);
     }
 
@@ -130,14 +130,14 @@ public sealed class KnowledgeStoreTests
         var settings = new AppSettings();
         settings.Knowledge.Search.MinScore = 0;
         var store = new SqliteKnowledgeStore(paths, settings);
-        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "模块" });
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "??" });
         var docA = await store.SaveDocumentAsync(new KnowledgeDocument { ModuleId = module.Id, FileName = "a.md", FileType = ".md" });
         var docB = await store.SaveDocumentAsync(new KnowledgeDocument { ModuleId = module.Id, FileName = "b.md", FileType = ".md" });
         await store.ReplaceChunksAsync(docA.Id, [
-            new KnowledgeChunk { DocumentId = docA.Id, ModuleId = module.Id, Content = "文档 A 内容", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
+            new KnowledgeChunk { DocumentId = docA.Id, ModuleId = module.Id, Content = "?? A ??", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
         ]);
         await store.ReplaceChunksAsync(docB.Id, [
-            new KnowledgeChunk { DocumentId = docB.Id, ModuleId = module.Id, Content = "文档 B 内容", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
+            new KnowledgeChunk { DocumentId = docB.Id, ModuleId = module.Id, Content = "?? B ??", EmbeddingModel = "test", EmbeddingDimension = 2, Embedding = [1, 0] }
         ]);
 
         var service = new KnowledgeSearchService(store, new FakeEmbeddingClient([1, 0]), RouterTestDependencies.CreateSessionKnowledgeState(), settings);
@@ -169,7 +169,7 @@ public sealed class KnowledgeStoreTests
             new KnowledgeDocumentExtractor(),
             new KnowledgeChunker(settings),
             new NoOpLogger());
-        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "模块" });
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "??" });
         var sourcePath = Path.Combine(root, "source.md");
         await File.WriteAllTextAsync(sourcePath, new string('a', 1200));
         var reports = new List<KnowledgeIndexingProgress>();
@@ -180,7 +180,8 @@ public sealed class KnowledgeStoreTests
             progress: new RecordingProgress(reports));
 
         Assert.Equal(3, document.ChunkCount);
-        var embeddingReports = reports.Where(report => report.Stage == "向量化").ToArray();
+        const string embeddingStage = "\u5411\u91CF\u5316";
+        var embeddingReports = reports.Where(report => report.Stage == embeddingStage).ToArray();
         Assert.Contains(embeddingReports, report => report.Processed == 2);
         Assert.Contains(embeddingReports, report => report.Processed >= 3);
         Assert.Equal(100, reports.Last().Percent);
@@ -202,7 +203,7 @@ public sealed class KnowledgeStoreTests
             new KnowledgeDocumentExtractor(),
             new KnowledgeChunker(settings),
             new NoOpLogger());
-        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "模块" });
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "??" });
         var sourcePath = Path.Combine(root, "empty.txt");
         await File.WriteAllTextAsync(sourcePath, "   ");
 
@@ -223,7 +224,7 @@ public sealed class KnowledgeStoreTests
         paths.EnsureCreated();
         var settings = new AppSettings();
         var store = new SqliteKnowledgeStore(paths, settings);
-        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "模块" });
+        var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "??" });
         var document = new KnowledgeDocument
         {
             ModuleId = module.Id,

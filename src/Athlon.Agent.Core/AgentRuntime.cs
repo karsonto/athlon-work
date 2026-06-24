@@ -3,6 +3,8 @@ using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Streaming;
+using Athlon.Agent.Core.Events;
+using Athlon.Agent.Core.Middleware;
 using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Core;
@@ -19,6 +21,9 @@ public sealed class AgentRuntime(
     IPromptPressureStore promptPressureStore,
     ISessionToolStormStore sessionToolStormStore,
     IActiveAgentSessionContext activeSessionContext,
+    IAgentRunContextAccessor runContextAccessor,
+    AgentTurnMiddlewarePipeline turnPipeline,
+    CompactionTurnMiddleware compactionMiddleware,
     AppSettings settings,
     IAppLogger logger,
     IPostTurnMemoryProcessor memoryProcessor) : IAgentRuntime
@@ -27,7 +32,7 @@ public sealed class AgentRuntime(
     private readonly ToolInvocationPipeline _toolPipeline = new(
         storage,
         toolResultEvictor,
-        () => AmbientToolRouterScope.CurrentRouter ?? toolRouter,
+        () => runContextAccessor.Current?.ToolRouter ?? toolRouter,
         logger);
     private TrainingData.ITrainingDataCollector? _trainingDataCollector;
     private AgentTurnCoordinator? _turnCoordinator;
@@ -49,8 +54,9 @@ public sealed class AgentRuntime(
         sessionUsageAccumulator,
         promptPressureStore,
         settings,
+        runContextAccessor,
         ResolveSystemPromptOrchestrator,
-        RunPreCompletionPipelineAsync,
+        RunForceCompactPreCompletionAsync,
         logger);
 
     public async Task<AgentSession> SendAsync(
@@ -61,10 +67,22 @@ public sealed class AgentRuntime(
         CancellationToken cancellationToken = default)
     {
         var ignorePatterns = ResolveIgnorePatterns(session);
-        using var workspaceScope = SessionWorkspaceScope.Enter(session.ActiveWorkspace, ignorePatterns);
+        var runId = Guid.NewGuid().ToString("N");
+        var runContext = AgentRunContext.CreateRoot(
+            session,
+            runId,
+            toolRouter,
+            systemPromptOrchestrator,
+            ignorePatterns);
+        if (AgentLoopOptionsScope.Current is { } loopOptions)
+        {
+            runContext = runContext with { LoopOptions = loopOptions };
+        }
+        using var runScope = runContextAccessor.Push(runContext);
+        using var workspaceScope = SessionWorkspaceScope.Enter(runContext.WorkspaceRoot, runContext.WorkspaceIgnorePatterns);
         using var skillActivationScope = SessionSkillActivationScope.EnterNewTurn();
         using var sessionScope = activeSessionContext.Enter(session.Id);
-        return await SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, cancellationToken);
+        return await SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, runContext, cancellationToken);
     }
 
     private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session)
@@ -91,6 +109,7 @@ public sealed class AgentRuntime(
         string userInput,
         IReadOnlyList<ImageAttachment>? imageAttachments,
         AgentTurnCallbacks? callbacks,
+        AgentRunContext runContext,
         CancellationToken cancellationToken)
     {
         try
@@ -112,38 +131,48 @@ public sealed class AgentRuntime(
             var frozenPrompt = activePrompt.PrepareForTurn(session, tools);
             var environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
             var modelToolRound = 0;
-            var maxModelToolRounds = AgentLoopOptionsScope.Current?.MaxModelToolRounds;
+            var maxModelToolRounds = runContext.LoopOptions?.MaxModelToolRounds;
             var modelMessageCache = new ModelMessageCache();
-            var runId = Guid.NewGuid().ToString("N");
-            var streamAdapter = new AgentStreamAdapter(session.Id, runId);
-            var toolStorm = ResolveToolStormBreaker(session.Id);
+            var streamAdapter = new AgentStreamAdapter(session.Id, runContext.RunId);
+            var turnInvocation = new AgentTurnInvocation
+            {
+                RunContext = runContext,
+                Session = session,
+                Callbacks = callbacks,
+                StreamAdapter = streamAdapter,
+                Tools = tools,
+                FrozenPrompt = frozenPrompt,
+                EnvironmentPrompt = environmentPrompt,
+                ModelMessageCache = modelMessageCache
+            };
+            await turnPipeline.OnTurnStartingAsync(turnInvocation, cancellationToken);
+            session = turnInvocation.Session;
+            if (callbacks?.EventSink is not null)
+            {
+                await callbacks.EventSink.PublishLifecycleEventAsync(
+                    new AgentRunLifecycleEvent.TurnStarted(runContext),
+                    cancellationToken).ConfigureAwait(false);
+            }
             await PublishStreamEventsAsync(callbacks, streamAdapter.CreateRunStarted());
 
             if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
             {
                 var toolCall = new AgentToolCall(Guid.NewGuid().ToString("N"), "file_list", new Dictionary<string, string>());
                 session = await InvokeToolAndPersistAsync(
-                    session,
+                    turnInvocation,
                     userMessage.Id,
                     toolCall,
-                    streamAdapter,
-                    callbacks,
-                    toolStorm,
                     cancellationToken);
             }
 
             while (true)
             {
-                var historyBeforePreCompletion = session.Messages;
-                session = await RunPreCompletionPipelineAsync(
-                    session,
-                    callbacks,
-                    PreCompletionOptions.AgentLoop,
-                    environmentPrompt,
-                    tools,
-                    cancellationToken: cancellationToken);
-                modelMessageCache.NotePreCompletionResult(historyBeforePreCompletion, session.Messages);
+                turnInvocation.Session = session;
+                turnInvocation.EnvironmentPrompt = environmentPrompt;
+                await turnPipeline.OnBeforeModelRoundAsync(turnInvocation, cancellationToken);
+                session = turnInvocation.Session;
                 environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
+                turnInvocation.EnvironmentPrompt = environmentPrompt;
                 var hygieneResult = ModelMessagesForApiBuilder.Build(
                     modelMessageCache,
                     environmentPrompt,
@@ -193,7 +222,9 @@ public sealed class AgentRuntime(
                     await PersistMessageAsync(session, assistant, cancellationToken);
                     await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
                     _logger.Information("Saved session {SessionId} with {MessageCount} messages", session.Id, session.Messages.Count);
-                    FireAndForgetMemoryFlush(session, cancellationToken);
+                    turnInvocation.Session = session;
+                    await turnPipeline.OnTurnCompletedAsync(turnInvocation, cancellationToken);
+                    await PublishTurnFinishedAsync(callbacks, runContext, session, TurnOutcomeKind.Completed, cancellationToken);
                     await RecordTrainingDataAsync(session, cancellationToken);
                     return session;
                 }
@@ -210,6 +241,7 @@ public sealed class AgentRuntime(
                 await PublishStreamEventsAsync(callbacks, streamAdapter.OnAssistantRoundCompleted(assistantWithToolCalls));
 
                 modelToolRound++;
+                turnInvocation.State.ModelToolRound = modelToolRound;
                 if (maxModelToolRounds is > 0 && modelToolRound >= maxModelToolRounds)
                 {
                     _logger.Warning(
@@ -217,19 +249,24 @@ public sealed class AgentRuntime(
                         maxModelToolRounds,
                         session.Id);
                     await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
-                    FireAndForgetMemoryFlush(session, cancellationToken);
+                    turnInvocation.Session = session;
+                    await turnPipeline.OnTurnCompletedAsync(turnInvocation, cancellationToken);
+                    await PublishTurnFinishedAsync(
+                        callbacks,
+                        runContext,
+                        session,
+                        TurnOutcomeKind.MaxToolRoundsReached,
+                        cancellationToken);
                     return session;
                 }
 
                 foreach (var toolCall in response.ToolCalls)
                 {
+                    turnInvocation.Session = session;
                     session = await InvokeToolAndPersistAsync(
-                        session,
+                        turnInvocation,
                         userMessage.Id,
                         toolCall,
-                        streamAdapter,
-                        callbacks,
-                        toolStorm,
                         cancellationToken);
                 }
             }
@@ -250,17 +287,72 @@ public sealed class AgentRuntime(
         }
     }
 
-    private ToolStormBreaker? ResolveToolStormBreaker(string sessionId)
+    private async Task<AgentSession> RunForceCompactPreCompletionAsync(
+        AgentSession session,
+        AgentTurnCallbacks? callbacks,
+        PreCompletionOptions options,
+        string environmentPrompt,
+        IReadOnlyList<ToolDefinition> tools,
+        ContextPressureLevel pressureOverride,
+        CancellationToken cancellationToken)
     {
-        var stormSettings = settings.ContextCompaction.ToolStorm;
-        if (!stormSettings.Enabled)
+        var invocation = new AgentTurnInvocation
         {
-            return null;
+            RunContext = runContextAccessor.Current
+                ?? AgentRunContext.CreateRoot(session, Guid.NewGuid().ToString("N"), toolRouter, systemPromptOrchestrator, ResolveIgnorePatterns(session)),
+            Session = session,
+            Callbacks = callbacks,
+            StreamAdapter = new AgentStreamAdapter(session.Id, Guid.NewGuid().ToString("N")),
+            EnvironmentPrompt = environmentPrompt,
+            Tools = tools
+        };
+        return await compactionMiddleware.RunPreCompletionAsync(
+            invocation,
+            options,
+            environmentPrompt,
+            tools,
+            cancellationToken,
+            pressureOverride).ConfigureAwait(false);
+    }
+
+    private async Task<AgentSession> InvokeToolAndPersistAsync(
+        AgentTurnInvocation invocation,
+        string? parentMessageId,
+        AgentToolCall toolCall,
+        CancellationToken cancellationToken)
+    {
+        await turnPipeline.OnBeforeToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
+        var toolStorm = invocation.ToolStorm;
+        var session = invocation.Session;
+        var streamAdapter = invocation.StreamAdapter;
+        var callbacks = invocation.Callbacks;
+
+        if (toolStorm is not null && !toolStorm.TryInspect(toolCall, out var reason))
+        {
+            var suppressed = ToolResult.Failure(
+                "Duplicate tool call suppressed",
+                reason ?? "repeat-loop guard suppressed the duplicate tool call.");
+            var content = FormatToolResult(toolCall, suppressed);
+            var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
+            session = session.WithMessage(toolMessage);
+            await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall));
+            await PersistMessageAsync(session, toolMessage, cancellationToken);
+            invocation.Session = session;
+            await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
+            return session;
         }
 
-        return stormSettings.Scope == ToolStormScope.Session
-            ? sessionToolStormStore.GetOrCreate(sessionId, stormSettings)
-            : new ToolStormBreaker(stormSettings);
+        session = await _toolPipeline.InvokeAndPersistAsync(
+            session,
+            parentMessageId,
+            toolCall,
+            streamAdapter,
+            callbacks,
+            PersistMessageAsync,
+            cancellationToken);
+        invocation.Session = session;
+        await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
+        return session;
     }
 
     private void LogToolCatalogDrift(string sessionId, string fingerprint)
@@ -294,174 +386,36 @@ public sealed class AgentRuntime(
 
     private readonly Dictionary<string, string> _toolCatalogFingerprints = new(StringComparer.Ordinal);
 
-    private async Task<AgentSession> InvokeToolAndPersistAsync(
-        AgentSession session,
-        string? parentMessageId,
-        AgentToolCall toolCall,
-        AgentStreamAdapter streamAdapter,
-        AgentTurnCallbacks? callbacks,
-        ToolStormBreaker? toolStorm,
-        CancellationToken cancellationToken)
-    {
-        if (toolStorm is not null && !toolStorm.TryInspect(toolCall, out var reason))
-        {
-            var suppressed = ToolResult.Failure(
-                "Duplicate tool call suppressed",
-                reason ?? "repeat-loop guard suppressed the duplicate tool call.");
-            var content = FormatToolResult(toolCall, suppressed);
-            var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
-            session = session.WithMessage(toolMessage);
-            await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall));
-            await PersistMessageAsync(session, toolMessage, cancellationToken);
-            return session;
-        }
-
-        return await _toolPipeline.InvokeAndPersistAsync(
-            session,
-            parentMessageId,
-            toolCall,
-            streamAdapter,
-            callbacks,
-            PersistMessageAsync,
-            cancellationToken);
-    }
-
-    private async Task<AgentSession> RunPreCompletionPipelineAsync(
-        AgentSession session,
-        AgentTurnCallbacks? callbacks,
-        PreCompletionOptions options,
-        string environmentPrompt,
-        IReadOnlyList<ToolDefinition> tools,
-        ContextPressureLevel pressureOverride = ContextPressureLevel.Normal,
-        CancellationToken cancellationToken = default)
-    {
-        CompactionRuntimeContext? runtimeContext = null;
-        var compaction = settings.ContextCompaction;
-        if (compaction.Enabled || options.ForceConversationCompact)
-        {
-            var multiplier = tokenEstimatorCalibrator.GetMultiplier(session.Id);
-            var budget = ContextBudgetCalculator.Compute(
-                environmentPrompt,
-                tools,
-                session.Messages,
-                settings.ContextCompaction,
-                settings.Model,
-                multiplier);
-            budget = ApplyPromptPressure(budget, session.Id);
-            runtimeContext = new CompactionRuntimeContext(
-                budget,
-                environmentPrompt,
-                tools,
-                multiplier,
-                pressureOverride,
-                promptPressureStore.GetLastPromptTokens(session.Id));
-        }
-
-        var messageIdsBefore = session.Messages.Select(message => message.Id).ToHashSet(StringComparer.Ordinal);
-        session = await preCompletionPipeline.RunAsync(session, options, runtimeContext, cancellationToken);
-        return await PersistCompactionAuditsAsync(session, messageIdsBefore, callbacks, cancellationToken);
-    }
-
-    private ContextBudgetSnapshot ApplyPromptPressure(ContextBudgetSnapshot budget, string sessionId)
-    {
-        var lastPromptTokens = promptPressureStore.GetLastPromptTokens(sessionId);
-        if (lastPromptTokens is not > 0)
-        {
-            return budget;
-        }
-
-        var historyFromActual = Math.Max(0, lastPromptTokens.Value - budget.FixedOverhead);
-        if (historyFromActual <= budget.EstimatedHistory)
-        {
-            return budget;
-        }
-
-        return budget.WithHistoryEstimate(historyFromActual, budget.HistoryBudget);
-    }
-
-    private async Task<AgentSession> PersistCompactionAuditsAsync(
-        AgentSession session,
-        HashSet<string> messageIdsBefore,
-        AgentTurnCallbacks? callbacks,
-        CancellationToken cancellationToken)
-    {
-        if (HasCompactionStructureChange(session, messageIdsBefore))
-        {
-            await NotifySessionUpdatedAsync(callbacks, session);
-        }
-
-        foreach (var message in session.Messages)
-        {
-            if (messageIdsBefore.Contains(message.Id))
-            {
-                continue;
-            }
-
-            await PublishStreamEventsAsync(callbacks, [new AgentStreamEvent.ChatMessageAppended(message)]);
-            await PersistMessageAsync(session, message, cancellationToken);
-        }
-
-        await storage.SaveSessionAsync(session, cancellationToken);
-
-        return session;
-    }
-
     private async Task PersistMessageAsync(AgentSession session, ChatMessage message, CancellationToken cancellationToken)
     {
         await storage.AppendConversationMessageAsync(session.Id, message, cancellationToken);
-    }
-
-    private static bool HasCompactionStructureChange(AgentSession session, HashSet<string> messageIdsBefore)
-    {
-        var hasNewCompactionAudit = false;
-        var hasNewSummaryPlaceholder = false;
-        foreach (var message in session.Messages)
-        {
-            if (messageIdsBefore.Contains(message.Id))
-            {
-                continue;
-            }
-
-            if (message.Role == MessageRole.Compaction)
-            {
-                hasNewCompactionAudit = true;
-            }
-            else if (SummaryMessageBuilder.IsSummaryMessage(message))
-            {
-                hasNewSummaryPlaceholder = true;
-            }
-        }
-
-        if (hasNewCompactionAudit || hasNewSummaryPlaceholder)
-        {
-            return true;
-        }
-
-        // When count comparison is inconclusive (e.g. count >= before), do a set comparison
-        var messageIdsAfter = session.Messages.Select(m => m.Id).ToHashSet(StringComparer.Ordinal);
-        return messageIdsAfter.Count != messageIdsBefore.Count;
-    }
-
-    private static async Task NotifySessionUpdatedAsync(AgentTurnCallbacks? callbacks, AgentSession session)
-    {
-        if (callbacks?.OnSessionUpdated is not null)
-        {
-            await callbacks.OnSessionUpdated(session);
-        }
     }
 
     internal static async Task PublishStreamEventsAsync(
         AgentTurnCallbacks? callbacks,
         IReadOnlyList<AgentStreamEvent> events)
     {
-        if (callbacks?.OnStreamEvent is null || events.Count == 0)
+        if (events.Count == 0)
+        {
+            return;
+        }
+
+        var sink = callbacks?.EventSink;
+        if (callbacks?.OnStreamEvent is null && sink is null)
         {
             return;
         }
 
         foreach (var streamEvent in events)
         {
-            await callbacks.OnStreamEvent(streamEvent);
+            if (sink is not null)
+            {
+                await sink.PublishStreamEventAsync(streamEvent).ConfigureAwait(false);
+            }
+            else if (callbacks?.OnStreamEvent is { } onStreamEvent)
+            {
+                await onStreamEvent(streamEvent).ConfigureAwait(false);
+            }
         }
     }
 
@@ -531,31 +485,25 @@ public sealed class AgentRuntime(
         }
     }
 
-    private void FireAndForgetMemoryFlush(AgentSession session, CancellationToken cancellationToken)
+    private static async Task PublishTurnFinishedAsync(
+        AgentTurnCallbacks? callbacks,
+        AgentRunContext runContext,
+        AgentSession session,
+        TurnOutcomeKind outcome,
+        CancellationToken cancellationToken)
     {
-        if (!settings.Memory.Enabled)
-            return;
-
-        var capturedSession = session;
-        _ = Task.Run(async () =>
+        if (callbacks?.EventSink is null)
         {
-            try
-            {
-                await memoryProcessor.ProcessAsync(capturedSession.Messages, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                _logger.Debug("Post-turn memory flush cancelled for session {SessionId}", capturedSession.Id);
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning("Post-turn memory flush failed: {Error}", ex.Message);
-            }
-        }, cancellationToken);
+            return;
+        }
+
+        await callbacks.EventSink.PublishLifecycleEventAsync(
+            new AgentRunLifecycleEvent.TurnFinished(runContext, session, new TurnOutcome(outcome)),
+            cancellationToken).ConfigureAwait(false);
     }
 
-    private IToolRouter ResolveToolRouter() => AmbientToolRouterScope.CurrentRouter ?? toolRouter;
+    private IToolRouter ResolveToolRouter() => runContextAccessor.Current?.ToolRouter ?? toolRouter;
 
     private ISystemPromptOrchestrator ResolveSystemPromptOrchestrator() =>
-        AmbientSystemPromptOrchestratorScope.CurrentOrchestrator ?? systemPromptOrchestrator;
+        runContextAccessor.Current?.PromptOrchestrator ?? systemPromptOrchestrator;
 }

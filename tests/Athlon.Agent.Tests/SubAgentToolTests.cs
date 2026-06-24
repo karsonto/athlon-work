@@ -147,6 +147,7 @@ public sealed class SubAgentToolTests
             childRouter,
             prompt,
             new NoOpActiveAgentSessionContext(),
+            new AgentRunContextAccessor(),
             new NoOpAppLogger());
     }
 

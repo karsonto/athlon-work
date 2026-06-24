@@ -1,15 +1,14 @@
 using System.Text;
-using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Core.Prompt;
 
-public sealed class SubAgentPersonaSection : IEnvironmentPromptSection
+public sealed class SubAgentPersonaSection(IAgentRunContextAccessor runContextAccessor) : IEnvironmentPromptSection
 {
     public int Order => 50;
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
-        var role = AmbientSubAgentRoleScope.CurrentRole;
+        var role = runContextAccessor.Current?.SubAgentRole;
         if (string.IsNullOrWhiteSpace(role))
         {
             return;

@@ -12,6 +12,7 @@ public sealed class SubAgentTool(
     Lazy<ChildAgentToolRouter> childToolRouter,
     SubAgentSystemPromptOrchestrator subAgentPromptOrchestrator,
     IActiveAgentSessionContext activeSessionContext,
+    IAgentRunContextAccessor runContextAccessor,
     IAppLogger logger) : IAgentTool, IExcludedFromChildAgentToolkit
 {
     private readonly SubAgentSettings _subAgent = settings.SubAgent;
@@ -74,16 +75,30 @@ public sealed class SubAgentTool(
         var session = bundle?.Session ?? await CreateSubSessionAsync(parentSessionId, subSessionId, cancellationToken);
         bundle = new SubAgentSessionBundle(session, role);
 
-        using var depthScope = SubAgentExecutionScope.Enter();
-        using var routerScope = AmbientToolRouterScope.Enter(childToolRouter.Value);
-        using var promptScope = AmbientSystemPromptOrchestratorScope.Enter(subAgentPromptOrchestrator);
-        using var roleScope = AmbientSubAgentRoleScope.Enter(role);
-        using var storageScope = AmbientSubAgentStorageScope.Enter(parentSessionId, subSessionId);
-        using var loopScope = AgentLoopOptionsScope.Enter(new AgentLoopOptions { MaxModelToolRounds = _subAgent.MaxToolRounds });
-        using var sessionScope = activeSessionContext.Enter(subSessionId);
-
         var ignorePatterns = ResolveIgnorePatterns(session);
-        using var workspaceScope = SessionWorkspaceScope.Enter(session.ActiveWorkspace, ignorePatterns);
+        var workspaceRoot = string.IsNullOrWhiteSpace(session.ActiveWorkspace)
+            ? runContextAccessor.Current?.WorkspaceRoot
+            : Path.GetFullPath(session.ActiveWorkspace);
+        var parentRunContext = runContextAccessor.Current
+            ?? AgentRunContext.CreateRoot(
+                new AgentSession(parentSessionId, string.Empty, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, workspaceRoot, null, settings.Model.ModelName, []),
+                Guid.NewGuid().ToString("N"),
+                childToolRouter.Value,
+                subAgentPromptOrchestrator,
+                ignorePatterns);
+        var childContext = parentRunContext.CreateChild(
+            subSessionId,
+            childToolRouter.Value,
+            subAgentPromptOrchestrator,
+            role,
+            new AgentLoopOptions { MaxModelToolRounds = _subAgent.MaxToolRounds },
+            workspaceRoot,
+            ignorePatterns);
+
+        using var depthScope = SubAgentExecutionScope.Enter();
+        using var runScope = runContextAccessor.Push(childContext);
+        using var sessionScope = activeSessionContext.Enter(subSessionId);
+        using var workspaceScope = SessionWorkspaceScope.Enter(childContext.WorkspaceRoot, childContext.WorkspaceIgnorePatterns);
 
         _logger.Information(
             "Starting sub-agent run parent={ParentId} sub={SubId} continue={Continue}",
@@ -192,6 +207,7 @@ public sealed class SubAgentTool(
                 ["role"] = "Who the child agent is: responsibilities, boundaries, and output style. Required for a new session_id; optional when continuing (updates saved role).",
                 ["message"] = "Task instruction for this sub-agent turn.",
                 ["session_id"] = "Optional. Omit to start a new sub-session; pass the id from a prior result to continue."
-            });
+            },
+            Group: ToolGroup.SubAgent);
     }
 }

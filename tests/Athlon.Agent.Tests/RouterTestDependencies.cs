@@ -36,7 +36,7 @@ internal static class RouterTestDependencies
             context.SetWorkspace(wsRoot);
         }
 
-        return new WorkspaceGuard(context, settings, new RouterTestPathProvider(appDataRoot));
+        return new WorkspaceGuard(context, new AgentRunContextAccessor(), settings, new RouterTestPathProvider(appDataRoot));
     }
 
     internal sealed class StubSessionKnowledgeState(SessionKnowledgeSnapshot snapshot) : ISessionKnowledgeState
