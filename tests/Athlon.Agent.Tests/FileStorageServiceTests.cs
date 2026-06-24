@@ -8,80 +8,74 @@ public sealed class FileStorageServiceTests
     [Fact]
     public async Task SaveSessionAsync_WritesMarkdownAndMetadata()
     {
-        var root = Path.Combine(Path.GetTempPath(), $"athlon-session-{Guid.NewGuid():N}");
+        using var temp = new TempDirectoryScope("athlon-session");
+        var root = temp.Root;
         var paths = new TestAppPathProvider(root);
         var logger = new NoOpLogger();
         var storage = new FileStorageService(logger, paths, new JsonFileStore());
         var session = AgentSession.Create("test-session").WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
 
-        try
-        {
-            await storage.SaveSessionAsync(session);
+        await storage.SaveSessionAsync(session);
 
-            var sessionJsonPath = Path.Combine(root, "sessions", session.Id, "session.json");
-            Assert.True(File.Exists(sessionJsonPath));
-            var sessions = await storage.ListSessionsAsync();
-            Assert.Contains(sessions, item => item.Id == session.Id);
-        }
-        finally
-        {
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, recursive: true);
-            }
-        }
+        var sessionJsonPath = Path.Combine(root, "sessions", session.Id, "session.json");
+        Assert.True(File.Exists(sessionJsonPath));
+        var sessions = await storage.ListSessionsAsync();
+        Assert.Contains(sessions, item => item.Id == session.Id);
     }
 
     [Fact]
     public async Task SaveSessionAsync_WritesChineseLiteralsInSessionJson()
     {
-        var root = Path.Combine(Path.GetTempPath(), $"athlon-session-{Guid.NewGuid():N}");
+        using var temp = new TempDirectoryScope("athlon-session");
+        var root = temp.Root;
         var paths = new TestAppPathProvider(root);
         var logger = new NoOpLogger();
         var storage = new FileStorageService(logger, paths, new JsonFileStore());
         var session = AgentSession.Create("chinese-session")
             .WithMessage(ChatMessage.Create(MessageRole.User, "我是用户"));
 
-        try
-        {
-            await storage.SaveSessionAsync(session);
+        await storage.SaveSessionAsync(session);
 
-            var sessionJsonPath = Path.Combine(root, "sessions", session.Id, "session.json");
-            var raw = await File.ReadAllTextAsync(sessionJsonPath);
+        var sessionJsonPath = Path.Combine(root, "sessions", session.Id, "session.json");
+        var raw = await File.ReadAllTextAsync(sessionJsonPath);
 
-            Assert.Contains("我是用户", raw);
-            Assert.DoesNotContain(@"\u6211", raw);
-        }
-        finally
-        {
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, recursive: true);
-            }
-        }
+        Assert.Contains("我是用户", raw);
+        Assert.DoesNotContain(@"\u6211", raw);
     }
 
-    private sealed class NoOpLogger : IAppLogger
+    [Fact]
+    public async Task DeleteSessionAsync_RemovesSessionDirectoryAndIndexEntry()
     {
-        public void Debug(string messageTemplate, params object[] values) { }
-        public void Information(string messageTemplate, params object[] values) { }
-        public void Warning(string messageTemplate, params object[] values) { }
-        public void Error(Exception exception, string messageTemplate, params object[] values) { }
-        public IAppLogger ForContext(string sourceContext) => this;
-        public void Dispose() { }
+        using var temp = new TempDirectoryScope("athlon-session-delete");
+        var root = temp.Root;
+        var paths = new TestAppPathProvider(root);
+        var logger = new NoOpLogger();
+        var storage = new FileStorageService(logger, paths, new JsonFileStore());
+        var session = AgentSession.Create("delete-me")
+            .WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
+
+        await storage.SaveSessionAsync(session);
+        var sessionJsonPath = Path.Combine(root, "sessions", session.Id, "session.json");
+        Assert.True(File.Exists(sessionJsonPath));
+
+        await storage.DeleteSessionAsync(session.Id);
+
+        Assert.False(Directory.Exists(Path.Combine(root, "sessions", session.Id)));
+        var sessions = await storage.ListSessionsAsync();
+        Assert.DoesNotContain(sessions, item => item.Id == session.Id);
     }
 
     private sealed class TestAppPathProvider(string root) : IAppPathProvider
     {
         public string RootPath { get; } = root;
-        public string ConfigPath => Path.Combine(root, "config");
-        public string SessionsPath => Path.Combine(root, "sessions");
-        public string AuditPath => Path.Combine(root, "audit");
-        public string LogsPath => Path.Combine(root, "logs");
-        public string CredentialsPath => Path.Combine(root, "credentials");
-        public string SkillsPath => Path.Combine(root, "skills");
+        public string ConfigPath => Path.Combine(RootPath, "config");
+        public string SessionsPath => Path.Combine(RootPath, "sessions");
+        public string AuditPath => Path.Combine(RootPath, "audit");
+        public string LogsPath => Path.Combine(RootPath, "logs");
+        public string CredentialsPath => Path.Combine(RootPath, "credentials");
+        public string SkillsPath => Path.Combine(RootPath, "skills");
 
-        public void EnsureCreated() => Directory.CreateDirectory(root);
+        public void EnsureCreated() => Directory.CreateDirectory(RootPath);
 
         public string ResolveSkillPath(string path) =>
             string.IsNullOrWhiteSpace(path) ? path : Path.Combine(SkillsPath, path);

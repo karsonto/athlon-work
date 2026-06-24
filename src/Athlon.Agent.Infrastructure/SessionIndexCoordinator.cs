@@ -56,6 +56,35 @@ internal sealed class SessionIndexCoordinator
         }
     }
 
+    public async Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default)
+    {
+        if (!Directory.Exists(_paths.SessionsPath))
+        {
+            return Array.Empty<SessionIndexEntry>();
+        }
+
+        await _indexLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var indexPath = Path.Combine(_paths.SessionsPath, "index.json");
+            if (File.Exists(indexPath))
+            {
+                var cached = await _jsonFileStore.LoadAsync<List<SessionIndexEntry>>(indexPath, cancellationToken)
+                    .ConfigureAwait(false);
+                if (cached is { Count: > 0 } && IsSessionIndexFresh(indexPath, cached))
+                {
+                    return FilterTopLevelSessions(cached);
+                }
+            }
+
+            return await RebuildSessionIndexAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _indexLock.Release();
+        }
+    }
+
     private async Task FlushPendingAsync(CancellationToken cancellationToken)
     {
         try
@@ -111,6 +140,11 @@ internal sealed class SessionIndexCoordinator
                     .ConfigureAwait(false);
                 if (cached is not null)
                 {
+                    if (!IsSessionIndexFresh(indexPath, cached))
+                    {
+                        return false;
+                    }
+
                     foreach (var existing in cached)
                     {
                         entries[existing.Id] = existing;
@@ -118,7 +152,11 @@ internal sealed class SessionIndexCoordinator
                 }
             }
 
-            entries[entry.Id] = entry;
+            if (!entries.TryGetValue(entry.Id, out var existingEntry) || entry.UpdatedAt >= existingEntry.UpdatedAt)
+            {
+                entries[entry.Id] = entry;
+            }
+
             var ordered = entries.Values.OrderByDescending(item => item.UpdatedAt).ThenBy(item => item.Id).ToArray();
             await _jsonFileStore.SaveAsync(indexPath, ordered, cancellationToken).ConfigureAwait(false);
             return true;
@@ -133,12 +171,12 @@ internal sealed class SessionIndexCoordinator
         }
     }
 
-    private async Task RebuildSessionIndexAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<SessionIndexEntry>> RebuildSessionIndexAsync(CancellationToken cancellationToken)
     {
         var result = new Dictionary<string, SessionIndexEntry>(StringComparer.Ordinal);
         if (!Directory.Exists(_paths.SessionsPath))
         {
-            return;
+            return Array.Empty<SessionIndexEntry>();
         }
 
         foreach (var file in Directory.EnumerateFiles(_paths.SessionsPath, "session.json", SearchOption.AllDirectories))
@@ -164,5 +202,61 @@ internal sealed class SessionIndexCoordinator
         Directory.CreateDirectory(_paths.SessionsPath);
         await _jsonFileStore.SaveAsync(Path.Combine(_paths.SessionsPath, "index.json"), ordered, cancellationToken)
             .ConfigureAwait(false);
+        return ordered;
     }
+
+    private static bool IsSessionIndexFresh(string indexPath, IReadOnlyList<SessionIndexEntry> entries)
+    {
+        var indexTime = File.GetLastWriteTimeUtc(indexPath);
+        var indexedSessionJsonPaths = entries
+            .Select(entry => Path.GetFullPath(Path.Combine(entry.Path, "session.json")))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var sessionsRoot = Path.GetDirectoryName(indexPath);
+        if (string.IsNullOrWhiteSpace(sessionsRoot) || !Directory.Exists(sessionsRoot))
+        {
+            return true;
+        }
+
+        foreach (var sessionJson in Directory.EnumerateFiles(sessionsRoot, "session.json", SearchOption.AllDirectories))
+        {
+            if (AmbientSubAgentStorageScope.IsSubAgentSessionPath(sessionJson))
+            {
+                continue;
+            }
+
+            if (!indexedSessionJsonPaths.Contains(Path.GetFullPath(sessionJson)))
+            {
+                return false;
+            }
+
+            if (File.GetLastWriteTimeUtc(sessionJson) > indexTime)
+            {
+                return false;
+            }
+        }
+
+        foreach (var entry in entries)
+        {
+            var sessionJson = Path.Combine(entry.Path, "session.json");
+            if (!File.Exists(sessionJson))
+            {
+                continue;
+            }
+
+            if (File.GetLastWriteTimeUtc(sessionJson) > indexTime)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static SessionIndexEntry[] FilterTopLevelSessions(IEnumerable<SessionIndexEntry> entries) =>
+        entries
+            .Where(entry => !AmbientSubAgentStorageScope.IsSubAgentSessionPath(Path.Combine(entry.Path, "session.json")))
+            .OrderByDescending(item => item.UpdatedAt)
+            .ThenBy(item => item.Id)
+            .ToArray();
 }

@@ -262,26 +262,17 @@ public sealed class SessionIndexMemoryTests
     private sealed class TestAppPathProvider(string root) : IAppPathProvider
     {
         public string RootPath { get; } = root;
-        public string ConfigPath => Path.Combine(root, "config");
-        public string SessionsPath => Path.Combine(root, "sessions");
-        public string AuditPath => Path.Combine(root, "audit");
-        public string LogsPath => Path.Combine(root, "logs");
-        public string CredentialsPath => Path.Combine(root, "credentials");
-        public string SkillsPath => Path.Combine(root, "skills");
+        public string ConfigPath => Path.Combine(RootPath, "config");
+        public string SessionsPath => Path.Combine(RootPath, "sessions");
+        public string AuditPath => Path.Combine(RootPath, "audit");
+        public string LogsPath => Path.Combine(RootPath, "logs");
+        public string CredentialsPath => Path.Combine(RootPath, "credentials");
+        public string SkillsPath => Path.Combine(RootPath, "skills");
 
-        public void EnsureCreated() => Directory.CreateDirectory(root);
+        public void EnsureCreated() => Directory.CreateDirectory(RootPath);
 
         public string ResolveSkillPath(string path) =>
             string.IsNullOrWhiteSpace(path) ? path : Path.Combine(SkillsPath, path);
     }
 
-    private sealed class NoOpLogger : IAppLogger
-    {
-        public void Debug(string messageTemplate, params object[] values) { }
-        public void Information(string messageTemplate, params object[] values) { }
-        public void Warning(string messageTemplate, params object[] values) { }
-        public void Error(Exception exception, string messageTemplate, params object[] values) { }
-        public IAppLogger ForContext(string sourceContext) => this;
-        public void Dispose() { }
-    }
 }
