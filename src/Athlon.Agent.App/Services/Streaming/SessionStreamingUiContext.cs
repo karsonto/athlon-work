@@ -18,6 +18,8 @@ public sealed class SessionStreamingUiContext
 
     public Action RequestScrollImmediate { get; set; } = () => { };
 
+    public Func<bool> ShowToolCalls { get; set; } = () => false;
+
     public ChatMessageViewModel? ActiveAssistantBubble =>
         _assistantBubbles.Values.LastOrDefault();
 
@@ -57,6 +59,11 @@ public sealed class SessionStreamingUiContext
                 ReleaseAssistantBubble(messageId, messages);
                 break;
             case AgentStreamEvent.ToolCallStart(var toolCallId, var toolName, var index):
+                if (!ShowToolCalls())
+                {
+                    break;
+                }
+
                 if (index is int toolIndex)
                 {
                     _toolCallIdToIndex[toolCallId] = toolIndex;
@@ -74,6 +81,11 @@ public sealed class SessionStreamingUiContext
 
                 break;
             case AgentStreamEvent.ToolCallArgs(var toolCallId, var argsJson):
+                if (!ShowToolCalls())
+                {
+                    break;
+                }
+
                 if (_toolCallIdToIndex.TryGetValue(toolCallId, out var argsIndex)
                     && _toolBubblesByIndex.TryGetValue(argsIndex, out var toolBubble))
                 {
@@ -91,6 +103,11 @@ public sealed class SessionStreamingUiContext
                 RequestScroll();
                 break;
             case AgentStreamEvent.ToolCallEnd(var toolCallId):
+                if (!ShowToolCalls())
+                {
+                    break;
+                }
+
                 if (_toolCallIdToIndex.TryGetValue(toolCallId, out var endIndex)
                     && _toolBubblesByIndex.TryGetValue(endIndex, out var endedTool))
                 {
@@ -105,9 +122,19 @@ public sealed class SessionStreamingUiContext
 
                 break;
             case AgentStreamEvent.ToolCallResult(var toolCallId, var content, var messageId):
+                if (!ShowToolCalls())
+                {
+                    break;
+                }
+
                 HandleToolCallResult(toolCallId, content, messageId, messages);
                 break;
             case AgentStreamEvent.ToolCallOutput(var toolCallId, var delta):
+                if (!ShowToolCalls())
+                {
+                    break;
+                }
+
                 HandleToolCallOutput(toolCallId, delta, messages);
                 break;
             case AgentStreamEvent.ChatMessageAppended(var message):
@@ -157,6 +184,11 @@ public sealed class SessionStreamingUiContext
 
         if (message.Role == MessageRole.Tool)
         {
+            if (!ShowToolCalls())
+            {
+                return;
+            }
+
             var toolCallId = AgentRuntime.ExtractToolCallId(message.Content);
             var existing = FindToolMessage(messages, toolCallId);
             if (existing is not null)

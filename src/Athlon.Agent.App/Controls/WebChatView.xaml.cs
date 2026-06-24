@@ -21,6 +21,7 @@ public partial class WebChatView : UserControl
     private int _navigationGeneration;
     private int _renderGeneration;
     private IReadOnlyList<ChatMessageViewModel> _pendingMessages = Array.Empty<ChatMessageViewModel>();
+    private bool _pendingShowToolCalls;
     private bool _needsRender;
     private bool _renderRetryScheduled;
     private bool _renderInProgress;
@@ -86,9 +87,10 @@ public partial class WebChatView : UserControl
     private bool CanRender() =>
         IsVisible && ActualWidth >= 1 && ActualHeight >= 1;
 
-    public async Task LoadMessagesAsync(IReadOnlyList<ChatMessageViewModel> messages)
+    public async Task LoadMessagesAsync(IReadOnlyList<ChatMessageViewModel> messages, bool showToolCalls = false)
     {
         _pendingMessages = messages;
+        _pendingShowToolCalls = showToolCalls;
         _needsRender = true;
         var generation = Interlocked.Increment(ref _renderGeneration);
         await EnsureInitializedAndRenderAsync(generation).ConfigureAwait(true);
@@ -155,7 +157,7 @@ public partial class WebChatView : UserControl
         try
         {
             var navigated = await NavigateHtmlAsync(
-                _htmlBuilder.BuildDocumentHtml(_pendingMessages),
+                _htmlBuilder.BuildDocumentHtml(_pendingMessages, _pendingShowToolCalls),
                 expectedGeneration).ConfigureAwait(true);
             if (!navigated || expectedGeneration != _renderGeneration)
             {

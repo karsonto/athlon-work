@@ -42,6 +42,7 @@ public sealed class SessionTurnUiController
     private readonly Dictionary<string, ChatMessageViewModel> _viewModelCache = new(StringComparer.Ordinal);
     private int _bulkChatViewSyncDepth;
     private int _syncChatViewGeneration;
+    private Func<bool> _showToolCalls = () => false;
 
     private Action _requestScroll = NoOpScroll;
     private Action _requestScrollImmediate = NoOpScroll;
@@ -56,6 +57,15 @@ public sealed class SessionTurnUiController
         RequestScrollImmediate = requestScrollImmediate ?? requestScroll ?? NoOpScroll;
         Messages = new ObservableCollection<ChatMessageViewModel>();
         Messages.CollectionChanged += OnMessagesCollectionChanged;
+        _streaming.ShowToolCalls = () => _showToolCalls();
+    }
+
+    public bool ShowToolCalls => _showToolCalls();
+
+    public void SetShowToolCalls(bool showToolCalls)
+    {
+        _showToolCalls = () => showToolCalls;
+        _streaming.ShowToolCalls = _showToolCalls;
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages { get; }
@@ -351,7 +361,7 @@ public sealed class SessionTurnUiController
         }
 
         const int batchSize = 50;
-        var viewModels = ChatTimelineHydrator.BuildDisplayMessages(displayMessages, _viewModelCache);
+        var viewModels = ChatTimelineHydrator.BuildDisplayMessages(displayMessages, _viewModelCache, _showToolCalls());
         if (viewModels.Count <= batchSize)
         {
             foreach (var viewModel in viewModels)
@@ -482,7 +492,7 @@ public sealed class SessionTurnUiController
         if (immediate)
         {
             Interlocked.Increment(ref _syncChatViewGeneration);
-            _ = ChatView.LoadMessagesAsync(Messages);
+            _ = ChatView.LoadMessagesAsync(Messages, _showToolCalls());
             return;
         }
 
@@ -494,7 +504,7 @@ public sealed class SessionTurnUiController
                 return;
             }
 
-            _ = ChatView.LoadMessagesAsync(Messages);
+            _ = ChatView.LoadMessagesAsync(Messages, _showToolCalls());
         });
     }
 
@@ -586,11 +596,12 @@ public sealed class SessionTurnUiController
         _ = ChatView.DispatchUserMessageAsync(message);
     }
 
-    private static bool ShouldDispatchToChatView(AgentStreamEvent streamEvent) =>
+    private bool ShouldDispatchToChatView(AgentStreamEvent streamEvent) =>
         streamEvent is not AgentStreamEvent.UsageRecorded
             and not AgentStreamEvent.ContextHygieneApplied
             and not AgentStreamEvent.ChatMessageAppended
-            and not AgentStreamEvent.ClearEmptyAssistantPlaceholder;
+            and not AgentStreamEvent.ClearEmptyAssistantPlaceholder
+        && (_showToolCalls() || !ChatDisplayPolicy.IsToolStreamEvent(streamEvent));
 
     private ChatMessageViewModel? FindToolMessage(string? toolCallId)
     {
@@ -655,6 +666,11 @@ public sealed class SessionTurnUiController
 
             if (message.Role == MessageRole.Tool)
             {
+                if (!_showToolCalls())
+                {
+                    continue;
+                }
+
                 var toolCallId = ChatTimelineHydrator.ExtractToolCallId(message.Content);
                 var existing = FindToolMessage(toolCallId);
                 if (existing is not null)

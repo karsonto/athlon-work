@@ -26,7 +26,7 @@ public sealed class ChatHtmlBuilder
     public string BuildDispatchScript(AgentStreamEvent streamEvent) =>
         $"handleEvent({ChatEventSerializer.Serialize(streamEvent)});";
 
-    public string BuildDocumentHtml(IReadOnlyList<ChatMessageViewModel> messages)
+    public string BuildDocumentHtml(IReadOnlyList<ChatMessageViewModel> messages, bool showToolCalls = false)
     {
         const string footer = "</body></html>";
         var shell = BuildShellHtml();
@@ -36,7 +36,7 @@ public sealed class ChatHtmlBuilder
         }
 
         var eventsJson = ChatEventSerializer.SerializeEventsToJsonArray(
-            ChatEventSerializer.BuildReplayEvents(messages));
+            ChatEventSerializer.BuildReplayEvents(messages, showToolCalls));
         var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes(eventsJson));
         var replayScript =
             "<script>\n" +

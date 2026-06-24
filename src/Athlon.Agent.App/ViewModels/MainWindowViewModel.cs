@@ -374,7 +374,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _savedChatView = chatView;
         _uiCache.AttachChatViewToAll(chatView);
         _activeUi.ChatView = chatView;
-        _ = chatView.LoadMessagesAsync(_activeUi.Messages);
+        _ = chatView.LoadMessagesAsync(_activeUi.Messages, _activeUi.ShowToolCalls);
     }
 
     private void NotifyContextSidebarLayoutChanged()
@@ -634,7 +634,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (renderExistingMessages && _savedChatView is not null)
         {
-            _ = _savedChatView.LoadMessagesAsync(_activeUi.Messages);
+            _ = _savedChatView.LoadMessagesAsync(_activeUi.Messages, _activeUi.ShowToolCalls);
         }
 
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
@@ -758,6 +758,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         SettingsViewModel.PruneEmptyWorkspaces(Settings.Settings);
         Settings.SyncSkillsFromCatalog();
         await _storage.SaveSettingsAsync(Settings.Settings);
+        _uiCache.ApplyShowToolCalls(Settings.Settings.Ui.ShowToolCalls);
+        await _activeUi.HydrateFromSessionAsync(_session);
         await RefreshMcpRuntimeAsync();
         ApplySessionWorkspace();
         OnPropertyChanged(nameof(Sidebar));

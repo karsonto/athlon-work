@@ -8,22 +8,31 @@ internal static class ChatTimelineHydrator
 {
     public static List<ChatMessageViewModel> BuildDisplayMessages(
         IReadOnlyList<ChatMessage> displayMessages,
-        Dictionary<string, ChatMessageViewModel>? viewModelCache = null)
+        Dictionary<string, ChatMessageViewModel>? viewModelCache = null,
+        bool showToolCalls = false)
     {
         var result = new List<ChatMessageViewModel>();
         var answeredToolCallIds = BuildAnsweredToolCallIds(displayMessages);
 
         foreach (var message in ChatTimelineOrder.OrderForDisplay(displayMessages))
         {
-            // Reuse cached ViewModel if available to avoid full FlowDocument rebuild
-            if (viewModelCache?.TryGetValue(message.Id, out var cached) == true)
+            if (!ChatDisplayPolicy.ShouldIncludeToolMessage(showToolCalls, message))
             {
-                // Re-add to result; the ViewModel's bindings will reattach when ListBox item is created
-                result.Add(cached);
                 continue;
             }
 
-            AddMessageToDisplay(result, message, answeredToolCallIds);
+            // Reuse cached ViewModel if available to avoid full FlowDocument rebuild
+            if (viewModelCache?.TryGetValue(message.Id, out var cached) == true)
+            {
+                if (ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls, cached))
+                {
+                    result.Add(cached);
+                }
+
+                continue;
+            }
+
+            AddMessageToDisplay(result, message, answeredToolCallIds, showToolCalls);
         }
 
         return result;
@@ -55,16 +64,22 @@ internal static class ChatTimelineHydrator
     private static void AddMessageToDisplay(
         List<ChatMessageViewModel> messages,
         ChatMessage message,
-        HashSet<string> answeredToolCallIds)
+        HashSet<string> answeredToolCallIds,
+        bool showToolCalls)
     {
         if (ShouldHideMessageFromChat(message) || ContainsMessageId(messages, message.Id))
         {
             return;
         }
 
+        if (!ChatDisplayPolicy.ShouldIncludeToolMessage(showToolCalls, message))
+        {
+            return;
+        }
+
         messages.Add(new ChatMessageViewModel(message));
 
-        if (message.Role != MessageRole.Assistant)
+        if (message.Role != MessageRole.Assistant || !showToolCalls)
         {
             return;
         }

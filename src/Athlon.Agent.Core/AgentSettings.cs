@@ -200,4 +200,6 @@ public sealed class UiSettings
     public double NavigationSidebarWidth { get; set; } = 220;
     public double EditorPaneWidth { get; set; } = 480;
     public double ComposerHeight { get; set; } = 168;
+    /// <summary>When false (default), tool-call cards are hidden in chat UI.</summary>
+    public bool ShowToolCalls { get; set; } = false;
 }

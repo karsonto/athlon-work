@@ -713,6 +713,18 @@
                     </Border>
 
                     <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="界面"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,14" />
+                            <CheckBox IsChecked="{Binding Settings.Settings.Ui.ShowToolCalls, UpdateSourceTrigger=PropertyChanged}"
+                                      Content="显示工具调用气泡"
+                                      ToolTip="关闭后聊天中不显示 file_read、execute_command 等工具卡片；上下文压缩通知仍会显示。" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />

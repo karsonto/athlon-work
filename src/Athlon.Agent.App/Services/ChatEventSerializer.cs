@@ -108,12 +108,19 @@ internal static class ChatEventSerializer
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
-    public static IReadOnlyList<string> BuildReplayEvents(IReadOnlyList<ChatMessageViewModel> messages)
+    public static IReadOnlyList<string> BuildReplayEvents(
+        IReadOnlyList<ChatMessageViewModel> messages,
+        bool showToolCalls = false)
     {
         var events = new List<string> { SerializeResetTimeline() };
         foreach (var message in messages)
         {
             if (message.IsHiddenPlaceholder)
+            {
+                continue;
+            }
+
+            if (!ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls, message))
             {
                 continue;
             }

@@ -109,6 +109,7 @@ public sealed class SessionTurnUiControllerDisplayTests
     {
         var dispatcher = await StartStaDispatcherAsync();
         var ui = new SessionTurnUiController(dispatcher);
+        ui.SetShowToolCalls(true);
         ui.SetDisplayed(false);
 
         var callbacks = ui.BuildCallbacks();
@@ -134,6 +135,7 @@ public sealed class SessionTurnUiControllerDisplayTests
     {
         var dispatcher = await StartStaDispatcherAsync();
         var ui = new SessionTurnUiController(dispatcher);
+        ui.SetShowToolCalls(true);
         ui.SetDisplayed(true);
 
         var callbacks = ui.BuildCallbacks();
@@ -164,6 +166,7 @@ public sealed class SessionTurnUiControllerDisplayTests
     {
         var dispatcher = await StartStaDispatcherAsync();
         var ui = new SessionTurnUiController(dispatcher);
+        ui.SetShowToolCalls(true);
         ui.SetDisplayed(true);
 
         var callbacks = ui.BuildCallbacks();
@@ -183,6 +186,26 @@ public sealed class SessionTurnUiControllerDisplayTests
         Assert.Equal(2, assistants.Count);
         Assert.Contains("before tool", assistants[0].Content, StringComparison.Ordinal);
         Assert.Contains("after tool", assistants[1].Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ToolCallStart_does_not_add_message_when_show_tool_calls_disabled()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.SetShowToolCalls(false);
+        ui.SetDisplayed(true);
+
+        var callbacks = ui.BuildCallbacks();
+        await EmitToolStart(callbacks, "call-1", "read_file", 0);
+        await EmitToolArgs(callbacks, "call-1", "{\"path\":\"/tmp\"}");
+        await EmitToolEnd(callbacks, "call-1");
+
+        var count = await dispatcher.InvokeAsync(() => ui.Messages.Count);
+        Assert.Equal(0, count);
+        var tool = await dispatcher.InvokeAsync(() =>
+            ui.Messages.LastOrDefault(message => message.IsTool && !message.IsCompaction));
+        Assert.Null(tool);
     }
 
     private static Task EmitText(AgentTurnCallbacks callbacks, string messageId, string delta) =>

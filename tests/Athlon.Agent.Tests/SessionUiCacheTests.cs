@@ -13,7 +13,7 @@ public sealed class SessionUiCacheTests
     public async Task Touch_evicts_oldest_session_and_clears_messages()
     {
         var dispatcher = await StartStaDispatcherAsync();
-        var cache = new SessionUiCache(dispatcher);
+        var cache = new SessionUiCache(dispatcher, new AppSettings());
 
         await dispatcher.InvokeAsync(() =>
         {
@@ -37,7 +37,7 @@ public sealed class SessionUiCacheTests
     public async Task Remove_clears_controller_messages()
     {
         var dispatcher = await StartStaDispatcherAsync();
-        var cache = new SessionUiCache(dispatcher);
+        var cache = new SessionUiCache(dispatcher, new AppSettings());
 
         await dispatcher.InvokeAsync(() =>
         {

@@ -56,7 +56,9 @@ public partial class App : Application
             StartupTrace("ServiceCollection created");
             services.AddAthlonInfrastructure();
             StartupTrace("Infrastructure registered");
-            services.AddSingleton(_ => new SessionUiCache(System.Windows.Threading.Dispatcher.CurrentDispatcher));
+            services.AddSingleton(sp => new SessionUiCache(
+                System.Windows.Threading.Dispatcher.CurrentDispatcher,
+                sp.GetRequiredService<AppSettings>()));
             services.AddSingleton<SessionTurnHost>();
             services.AddSingleton<QueuedTurnPresenter>();
             services.AddSingleton<ComposerAtCompletionService>();
