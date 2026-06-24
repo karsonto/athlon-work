@@ -1,23 +1,27 @@
 using System.ComponentModel;
+using System.Linq;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Threading;
+using Athlon.Agent.App.Behaviors;
 using Athlon.Agent.App.Controls;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
+using Microsoft.Xaml.Behaviors;
 
 namespace Athlon.Agent.App;
 
-public partial class MainWindow : Window
+public partial class MainWindow : Window, IMainWindowLayoutHost
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly ClipboardImageAttachmentReader _clipboardImageReader;
     private readonly AppUpdateService _updateService;
-    private readonly ChatAutoScrollController _chatScroll;
     private readonly MainWindowLayoutBinder _layoutBinder;
+    private readonly MainWindowShutdownCoordinator _shutdownCoordinator;
     private bool _shutdownInProgress;
+    private ChatAutoScrollBehavior? _chatScrollBehavior;
+    private readonly PropertyChangedEventHandler _viewModelPropertyChangedHandler;
+    private readonly EventHandler _contextSidebarLayoutChangedHandler;
+    private readonly RoutedEventHandler _loadedHandler;
+    private readonly CancelEventHandler _closingHandler;
 
     public MainWindow(
         MainWindowViewModel viewModel,
@@ -30,7 +34,7 @@ public partial class MainWindow : Window
         _viewModel = viewModel;
         _clipboardImageReader = clipboardImageReader;
         _updateService = updateService;
-        _chatScroll = new ChatAutoScrollController(Dispatcher, () => _viewModel.IsBusy);
+        _shutdownCoordinator = new MainWindowShutdownCoordinator();
         _layoutBinder = new MainWindowLayoutBinder(_viewModel, new MainWindowLayoutElements
         {
             NavigationSidebarColumn = NavigationSidebarColumn,
@@ -44,42 +48,49 @@ public partial class MainWindow : Window
             ContextSidebarCollapsedRail = ContextSidebarCollapsedRail
         });
         DataContext = _viewModel;
-        _viewModel.ScrollChatToBottom = () => _chatScroll.ScrollToEnd(immediate: false);
-        _viewModel.ScrollChatToBottomImmediate = () => _chatScroll.ScrollToEnd(immediate: true);
-        _viewModel.ContextSidebarLayoutChanged += (_, _) => Dispatcher.Invoke(_layoutBinder.ApplyContextSidebar);
-        _viewModel.PropertyChanged += OnViewModelPropertyChanged;
-        MarkdownMessageView.ContentInteractionChanged += (_, _) => _chatScroll.OnContentInteractionChanged();
-        Loaded += OnMainWindowLoaded;
-        Closing += OnMainWindowClosing;
-        StateChanged += (_, _) => UpdateMaximizeRestoreButton();
-        UpdateMaximizeRestoreButton();
+        _viewModelPropertyChangedHandler = OnViewModelPropertyChanged;
+        _contextSidebarLayoutChangedHandler = (_, _) =>
+            ExecuteOnUiThread(_layoutBinder.ApplyContextSidebar);
+        _loadedHandler = OnMainWindowLoaded;
+        _closingHandler = OnMainWindowClosing;
+        _viewModel.ContextSidebarLayoutChanged += _contextSidebarLayoutChangedHandler;
+        _viewModel.PropertyChanged += _viewModelPropertyChangedHandler;
+        Loaded += _loadedHandler;
+        Closing += _closingHandler;
+        Closed += OnMainWindowClosed;
         App.StartupTrace("MainWindow DataContext assigned");
+    }
+
+    private void ExecuteOnUiThread(Action action)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        Dispatcher.InvokeAsync(action);
     }
 
     private void OnMainWindowLoaded(object sender, RoutedEventArgs e)
     {
         _layoutBinder.ApplyAll();
-        AttachComposerPasteHandler();
-        if (ChatMessagesList is not null)
-        {
-            _chatScroll.Attach(ChatMessagesList);
-        }
-
-        _chatScroll.ScrollToEnd(immediate: true);
+        ComposerInput.ClipboardImageReader = _clipboardImageReader;
+        _chatScrollBehavior = Interaction.GetBehaviors(ChatMessagesList)
+            .OfType<ChatAutoScrollBehavior>()
+            .FirstOrDefault();
     }
 
-    private void AttachComposerPasteHandler()
+    private void OnMainWindowClosed(object? sender, EventArgs e)
     {
-        if (ComposerTextBox is null)
-        {
-            return;
-        }
-
-        ComposerTextBox.AddHandler(
-            CommandManager.PreviewExecutedEvent,
-            new ExecutedRoutedEventHandler(ComposerTextBox_OnPastePreviewExecuted),
-            handledEventsToo: true);
+        _viewModel.ContextSidebarLayoutChanged -= _contextSidebarLayoutChangedHandler;
+        _viewModel.PropertyChanged -= _viewModelPropertyChangedHandler;
+        Loaded -= _loadedHandler;
+        Closing -= _closingHandler;
     }
+
+    internal void ShowShutdownOverlay() =>
+        ShutdownOverlay.Visibility = Visibility.Visible;
 
     private async void OnMainWindowClosing(object? sender, CancelEventArgs e)
     {
@@ -88,134 +99,47 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!_viewModel.ConfirmCloseEditorTabs())
+        if (!await _shutdownCoordinator.TryCloseAsync(this, _viewModel, e).ConfigureAwait(true))
         {
-            e.Cancel = true;
             return;
-        }
-
-        if (_viewModel.HasPendingShutdownWork)
-        {
-            var confirm = MessageBox.Show(
-                this,
-                "有对话正在生成或消息排队中，退出将停止所有任务。确定退出？",
-                "退出 Athlon Agent",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Question);
-            if (confirm != MessageBoxResult.Yes)
-            {
-                e.Cancel = true;
-                return;
-            }
-        }
-
-        e.Cancel = true;
-        ShutdownOverlay.Visibility = Visibility.Visible;
-        IsEnabled = false;
-
-        try
-        {
-            var progress = new Progress<string>(status =>
-            {
-                Dispatcher.Invoke(() => _viewModel.ShutdownStatusText = status);
-            });
-            await _viewModel.ShutdownAsync(progress).ConfigureAwait(true);
-        }
-        catch
-        {
-            // Proceed with exit even if cleanup fails.
         }
 
         _shutdownInProgress = true;
         Application.Current.Shutdown();
     }
 
-    private void NavigationSidebarSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
+    void IMainWindowLayoutHost.OnNavigationSidebarDragCompleted() =>
         _layoutBinder.OnNavigationSidebarDragCompleted();
+
+    void IMainWindowLayoutHost.OnEditorPaneDragCompleted() =>
+        _layoutBinder.OnEditorPaneDragCompleted();
+
+    void IMainWindowLayoutHost.OnComposerDragCompleted() =>
+        _layoutBinder.OnComposerDragCompleted();
+
+    void IMainWindowLayoutHost.OnContextSidebarDragCompleted() =>
+        _layoutBinder.OnContextSidebarDragCompleted();
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(MainWindowViewModel.HasChatMessages))
         {
-            Dispatcher.Invoke(() =>
+            ExecuteOnUiThread(() =>
             {
-                if (ChatMessagesList is not null)
-                {
-                    _chatScroll.Attach(ChatMessagesList);
-                }
-
                 _layoutBinder.ApplyContextSidebar();
-                _chatScroll.OnHasChatMessagesChanged(_viewModel.HasChatMessages);
+                _chatScrollBehavior?.OnHasChatMessagesChanged(_viewModel.HasChatMessages);
             });
         }
 
         if (e.PropertyName == nameof(MainWindowViewModel.HasOpenEditorTabs))
         {
-            Dispatcher.Invoke(_layoutBinder.ApplyEditorPane);
+            ExecuteOnUiThread(_layoutBinder.ApplyEditorPane);
         }
 
         if (e.PropertyName == nameof(MainWindowViewModel.IsBusy))
         {
-            Dispatcher.Invoke(() => _chatScroll.OnStreamingStateChanged(_viewModel.IsBusy));
+            ExecuteOnUiThread(() => _chatScrollBehavior?.OnStreamingStateChanged(_viewModel.IsBusy));
         }
-    }
-
-    private void EditorChatSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
-        _layoutBinder.OnEditorPaneDragCompleted();
-
-    private void ComposerSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
-        _layoutBinder.OnComposerDragCompleted();
-
-    private void ContextSidebarSplitter_OnDragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e) =>
-        _layoutBinder.OnContextSidebarDragCompleted();
-
-    private void TitleBar_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (IsWithinTitleBarMenu(e.OriginalSource as DependencyObject))
-        {
-            return;
-        }
-
-        if (e.ClickCount == 2)
-        {
-            ToggleWindowState();
-            return;
-        }
-
-        if (e.ButtonState == MouseButtonState.Pressed)
-        {
-            DragMove();
-        }
-    }
-
-    private static bool IsWithinTitleBarMenu(DependencyObject? source)
-    {
-        while (source is not null)
-        {
-            if (source is Menu or MenuItem)
-            {
-                return true;
-            }
-
-            source = VisualTreeHelper.GetParent(source);
-        }
-
-        return false;
-    }
-
-    private void MinimizeButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        WindowState = WindowState.Minimized;
-    }
-
-    private void MaximizeRestoreButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        ToggleWindowState();
-    }
-
-    private void CloseButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        Close();
     }
 
     private void HelpAboutMenuItem_OnClick(object sender, RoutedEventArgs e)
@@ -227,294 +151,13 @@ public partial class MainWindow : Window
         about.ShowDialog();
     }
 
-    private void ToggleWindowState()
-    {
-        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
-    }
-
-    private void UpdateMaximizeRestoreButton()
-    {
-        if (MaximizeRestoreButton is null)
-        {
-            return;
-        }
-
-        MaximizeRestoreButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
-        MaximizeRestoreButton.ToolTip = WindowState == WindowState.Maximized ? "还原" : "最大化";
-    }
-
-    private void ChatMessagesScrollViewer_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) =>
-        _chatScroll.HandlePreviewMouseLeftButtonDown();
-
-    private void ChatMessagesScrollViewer_OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) =>
-        _chatScroll.HandlePreviewMouseLeftButtonUp();
-
-    private void ApiKeyPasswordBox_OnPasswordChanged(object sender, RoutedEventArgs e)
-    {
-        if (sender is PasswordBox passwordBox)
-        {
-            _viewModel.ApiKey = passwordBox.Password;
-        }
-    }
-
-    private void KnowledgeEmbeddingApiKeyPasswordBox_OnPasswordChanged(object sender, RoutedEventArgs e)
-    {
-        if (sender is PasswordBox passwordBox)
-        {
-            _viewModel.KnowledgeEmbeddingApiKey = passwordBox.Password;
-        }
-    }
-
-    private void KnowledgeTree_OnSelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
-    {
-        if (e.NewValue is KnowledgeTreeNodeViewModel node)
-        {
-            _viewModel.KnowledgePageVm.SelectTreeNode(node);
-        }
-    }
-
-    private void KnowledgeTree_OnPreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (e.OriginalSource is not DependencyObject source)
-        {
-            return;
-        }
-
-        var treeViewItem = FindAncestor<TreeViewItem>(source);
-        if (treeViewItem is null)
-        {
-            return;
-        }
-
-        treeViewItem.IsSelected = true;
-        treeViewItem.Focus();
-    }
-
-    private void KnowledgeSaveModuleButton_OnClick(object sender, RoutedEventArgs e)
-    {
-        if (FocusManager.GetFocusedElement(this) is FrameworkElement focusedElement)
-        {
-            focusedElement.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
-            return;
-        }
-    }
-
-    private void KnowledgeDocuments_OnDragEnter(object sender, DragEventArgs e)
-    {
-        if (e.Data.GetDataPresent(DataFormats.FileDrop))
-        {
-            e.Effects = DragDropEffects.Copy;
-            KnowledgeDragOverlay.Opacity = 1;
-        }
-        else
-        {
-            e.Effects = DragDropEffects.None;
-        }
-
-        e.Handled = true;
-    }
-
-    private void KnowledgeDocuments_OnDragOver(object sender, DragEventArgs e)
-    {
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
-        e.Handled = true;
-    }
-
-    private void KnowledgeDocuments_OnDragLeave(object sender, DragEventArgs e)
-    {
-        KnowledgeDragOverlay.Opacity = 0;
-        e.Handled = true;
-    }
-
-    private async void KnowledgeDocuments_OnDrop(object sender, DragEventArgs e)
-    {
-        KnowledgeDragOverlay.Opacity = 0;
-        if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
-        {
-            await _viewModel.KnowledgePageVm.ImportDocumentsAsync(files);
-        }
-
-        e.Handled = true;
-    }
-
-    private void ComposerTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
-        {
-            if (TryPasteImagesFromClipboard())
-            {
-                e.Handled = true;
-                return;
-            }
-        }
-
-        if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
-        {
-            if (_viewModel.IsAtCompletionOpen && TryAcceptAtCompletion())
-            {
-                e.Handled = true;
-                return;
-            }
-
-            _viewModel.CloseAtCompletion();
-
-            if (_viewModel.SendCommand.CanExecute(null))
-            {
-                _viewModel.SendCommand.Execute(null);
-            }
-
-            e.Handled = true;
-            return;
-        }
-
-        if (_viewModel.IsAtCompletionOpen)
-        {
-            switch (e.Key)
-            {
-                case Key.Down:
-                    _viewModel.MoveAtCompletionSelection(1);
-                    SyncAtCompletionListSelection();
-                    e.Handled = true;
-                    return;
-                case Key.Up:
-                    _viewModel.MoveAtCompletionSelection(-1);
-                    SyncAtCompletionListSelection();
-                    e.Handled = true;
-                    return;
-                case Key.Tab:
-                    TryAcceptAtCompletion();
-                    e.Handled = true;
-                    return;
-                case Key.Escape:
-                    _viewModel.CloseAtCompletion();
-                    e.Handled = true;
-                    return;
-            }
-        }
-    }
-
-    private void ComposerTextBox_OnPastePreviewExecuted(object sender, ExecutedRoutedEventArgs e)
-    {
-        if (e.Command != ApplicationCommands.Paste)
-        {
-            return;
-        }
-
-        if (TryPasteImagesFromClipboard())
-        {
-            e.Handled = true;
-        }
-    }
-
-    private bool TryPasteImagesFromClipboard()
-    {
-        var images = _clipboardImageReader.TryReadImages();
-        if (images.Count == 0)
-        {
-            return false;
-        }
-
-        _viewModel.AddPendingImages(images);
-        return true;
-    }
-
-    private void ComposerTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (sender is not TextBox textBox)
-        {
-            return;
-        }
-
-        _viewModel.UpdateComposerCompletion(textBox.Text, textBox.CaretIndex);
-        Dispatcher.BeginInvoke(SyncActiveCompletionListSelection, DispatcherPriority.Loaded);
-    }
-
-    private void SyncActiveCompletionListSelection()
-    {
-        if (_viewModel.IsAtCompletionOpen)
-        {
-            SyncAtCompletionListSelection();
-        }
-    }
-
-    private void AtCompletionListBox_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        TryAcceptAtCompletion();
-        e.Handled = true;
-    }
-
-    private void SyncAtCompletionListSelection()
-    {
-        if (!_viewModel.IsAtCompletionOpen || AtCompletionListBox.Items.Count == 0)
-        {
-            return;
-        }
-
-        var index = Math.Clamp(_viewModel.SelectedAtCompletionIndex, 0, AtCompletionListBox.Items.Count - 1);
-        AtCompletionListBox.SelectedIndex = index;
-        AtCompletionListBox.ScrollIntoView(AtCompletionListBox.Items[index]);
-    }
-
-    private bool TryAcceptAtCompletion()
-    {
-        if (!_viewModel.TryAcceptAtCompletion(ComposerTextBox.CaretIndex, out var newCaretIndex))
-        {
-            return false;
-        }
-
-        ComposerTextBox.Focus();
-        ComposerTextBox.CaretIndex = newCaretIndex;
-        return true;
-    }
-
     private void WorkspaceTreeItem_OnExpanded(object sender, RoutedEventArgs e)
     {
-        if (sender is not TreeViewItem { DataContext: WorkspaceTreeNodeViewModel node })
+        if (sender is not System.Windows.Controls.TreeViewItem { DataContext: WorkspaceTreeNodeViewModel node })
         {
             return;
         }
 
         _viewModel.Sidebar.ExpandWorkspaceTreeNode(node);
-    }
-
-    private void WorkspaceTree_OnMouseDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        if (e.OriginalSource is not DependencyObject source)
-        {
-            return;
-        }
-
-        var treeViewItem = FindAncestor<TreeViewItem>(source);
-        if (treeViewItem?.DataContext is not WorkspaceTreeNodeViewModel node)
-        {
-            return;
-        }
-
-        if (node.IsPlaceholder || node.IsExpanderPlaceholder || node.IsDirectory || string.IsNullOrWhiteSpace(node.FullPath))
-        {
-            return;
-        }
-
-        if (_viewModel.OpenWorkspaceTreeNodeInEditorCommand.CanExecute(node))
-        {
-            _viewModel.OpenWorkspaceTreeNodeInEditorCommand.Execute(node);
-        }
-
-        e.Handled = true;
-    }
-
-    private static T? FindAncestor<T>(DependencyObject current) where T : DependencyObject
-    {
-        while (current is not null)
-        {
-            if (current is T matched)
-            {
-                return matched;
-            }
-
-            current = VisualTreeHelper.GetParent(current);
-        }
-
-        return null;
     }
 }

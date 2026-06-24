@@ -3,7 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:app="clr-namespace:Athlon.Agent.App"
+        xmlns:behaviors="clr-namespace:Athlon.Agent.App.Behaviors"
         xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
+        xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -130,8 +132,10 @@
                 Grid.ColumnSpan="3"
                 Background="{DynamicResource Brush.Chrome}"
                 BorderBrush="{DynamicResource Brush.Border}"
-                BorderThickness="0,0,0,1"
-                MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
+                BorderThickness="0,0,0,1">
+            <i:Interaction.Behaviors>
+                <behaviors:WindowChromeBehavior MaximizeRestoreButton="{Binding ElementName=MaximizeRestoreButton}" />
+            </i:Interaction.Behaviors>
             <Grid>
                 <StackPanel Orientation="Horizontal"
                             VerticalAlignment="Stretch"
@@ -186,17 +190,26 @@
                     </Button>
                     <Button Content="−"
                             ToolTip="最小化"
-                            Click="MinimizeButton_OnClick"
-                            Style="{StaticResource WindowCaptionButtonStyle}" />
+                            Style="{StaticResource WindowCaptionButtonStyle}">
+                        <i:Interaction.Behaviors>
+                            <behaviors:WindowCaptionButtonBehavior Action="Minimize" />
+                        </i:Interaction.Behaviors>
+                    </Button>
                     <Button x:Name="MaximizeRestoreButton"
                             Content="□"
                             ToolTip="最大化"
-                            Click="MaximizeRestoreButton_OnClick"
-                            Style="{StaticResource WindowCaptionButtonStyle}" />
+                            Style="{StaticResource WindowCaptionButtonStyle}">
+                        <i:Interaction.Behaviors>
+                            <behaviors:WindowCaptionButtonBehavior Action="MaximizeRestore" />
+                        </i:Interaction.Behaviors>
+                    </Button>
                     <Button Content="×"
                             ToolTip="关闭"
-                            Click="CloseButton_OnClick"
-                            Style="{StaticResource WindowCloseCaptionButtonStyle}" />
+                            Style="{StaticResource WindowCloseCaptionButtonStyle}">
+                        <i:Interaction.Behaviors>
+                            <behaviors:WindowCaptionButtonBehavior Action="Close" />
+                        </i:Interaction.Behaviors>
+                    </Button>
                 </StackPanel>
             </Grid>
         </Border>
@@ -555,8 +568,11 @@
                               ResizeDirection="Columns"
                               ResizeBehavior="CurrentAndNext"
                               Panel.ZIndex="2"
-                              Visibility="Collapsed"
-                              DragCompleted="EditorChatSplitter_OnDragCompleted" />
+                              Visibility="Collapsed">
+                    <i:Interaction.Behaviors>
+                        <behaviors:GridSplitterLayoutBehavior Kind="EditorPane" />
+                    </i:Interaction.Behaviors>
+                </GridSplitter>
 
                 <Grid Grid.Column="1" ClipToBounds="True">
                 <Grid.RowDefinitions>
@@ -704,9 +720,10 @@
                 <ListBox x:Name="ChatMessagesList"
                              ItemsSource="{Binding Messages}"
                              Padding="24,24"
-                             ClipToBounds="True"
-                             PreviewMouseLeftButtonDown="ChatMessagesScrollViewer_OnPreviewMouseLeftButtonDown"
-                             PreviewMouseLeftButtonUp="ChatMessagesScrollViewer_OnPreviewMouseLeftButtonUp">
+                             ClipToBounds="True">
+                        <i:Interaction.Behaviors>
+                            <behaviors:ChatAutoScrollBehavior />
+                        </i:Interaction.Behaviors>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <!-- 对齐 report/html：用户 justify-end，助手 justify-start -->
@@ -1191,8 +1208,11 @@
                               Style="{StaticResource LayoutRowSplitterStyle}"
                               ResizeDirection="Rows"
                               ResizeBehavior="PreviousAndNext"
-                              Panel.ZIndex="2"
-                              DragCompleted="ComposerSplitter_OnDragCompleted" />
+                              Panel.ZIndex="2">
+                    <i:Interaction.Behaviors>
+                        <behaviors:GridSplitterLayoutBehavior Kind="Composer" />
+                    </i:Interaction.Behaviors>
+                </GridSplitter>
 
             <!-- Composer -->
             <Border Grid.Row="3"
@@ -1274,113 +1294,8 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </ScrollViewer>
-                        <Grid Grid.Row="1">
-                            <TextBox x:Name="ComposerTextBox"
-                                     Text="{Binding ComposerText, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource ComposerTextBoxStyle}"
-                                     TextChanged="ComposerTextBox_OnTextChanged"
-                                     PreviewKeyDown="ComposerTextBox_OnPreviewKeyDown" />
-                            <TextBlock Text="输入消息... (Shift+Enter 换行，Enter 发送)"
-                                       Foreground="{DynamicResource Brush.SubtleText}"
-                                       Margin="8,8,0,0"
-                                       IsHitTestVisible="False"
-                                       FontSize="14">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsComposerEmpty}" Value="True">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Grid>
-                        <Popup Grid.Row="1"
-                               IsOpen="{Binding IsAtCompletionOpen, Mode=OneWay}"
-                               PlacementTarget="{Binding ElementName=ComposerTextBox}"
-                               Placement="Top"
-                               StaysOpen="False"
-                               AllowsTransparency="True">
-                            <Border Background="{DynamicResource Brush.Panel}"
-                                    BorderBrush="{DynamicResource Brush.Border}"
-                                    BorderThickness="1"
-                                    CornerRadius="10"
-                                    Padding="6"
-                                    MinWidth="340"
-                                    MaxWidth="560"
-                                    MaxHeight="240">
-                                <ListBox x:Name="AtCompletionListBox"
-                                         ItemsSource="{Binding AtCompletionItems}"
-                                         SelectedIndex="{Binding SelectedAtCompletionIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                         Focusable="False"
-                                         KeyboardNavigation.DirectionalNavigation="Contained"
-                                         MouseDoubleClick="AtCompletionListBox_OnMouseDoubleClick"
-                                         BorderThickness="0"
-                                         Background="Transparent"
-                                         ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                         ItemContainerStyle="{StaticResource CompletionListBoxItemStyle}">
-                                    <ListBox.Style>
-                                        <Style TargetType="ListBox">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsAtCompletionOpen}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </ListBox.Style>
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <Grid Margin="2,4">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="*" />
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0"
-                                                        BorderThickness="1"
-                                                        CornerRadius="8"
-                                                        Padding="6,2"
-                                                        Margin="0,0,8,0">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionFileBadgeBg}" />
-                                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionFileBadgeBorder}" />
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding Type}" Value="技能">
-                                                                    <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionSkillBadgeBg}" />
-                                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionSkillBadgeBorder}" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                    <TextBlock Text="{Binding Type}" FontSize="11">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionFileBadgeText}" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding Type}" Value="技能">
-                                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionSkillBadgeText}" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </Border>
-                                                <StackPanel Grid.Column="1">
-                                                    <TextBlock Text="{Binding PrimaryText}" FontSize="13" FontWeight="SemiBold" />
-                                                    <TextBlock Text="{Binding SecondaryText}"
-                                                               FontSize="11"
-                                                               Foreground="{DynamicResource Brush.SubtleText}"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-                                            </Grid>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
-                            </Border>
-                        </Popup>
+                        <controls:ComposerInputControl x:Name="ComposerInput"
+                                                       Grid.Row="1" />
                         <Grid Grid.Row="2" Margin="0,8,0,0">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
                                     <Button Command="{Binding SelectImagesCommand}"
@@ -1646,8 +1561,8 @@
                                       Margin="0,0,0,12" />
                             <TextBlock Text="API Key" Foreground="{DynamicResource Brush.SubtleText}" />
                             <PasswordBox x:Name="ApiKeyPasswordBox"
-                                           PasswordChanged="ApiKeyPasswordBox_OnPasswordChanged"
-                                           Margin="0,6,0,6" />
+                                         behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,6,0,6" />
                             <TextBlock Text="API Key 使用 Windows DPAPI 加密保存在用户目录。"
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap" />
@@ -1762,7 +1677,7 @@
                             </Grid>
                             <TextBlock Text="Embedding API Key" Foreground="{DynamicResource Brush.SubtleText}" />
                             <PasswordBox x:Name="KnowledgeEmbeddingApiKeyPasswordBox"
-                                         PasswordChanged="KnowledgeEmbeddingApiKeyPasswordBox_OnPasswordChanged"
+                                         behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding KnowledgeEmbeddingApiKey, UpdateSourceTrigger=PropertyChanged}"
                                          Margin="0,6,0,6" />
                             <TextBlock Text="{Binding HasStoredKnowledgeEmbeddingApiKey, StringFormat=已保存知识库 Embedding API Key：{0}}"
                                        Foreground="{DynamicResource Brush.SubtleText}"
@@ -2217,7 +2132,6 @@
                                                 Margin="0,0,8,0" />
                                         <Button Content="保存"
                                                 Command="{Binding SaveSelectedModuleCommand}"
-                                                Click="KnowledgeSaveModuleButton_OnClick"
                                                 Style="{StaticResource GhostButtonStyle}" />
                                     </StackPanel>
                                 </StackPanel>
@@ -2250,70 +2164,7 @@
                                                FontSize="12" />
                                 </StackPanel>
                             </StackPanel>
-                            <Grid>
-                                <TreeView ItemsSource="{Binding DocumentTree}"
-                                          BorderThickness="0"
-                                          Background="Transparent"
-                                          AllowDrop="True"
-                                          DragEnter="KnowledgeDocuments_OnDragEnter"
-                                          DragOver="KnowledgeDocuments_OnDragOver"
-                                          DragLeave="KnowledgeDocuments_OnDragLeave"
-                                          Drop="KnowledgeDocuments_OnDrop"
-                                          PreviewMouseRightButtonDown="KnowledgeTree_OnPreviewMouseRightButtonDown"
-                                          SelectedItemChanged="KnowledgeTree_OnSelectedItemChanged">
-                                    <TreeView.ItemContainerStyle>
-                                        <Style TargetType="TreeViewItem">
-                                            <Setter Property="IsExpanded" Value="True" />
-                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                                            <Setter Property="Margin" Value="0,2" />
-                                            <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TreeView}}" />
-                                            <Setter Property="ContextMenu">
-                                                <Setter.Value>
-                                                    <ContextMenu Style="{StaticResource MarkdownContextMenuStyle}">
-                                                        <MenuItem Header="{Binding PlacementTarget.DataContext.DeleteMenuHeader, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                                  Style="{StaticResource MarkdownContextMenuItemStyle}"
-                                                                  Command="{Binding PlacementTarget.Tag.DeleteTreeNodeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
-                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                                    </ContextMenu>
-                                                </Setter.Value>
-                                            </Setter>
-                                        </Style>
-                                    </TreeView.ItemContainerStyle>
-                                    <TreeView.ItemTemplate>
-                                        <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                                            <StackPanel Orientation="Horizontal" Margin="0,3">
-                                                <TextBlock Text="{Binding Glyph}" Margin="0,0,6,0" />
-                                                <StackPanel>
-                                                    <TextBlock Text="{Binding DisplayName}"
-                                                               FontWeight="SemiBold"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                    <TextBlock Text="{Binding MetaText}"
-                                                               Foreground="{DynamicResource Brush.SubtleText}"
-                                                               FontSize="12"
-                                                               TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </HierarchicalDataTemplate>
-                                    </TreeView.ItemTemplate>
-                                </TreeView>
-
-                                <!-- Drag-drop overlay indicator -->
-                                <Border x:Name="KnowledgeDragOverlay"
-                                        IsHitTestVisible="False"
-                                        CornerRadius="8"
-                                        BorderThickness="2"
-                                        BorderBrush="{DynamicResource Brush.Accent}"
-                                        Background="{DynamicResource Brush.AccentSubtle}"
-                                        Opacity="0"
-                                        Visibility="Visible">
-                                    <TextBlock Text="松开以上传文件到当前知识空间"
-                                               Foreground="{DynamicResource Brush.Accent}"
-                                               FontWeight="SemiBold"
-                                               FontSize="14"
-                                               VerticalAlignment="Center"
-                                               HorizontalAlignment="Center" />
-                                </Border>
-                            </Grid>
+                            <controls:KnowledgeDocumentsDropZone DataContext="{Binding KnowledgePageVm}" />
                         </DockPanel>
                     </Border>
 
@@ -3023,8 +2874,10 @@
                                       BorderThickness="0"
                                       FontSize="13"
                                       Foreground="{DynamicResource Brush.Text}"
-                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                      MouseDoubleClick="WorkspaceTree_OnMouseDoubleClick">
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <i:Interaction.Behaviors>
+                                    <behaviors:TreeViewItemDoubleClickBehavior />
+                                </i:Interaction.Behaviors>
                                 <TreeView.ItemContainerStyle>
                                     <Style TargetType="TreeViewItem" BasedOn="{StaticResource WorkspaceTreeViewItemStyle}">
                                         <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
@@ -3178,8 +3031,11 @@
                       Style="{StaticResource LayoutColumnSplitterStyle}"
                       ResizeDirection="Columns"
                       ResizeBehavior="CurrentAndNext"
-                      Panel.ZIndex="3"
-                      DragCompleted="NavigationSidebarSplitter_OnDragCompleted" />
+                      Panel.ZIndex="3">
+            <i:Interaction.Behaviors>
+                <behaviors:GridSplitterLayoutBehavior Kind="NavigationSidebar" />
+            </i:Interaction.Behaviors>
+        </GridSplitter>
 
         <GridSplitter x:Name="ContextSidebarSplitter"
                       Grid.Row="1"
@@ -3187,8 +3043,11 @@
                       Style="{StaticResource LayoutColumnSplitterStyle}"
                       ResizeDirection="Columns"
                       ResizeBehavior="CurrentAndNext"
-                      Panel.ZIndex="3"
-                      DragCompleted="ContextSidebarSplitter_OnDragCompleted" />
+                      Panel.ZIndex="3">
+            <i:Interaction.Behaviors>
+                <behaviors:GridSplitterLayoutBehavior Kind="ContextSidebar" />
+            </i:Interaction.Behaviors>
+        </GridSplitter>
         </Grid>
 
         <Border Panel.ZIndex="100"

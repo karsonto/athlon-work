@@ -1,9 +1,10 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 
-namespace Athlon.Agent.App.ViewModels;
+namespace Athlon.Agent.App.Windows;
 
 public partial class ScheduleTaskEditWindow : Window
 {

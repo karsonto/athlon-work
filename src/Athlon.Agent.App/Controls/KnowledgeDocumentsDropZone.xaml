@@ -1,0 +1,74 @@
+<UserControl x:Class="Athlon.Agent.App.Controls.KnowledgeDocumentsDropZone"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:behaviors="clr-namespace:Athlon.Agent.App.Behaviors"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+             xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
+             x:Name="DropZoneRoot">
+    <Grid>
+        <TreeView x:Name="DocumentTree"
+                  ItemsSource="{Binding DocumentTree}"
+                  BorderThickness="0"
+                  Background="Transparent"
+                  AllowDrop="True"
+                  DragEnter="DocumentTree_OnDragEnter"
+                  DragOver="DocumentTree_OnDragOver"
+                  DragLeave="DocumentTree_OnDragLeave"
+                  Drop="DocumentTree_OnDrop"
+                  SelectedItemChanged="DocumentTree_OnSelectedItemChanged">
+            <i:Interaction.Behaviors>
+                <behaviors:TreeViewRightClickSelectBehavior />
+            </i:Interaction.Behaviors>
+            <TreeView.ItemContainerStyle>
+                <Style TargetType="TreeViewItem">
+                    <Setter Property="IsExpanded" Value="True" />
+                    <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                    <Setter Property="Margin" Value="0,2" />
+                    <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TreeView}}" />
+                    <Setter Property="ContextMenu">
+                        <Setter.Value>
+                            <ContextMenu Style="{StaticResource MarkdownContextMenuStyle}">
+                                <MenuItem Header="{Binding PlacementTarget.DataContext.DeleteMenuHeader, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                          Command="{Binding PlacementTarget.Tag.DeleteTreeNodeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                            </ContextMenu>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </TreeView.ItemContainerStyle>
+            <TreeView.ItemTemplate>
+                <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                    <StackPanel Orientation="Horizontal" Margin="0,3">
+                        <TextBlock Text="{Binding Glyph}" Margin="0,0,6,0" />
+                        <StackPanel>
+                            <TextBlock Text="{Binding DisplayName}"
+                                       FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding MetaText}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       FontSize="12"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </StackPanel>
+                </HierarchicalDataTemplate>
+            </TreeView.ItemTemplate>
+        </TreeView>
+
+        <Border x:Name="DragOverlay"
+                IsHitTestVisible="False"
+                CornerRadius="8"
+                BorderThickness="2"
+                BorderBrush="{DynamicResource Brush.Accent}"
+                Background="{DynamicResource Brush.AccentSubtle}"
+                Opacity="0"
+                Visibility="Visible">
+            <TextBlock Text="松开以上传文件到当前知识空间"
+                       Foreground="{DynamicResource Brush.Accent}"
+                       FontWeight="SemiBold"
+                       FontSize="14"
+                       VerticalAlignment="Center"
+                       HorizontalAlignment="Center" />
+        </Border>
+    </Grid>
+</UserControl>

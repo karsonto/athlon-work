@@ -16,6 +16,8 @@ public partial class App : Application
 {
     private ServiceProvider? _services;
 
+    internal ServiceProvider? Services => _services;
+
     protected override void OnStartup(StartupEventArgs e)
     {
         StartupTrace("OnStartup entered");
@@ -62,8 +64,7 @@ public partial class App : Application
             services.AddSingleton<ApplicationShutdownService>();
             services.AddSingleton<AppUpdateService>();
             services.AddSingleton<ClipboardImageAttachmentReader>();
-            services.AddSingleton<MainWindowViewModel>();
-            services.AddSingleton<MainWindow>();
+            services.AddAthlonViewModels();
             _services = services.BuildServiceProvider();
             StartupTrace("ServiceProvider built");
 

@@ -6,7 +6,7 @@ using System.Windows.Threading;
 
 namespace Athlon.Agent.App.Services;
 
-public sealed class ChatAutoScrollController
+public sealed class ChatAutoScrollController : IDisposable
 {
     private const double AutoScrollBottomThreshold = 48;
     private static readonly TimeSpan ScrollThrottleInterval = TimeSpan.FromMilliseconds(100);
@@ -20,6 +20,8 @@ public sealed class ChatAutoScrollController
     private bool _isProgrammaticScroll;
     private bool _chatPointerDown;
     private bool _chatScrollLockedByUser;
+    private bool _disposed;
+    private ScrollChangedEventHandler? _scrollChangedHandler;
 
     public ChatAutoScrollController(Dispatcher dispatcher, Func<bool> isBusy)
     {
@@ -209,7 +211,8 @@ public sealed class ChatAutoScrollController
 
         _scrollViewer = scrollViewer;
         _scrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Visible;
-        _scrollViewer.ScrollChanged += (_, e) => HandleScrollChanged(e);
+        _scrollChangedHandler = (_, e) => HandleScrollChanged(e);
+        _scrollViewer.ScrollChanged += _scrollChangedHandler;
     }
 
     private void UpdateScrollLock()
@@ -234,9 +237,26 @@ public sealed class ChatAutoScrollController
     }
 
     private bool ShouldSuppressAutoScroll() =>
-        _chatPointerDown
-        || _chatScrollLockedByUser
-        || ChatScrollHelper.HasTextSelection(_chatMessagesList);
+        _chatPointerDown || _chatScrollLockedByUser;
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _scrollThrottleTimer.Tick -= OnScrollThrottleTimerTick;
+        _scrollThrottleTimer.Stop();
+
+        if (_scrollViewer is not null && _scrollChangedHandler is not null)
+        {
+            _scrollViewer.ScrollChanged -= _scrollChangedHandler;
+            _scrollChangedHandler = null;
+            _scrollViewer = null;
+        }
+    }
 
     private static bool IsNearBottom(ScrollViewer viewer)
     {

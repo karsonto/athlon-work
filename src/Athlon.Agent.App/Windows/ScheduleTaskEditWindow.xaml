@@ -1,4 +1,4 @@
-<Window x:Class="Athlon.Agent.App.ViewModels.ScheduleTaskEditWindow"
+<Window x:Class="Athlon.Agent.App.Windows.ScheduleTaskEditWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="编辑定时任务"

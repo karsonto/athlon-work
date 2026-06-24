@@ -16,8 +16,19 @@ namespace Athlon.Agent.App.Controls;
 /// </summary>
 public partial class MarkdownMessageView : UserControl
 {
-    /// <summary>Raised when markdown text selection changes (used to pause chat auto-scroll).</summary>
-    public static event EventHandler? ContentInteractionChanged;
+    /// <summary>Bubbles when markdown text selection changes (used to pause chat auto-scroll).</summary>
+    public static readonly RoutedEvent ContentInteractionChangedEvent =
+        EventManager.RegisterRoutedEvent(
+            nameof(ContentInteractionChanged),
+            RoutingStrategy.Bubble,
+            typeof(RoutedEventHandler),
+            typeof(MarkdownMessageView));
+
+    public event RoutedEventHandler ContentInteractionChanged
+    {
+        add => AddHandler(ContentInteractionChangedEvent, value);
+        remove => RemoveHandler(ContentInteractionChangedEvent, value);
+    }
 
     private ContextMenu? _contextMenu;
     private MenuItem? _previewHtmlMenuItem;
@@ -100,7 +111,7 @@ public partial class MarkdownMessageView : UserControl
     }
 
     private void OnCodeBlockInteractionChanged(object? sender, EventArgs e) =>
-        ContentInteractionChanged?.Invoke(null, EventArgs.Empty);
+        RaiseContentInteractionChanged();
 
     public string Markdown
     {
@@ -311,7 +322,10 @@ public partial class MarkdownMessageView : UserControl
     }
 
     private void OnTextSelectionChanged(object? sender, EventArgs e) =>
-        ContentInteractionChanged?.Invoke(null, EventArgs.Empty);
+        RaiseContentInteractionChanged();
+
+    private void RaiseContentInteractionChanged() =>
+        RaiseEvent(new RoutedEventArgs(ContentInteractionChangedEvent));
 
     private ContextMenu BuildContextMenu()
     {

@@ -32,13 +32,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IImageAttachmentReader _imageAttachmentReader;
     private readonly IImageAttachmentStore _imageAttachmentStore;
     private readonly IAppPathProvider _paths;
-    private readonly SessionTurnHost _turnHost;
-    private readonly QueuedTurnPresenter _queuedTurnPresenter;
-    private readonly ComposerAtCompletionService _atCompletion;
+    private readonly SessionTurnCoordinator _sessionTurns;
+    private readonly ComposerCoordinator _composer;
+    private readonly LayoutCoordinator _layout;
+    private readonly NavigationCoordinator _navigation;
+    private readonly IChatScrollService _chatScroll;
     private readonly SessionUiCache _uiCache;
     private readonly ApplicationShutdownService _shutdownService;
     private readonly SchedulerService _scheduler;
-    private readonly UiLayoutSettingsBridge _uiLayout;
     private readonly SessionHistoryCoordinator _sessionHistory;
     private readonly WorkspaceSessionBridge _workspaceBridge = new();
     private readonly ISessionUsageAccumulator _sessionUsageAccumulator;
@@ -50,6 +51,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
     private SessionTurnUiController _activeUi;
+    private bool _shutdownCompleted;
 
     public MainWindowViewModel(
         IFileStorageService storage,
@@ -61,9 +63,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IAppPathProvider paths,
         IAgentSkillCatalog skillCatalog,
         ISkillRuntime skillRuntime,
-        SessionTurnHost turnHost,
-        QueuedTurnPresenter queuedTurnPresenter,
-        ComposerAtCompletionService atCompletion,
+        SessionTurnCoordinator sessionTurns,
+        ComposerCoordinator composer,
+        LayoutCoordinator layout,
+        NavigationCoordinator navigation,
+        IChatScrollService chatScroll,
         SessionUiCache uiCache,
         WorkspaceFileEditorService workspaceFileEditorService,
         ApplicationShutdownService shutdownService,
@@ -71,10 +75,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         IImpSsoSessionStore ssoSessionStore,
         ISessionUsageAccumulator sessionUsageAccumulator,
         SchedulerService scheduler,
-        IKnowledgeStore knowledgeStore,
-        IKnowledgeIndexer knowledgeIndexer,
-        IKnowledgeSearchService knowledgeSearchService,
-        ISessionKnowledgeState sessionKnowledgeState)
+        SettingsViewModel settingsViewModel,
+        KnowledgeViewModel knowledgePageVm,
+        ContextSidebarViewModel sidebar,
+        FileEditorViewModel fileEditor,
+        ComposerKnowledgeViewModel composerKnowledge)
     {
         _storage = storage;
         _credentialStore = credentialStore;
@@ -83,16 +88,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _imageAttachmentReader = imageAttachmentReader;
         _imageAttachmentStore = imageAttachmentStore;
         _paths = paths;
-        _turnHost = turnHost;
-        _queuedTurnPresenter = queuedTurnPresenter;
-        _queuedTurnPresenter.QueueChanged += OnQueuedTurnsChanged;
-        _atCompletion = atCompletion;
+        _sessionTurns = sessionTurns;
+        _composer = composer;
+        _layout = layout;
+        _navigation = navigation;
+        _chatScroll = chatScroll;
         _uiCache = uiCache;
         _shutdownService = shutdownService;
         _scheduler = scheduler;
         _appSettings = settings;
         _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
-        _uiLayout = new UiLayoutSettingsBridge(storage, settings);
         _sessionHistory = new SessionHistoryCoordinator(storage);
         _sessionUsageAccumulator = sessionUsageAccumulator;
         _skillCatalog = skillCatalog;
@@ -101,17 +106,18 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         WireSessionUsageUi(_activeUi);
         _activeUi.SetDisplayed(true);
-        _turnHost.TurnCompleted += OnTurnCompleted;
-        _turnHost.TurnStateChanged += OnTurnStateChanged;
-        Settings = new SettingsViewModel(settings, _mcpRegistry, skillCatalog, paths);
+        _sessionTurns.TurnHost.TurnCompleted += OnTurnCompleted;
+        _sessionTurns.TurnHost.TurnStateChanged += OnTurnStateChanged;
+        _sessionTurns.QueuedTurnPresenter.QueueChanged += OnQueuedTurnsChanged;
+        Settings = settingsViewModel;
         SchedulePageVm = new ScheduleViewModel(settings, storage, scheduler, OpenSessionByIdAsync);
-        KnowledgePageVm = new KnowledgeViewModel(knowledgeStore, knowledgeIndexer, knowledgeSearchService);
+        KnowledgePageVm = knowledgePageVm;
         KnowledgePageVm.KnowledgeDataChanged += OnKnowledgeDataChanged;
-        ComposerKnowledge = new ComposerKnowledgeViewModel(sessionKnowledgeState, knowledgeStore, settings);
+        ComposerKnowledge = composerKnowledge;
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
-        Sidebar = new ContextSidebarViewModel(paths, skillCatalog, _mcpRegistry, settings);
-        FileEditor = new FileEditorViewModel(workspaceFileEditorService);
+        Sidebar = sidebar;
+        FileEditor = fileEditor;
         FileEditor.Tabs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasOpenEditorTabs));
         FileEditor.PropertyChanged += (_, e) =>
         {
@@ -121,12 +127,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
         };
         HasStoredApiKey = EnsureCurrentApiKeySecret(settings);
-        HasStoredKnowledgeEmbeddingApiKey = _credentialStore
-            .HasSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName)
-            .GetAwaiter()
-            .GetResult();
         ComposerKnowledge.SetEmbeddingApiKeyAvailable(HasStoredKnowledgeEmbeddingApiKey);
-        _uiLayout.ClampInitialLayout();
+        _layout.ClampInitialLayout();
 
         LogsPath = paths.LogsPath;
         KnowledgePageVm.SetSession(_displayedSessionId);
@@ -160,6 +162,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public async Task InitializeAsync()
     {
+        HasStoredKnowledgeEmbeddingApiKey = await _credentialStore
+            .HasSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName)
+            .ConfigureAwait(true);
+        ComposerKnowledge.SetEmbeddingApiKeyAvailable(HasStoredKnowledgeEmbeddingApiKey);
+
         await RefreshMcpRuntimeAsync();
 
         await RefreshSessionHistoryAsync();
@@ -172,13 +179,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<ChatMessageViewModel> Messages => _activeUi.Messages;
 
-    /// <summary>由 MainWindow 注入，用于流式输出时自动滚到底部（节流）。</summary>
-    public Action? ScrollChatToBottom { get; set; }
-
-    /// <summary>由 MainWindow 注入，用于非流式场景立即滚到底部。</summary>
-    public Action? ScrollChatToBottomImmediate { get; set; }
     public ObservableCollection<AgentRecordGroupViewModel> AgentRecordGroups => _sessionHistory.AgentRecordGroups;
-    public ObservableCollection<QueuedTurnViewModel> QueuedTurns => _queuedTurnPresenter.GetForSession(_displayedSessionId);
+    public ObservableCollection<QueuedTurnViewModel> QueuedTurns => _sessionTurns.QueuedTurnPresenter.GetForSession(_displayedSessionId);
     public bool HasQueuedTurns => QueuedTurns.Count > 0;
     public ContextSidebarViewModel Sidebar { get; }
     public SettingsViewModel Settings { get; }
@@ -303,53 +305,26 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void Navigate(string page)
     {
         CurrentPage = page;
-        if (string.Equals(page, "Settings", StringComparison.Ordinal))
-        {
-            Settings.SyncSkillsFromCatalog();
-        }
+        _navigation.HandlePageChanged(page, Settings, SchedulePageVm, KnowledgePageVm);
     }
 
     [RelayCommand]
     private void SsoLogout()
     {
-        if (!_appSettings.Sso.Enabled)
+        if (!_navigation.TryConfirmSsoLogout())
         {
             return;
         }
 
-        var result = MessageBox.Show(
-            "确定要退出登录吗？",
-            AppVersionInfo.ProductName,
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
-        if (result != MessageBoxResult.Yes)
-        {
-            return;
-        }
-
-        _ssoSessionStore?.Clear();
+        _navigation.ClearSsoSession();
         Application.Current.Shutdown(0);
     }
 
     private void InitializeSsoDisplay()
     {
-        if (!_appSettings.Sso.Enabled || _ssoSessionStore is null)
-        {
-            SsoDisplayName = string.Empty;
-            IsSsoUserVisible = false;
-            return;
-        }
-
-        var session = _ssoSessionStore.GetCachedSession();
-        if (session is null || _ssoSessionStore.IsExpired(session))
-        {
-            SsoDisplayName = string.Empty;
-            IsSsoUserVisible = false;
-            return;
-        }
-
-        SsoDisplayName = session.DisplayName;
-        IsSsoUserVisible = !string.IsNullOrWhiteSpace(SsoDisplayName);
+        var (displayName, isVisible) = _navigation.GetSsoDisplayState();
+        SsoDisplayName = displayName;
+        IsSsoUserVisible = isVisible;
     }
 
     [RelayCommand]
@@ -360,14 +335,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             : AppThemeKind.Light;
         AppThemeManager.SetTheme(next, _appSettings.Ui);
         NotifyThemeToggleStateChanged();
-        await _uiLayout.PersistNowAsync();
+        await _layout.PersistNowAsync();
     }
 
     [RelayCommand]
     private async Task ToggleContextSidebarAsync()
     {
         SetContextSidebarVisible(!_appSettings.Ui.ContextSidebarVisible);
-        await _uiLayout.PersistNowAsync();
+        await _layout.PersistNowAsync();
     }
 
     private void OnAppThemeChanged(object? sender, EventArgs e) => NotifyThemeToggleStateChanged();
@@ -379,53 +354,17 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ThemeToggleToolTip));
     }
 
-    public void SetContextSidebarVisible(bool visible)
-    {
-        var ui = _appSettings.Ui;
-        if (ui.ContextSidebarVisible == visible)
-        {
-            return;
-        }
+    public void SetContextSidebarVisible(bool visible) =>
+        _layout.SetContextSidebarVisible(visible, NotifyContextSidebarLayoutChanged);
 
-        ui.ContextSidebarVisible = visible;
-        if (visible && ui.ContextSidebarWidth < ContextSidebarMinWidth)
-        {
-            ui.ContextSidebarWidth = ContextSidebarDefaultWidth;
-        }
-
-        NotifyContextSidebarLayoutChanged();
-    }
-
-    public void UpdateContextSidebarWidth(double width)
-    {
-        if (!_appSettings.Ui.ContextSidebarVisible)
-        {
-            return;
-        }
-
-        _uiLayout.TryUpdateDimension(
-            _appSettings.Ui.ContextSidebarWidth,
-            width,
-            ContextSidebarMinWidth,
-            ContextSidebarMaxWidth,
-            value => _appSettings.Ui.ContextSidebarWidth = value);
-    }
+    public void UpdateContextSidebarWidth(double width) =>
+        _layout.UpdateContextSidebarWidth(width);
 
     public void UpdateNavigationSidebarWidth(double width) =>
-        _uiLayout.TryUpdateDimension(
-            _appSettings.Ui.NavigationSidebarWidth,
-            width,
-            NavigationSidebarMinWidth,
-            NavigationSidebarMaxWidth,
-            value => _appSettings.Ui.NavigationSidebarWidth = value);
+        _layout.UpdateNavigationSidebarWidth(width);
 
     public void UpdateComposerHeight(double height) =>
-        _uiLayout.TryUpdateDimension(
-            _appSettings.Ui.ComposerHeight,
-            height,
-            ComposerMinHeight,
-            ComposerMaxHeight,
-            value => _appSettings.Ui.ComposerHeight = value);
+        _layout.UpdateComposerHeight(height);
 
     private void NotifyContextSidebarLayoutChanged()
     {
@@ -435,7 +374,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ContextSidebarLayoutChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public Task PersistUiLayoutForSidebarAsync() => _uiLayout.PersistNowAsync();
+    public Task PersistUiLayoutForSidebarAsync() => _layout.PersistNowAsync();
 
     [RelayCommand]
     private Task NewSession()
@@ -470,9 +409,9 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (_turnHost.IsRunning(_displayedSessionId))
+        if (_sessionTurns.TurnHost.IsRunning(_displayedSessionId))
         {
-            _turnHost.Cancel(_displayedSessionId);
+            _sessionTurns.TurnHost.Cancel(_displayedSessionId);
         }
 
         _session = _session.WithMessages(Array.Empty<ChatMessage>());
@@ -495,7 +434,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (IsBusy && e.Action == NotifyCollectionChangedAction.Add)
         {
-            ScrollChatToBottom?.Invoke();
+            _chatScroll.ScrollToBottom();
         }
     }
 
@@ -544,13 +483,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        if (_turnHost.IsRunning(item.Id))
+        if (_sessionTurns.TurnHost.IsRunning(item.Id))
         {
-            _turnHost.Cancel(item.Id);
+            _sessionTurns.TurnHost.Cancel(item.Id);
         }
 
-        _turnHost.ClearQueue(item.Id);
-        _queuedTurnPresenter.RemoveSession(item.Id);
+        _sessionTurns.TurnHost.ClearQueue(item.Id);
+        _sessionTurns.QueuedTurnPresenter.RemoveSession(item.Id);
 
         _uiCache.Remove(item.Id);
         await _storage.DeleteSessionAsync(item.Id);
@@ -591,18 +530,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         AddPendingImages(images);
     }
 
-    public void AddPendingImages(IEnumerable<ImageAttachment> images)
-    {
-        foreach (var image in images)
-        {
-            if (PendingImageAttachments.Any(existing => ImageAttachmentsMatch(existing.Attachment, image)))
-            {
-                continue;
-            }
-
-            PendingImageAttachments.Add(new PendingImageAttachmentViewModel(image));
-        }
-    }
+    public void AddPendingImages(IEnumerable<ImageAttachment> images) =>
+        _composer.AddPendingImages(images, PendingImageAttachments);
 
     [RelayCommand]
     private void RemovePendingImage(PendingImageAttachmentViewModel? image)
@@ -625,29 +554,28 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _skillCatalog.Reload();
-        var input = SkillComposerExpander.Expand(ComposerText, _skillRuntime.GetSkills());
-        var imageAttachments = PersistPendingImages(_displayedSessionId);
+        _sessionTurns.ReloadSkills();
+        var input = _sessionTurns.ExpandComposerInput(ComposerText);
+        var imageAttachments = _composer.PersistPendingImages(_displayedSessionId, PendingImageAttachments);
         ComposerText = string.Empty;
         SyncWorkspaceContext();
 
-        var ui = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
+        var ui = _sessionTurns.GetOrCreateUi(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         PendingImageAttachments.Clear();
 
-        if (_turnHost.IsRunning(_displayedSessionId))
+        if (_sessionTurns.IsRunning(_displayedSessionId))
         {
-            var queueId = Guid.NewGuid().ToString("N");
-            _queuedTurnPresenter.Enqueue(_displayedSessionId, queueId, input, imageAttachments, ui);
+            _sessionTurns.EnqueueTurn(_displayedSessionId, input, imageAttachments, ui);
             SettingsStatus = "已加入排队";
             NotifyCommandStatesChanged();
             return;
         }
 
         ui.AddUserMessage(input, imageAttachments);
-        var request = new SessionTurnRequest(_displayedSessionId, _session, input, imageAttachments, ui, IsAutoContinue: false);
-        if (!_turnHost.TryStart(request, out var error))
+        var error = _sessionTurns.TryStartTurn(_displayedSessionId, _session, input, imageAttachments, ui);
+        if (error is not null)
         {
-            SettingsStatus = error ?? "无法开始生成。";
+            SettingsStatus = error;
             NotifyCommandStatesChanged();
             return;
         }
@@ -664,12 +592,12 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             return;
         }
 
-        _queuedTurnPresenter.Remove(_displayedSessionId, item.QueueId);
+        _sessionTurns.QueuedTurnPresenter.Remove(_displayedSessionId, item.QueueId);
     }
 
-    private void RequestScrollToBottom() => ScrollChatToBottom?.Invoke();
+    private void RequestScrollToBottom() => _chatScroll.ScrollToBottom();
 
-    private void RequestScrollToBottomImmediate() => ScrollChatToBottomImmediate?.Invoke();
+    private void RequestScrollToBottomImmediate() => _chatScroll.ScrollToBottomImmediate();
 
     private void WireSessionUsageUi(SessionTurnUiController ui)
     {
@@ -730,7 +658,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     ? _session
                     : e.Session);
             RequestRefreshSessionHistory();
-            if (_queuedTurnPresenter.TryProcessNext(e, out var queueError))
+            if (_sessionTurns.QueuedTurnPresenter.TryProcessNext(e, out var queueError))
             {
                 if (string.Equals(e.SessionId, _displayedSessionId, StringComparison.Ordinal))
                 {
@@ -748,13 +676,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void UpdateDisplayedBusyState()
     {
-        IsBusy = _turnHost.IsRunning(_displayedSessionId);
+        IsBusy = _sessionTurns.TurnHost.IsRunning(_displayedSessionId);
     }
 
     private void StopSession(string sessionId)
     {
-        _turnHost.Cancel(sessionId);
-        _queuedTurnPresenter.Clear(sessionId);
+        _sessionTurns.TurnHost.Cancel(sessionId);
+        _sessionTurns.QueuedTurnPresenter.Clear(sessionId);
     }
 
     [RelayCommand]
@@ -896,12 +824,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public bool ConfirmCloseEditorTabs() => FileEditor.TryCloseAllTabs();
 
     public void UpdateEditorPaneWidth(double width) =>
-        _uiLayout.TryUpdateDimension(
-            _appSettings.Ui.EditorPaneWidth,
-            width,
-            EditorPaneMinWidth,
-            EditorPaneMaxWidth,
-            value => _appSettings.Ui.EditorPaneWidth = value);
+        _layout.UpdateEditorPaneWidth(width);
 
     [RelayCommand(CanExecute = nameof(CanDeleteWorkspaceItem))]
     private void DeleteWorkspaceItem(WorkspaceTreeNodeViewModel? node)
@@ -981,84 +904,41 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     public void UpdateComposerCompletion(string composerText, int caretIndex) =>
         UpdateAtCompletion(composerText, caretIndex);
 
-    public void UpdateAtCompletion(string composerText, int caretIndex)
-    {
-        if (!ComposerAtCompletionService.TryGetQuery(composerText, caretIndex, out var query))
-        {
-            CloseAtCompletion();
-            return;
-        }
-
-        _atCompletion.EnsureFileIndexBuilt(
-            _skillCatalog,
+    public void UpdateAtCompletion(string composerText, int caretIndex) =>
+        _composer.UpdateAtCompletion(
+            composerText,
+            caretIndex,
             _session.ActiveWorkspace,
-            _workspaceContext.IgnorePatterns);
+            _workspaceContext.IgnorePatterns,
+            AtCompletionItems,
+            open => IsAtCompletionOpen = open,
+            index => SelectedAtCompletionIndex = index,
+            SelectedAtCompletionIndex);
 
-        var sorted = _atCompletion.FilterMatches(query);
+    public void MoveAtCompletionSelection(int delta) =>
+        _composer.MoveSelection(
+            delta,
+            IsAtCompletionOpen,
+            AtCompletionItems.Count,
+            SelectedAtCompletionIndex,
+            index => SelectedAtCompletionIndex = index);
 
-        AtCompletionItems.Clear();
-        foreach (var item in sorted)
-        {
-            AtCompletionItems.Add(item);
-        }
+    public bool TryAcceptAtCompletion(int caretIndex, out int newCaretIndex) =>
+        _composer.TryAcceptAtCompletion(
+            ComposerText,
+            caretIndex,
+            IsAtCompletionOpen,
+            SelectedAtCompletionIndex,
+            AtCompletionItems,
+            text => ComposerText = text,
+            CloseAtCompletion,
+            out newCaretIndex);
 
-        if (AtCompletionItems.Count == 0)
-        {
-            CloseAtCompletion();
-            return;
-        }
-
-        IsAtCompletionOpen = true;
-        if (SelectedAtCompletionIndex < 0 || SelectedAtCompletionIndex >= AtCompletionItems.Count)
-        {
-            SelectedAtCompletionIndex = 0;
-        }
-    }
-
-    public void MoveAtCompletionSelection(int delta)
-    {
-        if (!IsAtCompletionOpen || AtCompletionItems.Count == 0)
-        {
-            return;
-        }
-
-        var next = SelectedAtCompletionIndex + delta;
-        if (next < 0)
-        {
-            next = AtCompletionItems.Count - 1;
-        }
-        else if (next >= AtCompletionItems.Count)
-        {
-            next = 0;
-        }
-
-        SelectedAtCompletionIndex = next;
-    }
-
-    public bool TryAcceptAtCompletion(int caretIndex, out int newCaretIndex)
-    {
-        newCaretIndex = caretIndex;
-        if (!IsAtCompletionOpen
-            || SelectedAtCompletionIndex < 0
-            || SelectedAtCompletionIndex >= AtCompletionItems.Count
-            || !ComposerCompletionQuery.TryGetAtQuerySpan(ComposerText, caretIndex, out var atStart, out var atEndExclusive))
-        {
-            return false;
-        }
-
-        var replacement = ComposerAtCompletionService.FormatReplacement(AtCompletionItems[SelectedAtCompletionIndex]);
-        ComposerText = ComposerText[..atStart] + replacement + ComposerText[atEndExclusive..];
-        newCaretIndex = atStart + replacement.Length;
-        CloseAtCompletion();
-        return true;
-    }
-
-    public void CloseAtCompletion()
-    {
-        IsAtCompletionOpen = false;
-        SelectedAtCompletionIndex = -1;
-        AtCompletionItems.Clear();
-    }
+    public void CloseAtCompletion() =>
+        _composer.CloseAtCompletion(
+            AtCompletionItems,
+            _ => IsAtCompletionOpen = false,
+            index => SelectedAtCompletionIndex = index);
 
     private void ApplySessionWorkspace()
     {
@@ -1118,7 +998,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private async Task RefreshSessionHistoryAsync()
     {
-        await _sessionHistory.RefreshAsync(_session.Id, _turnHost.IsRunning, StopSession);
+        await _sessionHistory.RefreshAsync(_session.Id, _sessionTurns.TurnHost.IsRunning, StopSession);
         OnPropertyChanged(nameof(HasAgentRecords));
     }
 
@@ -1204,28 +1084,46 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
             });
 
-    public bool HasPendingShutdownWork => _turnHost.HasActiveWork;
+    public bool HasPendingShutdownWork => _sessionTurns.HasActiveWork;
 
     public async Task ShutdownAsync(
         IProgress<string>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        if (_shutdownCompleted)
+        {
+            return;
+        }
+
         _workspaceBridge.Dispose();
 
         await _shutdownService.ShutdownAsync(progress, cancellationToken: cancellationToken).ConfigureAwait(false);
+        _shutdownCompleted = true;
     }
 
     public void Dispose()
     {
-        AppThemeManager.ThemeChanged -= OnAppThemeChanged;
-        _turnHost.TurnCompleted -= OnTurnCompleted;
-        _turnHost.TurnStateChanged -= OnTurnStateChanged;
-        KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;
+        if (_shutdownCompleted)
+        {
+            UnsubscribeEvents();
+            return;
+        }
+
         ShutdownAsync().GetAwaiter().GetResult();
+        UnsubscribeEvents();
+    }
+
+    private void UnsubscribeEvents()
+    {
+        AppThemeManager.ThemeChanged -= OnAppThemeChanged;
+        _sessionTurns.TurnHost.TurnCompleted -= OnTurnCompleted;
+        _sessionTurns.TurnHost.TurnStateChanged -= OnTurnStateChanged;
+        KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
+        PendingImageAttachments.CollectionChanged -= OnPendingImagesChanged;
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();
-        _uiLayout.Dispose();
+        _layout.Dispose();
         _sessionHistory.Dispose();
         _workspaceBridge.Dispose();
     }
@@ -1254,18 +1152,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsSettingsPage));
         OnPropertyChanged(nameof(IsSchedulePage));
         OnPropertyChanged(nameof(IsKnowledgePage));
-        if (string.Equals(value, "Settings", StringComparison.Ordinal))
-        {
-            Settings.SyncSkillsFromCatalog();
-        }
-        else if (string.Equals(value, "Schedule", StringComparison.Ordinal))
-        {
-            SchedulePageVm.SyncFromSettings();
-        }
-        else if (string.Equals(value, "Knowledge", StringComparison.Ordinal))
-        {
-            _ = KnowledgePageVm.RefreshIfStaleAsync();
-        }
+        _navigation.HandlePageChanged(value, Settings, SchedulePageVm, KnowledgePageVm);
     }
 
     private void OnSkillConfigurationChanged()
@@ -1289,11 +1176,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     private void RefreshAtCompletionSources(bool reloadSkills = false) =>
-        _atCompletion.RefreshSources(
-            _skillCatalog,
-            _session.ActiveWorkspace,
-            _workspaceContext.IgnorePatterns,
-            reloadSkills);
+        _composer.RefreshSources(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns, reloadSkills);
 
     public void ShowCopyNotice(string message)
     {
@@ -1318,44 +1201,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             // Superseded by a newer notice.
         }
     }
-
-    private ImageAttachment[] PersistPendingImages(string sessionId)
-    {
-        var persisted = new List<ImageAttachment>(PendingImageAttachments.Count);
-        foreach (var pending in PendingImageAttachments)
-        {
-            persisted.Add(PersistImageAttachment(sessionId, pending.Attachment));
-        }
-
-        return persisted.ToArray();
-    }
-
-    private ImageAttachment PersistImageAttachment(string sessionId, ImageAttachment attachment)
-    {
-        if (!string.IsNullOrWhiteSpace(attachment.DataUrl))
-        {
-            return attachment;
-        }
-
-        if (string.IsNullOrWhiteSpace(attachment.LocalPath))
-        {
-            return attachment;
-        }
-
-        var sessionAttachmentsRoot = Path.Combine(_paths.SessionsPath, sessionId, "attachments");
-        if (attachment.LocalPath.StartsWith(sessionAttachmentsRoot, StringComparison.OrdinalIgnoreCase))
-        {
-            return attachment;
-        }
-
-        return _imageAttachmentStore.SaveFromFile(sessionId, attachment.LocalPath);
-    }
-
-    private static bool ImageAttachmentsMatch(ImageAttachment left, ImageAttachment right) =>
-        (!string.IsNullOrWhiteSpace(left.LocalPath)
-            && string.Equals(left.LocalPath, right.LocalPath, StringComparison.OrdinalIgnoreCase))
-        || (!string.IsNullOrWhiteSpace(left.DataUrl)
-            && string.Equals(left.DataUrl, right.DataUrl, StringComparison.Ordinal));
 }
 
 public sealed record AtCompletionItemViewModel(
