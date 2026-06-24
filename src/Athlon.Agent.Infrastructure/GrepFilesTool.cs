@@ -1,15 +1,5 @@
-using System.Diagnostics;
-using System.Net.Http.Json;
-using System.Runtime.Versioning;
-using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Compaction;
-using Microsoft.Extensions.DependencyInjection;
-using Serilog;
-using Serilog.Core;
-using Serilog.Events;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -21,18 +11,27 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
 
     public ToolDefinition Definition { get; } = new(
         "grep_files",
-        "Search file contents for a literal text pattern.",
+        "Search file contents for a text pattern (literal by default; set regex to true for .NET regular expressions).",
         new Dictionary<string, string>
         {
-            ["pattern"] = "Literal text pattern to search for",
+            ["pattern"] = "Text pattern (literal or regex). Regex example with regex true: class\\s+\\w+",
             ["path"] = ToolPathDescriptions.OptionalWorkspaceRelativeDirectory,
-            ["glob"] = "Optional file glob filter, e.g. *.cs"
+            ["glob"] = "Optional file glob filter, e.g. *.cs",
+            ["regex"] = "Optional true to treat pattern as .NET regular expression (default: false, literal case-insensitive)"
         });
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
         if (!ToolArguments.TryGetRequired(invocation, "pattern", out var pattern, out var error)) return error;
         if (!WorkspaceToolHelper.TryResolveOptionalNormalizedPath(invocation, guard, out var fullPath, out error)) return error;
+
+        var useRegex = invocation.Arguments.TryGetValue("regex", out var regexValue)
+            && bool.TryParse(regexValue, out var parsedRegex)
+            && parsedRegex;
+        if (!GrepLineMatcher.TryCreate(pattern, useRegex, out var matcher, out var regexError))
+        {
+            return ToolResult.Failure("Invalid regex", regexError ?? "Invalid pattern.");
+        }
 
         var glob = invocation.Arguments.GetValueOrDefault("glob") ?? "*";
         var ignorePatterns = guard.GetIgnorePatterns();
@@ -70,7 +69,7 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
                     cancellationToken.ThrowIfCancellationRequested();
                     var line = await reader.ReadLineAsync(cancellationToken) ?? string.Empty;
                     lineNumber++;
-                    if (!line.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                    if (!matcher!.IsMatch(line))
                     {
                         continue;
                     }
@@ -94,7 +93,7 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
             if (matches.Count >= MaxMatches) break;
         }
 
-        await WorkspaceToolHelper.AuditAsync(audit, "grep_files", new { path = fullPath, pattern, count = matches.Count }, cancellationToken);
+        await WorkspaceToolHelper.AuditAsync(audit, "grep_files", new { path = fullPath, pattern, regex = useRegex, count = matches.Count }, cancellationToken);
         return matches.Count == 0
             ? ToolResult.Success("No matches found", "No matches found")
             : ToolResult.Success($"Found {matches.Count} matches", string.Join(Environment.NewLine, matches));

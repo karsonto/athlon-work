@@ -72,6 +72,97 @@ public sealed class GrepFilesToolTests
         }
     }
 
+    [Fact]
+    public async Task InvokeAsync_RegexMode_MatchesPattern()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, "src"));
+
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "src", "Foo.cs"), "public class Foo { }");
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
+            {
+                ["pattern"] = @"class\s+\w+",
+                ["regex"] = "true"
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Contains("Foo.cs", result.Content!, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("public class Foo", result.Content!, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_LiteralMode_DoesNotTreatRegexMetacharactersAsPattern()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(workspaceRoot);
+
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "sample.txt"), @"class\s+\w+");
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
+            {
+                ["pattern"] = @"class\s+\w+"
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Contains("sample.txt", result.Content!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_RegexMode_RejectsInvalidPattern()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(workspaceRoot);
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
+            {
+                ["pattern"] = "[unclosed",
+                ["regex"] = "true"
+            }));
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("Invalid regex", result.Summary);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static GrepFilesTool CreateTool(string workspaceRoot, string appDataRoot)
     {
         var context = new ActiveWorkspaceContext();

@@ -81,6 +81,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, FileReadTool>();
         services.AddSingleton<IAgentTool, FileWriteTool>();
         services.AddSingleton<IAgentTool, FileEditTool>();
+        services.AddSingleton<IAgentTool, ApplyPatchTool>();
         services.AddSingleton<IAgentTool, GrepFilesTool>();
         services.AddSingleton<IAgentTool, GlobFilesTool>();
         services.AddSingleton<IAgentTool, ExecuteCommandTool>();

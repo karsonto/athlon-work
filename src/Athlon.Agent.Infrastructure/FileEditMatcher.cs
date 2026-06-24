@@ -90,6 +90,7 @@ internal static partial class FileEditMatcher
         }
 
         builder.Append(" Check whitespace, indentation, and line endings (CRLF vs LF).");
+        builder.Append(" Re-read the file and retry once, or use apply_patch with a unified diff.");
         return builder.ToString();
     }
 

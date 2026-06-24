@@ -98,6 +98,7 @@ public sealed class WorkspaceIgnoreSettings
 public sealed class PromptSettings
 {
     public int MaxAgentsMdChars { get; set; } = 8000;
+    public int MaxContributingMdChars { get; set; } = 4000;
     public int MaxKnowledgeMdChars { get; set; } = 1500;
     public int MaxKnowledgeCatalogEntries { get; set; } = 50;
 }

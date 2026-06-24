@@ -3,11 +3,10 @@ namespace Athlon.Agent.Core;
 public static class ToolPathDescriptions
 {
     public const string WorkspaceRelativePath =
-        "Prefer workspace-relative path (forward slashes), e.g. src/foo.cs. "
-        + "Absolute paths are also allowed when needed.";
+        "Workspace-relative path (forward slashes), e.g. src/foo.cs. Must be inside the active workspace.";
 
     public const string OptionalWorkspaceRelativeDirectory =
-        "Optional directory path. Prefer workspace-relative (forward slashes); absolute paths are allowed.";
+        "Optional directory path. Prefer workspace-relative (forward slashes); must be inside the active workspace.";
 
     public const string OptionalWorkspaceRelativeCwd =
         "Optional working directory. Prefer workspace-relative (forward slashes); absolute paths are allowed. "

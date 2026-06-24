@@ -17,7 +17,8 @@ public sealed class ExecuteCommandTool(
     public ToolDefinition Definition { get; } = new(
         "execute_command",
         "Execute a shell command (user approval required). On Windows use cmd.exe semantics, not PowerShell. "
-        + "Console I/O uses UTF-8 (chcp 65001). "
+            + "After code changes, verify with dotnet build or dotnet test --filter. "
+            + "Console I/O uses UTF-8 (chcp 65001). "
         + $"Default timeout {DefaultTimeoutSeconds}s (max {MaxTimeoutSeconds}s); timeout ends only this tool, not the agent turn.",
         new Dictionary<string, string>
         {

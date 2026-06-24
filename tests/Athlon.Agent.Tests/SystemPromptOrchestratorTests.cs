@@ -27,6 +27,7 @@ public sealed class SystemPromptOrchestratorTests
             new EncodingPolicySection(),
             new WorkspacePolicySection(),
             new WorkspaceFilesSection(),
+            new CodingWorkflowSection(),
             new FileToolsPolicySection(),
             new ToolsPolicySection(),
             new SkillsSection(settings, catalog),
@@ -77,6 +78,22 @@ public sealed class SystemPromptOrchestratorTests
 
         Assert.StartsWith(frozen.Text.TrimEnd(), iteration.TrimEnd(), StringComparison.Ordinal);
         Assert.Contains("PRE_REASONING_MARKER", iteration, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PrepareForTurn_IncludesCodingWorkflow_WhenWorkspaceConfigured()
+    {
+        var settings = new AppSettings
+        {
+            Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = @"C:\work\demo" } }
+        };
+        var orchestrator = PromptTestHelpers.CreateOrchestrator(
+            new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
+            settings);
+        var prompt = orchestrator.PrepareForTurn(AgentSession.Create("coding-workflow"), Array.Empty<ToolDefinition>()).Text;
+
+        Assert.Contains("Coding workflow:", prompt, StringComparison.Ordinal);
+        Assert.Contains("dotnet test", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -42,7 +42,9 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
             builder.AppendLine();
         }
 
-        builder.AppendLine("For write operations, explain your intent before calling file_write or file_edit.");
+        builder.AppendLine("For write operations, explain your intent before calling file_write, file_edit, or apply_patch.");
+        builder.AppendLine("If the same tool fails with the same error twice, stop repeating it; gather more context (search, file_read) or switch tools (e.g. apply_patch).");
+        builder.AppendLine("Read-only tools (file_read, grep_files, glob_files, file_list) may be called in parallel when they do not depend on each other.");
         builder.AppendLine("Windows: cmd.exe only, not PowerShell. execute_command defaults cwd to the workspace root; use workspace-relative cwd when needed.");
         builder.AppendLine("Skill scripts: use absolute paths from each skill's <files-root> inside the command string; do not use workspace-relative paths for skill files.");
         builder.AppendLine("In cmd, quote paths that contain spaces or non-ASCII characters (e.g. type \"docs/报告.txt\").");

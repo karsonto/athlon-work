@@ -63,7 +63,7 @@ public sealed class FileListToolTests
     }
 
     [Fact]
-    public async Task InvokeAsync_AllowsAbsolutePathOutsideWorkspace()
+    public async Task InvokeAsync_RejectsAbsolutePathOutsideWorkspace()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-list-{Guid.NewGuid():N}");
         var workspaceRoot = Path.Combine(root, "workspace");
@@ -85,9 +85,8 @@ public sealed class FileListToolTests
                 "file_list",
                 new Dictionary<string, string> { ["path"] = outsideRoot }));
 
-            Assert.True(result.Succeeded, result.Error);
-            Assert.Contains("outside.txt", result.Content, StringComparison.Ordinal);
-            Assert.DoesNotContain("Outside workspace", result.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.False(result.Succeeded);
+            Assert.Equal("Outside workspace", result.Summary);
         }
         finally
         {

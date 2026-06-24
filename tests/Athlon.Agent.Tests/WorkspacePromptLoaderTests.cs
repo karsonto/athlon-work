@@ -22,7 +22,7 @@ public sealed class WorkspacePromptLoaderTests
             Assert.Contains("## AGENTS.md", text, StringComparison.Ordinal);
             Assert.Contains("<loaded_context>", text, StringComparison.Ordinal);
             Assert.Contains("# Agent Rules", text, StringComparison.Ordinal);
-            Assert.DoesNotContain("Honor AGENTS.md", text, StringComparison.Ordinal);
+            Assert.Contains("override your default habits", text, StringComparison.Ordinal);
         }
         finally
         {
@@ -72,6 +72,27 @@ public sealed class WorkspacePromptLoaderTests
             Assert.Contains("## Domain Knowledge", text, StringComparison.Ordinal);
             Assert.Contains("knowledge/refs/guide.md", text, StringComparison.Ordinal);
             Assert.DoesNotContain("knowledge/bin/", text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void AppendWorkspaceFiles_InjectsContributingMd_WhenPresent()
+    {
+        var root = CreateWorkspaceRoot();
+        File.WriteAllText(Path.Combine(root, "CONTRIBUTING.md"), "# Contributing\nRun dotnet test before PR.");
+
+        try
+        {
+            var builder = new StringBuilder();
+            WorkspacePromptLoader.AppendWorkspaceFiles(builder, CreateContext(root));
+
+            var text = builder.ToString();
+            Assert.Contains("## CONTRIBUTING.md", text, StringComparison.Ordinal);
+            Assert.Contains("Run dotnet test before PR.", text, StringComparison.Ordinal);
         }
         finally
         {

@@ -7,6 +7,7 @@ namespace Athlon.Agent.Infrastructure.Prompt;
 public static class WorkspacePromptLoader
 {
     private const string AgentsFileName = "AGENTS.md";
+    private const string ContributingFileName = "CONTRIBUTING.md";
     private const string KnowledgeDirName = "knowledge";
     private const string KnowledgeIndexFileName = "KNOWLEDGE.md";
     private const string TruncationNotice = "\n\n... (truncated — read the full file with file_read) ...\n";
@@ -30,9 +31,26 @@ public static class WorkspacePromptLoader
                 builder.AppendLine();
             }
 
+            builder.AppendLine("Project rules below (from AGENTS.md) override your default habits when they conflict. Follow them for all workspace edits.");
             builder.AppendLine("## AGENTS.md");
             builder.AppendLine("<loaded_context>");
             builder.AppendLine(agentsContent.TrimEnd());
+            builder.AppendLine("</loaded_context>");
+            builder.AppendLine();
+            hasContent = true;
+        }
+
+        var contributingContent = TryReadContributingMd(workspaceRoot, settings.MaxContributingMdChars);
+        if (!string.IsNullOrWhiteSpace(contributingContent))
+        {
+            if (!hasContent)
+            {
+                builder.AppendLine();
+            }
+
+            builder.AppendLine("## CONTRIBUTING.md");
+            builder.AppendLine("<loaded_context>");
+            builder.AppendLine(contributingContent.TrimEnd());
             builder.AppendLine("</loaded_context>");
             builder.AppendLine();
             hasContent = true;
@@ -65,6 +83,17 @@ public static class WorkspacePromptLoader
         }
 
         return ReadTextWithLimit(agentsPath, maxChars);
+    }
+
+    private static string? TryReadContributingMd(string workspaceRoot, int maxChars)
+    {
+        var contributingPath = Path.Combine(workspaceRoot, ContributingFileName);
+        if (!File.Exists(contributingPath) || !IsUnderRoot(contributingPath, workspaceRoot))
+        {
+            return null;
+        }
+
+        return ReadTextWithLimit(contributingPath, maxChars);
     }
 
     private static string? BuildKnowledgeBlock(

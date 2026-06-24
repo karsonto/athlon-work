@@ -17,7 +17,8 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
 {
     public ToolDefinition Definition { get; } = new(
         "file_edit",
-        "Replace exact text in a file (with backup). old_text must match disk content exactly — not file_read's N|line prefixes.",
+        "Replace exact text in a file (with backup). old_text must match disk content exactly — not file_read's N|line prefixes. "
+            + "If matching fails, use apply_patch with a unified diff instead.",
         new Dictionary<string, string>
         {
             ["path"] = ToolPathDescriptions.WorkspaceRelativePath,

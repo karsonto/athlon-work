@@ -17,7 +17,7 @@ internal static class WorkspaceToolHelper
         }
 
         fullPath = guard.Normalize(path);
-        return true;
+        return TryEnsureInsideWorkspace(guard, ref fullPath, out error);
     }
 
     public static bool TryResolveOptionalNormalizedPath(
@@ -34,6 +34,19 @@ internal static class WorkspaceToolHelper
         }
 
         fullPath = guard.Normalize(path);
+        return TryEnsureInsideWorkspace(guard, ref fullPath, out error);
+    }
+
+    private static bool TryEnsureInsideWorkspace(WorkspaceGuard guard, ref string fullPath, out ToolResult error)
+    {
+        if (guard.HasConfiguredWorkspace && !guard.IsInsideWorkspace(fullPath))
+        {
+            error = ToolResult.Failure("Outside workspace", fullPath);
+            fullPath = string.Empty;
+            return false;
+        }
+
+        error = ToolResult.Success("OK");
         return true;
     }
 
