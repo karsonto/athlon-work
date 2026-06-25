@@ -101,12 +101,22 @@ function Copy-RuntimeTree {
         [string]$TargetFolder
     )
 
+    if (-not (Test-Path -LiteralPath $SourceFolder)) {
+        throw "Source runtime folder not found: $SourceFolder"
+    }
+
+    $items = @(Get-ChildItem -LiteralPath $SourceFolder -Force)
+    if ($items.Count -eq 0) {
+        throw "Source runtime folder is empty: $SourceFolder"
+    }
+
     if (Test-Path -LiteralPath $TargetFolder) {
         Remove-Item -LiteralPath $TargetFolder -Recurse -Force
     }
 
     New-Item -ItemType Directory -Path $TargetFolder -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $SourceFolder '*') -Destination $TargetFolder -Recurse -Force
+    # -LiteralPath does not expand wildcards; use -Path for glob copy.
+    Copy-Item -Path (Join-Path $SourceFolder '*') -Destination $TargetFolder -Recurse -Force
 }
 
 $runtimeVersion = if ([string]::IsNullOrWhiteSpace($Version)) { Get-PinnedVersion -Path $VersionFile } else { $Version.Trim() }
