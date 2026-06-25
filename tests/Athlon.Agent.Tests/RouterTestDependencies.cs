@@ -1,5 +1,7 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -13,12 +15,50 @@ internal static class RouterTestDependencies
         return context;
     }
 
+    public static AgentRunContextAccessor CreateRunContextAccessor(
+        bool harnessEnabled = false,
+        AgentRunKind kind = AgentRunKind.Root,
+        string sessionId = "test-session")
+    {
+        var accessor = new AgentRunContextAccessor();
+        if (!harnessEnabled && kind == AgentRunKind.Root)
+        {
+            return accessor;
+        }
+
+        var session = AgentSession.Create("Test");
+        session = session with { Id = sessionId };
+        var runContext = AgentRunContext.CreateRoot(
+            session,
+            "run-1",
+            new ToolRouter(Array.Empty<IAgentTool>()),
+            PromptTestHelpers.CreateStaticOrchestrator(),
+            []);
+        if (kind == AgentRunKind.SubAgent)
+        {
+            runContext = runContext.CreateChild(
+                "sub-session",
+                new ToolRouter(Array.Empty<IAgentTool>()),
+                PromptTestHelpers.CreateStaticOrchestrator(),
+                "reviewer",
+                null,
+                null,
+                []);
+        }
+
+        accessor.Push(runContext);
+        return accessor;
+    }
+
     public static ISessionKnowledgeState CreateSessionKnowledgeState(
         bool enabled = false,
         params string[] moduleIds) =>
         new StubSessionKnowledgeState(new SessionKnowledgeSnapshot(
             enabled,
             moduleIds.ToHashSet(StringComparer.OrdinalIgnoreCase)));
+
+    public static ISessionHarnessState CreateSessionHarnessState(bool enabled = false) =>
+        new StubSessionHarnessState(new SessionHarnessSnapshot(enabled));
 
     public static WorkspaceGuard CreateWorkspaceGuard(bool configured = true, string? workspaceRoot = null)
     {
@@ -37,6 +77,29 @@ internal static class RouterTestDependencies
         }
 
         return new WorkspaceGuard(context, new AgentRunContextAccessor(), settings, new RouterTestPathProvider(appDataRoot));
+    }
+
+    internal sealed class StubSessionHarnessState(SessionHarnessSnapshot snapshot) : ISessionHarnessState
+    {
+        public Task LoadAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task SaveAsync(string sessionId, SessionHarnessSnapshot state, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public SessionHarnessSnapshot GetSnapshot(string? sessionId) => snapshot;
+
+        public bool IsEnabled(string? sessionId) => snapshot.Enabled;
+
+        public bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor)
+        {
+            var run = runContextAccessor.Current;
+            if (run is null || run.Kind == AgentRunKind.SubAgent)
+            {
+                return false;
+            }
+
+            return snapshot.Enabled;
+        }
     }
 
     internal sealed class StubSessionKnowledgeState(SessionKnowledgeSnapshot snapshot) : ISessionKnowledgeState

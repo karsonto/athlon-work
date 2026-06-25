@@ -16,13 +16,15 @@ public sealed class ChildAgentToolRouterTests
         var other = new StubNamedTool("file_list");
         var registry = new StubMcpRegistry([new ToolDefinition("mcp__srv__search", "mcp", new Dictionary<string, string>())]);
 
-        var settings = new AppSettings { Memory = new MemorySettings { Enabled = true } };
+        var settings = new AppSettings();
         var router = new ChildAgentToolRouter(
             [subAgent, other],
             registry,
             settings,
             RouterTestDependencies.CreateSessionContext(),
             RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new AgentRunContextAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard());
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
@@ -32,12 +34,12 @@ public sealed class ChildAgentToolRouterTests
     }
 
     [Fact]
-    public void ListTools_WhenMemoryDisabled_ExcludesMemoryTools()
+    public void ListTools_WhenHarnessDisabled_ExcludesMemoryTools()
     {
         var memorySearch = new StubMemoryTool("memory_search");
         var other = new StubNamedTool("file_list");
         var registry = new StubMcpRegistry([]);
-        var settings = new AppSettings { Memory = new MemorySettings { Enabled = false } };
+        var settings = new AppSettings();
 
         var router = new ChildAgentToolRouter(
             [memorySearch, other],
@@ -45,6 +47,8 @@ public sealed class ChildAgentToolRouterTests
             settings,
             RouterTestDependencies.CreateSessionContext(),
             RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new AgentRunContextAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard());
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
@@ -57,13 +61,15 @@ public sealed class ChildAgentToolRouterTests
     {
         var registry = new StubMcpRegistry([]);
         registry.Definitions.Add(new ToolDefinition("mcp__srv__ping", "ping", new Dictionary<string, string>()));
-        var settings = new AppSettings { Memory = new MemorySettings { Enabled = true } };
+        var settings = new AppSettings();
         var router = new ChildAgentToolRouter(
             Array.Empty<IAgentTool>(),
             registry,
             settings,
             RouterTestDependencies.CreateSessionContext(),
             RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new AgentRunContextAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard());
 
         var result = await router.InvokeAsync(new ToolInvocation("mcp__srv__ping", new Dictionary<string, string>()));

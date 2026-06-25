@@ -1,92 +1,82 @@
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
 
 namespace Athlon.Agent.Tests;
 
-public sealed class CompositeToolRouterMemoryTests
+public sealed class CompositeToolRouterHarnessTests
 {
     [Fact]
-    public void MemorySettings_DefaultsToDisabled()
+    public void ListTools_WhenHarnessDisabled_ExcludesHarnessTools()
     {
-        var settings = new MemorySettings();
-
-        Assert.False(settings.Enabled);
-    }
-
-    [Fact]
-    public void ListTools_WhenMemoryDisabled_ExcludesMemoryTools()
-    {
-        var settings = new AppSettings { Memory = new MemorySettings { Enabled = false } };
-        var router = CreateRouter(settings);
+        var router = CreateRouter(harnessEnabled: false);
 
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
         Assert.DoesNotContain("memory_search", names);
         Assert.DoesNotContain("memory_get", names);
+        Assert.DoesNotContain("todo_write", names);
         Assert.Contains("file_list", names);
     }
 
     [Fact]
-    public void ListTools_WhenMemoryEnabled_IncludesMemoryTools()
+    public void ListTools_WhenHarnessEnabled_IncludesHarnessTools()
     {
-        var settings = new AppSettings { Memory = new MemorySettings { Enabled = true } };
-        var router = CreateRouter(settings);
+        var router = CreateRouter(harnessEnabled: true);
 
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
         Assert.Contains("memory_search", names);
         Assert.Contains("memory_get", names);
+        Assert.Contains("todo_write", names);
         Assert.Contains("file_list", names);
     }
 
     [Fact]
-    public async Task InvokeAsync_WhenMemoryDisabled_ReturnsNotFoundForMemoryTools()
+    public async Task InvokeAsync_WhenHarnessDisabled_ReturnsNotFoundForHarnessTools()
     {
-        var settings = new AppSettings { Memory = new MemorySettings { Enabled = false } };
-        var router = CreateRouter(settings);
+        var router = CreateRouter(harnessEnabled: false);
 
         var searchResult = await router.InvokeAsync(new ToolInvocation("memory_search", new Dictionary<string, string> { ["query"] = "test" }));
-        var getResult = await router.InvokeAsync(new ToolInvocation("memory_get", new Dictionary<string, string>
+        var todoResult = await router.InvokeAsync(new ToolInvocation("todo_write", new Dictionary<string, string>
         {
-            ["path"] = "MEMORY.md",
-            ["start_line"] = "1",
-            ["end_line"] = "5"
+            ["todos"] = """[{"id":"1","content":"x","status":"pending"}]""",
+            ["merge"] = "false"
         }));
 
         Assert.False(searchResult.Succeeded);
-        Assert.Contains("memory_search", searchResult.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        Assert.False(getResult.Succeeded);
-        Assert.Contains("memory_get", getResult.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.False(todoResult.Succeeded);
     }
 
     [Fact]
-    public async Task InvokeAsync_WhenMemoryEnabled_ResolvesMemoryTools()
+    public async Task InvokeAsync_WhenHarnessEnabled_ResolvesMemoryTools()
     {
-        var settings = new AppSettings { Memory = new MemorySettings { Enabled = true } };
-        var router = CreateRouter(settings);
+        var router = CreateRouter(harnessEnabled: true);
 
         var result = await router.InvokeAsync(new ToolInvocation("memory_search", new Dictionary<string, string> { ["query"] = "nonexistent-xyz-123" }));
 
         Assert.True(result.Succeeded);
     }
 
-    private static CompositeToolRouter CreateRouter(AppSettings settings)
+    private static CompositeToolRouter CreateRouter(bool harnessEnabled)
     {
         var tools = new IAgentTool[]
         {
             new StubNamedTool("file_list"),
             new StubMemoryTool("memory_search"),
-            new StubMemoryTool("memory_get")
+            new StubMemoryTool("memory_get"),
+            new StubHarnessTool("todo_write")
         };
         return new CompositeToolRouter(
             tools,
             new StubMcpRegistry([]),
-            settings,
+            new AppSettings(),
             RouterTestDependencies.CreateSessionContext(),
             RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateSessionHarnessState(harnessEnabled),
+            RouterTestDependencies.CreateRunContextAccessor(harnessEnabled),
             RouterTestDependencies.CreateWorkspaceGuard());
     }
 
@@ -98,6 +88,13 @@ public sealed class CompositeToolRouterMemoryTests
     }
 
     private sealed class StubMemoryTool(string name) : IAgentTool, ILongTermMemoryTool
+    {
+        public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
+        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ToolResult.Success("ok"));
+    }
+
+    private sealed class StubHarnessTool(string name) : IAgentTool, IHarnessTool
     {
         public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>

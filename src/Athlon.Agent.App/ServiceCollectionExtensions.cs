@@ -1,6 +1,7 @@
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure;
@@ -47,6 +48,9 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ISessionKnowledgeState>(),
             sp.GetRequiredService<IKnowledgeStore>(),
             sp.GetRequiredService<AppSettings>()));
+        services.AddSingleton(sp => new ComposerHarnessViewModel(
+            sp.GetRequiredService<ISessionHarnessState>(),
+            sp.GetRequiredService<ISessionTaskListStore>()));
         services.AddSingleton<MainWindowViewModel>();
         services.AddSingleton<WebView2EnvironmentProvider>();
         services.AddSingleton<MainWindow>();

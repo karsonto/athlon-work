@@ -2,9 +2,6 @@ namespace Athlon.Agent.Core.Memory;
 
 public sealed class MemorySettings
 {
-    /// <summary>Master switch. When false the memory system is completely disabled.</summary>
-    public bool Enabled { get; set; } = false;
-
     /// <summary>Minimum gap between two consolidation runs.</summary>
     public TimeSpan ConsolidationMinGap { get; set; } = TimeSpan.FromMinutes(30);
 

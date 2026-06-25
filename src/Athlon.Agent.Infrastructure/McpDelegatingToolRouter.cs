@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Memory;
 
@@ -11,6 +12,8 @@ internal sealed class McpDelegatingToolRouter(
     AppSettings settings,
     IActiveAgentSessionContext activeSessionContext,
     ISessionKnowledgeState sessionKnowledgeState,
+    ISessionHarnessState sessionHarnessState,
+    IAgentRunContextAccessor runContextAccessor,
     WorkspaceGuard workspaceGuard,
     Func<Task>? refreshMcpCatalogAsync = null,
     IAppLogger? logger = null) : IToolRouter
@@ -35,7 +38,8 @@ internal sealed class McpDelegatingToolRouter(
                 && sessionKnowledgeState.ShouldExposeKnowledgeTool(activeSessionContext.SessionId);
         }
 
-        if (!settings.Memory.Enabled && tool is ILongTermMemoryTool)
+        if (!sessionHarnessState.IsEnabledForActiveRun(runContextAccessor)
+            && tool is ILongTermMemoryTool or IHarnessTool)
         {
             return false;
         }

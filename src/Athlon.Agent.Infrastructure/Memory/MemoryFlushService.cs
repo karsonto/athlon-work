@@ -40,9 +40,6 @@ IMPORTANT:
         IReadOnlyList<ChatMessage> messages,
         CancellationToken cancellationToken = default)
     {
-        if (!_cfg.Enabled)
-            return MemoryFlushResult.Skipped;
-
         var conversationText = SerializeMessages(messages);
         if (string.IsNullOrWhiteSpace(conversationText))
             return MemoryFlushResult.Skipped;

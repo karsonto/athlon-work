@@ -30,6 +30,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         App.StartupTrace("MainWindow InitializeComponent completed");
         _viewModel = viewModel;
         _clipboardImageReader = clipboardImageReader;
+        ComposerInput.ClipboardImageReader = _clipboardImageReader;
         _updateService = updateService;
         _shutdownCoordinator = new MainWindowShutdownCoordinator();
         _layoutBinder = new MainWindowLayoutBinder(_viewModel, new MainWindowLayoutElements
@@ -72,7 +73,6 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     private void OnMainWindowLoaded(object sender, RoutedEventArgs e)
     {
         _layoutBinder.ApplyAll();
-        ComposerInput.ClipboardImageReader = _clipboardImageReader;
         ChatWebView.InitializationFailed += OnChatWebViewInitializationFailed;
         _viewModel.AttachChatView(ChatWebView);
         RegisterChatScrollService();

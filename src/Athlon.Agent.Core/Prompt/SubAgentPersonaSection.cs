@@ -17,10 +17,19 @@ public sealed class SubAgentPersonaSection(IAgentRunContextAccessor runContextAc
         builder.AppendLine(role.Trim());
         builder.AppendLine();
 
-        builder.AppendLine("You are invoked by the parent agent via call_assistant.");
-        builder.AppendLine("Do not call call_assistant or delegate to other agents.");
+        builder.AppendLine("You are invoked by the parent agent as a sub-agent session.");
+        builder.AppendLine("Do not call sessions_* tools, call_assistant, or delegate to other agents.");
         builder.AppendLine("Use file tools, MCP tools, and load_skill_through_path when needed.");
-        builder.AppendLine("Deliver a clear, self-contained result the parent agent can synthesize.");
+        builder.AppendLine("End your reply with a structured result block:");
+        builder.AppendLine();
+        builder.AppendLine("## Result");
+        builder.AppendLine("status: completed | blocked | needs_parent");
+        builder.AppendLine("accomplished:");
+        builder.AppendLine("- ...");
+        builder.AppendLine("findings:");
+        builder.AppendLine("- ...");
+        builder.AppendLine("files_changed:");
+        builder.AppendLine("- path/to/file");
         builder.AppendLine();
     }
 }

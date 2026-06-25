@@ -1,9 +1,12 @@
+using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Memory;
 
 namespace Athlon.Agent.Core.Middleware;
 
 public sealed class PostTurnMemoryMiddleware(
-    AppSettings settings,
+    ISessionHarnessState harnessState,
+    IAgentRunContextAccessor runContextAccessor,
     IPostTurnMemoryProcessor memoryProcessor,
     IAppLogger logger) : AgentTurnMiddlewareBase
 {
@@ -11,7 +14,7 @@ public sealed class PostTurnMemoryMiddleware(
 
     public override ValueTask OnTurnCompletedAsync(AgentTurnInvocation invocation, CancellationToken cancellationToken)
     {
-        if (!settings.Memory.Enabled)
+        if (!harnessState.IsEnabledForActiveRun(runContextAccessor))
         {
             return ValueTask.CompletedTask;
         }

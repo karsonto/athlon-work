@@ -1,3 +1,4 @@
+using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Athlon.Agent.App.Services;
@@ -37,6 +38,46 @@ public sealed class ClipboardImageAttachmentReaderTests
             Assert.NotNull(attachment);
             Assert.StartsWith("clipboard-", attachment!.FileName, StringComparison.Ordinal);
             Assert.EndsWith(".png", attachment.FileName, StringComparison.OrdinalIgnoreCase);
+        });
+    }
+
+    [Fact]
+    public void HasImageFormats_detects_png_clipboard_format()
+    {
+        RunSta(() =>
+        {
+            var bitmap = CreateSolidColorBitmap(4, 4, Colors.Coral);
+            using var stream = new MemoryStream();
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            encoder.Save(stream);
+
+            var data = new DataObject();
+            data.SetData("PNG", stream.ToArray());
+
+            Assert.True(ClipboardImageAttachmentReader.HasImageFormats(data));
+        });
+    }
+
+    [Fact]
+    public void TryReadBitmapFromDataObject_reads_png_clipboard_format()
+    {
+        RunSta(() =>
+        {
+            var bitmap = CreateSolidColorBitmap(6, 6, Colors.Green);
+            using var stream = new MemoryStream();
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            encoder.Save(stream);
+
+            var data = new DataObject();
+            data.SetData("PNG", stream.ToArray());
+
+            var decoded = ClipboardImageAttachmentReader.TryReadBitmapFromDataObject(data);
+
+            Assert.NotNull(decoded);
+            Assert.Equal(6, decoded!.PixelWidth);
+            Assert.Equal(6, decoded.PixelHeight);
         });
     }
 

@@ -77,7 +77,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         KnowledgeViewModel knowledgePageVm,
         ContextSidebarViewModel sidebar,
         FileEditorViewModel fileEditor,
-        ComposerKnowledgeViewModel composerKnowledge)
+        ComposerKnowledgeViewModel composerKnowledge,
+        ComposerHarnessViewModel composerHarness)
     {
         _storage = storage;
         _credentialStore = credentialStore;
@@ -111,6 +112,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         KnowledgePageVm = knowledgePageVm;
         KnowledgePageVm.KnowledgeDataChanged += OnKnowledgeDataChanged;
         ComposerKnowledge = composerKnowledge;
+        ComposerHarness = composerHarness;
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Sidebar = sidebar;
@@ -129,6 +131,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         LogsPath = paths.LogsPath;
         KnowledgePageVm.SetSession(_displayedSessionId);
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
+        _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
 
         InitializeSsoDisplay();
 
@@ -300,6 +303,8 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public ComposerKnowledgeViewModel ComposerKnowledge { get; }
 
+    public ComposerHarnessViewModel ComposerHarness { get; }
+
     [RelayCommand]
     private void Navigate(string page)
     {
@@ -400,6 +405,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         CurrentPage = "Chat";
         KnowledgePageVm.SetSession(_displayedSessionId);
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
+        _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
         ApplySessionWorkspace();
         _ = SaveSessionInBackgroundAsync(previousSession);
         await _storage.SaveSessionAsync(_session);
@@ -645,6 +651,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         UpdateDisplayedBusyState();
         KnowledgePageVm.SetSession(_displayedSessionId);
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
+        _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
     }
 
     private void OnTurnStateChanged(object? sender, string sessionId)
@@ -663,6 +670,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private void OnKnowledgeDataChanged()
     {
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
+        _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
     }
 
     private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)
@@ -674,6 +682,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 _session = e.Session;
                 CurrentSessionTitle = _session.Title;
                 UpdateDisplayedBusyState();
+                _ = ComposerHarness.RefreshTasksAsync();
             }
 
             _sessionNavigation.Invalidate(e.SessionId);

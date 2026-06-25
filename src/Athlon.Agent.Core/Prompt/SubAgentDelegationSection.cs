@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Athlon.Agent.Core.Prompt;
 
-/// <summary>Guidance for the parent agent on when and how to delegate via call_assistant.</summary>
+/// <summary>Guidance for the parent agent on when and how to delegate via sessions_* and call_assistant.</summary>
 public sealed class SubAgentDelegationSection(AppSettings settings) : IEnvironmentPromptSection
 {
     public int Order => 550;
@@ -14,16 +14,19 @@ public sealed class SubAgentDelegationSection(AppSettings settings) : IEnvironme
             return;
         }
 
-        var toolName = context.Tools.FirstOrDefault(tool =>
-            string.Equals(tool.Name, "call_assistant", StringComparison.OrdinalIgnoreCase))?.Name
-            ?? "call_assistant";
-
         builder.AppendLine("## Delegating sub-tasks");
-        builder.AppendLine($"Use `{toolName}` when a focused sub-run with tools and memory helps (research, multi-step file work, isolated experiments).");
-        builder.AppendLine("- **New session:** provide `role` (who the child is, boundaries, output style) and `message` (this turn's task, paths, acceptance criteria).");
-        builder.AppendLine("- **Continue:** pass `session_id` from the prior tool result and a new `message`; `role` is optional (updates the child's role if provided).");
+        builder.AppendLine("Prefer `sessions_spawn` / `sessions_send` for structured sub-agent orchestration.");
+        if (settings.SubAgent.KeepCallAssistantAlias)
+        {
+            builder.AppendLine("`call_assistant` remains available as a compatibility alias (spawn when session_id omitted, send when provided).");
+        }
+
+        builder.AppendLine("- **New child:** `sessions_spawn` with `role` (who the child is, boundaries, output style), optional `message`, optional `label` for reuse.");
+        builder.AppendLine("- **Continue:** `sessions_send` with `session_key` or `label` and a new `message`.");
+        builder.AppendLine("- **Discover:** `sessions_list` when you do not remember session_key; `sessions_history` for transcript snippets.");
+        builder.AppendLine("- **Long tasks:** `timeout_seconds=0` returns `task_id`; next turn call `sessions_pending_completions` or wait for system reminder injection; use `task_output` to poll.");
         builder.AppendLine("- You may name a skill in `message` or let the child use `load_skill_through_path` from the skills list.");
-        builder.AppendLine("- Wait for the tool result; summarize for the user. The child cannot spawn nested agents.");
+        builder.AppendLine("- Wait for tool results; summarize for the user. Children cannot spawn nested agents.");
         builder.AppendLine();
     }
 }

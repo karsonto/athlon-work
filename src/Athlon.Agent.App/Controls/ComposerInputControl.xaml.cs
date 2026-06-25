@@ -12,6 +12,7 @@ public partial class ComposerInputControl : UserControl
     private readonly ExecutedRoutedEventHandler _pasteHandler;
     private MainWindowViewModel? _viewModel;
     private bool _isReplayingPaste;
+    private bool _isHandlingPaste;
 
     public ComposerInputControl()
     {
@@ -42,6 +43,14 @@ public partial class ComposerInputControl : UserControl
     {
         if (_viewModel is null)
         {
+            return;
+        }
+
+        if (e.Key == Key.V
+            && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
+            && TryBeginImagePaste(e))
+        {
+            _ = HandleImagePasteAsync();
             return;
         }
 
@@ -97,28 +106,56 @@ public partial class ComposerInputControl : UserControl
             return;
         }
 
-        if (_isReplayingPaste)
+        if (!TryBeginImagePaste(e))
         {
             return;
+        }
+
+        await HandleImagePasteAsync().ConfigureAwait(true);
+    }
+
+    private bool TryBeginImagePaste(RoutedEventArgs e)
+    {
+        if (_isReplayingPaste || _isHandlingPaste)
+        {
+            return false;
         }
 
         if (_viewModel is null || ClipboardImageReader is null || !ClipboardImageReader.HasPotentialImages())
         {
-            return;
+            return false;
         }
 
         e.Handled = true;
-        if (!await TryPasteImagesFromClipboardAsync().ConfigureAwait(true))
+        return true;
+    }
+
+    private async Task HandleImagePasteAsync()
+    {
+        if (_isHandlingPaste)
         {
-            try
+            return;
+        }
+
+        _isHandlingPaste = true;
+        try
+        {
+            if (!await TryPasteImagesFromClipboardAsync().ConfigureAwait(true))
             {
-                _isReplayingPaste = true;
-                ComposerTextBox.Paste();
+                try
+                {
+                    _isReplayingPaste = true;
+                    ComposerTextBox.Paste();
+                }
+                finally
+                {
+                    _isReplayingPaste = false;
+                }
             }
-            finally
-            {
-                _isReplayingPaste = false;
-            }
+        }
+        finally
+        {
+            _isHandlingPaste = false;
         }
     }
 

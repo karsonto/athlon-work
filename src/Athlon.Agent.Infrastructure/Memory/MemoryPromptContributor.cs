@@ -1,5 +1,6 @@
 using System.Text;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
 
@@ -7,12 +8,14 @@ namespace Athlon.Agent.Infrastructure.Memory;
 
 /// <summary>
 /// Injects the curated MEMORY.md content into the system prompt before each reasoning iteration.
-/// Only when memory is enabled and MEMORY.md is non-empty.
+/// Only when harness is enabled for the session and MEMORY.md is non-empty.
 /// </summary>
-public sealed class MemoryPromptContributor(ILongTermMemory longTermMemory, AppSettings settings) : IPreReasoningPromptContributor
+public sealed class MemoryPromptContributor(
+    ILongTermMemory longTermMemory,
+    ISessionHarnessState harnessState,
+    IAgentRunContextAccessor runContextAccessor) : IPreReasoningPromptContributor
 {
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
-    private readonly MemorySettings _cfg = settings.Memory;
     private readonly object _cacheLock = new();
     private string _cachedMemoryContent = string.Empty;
     private DateTimeOffset _nextRefreshAt = DateTimeOffset.MinValue;
@@ -22,7 +25,7 @@ public sealed class MemoryPromptContributor(ILongTermMemory longTermMemory, AppS
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
-        if (!_cfg.Enabled || PromptModeHelper.IsChatOnly(context))
+        if (!harnessState.IsEnabledForActiveRun(runContextAccessor) || PromptModeHelper.IsChatOnly(context))
             return;
 
         StartRefreshIfNeeded();

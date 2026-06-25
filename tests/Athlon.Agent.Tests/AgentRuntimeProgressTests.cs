@@ -193,6 +193,8 @@ public sealed class AgentRuntimeProgressTests
             new AppSettings(),
             RouterTestDependencies.CreateSessionContext(),
             RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new AgentRunContextAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard());
         var mcpSettings = new AppSettings();
         var logger = new NoOpLogger();

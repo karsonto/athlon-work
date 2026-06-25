@@ -38,9 +38,6 @@ Output the COMPLETE new MEMORY.md content (not just a diff). Use markdown.
     /// <summary>Runs a single consolidation cycle. No-op if no new daily files exist.</summary>
     public async Task ConsolidateAsync(CancellationToken cancellationToken = default)
     {
-        if (!_cfg.Enabled)
-            return;
-
         var watermark = await longTermMemory.ReadWatermarkAsync(cancellationToken);
         if (watermark == default)
             watermark = DateTime.MinValue;

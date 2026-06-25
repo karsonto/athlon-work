@@ -53,18 +53,26 @@ public sealed class FileSubAgentSessionStore(IAppPathProvider paths, IJsonFileSt
             return null;
         }
 
-        var meta = await jsonFileStore.LoadAsync<SubAgentMeta>(metaPath, cancellationToken);
+        var meta = await jsonFileStore.LoadAsync<SubAgentMetaFile>(metaPath, cancellationToken);
         return meta?.Role;
     }
 
     private async Task SaveRoleAsync(string directory, string role, CancellationToken cancellationToken)
     {
         var metaPath = Path.Combine(directory, "meta.json");
-        await jsonFileStore.SaveAsync(metaPath, new SubAgentMeta(role), cancellationToken);
+        var existing = await jsonFileStore.LoadAsync<SubAgentMetaFile>(metaPath, cancellationToken).ConfigureAwait(false);
+        var now = DateTimeOffset.UtcNow;
+        var meta = existing ?? new SubAgentMetaFile
+        {
+            SpawnRunId = $"run_{Guid.NewGuid():N}",
+            CreatedAt = now,
+            LastActivityAt = now
+        };
+        meta.Role = role;
+        meta.LastActivityAt = now;
+        await jsonFileStore.SaveAsync(metaPath, meta, cancellationToken).ConfigureAwait(false);
     }
 
     private string GetSubAgentDirectory(string parentSessionId, string subSessionId) =>
         Path.Combine(paths.SessionsPath, parentSessionId, "subagents", "default", subSessionId);
-
-    private sealed record SubAgentMeta(string Role);
 }

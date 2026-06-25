@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 
 namespace Athlon.Agent.Infrastructure;
@@ -9,6 +10,8 @@ public sealed class CompositeToolRouter(
     AppSettings settings,
     IActiveAgentSessionContext activeSessionContext,
     ISessionKnowledgeState sessionKnowledgeState,
+    ISessionHarnessState sessionHarnessState,
+    IAgentRunContextAccessor runContextAccessor,
     WorkspaceGuard workspaceGuard) : IToolRouter
 {
     private readonly McpDelegatingToolRouter _inner = new(
@@ -18,6 +21,8 @@ public sealed class CompositeToolRouter(
         settings,
         activeSessionContext,
         sessionKnowledgeState,
+        sessionHarnessState,
+        runContextAccessor,
         workspaceGuard);
 
     public IReadOnlyList<ToolDefinition> ListTools() => _inner.ListTools();

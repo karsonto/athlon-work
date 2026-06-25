@@ -1,10 +1,6 @@
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.SubAgents;
-using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.SubAgents;
-using Athlon.Agent.Mcp;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Athlon.Agent.Tests;
 
@@ -13,8 +9,9 @@ public sealed class SubAgentToolTests
     [Fact]
     public async Task InvokeAsync_NewSession_RequiresRole()
     {
-        var tool = CreateTool(new StubOrchestrator());
-        using var parent = new NoOpActiveAgentSessionContext().Enter("parent-1");
+        var context = new NoOpActiveAgentSessionContext();
+        var tool = CreateTool(new StubSessionManager(), context: context);
+        using var parent = context.Enter("parent-1");
 
         var result = await tool.InvokeAsync(new ToolInvocation(
             "call_assistant",
@@ -27,9 +24,10 @@ public sealed class SubAgentToolTests
     [Fact]
     public async Task InvokeAsync_NewSession_ReturnsSessionId()
     {
-        var orchestrator = new StubOrchestrator();
-        var tool = CreateTool(orchestrator);
-        using var parent = new NoOpActiveAgentSessionContext().Enter("parent-1");
+        var context = new NoOpActiveAgentSessionContext();
+        var manager = new StubSessionManager();
+        var tool = CreateTool(manager, context: context);
+        using var parent = context.Enter("parent-1");
 
         var result = await tool.InvokeAsync(new ToolInvocation(
             "call_assistant",
@@ -41,64 +39,37 @@ public sealed class SubAgentToolTests
 
         Assert.True(result.Succeeded);
         Assert.Contains("session_id:", result.Content ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1, orchestrator.SendCount);
+        Assert.Equal(1, manager.SpawnCount);
     }
 
     [Fact]
-    public async Task InvokeAsync_Continue_ReusesSavedRole()
+    public async Task InvokeAsync_Continue_UsesSend()
     {
-        var store = new InMemorySubAgentStore();
-        var subId = "sub-continue";
-        var session = AgentSession.Create("Sub") with { Id = subId };
-        await store.SaveAsync("parent-1", subId, new SubAgentSessionBundle(session, "Original role"));
-
-        var orchestrator = new StubOrchestrator();
-        var tool = CreateTool(orchestrator, store);
-        using var parent = new NoOpActiveAgentSessionContext().Enter("parent-1");
+        var context = new NoOpActiveAgentSessionContext();
+        var manager = new StubSessionManager();
+        var tool = CreateTool(manager, context: context);
+        using var parent = context.Enter("parent-1");
 
         var result = await tool.InvokeAsync(new ToolInvocation(
             "call_assistant",
             new Dictionary<string, string>
             {
-                ["session_id"] = subId,
+                ["session_id"] = "sub-continue",
                 ["message"] = "continue"
             }));
 
         Assert.True(result.Succeeded);
-        var loaded = await store.LoadAsync("parent-1", subId);
-        Assert.Equal("Original role", loaded!.Role);
-    }
-
-    [Fact]
-    public async Task InvokeAsync_Continue_CanOverrideRole()
-    {
-        var store = new InMemorySubAgentStore();
-        var subId = "sub-override";
-        var session = AgentSession.Create("Sub") with { Id = subId };
-        await store.SaveAsync("parent-1", subId, new SubAgentSessionBundle(session, "Old"));
-
-        var tool = CreateTool(new StubOrchestrator(), store);
-        using var parent = new NoOpActiveAgentSessionContext().Enter("parent-1");
-
-        await tool.InvokeAsync(new ToolInvocation(
-            "call_assistant",
-            new Dictionary<string, string>
-            {
-                ["session_id"] = subId,
-                ["role"] = "New role",
-                ["message"] = "go"
-            }));
-
-        var loaded = await store.LoadAsync("parent-1", subId);
-        Assert.Equal("New role", loaded!.Role);
+        Assert.Equal(1, manager.SendCount);
+        Assert.Equal("sub-continue", manager.LastSendSessionKey?.Split(':').Last());
     }
 
     [Fact]
     public async Task InvokeAsync_ExceedsNestingDepth_Fails()
     {
+        var context = new NoOpActiveAgentSessionContext();
         var settings = new AppSettings { SubAgent = new SubAgentSettings { MaxNestingDepth = 1 } };
-        var tool = CreateTool(new StubOrchestrator(), settings: settings);
-        using var parent = new NoOpActiveAgentSessionContext().Enter("parent-1");
+        var tool = CreateTool(new StubSessionManager(), settings, context);
+        using var parent = context.Enter("parent-1");
         using var depth = SubAgentExecutionScope.Enter();
 
         var result = await tool.InvokeAsync(new ToolInvocation(
@@ -114,140 +85,86 @@ public sealed class SubAgentToolTests
     }
 
     private static SubAgentTool CreateTool(
-        IAgentOrchestrator orchestrator,
-        ISubAgentSessionStore? store = null,
-        AppSettings? settings = null)
+        ISubAgentSessionManager sessionManager,
+        AppSettings? settings = null,
+        IActiveAgentSessionContext? context = null)
     {
         settings ??= new AppSettings();
-        store ??= new InMemorySubAgentStore();
-        var storage = new ParentSessionStorage();
-        var childRouter = new Lazy<ChildAgentToolRouter>(() =>
-            new ChildAgentToolRouter(
-                Array.Empty<IAgentTool>(),
-                new EmptyMcpRegistry(),
-                settings,
-                RouterTestDependencies.CreateSessionContext(),
-                RouterTestDependencies.CreateSessionKnowledgeState(),
-                RouterTestDependencies.CreateWorkspaceGuard()));
-        var prompt = new SubAgentSystemPromptOrchestrator(
-            settings,
-            new StubHostEnvironment(),
-            Array.Empty<Athlon.Agent.Core.Prompt.IEnvironmentPromptSection>(),
-            Array.Empty<Athlon.Agent.Core.Prompt.IPreReasoningPromptContributor>());
-
-        var services = new ServiceCollection();
-        services.AddSingleton(orchestrator);
-        var serviceProvider = services.BuildServiceProvider();
-
+        context ??= new NoOpActiveAgentSessionContext();
         return new SubAgentTool(
             settings,
-            serviceProvider,
-            storage,
-            store,
-            childRouter,
-            prompt,
-            new NoOpActiveAgentSessionContext(),
-            new AgentRunContextAccessor(),
-            new NoOpAppLogger());
+            new Lazy<ISubAgentSessionManager>(() => sessionManager),
+            context);
     }
 
-    private sealed class StubOrchestrator : IAgentOrchestrator
+    private sealed class StubSessionManager : ISubAgentSessionManager
     {
+        public int SpawnCount { get; private set; }
         public int SendCount { get; private set; }
+        public string? LastSendSessionKey { get; private set; }
 
-        public Task<AgentSession> SendAsync(
-            AgentSession session,
-            string userInput,
-            IReadOnlyList<ImageAttachment>? imageAttachments = null,
-            AgentTurnCallbacks? callbacks = null,
+        public Task<SpawnResult> SpawnAsync(
+            string parentSessionId,
+            string role,
+            string? message,
+            string? label,
+            int? timeoutSeconds,
+            CancellationToken cancellationToken = default)
+        {
+            SpawnCount++;
+            var subId = Guid.NewGuid().ToString("N");
+            var key = SubAgentSessionKey.Build(parentSessionId, subId);
+            var reply = SubAgentResultFormatter.FormatTrustedReply(key, subId, "/tmp/session.json", "done from sub");
+            return Task.FromResult(new SpawnResult("ok", "run_x", key, subId, "/tmp/session.json", null, null, false, reply));
+        }
+
+        public Task<SendResult> SendAsync(
+            string parentSessionId,
+            string? sessionKey,
+            string? label,
+            string message,
+            int? timeoutSeconds,
             CancellationToken cancellationToken = default)
         {
             SendCount++;
-            var assistant = ChatMessage.Create(MessageRole.Assistant, "done from sub", session.Messages.LastOrDefault()?.Id);
-            return Task.FromResult(session.WithMessage(assistant));
+            LastSendSessionKey = sessionKey;
+            var key = sessionKey ?? string.Empty;
+            var subId = key.Split(':').LastOrDefault() ?? "sub";
+            var reply = SubAgentResultFormatter.FormatTrustedReply(key, subId, "/tmp/session.json", "done from sub");
+            return Task.FromResult(new SendResult("ok", key, reply, null, null));
         }
+
+        public Task<IReadOnlyList<SubAgentSessionEntry>> ListAsync(string parentSessionId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<SubAgentSessionEntry>>(Array.Empty<SubAgentSessionEntry>());
+
+        public Task<HistoryResult> HistoryAsync(string parentSessionId, string sessionKey, int limit, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new HistoryResult(sessionKey, null, null, null));
+
+        public Task<IReadOnlyList<PendingCompletion>> DrainCompletionsAsync(string parentSessionId, int limit, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<PendingCompletion>>(Array.Empty<PendingCompletion>());
+
+        public Task<SubAgentTaskRecord?> GetTaskOutputAsync(string parentSessionId, string taskId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SubAgentTaskRecord?>(null);
     }
 
-    private sealed class InMemorySubAgentStore : ISubAgentSessionStore
+    private sealed class NoOpActiveAgentSessionContext : IActiveAgentSessionContext
     {
-        private readonly Dictionary<string, SubAgentSessionBundle> _bundles = new(StringComparer.Ordinal);
+        private string? _sessionId;
 
-        public Task<SubAgentSessionBundle?> LoadAsync(string parentSessionId, string subSessionId, CancellationToken cancellationToken = default)
+        public string? SessionId => _sessionId;
+
+        public void SetSession(string? sessionId) => _sessionId = sessionId;
+
+        public IDisposable Enter(string sessionId)
         {
-            _bundles.TryGetValue(Key(parentSessionId, subSessionId), out var bundle);
-            return Task.FromResult(bundle);
+            var previous = _sessionId;
+            _sessionId = sessionId;
+            return new Scope(this, previous);
         }
 
-        public Task SaveAsync(string parentSessionId, string subSessionId, SubAgentSessionBundle bundle, CancellationToken cancellationToken = default)
+        private sealed class Scope(NoOpActiveAgentSessionContext owner, string? previous) : IDisposable
         {
-            _bundles[Key(parentSessionId, subSessionId)] = bundle;
-            return Task.CompletedTask;
+            public void Dispose() => owner._sessionId = previous;
         }
-
-        private static string Key(string parent, string sub) => parent + ":" + sub;
-    }
-
-    private sealed class ParentSessionStorage : IFileStorageService
-    {
-        public string RootPath => "/tmp";
-        public Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<AgentSession?>(AgentSession.Create("Parent") with { Id = sessionId, ActiveWorkspace = @"C:\repo" });
-        public Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default) => Task.FromResult("");
-        public Task<string> SaveEvictedToolResultAsync(string sessionId, string toolCallId, string content, CancellationToken cancellationToken = default) => Task.FromResult("");
-        public Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<IReadOnlyList<ChatMessage>> LoadConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<ChatMessage>>(Array.Empty<ChatMessage>());
-        public Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<SessionIndexEntry>>(Array.Empty<SessionIndexEntry>());
-        public Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task<AppSettings> LoadSettingsAsync(CancellationToken cancellationToken = default) => Task.FromResult(new AppSettings());
-    }
-
-    private sealed class EmptyMcpRegistry : IMcpRegistry
-    {
-        public IReadOnlyList<McpServerStatus> GetStatuses() => Array.Empty<McpServerStatus>();
-        public IReadOnlyList<ToolDefinition> ListToolDefinitions() => Array.Empty<ToolDefinition>();
-        public IReadOnlyList<McpCatalogEntry> ListCatalogEntries() => Array.Empty<McpCatalogEntry>();
-        public int CatalogVersion => 0;
-        public int CatalogCount => 0;
-        public int CatalogSchemaCharCount => 0;
-        public IReadOnlyList<McpSearchIndex.SearchResult> SearchCatalog(string query, int topK, double minScore, string? serverName = null) =>
-            Array.Empty<McpSearchIndex.SearchResult>();
-        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
-        public Task<ToolResult> InvokeAsync(string serverName, string toolName, IReadOnlyDictionary<string, string> arguments, CancellationToken cancellationToken = default) =>
-            Task.FromResult(ToolResult.Failure("none", "none"));
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
-    }
-
-    private sealed class StubHostEnvironment : IAgentHostEnvironment
-    {
-        public bool IsWindows => true;
-        public string OsDescription => "test";
-        public string OsVersion => "1";
-        public string UserName => "u";
-        public string UserDomainName => "d";
-        public string MachineName => "m";
-        public string UserProfilePath => "/u";
-        public string SystemDirectory => "/s";
-        public string ProcessArchitecture => "x64";
-        public string OsArchitecture => "x64";
-        public int ProcessorCount => 1;
-        public string AppDataDirectory => "/a";
-        public string SkillsDirectory => "/skills";
-    }
-
-    private sealed class NoOpAppLogger : IAppLogger
-    {
-        public void Debug(string messageTemplate, params object[] values) { }
-        public void Information(string messageTemplate, params object[] values) { }
-        public void Warning(string messageTemplate, params object[] values) { }
-        public void Error(Exception exception, string messageTemplate, params object[] values) { }
-        public IAppLogger ForContext(string sourceContext) => this;
     }
 }

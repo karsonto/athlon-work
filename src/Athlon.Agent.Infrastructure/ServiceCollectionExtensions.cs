@@ -6,6 +6,8 @@ using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Harness;
+using Athlon.Agent.Infrastructure.Harness;
 using Athlon.Agent.Infrastructure.Memory;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
@@ -73,6 +75,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IKnowledgeIndexer, KnowledgeIndexerService>();
         services.AddSingleton<IKnowledgeSearchService, KnowledgeSearchService>();
         services.AddSingleton<ISessionKnowledgeState, SessionKnowledgeState>();
+        services.AddSingleton<ISessionHarnessState, SessionHarnessState>();
+        services.AddSingleton<ISessionTaskListStore, FileSessionTaskListStore>();
         services.AddHttpClient<IEmbeddingClient, OpenAiCompatibleEmbeddingClient>(
             static client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddSingleton<AuditLogService>();
@@ -94,13 +98,30 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<AppSettings>(),
                 sp.GetRequiredService<IActiveAgentSessionContext>(),
                 sp.GetRequiredService<ISessionKnowledgeState>(),
+                sp.GetRequiredService<ISessionHarnessState>(),
+                sp.GetRequiredService<IAgentRunContextAccessor>(),
                 sp.GetRequiredService<WorkspaceGuard>())));
         services.AddSingleton<SubAgentSystemPromptOrchestrator>();
         services.AddSingleton<ISubAgentSessionStore, FileSubAgentSessionStore>();
+        services.AddSingleton<ISubAgentRegistry, FileSubAgentRegistry>();
+        services.AddSingleton<ISubAgentTaskStore, FileSubAgentTaskStore>();
+        services.AddSingleton<ISubAgentCompletionStore, FileSubAgentCompletionStore>();
+        services.AddSingleton<SubAgentRunExecutor>();
+        services.AddSingleton<SubAgentBackgroundExecutor>();
+        services.AddSingleton<ISubAgentSessionManager, SubAgentSessionManager>();
+        services.AddSingleton<Lazy<ISubAgentSessionManager>>(static sp =>
+            new Lazy<ISubAgentSessionManager>(() => sp.GetRequiredService<ISubAgentSessionManager>()));
         if (settings.SubAgent.Enabled)
         {
             services.AddSingleton<SubAgentTool>();
             services.AddSingleton<IAgentTool>(static sp => sp.GetRequiredService<SubAgentTool>());
+            services.AddSingleton<IAgentTool, SessionsSpawnTool>();
+            services.AddSingleton<IAgentTool, SessionsSendTool>();
+            services.AddSingleton<IAgentTool, SessionsListTool>();
+            services.AddSingleton<IAgentTool, SessionsHistoryTool>();
+            services.AddSingleton<IAgentTool, SessionsPendingCompletionsTool>();
+            services.AddSingleton<IAgentTool, SubAgentTaskOutputTool>();
+            services.AddSingleton<IPreReasoningPromptContributor, SubAgentCompletionPromptContributor>();
         }
 
         services.AddSingleton<TruncateArgsService>();
@@ -118,7 +139,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPostTurnMemoryProcessor, PostTurnMemoryProcessor>();
         services.AddSingleton<IAgentTool, MemorySearchTool>();
         services.AddSingleton<IAgentTool, MemoryGetTool>();
+        services.AddSingleton<IAgentTool, TodoWriteTool>();
         services.AddSingleton<IPreReasoningPromptContributor, MemoryPromptContributor>();
+        services.AddSingleton<IPreReasoningPromptContributor, TaskListPromptContributor>();
         services.AddSingleton<CompactionTurnMiddleware>();
         services.AddSingleton<IAgentTurnMiddleware, CompactionTurnMiddleware>();
         services.AddSingleton<IAgentTurnMiddleware, PostTurnMemoryMiddleware>();

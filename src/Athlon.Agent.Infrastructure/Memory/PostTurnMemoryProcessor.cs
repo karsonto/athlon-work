@@ -14,9 +14,6 @@ public sealed class PostTurnMemoryProcessor(
 
     public async Task ProcessAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
     {
-        if (!settings.Memory.Enabled)
-            return;
-
         await flushService.FlushAsync(messages, cancellationToken);
 
         var now = DateTime.UtcNow;

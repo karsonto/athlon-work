@@ -7,6 +7,7 @@ using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.Sso;
+using Athlon.Agent.Infrastructure.SubAgents;
 using Athlon.Agent.Mcp;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -69,6 +70,12 @@ public partial class App : Application
             services.AddAthlonViewModels();
             _services = services.BuildServiceProvider();
             StartupTrace("ServiceProvider built");
+
+            if (startupSettings.SubAgent.Enabled)
+            {
+                _services.GetRequiredService<SubAgentBackgroundExecutor>().Start();
+                StartupTrace("SubAgentBackgroundExecutor started");
+            }
 
             var settings = _services.GetRequiredService<AppSettings>();
             AppThemeManager.ApplyFromSettings(settings.Ui);
