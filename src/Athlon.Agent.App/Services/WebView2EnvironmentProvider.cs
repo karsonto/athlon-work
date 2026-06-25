@@ -33,39 +33,61 @@ public sealed class WebView2EnvironmentProvider
 
     private async Task<CoreWebView2Environment> CreateEnvironmentAsync(CancellationToken cancellationToken)
     {
-        var browserFolder = WebView2RuntimeLocator.TryResolveBundledFolder();
-        if (browserFolder is not null)
+        if (WebView2RuntimePolicy.ShouldUseBundledRuntime())
         {
-            var bundledVersion = WebView2RuntimeLocator.TryReadBundledVersion();
-            var bundledUserData = EnsureUserDataFolder(BundledUserDataFolderName);
-            try
+            var bundledEnvironment = await TryCreateBundledEnvironmentAsync(cancellationToken).ConfigureAwait(false);
+            if (bundledEnvironment is not null)
             {
-                _logger.Information(
-                    "WebView2 trying bundled fixed runtime {Version} at {Folder}",
-                    bundledVersion ?? "unknown",
-                    browserFolder);
-                App.StartupTrace($"WebView2 trying bundled fixed runtime at {browserFolder}");
-                var environment = await CoreWebView2Environment.CreateAsync(browserFolder, bundledUserData)
-                    .WaitAsync(cancellationToken)
-                    .ConfigureAwait(false);
-                App.StartupTrace("WebView2 using bundled fixed runtime");
-                return environment;
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(
-                    ex,
-                    "Bundled WebView2 runtime failed at {Folder}; falling back to Evergreen",
-                    browserFolder);
-                App.StartupTrace($"WebView2 bundled runtime failed ({ex.Message}); falling back to Evergreen");
+                return bundledEnvironment;
             }
         }
         else
         {
-            _logger.Warning("Bundled WebView2 runtime not found; using Evergreen");
-            App.StartupTrace("WebView2 bundled runtime missing; using Evergreen");
+            _logger.Information("Windows 11 detected; using Evergreen WebView2 runtime");
+            App.StartupTrace("Windows 11 detected; skipping bundled WebView2 runtime");
         }
 
+        return await CreateEvergreenEnvironmentAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<CoreWebView2Environment?> TryCreateBundledEnvironmentAsync(CancellationToken cancellationToken)
+    {
+        var browserFolder = WebView2RuntimeLocator.TryResolveBundledFolder();
+        if (browserFolder is null)
+        {
+            _logger.Warning("Bundled WebView2 runtime not found; using Evergreen");
+            App.StartupTrace("WebView2 bundled runtime missing; using Evergreen");
+            return null;
+        }
+
+        var bundledVersion = WebView2RuntimeLocator.TryReadBundledVersion();
+        var bundledUserData = EnsureUserDataFolder(BundledUserDataFolderName);
+        try
+        {
+            _logger.Information(
+                "WebView2 trying bundled fixed runtime {Version} at {Folder}",
+                bundledVersion ?? "unknown",
+                browserFolder);
+            App.StartupTrace($"WebView2 trying bundled fixed runtime at {browserFolder}");
+            var environment = await CoreWebView2Environment.CreateAsync(browserFolder, bundledUserData)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            App.StartupTrace("WebView2 using bundled fixed runtime");
+            return environment;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                ex,
+                "Bundled WebView2 runtime failed at {Folder}; falling back to Evergreen",
+                browserFolder);
+            App.StartupTrace($"WebView2 bundled runtime failed ({ex.Message}); falling back to Evergreen");
+            return null;
+        }
+    }
+
+    private async Task<CoreWebView2Environment> CreateEvergreenEnvironmentAsync(CancellationToken cancellationToken)
+    {
         var evergreenUserData = EnsureUserDataFolder(EvergreenUserDataFolderName);
         try
         {
@@ -77,7 +99,7 @@ public sealed class WebView2EnvironmentProvider
         }
         catch (Exception ex)
         {
-            const string message = "WebView2 初始化失败：捆绑 Runtime 与系统 Evergreen Runtime 均不可用。";
+            const string message = "WebView2 初始化失败：系统 Evergreen Runtime 不可用。";
             _logger.Error(ex, "{Message}", message);
             App.StartupTrace($"WebView2 initialization failed: {ex.Message}");
             throw new InvalidOperationException(message, ex);
