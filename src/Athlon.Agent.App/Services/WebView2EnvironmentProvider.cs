@@ -8,6 +8,9 @@ namespace Athlon.Agent.App.Services;
 /// <summary>Creates and caches a shared <see cref="CoreWebView2Environment"/> for all WebView2 controls.</summary>
 public sealed class WebView2EnvironmentProvider
 {
+    private const string BundledUserDataFolderName = "bundled";
+    private const string EvergreenUserDataFolderName = "evergreen";
+
     private readonly IAppPathProvider _paths;
     private readonly IAppLogger _logger;
     private readonly object _lock = new();
@@ -30,35 +33,61 @@ public sealed class WebView2EnvironmentProvider
 
     private async Task<CoreWebView2Environment> CreateEnvironmentAsync(CancellationToken cancellationToken)
     {
-        var userDataFolder = Path.Combine(_paths.RootPath, "webview2");
-        Directory.CreateDirectory(userDataFolder);
-
         var browserFolder = WebView2RuntimeLocator.TryResolveBundledFolder();
         if (browserFolder is not null)
         {
             var bundledVersion = WebView2RuntimeLocator.TryReadBundledVersion();
-            _logger.Information(
-                "WebView2 using bundled fixed runtime {Version} at {Folder}",
-                bundledVersion ?? "unknown",
-                browserFolder);
-            App.StartupTrace($"WebView2 using bundled fixed runtime at {browserFolder}");
-            return await CoreWebView2Environment.CreateAsync(browserFolder, userDataFolder)
-                .WaitAsync(cancellationToken)
-                .ConfigureAwait(false);
+            var bundledUserData = EnsureUserDataFolder(BundledUserDataFolderName);
+            try
+            {
+                _logger.Information(
+                    "WebView2 trying bundled fixed runtime {Version} at {Folder}",
+                    bundledVersion ?? "unknown",
+                    browserFolder);
+                App.StartupTrace($"WebView2 trying bundled fixed runtime at {browserFolder}");
+                var environment = await CoreWebView2Environment.CreateAsync(browserFolder, bundledUserData)
+                    .WaitAsync(cancellationToken)
+                    .ConfigureAwait(false);
+                App.StartupTrace("WebView2 using bundled fixed runtime");
+                return environment;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    ex,
+                    "Bundled WebView2 runtime failed at {Folder}; falling back to Evergreen",
+                    browserFolder);
+                App.StartupTrace($"WebView2 bundled runtime failed ({ex.Message}); falling back to Evergreen");
+            }
+        }
+        else
+        {
+            _logger.Warning("Bundled WebView2 runtime not found; using Evergreen");
+            App.StartupTrace("WebView2 bundled runtime missing; using Evergreen");
         }
 
-#if DEBUG
-        _logger.Warning("Bundled WebView2 runtime not found; using Evergreen fallback (Debug only)");
-        App.StartupTrace("WebView2 bundled runtime missing; using Evergreen fallback (Debug only)");
-        return await CoreWebView2Environment.CreateAsync(null, userDataFolder)
-            .WaitAsync(cancellationToken)
-            .ConfigureAwait(false);
-#else
-        const string message =
-            "缺少捆绑的 WebView2 Runtime。请使用正式发布包，或在构建前运行 tools/fetch-webview2-fixed-runtime.ps1。";
-        _logger.Error(new InvalidOperationException(message), "{Message}", message);
-        App.StartupTrace($"WebView2 initialization failed: {message}");
-        throw new InvalidOperationException(message);
-#endif
+        var evergreenUserData = EnsureUserDataFolder(EvergreenUserDataFolderName);
+        try
+        {
+            var environment = await CoreWebView2Environment.CreateAsync(null, evergreenUserData)
+                .WaitAsync(cancellationToken)
+                .ConfigureAwait(false);
+            App.StartupTrace("WebView2 using Evergreen runtime");
+            return environment;
+        }
+        catch (Exception ex)
+        {
+            const string message = "WebView2 初始化失败：捆绑 Runtime 与系统 Evergreen Runtime 均不可用。";
+            _logger.Error(ex, "{Message}", message);
+            App.StartupTrace($"WebView2 initialization failed: {ex.Message}");
+            throw new InvalidOperationException(message, ex);
+        }
+    }
+
+    private string EnsureUserDataFolder(string modeFolderName)
+    {
+        var userDataFolder = Path.Combine(_paths.RootPath, "webview2", modeFolderName);
+        Directory.CreateDirectory(userDataFolder);
+        return userDataFolder;
     }
 }

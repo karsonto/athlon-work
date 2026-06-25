@@ -18,7 +18,8 @@ internal static class WebView2RuntimeLocator
             return direct;
         }
 
-        return FindMsEdgeWebView2Folder(baseDirectory);
+        var runtimeRoot = Path.Combine(baseDirectory, "runtimes", "webview2");
+        return FindMsEdgeWebView2Folder(runtimeRoot);
     }
 
     public static string? TryReadBundledVersion()

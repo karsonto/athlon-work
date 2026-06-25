@@ -83,7 +83,8 @@ Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is
 **WebView2 (chat UI):**
 
 - **Release installers** bundle a Fixed Version WebView2 Runtime — no separate install required.
-- **Debug from source** can use the system Evergreen WebView2 Runtime if present (typical on Windows 11).
+- If bundled initialization fails (e.g. on some Windows 11 setups), the app falls back to the system Evergreen WebView2 Runtime.
+- **Debug from source** can use the system Evergreen WebView2 Runtime when bundled files are absent.
 - To test the same bundled runtime locally before release:
 
 ```powershell

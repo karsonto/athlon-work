@@ -90,7 +90,7 @@ To refresh the bundled runtime locally or before a manual publish:
 pwsh tools/fetch-webview2-fixed-runtime.ps1
 ```
 
-Release CI runs this script automatically before `dotnet publish`. Debug builds fall back to the system Evergreen WebView2 Runtime when the bundled folder is absent.
+Release CI runs this script automatically before `dotnet publish`. The app tries the bundled Fixed Version runtime first, then falls back to the system Evergreen WebView2 Runtime if bundled initialization fails (common on Windows 11).
 
 If you update `tools/webview2-runtime.version`, run the fetch script and verify chat rendering, Mermaid preview, and HTML preview on a machine without a separate WebView2 install.
 
