@@ -41,6 +41,10 @@ jobs:
       - name: Restore
         run: dotnet restore src/Athlon.Agent.App/Athlon.Agent.App.csproj
 
+      - name: Download WebView2 Fixed Runtime
+        shell: pwsh
+        run: ./tools/fetch-webview2-fixed-runtime.ps1
+
       - name: Publish self-contained x64
         run: dotnet publish src/Athlon.Agent.App/Athlon.Agent.App.csproj -c Release -r win-x64 --self-contained true -o publish -p:Version=${{ steps.version.outputs.version }}
 
@@ -78,11 +82,12 @@ jobs:
             ### Installer
             - File: `AthlonAgent-Setup.exe`
             - One-click install to `%LocalAppData%\AthlonAgent`
-            - Includes .NET 10 runtime
+            - Includes .NET 10 runtime and WebView2 Fixed Runtime (~150MB)
 
             ### Portable
             - File: `AthlonAgent-Portable.zip`
             - Extract and run; supports auto-update when configured
+            - Includes bundled WebView2 Fixed Runtime (no separate WebView2 install required)
 
             ### Intranet deployment
             Sync the entire `Releases/` directory to your internal update server so `releases.win.json` and `*.nupkg` are HTTP-accessible.
@@ -90,6 +95,7 @@ jobs:
 
             ## System Requirements
             - Windows 10 / Windows 11 x64
+            - WebView2 is bundled with the installer; no separate WebView2 Runtime install is required
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

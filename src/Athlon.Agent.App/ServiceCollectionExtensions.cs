@@ -48,6 +48,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IKnowledgeStore>(),
             sp.GetRequiredService<AppSettings>()));
         services.AddSingleton<MainWindowViewModel>();
+        services.AddSingleton<WebView2EnvironmentProvider>();
         services.AddSingleton<MainWindow>();
         return services;
     }

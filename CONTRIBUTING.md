@@ -74,6 +74,26 @@ dotnet build Athlon.Agent.slnx
 dotnet test Athlon.Agent.slnx
 ```
 
+### Bundled WebView2 Fixed Runtime
+
+Release builds download and package a Fixed Version WebView2 Runtime for Windows 10 compatibility.
+
+| File | Purpose |
+|------|---------|
+| `tools/webview2-runtime.version` | Pinned runtime version (must match a build on the [WebView2 download page](https://developer.microsoft.com/microsoft-edge/webview2/)) |
+| `tools/webview2-runtime.download-url` | Optional override for the CAB CDN URL |
+| `tools/fetch-webview2-fixed-runtime.ps1` | Downloads, expands, and copies runtime to `src/Athlon.Agent.App/runtimes/webview2/x64/` |
+
+To refresh the bundled runtime locally or before a manual publish:
+
+```powershell
+pwsh tools/fetch-webview2-fixed-runtime.ps1
+```
+
+Release CI runs this script automatically before `dotnet publish`. Debug builds fall back to the system Evergreen WebView2 Runtime when the bundled folder is absent.
+
+If you update `tools/webview2-runtime.version`, run the fetch script and verify chat rendering, Mermaid preview, and HTML preview on a machine without a separate WebView2 install.
+
 If the app is running and locks output DLLs:
 
 ```powershell

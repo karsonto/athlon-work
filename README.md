@@ -25,7 +25,7 @@ Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is
 
 | | |
 |---|---|
-| **Native Windows** | Real WPF UI — fast, crisp, no embedded browser for chat |
+| **Native Windows** | Real WPF shell with WebView2 chat rendering — fast, polished desktop UI |
 | **Bring your own model** | OpenAI-compatible APIs (OpenAI, DeepSeek, Ollama, LM Studio, …) |
 | **Agent loop built-in** | Multi-step tool calling with filesystem, grep, glob, shell |
 | **Token-smart** | Optional dynamic context compaction, hygiene, and MCP tool search |
@@ -77,8 +77,19 @@ Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is
 
 ### Prerequisites
 
-- Windows 10/11
+- Windows 10/11 x64
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+
+**WebView2 (chat UI):**
+
+- **Release installers** bundle a Fixed Version WebView2 Runtime — no separate install required.
+- **Debug from source** can use the system Evergreen WebView2 Runtime if present (typical on Windows 11).
+- To test the same bundled runtime locally before release:
+
+```powershell
+pwsh tools/fetch-webview2-fixed-runtime.ps1
+dotnet run --project src/Athlon.Agent.App/Athlon.Agent.App.csproj
+```
 
 ### Run from source
 

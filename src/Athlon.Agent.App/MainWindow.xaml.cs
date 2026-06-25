@@ -73,9 +73,13 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     {
         _layoutBinder.ApplyAll();
         ComposerInput.ClipboardImageReader = _clipboardImageReader;
+        ChatWebView.InitializationFailed += OnChatWebViewInitializationFailed;
         _viewModel.AttachChatView(ChatWebView);
         RegisterChatScrollService();
     }
+
+    private void OnChatWebViewInitializationFailed(object? sender, string message) =>
+        _viewModel.SettingsStatus = message;
 
     private void RegisterChatScrollService()
     {
@@ -92,6 +96,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 
     private void OnMainWindowClosed(object? sender, EventArgs e)
     {
+        ChatWebView.InitializationFailed -= OnChatWebViewInitializationFailed;
         _viewModel.ContextSidebarLayoutChanged -= _contextSidebarLayoutChangedHandler;
         _viewModel.PropertyChanged -= _viewModelPropertyChangedHandler;
         Loaded -= _loadedHandler;

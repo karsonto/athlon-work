@@ -18,6 +18,7 @@ public partial class WebChatView : UserControl
     private Task? _initTask;
     private bool _initialized;
     private bool _documentReady;
+    private bool _loggedCanRenderBlock;
     private int _navigationGeneration;
     private int _renderGeneration;
     private IReadOnlyList<ChatMessageViewModel> _pendingMessages = Array.Empty<ChatMessageViewModel>();
@@ -37,6 +38,8 @@ public partial class WebChatView : UserControl
         LayoutUpdated += OnLayoutUpdated;
         AppThemeManager.ThemeChanged += OnAppThemeChanged;
     }
+
+    public event EventHandler<string>? InitializationFailed;
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
@@ -58,13 +61,13 @@ public partial class WebChatView : UserControl
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e) =>
-        _ = EnsureInitializedAndRenderAsync();
+        _ = RunRenderPipelineSafeAsync(_renderGeneration);
 
     private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (IsVisible)
         {
-            _ = EnsureInitializedAndRenderAsync();
+            _ = RunRenderPipelineSafeAsync(_renderGeneration);
         }
     }
 
@@ -72,7 +75,7 @@ public partial class WebChatView : UserControl
     {
         if (_needsRender && CanRender())
         {
-            _ = EnsureInitializedAndRenderAsync();
+            _ = RunRenderPipelineSafeAsync(_renderGeneration);
         }
     }
 
@@ -80,7 +83,7 @@ public partial class WebChatView : UserControl
     {
         if (_needsRender && CanRender())
         {
-            _ = EnsureInitializedAndRenderAsync();
+            _ = RunRenderPipelineSafeAsync(_renderGeneration);
         }
     }
 
@@ -93,7 +96,7 @@ public partial class WebChatView : UserControl
         _pendingShowToolCalls = showToolCalls;
         _needsRender = true;
         var generation = Interlocked.Increment(ref _renderGeneration);
-        await EnsureInitializedAndRenderAsync(generation).ConfigureAwait(true);
+        await RunRenderPipelineSafeAsync(generation).ConfigureAwait(true);
 
         if (_needsRender && generation == _renderGeneration)
         {
@@ -126,13 +129,23 @@ public partial class WebChatView : UserControl
             _renderRetryScheduled = false;
             if (_needsRender)
             {
-                _ = EnsureInitializedAndRenderAsync(_renderGeneration);
+                _ = RunRenderPipelineSafeAsync(_renderGeneration);
             }
         });
     }
 
-    private Task EnsureInitializedAndRenderAsync() =>
-        EnsureInitializedAndRenderAsync(_renderGeneration);
+    private async Task RunRenderPipelineSafeAsync(int expectedGeneration)
+    {
+        try
+        {
+            await EnsureInitializedAndRenderAsync(expectedGeneration).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"WebChatView render pipeline failed: {ex}");
+            ReportInitializationFailure($"聊天渲染失败：{ex.Message}");
+        }
+    }
 
     private async Task EnsureInitializedAndRenderAsync(int expectedGeneration)
     {
@@ -144,8 +157,17 @@ public partial class WebChatView : UserControl
 
         if (!CanRender())
         {
+            if (!_loggedCanRenderBlock)
+            {
+                _loggedCanRenderBlock = true;
+                App.StartupTrace(
+                    $"WebChatView CanRender=false (visible={IsVisible}, width={ActualWidth:0.##}, height={ActualHeight:0.##})");
+            }
+
             return;
         }
+
+        _loggedCanRenderBlock = false;
 
         if (_renderInProgress)
         {
@@ -189,6 +211,11 @@ public partial class WebChatView : UserControl
             return;
         }
 
+        if (_initTask is { IsFaulted: true } or { IsCanceled: true })
+        {
+            _initTask = null;
+        }
+
         _initTask ??= InitializeWebViewAsync();
         await _initTask.ConfigureAwait(true);
     }
@@ -200,23 +227,48 @@ public partial class WebChatView : UserControl
             return;
         }
 
-        await ChatWebView.EnsureCoreWebView2Async().ConfigureAwait(true);
-        ChatWebView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = false;
-        ChatWebView.CoreWebView2.Settings.IsScriptEnabled = true;
-        ChatWebView.CoreWebView2.Settings.IsWebMessageEnabled = true;
-        ChatWebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
-        ChatWebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
-        var assetsDir = ChatMarkdownAssets.AssetsDirectory;
-        if (Directory.Exists(assetsDir))
+        try
         {
-            ChatWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                ChatMarkdownAssets.VirtualHost,
-                assetsDir,
-                CoreWebView2HostResourceAccessKind.Allow);
+            var provider = WebView2ServiceAccess.TryResolve()
+                ?? throw new InvalidOperationException("WebView2EnvironmentProvider is not registered.");
+            var environment = await provider.GetEnvironmentAsync().ConfigureAwait(true);
+            await ChatWebView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+            ChatWebView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = false;
+            ChatWebView.CoreWebView2.Settings.IsScriptEnabled = true;
+            ChatWebView.CoreWebView2.Settings.IsWebMessageEnabled = true;
+            ChatWebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+            ChatWebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+            var assetsDir = ChatMarkdownAssets.AssetsDirectory;
+            if (Directory.Exists(assetsDir))
+            {
+                ChatWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    ChatMarkdownAssets.VirtualHost,
+                    assetsDir,
+                    CoreWebView2HostResourceAccessKind.Allow);
+            }
+
+            ApplyThemeBackground();
+            _initialized = true;
+            App.StartupTrace("WebChatView initialization completed");
+        }
+        catch (Exception ex)
+        {
+            _initTask = null;
+            App.StartupTrace($"WebChatView initialization failed: {ex}");
+            ReportInitializationFailure($"聊天渲染初始化失败：{ex.Message}");
+            throw;
+        }
+    }
+
+    private void ReportInitializationFailure(string message)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.BeginInvoke(() => ReportInitializationFailure(message));
+            return;
         }
 
-        ApplyThemeBackground();
-        _initialized = true;
+        InitializationFailed?.Invoke(this, message);
     }
 
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -258,11 +310,16 @@ public partial class WebChatView : UserControl
 
     private async Task ExecuteScriptWhenReadyAsync(string script)
     {
-        await EnsureReadyAsync().ConfigureAwait(true);
-        await WaitForDocumentReadyAsync().ConfigureAwait(true);
-
         try
         {
+            await EnsureReadyAsync().ConfigureAwait(true);
+            var documentReady = await WaitForDocumentReadyAsync().ConfigureAwait(true);
+            if (!documentReady)
+            {
+                App.StartupTrace($"WebChatView ExecuteScript skipped: document not ready ({script.Length} chars)");
+                return;
+            }
+
             await ChatWebView.CoreWebView2.ExecuteScriptAsync(script).ConfigureAwait(true);
         }
         catch (Exception ex)
@@ -271,11 +328,11 @@ public partial class WebChatView : UserControl
         }
     }
 
-    private async Task WaitForDocumentReadyAsync()
+    private async Task<bool> WaitForDocumentReadyAsync()
     {
         if (_documentReady)
         {
-            return;
+            return true;
         }
 
         var generation = _navigationGeneration;
@@ -284,6 +341,14 @@ public partial class WebChatView : UserControl
         {
             await Task.Delay(16).ConfigureAwait(true);
         }
+
+        if (!_documentReady && generation == _navigationGeneration)
+        {
+            App.StartupTrace("WebChatView WaitForDocumentReady timed out after 5s");
+            return false;
+        }
+
+        return _documentReady;
     }
 
     private async Task<bool> NavigateHtmlAsync(string html, int expectedGeneration)
