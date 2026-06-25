@@ -1,19 +1,22 @@
 using System.ComponentModel;
 using System.Windows;
 using Athlon.Agent.App.Controls;
+using Athlon.Agent.App.Navigation;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
+using Athlon.Agent.App.Views;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Athlon.Agent.App;
 
 public partial class MainWindow : Window, IMainWindowLayoutHost
 {
-    private readonly MainWindowViewModel _viewModel;
+    private readonly MainShellViewModel _viewModel;
     private readonly ClipboardImageAttachmentReader _clipboardImageReader;
     private readonly AppUpdateService _updateService;
     private readonly MainWindowLayoutBinder _layoutBinder;
     private readonly MainWindowShutdownCoordinator _shutdownCoordinator;
+    private readonly PageViewFactory _pageViewFactory;
     private bool _shutdownInProgress;
     private readonly PropertyChangedEventHandler _viewModelPropertyChangedHandler;
     private readonly EventHandler _contextSidebarLayoutChangedHandler;
@@ -21,26 +24,23 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     private readonly CancelEventHandler _closingHandler;
 
     public MainWindow(
-        MainWindowViewModel viewModel,
+        MainShellViewModel viewModel,
         ClipboardImageAttachmentReader clipboardImageReader,
-        AppUpdateService updateService)
+        AppUpdateService updateService,
+        PageViewFactory pageViewFactory)
     {
         App.StartupTrace("MainWindow constructor entered");
         InitializeComponent();
         App.StartupTrace("MainWindow InitializeComponent completed");
         _viewModel = viewModel;
         _clipboardImageReader = clipboardImageReader;
-        ComposerInput.ClipboardImageReader = _clipboardImageReader;
         _updateService = updateService;
+        _pageViewFactory = pageViewFactory;
         _shutdownCoordinator = new MainWindowShutdownCoordinator();
         _layoutBinder = new MainWindowLayoutBinder(_viewModel, new MainWindowLayoutElements
         {
             NavigationSidebarColumn = NavigationSidebarColumn,
-            EditorPaneColumn = EditorPaneColumn,
             ContextSidebarColumn = ContextSidebarColumn,
-            ComposerRow = ComposerRow,
-            EditorPaneHost = EditorPaneHost,
-            EditorChatSplitter = EditorChatSplitter,
             ContextSidebarPanel = ContextSidebarPanel,
             ContextSidebarSplitter = ContextSidebarSplitter,
             ContextSidebarCollapsedRail = ContextSidebarCollapsedRail
@@ -72,17 +72,35 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 
     private void OnMainWindowLoaded(object sender, RoutedEventArgs e)
     {
-        _layoutBinder.ApplyAll();
-        ChatWebView.InitializationFailed += OnChatWebViewInitializationFailed;
-        _viewModel.AttachChatView(ChatWebView);
-        RegisterChatScrollService();
+        _pageViewFactory.Preload(AppPage.Chat);
+        if (_viewModel.CurrentPageView is ChatPageView chatPage)
+        {
+            _layoutBinder.BindChatSurface(chatPage);
+            ((IChatLayoutSurface)chatPage).ComposerInput.ClipboardImageReader = _clipboardImageReader;
+            _layoutBinder.ApplyAll();
+            ChatWebView.InitializationFailed += OnChatWebViewInitializationFailed;
+            _viewModel.AttachChatView(ChatWebView);
+            RegisterChatScrollService(chatPage);
+        }
+        else
+        {
+            _layoutBinder.ApplyAll();
+        }
+
+        App.StartupTrace("MainWindow page host ready");
     }
 
-    private void OnChatWebViewInitializationFailed(object? sender, string message) =>
-        _viewModel.SettingsStatus = message;
+    private WebChatView ChatWebView =>
+        _viewModel.CurrentPageView is ChatPageView chatPage
+            ? ((IChatLayoutSurface)chatPage).ChatWebView
+            : throw new InvalidOperationException("Chat page is not loaded.");
 
-    private void RegisterChatScrollService()
+    private void OnChatWebViewInitializationFailed(object? sender, string message) =>
+        _viewModel.Settings.SettingsStatus = message;
+
+    private void RegisterChatScrollService(ChatPageView chatPage)
     {
+        var webChat = ((IChatLayoutSurface)chatPage).ChatWebView;
         if (Application.Current is not App { Services: { } services })
         {
             return;
@@ -90,13 +108,16 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 
         var chatScrollService = services.GetService<IChatScrollService>();
         chatScrollService?.Register(
-            () => _ = ChatWebView.ScrollToBottomAsync(),
-            () => _ = ChatWebView.ScrollToBottomAsync());
+            () => _ = webChat.ScrollToBottomAsync(),
+            () => _ = webChat.ScrollToBottomAsync());
     }
 
     private void OnMainWindowClosed(object? sender, EventArgs e)
     {
-        ChatWebView.InitializationFailed -= OnChatWebViewInitializationFailed;
+        if (_viewModel.CurrentPageView is ChatPageView chatPage)
+        {
+            ((IChatLayoutSurface)chatPage).ChatWebView.InitializationFailed -= OnChatWebViewInitializationFailed;
+        }
         _viewModel.ContextSidebarLayoutChanged -= _contextSidebarLayoutChangedHandler;
         _viewModel.PropertyChanged -= _viewModelPropertyChangedHandler;
         Loaded -= _loadedHandler;
@@ -136,17 +157,31 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(MainWindowViewModel.HasChatMessages))
+        if (e.PropertyName == nameof(MainShellViewModel.CurrentPageView))
+        {
+            if (_viewModel.CurrentPageView is ChatPageView chatPage)
+            {
+                _layoutBinder.BindChatSurface(chatPage);
+                ((IChatLayoutSurface)chatPage).ComposerInput.ClipboardImageReader = _clipboardImageReader;
+                _layoutBinder.ApplyEditorPane();
+                _layoutBinder.ApplyComposer();
+                ((IChatLayoutSurface)chatPage).ChatWebView.InitializationFailed += OnChatWebViewInitializationFailed;
+                _viewModel.AttachChatView(((IChatLayoutSurface)chatPage).ChatWebView);
+                RegisterChatScrollService(chatPage);
+            }
+        }
+
+        if (e.PropertyName == nameof(MainShellViewModel.HasChatMessages))
         {
             ExecuteOnUiThread(_layoutBinder.ApplyContextSidebar);
         }
 
-        if (e.PropertyName == nameof(MainWindowViewModel.HasOpenEditorTabs))
+        if (e.PropertyName == nameof(MainShellViewModel.HasOpenEditorTabs))
         {
             ExecuteOnUiThread(_layoutBinder.ApplyEditorPane);
         }
 
-        if (e.PropertyName == nameof(MainWindowViewModel.IsBusy))
+        if (e.PropertyName == nameof(MainShellViewModel.IsBusy))
         {
             // WebView2 内部处理流式状态变化，无需额外操作
         }
@@ -159,15 +194,5 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             Owner = this
         };
         about.ShowDialog();
-    }
-
-    private void WorkspaceTreeItem_OnExpanded(object sender, RoutedEventArgs e)
-    {
-        if (sender is not System.Windows.Controls.TreeViewItem { DataContext: WorkspaceTreeNodeViewModel node })
-        {
-            return;
-        }
-
-        _viewModel.Sidebar.ExpandWorkspaceTreeNode(node);
     }
 }

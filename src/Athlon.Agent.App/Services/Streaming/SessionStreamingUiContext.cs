@@ -3,6 +3,7 @@ using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Streaming;
+using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.App.Services.Streaming;
 
@@ -93,11 +94,8 @@ public sealed class SessionStreamingUiContext
                 }
                 else
                 {
-                    // Buffer args in case ToolCallStart hasn't arrived yet
-                    if (_pendingToolCallArgs.TryGetValue(toolCallId, out var existing))
-                        _pendingToolCallArgs[toolCallId] = existing + argsJson;
-                    else
-                        _pendingToolCallArgs[toolCallId] = argsJson;
+                    // Buffer latest snapshot in case ToolCallStart hasn't arrived yet
+                    _pendingToolCallArgs[toolCallId] = argsJson;
                 }
 
                 RequestScroll();
@@ -164,7 +162,9 @@ public sealed class SessionStreamingUiContext
             return;
         }
 
-        if (message.Role == MessageRole.User && SummaryMessageBuilder.IsSummaryMessage(message))
+        if (message.Role == MessageRole.User
+            && (SummaryMessageBuilder.IsSummaryMessage(message)
+                || SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)))
         {
             RemoveEmptyActiveAssistantBubble(messages);
             return;

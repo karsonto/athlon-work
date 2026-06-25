@@ -3,6 +3,7 @@ using System.Windows.Threading;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.SubAgents;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -41,7 +42,8 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsHiddenPlaceholder = isFoldedHistoryPlaceholder
             ? false
             : IsUser && (CompactionMessageContent.IsSummaryPlaceholder(message.Content)
-            || SummaryMessageBuilder.IsSummaryMessage(message))
+            || SummaryMessageBuilder.IsSummaryMessage(message)
+            || SubAgentAutoContinuePrompt.IsAutoContinueMessage(message))
             || IsAssistantToolCallsOnly(message);
         DisplayRole = IsUser
             ? "您"

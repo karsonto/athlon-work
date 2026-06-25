@@ -10,7 +10,7 @@ namespace Athlon.Agent.App.Controls;
 public partial class ComposerInputControl : UserControl
 {
     private readonly ExecutedRoutedEventHandler _pasteHandler;
-    private MainWindowViewModel? _viewModel;
+    private MainShellViewModel? _viewModel;
     private bool _isReplayingPaste;
     private bool _isHandlingPaste;
 
@@ -20,18 +20,25 @@ public partial class ComposerInputControl : UserControl
         _pasteHandler = ComposerTextBox_OnPastePreviewExecuted;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        DataContextChanged += (_, _) => _viewModel = DataContext as MainWindowViewModel;
+        DataContextChanged += (_, _) =>
+        {
+            _viewModel = DataContext as MainShellViewModel;
+            UpdatePlaceholderVisibility();
+        };
+        ComposerTextBox.GotFocus += (_, _) => UpdatePlaceholderVisibility();
+        ComposerTextBox.LostFocus += (_, _) => UpdatePlaceholderVisibility();
     }
 
     public ClipboardImageAttachmentReader? ClipboardImageReader { get; set; }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _viewModel ??= DataContext as MainWindowViewModel;
+        _viewModel ??= DataContext as MainShellViewModel;
         ComposerTextBox.AddHandler(
             CommandManager.PreviewExecutedEvent,
             _pasteHandler,
             handledEventsToo: true);
+        UpdatePlaceholderVisibility();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -178,6 +185,8 @@ public partial class ComposerInputControl : UserControl
 
     private void ComposerTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
     {
+        UpdatePlaceholderVisibility();
+
         if (_viewModel is null || sender is not TextBox textBox)
         {
             return;
@@ -188,6 +197,13 @@ public partial class ComposerInputControl : UserControl
         {
             Dispatcher.BeginInvoke(SyncActiveCompletionListSelection, DispatcherPriority.Loaded);
         }
+    }
+
+    private void UpdatePlaceholderVisibility()
+    {
+        var showPlaceholder = string.IsNullOrWhiteSpace(ComposerTextBox.Text)
+            && !ComposerTextBox.IsKeyboardFocusWithin;
+        PlaceholderText.Visibility = showPlaceholder ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void SyncActiveCompletionListSelection()

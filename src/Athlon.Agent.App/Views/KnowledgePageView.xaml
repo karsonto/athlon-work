@@ -1,6 +1,293 @@
 <UserControl x:Class="Athlon.Agent.App.Views.KnowledgePageView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Knowledge page markup remains in MainWindow.xaml during incremental migration. -->
-    <Grid />
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:app="clr-namespace:Athlon.Agent.App"
+             xmlns:controls="clr-namespace:Athlon.Agent.App.Controls">
+    <Grid Background="{DynamicResource Brush.ChatBackground}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0"
+                        Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}"
+                        Background="{DynamicResource Brush.Chrome}"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="0,0,0,1"
+                        Padding="24,0">
+                    <Grid VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button Command="{Binding NavigateCommand}"
+                                    CommandParameter="Chat"
+                                    Style="{StaticResource GhostIconButtonStyle}"
+                                    Margin="0,0,8,0"
+                                    ToolTip="返回对话"
+                                    Content="←" />
+                            <ContentControl Style="{StaticResource KnowledgeNavIconStyle}"
+                                            Width="28"
+                                            Height="28"
+                                            Margin="0,0,10,0"
+                                            VerticalAlignment="Center" />
+                            <TextBlock Text="知识库"
+                                       FontSize="20"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="1" DataContext="{Binding KnowledgePageVm}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="380" MinWidth="280" MaxWidth="560" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0"
+                            Background="{DynamicResource Brush.Panel}"
+                            BorderBrush="{DynamicResource Brush.Border}"
+                            BorderThickness="0,0,1,0"
+                            Padding="14">
+                        <DockPanel LastChildFill="True">
+                            <StackPanel DockPanel.Dock="Top">
+                                <TextBlock Text="知识空间"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,10" />
+
+                                <!-- Empty state: no module selected -->
+                                <Border x:Name="KnowledgeModuleEmptyState"
+                                        BorderThickness="2"
+                                        BorderBrush="{DynamicResource Brush.Border}"
+                                        CornerRadius="10"
+                                        Padding="16"
+                                        MinHeight="80"
+                                        Margin="0,0,0,14">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasModuleSelected}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="还没有知识空间"
+                                                   Foreground="{DynamicResource Brush.Text}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap"
+                                                   HorizontalAlignment="Center"
+                                                   Margin="0,0,0,6" />
+                                        <TextBlock Text="点击下方按钮创建第一个知识空间。"
+                                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap"
+                                                   HorizontalAlignment="Center"
+                                                   TextAlignment="Center"
+                                                   Margin="0,0,0,12" />
+                                        <Button Content="新建知识空间"
+                                                Command="{Binding AddModuleCommand}"
+                                                Style="{StaticResource GhostButtonStyle}"
+                                                HorizontalAlignment="Center"
+                                                Padding="16,6" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Module form (only visible when a module is selected) -->
+                                <StackPanel x:Name="KnowledgeModuleForm">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasModuleSelected}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <TextBlock Text="名称" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ModuleName, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,4,0,8" />
+                                    <TextBlock Text="描述" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ModuleDescription, UpdateSourceTrigger=PropertyChanged}"
+                                             AcceptsReturn="True"
+                                             MinHeight="62"
+                                             TextWrapping="Wrap"
+                                             Margin="0,4,0,10" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,14">
+                                        <Button Content="新增"
+                                                Command="{Binding AddModuleCommand}"
+                                                Style="{StaticResource GhostButtonStyle}"
+                                                Margin="0,0,8,0" />
+                                        <Button Content="刷新"
+                                                Command="{Binding RefreshCommand}"
+                                                Style="{StaticResource GhostButtonStyle}"
+                                                Margin="0,0,8,0" />
+                                        <Button Content="保存"
+                                                Command="{Binding SaveSelectedModuleCommand}"
+                                                Style="{StaticResource GhostButtonStyle}" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <TextBlock Text="文档"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,8" />
+                                <TextBlock Text="将文件拖拽到下方区域可上传到当前知识空间。"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"
+                                           Margin="0,0,0,8" />
+                                <StackPanel Margin="0,0,0,8">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsLoading}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <ProgressBar IsIndeterminate="True"
+                                                 Height="4"
+                                                 Margin="0,0,0,6" />
+                                    <TextBlock Text="正在加载知识库…"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               FontSize="12" />
+                                </StackPanel>
+                            </StackPanel>
+                            <controls:KnowledgeDocumentsDropZone />
+                        </DockPanel>
+                    </Border>
+
+                    <GridSplitter Grid.Column="0"
+                                  Style="{StaticResource LayoutColumnSplitterStyle}"
+                                  ResizeDirection="Columns"
+                                  ResizeBehavior="CurrentAndNext"
+                                  Panel.ZIndex="2" />
+
+                    <ScrollViewer Grid.Column="1"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Padding="22">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{Binding StatusText}"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                    <Button Content="重新索引"
+                                            Command="{Binding ReindexSelectedDocumentCommand}"
+                                            Style="{StaticResource GhostButtonStyle}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <StackPanel Margin="0,0,0,12">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsIndexing}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <ProgressBar Minimum="0"
+                                             Maximum="100"
+                                             Height="8"
+                                             Value="{Binding IndexingProgress}"
+                                             Margin="0,0,0,6" />
+                                <TextBlock Text="{Binding IndexingProgressText}"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12" />
+                            </StackPanel>
+
+                            <!-- Document Preview Card -->
+                            <Border Style="{StaticResource SettingsCardStyle}"
+                                    Padding="16">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                        <TextBlock Text="📄"
+                                                   FontSize="16"
+                                                   Margin="0,0,8,0"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Text="文档预览"
+                                                   FontSize="15"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <Border Background="{DynamicResource Brush.Chrome}"
+                                            CornerRadius="8"
+                                            Padding="14"
+                                            MaxHeight="320"
+                                            MinHeight="80">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled">
+                                            <TextBlock Text="{Binding DocumentPreview}"
+                                                       Foreground="{DynamicResource Brush.Text}"
+                                                       TextWrapping="Wrap"
+                                                       FontSize="13"
+                                                       FontFamily="Consolas"
+                                                       LineHeight="20" />
+                                        </ScrollViewer>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Search Test Card -->
+                            <Border Style="{StaticResource SettingsCardStyle}">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                        <TextBlock Text="🔍"
+                                                   FontSize="15"
+                                                   Margin="0,0,8,0"
+                                                   VerticalAlignment="Center" />
+                                        <TextBlock Text="检索测试"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBox Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                                             AcceptsReturn="True"
+                                             MinHeight="72"
+                                             TextWrapping="Wrap"
+                                             Margin="0,0,0,10" />
+                                    <Button Content="测试检索"
+                                            Command="{Binding TestSearchCommand}"
+                                            Style="{StaticResource GhostButtonStyle}"
+                                            HorizontalAlignment="Left"
+                                            Margin="0,0,0,10" />
+                                    <Border Background="{DynamicResource Brush.Chrome}"
+                                            CornerRadius="8"
+                                            Padding="14"
+                                            MinHeight="120"
+                                            MaxHeight="340">
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled">
+                                            <TextBlock Text="{Binding SearchResults}"
+                                                       Foreground="{DynamicResource Brush.Text}"
+                                                       TextWrapping="Wrap"
+                                                       FontSize="13"
+                                                       LineHeight="20" />
+                                        </ScrollViewer>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+    </Grid>
 </UserControl>

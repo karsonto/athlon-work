@@ -27,6 +27,10 @@ public interface ISubAgentSessionManager
         int limit,
         CancellationToken cancellationToken = default);
 
+    Task<int> PeekPendingCompletionsCountAsync(
+        string parentSessionId,
+        CancellationToken cancellationToken = default);
+
     Task<SubAgentTaskRecord?> GetTaskOutputAsync(
         string parentSessionId,
         string taskId,

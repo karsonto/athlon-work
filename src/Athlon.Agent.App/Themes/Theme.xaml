@@ -5,6 +5,7 @@
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="Controls.xaml" />
         <ResourceDictionary Source="ChatStyles.xaml" />
+        <ResourceDictionary Source="ChatNavIconStyles.xaml" />
         <ResourceDictionary Source="Overlays.xaml" />
     </ResourceDictionary.MergedDictionaries>
 

@@ -120,7 +120,9 @@ dotnet run --project src/Athlon.Agent.App/Athlon.Agent.App.csproj
 ```mermaid
 flowchart TB
     subgraph UI["Athlon.Agent.App (WPF)"]
-        MW[MainWindow / MVVM]
+        MW[MainWindow shell]
+        ShellVm[MainShellViewModel]
+        Pages[Chat / Settings / Knowledge / Schedule pages]
         MD[MarkdownMessageView]
         SCH[SchedulerService]
     end
@@ -142,15 +144,19 @@ flowchart TB
         MCP[MCP client]
     end
 
-    MW --> RT
+    MW --> ShellVm
+    ShellVm --> Pages
+    Pages --> RT
     SCH --> RT
     RT --> LLM
     RT --> TOOLS
     RT --> SK
     RT --> MCP
     RT --> CMP
-    MW --> STORE
+    ShellVm --> STORE
 ```
+
+`MainWindow.xaml` is a thin shell (~300 lines): navigation sidebar, lazy-loaded page host (`PageViewFactory`), context sidebar, and status chrome. Page markup lives in `Views/*PageView.xaml`; composer/chat logic is in `ChatPageViewModel`, settings credentials in `SettingsViewModel`. Startup milestones are traced via `App.StartupTrace` (written to `startup.log` under the app logs folder).
 
 ```text
 src/

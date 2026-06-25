@@ -12,22 +12,13 @@
                  Style="{StaticResource ComposerTextBoxStyle}"
                  TextChanged="ComposerTextBox_OnTextChanged"
                  PreviewKeyDown="ComposerTextBox_OnPreviewKeyDown" />
-        <TextBlock Text="输入消息... (Shift+Enter 换行，Enter 发送)"
+        <TextBlock x:Name="PlaceholderText"
+                   Text="输入消息... (Shift+Enter 换行，Enter 发送)"
                    Foreground="{DynamicResource Brush.SubtleText}"
-                   Margin="8,8,0,0"
+                   Margin="12,12,0,0"
                    IsHitTestVisible="False"
-                   FontSize="14">
-            <TextBlock.Style>
-                <Style TargetType="TextBlock">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsComposerEmpty}" Value="True">
-                            <Setter Property="Visibility" Value="Visible" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </TextBlock.Style>
-        </TextBlock>
+                   FontSize="14"
+                   Visibility="Visible" />
         <Popup IsOpen="{Binding IsAtCompletionOpen, Mode=OneWay}"
                PlacementTarget="{Binding ElementName=ComposerTextBox}"
                Placement="Top"

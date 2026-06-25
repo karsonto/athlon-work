@@ -823,7 +823,8 @@ public sealed class ChatHtmlBuilder
             case 'TOOL_CALL_ARGS': {
               const card = getToolCard(event.toolCallId);
               const pre = card && card.querySelector('.tool-args');
-              if (pre) pre.textContent += event.delta || '';
+              // delta is the full JSON snapshot built so far, not an incremental chunk
+              if (pre) pre.textContent = event.delta || '';
               scrollToBottom();
               break;
             }

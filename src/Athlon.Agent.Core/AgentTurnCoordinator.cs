@@ -40,8 +40,8 @@ internal sealed class AgentTurnCoordinator(
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnTextDelta(assistantMessageId, token)),
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
                 delta => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
-                cancellationToken);
-            await RecordModelUsageAsync(session, callbacks, environmentPrompt, tools, response, contextSavingsTokens);
+                cancellationToken).ConfigureAwait(false);
+            await RecordModelUsageAsync(session, callbacks, environmentPrompt, tools, response, contextSavingsTokens).ConfigureAwait(false);
             return (session, response);
         }
         catch (HttpRequestException ex) when (AgentRuntime.IsContextLengthError(ex))
@@ -55,7 +55,7 @@ internal sealed class AgentTurnCoordinator(
                 environmentPrompt,
                 tools,
                 ContextPressureLevel.Overflow,
-                cancellationToken);
+                cancellationToken).ConfigureAwait(false);
 
             modelMessageCache?.Invalidate();
             environmentPrompt = resolveSystemPromptOrchestrator().BuildForReasoningIteration(
@@ -73,8 +73,8 @@ internal sealed class AgentTurnCoordinator(
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnTextDelta(assistantMessageId, token)),
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
                 delta => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
-                cancellationToken);
-            await RecordModelUsageAsync(session, callbacks, environmentPrompt, tools, response, retryResult.EstimatedSavingsTokens);
+                cancellationToken).ConfigureAwait(false);
+            await RecordModelUsageAsync(session, callbacks, environmentPrompt, tools, response, retryResult.EstimatedSavingsTokens).ConfigureAwait(false);
             return (session, response);
         }
     }
@@ -114,7 +114,7 @@ internal sealed class AgentTurnCoordinator(
 
         if (callbacks?.OnUsageRecorded is { } onUsage)
         {
-            await onUsage(snapshot);
+            await onUsage(snapshot).ConfigureAwait(false);
         }
 
         var events = new List<AgentStreamEvent> { new AgentStreamEvent.UsageRecorded(snapshot) };
@@ -123,6 +123,6 @@ internal sealed class AgentTurnCoordinator(
             events.Add(new AgentStreamEvent.ContextHygieneApplied(contextSavingsTokens));
         }
 
-        await AgentRuntime.PublishStreamEventsAsync(callbacks, events);
+        await AgentRuntime.PublishStreamEventsAsync(callbacks, events).ConfigureAwait(false);
     }
 }

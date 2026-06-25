@@ -47,21 +47,21 @@ public sealed class TrainingSampleStore : ITrainingDataCollector, IDisposable
             var correctionSamples = TurnTrajectoryExtractor.ExtractCorrectionSamples(session);
             foreach (var sample in correctionSamples)
             {
-                await WriteSampleAsync(sample, cancellationToken);
+                await WriteSampleAsync(sample, cancellationToken).ConfigureAwait(false);
             }
 
             // 超时/溢出恢复轨迹
             var overflowSamples = TurnTrajectoryExtractor.ExtractOverflowRecoverySamples(session);
             foreach (var sample in overflowSamples)
             {
-                await WriteSampleAsync(sample, cancellationToken);
+                await WriteSampleAsync(sample, cancellationToken).ConfigureAwait(false);
             }
 
             // DPO 偏好对（从修正轨迹生成 chosen/rejected）
             var dpoPairs = TurnTrajectoryExtractor.ExtractPreferencePairs(session);
             foreach (var pair in dpoPairs)
             {
-                await WriteDpoSampleAsync(pair, cancellationToken);
+                await WriteDpoSampleAsync(pair, cancellationToken).ConfigureAwait(false);
             }
 
             var totalCount = correctionSamples.Count + overflowSamples.Count + dpoPairs.Count;
@@ -88,7 +88,7 @@ public sealed class TrainingSampleStore : ITrainingDataCollector, IDisposable
         try
         {
             var sample = TurnTrajectoryExtractor.ExtractFullSession(session, totalTokens);
-            await WriteSampleAsync(sample, cancellationToken);
+            await WriteSampleAsync(sample, cancellationToken).ConfigureAwait(false);
 
             _logger.Information("Saved full session sample for session {SessionId} ({Tokens} tokens)",
                 session.Id, totalTokens);
@@ -107,8 +107,8 @@ public sealed class TrainingSampleStore : ITrainingDataCollector, IDisposable
         try
         {
             var writer = GetSftWriter();
-            await writer.WriteLineAsync(line.AsMemory(), cancellationToken);
-            await writer.FlushAsync();
+            await writer.WriteLineAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
+            await writer.FlushAsync().ConfigureAwait(false);
         }
         finally
         {
@@ -124,8 +124,8 @@ public sealed class TrainingSampleStore : ITrainingDataCollector, IDisposable
         try
         {
             var writer = GetDpoWriter();
-            await writer.WriteLineAsync(line.AsMemory(), cancellationToken);
-            await writer.FlushAsync();
+            await writer.WriteLineAsync(line.AsMemory(), cancellationToken).ConfigureAwait(false);
+            await writer.FlushAsync().ConfigureAwait(false);
         }
         finally
         {

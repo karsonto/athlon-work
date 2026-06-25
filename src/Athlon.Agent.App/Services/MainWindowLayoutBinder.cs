@@ -5,8 +5,16 @@ using UiLayoutConstraints = Athlon.Agent.App.UiLayoutConstraints;
 
 namespace Athlon.Agent.App.Services;
 
-public sealed class MainWindowLayoutBinder(MainWindowViewModel viewModel, MainWindowLayoutElements elements)
+public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWindowLayoutElements elements)
 {
+    public void BindChatSurface(IChatLayoutSurface chatSurface)
+    {
+        elements.EditorPaneColumn = chatSurface.ChatLayoutElements.EditorPaneColumn;
+        elements.EditorPaneHost = chatSurface.ChatLayoutElements.EditorPaneHost;
+        elements.EditorChatSplitter = chatSurface.ChatLayoutElements.EditorChatSplitter;
+        elements.ComposerRow = chatSurface.ChatLayoutElements.ComposerRow;
+    }
+
     public void ApplyAll()
     {
         ApplyNavigationSidebar();
@@ -163,11 +171,11 @@ public sealed class MainWindowLayoutBinder(MainWindowViewModel viewModel, MainWi
 public sealed class MainWindowLayoutElements
 {
     public ColumnDefinition? NavigationSidebarColumn { get; init; }
-    public ColumnDefinition? EditorPaneColumn { get; init; }
+    public ColumnDefinition? EditorPaneColumn { get; set; }
     public ColumnDefinition? ContextSidebarColumn { get; init; }
-    public RowDefinition? ComposerRow { get; init; }
-    public FrameworkElement? EditorPaneHost { get; init; }
-    public FrameworkElement? EditorChatSplitter { get; init; }
+    public RowDefinition? ComposerRow { get; set; }
+    public FrameworkElement? EditorPaneHost { get; set; }
+    public FrameworkElement? EditorChatSplitter { get; set; }
     public FrameworkElement? ContextSidebarPanel { get; init; }
     public FrameworkElement? ContextSidebarSplitter { get; init; }
     public FrameworkElement? ContextSidebarCollapsedRail { get; init; }

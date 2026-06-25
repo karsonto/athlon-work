@@ -183,6 +183,17 @@ public sealed class SessionTurnUiController
                                     _ = ChatView.ApplyAssistantMarkdownAsync(assistant);
                                 }
                             }
+                            else if (streamEvent is AgentStreamEvent.ToolCallEnd(var endToolCallId))
+                            {
+                                var toolBubble = Messages.LastOrDefault(message =>
+                                    message.IsTool
+                                    && string.Equals(message.ToolCallId, endToolCallId, StringComparison.Ordinal));
+                                if (toolBubble is not null && toolBubble.HasToolArguments)
+                                {
+                                    _ = ChatView.DispatchEventAsync(
+                                        new AgentStreamEvent.ToolCallArgs(endToolCallId, toolBubble.ToolArgumentsText));
+                                }
+                            }
                             else if (streamEvent is AgentStreamEvent.ToolCallResult(var toolCallId, _, _))
                             {
                                 var toolMessage = Messages.LastOrDefault(message =>

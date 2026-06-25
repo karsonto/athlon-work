@@ -199,6 +199,42 @@ public sealed class SessionIndexMemoryTests
     }
 
     [Fact]
+    public async Task ListSessionsAsync_excludes_top_level_subagent_leak()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-leak-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
+        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
+
+        var parentDir = Path.Combine(paths.SessionsPath, "parent");
+        var subDir = Path.Combine(parentDir, "subagents", "default", "sub-1");
+        var leakedDir = Path.Combine(paths.SessionsPath, "sub-1");
+        Directory.CreateDirectory(subDir);
+        Directory.CreateDirectory(leakedDir);
+
+        await WriteSessionJsonAsync(parentDir, "parent", "Parent chat");
+        await WriteSessionJsonAsync(subDir, "sub-1", "Sub-agent");
+        await WriteSessionJsonAsync(leakedDir, "sub-1", "Sub-agent");
+
+        try
+        {
+            var sessions = await storage.ListSessionsAsync();
+
+            Assert.Single(sessions);
+            Assert.Equal("parent", sessions[0].Id);
+            Assert.DoesNotContain(sessions, item => item.Id == "sub-1");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task LoadSessionAsync_does_not_load_subagent_session_by_id()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-load-{Guid.NewGuid():N}");

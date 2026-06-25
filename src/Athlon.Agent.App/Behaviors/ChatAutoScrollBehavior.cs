@@ -78,14 +78,14 @@ public sealed class ChatAutoScrollBehavior : Behavior<ListBox>
 
     private bool GetIsBusy() => FindViewModel()?.IsBusy ?? false;
 
-    private MainWindowViewModel? FindViewModel()
+    private MainShellViewModel? FindViewModel()
     {
-        if (AssociatedObject.DataContext is MainWindowViewModel direct)
+        if (AssociatedObject.DataContext is MainShellViewModel direct)
         {
             return direct;
         }
 
-        return Window.GetWindow(AssociatedObject)?.DataContext as MainWindowViewModel;
+        return Window.GetWindow(AssociatedObject)?.DataContext as MainShellViewModel;
     }
 
     private void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) =>

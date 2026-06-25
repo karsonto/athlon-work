@@ -26,6 +26,11 @@ internal sealed class SessionIndexCoordinator
 
     public void ScheduleUpdate(AgentSession session)
     {
+        if (_runContextAccessor.Current?.Kind == AgentRunKind.SubAgent)
+        {
+            return;
+        }
+
         var sessionDir = _runContextAccessor.ResolveSessionDirectory(_paths.SessionsPath, session.Id);
         var entry = new SessionIndexEntry(session.Id, session.Title, sessionDir, session.UpdatedAt);
         ScheduleUpdate(entry);
@@ -33,6 +38,11 @@ internal sealed class SessionIndexCoordinator
 
     public void ScheduleUpdate(SessionIndexEntry entry)
     {
+        if (AgentRunContext.IsSubAgentSessionPath(Path.Combine(entry.Path, "session.json")))
+        {
+            return;
+        }
+
         lock (_scheduleLock)
         {
             _pending[entry.Id] = entry;
@@ -133,6 +143,12 @@ internal sealed class SessionIndexCoordinator
 
     private async Task<bool> TryUpsertIndexEntryAsync(SessionIndexEntry entry, CancellationToken cancellationToken)
     {
+        var subAgentSessionIds = CollectSubAgentSessionIds();
+        if (IsSubAgentSessionEntry(entry, subAgentSessionIds))
+        {
+            return true;
+        }
+
         try
         {
             Directory.CreateDirectory(_paths.SessionsPath);
@@ -212,6 +228,8 @@ internal sealed class SessionIndexCoordinator
             return Array.Empty<SessionIndexEntry>();
         }
 
+        var subAgentSessionIds = CollectSubAgentSessionIds();
+
         foreach (var file in Directory.EnumerateFiles(_paths.SessionsPath, "session.json", SearchOption.AllDirectories))
         {
             if (AgentRunContext.IsSubAgentSessionPath(file))
@@ -220,7 +238,7 @@ internal sealed class SessionIndexCoordinator
             }
 
             var indexEntry = SessionJsonIndexReader.TryRead(file);
-            if (indexEntry is null)
+            if (indexEntry is null || IsSubAgentSessionEntry(indexEntry, subAgentSessionIds))
             {
                 continue;
             }
@@ -264,10 +282,42 @@ internal sealed class SessionIndexCoordinator
         return true;
     }
 
-    private static SessionIndexEntry[] FilterTopLevelSessions(IEnumerable<SessionIndexEntry> entries) =>
-        entries
-            .Where(entry => !AgentRunContext.IsSubAgentSessionPath(Path.Combine(entry.Path, "session.json")))
+    private SessionIndexEntry[] FilterTopLevelSessions(IEnumerable<SessionIndexEntry> entries)
+    {
+        var subAgentSessionIds = CollectSubAgentSessionIds();
+        return entries
+            .Where(entry => !IsSubAgentSessionEntry(entry, subAgentSessionIds))
             .OrderByDescending(item => item.UpdatedAt)
             .ThenBy(item => item.Id)
             .ToArray();
+    }
+
+    private HashSet<string> CollectSubAgentSessionIds()
+    {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        if (!Directory.Exists(_paths.SessionsPath))
+        {
+            return ids;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(_paths.SessionsPath, "session.json", SearchOption.AllDirectories))
+        {
+            if (!AgentRunContext.IsSubAgentSessionPath(file))
+            {
+                continue;
+            }
+
+            var indexEntry = SessionJsonIndexReader.TryRead(file);
+            if (indexEntry is not null)
+            {
+                ids.Add(indexEntry.Id);
+            }
+        }
+
+        return ids;
+    }
+
+    private static bool IsSubAgentSessionEntry(SessionIndexEntry entry, ISet<string> subAgentSessionIds) =>
+        AgentRunContext.IsSubAgentSessionPath(Path.Combine(entry.Path, "session.json"))
+        || subAgentSessionIds.Contains(entry.Id);
 }

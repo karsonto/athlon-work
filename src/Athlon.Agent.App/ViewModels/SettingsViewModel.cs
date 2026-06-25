@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
 using Athlon.Agent.Skills;
@@ -14,17 +16,26 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IMcpRegistry _mcpRegistry;
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly IAppPathProvider _paths;
+    private readonly ICredentialStore _credentialStore;
+    private readonly IFileStorageService _storage;
+    private readonly ApiKeySecretMigrationService _apiKeySecretMigration;
 
     public SettingsViewModel(
         AppSettings settings,
         IMcpRegistry mcpRegistry,
         IAgentSkillCatalog skillCatalog,
-        IAppPathProvider paths)
+        IAppPathProvider paths,
+        ICredentialStore credentialStore,
+        IFileStorageService storage,
+        ApiKeySecretMigrationService apiKeySecretMigration)
     {
         Settings = settings;
         _mcpRegistry = mcpRegistry;
         _skillCatalog = skillCatalog;
         _paths = paths;
+        _credentialStore = credentialStore;
+        _storage = storage;
+        _apiKeySecretMigration = apiKeySecretMigration;
         foreach (var server in Settings.McpServers)
         {
             McpServers.Add(new McpServerItemViewModel(server, _mcpRegistry, OnMcpServerEnabledChanged));
@@ -36,6 +47,66 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public event EventHandler? McpConfigurationChanged;
     public event EventHandler? SkillConfigurationChanged;
+    public event EventHandler? SettingsSaved;
+    public event EventHandler<bool>? EmbeddingApiKeyAvailabilityChanged;
+
+    [ObservableProperty]
+    private string settingsStatus = "Settings are stored as JSON files under the app data folder.";
+
+    [ObservableProperty]
+    private string apiKey = string.Empty;
+
+    [ObservableProperty]
+    private bool hasStoredApiKey;
+
+    [ObservableProperty]
+    private string knowledgeEmbeddingApiKey = string.Empty;
+
+    [ObservableProperty]
+    private bool hasStoredKnowledgeEmbeddingApiKey;
+
+    public string McpConfigPath => SettingsConfigPath;
+
+    public async Task InitializeAsync()
+    {
+        HasStoredApiKey = await _apiKeySecretMigration
+            .EnsureCurrentApiKeySecretAsync(Settings)
+            .ConfigureAwait(true);
+        HasStoredKnowledgeEmbeddingApiKey = await _credentialStore
+            .HasSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName)
+            .ConfigureAwait(true);
+        EmbeddingApiKeyAvailabilityChanged?.Invoke(this, HasStoredKnowledgeEmbeddingApiKey);
+    }
+
+    [RelayCommand]
+    private async Task SaveSettingsAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(ApiKey))
+        {
+            await _credentialStore.SaveSecretAsync(ModelSettings.ApiKeySecretName, ApiKey).ConfigureAwait(true);
+            ApiKey = string.Empty;
+            HasStoredApiKey = true;
+            OnPropertyChanged(nameof(ApiKey));
+        }
+
+        if (!string.IsNullOrWhiteSpace(KnowledgeEmbeddingApiKey))
+        {
+            await _credentialStore
+                .SaveSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName, KnowledgeEmbeddingApiKey)
+                .ConfigureAwait(true);
+            KnowledgeEmbeddingApiKey = string.Empty;
+            HasStoredKnowledgeEmbeddingApiKey = true;
+            OnPropertyChanged(nameof(KnowledgeEmbeddingApiKey));
+            EmbeddingApiKeyAvailabilityChanged?.Invoke(this, true);
+        }
+
+        Settings.Model.LegacyApiKeyCredentialName = null;
+        PruneEmptyWorkspaces(Settings);
+        SyncSkillsFromCatalog();
+        await _storage.SaveSettingsAsync(Settings).ConfigureAwait(true);
+        SettingsStatus = $"Saved at {AppTimeZone.Now:HH:mm:ss}";
+        SettingsSaved?.Invoke(this, EventArgs.Empty);
+    }
 
     private void OnMcpServerEnabledChanged() => McpConfigurationChanged?.Invoke(this, EventArgs.Empty);
 

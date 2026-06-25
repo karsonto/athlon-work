@@ -1,3 +1,6 @@
+using Athlon.Agent.App;
+using Athlon.Agent.App.Services;
+using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.SubAgents;
@@ -30,5 +33,35 @@ public sealed class AppStartupIntegrationTest
         {
             asyncDisposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
+    }
+
+    [Fact]
+    public void AddAthlonViewModels_RegistersMainShellAndChatPage_WithoutCycle()
+    {
+        var services = new ServiceCollection();
+        services.AddAthlonInfrastructure();
+        services.AddSingleton(sp => new SessionUiCache(
+            System.Windows.Threading.Dispatcher.CurrentDispatcher,
+            sp.GetRequiredService<AppSettings>()));
+        services.AddSingleton<SessionTurnHost>();
+        services.AddSingleton<QueuedTurnPresenter>();
+        services.AddSingleton<ComposerAtCompletionService>();
+        services.AddSingleton<SchedulerService>();
+        services.AddSingleton<ApplicationShutdownService>();
+        services.AddSingleton<ClipboardImageAttachmentReader>();
+        services.AddSingleton<AppUpdateService>();
+        services.AddSingleton<IMcpRegistry>(new TestMcpRegistry());
+        services.AddAthlonViewModels();
+
+        Assert.Contains(services, d => d.ServiceType == typeof(MainShellViewModel));
+        Assert.Contains(services, d => d.ServiceType == typeof(ChatPageViewModel));
+        Assert.Contains(services, d => d.ServiceType == typeof(ISessionHost));
+        Assert.Contains(services, d => d.ServiceType == typeof(INavigationService));
+
+        using var provider = services.BuildServiceProvider();
+        var chatPage = provider.GetRequiredService<ChatPageViewModel>();
+        var settings = provider.GetRequiredService<SettingsViewModel>();
+        Assert.NotNull(chatPage);
+        Assert.NotNull(settings);
     }
 }

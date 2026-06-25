@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.SubAgents;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Athlon.Agent.Infrastructure.SubAgents;
 
@@ -10,6 +11,7 @@ public sealed class SubAgentBackgroundExecutor(
     ISubAgentRegistry registry,
     ISubAgentTaskStore taskStore,
     ISubAgentCompletionStore completionStore,
+    IServiceProvider serviceProvider,
     IAppLogger logger)
 {
     private readonly SubAgentSettings _subAgent = settings.SubAgent;
@@ -128,6 +130,7 @@ public sealed class SubAgentBackgroundExecutor(
                     completedAt,
                     announce),
                 cancellationToken).ConfigureAwait(false);
+            serviceProvider.GetService<ISubAgentCompletionNotifier>()?.NotifyCompletionReady(item.ParentSessionId);
         }
 
         record = record with

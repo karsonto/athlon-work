@@ -14,22 +14,20 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 
-using Athlon.Agent.App;
+using System.Windows.Controls;
+using Athlon.Agent.App.Navigation;
 using Athlon.Agent.App.Themes;
 
 namespace Athlon.Agent.App.ViewModels;
 
-public partial class MainWindowViewModel : ObservableObject, IDisposable
+public partial class MainShellViewModel : ObservableObject, IDisposable, ISessionHost, INavigationService
 {
     private readonly IFileStorageService _storage;
-    private readonly ICredentialStore _credentialStore;
-    private readonly ApiKeySecretMigrationService _apiKeySecretMigration;
     private readonly IActiveWorkspaceContext _workspaceContext;
     private readonly IMcpRegistry _mcpRegistry;
     private readonly AppSettings _appSettings;
     private readonly IImpSsoSessionStore? _ssoSessionStore;
     private readonly IAgentSkillCatalog _skillCatalog;
-    private readonly IImageAttachmentReader _imageAttachmentReader;
     private readonly SessionTurnCoordinator _sessionTurns;
     private readonly ComposerCoordinator _composer;
     private readonly LayoutCoordinator _layout;
@@ -37,11 +35,11 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly IChatScrollService _chatScroll;
     private readonly SessionUiCache _uiCache;
     private readonly ApplicationShutdownService _shutdownService;
-    private readonly SchedulerService _scheduler;
     private readonly SessionHistoryCoordinator _sessionHistory;
     private readonly SessionNavigationStore _sessionNavigation;
     private readonly WorkspaceSessionBridge _workspaceBridge = new();
     private readonly ISessionUsageAccumulator _sessionUsageAccumulator;
+    private readonly PageViewFactory _pageViewFactory;
 
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -50,13 +48,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool _disposed;
     private Controls.WebChatView? _savedChatView;
 
-    public MainWindowViewModel(
+    public MainShellViewModel(
         IFileStorageService storage,
-        ICredentialStore credentialStore,
-        ApiKeySecretMigrationService apiKeySecretMigration,
         IActiveWorkspaceContext workspaceContext,
         IMcpRegistry mcpRegistry,
-        IImageAttachmentReader imageAttachmentReader,
         IAppPathProvider paths,
         IAgentSkillCatalog skillCatalog,
         SessionTurnCoordinator sessionTurns,
@@ -65,27 +60,25 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         NavigationCoordinator navigation,
         IChatScrollService chatScroll,
         SessionUiCache uiCache,
-        WorkspaceFileEditorService workspaceFileEditorService,
         ApplicationShutdownService shutdownService,
         AppSettings settings,
         IImpSsoSessionStore ssoSessionStore,
         ISessionUsageAccumulator sessionUsageAccumulator,
         SessionHistoryCoordinator sessionHistory,
         SessionNavigationStore sessionNavigation,
-        SchedulerService scheduler,
         SettingsViewModel settingsViewModel,
         KnowledgeViewModel knowledgePageVm,
         ContextSidebarViewModel sidebar,
         FileEditorViewModel fileEditor,
         ComposerKnowledgeViewModel composerKnowledge,
-        ComposerHarnessViewModel composerHarness)
+        ComposerHarnessViewModel composerHarness,
+        PageViewFactory pageViewFactory,
+        ChatPageViewModel chatPage,
+        ScheduleViewModel schedulePageVm)
     {
         _storage = storage;
-        _credentialStore = credentialStore;
-        _apiKeySecretMigration = apiKeySecretMigration;
         _workspaceContext = workspaceContext;
         _mcpRegistry = mcpRegistry;
-        _imageAttachmentReader = imageAttachmentReader;
         _sessionTurns = sessionTurns;
         _composer = composer;
         _layout = layout;
@@ -93,13 +86,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _chatScroll = chatScroll;
         _uiCache = uiCache;
         _shutdownService = shutdownService;
-        _scheduler = scheduler;
-        _appSettings = settings;
-        _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
         _sessionHistory = sessionHistory;
         _sessionNavigation = sessionNavigation;
         _sessionUsageAccumulator = sessionUsageAccumulator;
+        _pageViewFactory = pageViewFactory;
         _skillCatalog = skillCatalog;
+        _appSettings = settings;
+        _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
         _displayedSessionId = _session.Id;
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         WireSessionUsageUi(_activeUi);
@@ -108,13 +101,26 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _sessionTurns.TurnHost.TurnStateChanged += OnTurnStateChanged;
         _sessionTurns.QueuedTurnPresenter.QueueChanged += OnQueuedTurnsChanged;
         Settings = settingsViewModel;
-        SchedulePageVm = new ScheduleViewModel(settings, storage, scheduler, OpenSessionByIdAsync);
+        SchedulePageVm = schedulePageVm;
         KnowledgePageVm = knowledgePageVm;
         KnowledgePageVm.KnowledgeDataChanged += OnKnowledgeDataChanged;
         ComposerKnowledge = composerKnowledge;
         ComposerHarness = composerHarness;
+        ChatPage = chatPage;
+        ChatPage.Configure(
+            () => _displayedSessionId,
+            () => _session,
+            () => _activeUi,
+            status => Settings.SettingsStatus = status,
+            NotifyCommandStatesChanged,
+            SyncWorkspaceContext,
+            busy => IsBusy = busy,
+            () => _workspaceContext.IgnorePatterns);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
+        Settings.SettingsSaved += async (_, _) => await OnSettingsSavedAsync();
+        Settings.EmbeddingApiKeyAvailabilityChanged += (_, available) =>
+            ComposerKnowledge.SetEmbeddingApiKeyAvailable(available);
         Sidebar = sidebar;
         FileEditor = fileEditor;
         FileEditor.Tabs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasOpenEditorTabs));
@@ -125,7 +131,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(HasOpenEditorTabs));
             }
         };
-        ComposerKnowledge.SetEmbeddingApiKeyAvailable(HasStoredKnowledgeEmbeddingApiKey);
+        ComposerKnowledge.SetEmbeddingApiKeyAvailable(Settings.HasStoredKnowledgeEmbeddingApiKey);
         _layout.ClampInitialLayout();
 
         LogsPath = paths.LogsPath;
@@ -137,8 +143,26 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         ApplySessionWorkspace();
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
-        PendingImageAttachments.CollectionChanged += OnPendingImagesChanged;
+        ChatPage.PendingImageAttachments.CollectionChanged += (_, _) =>
+        {
+            ChatPage.OnPendingImagesChanged();
+            OnPropertyChanged(nameof(HasPendingImages));
+        };
+        ChatPage.PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(ChatPageViewModel.ComposerText):
+                    OnPropertyChanged(nameof(ComposerText));
+                    OnPropertyChanged(nameof(IsComposerEmpty));
+                    break;
+                case nameof(ChatPageViewModel.IsComposerEmpty):
+                    OnPropertyChanged(nameof(IsComposerEmpty));
+                    break;
+            }
+        };
         AppThemeManager.ThemeChanged += OnAppThemeChanged;
+        CurrentPageView = _pageViewFactory.GetOrCreate(CurrentPage);
         _ = InitializeAsync();
     }
 
@@ -161,17 +185,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public async Task InitializeAsync()
     {
-        HasStoredApiKey = await _apiKeySecretMigration
-            .EnsureCurrentApiKeySecretAsync(_appSettings)
-            .ConfigureAwait(true);
-        HasStoredKnowledgeEmbeddingApiKey = await _credentialStore
-            .HasSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName)
-            .ConfigureAwait(true);
-        ComposerKnowledge.SetEmbeddingApiKeyAvailable(HasStoredKnowledgeEmbeddingApiKey);
+        await Settings.InitializeAsync().ConfigureAwait(true);
+        await RefreshMcpRuntimeAsync().ConfigureAwait(true);
 
-        await RefreshMcpRuntimeAsync();
-
-        await RefreshSessionHistoryAsync();
+        await RefreshSessionHistoryAsync().ConfigureAwait(true);
         var latest = GetFirstAgentRecord();
         if (latest is not null && _session.Messages.Count == 0)
         {
@@ -237,11 +254,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private bool isCopyNoticeVisible;
 
     [ObservableProperty]
-    private string composerText = string.Empty;
-
-    public bool IsComposerEmpty => string.IsNullOrWhiteSpace(ComposerText);
-
-    [ObservableProperty]
     private bool isBusy;
 
     [ObservableProperty]
@@ -251,7 +263,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private string shutdownStatusText = "正在关闭…";
 
     [ObservableProperty]
-    private string currentPage = "Chat";
+    private AppPage currentPage = AppPage.Chat;
+
+    [ObservableProperty]
+    private UserControl? currentPageView;
 
     [ObservableProperty]
     private string currentSessionTitle = "New Chat";
@@ -260,43 +275,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     private string sessionUsageLine = string.Empty;
 
     [ObservableProperty]
-    private string settingsStatus = "Settings are stored as JSON files under the app data folder.";
-
-    [ObservableProperty]
-    private string apiKey = string.Empty;
-
-    [ObservableProperty]
-    private bool hasStoredApiKey;
-
-    [ObservableProperty]
-    private string knowledgeEmbeddingApiKey = string.Empty;
-
-    [ObservableProperty]
-    private bool hasStoredKnowledgeEmbeddingApiKey;
-
-    [ObservableProperty]
     private string activeWorkspaceName = "No workspace";
-
-    [ObservableProperty]
-    private bool isAtCompletionOpen;
-
-    [ObservableProperty]
-    private int selectedAtCompletionIndex = -1;
 
     [ObservableProperty]
     private string ssoDisplayName = string.Empty;
 
     [ObservableProperty]
     private bool isSsoUserVisible;
-
-    public ObservableCollection<AtCompletionItemViewModel> AtCompletionItems { get; } = new();
-    public ObservableCollection<PendingImageAttachmentViewModel> PendingImageAttachments { get; } = new();
-    public bool HasPendingImages => PendingImageAttachments.Count > 0;
-
-    public bool IsChatPage => CurrentPage == "Chat";
-    public bool IsSettingsPage => CurrentPage == "Settings";
-    public bool IsSchedulePage => CurrentPage == "Schedule";
-    public bool IsKnowledgePage => CurrentPage == "Knowledge";
 
     public ScheduleViewModel SchedulePageVm { get; }
     public KnowledgeViewModel KnowledgePageVm { get; }
@@ -305,12 +290,57 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public ComposerHarnessViewModel ComposerHarness { get; }
 
+    public ChatPageViewModel ChatPage { get; }
+
+    public string ComposerText
+    {
+        get => ChatPage.ComposerText;
+        set => ChatPage.ComposerText = value;
+    }
+
+    public bool IsComposerEmpty => ChatPage.IsComposerEmpty;
+
+    public bool IsAtCompletionOpen
+    {
+        get => ChatPage.IsAtCompletionOpen;
+        set => ChatPage.IsAtCompletionOpen = value;
+    }
+
+    public int SelectedAtCompletionIndex
+    {
+        get => ChatPage.SelectedAtCompletionIndex;
+        set => ChatPage.SelectedAtCompletionIndex = value;
+    }
+
+    public ObservableCollection<AtCompletionItemViewModel> AtCompletionItems => ChatPage.AtCompletionItems;
+
+    public ObservableCollection<PendingImageAttachmentViewModel> PendingImageAttachments => ChatPage.PendingImageAttachments;
+
+    public bool HasPendingImages => ChatPage.HasPendingImages;
+
+    public IAsyncRelayCommand SendCommand => ChatPage.SendCommand;
+
+    public IRelayCommand StopCommand => ChatPage.StopCommand;
+
+    public IAsyncRelayCommand SelectImagesCommand => ChatPage.SelectImagesCommand;
+
+    public IRelayCommand RemovePendingImageCommand => ChatPage.RemovePendingImageCommand;
+
+    public IRelayCommand RemoveQueuedTurnCommand => ChatPage.RemoveQueuedTurnCommand;
+
+    public string SettingsStatus
+    {
+        get => Settings.SettingsStatus;
+        set => Settings.SettingsStatus = value;
+    }
+
     [RelayCommand]
     private void Navigate(string page)
     {
-        CurrentPage = page;
-        _navigation.HandlePageChanged(page, Settings, SchedulePageVm, KnowledgePageVm);
+        CurrentPage = AppPageExtensions.Parse(page);
     }
+
+    void INavigationService.Navigate(AppPage page) => CurrentPage = page;
 
     [RelayCommand]
     private void SsoLogout()
@@ -402,7 +432,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         ComposerText = string.Empty;
         PendingImageAttachments.Clear();
         UpdateDisplayedBusyState();
-        CurrentPage = "Chat";
+        CurrentPage = AppPage.Chat;
         KnowledgePageVm.SetSession(_displayedSessionId);
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
         _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
@@ -439,7 +469,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
         await _storage.SaveSessionAsync(_session);
         _sessionNavigation.Invalidate(_session.Id);
-        SettingsStatus = "上下文已清空。";
+        Settings.SettingsStatus = "上下文已清空。";
         NotifyCommandStatesChanged();
     }
 
@@ -456,17 +486,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void OnPendingImagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        OnPropertyChanged(nameof(HasPendingImages));
-        SendCommand.NotifyCanExecuteChanged();
-    }
-
     private void NotifyCommandStatesChanged()
     {
         SendCommand.NotifyCanExecuteChanged();
         ClearContextCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(HasChatMessages));
+    }
+
+    private void OnQueuedTurnsChanged(string sessionId)
+    {
+        if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+        {
+            OnPropertyChanged(nameof(QueuedTurns));
+            OnPropertyChanged(nameof(HasQueuedTurns));
+        }
     }
 
     [RelayCommand]
@@ -480,7 +513,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         var previousSession = _session;
         await LoadSessionInternalAsync(item.Id);
         _ = SaveSessionInBackgroundAsync(previousSession);
-        CurrentPage = "Chat";
+        CurrentPage = AppPage.Chat;
     }
 
     [RelayCommand]
@@ -521,97 +554,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             ComposerText = string.Empty;
             PendingImageAttachments.Clear();
             ApplySessionWorkspace();
-            CurrentPage = "Chat";
+            CurrentPage = AppPage.Chat;
         }
 
         await RefreshSessionHistoryAsync();
-        SettingsStatus = "对话已删除。";
+        Settings.SettingsStatus = "对话已删除。";
         NotifyCommandStatesChanged();
-    }
-
-    [RelayCommand]
-    private async Task SelectImagesAsync()
-    {
-        var dialog = new OpenFileDialog
-        {
-            Title = "选择图片",
-            Multiselect = true,
-            Filter = "Image Files|*.png;*.jpg;*.jpeg;*.webp;*.gif"
-        };
-
-        if (dialog.ShowDialog() != true || dialog.FileNames.Length == 0)
-        {
-            return;
-        }
-
-        var images = await _imageAttachmentReader.ReadImagesAsync(dialog.FileNames);
-        AddPendingImages(images);
     }
 
     public void AddPendingImages(IEnumerable<ImageAttachment> images) =>
-        _composer.AddPendingImages(images, PendingImageAttachments);
-
-    [RelayCommand]
-    private void RemovePendingImage(PendingImageAttachmentViewModel? image)
-    {
-        if (image is null)
-        {
-            return;
-        }
-
-        PendingImageAttachments.Remove(image);
-    }
-
-    [RelayCommand(CanExecute = nameof(CanSend))]
-    private async Task SendAsync()
-    {
-        CloseAtCompletion();
-
-        if (string.IsNullOrWhiteSpace(ComposerText) && PendingImageAttachments.Count == 0)
-        {
-            return;
-        }
-
-        _sessionTurns.ReloadSkills();
-        var input = _sessionTurns.ExpandComposerInput(ComposerText);
-        var imageAttachments = _composer.PersistPendingImages(_displayedSessionId, PendingImageAttachments);
-        ComposerText = string.Empty;
-        SyncWorkspaceContext();
-
-        var ui = _sessionTurns.GetOrCreateUi(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
-        PendingImageAttachments.Clear();
-
-        if (_sessionTurns.IsRunning(_displayedSessionId))
-        {
-            _sessionTurns.EnqueueTurn(_displayedSessionId, input, imageAttachments, ui);
-            SettingsStatus = "已加入排队";
-            NotifyCommandStatesChanged();
-            return;
-        }
-
-        ui.AddUserMessage(input, imageAttachments);
-        var error = _sessionTurns.TryStartTurn(_displayedSessionId, _session, input, imageAttachments, ui);
-        if (error is not null)
-        {
-            SettingsStatus = error;
-            NotifyCommandStatesChanged();
-            return;
-        }
-
-        UpdateDisplayedBusyState();
-        NotifyCommandStatesChanged();
-    }
-
-    [RelayCommand]
-    private void RemoveQueuedTurn(QueuedTurnViewModel? item)
-    {
-        if (item is null)
-        {
-            return;
-        }
-
-        _sessionTurns.QueuedTurnPresenter.Remove(_displayedSessionId, item.QueueId);
-    }
+        ChatPage.AddPendingImages(images);
 
     private void RequestScrollToBottom() => _chatScroll.ScrollToBottom();
 
@@ -694,7 +646,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                     UpdateDisplayedBusyState();
                     if (queueError is not null)
                     {
-                        SettingsStatus = queueError;
+                        Settings.SettingsStatus = queueError;
                     }
                 }
             }
@@ -703,19 +655,13 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         });
     }
 
-    private void UpdateDisplayedBusyState()
-    {
-        IsBusy = _sessionTurns.TurnHost.IsRunning(_displayedSessionId);
-    }
+    private void UpdateDisplayedBusyState() => ChatPage.UpdateDisplayedBusyState();
 
     private void StopSession(string sessionId)
     {
         _sessionTurns.TurnHost.Cancel(sessionId);
         _sessionTurns.QueuedTurnPresenter.Clear(sessionId);
     }
-
-    [RelayCommand]
-    private void Stop() => StopSession(_displayedSessionId);
 
     [RelayCommand]
     private async Task ConfigureWorkspaceAsync()
@@ -740,40 +686,16 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _session = _session.WithWorkspace(dialog.FolderName);
         ApplySessionWorkspace();
         await SaveCurrentSessionIfNeededAsync();
-        SettingsStatus = $"当前对话工作区：{folderName}";
+        Settings.SettingsStatus = $"当前对话工作区：{folderName}";
     }
 
-    [RelayCommand]
-    private async Task SaveSettingsAsync()
+    private async Task OnSettingsSavedAsync()
     {
-        if (!string.IsNullOrWhiteSpace(ApiKey))
-        {
-            await _credentialStore.SaveSecretAsync(ModelSettings.ApiKeySecretName, ApiKey);
-            ApiKey = string.Empty;
-            HasStoredApiKey = true;
-            OnPropertyChanged(nameof(ApiKey));
-        }
-
-        if (!string.IsNullOrWhiteSpace(KnowledgeEmbeddingApiKey))
-        {
-            await _credentialStore.SaveSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName, KnowledgeEmbeddingApiKey);
-            KnowledgeEmbeddingApiKey = string.Empty;
-            HasStoredKnowledgeEmbeddingApiKey = true;
-            ComposerKnowledge.SetEmbeddingApiKeyAvailable(true);
-            OnPropertyChanged(nameof(KnowledgeEmbeddingApiKey));
-        }
-
-        Settings.Settings.Model.LegacyApiKeyCredentialName = null;
-        SettingsViewModel.PruneEmptyWorkspaces(Settings.Settings);
-        Settings.SyncSkillsFromCatalog();
-        await _storage.SaveSettingsAsync(Settings.Settings);
         _uiCache.ApplyShowToolCalls(Settings.Settings.Ui.ShowToolCalls);
-        await _activeUi.HydrateFromSessionAsync(_session);
-        await RefreshMcpRuntimeAsync();
+        await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
+        await RefreshMcpRuntimeAsync().ConfigureAwait(true);
         ApplySessionWorkspace();
-        OnPropertyChanged(nameof(Sidebar));
-        SettingsStatus = $"Saved at {AppTimeZone.Now:HH:mm:ss}";
-        CurrentPage = "Chat";
+        CurrentPage = AppPage.Chat;
     }
 
     public Task OpenWorkspaceFileInEditorAsync(string path) =>
@@ -891,14 +813,14 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
             }
             else
             {
-                SettingsStatus = "目标不存在或已被删除。";
+                Settings.SettingsStatus = "目标不存在或已被删除。";
                 Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
                 return;
             }
 
             RefreshAtCompletionSources();
             Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
-            SettingsStatus = $"已删除{kind}「{node.Name}」。";
+            Settings.SettingsStatus = $"已删除{kind}「{node.Name}」。";
         }
         catch (Exception exception)
         {
@@ -907,7 +829,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
                 "删除失败",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
-            SettingsStatus = $"删除失败：{exception.Message}";
+            Settings.SettingsStatus = $"删除失败：{exception.Message}";
         }
     }
 
@@ -920,56 +842,19 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         && WorkspaceSessionBridge.IsPathUnderWorkspace(root, node.FullPath)
         && !WorkspaceSessionBridge.IsWorkspaceRootPath(root, node.FullPath);
 
-    private bool CanSend() =>
-        !string.IsNullOrWhiteSpace(ComposerText) || PendingImageAttachments.Count > 0;
-
-    private void OnQueuedTurnsChanged(string sessionId)
-    {
-        if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
-        {
-            OnPropertyChanged(nameof(QueuedTurns));
-            OnPropertyChanged(nameof(HasQueuedTurns));
-        }
-    }
-
     public void UpdateComposerCompletion(string composerText, int caretIndex) =>
-        UpdateAtCompletion(composerText, caretIndex);
+        ChatPage.UpdateComposerCompletion(composerText, caretIndex);
 
     public void UpdateAtCompletion(string composerText, int caretIndex) =>
-        _composer.UpdateAtCompletion(
-            composerText,
-            caretIndex,
-            _session.ActiveWorkspace,
-            _workspaceContext.IgnorePatterns,
-            AtCompletionItems,
-            open => IsAtCompletionOpen = open,
-            index => SelectedAtCompletionIndex = index,
-            SelectedAtCompletionIndex);
+        ChatPage.UpdateAtCompletion(composerText, caretIndex);
 
     public void MoveAtCompletionSelection(int delta) =>
-        _composer.MoveSelection(
-            delta,
-            IsAtCompletionOpen,
-            AtCompletionItems.Count,
-            SelectedAtCompletionIndex,
-            index => SelectedAtCompletionIndex = index);
+        ChatPage.MoveAtCompletionSelection(delta);
 
     public bool TryAcceptAtCompletion(int caretIndex, out int newCaretIndex) =>
-        _composer.TryAcceptAtCompletion(
-            ComposerText,
-            caretIndex,
-            IsAtCompletionOpen,
-            SelectedAtCompletionIndex,
-            AtCompletionItems,
-            text => ComposerText = text,
-            CloseAtCompletion,
-            out newCaretIndex);
+        ChatPage.TryAcceptAtCompletion(caretIndex, out newCaretIndex);
 
-    public void CloseAtCompletion() =>
-        _composer.CloseAtCompletion(
-            AtCompletionItems,
-            _ => IsAtCompletionOpen = false,
-            index => SelectedAtCompletionIndex = index);
+    public void CloseAtCompletion() => ChatPage.CloseAtCompletion();
 
     private void ApplySessionWorkspace()
     {
@@ -1017,7 +902,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             Application.Current?.Dispatcher.InvokeAsync(() =>
-                SettingsStatus = $"保存对话失败：{ex.Message}");
+                Settings.SettingsStatus = $"保存对话失败：{ex.Message}");
         }
     }
 
@@ -1036,20 +921,20 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public async Task OpenSessionByIdAsync(string sessionId)
     {
-        CurrentPage = "Chat";
+        CurrentPage = AppPage.Chat;
         await LoadSessionInternalAsync(sessionId);
     }
 
     private async Task LoadSessionInternalAsync(string sessionId)
     {
         IsLoadingSession = true;
-        SettingsStatus = "正在加载对话…";
+        Settings.SettingsStatus = "正在加载对话…";
         try
         {
             var snapshot = await _sessionNavigation.LoadSnapshotAsync(sessionId);
             if (snapshot is null)
             {
-                SettingsStatus = "无法加载该对话。";
+                Settings.SettingsStatus = "无法加载该对话。";
                 return;
             }
 
@@ -1074,7 +959,7 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
 
             ApplySessionWorkspace();
             UpdateDisplayedBusyState();
-            SettingsStatus = $"已加载对话：{_session.Title}";
+            Settings.SettingsStatus = $"已加载对话：{_session.Title}";
 
         }
         finally
@@ -1129,7 +1014,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _sessionTurns.TurnHost.TurnStateChanged -= OnTurnStateChanged;
         KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
-        PendingImageAttachments.CollectionChanged -= OnPendingImagesChanged;
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();
         _layout.Dispose();
@@ -1137,13 +1021,10 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
         _workspaceBridge.Dispose();
     }
 
-    partial void OnCurrentPageChanged(string value)
+    partial void OnCurrentPageChanged(AppPage value)
     {
-        OnPropertyChanged(nameof(IsChatPage));
-        OnPropertyChanged(nameof(IsSettingsPage));
-        OnPropertyChanged(nameof(IsSchedulePage));
-        OnPropertyChanged(nameof(IsKnowledgePage));
-        _navigation.HandlePageChanged(value, Settings, SchedulePageVm, KnowledgePageVm);
+        CurrentPageView = _pageViewFactory.GetOrCreate(value);
+        _navigation.HandlePageChanged(value.ToPageKey(), Settings, SchedulePageVm, KnowledgePageVm);
     }
 
     private void OnSkillConfigurationChanged()
@@ -1157,12 +1038,6 @@ public partial class MainWindowViewModel : ObservableObject, IDisposable
     partial void OnIsBusyChanged(bool value)
     {
         ClearContextCommand.NotifyCanExecuteChanged();
-        SendCommand.NotifyCanExecuteChanged();
-    }
-
-    partial void OnComposerTextChanged(string value)
-    {
-        OnPropertyChanged(nameof(IsComposerEmpty));
         SendCommand.NotifyCanExecuteChanged();
     }
 

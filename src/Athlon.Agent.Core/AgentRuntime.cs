@@ -82,7 +82,7 @@ public sealed class AgentRuntime(
         using var workspaceScope = SessionWorkspaceScope.Enter(runContext.WorkspaceRoot, runContext.WorkspaceIgnorePatterns);
         using var skillActivationScope = SessionSkillActivationScope.EnterNewTurn();
         using var sessionScope = activeSessionContext.Enter(session.Id);
-        return await SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, runContext, cancellationToken);
+        return await SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, runContext, cancellationToken).ConfigureAwait(false);
     }
 
     private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session)
@@ -120,7 +120,7 @@ public sealed class AgentRuntime(
                 session.Messages.LastOrDefault()?.Id,
                 imageAttachments: imageAttachments);
             session = session.WithMessage(userMessage);
-            await PersistMessageAsync(session, userMessage, cancellationToken);
+            await PersistMessageAsync(session, userMessage, cancellationToken).ConfigureAwait(false);
 
             var activeRouter = ResolveToolRouter();
             var activePrompt = ResolveSystemPromptOrchestrator();
@@ -145,7 +145,7 @@ public sealed class AgentRuntime(
                 EnvironmentPrompt = environmentPrompt,
                 ModelMessageCache = modelMessageCache
             };
-            await turnPipeline.OnTurnStartingAsync(turnInvocation, cancellationToken);
+            await turnPipeline.OnTurnStartingAsync(turnInvocation, cancellationToken).ConfigureAwait(false);
             session = turnInvocation.Session;
             if (callbacks?.EventSink is not null)
             {
@@ -153,7 +153,7 @@ public sealed class AgentRuntime(
                     new AgentRunLifecycleEvent.TurnStarted(runContext),
                     cancellationToken).ConfigureAwait(false);
             }
-            await PublishStreamEventsAsync(callbacks, streamAdapter.CreateRunStarted());
+            await PublishStreamEventsAsync(callbacks, streamAdapter.CreateRunStarted()).ConfigureAwait(false);
 
             if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
             {
@@ -162,14 +162,14 @@ public sealed class AgentRuntime(
                     turnInvocation,
                     userMessage.Id,
                     toolCall,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
             }
 
             while (true)
             {
                 turnInvocation.Session = session;
                 turnInvocation.EnvironmentPrompt = environmentPrompt;
-                await turnPipeline.OnBeforeModelRoundAsync(turnInvocation, cancellationToken);
+                await turnPipeline.OnBeforeModelRoundAsync(turnInvocation, cancellationToken).ConfigureAwait(false);
                 session = turnInvocation.Session;
                 environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
                 turnInvocation.EnvironmentPrompt = environmentPrompt;
@@ -191,7 +191,7 @@ public sealed class AgentRuntime(
                     environmentPrompt,
                     modelMessageCache,
                     hygieneResult.EstimatedSavingsTokens,
-                    cancellationToken);
+                    cancellationToken).ConfigureAwait(false);
                 session = updatedSession;
 
                 if (response.ToolCalls.Count == 0)
@@ -201,7 +201,7 @@ public sealed class AgentRuntime(
                     {
                         await PublishStreamEventsAsync(
                             callbacks,
-                            streamAdapter.OnTextDelta(assistantMessageId, response.Content));
+                            streamAdapter.OnTextDelta(assistantMessageId, response.Content)).ConfigureAwait(false);
                     }
 
                     if (!streamAdapter.State.HasStartedReasoningMessage(assistantMessageId)
@@ -209,7 +209,7 @@ public sealed class AgentRuntime(
                     {
                         await PublishStreamEventsAsync(
                             callbacks,
-                            streamAdapter.OnReasoningDelta(assistantMessageId, response.ReasoningContent!));
+                            streamAdapter.OnReasoningDelta(assistantMessageId, response.ReasoningContent!)).ConfigureAwait(false);
                     }
 
                     var assistant = ChatMessage.CreateWithId(
@@ -219,13 +219,13 @@ public sealed class AgentRuntime(
                         userMessage.Id,
                         reasoningContent: response.ReasoningContent);
                     session = session.WithMessage(assistant);
-                    await PersistMessageAsync(session, assistant, cancellationToken);
-                    await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
+                    await PersistMessageAsync(session, assistant, cancellationToken).ConfigureAwait(false);
+                    await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun()).ConfigureAwait(false);
                     _logger.Information("Saved session {SessionId} with {MessageCount} messages", session.Id, session.Messages.Count);
                     turnInvocation.Session = session;
-                    await turnPipeline.OnTurnCompletedAsync(turnInvocation, cancellationToken);
-                    await PublishTurnFinishedAsync(callbacks, runContext, session, TurnOutcomeKind.Completed, cancellationToken);
-                    await RecordTrainingDataAsync(session, cancellationToken);
+                    await turnPipeline.OnTurnCompletedAsync(turnInvocation, cancellationToken).ConfigureAwait(false);
+                    await PublishTurnFinishedAsync(callbacks, runContext, session, TurnOutcomeKind.Completed, cancellationToken).ConfigureAwait(false);
+                    await RecordTrainingDataAsync(session, cancellationToken).ConfigureAwait(false);
                     return session;
                 }
 
@@ -237,8 +237,8 @@ public sealed class AgentRuntime(
                     response.ToolCalls,
                     response.ReasoningContent);
                 session = session.WithMessage(assistantWithToolCalls);
-                await PersistMessageAsync(session, assistantWithToolCalls, cancellationToken);
-                await PublishStreamEventsAsync(callbacks, streamAdapter.OnAssistantRoundCompleted(assistantWithToolCalls));
+                await PersistMessageAsync(session, assistantWithToolCalls, cancellationToken).ConfigureAwait(false);
+                await PublishStreamEventsAsync(callbacks, streamAdapter.OnAssistantRoundCompleted(assistantWithToolCalls)).ConfigureAwait(false);
 
                 modelToolRound++;
                 turnInvocation.State.ModelToolRound = modelToolRound;
@@ -248,15 +248,15 @@ public sealed class AgentRuntime(
                         "Max model tool rounds ({MaxRounds}) reached for session {SessionId}; stopping without executing pending tools",
                         maxModelToolRounds,
                         session.Id);
-                    await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
+                    await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun()).ConfigureAwait(false);
                     turnInvocation.Session = session;
-                    await turnPipeline.OnTurnCompletedAsync(turnInvocation, cancellationToken);
+                    await turnPipeline.OnTurnCompletedAsync(turnInvocation, cancellationToken).ConfigureAwait(false);
                     await PublishTurnFinishedAsync(
                         callbacks,
                         runContext,
                         session,
                         TurnOutcomeKind.MaxToolRoundsReached,
-                        cancellationToken);
+                        cancellationToken).ConfigureAwait(false);
                     return session;
                 }
 
@@ -289,7 +289,7 @@ public sealed class AgentRuntime(
             using var saveCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             try
             {
-                await storage.SaveSessionAsync(session, saveCts.Token);
+                await storage.SaveSessionAsync(session, saveCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -347,8 +347,8 @@ public sealed class AgentRuntime(
             var content = FormatToolResult(toolCall, suppressed);
             var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
             session = session.WithMessage(toolMessage);
-            await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall));
-            await PersistMessageAsync(session, toolMessage, cancellationToken);
+            await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall)).ConfigureAwait(false);
+            await PersistMessageAsync(session, toolMessage, cancellationToken).ConfigureAwait(false);
             invocation.Session = session;
             await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
             return session;
@@ -361,7 +361,7 @@ public sealed class AgentRuntime(
             streamAdapter,
             callbacks,
             PersistMessageAsync,
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
         invocation.Session = session;
         await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
         return session;
@@ -470,7 +470,7 @@ public sealed class AgentRuntime(
 
     private async Task PersistMessageAsync(AgentSession session, ChatMessage message, CancellationToken cancellationToken)
     {
-        await storage.AppendConversationMessageAsync(session.Id, message, cancellationToken);
+        await storage.AppendConversationMessageAsync(session.Id, message, cancellationToken).ConfigureAwait(false);
     }
 
     internal static async Task PublishStreamEventsAsync(
@@ -559,7 +559,7 @@ public sealed class AgentRuntime(
 
         try
         {
-            await collector.RecordTurnAsync(session, cancellationToken);
+            await collector.RecordTurnAsync(session, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

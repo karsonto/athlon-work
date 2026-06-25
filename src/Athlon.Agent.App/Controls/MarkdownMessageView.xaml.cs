@@ -374,7 +374,7 @@ public partial class MarkdownMessageView : UserControl
             if (!string.IsNullOrEmpty(Markdown))
             {
                 Clipboard.SetText(Markdown);
-                if (Application.Current.MainWindow?.DataContext is ViewModels.MainWindowViewModel vm)
+                if (Application.Current.MainWindow?.DataContext is ViewModels.MainShellViewModel vm)
                 {
                     vm.ShowCopyNotice("内容已复制到剪贴板");
                 }
@@ -397,7 +397,7 @@ public partial class MarkdownMessageView : UserControl
             }
 
             Clipboard.SetText(cardState.Text);
-            if (Application.Current.MainWindow?.DataContext is ViewModels.MainWindowViewModel vm)
+            if (Application.Current.MainWindow?.DataContext is ViewModels.MainShellViewModel vm)
             {
                 vm.ShowCopyNotice("已复制");
             }

@@ -70,6 +70,7 @@ public partial class App : Application
             services.AddAthlonViewModels();
             _services = services.BuildServiceProvider();
             StartupTrace("ServiceProvider built");
+            _services.GetRequiredService<SubAgentCompletionContinuationService>();
 
             if (startupSettings.SubAgent.Enabled)
             {

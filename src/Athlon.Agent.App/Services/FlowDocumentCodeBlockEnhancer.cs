@@ -454,7 +454,7 @@ public static class FlowDocumentCodeBlockEnhancer
             if (!string.IsNullOrEmpty(codeText))
             {
                 Clipboard.SetText(codeText);
-                if (Application.Current?.MainWindow?.DataContext is ViewModels.MainWindowViewModel vm)
+                if (Application.Current?.MainWindow?.DataContext is ViewModels.MainShellViewModel vm)
                 {
                     vm.ShowCopyNotice("已复制");
                 }

@@ -39,7 +39,7 @@ public sealed class TreeViewItemDoubleClickBehavior : Behavior<TreeView>
             return;
         }
 
-        var viewModel = Window.GetWindow(AssociatedObject)?.DataContext as MainWindowViewModel;
+        var viewModel = Window.GetWindow(AssociatedObject)?.DataContext as MainShellViewModel;
         if (viewModel?.OpenWorkspaceTreeNodeInEditorCommand.CanExecute(node) == true)
         {
             viewModel.OpenWorkspaceTreeNodeInEditorCommand.Execute(node);

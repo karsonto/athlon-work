@@ -1,6 +1,469 @@
-<UserControl x:Class="Athlon.Agent.App.Views.SettingsPageView"
+﻿<UserControl x:Class="Athlon.Agent.App.Views.SettingsPageView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Settings page markup remains in MainWindow.xaml during incremental migration. -->
-    <Grid />
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:behaviors="clr-namespace:Athlon.Agent.App.Behaviors"
+             xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
+             DataContext="{Binding Settings, RelativeSource={RelativeSource AncestorType=Window}}">
+    <ScrollViewer Padding="40,32" VerticalScrollBarVisibility="Auto" Background="{DynamicResource Brush.ChatBackground}">
+                <StackPanel MaxWidth="760">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="Chat"
+                                Style="{StaticResource GhostIconButtonStyle}"
+                                Margin="0,0,8,0"
+                                ToolTip="返回对话"
+                                Content="←" />
+                        <TextBlock Text="设置" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Text="配置模型、MCP、技能、工作区、上下文压缩与工具权限。"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               Margin="0,0,0,24" />
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Model" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
+                            <TextBlock Text="Provider" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding Settings.Model.Provider, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
+                            <TextBlock Text="Endpoint" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding Settings.Model.Endpoint, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
+                            <TextBlock Text="Model Name" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding Settings.Model.ModelName, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
+                            <TextBlock Text="Max Tokens" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding ModelMaxTokensText, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,6,0,6" />
+                            <TextBlock Text="单次回复最大输出 token（留空则使用 API 默认值）。仅影响对话补全，不影响上下文摘要。"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       Margin="0,0,0,12" />
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="启用流式输出（SSE）" VerticalAlignment="Center" />
+                                <CheckBox Grid.Column="1"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          IsChecked="{Binding Settings.Model.EnableStreaming, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Text="API Key" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <PasswordBox x:Name="ApiKeyPasswordBox"
+                                         behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,6,0,6" />
+                            <TextBlock Text="API Key 使用 Windows DPAPI 加密保存在用户目录。"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="界面"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,14" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="显示工具调用"
+                                           VerticalAlignment="Center"
+                                           ToolTip="关闭后聊天中不显示 file_read、execute_command 等工具卡片；上下文压缩通知仍会显示。" />
+                                <CheckBox Grid.Column="1"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          IsChecked="{Binding Settings.Ui.ShowToolCalls, UpdateSourceTrigger=PropertyChanged}"
+                                          ToolTip="关闭后聊天中不显示 file_read、execute_command 等工具卡片；上下文压缩通知仍会显示。"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                            <TextBlock Text="长期记忆与任务列表请在聊天输入区通过 Harness 开关按会话启用。"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,10,0,0" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,14">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                                        <ContentControl Style="{StaticResource KnowledgeNavIconStyle}"
+                                                        Width="22"
+                                                        Height="22"
+                                                        Margin="0,0,10,0"
+                                                        VerticalAlignment="Center" />
+                                        <TextBlock Text="知识库 Embedding"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <TextBlock Text="配置向量检索所需的基础设施。在聊天输入区为每个会话单独开启知识库并选择知识空间。"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               TextWrapping="Wrap"
+                                               FontSize="12"
+                                               Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="Embedding Endpoint" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding Settings.Knowledge.Embedding.Endpoint, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,6,0,10" />
+                            <TextBlock Text="Embedding Model" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding Settings.Knowledge.Embedding.Model, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,6,0,10" />
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="向量维度" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding KnowledgeEmbeddingDimensionText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Batch Size" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding KnowledgeEmbeddingBatchSizeText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="切片目标字符" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBlock Text="按固定字符数硬切，与段落无关"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               FontSize="11"
+                                               Margin="0,2,0,0" />
+                                    <TextBox Text="{Binding KnowledgeChunkTargetCharsText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="切片重叠字符" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBlock Text="相邻切片重叠的字符数"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               FontSize="11"
+                                               Margin="0,2,0,0" />
+                                    <TextBox Text="{Binding KnowledgeChunkOverlapCharsText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="TopK" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding KnowledgeSearchTopKText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Min Score" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding KnowledgeSearchMinScoreText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="Embedding API Key" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <PasswordBox x:Name="KnowledgeEmbeddingApiKeyPasswordBox"
+                                         behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding KnowledgeEmbeddingApiKey, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,6,0,6" />
+                            <TextBlock Text="{Binding HasStoredKnowledgeEmbeddingApiKey, StringFormat=已保存知识库 Embedding API Key：{0}}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       FontSize="12" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="上下文与 Token ROI" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="主动压缩（会话持久化层）" VerticalAlignment="Center" />
+                                <CheckBox Grid.Column="1"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          IsChecked="{Binding Settings.ContextCompaction.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                          ToolTip="启用 truncate / compact 等会话级压缩"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="动态压缩（预算利用率）" VerticalAlignment="Center" />
+                                <CheckBox Grid.Column="1"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          IsChecked="{Binding Settings.ContextCompaction.DynamicCompaction.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                          ToolTip="启用动态三级压缩策略"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="发送边界卫生（每轮 API 前）" VerticalAlignment="Center" />
+                                <CheckBox Grid.Column="1"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          IsChecked="{Binding Settings.ContextCompaction.RequestHistoryHygiene.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Tool storm 抑制" VerticalAlignment="Center" />
+                                <CheckBox Grid.Column="1"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          IsChecked="{Binding Settings.ContextCompaction.ToolStorm.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Storm 阈值" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding Settings.ContextCompaction.ToolStorm.Threshold, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="MCP Search Mode" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <CheckBox Content="启用 MCP 按需工具发现（search 模式）"
+                                      IsChecked="{Binding Settings.McpSearch.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="0,0,0,8" />
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="模式 (direct/search/auto)" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding Settings.McpSearch.Mode, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Auto 阈值 (工具数)" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding Settings.McpSearch.AutoThresholdToolCount, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                            <Grid Margin="0,8,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="Auto 阈值 (schema 字符)" VerticalAlignment="Center" />
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding Settings.McpSearch.AutoThresholdSchemaChars, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Installed MCP Servers" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="{Binding McpConfigPath, StringFormat=MCP 服务从 {0} 读取；此页面仅控制每个服务是否启用。新增、删除和命令参数请直接修改 JSON 配置。}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,0,0,14" />
+                            <ItemsControl ItemsSource="{Binding McpServers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{DynamicResource Brush.Panel}"
+                                                BorderBrush="{DynamicResource Brush.Border}"
+                                                BorderThickness="0,0,0,1"
+                                                Padding="8,10"
+                                                Margin="0,0,0,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="44" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <Grid Grid.Column="0" Width="40" Height="40" VerticalAlignment="Center">
+                                                    <Border Width="36" Height="36" CornerRadius="10" Background="{DynamicResource Brush.PanelAlt}">
+                                                        <TextBlock Text="{Binding DisplayInitial}"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"
+                                                                   FontWeight="SemiBold"
+                                                                   FontSize="15" />
+                                                    </Border>
+                                                    <Ellipse Width="10" Height="10"
+                                                             HorizontalAlignment="Right"
+                                                             VerticalAlignment="Bottom"
+                                                             Margin="0,0,-2,-2"
+                                                             Stroke="{DynamicResource Brush.Border}"
+                                                             StrokeThickness="2">
+                                                        <Ellipse.Style>
+                                                            <Style TargetType="Ellipse">
+                                                                <Setter Property="Fill" Value="{DynamicResource Brush.DisabledText}" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsStatusHealthy}" Value="True">
+                                                                        <Setter Property="Fill" Value="{DynamicResource Brush.Success}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                                                                        <Setter Property="Fill" Value="{DynamicResource Brush.Danger}" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding ShowStatusDot}" Value="False">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Ellipse.Style>
+                                                    </Ellipse>
+                                                </Grid>
+
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,8,0">
+                                                    <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding ToolSummary}"
+                                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                                               FontSize="12"
+                                                               Margin="0,4,0,0" />
+                                                </StackPanel>
+
+                                                <CheckBox Grid.Column="2"
+                                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                                          IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                                          VerticalAlignment="Center"
+                                                          Margin="12,0,0,0" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="Installed Skills" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="{Binding SkillsSettingsDescription}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,0,0,14" />
+                            <ItemsControl ItemsSource="{Binding Skills}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:SkillItemViewModel}">
+                                        <Border Background="{DynamicResource Brush.Panel}"
+                                                BorderBrush="{DynamicResource Brush.Border}"
+                                                BorderThickness="0,0,0,1"
+                                                Padding="8,10"
+                                                Margin="0,0,0,8">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsInstalled}" Value="False">
+                                                            <Setter Property="Opacity" Value="0.55" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="44" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0"
+                                                        Width="36"
+                                                        Height="36"
+                                                        CornerRadius="10"
+                                                        Background="{DynamicResource Brush.PanelAlt}"
+                                                        VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DisplayInitial}"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"
+                                                               FontWeight="SemiBold"
+                                                               FontSize="15" />
+                                                </Border>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,8,0">
+                                                    <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" />
+                                                    <TextBlock Text="{Binding Description}"
+                                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                                               FontSize="12"
+                                                               Margin="0,4,0,0"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding StatusText}"
+                                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                                               FontSize="11"
+                                                               Margin="0,2,0,0">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsInstalled}" Value="False">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                                <CheckBox Grid.Column="2"
+                                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                                          IsChecked="{Binding Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                                          VerticalAlignment="Center"
+                                                          Margin="12,0,0,0" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="训练数据采集"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="自动从修正轨迹、溢出恢复轨迹、工具选型 DPO 中提取训练数据，写入 ~/.athlon-agent/training-data/。仅当 agent 调用工具失败→用户修正→重试成功、或超时→继续→完成时产出样本，不影响正常使用。"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"
+                                           Margin="0,6,0,0" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1"
+                                      Style="{StaticResource McpToggleSwitchStyle}"
+                                      IsChecked="{Binding Settings.TrainingData.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                      ToolTip="启用训练数据采集"
+                                      VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,24">
+                        <TextBlock Text="{Binding SettingsStatus}" Foreground="{DynamicResource Brush.SubtleText}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                        <Button Content="保存设置" Command="{Binding SaveSettingsCommand}" Style="{StaticResource GhostButtonStyle}" />
+                    </StackPanel>
+                </StackPanel>
+    </ScrollViewer>
 </UserControl>

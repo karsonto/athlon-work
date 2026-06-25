@@ -78,7 +78,7 @@ internal sealed class ToolInvocationPipeline(
 
         var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
         session = session.WithMessage(toolMessage);
-        await AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall));
+        await AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall)).ConfigureAwait(false);
         await persistMessageAsync(session, toolMessage, cancellationToken).ConfigureAwait(false);
         return session;
     }

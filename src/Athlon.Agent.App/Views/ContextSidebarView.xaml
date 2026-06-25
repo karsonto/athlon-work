@@ -1,6 +1,247 @@
-<UserControl x:Class="Athlon.Agent.App.Views.ContextSidebarView"
+﻿<UserControl x:Class="Athlon.Agent.App.Views.ContextSidebarView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <!-- Context sidebar markup remains in MainWindow.xaml during incremental migration. -->
-    <Grid />
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:app="clr-namespace:Athlon.Agent.App"
+             xmlns:behaviors="clr-namespace:Athlon.Agent.App.Behaviors"
+             xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderRowHeight}" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}">
+                    <Grid>
+                        <TextBlock Text="上下文"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.TextSecondary}"
+                                   VerticalAlignment="Center" />
+                        <Button Command="{Binding ClearContextCommand}"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                ToolTip="清空当前对话在模型中的可见历史"
+                                Style="{StaticResource IconButtonStyle}">
+                            <TextBlock Text="🗑" FontSize="14" />
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <UniformGrid Grid.Row="1" Columns="2" Background="{DynamicResource Brush.Chrome}">
+                    <RadioButton x:Name="ContextTabFiles"
+                                 GroupName="ContextTabs"
+                                 Content="文件"
+                                 IsChecked="True"
+                                 Style="{StaticResource ContextTabButtonStyle}" />
+                    <RadioButton x:Name="ContextTabSkills"
+                                 GroupName="ContextTabs"
+                                 Content="技能"
+                                 Style="{StaticResource ContextTabButtonStyle}" />
+                </UniformGrid>
+
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16">
+                    <ScrollViewer.Style>
+                        <Style TargetType="ScrollViewer">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked, ElementName=ContextTabFiles}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ScrollViewer.Style>
+                    <!-- Files tab -->
+                    <StackPanel>
+                        <Border Background="{DynamicResource Brush.PanelAlt}"
+                                BorderBrush="{DynamicResource Brush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="10,8"
+                                Margin="0,0,0,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="工作区"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               FontSize="11"
+                                               Margin="0,0,0,2" />
+                                    <TextBlock Text="{Binding ActiveWorkspaceName}"
+                                               FontWeight="SemiBold"
+                                               FontSize="13"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        Content="配置"
+                                        Command="{Binding ConfigureWorkspaceCommand}"
+                                        Style="{StaticResource GhostButtonStyle}"
+                                        Padding="8,4"
+                                        FontSize="12"
+                                        MinHeight="28"
+                                        VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+                        <Border Background="{DynamicResource Brush.Panel}"
+                                BorderBrush="{DynamicResource Brush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="8">
+                            <TreeView ItemsSource="{Binding Sidebar.WorkspaceTree}"
+                                      Background="Transparent"
+                                      BorderThickness="0"
+                                      FontSize="13"
+                                      Foreground="{DynamicResource Brush.Text}"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <i:Interaction.Behaviors>
+                                    <behaviors:TreeViewItemDoubleClickBehavior />
+                                </i:Interaction.Behaviors>
+                                <TreeView.ItemContainerStyle>
+                                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource WorkspaceTreeViewItemStyle}">
+                                        <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                        <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TreeView}}" />
+                                        <EventSetter Event="Expanded" Handler="WorkspaceTreeItem_OnExpanded" />
+                                        <Setter Property="ContextMenu">
+                                            <Setter.Value>
+                                                <ContextMenu Style="{StaticResource MarkdownContextMenuStyle}">
+                                                    <MenuItem Header="在编辑器中打开"
+                                                              Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                                              Command="{Binding PlacementTarget.Tag.OpenWorkspaceTreeNodeInEditorCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                    <MenuItem Header="{Binding PlacementTarget.DataContext.OpenInExplorerMenuHeader, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                                              Command="{Binding PlacementTarget.Tag.OpenWorkspaceTreeNodeInExplorerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                    <MenuItem Header="删除"
+                                                              Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                                              Command="{Binding PlacementTarget.Tag.DeleteWorkspaceItemCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                </ContextMenu>
+                                            </Setter.Value>
+                                        </Setter>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsExpanderPlaceholder}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Setter Property="Height" Value="0" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TreeView.ItemContainerStyle>
+                                <TreeView.ItemTemplate>
+                                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                        <StackPanel Orientation="Horizontal">
+                                            <controls:WorkspaceFileIcon Kind="{Binding IconKind}" Margin="0,0,6,0" />
+                                            <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </HierarchicalDataTemplate>
+                                </TreeView.ItemTemplate>
+                            </TreeView>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Padding="16">
+                    <ScrollViewer.Style>
+                        <Style TargetType="ScrollViewer">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsChecked, ElementName=ContextTabSkills}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ScrollViewer.Style>
+                    <!-- Skills + MCP tab -->
+                    <StackPanel>
+                        <TextBlock Text="技能" Foreground="{DynamicResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <Border Background="{DynamicResource Brush.Panel}"
+                                BorderBrush="{DynamicResource Brush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="10"
+                                Margin="0,0,0,16">
+                            <ItemsControl ItemsSource="{Binding Sidebar.Skills}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}"
+                                                   Margin="0,4"
+                                                   FontSize="13"
+                                                   TextWrapping="Wrap"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource Brush.Text}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+                        <TextBlock Text="MCP 服务器" Foreground="{DynamicResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <Border Background="{DynamicResource Brush.Panel}"
+                                BorderBrush="{DynamicResource Brush.Border}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="10">
+                            <ItemsControl ItemsSource="{Binding Sidebar.McpServers}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,3">
+                                            <Button Command="{Binding ToggleExpandedCommand}"
+                                                    Style="{StaticResource McpSidebarItemButtonStyle}">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                             Style="{StaticResource McpStatusIndicatorStyle}" />
+                                                    <StackPanel Grid.Column="1">
+                                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
+                                                                   TextTrimming="CharacterEllipsis" Style="{StaticResource McpStatusNameStyle}" />
+                                                        <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Brush.SubtleText}"
+                                                                   FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0" />
+                                                    </StackPanel>
+                                                    <TextBlock Grid.Column="2" Text="{Binding Chevron}"
+                                                               Foreground="{DynamicResource Brush.SubtleText}" FontSize="11"
+                                                               VerticalAlignment="Center" Margin="8,0,0,0">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding HasTools}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </Grid>
+                                            </Button>
+                                            <ItemsControl ItemsSource="{Binding ToolNames}" Margin="22,2,0,4">
+                                                <ItemsControl.Style>
+                                                    <Style TargetType="ItemsControl">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsExpanded}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ItemsControl.Style>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding}" Foreground="{DynamicResource Brush.SubtleText}"
+                                                                   FontSize="11" Margin="0,1" TextTrimming="CharacterEllipsis" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
 </UserControl>

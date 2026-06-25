@@ -289,6 +289,11 @@ public sealed class SubAgentSessionManager(
         return completionStore.DrainAsync(parentSessionId, take, cancellationToken);
     }
 
+    public Task<int> PeekPendingCompletionsCountAsync(
+        string parentSessionId,
+        CancellationToken cancellationToken = default) =>
+        completionStore.PeekCountAsync(parentSessionId, cancellationToken);
+
     public Task<SubAgentTaskRecord?> GetTaskOutputAsync(
         string parentSessionId,
         string taskId,

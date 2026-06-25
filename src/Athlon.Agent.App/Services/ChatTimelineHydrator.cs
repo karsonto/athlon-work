@@ -1,6 +1,7 @@
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.App.Services;
 
@@ -119,5 +120,6 @@ internal static class ChatTimelineHydrator
 
     public static bool ShouldHideMessageFromChat(ChatMessage message) =>
         message.Role == MessageRole.User && SummaryMessageBuilder.IsSummaryMessage(message)
+        || message.Role == MessageRole.User && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
         || ChatMessageViewModel.IsAssistantToolCallsOnly(message);
 }

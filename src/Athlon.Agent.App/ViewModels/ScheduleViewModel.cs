@@ -20,12 +20,12 @@ public sealed partial class ScheduleViewModel : ObservableObject
         AppSettings settings,
         IFileStorageService storage,
         SchedulerService scheduler,
-        Func<string, Task>? openSession = null)
+        Lazy<ISessionHost> sessionHost)
     {
         _settings = settings;
         _storage = storage;
         _scheduler = scheduler;
-        _openSession = openSession;
+        _openSession = id => sessionHost.Value.OpenSessionByIdAsync(id);
         _scheduler.TaskStatusChanged += OnTaskStatusChanged;
         SyncFromSettings();
         UpdateSchedulerState();

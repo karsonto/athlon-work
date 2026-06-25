@@ -204,6 +204,7 @@ public sealed class SubAgentSessionsTests
                 registry,
                 taskStore,
                 completionStore,
+                new ServiceCollection().BuildServiceProvider(),
                 new SessionsNoOpAppLogger());
             var manager = new SubAgentSessionManager(
                 settings,

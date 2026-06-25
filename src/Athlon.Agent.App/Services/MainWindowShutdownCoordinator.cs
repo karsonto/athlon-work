@@ -6,7 +6,7 @@ namespace Athlon.Agent.App.Services;
 
 public sealed class MainWindowShutdownCoordinator
 {
-    public async Task<bool> TryCloseAsync(Window window, MainWindowViewModel viewModel, CancelEventArgs e)
+    public async Task<bool> TryCloseAsync(Window window, MainShellViewModel viewModel, CancelEventArgs e)
     {
         if (!await viewModel.ConfirmCloseEditorTabsAsync().ConfigureAwait(true))
         {
