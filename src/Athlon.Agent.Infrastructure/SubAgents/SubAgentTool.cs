@@ -110,7 +110,7 @@ public sealed class SubAgentTool(
         try
         {
             var orchestrator = serviceProvider.GetRequiredService<IAgentOrchestrator>();
-            session = await orchestrator.SendAsync(session, message.Trim(), null, null, null, cancellationToken);
+            session = await orchestrator.SendAsync(session, message.Trim(), null, null, cancellationToken);
             bundle = bundle with { Session = session };
             await sessionStore.SaveAsync(parentSessionId, subSessionId, bundle, cancellationToken);
 
