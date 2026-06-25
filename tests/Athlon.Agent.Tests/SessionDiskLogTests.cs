@@ -133,7 +133,7 @@ public sealed class SessionDiskLogTests
 
         try
         {
-            await runtime.SendAsync(session, "取消前也要保存", null, null, CancellationToken.None);
+            await runtime.SendAsync(session, "取消前也要保存", null, null, null, CancellationToken.None);
         }
         catch (OperationCanceledException)
         {

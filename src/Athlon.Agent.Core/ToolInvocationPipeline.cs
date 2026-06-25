@@ -25,8 +25,6 @@ internal sealed class ToolInvocationPipeline(
         ToolResult result;
         try
         {
-            // Set up ambient output stream so tools (e.g. ExecuteCommandTool) can push
-            // incremental stdout/stderr to the UI while still running.
             using var outputStream = new AmbientToolOutputStream(callbacks, toolCall.Id);
             result = await Task.Run(
                     () => resolveToolRouter().InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken),
@@ -44,21 +42,28 @@ internal sealed class ToolInvocationPipeline(
         }
 
         sw.Stop();
-
-        await storage.AppendToolCallLogAsync(
-            session.Id,
-            new SessionToolCallLogEntry(
-                DateTimeOffset.UtcNow,
-                toolCall.Id,
-                toolCall.Name,
-                toolCall.Arguments,
-                result.Succeeded,
-                result.Summary,
-                result.Content,
-                result.Error,
-                sw.ElapsedMilliseconds),
+        await AppendAuditLogAsync(session.Id, toolCall, result, sw.ElapsedMilliseconds, cancellationToken);
+        return await PersistResultAsync(
+            session,
+            parentMessageId,
+            toolCall,
+            result,
+            streamAdapter,
+            callbacks,
+            persistMessageAsync,
             cancellationToken);
+    }
 
+    public async Task<AgentSession> PersistResultAsync(
+        AgentSession session,
+        string? parentMessageId,
+        AgentToolCall toolCall,
+        ToolResult result,
+        AgentStreamAdapter streamAdapter,
+        AgentTurnCallbacks? callbacks,
+        Func<AgentSession, ChatMessage, CancellationToken, Task> persistMessageAsync,
+        CancellationToken cancellationToken)
+    {
         var content = ModelMessageBuilder.FormatToolResult(toolCall, result);
         content = await toolResultEvictor.EvictIfNeededAsync(
             session.Id,
@@ -73,4 +78,24 @@ internal sealed class ToolInvocationPipeline(
         await persistMessageAsync(session, toolMessage, cancellationToken);
         return session;
     }
+
+    private Task AppendAuditLogAsync(
+        string sessionId,
+        AgentToolCall toolCall,
+        ToolResult result,
+        long elapsedMs,
+        CancellationToken cancellationToken) =>
+        storage.AppendToolCallLogAsync(
+            sessionId,
+            new SessionToolCallLogEntry(
+                DateTimeOffset.UtcNow,
+                toolCall.Id,
+                toolCall.Name,
+                toolCall.Arguments,
+                result.Succeeded,
+                result.Summary,
+                result.Content,
+                result.Error,
+                elapsedMs),
+            cancellationToken);
 }

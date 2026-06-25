@@ -9,4 +9,5 @@ public sealed class SubAgentSettings
         + "Child has same file tools, skills, MCP, and compaction as parent; cannot spawn nested agents.";
     public int MaxToolRounds { get; set; } = 16;
     public int MaxNestingDepth { get; set; } = 2;
+    public int MaxHandoffChars { get; set; } = 4000;
 }

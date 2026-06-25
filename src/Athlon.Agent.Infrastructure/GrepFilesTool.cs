@@ -28,14 +28,29 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
         var useRegex = invocation.Arguments.TryGetValue("regex", out var regexValue)
             && bool.TryParse(regexValue, out var parsedRegex)
             && parsedRegex;
+
+        var glob = invocation.Arguments.GetValueOrDefault("glob") ?? "*";
+        var ignorePatterns = guard.GetIgnorePatterns();
+        var baseRoot = guard.Normalize(".");
+        var rgResult = await RipgrepRunner.TrySearchAsync(
+            pattern,
+            fullPath,
+            baseRoot,
+            glob,
+            useRegex,
+            ignorePatterns,
+            cancellationToken);
+        if (rgResult is not null)
+        {
+            await WorkspaceToolHelper.AuditAsync(audit, "grep_files", new { path = fullPath, pattern, regex = useRegex, engine = "rg" }, cancellationToken);
+            return rgResult;
+        }
+
         if (!GrepLineMatcher.TryCreate(pattern, useRegex, out var matcher, out var regexError))
         {
             return ToolResult.Failure("Invalid regex", regexError ?? "Invalid pattern.");
         }
 
-        var glob = invocation.Arguments.GetValueOrDefault("glob") ?? "*";
-        var ignorePatterns = guard.GetIgnorePatterns();
-        var baseRoot = guard.Normalize(".");
         var files = File.Exists(fullPath)
             ? new[] { fullPath }
             : Directory.Exists(fullPath)

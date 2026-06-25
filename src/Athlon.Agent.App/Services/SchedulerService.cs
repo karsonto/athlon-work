@@ -129,6 +129,14 @@ public sealed class SchedulerService : IDisposable
                 return;
             }
 
+            if (_settings.Schedule.RequireToolApproval)
+            {
+                task.LastStatus = "error";
+                task.LastMessage = "定时任务已启用工具审批，但无人值守无法确认";
+                NotifyStatus(task, "error", task.LastMessage);
+                return;
+            }
+
             var session = AgentSession.Create($"定时任务: {task.Title}")
                 .WithWorkspace(workspaceRoot);
 
@@ -139,6 +147,7 @@ public sealed class SchedulerService : IDisposable
                 {
                     OnSessionUpdated = _ => Task.CompletedTask
                 },
+                options: new AgentSendOptions { RequireToolApproval = false },
                 cancellationToken: cts.Token);
 
             await _storage.SaveSessionAsync(result);

@@ -19,6 +19,7 @@ public sealed class CodingWorkflowSection : IEnvironmentPromptSection
         builder.AppendLine("- Run only tests related to your changes, not the full suite. Treat command output as ground truth; fix root causes and re-run until checks pass before claiming completion.");
         builder.AppendLine("- Standards: read before editing; make minimal focused changes; fix root causes; match existing style; do not fix unrelated issues.");
         builder.AppendLine("- Persistence: keep working until the current task is verified, not merely edited.");
+        builder.AppendLine("- Multi-step tasks: use todo_write to track steps; mark completed only after verification passes.");
         builder.AppendLine();
     }
 }
