@@ -24,8 +24,9 @@ public sealed class CodingWorkflowSectionTests
         var text = builder.ToString();
         Assert.Contains("Coding workflow:", text, StringComparison.Ordinal);
         Assert.Contains("Verification:", text, StringComparison.Ordinal);
-        Assert.Contains("dotnet build", text, StringComparison.Ordinal);
-        Assert.Contains("dotnet test", text, StringComparison.Ordinal);
+        Assert.Contains("mvn -q -pl", text, StringComparison.Ordinal);
+        Assert.Contains("npx tsc", text, StringComparison.Ordinal);
+        Assert.Contains("pytest", text, StringComparison.Ordinal);
         Assert.Contains("apply_patch", text, StringComparison.Ordinal);
     }
 

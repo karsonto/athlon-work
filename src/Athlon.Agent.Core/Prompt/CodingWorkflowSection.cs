@@ -15,7 +15,7 @@ public sealed class CodingWorkflowSection : IEnvironmentPromptSection
 
         builder.AppendLine("Coding workflow:");
         builder.AppendLine("- Planning: for multi-step or multi-file tasks, explore with grep_files, glob_files, and file_read first; state a brief plan before editing.");
-        builder.AppendLine("- Verification: after file_write, file_edit, or apply_patch, run execute_command to verify (e.g. dotnet build, dotnet test --filter \"FullyQualifiedName~Namespace.ClassName\").");
+        builder.AppendLine("- Verification: after file_write, file_edit, or apply_patch, run execute_command to verify with project-appropriate checks (e.g. mvn -q -pl <module> compile, npx tsc --noEmit, ruff check <path>, pytest <test file>).");
         builder.AppendLine("- Run only tests related to your changes, not the full suite. Treat command output as ground truth; fix root causes and re-run until checks pass before claiming completion.");
         builder.AppendLine("- Standards: read before editing; make minimal focused changes; fix root causes; match existing style; do not fix unrelated issues.");
         builder.AppendLine("- Persistence: keep working until the current task is verified, not merely edited.");

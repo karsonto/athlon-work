@@ -93,7 +93,7 @@ public sealed class SystemPromptOrchestratorTests
         var prompt = orchestrator.PrepareForTurn(AgentSession.Create("coding-workflow"), Array.Empty<ToolDefinition>()).Text;
 
         Assert.Contains("Coding workflow:", prompt, StringComparison.Ordinal);
-        Assert.Contains("dotnet test", prompt, StringComparison.Ordinal);
+        Assert.Contains("mvn -q -pl", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
