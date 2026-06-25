@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
 
