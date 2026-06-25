@@ -35,6 +35,6 @@ public sealed class FileSessionTaskStore(IFileStorageService storage) : ISession
         await JsonSerializer.SerializeAsync(stream, tasks, JsonOptions, cancellationToken);
     }
 
-    private static string ResolvePath(string sessionId) =>
+    private string ResolvePath(string sessionId) =>
         Path.Combine(storage.RootPath, "sessions", sessionId, "tasks.json");
 }

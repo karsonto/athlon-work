@@ -312,6 +312,7 @@ public sealed class SessionTurnHost
                     _request.UserInput,
                     _request.ImageAttachments,
                     callbacks,
+                    null,
                     turnToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)

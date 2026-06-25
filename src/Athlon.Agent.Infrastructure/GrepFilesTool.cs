@@ -79,10 +79,9 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
                 await using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 4096, useAsync: true);
                 using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
                 var lineNumber = 0;
-                while (!reader.EndOfStream)
+                string? line;
+                while ((line = await reader.ReadLineAsync(cancellationToken)) is not null)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var line = await reader.ReadLineAsync(cancellationToken) ?? string.Empty;
                     lineNumber++;
                     if (!matcher!.IsMatch(line))
                     {
