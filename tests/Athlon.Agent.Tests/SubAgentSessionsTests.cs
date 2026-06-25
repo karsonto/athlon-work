@@ -93,7 +93,6 @@ public sealed class SubAgentSessionsTests
         var tools = new IAgentTool[]
         {
             new StubSessionsTool("sessions_spawn"),
-            new StubSessionsTool("call_assistant"),
             new StubNamedTool("file_list")
         };
         var router = new ChildAgentToolRouter(
@@ -108,7 +107,6 @@ public sealed class SubAgentSessionsTests
 
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
         Assert.DoesNotContain("sessions_spawn", names);
-        Assert.DoesNotContain("call_assistant", names);
         Assert.Contains("file_list", names);
     }
 

@@ -61,6 +61,7 @@ public sealed class AppSettings
     public WorkspaceIgnoreSettings WorkspaceIgnore { get; set; } = new();
     public FileReadSettings FileRead { get; set; } = new();
     public SubAgentSettings SubAgent { get; set; } = new();
+    public ParallelToolExecutionSettings ParallelToolExecution { get; set; } = new();
     public MemorySettings Memory { get; set; } = new();
     public ScheduleSettings Schedule { get; set; } = new();
     public UpdateSettings Update { get; set; } = new();

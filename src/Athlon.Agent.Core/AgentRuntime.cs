@@ -260,14 +260,26 @@ public sealed class AgentRuntime(
                     return session;
                 }
 
-                foreach (var toolCall in response.ToolCalls)
+                if (ParallelToolPolicy.CanParallelizeBatch(response.ToolCalls, settings.ParallelToolExecution))
                 {
                     turnInvocation.Session = session;
-                    session = await InvokeToolAndPersistAsync(
+                    session = await InvokeParallelToolBatchAsync(
                         turnInvocation,
                         userMessage.Id,
-                        toolCall,
-                        cancellationToken);
+                        response.ToolCalls,
+                        cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    foreach (var toolCall in response.ToolCalls)
+                    {
+                        turnInvocation.Session = session;
+                        session = await InvokeToolAndPersistAsync(
+                            turnInvocation,
+                            userMessage.Id,
+                            toolCall,
+                            cancellationToken).ConfigureAwait(false);
+                    }
                 }
             }
         }
@@ -352,6 +364,76 @@ public sealed class AgentRuntime(
             cancellationToken);
         invocation.Session = session;
         await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
+        return session;
+    }
+
+    private async Task<AgentSession> InvokeParallelToolBatchAsync(
+        AgentTurnInvocation invocation,
+        string? parentMessageId,
+        IReadOnlyList<AgentToolCall> toolCalls,
+        CancellationToken cancellationToken)
+    {
+        var toolStorm = invocation.ToolStorm;
+        var results = new ToolResult?[toolCalls.Count];
+        var pending = new List<(int Index, AgentToolCall Call)>();
+
+        for (var index = 0; index < toolCalls.Count; index++)
+        {
+            var toolCall = toolCalls[index];
+            if (toolStorm is not null && !toolStorm.TryInspect(toolCall, out var reason))
+            {
+                results[index] = ToolResult.Failure(
+                    "Duplicate tool call suppressed",
+                    reason ?? "repeat-loop guard suppressed the duplicate tool call.");
+            }
+            else
+            {
+                pending.Add((index, toolCall));
+            }
+        }
+
+        if (pending.Count > 0)
+        {
+            var maxDegree = Math.Max(1, settings.ParallelToolExecution.MaxDegreeOfParallelism);
+            await Parallel.ForEachAsync(
+                pending,
+                new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = maxDegree,
+                    CancellationToken = cancellationToken
+                },
+                async (item, ct) =>
+                {
+                    var outcome = await _toolPipeline.InvokeCoreAsync(
+                        invocation.Session.Id,
+                        item.Call,
+                        invocation.Callbacks,
+                        ct).ConfigureAwait(false);
+                    results[item.Index] = outcome.Result;
+                }).ConfigureAwait(false);
+        }
+
+        var session = invocation.Session;
+        for (var index = 0; index < toolCalls.Count; index++)
+        {
+            var toolCall = toolCalls[index];
+            await turnPipeline.OnBeforeToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
+
+            var result = results[index]
+                ?? ToolResult.Failure("Tool invocation failed", "No result was produced for this tool call.");
+            session = await _toolPipeline.PersistToolResultAsync(
+                session,
+                parentMessageId,
+                toolCall,
+                result,
+                invocation.StreamAdapter,
+                invocation.Callbacks,
+                PersistMessageAsync,
+                cancellationToken).ConfigureAwait(false);
+            invocation.Session = session;
+            await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
+        }
+
         return session;
     }
 

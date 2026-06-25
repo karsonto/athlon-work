@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Athlon.Agent.Core.Prompt;
 
-/// <summary>Guidance for the parent agent on when and how to delegate via sessions_* and call_assistant.</summary>
+/// <summary>Guidance for the parent agent on when and how to delegate via sessions_* tools.</summary>
 public sealed class SubAgentDelegationSection(AppSettings settings) : IEnvironmentPromptSection
 {
     public int Order => 550;
@@ -15,12 +15,7 @@ public sealed class SubAgentDelegationSection(AppSettings settings) : IEnvironme
         }
 
         builder.AppendLine("## Delegating sub-tasks");
-        builder.AppendLine("Prefer `sessions_spawn` / `sessions_send` for structured sub-agent orchestration.");
-        if (settings.SubAgent.KeepCallAssistantAlias)
-        {
-            builder.AppendLine("`call_assistant` remains available as a compatibility alias (spawn when session_id omitted, send when provided).");
-        }
-
+        builder.AppendLine("Use `sessions_spawn` / `sessions_send` for structured sub-agent orchestration.");
         builder.AppendLine("- **New child:** `sessions_spawn` with `role` (who the child is, boundaries, output style), optional `message`, optional `label` for reuse.");
         builder.AppendLine("- **Continue:** `sessions_send` with `session_key` or `label` and a new `message`.");
         builder.AppendLine("- **Discover:** `sessions_list` when you do not remember session_key; `sessions_history` for transcript snippets.");

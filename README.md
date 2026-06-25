@@ -45,7 +45,7 @@ Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is
 ### Agent Runtime
 - Shared `AgentRuntime`: prompt building, streaming, tool dispatch, multi-round loops
 - Built-in tools: `file_list`, `file_read`, `file_write`, `file_edit`, `grep_files`, `glob_files`, `execute_command`
-- Sub-agent delegation (`call_assistant`) with configurable nesting depth
+- Sub-agent delegation (`sessions_spawn` / `sessions_send`) with configurable nesting depth
 - Long-term memory hooks and context compaction pipeline
 
 ### Automation & Integration

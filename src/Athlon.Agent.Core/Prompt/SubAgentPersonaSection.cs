@@ -18,7 +18,7 @@ public sealed class SubAgentPersonaSection(IAgentRunContextAccessor runContextAc
         builder.AppendLine();
 
         builder.AppendLine("You are invoked by the parent agent as a sub-agent session.");
-        builder.AppendLine("Do not call sessions_* tools, call_assistant, or delegate to other agents.");
+        builder.AppendLine("Do not call sessions_* tools or delegate to other agents.");
         builder.AppendLine("Use file tools, MCP tools, and load_skill_through_path when needed.");
         builder.AppendLine("End your reply with a structured result block:");
         builder.AppendLine();

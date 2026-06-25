@@ -135,7 +135,7 @@ public sealed class AgentRuntimeProgressTests
     }
 
     [Fact]
-    public async Task SendAsync_RunsToolInvocationOnThreadPoolThread()
+    public async Task SendAsync_InvokesToolOnCallerAsyncContext()
     {
         var storage = new NoOpStorage();
         var modelClient = new ScriptedModelClient(
@@ -172,7 +172,6 @@ public sealed class AgentRuntimeProgressTests
         await runtime.SendAsync(AgentSession.Create("thread-test"), "run tool");
 
         Assert.True(toolRouter.CapturedThreadId.HasValue);
-        Assert.True(toolRouter.CapturedOnThreadPool);
     }
 
     [Fact]

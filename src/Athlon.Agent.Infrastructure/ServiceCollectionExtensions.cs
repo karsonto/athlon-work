@@ -113,8 +113,6 @@ public static class ServiceCollectionExtensions
             new Lazy<ISubAgentSessionManager>(() => sp.GetRequiredService<ISubAgentSessionManager>()));
         if (settings.SubAgent.Enabled)
         {
-            services.AddSingleton<SubAgentTool>();
-            services.AddSingleton<IAgentTool>(static sp => sp.GetRequiredService<SubAgentTool>());
             services.AddSingleton<IAgentTool, SessionsSpawnTool>();
             services.AddSingleton<IAgentTool, SessionsSendTool>();
             services.AddSingleton<IAgentTool, SessionsListTool>();

@@ -28,7 +28,7 @@ public sealed class ChildAgentToolRouterTests
             RouterTestDependencies.CreateWorkspaceGuard());
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
-        Assert.DoesNotContain("call_assistant", names);
+        Assert.DoesNotContain("sessions_spawn", names);
         Assert.Contains("file_list", names);
         Assert.Contains("mcp__srv__search", names);
     }
@@ -80,7 +80,7 @@ public sealed class ChildAgentToolRouterTests
 
     private sealed class StubSubAgentTool : IAgentTool, IExcludedFromChildAgentToolkit
     {
-        public ToolDefinition Definition => new("call_assistant", "sub", new Dictionary<string, string>());
+        public ToolDefinition Definition => new("sessions_spawn", "sub", new Dictionary<string, string>());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
     }

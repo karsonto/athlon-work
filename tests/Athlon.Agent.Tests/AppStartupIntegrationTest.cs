@@ -8,7 +8,7 @@ namespace Athlon.Agent.Tests;
 public sealed class AppStartupIntegrationTest
 {
     [Fact]
-    public void AddAthlonInfrastructure_ResolvesRuntimeAndSubAgentTool_WithoutCycle()
+    public void AddAthlonInfrastructure_ResolvesRuntimeAndSessionsSpawnTool_WithoutCycle()
     {
         var services = new ServiceCollection();
         services.AddAthlonInfrastructure();
@@ -17,12 +17,14 @@ public sealed class AppStartupIntegrationTest
         var runtime = provider.GetRequiredService<IAgentRuntime>();
         var orchestrator = provider.GetRequiredService<IAgentOrchestrator>();
         var router = provider.GetRequiredService<IToolRouter>();
-        var subAgent = provider.GetRequiredService<SubAgentTool>();
+        var spawnTool = provider.GetServices<IAgentTool>()
+            .OfType<SessionsSpawnTool>()
+            .Single();
 
         Assert.NotNull(runtime);
         Assert.NotNull(orchestrator);
         Assert.NotNull(router);
-        Assert.Contains(provider.GetServices<IAgentTool>(), tool => ReferenceEquals(tool, subAgent));
+        Assert.Equal("sessions_spawn", spawnTool.Definition.Name);
 
         if (provider is IAsyncDisposable asyncDisposable)
         {
