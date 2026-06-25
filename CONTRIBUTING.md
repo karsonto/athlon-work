@@ -81,7 +81,7 @@ Release builds download and package a Fixed Version WebView2 Runtime for Windows
 | File | Purpose |
 |------|---------|
 | `tools/webview2-runtime.version` | Pinned runtime version (must match a build on the [WebView2 download page](https://developer.microsoft.com/microsoft-edge/webview2/)) |
-| `tools/webview2-runtime.download-url` | Optional override for the CAB CDN URL |
+| `tools/webview2-runtime.download-url` | Pinned CAB CDN URL used when page scraping fails (update together with version) |
 | `tools/fetch-webview2-fixed-runtime.ps1` | Downloads, expands, and copies runtime to `src/Athlon.Agent.App/runtimes/webview2/x64/` |
 
 To refresh the bundled runtime locally or before a manual publish:

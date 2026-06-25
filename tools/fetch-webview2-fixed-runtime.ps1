@@ -35,6 +35,11 @@ function Get-PinnedVersion {
     return $value
 }
 
+function Normalize-EscapedWebContent {
+    param([string]$Content)
+    return $Content.Replace('\u002F', '/').Replace('\/', '/')
+}
+
 function Resolve-DownloadUrl {
     param(
         [string]$RuntimeVersion,
@@ -56,21 +61,27 @@ function Resolve-DownloadUrl {
     $cabName = "Microsoft.WebView2.FixedVersionRuntime.$RuntimeVersion.x64.cab"
     $pageUrl = 'https://developer.microsoft.com/en-us/microsoft-edge/webview2/'
     Write-Host "Resolving download URL from $pageUrl ..."
-    $html = (Invoke-WebRequest -Uri $pageUrl -UseBasicParsing -TimeoutSec 120).Content
-    $escaped = [Regex]::Escape($cabName)
+    $html = Normalize-EscapedWebContent (Invoke-WebRequest -Uri $pageUrl -UseBasicParsing -TimeoutSec 120).Content
+    $escapedCabName = [Regex]::Escape($cabName)
     $match = [Regex]::Match(
         $html,
-        "https:\\/\\/msedge\.sf\.dl\.delivery\.mp\.microsoft\.com\\/filestreamingservice\\/files\\/[0-9a-f-]+\\/$escaped",
+        "https://msedge\.sf\.dl\.delivery\.mp\.microsoft\.com/filestreamingservice/files/[0-9a-f-]+/$escapedCabName",
         [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
     if (-not $match.Success) {
+        $available = [Regex]::Matches(
+            $html,
+            'Microsoft\.WebView2\.FixedVersionRuntime\.([0-9.]+)\.x64\.cab') |
+            ForEach-Object { $_.Groups[1].Value } |
+            Select-Object -Unique
+        $availableText = if ($available.Count -gt 0) { ($available -join ', ') } else { '(none found on page)' }
         throw @"
 Could not resolve CDN URL for $cabName.
-Update tools/webview2-runtime.version to a version listed on the WebView2 download page,
-or add the full CAB URL to tools/webview2-runtime.download-url.
+Versions currently listed for x64 on the WebView2 download page: $availableText
+Update tools/webview2-runtime.version, set tools/webview2-runtime.download-url, or pass -DownloadUrl.
 "@
     }
 
-    return $match.Value.Replace('\/', '/')
+    return $match.Value
 }
 
 function Find-MsEdgeWebView2Folder {
