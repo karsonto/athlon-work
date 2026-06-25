@@ -229,10 +229,7 @@ public partial class WebChatView : UserControl
 
         try
         {
-            var provider = WebView2ServiceAccess.TryResolve()
-                ?? throw new InvalidOperationException("WebView2EnvironmentProvider is not registered.");
-            var environment = await provider.GetEnvironmentAsync().ConfigureAwait(true);
-            await ChatWebView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+            await WebView2Initializer.EnsureCoreWebView2Async(ChatWebView).ConfigureAwait(true);
             ChatWebView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = false;
             ChatWebView.CoreWebView2.Settings.IsScriptEnabled = true;
             ChatWebView.CoreWebView2.Settings.IsWebMessageEnabled = true;

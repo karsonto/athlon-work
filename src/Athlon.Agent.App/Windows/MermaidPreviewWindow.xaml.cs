@@ -64,8 +64,7 @@ public partial class MermaidPreviewWindow : Window
     {
         try
         {
-            var environment = await WebView2ServiceAccess.GetRequiredEnvironmentAsync().ConfigureAwait(true);
-            await PreviewWebView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+            await WebView2Initializer.EnsureCoreWebView2Async(PreviewWebView).ConfigureAwait(true);
             var core = PreviewWebView.CoreWebView2
                 ?? throw new InvalidOperationException("WebView2 未初始化。");
 

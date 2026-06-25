@@ -43,8 +43,7 @@ public partial class HtmlPreviewWindow : Window
     {
         try
         {
-            var environment = await WebView2ServiceAccess.GetRequiredEnvironmentAsync().ConfigureAwait(true);
-            await PreviewWebView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+            await WebView2Initializer.EnsureCoreWebView2Async(PreviewWebView).ConfigureAwait(true);
             PreviewWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             PreviewWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
             PreviewWebView.NavigateToString(MarkdownHtmlRenderer.BuildPreviewDocument(_rawHtml));

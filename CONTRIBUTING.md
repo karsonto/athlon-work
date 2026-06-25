@@ -90,7 +90,7 @@ To refresh the bundled runtime locally or before a manual publish:
 pwsh tools/fetch-webview2-fixed-runtime.ps1
 ```
 
-Release CI runs this script automatically before `dotnet publish`. At runtime, Windows 10 (build &lt; 22000) uses the bundled Fixed Version first; Windows 11 uses the system Evergreen WebView2 Runtime directly.
+Release CI runs this script automatically before `dotnet publish`. At runtime, Windows 10 (build &lt; 22000) tries the bundled Fixed Version first; Windows 11 uses the same default WebView2 initialization as pre-v2.4.0 builds.
 
 If you update `tools/webview2-runtime.version`, run the fetch script and verify chat rendering, Mermaid preview, and HTML preview on a machine without a separate WebView2 install.
 
