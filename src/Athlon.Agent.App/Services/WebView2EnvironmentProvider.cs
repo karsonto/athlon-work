@@ -78,9 +78,9 @@ public sealed class WebView2EnvironmentProvider
         catch (Exception ex)
         {
             _logger.Warning(
-                ex,
-                "Bundled WebView2 runtime failed at {Folder}; falling back to Evergreen",
-                browserFolder);
+                "Bundled WebView2 runtime failed at {Folder}; falling back to Evergreen: {Error}",
+                browserFolder,
+                ex.Message);
             App.StartupTrace($"WebView2 bundled runtime failed ({ex.Message}); falling back to Evergreen");
             return null;
         }
