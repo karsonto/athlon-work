@@ -23,9 +23,6 @@ public sealed record AgentRunContext
 
     public AgentLoopOptions? LoopOptions { get; init; }
 
-    /// <summary>When set, overrides <see cref="ToolPermissionSettings.RequireToolApproval"/> for this run.</summary>
-    public bool? RequireToolApproval { get; init; }
-
     public AgentRunKind Kind { get; init; } = AgentRunKind.Root;
 
     public static AgentRunContext CreateRoot(

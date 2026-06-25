@@ -204,7 +204,6 @@ public sealed class SessionTurnHostTests
             string userInput,
             IReadOnlyList<ImageAttachment>? imageAttachments = null,
             AgentTurnCallbacks? callbacks = null,
-            AgentSendOptions? options = null,
             CancellationToken cancellationToken = default)
         {
             await Task.Delay(delay, cancellationToken);

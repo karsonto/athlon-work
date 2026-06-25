@@ -160,7 +160,6 @@ public sealed class SubAgentToolTests
             string userInput,
             IReadOnlyList<ImageAttachment>? imageAttachments = null,
             AgentTurnCallbacks? callbacks = null,
-            AgentSendOptions? options = null,
             CancellationToken cancellationToken = default)
         {
             SendCount++;

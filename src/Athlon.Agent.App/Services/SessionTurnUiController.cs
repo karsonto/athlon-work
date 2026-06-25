@@ -134,7 +134,6 @@ public sealed class SessionTurnUiController
             OnUsageRecorded?.Invoke(snapshot);
             return Task.CompletedTask;
         },
-        OnToolApprovalRequired = (pending, ct) => RequestToolApprovalAsync(pending, ct),
         OnStreamEvent = streamEvent =>
         {
             if (streamEvent is AgentStreamEvent.UsageRecorded(var snapshot))
@@ -199,33 +198,6 @@ public sealed class SessionTurnUiController
             }
         }
     };
-
-    private async Task<ToolApprovalDecision> RequestToolApprovalAsync(
-        PendingToolApproval pending,
-        CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        return await _dispatcher.InvokeAsync(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var toolCall = new AgentToolCall(
-                pending.ToolCallId,
-                pending.ToolName,
-                pending.Arguments);
-            var toolMessage = Messages.LastOrDefault(message =>
-                message.IsTool
-                && string.Equals(message.ToolCallId, pending.ToolCallId, StringComparison.Ordinal));
-            if (toolMessage is null)
-            {
-                toolMessage = ChatMessageViewModel.CreatePendingTool(toolCall);
-                Messages.Add(toolMessage);
-            }
-
-            toolMessage.MarkAwaitingApproval(toolCall);
-            RequestScrollImmediate();
-            return ToolApprovalDialog.Show(pending);
-        });
-    }
 
     public void AddUserMessage(string input, IReadOnlyList<ImageAttachment> imageAttachments)
     {

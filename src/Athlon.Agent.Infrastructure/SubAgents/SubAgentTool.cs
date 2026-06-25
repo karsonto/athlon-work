@@ -1,4 +1,3 @@
-using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.SubAgents;
 using Microsoft.Extensions.DependencyInjection;
@@ -115,7 +114,11 @@ public sealed class SubAgentTool(
             await sessionStore.SaveAsync(parentSessionId, subSessionId, bundle, cancellationToken);
 
             var responseText = ExtractLastAssistantText(session) ?? "(Sub-agent finished without assistant text.)";
-            var content = BuildHandoffContent(subSessionId, session, responseText);
+            var content = string.Join(
+                Environment.NewLine,
+                $"session_id: {subSessionId}",
+                string.Empty,
+                responseText);
 
             return ToolResult.Success($"Sub-agent completed (session_id={subSessionId})", content);
         }
@@ -191,59 +194,6 @@ public sealed class SubAgentTool(
         }
 
         return null;
-    }
-
-    private string BuildHandoffContent(string subSessionId, AgentSession session, string responseText)
-    {
-        var builder = new StringBuilder();
-        builder.AppendLine("## Result");
-        builder.AppendLine(responseText);
-        builder.AppendLine();
-        builder.AppendLine("## Session");
-        builder.AppendLine($"session_id: {subSessionId}");
-        builder.AppendLine();
-        builder.AppendLine("## Trace (abbreviated)");
-        builder.Append(ExtractToolTrace(session, _subAgent.MaxHandoffChars));
-        return builder.ToString().TrimEnd();
-    }
-
-    private static string ExtractToolTrace(AgentSession session, int maxChars)
-    {
-        var lines = new List<string>();
-        foreach (var message in session.Messages)
-        {
-            if (message.Role != MessageRole.Tool)
-            {
-                continue;
-            }
-
-            var line = SummarizeToolMessage(message.Content);
-            if (!string.IsNullOrWhiteSpace(line))
-            {
-                lines.Add($"- {line}");
-            }
-        }
-
-        if (lines.Count == 0)
-        {
-            return "- (no tool calls)";
-        }
-
-        var text = string.Join(Environment.NewLine, lines);
-        if (text.Length <= maxChars)
-        {
-            return text;
-        }
-
-        return text[..maxChars] + Environment.NewLine + $"... ({lines.Count} tool results; trace truncated)";
-    }
-
-    private static string SummarizeToolMessage(string content)
-    {
-        var lines = content.Replace("\r\n", "\n").Split('\n');
-        var toolLine = lines.FirstOrDefault(line => line.StartsWith("Tool `", StringComparison.Ordinal)) ?? "tool";
-        var summaryLine = lines.FirstOrDefault(line => line.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase));
-        return summaryLine is null ? toolLine.Trim() : $"{toolLine.Trim()} → {summaryLine["Summary:".Length..].Trim()}";
     }
 
     private ToolDefinition BuildDefinition()

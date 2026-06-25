@@ -23,7 +23,6 @@ public sealed class AgentRunEventBridge
         {
             OnSessionUpdated = inner.OnSessionUpdated,
             OnUsageRecorded = inner.OnUsageRecorded,
-            OnToolApprovalRequired = inner.OnToolApprovalRequired,
             EventSink = Multiplexer
         };
     }

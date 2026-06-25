@@ -18,10 +18,6 @@ public sealed class ScheduleSettings
     public string Mode { get; set; } = "agent";
     public string PromptPrefix { get; set; } = "";
     public bool KeepAwake { get; set; } = false;
-
-    /// <summary>When true, scheduled turns require tool approval (unsupported unattended — task fails fast).</summary>
-    public bool RequireToolApproval { get; set; }
-
     public List<ScheduledTask> Tasks { get; set; } = new();
 }
 
@@ -123,10 +119,6 @@ public sealed class ModelSettings
     public bool EnableStreaming { get; set; } = true;
     public int StreamingIdleTimeoutSeconds { get; set; } = 90;
 
-    public bool EnableFallback { get; set; }
-
-    public string FallbackModelName { get; set; } = "";
-
     [JsonPropertyName("ApiKeyCredentialName")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public string? LegacyApiKeyCredentialName { get; set; }
@@ -141,10 +133,6 @@ public sealed class LoggingSettings
 public sealed class ToolPermissionSettings
 {
     public bool AskBeforeEveryCommand { get; set; } = true;
-
-    /// <summary>When true, write/command tools pause for user approval in interactive chat.</summary>
-    public bool RequireToolApproval { get; set; }
-
     public string FileScopePolicy { get; set; } = "AskOutsideWorkspace";
     public List<string> CommandAllowList { get; set; } = new() { "git", "dotnet", "python", "node", "npm" };
     public List<string> CommandDenyList { get; set; } = new() { "format", "del /s", "rmdir /s", "Remove-Item -Recurse" };

@@ -7,9 +7,6 @@ public sealed class AgentTurnSettings
     /// Set to <c>0</c> to disable the turn timeout. Positive values are clamped to 1–180.
     /// </summary>
     public int TimeoutMinutes { get; set; } = AgentTurnSettingsExtensions.DefaultTimeoutMinutes;
-
-    /// <summary>Max model↔tool rounds per user message for the root agent. 0 = unlimited.</summary>
-    public int MaxModelToolRounds { get; set; } = 100;
 }
 
 public static class AgentTurnSettingsExtensions

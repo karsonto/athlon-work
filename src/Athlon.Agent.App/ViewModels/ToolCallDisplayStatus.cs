@@ -4,7 +4,6 @@ public enum ToolCallDisplayStatus
 {
     None,
     Preparing,
-    AwaitingApproval,
     Running,
     Succeeded,
     Failed,

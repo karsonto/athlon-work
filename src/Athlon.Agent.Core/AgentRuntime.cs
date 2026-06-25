@@ -64,25 +64,19 @@ public sealed class AgentRuntime(
         string userInput,
         IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
-        AgentSendOptions? options = null,
         CancellationToken cancellationToken = default)
     {
         var ignorePatterns = ResolveIgnorePatterns(session);
         var runId = Guid.NewGuid().ToString("N");
-        var loopOptions = ResolveLoopOptions(options);
         var runContext = AgentRunContext.CreateRoot(
             session,
             runId,
             toolRouter,
             systemPromptOrchestrator,
-            ignorePatterns) with
+            ignorePatterns);
+        if (AgentLoopOptionsScope.Current is { } loopOptions)
         {
-            LoopOptions = loopOptions,
-            RequireToolApproval = options?.RequireToolApproval
-        };
-        if (AgentLoopOptionsScope.Current is { } ambientLoopOptions)
-        {
-            runContext = runContext with { LoopOptions = ambientLoopOptions };
+            runContext = runContext with { LoopOptions = loopOptions };
         }
         using var runScope = runContextAccessor.Push(runContext);
         using var workspaceScope = SessionWorkspaceScope.Enter(runContext.WorkspaceRoot, runContext.WorkspaceIgnorePatterns);
@@ -254,17 +248,6 @@ public sealed class AgentRuntime(
                         "Max model tool rounds ({MaxRounds}) reached for session {SessionId}; stopping without executing pending tools",
                         maxModelToolRounds,
                         session.Id);
-                    foreach (var pendingCall in response.ToolCalls)
-                    {
-                        var limitResult = ToolResult.Failure(
-                            "Max tool rounds reached",
-                            $"Agent stopped after {maxModelToolRounds} model/tool rounds; this tool call was not executed.");
-                        var limitContent = FormatToolResult(pendingCall, limitResult);
-                        var limitMessage = ChatMessage.Create(MessageRole.Tool, limitContent, userMessage.Id);
-                        session = session.WithMessage(limitMessage);
-                        await PersistMessageAsync(session, limitMessage, cancellationToken);
-                    }
-
                     await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun());
                     turnInvocation.Session = session;
                     await turnPipeline.OnTurnCompletedAsync(turnInvocation, cancellationToken);
@@ -277,11 +260,15 @@ public sealed class AgentRuntime(
                     return session;
                 }
 
-                session = await InvokeToolCallsAsync(
-                    turnInvocation,
-                    userMessage.Id,
-                    response.ToolCalls,
-                    cancellationToken);
+                foreach (var toolCall in response.ToolCalls)
+                {
+                    turnInvocation.Session = session;
+                    session = await InvokeToolAndPersistAsync(
+                        turnInvocation,
+                        userMessage.Id,
+                        toolCall,
+                        cancellationToken);
+                }
             }
         }
         catch (OperationCanceledException)
@@ -328,170 +315,44 @@ public sealed class AgentRuntime(
             pressureOverride).ConfigureAwait(false);
     }
 
-    private async Task<AgentSession> InvokeToolCallsAsync(
-        AgentTurnInvocation invocation,
-        string? parentMessageId,
-        IReadOnlyList<AgentToolCall> toolCalls,
-        CancellationToken cancellationToken)
-    {
-        var index = 0;
-        while (index < toolCalls.Count)
-        {
-            var batch = new List<AgentToolCall>();
-            while (index < toolCalls.Count && ToolReadOnlyClassifier.IsReadOnly(toolCalls[index].Name))
-            {
-                batch.Add(toolCalls[index]);
-                index++;
-            }
-
-            if (batch.Count > 1)
-            {
-                var coreTasks = batch.Select(toolCall =>
-                    InvokeToolCoreAsync(invocation, toolCall, cancellationToken)).ToArray();
-                var coreResults = await Task.WhenAll(coreTasks).ConfigureAwait(false);
-                foreach (var (toolCall, result) in coreResults)
-                {
-                    invocation.Session = await PersistToolResultAsync(
-                        invocation,
-                        parentMessageId,
-                        toolCall,
-                        result,
-                        cancellationToken);
-                }
-
-                continue;
-            }
-
-            if (batch.Count == 1)
-            {
-                invocation.Session = await InvokeToolAndPersistAsync(invocation, parentMessageId, batch[0], cancellationToken);
-                continue;
-            }
-
-            invocation.Session = await InvokeToolAndPersistAsync(invocation, parentMessageId, toolCalls[index], cancellationToken);
-            index++;
-        }
-
-        return invocation.Session;
-    }
-
-    private AgentLoopOptions? ResolveLoopOptions(AgentSendOptions? options)
-    {
-        if (options?.LoopOptions is not null)
-        {
-            return options.LoopOptions;
-        }
-
-        var maxRounds = settings.AgentTurn.MaxModelToolRounds;
-        return maxRounds > 0
-            ? new AgentLoopOptions { MaxModelToolRounds = maxRounds }
-            : null;
-    }
-
     private async Task<AgentSession> InvokeToolAndPersistAsync(
         AgentTurnInvocation invocation,
         string? parentMessageId,
         AgentToolCall toolCall,
         CancellationToken cancellationToken)
     {
-        var (call, result) = await InvokeToolCoreAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
-        return await PersistToolResultAsync(invocation, parentMessageId, call, result, cancellationToken);
-    }
-
-    private async Task<(AgentToolCall ToolCall, ToolResult Result)> InvokeToolCoreAsync(
-        AgentTurnInvocation invocation,
-        AgentToolCall toolCall,
-        CancellationToken cancellationToken)
-    {
         await turnPipeline.OnBeforeToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
         var toolStorm = invocation.ToolStorm;
+        var session = invocation.Session;
+        var streamAdapter = invocation.StreamAdapter;
+        var callbacks = invocation.Callbacks;
 
         if (toolStorm is not null && !toolStorm.TryInspect(toolCall, out var reason))
         {
-            return (toolCall, ToolResult.Failure(
+            var suppressed = ToolResult.Failure(
                 "Duplicate tool call suppressed",
-                reason ?? "repeat-loop guard suppressed the duplicate tool call."));
+                reason ?? "repeat-loop guard suppressed the duplicate tool call.");
+            var content = FormatToolResult(toolCall, suppressed);
+            var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
+            session = session.WithMessage(toolMessage);
+            await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall));
+            await PersistMessageAsync(session, toolMessage, cancellationToken);
+            invocation.Session = session;
+            await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
+            return session;
         }
 
-        var definition = invocation.Tools?.FirstOrDefault(tool =>
-            string.Equals(tool.Name, toolCall.Name, StringComparison.OrdinalIgnoreCase));
-        if (definition is not null
-            && ToolApprovalGate.IsApprovalRequired(settings, invocation.RunContext, toolCall, definition))
-        {
-            var pending = ToolInvocationPolicyEnforcer.TryCreatePendingApproval(toolCall, definition)!;
-            invocation.State.PendingApproval = pending;
-            var callbacks = invocation.Callbacks;
-
-            if (callbacks?.OnToolApprovalRequired is null)
-            {
-                return (toolCall, ToolApprovalGate.CreateNoHandlerResult());
-            }
-
-            var decision = await callbacks.OnToolApprovalRequired(pending, cancellationToken).ConfigureAwait(false);
-            invocation.State.PendingApproval = null;
-            if (decision == ToolApprovalDecision.Cancelled)
-            {
-                throw new OperationCanceledException("Tool approval cancelled.");
-            }
-
-            if (decision == ToolApprovalDecision.Rejected)
-            {
-                return (toolCall, ToolApprovalGate.CreateRejectedResult());
-            }
-        }
-
-        try
-        {
-            using var outputStream = new AmbientToolOutputStream(invocation.Callbacks, toolCall.Id);
-            var result = await Task.Run(
-                    () => ResolveToolRouter().InvokeAsync(new ToolInvocation(toolCall.Name, toolCall.Arguments), cancellationToken),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            return (toolCall, result);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            _logger.Error(ex, "Tool {ToolName} threw; returning failure to the model", toolCall.Name);
-            return (toolCall, ToolResult.Failure("Tool invocation failed", ex.Message));
-        }
-    }
-
-    private async Task<AgentSession> PersistToolResultAsync(
-        AgentTurnInvocation invocation,
-        string? parentMessageId,
-        AgentToolCall toolCall,
-        ToolResult result,
-        CancellationToken cancellationToken)
-    {
-        await storage.AppendToolCallLogAsync(
-            invocation.Session.Id,
-            new SessionToolCallLogEntry(
-                DateTimeOffset.UtcNow,
-                toolCall.Id,
-                toolCall.Name,
-                toolCall.Arguments,
-                result.Succeeded,
-                result.Summary,
-                result.Content,
-                result.Error,
-                (long)(result.Duration?.TotalMilliseconds ?? 0)),
-            cancellationToken);
-
-        invocation.Session = await _toolPipeline.PersistResultAsync(
-            invocation.Session,
+        session = await _toolPipeline.InvokeAndPersistAsync(
+            session,
             parentMessageId,
             toolCall,
-            result,
-            invocation.StreamAdapter,
-            invocation.Callbacks,
+            streamAdapter,
+            callbacks,
             PersistMessageAsync,
             cancellationToken);
+        invocation.Session = session;
         await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
-        return invocation.Session;
+        return session;
     }
 
     private void LogToolCatalogDrift(string sessionId, string fingerprint)

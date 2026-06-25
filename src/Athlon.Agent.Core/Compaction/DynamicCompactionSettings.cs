@@ -7,7 +7,7 @@ namespace Athlon.Agent.Core.Compaction;
 /// </summary>
 public sealed class DynamicCompactionSettings
 {
-    public bool Enabled { get; set; } = true;
+    public bool Enabled { get; set; }
 
     /// <summary>
     /// Raised trigger ceiling on the usable prompt window (default 80%).

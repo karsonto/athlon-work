@@ -46,7 +46,6 @@ public interface IAgentRuntime
         string userInput,
         IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
-        AgentSendOptions? options = null,
         CancellationToken cancellationToken = default);
 }
 public interface IFileStorageService
@@ -87,7 +86,6 @@ public interface IAgentOrchestrator
         string userInput,
         IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
-        AgentSendOptions? options = null,
         CancellationToken cancellationToken = default);
 }
 

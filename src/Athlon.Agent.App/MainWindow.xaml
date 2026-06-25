@@ -842,59 +842,6 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="工具与安全" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="写文件与执行命令前需确认" VerticalAlignment="Center" />
-                                    <TextBlock Text="开启后，file_write、file_edit、apply_patch、execute_command 会暂停等待批准"
-                                               Foreground="{DynamicResource Brush.SubtleText}"
-                                               FontSize="11"
-                                               Margin="0,2,0,0" />
-                                </StackPanel>
-                                <CheckBox Grid.Column="1"
-                                          Style="{StaticResource McpToggleSwitchStyle}"
-                                          IsChecked="{Binding Settings.Settings.ToolPermissions.RequireToolApproval, UpdateSourceTrigger=PropertyChanged}"
-                                          VerticalAlignment="Center" />
-                            </Grid>
-                            <Grid Margin="0,0,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="160" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <TextBlock Text="单轮工具上限" VerticalAlignment="Center" />
-                                <TextBox Grid.Column="1"
-                                         Text="{Binding Settings.Settings.AgentTurn.MaxModelToolRounds, UpdateSourceTrigger=PropertyChanged}"
-                                         ToolTip="每条用户消息允许的模型↔工具往返次数；0 表示不限" />
-                            </Grid>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel>
-                                    <TextBlock Text="模型失败时切换备用模型" VerticalAlignment="Center" />
-                                    <TextBlock Text="限流/过载等可重试错误时自动使用备用模型名重试一次"
-                                               Foreground="{DynamicResource Brush.SubtleText}"
-                                               FontSize="11"
-                                               Margin="0,2,0,0" />
-                                </StackPanel>
-                                <CheckBox Grid.Column="1"
-                                          Style="{StaticResource McpToggleSwitchStyle}"
-                                          IsChecked="{Binding Settings.Settings.Model.EnableFallback, UpdateSourceTrigger=PropertyChanged}"
-                                          VerticalAlignment="Center" />
-                            </Grid>
-                            <TextBlock Text="备用模型名" Foreground="{DynamicResource Brush.SubtleText}" Margin="0,8,0,0" />
-                            <TextBox Text="{Binding Settings.Settings.Model.FallbackModelName, UpdateSourceTrigger=PropertyChanged}"
-                                     Margin="0,6,0,0" />
-                        </StackPanel>
-                    </Border>
-
-                    <Border Style="{StaticResource SettingsCardStyle}">
-                        <StackPanel>
                             <TextBlock Text="上下文与 Token ROI" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>

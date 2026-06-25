@@ -53,15 +53,8 @@ public static class ServiceCollectionExtensions
             static client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddSingleton<IAppLogger>(logger);
         services.AddSingleton<IFileStorageService, FileStorageService>();
-        services.AddHttpClient<OpenAiCompatibleChatModelClient>(
+        services.AddHttpClient<IAgentModelClient, OpenAiCompatibleChatModelClient>(
             static client => client.Timeout = Timeout.InfiniteTimeSpan);
-        services.AddSingleton<IAgentModelClient>(static sp =>
-        {
-            var primary = sp.GetRequiredService<OpenAiCompatibleChatModelClient>();
-            var settings = sp.GetRequiredService<AppSettings>();
-            var logger = sp.GetRequiredService<IAppLogger>();
-            return new FallbackAgentModelClient(primary, settings, logger);
-        });
         services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
         services.AddSingleton<IAgentRuntime, AgentRuntime>();
         services.AddSingleton<IImageAttachmentReader, ImageAttachmentReader>();
@@ -92,8 +85,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, GrepFilesTool>();
         services.AddSingleton<IAgentTool, GlobFilesTool>();
         services.AddSingleton<IAgentTool, ExecuteCommandTool>();
-        services.AddSingleton<ISessionTaskStore, FileSessionTaskStore>();
-        services.AddSingleton<IAgentTool, TodoWriteTool>();
         services.AddSingleton<IAgentTool, KnowledgeSearchTool>();
         services.AddSingleton<IAgentTool, LoadSkillThroughPathTool>();
         services.AddSingleton<Lazy<ChildAgentToolRouter>>(static sp => new Lazy<ChildAgentToolRouter>(() =>
@@ -128,7 +119,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, MemorySearchTool>();
         services.AddSingleton<IAgentTool, MemoryGetTool>();
         services.AddSingleton<IPreReasoningPromptContributor, MemoryPromptContributor>();
-        services.AddSingleton<IPreReasoningPromptContributor, TaskListPromptContributor>();
         services.AddSingleton<CompactionTurnMiddleware>();
         services.AddSingleton<IAgentTurnMiddleware, CompactionTurnMiddleware>();
         services.AddSingleton<IAgentTurnMiddleware, PostTurnMemoryMiddleware>();

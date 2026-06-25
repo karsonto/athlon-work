@@ -12,7 +12,5 @@ public sealed class AgentTurnCallbacks
 
     public Func<SessionUsageSnapshot, Task>? OnUsageRecorded { get; init; }
 
-    public Func<PendingToolApproval, CancellationToken, Task<ToolApprovalDecision>>? OnToolApprovalRequired { get; init; }
-
     public IAgentRunEventSink? EventSink { get; init; }
 }

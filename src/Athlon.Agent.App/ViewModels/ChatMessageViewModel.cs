@@ -225,7 +225,6 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         OnPropertyChanged(nameof(ToolStatusLabel));
         OnPropertyChanged(nameof(ShowToolStatusLabel));
         OnPropertyChanged(nameof(ShowToolArgumentsPanel));
-        OnPropertyChanged(nameof(ShowApprovalActions));
     }
 
     public bool ShowToolStatusLabel => ToolCallStatus != ToolCallDisplayStatus.None;
@@ -233,7 +232,6 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public string ToolStatusLabel => ToolCallStatus switch
     {
         ToolCallDisplayStatus.Preparing => "准备中…",
-        ToolCallDisplayStatus.AwaitingApproval => "等待确认…",
         ToolCallDisplayStatus.Running => "执行中…",
         ToolCallDisplayStatus.Succeeded => "成功",
         ToolCallDisplayStatus.Failed => "失败",
@@ -311,23 +309,6 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
         IsToolArgumentsStreaming = true;
         ToolArgumentsText = string.IsNullOrEmpty(argumentsJson) ? "…" : argumentsJson;
-    }
-
-    public bool ShowApprovalActions => ToolCallStatus == ToolCallDisplayStatus.AwaitingApproval;
-
-    public void MarkAwaitingApproval(AgentToolCall toolCall)
-    {
-        if (!IsTool)
-        {
-            return;
-        }
-
-        ToolCallId = toolCall.Id;
-        ToolName = toolCall.Name;
-        ToolHeader = $"Tool `{toolCall.Name}`";
-        ToolArgumentsText = ToolMessageDisplayParser.FormatArgumentsFull(toolCall.Arguments);
-        ToolCallStatus = ToolCallDisplayStatus.AwaitingApproval;
-        IsToolRunning = false;
     }
 
     public void PromoteStreamingToolToRunning(AgentToolCall toolCall)
