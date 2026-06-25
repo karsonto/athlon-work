@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace Athlon.Agent.App.Services;
 
 /// <summary>Locates the bundled WebView2 Fixed Version runtime shipped with the app.</summary>
