@@ -1,4 +1,3 @@
-using System.IO;
 using Athlon.Agent.Core;
 
 namespace Athlon.Agent.App.ViewModels;
@@ -24,11 +23,6 @@ public static class AgentRecordGrouping
 
         foreach (var entry in entries)
         {
-            if (AgentRunContext.IsSubAgentSessionPath(Path.Combine(entry.Path, "session.json")))
-            {
-                continue;
-            }
-
             var item = new SessionHistoryItemViewModel(
                 entry,
                 entry.Id == activeSessionId,

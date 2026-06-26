@@ -235,6 +235,48 @@ public sealed class SessionIndexMemoryTests
     }
 
     [Fact]
+    public async Task SaveSessionAsync_redirects_subagent_to_nested_path()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-redirect-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
+        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
+
+        var parentDir = Path.Combine(paths.SessionsPath, "parent");
+        var subDir = Path.Combine(parentDir, "subagents", "default", "sub-1");
+        Directory.CreateDirectory(subDir);
+
+        var subSession = new AgentSession(
+            "sub-1",
+            "Sub-agent",
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow,
+            null,
+            null,
+            null,
+            Array.Empty<ChatMessage>());
+
+        try
+        {
+            await storage.SaveSessionAsync(subSession);
+
+            Assert.True(File.Exists(Path.Combine(subDir, "session.json")));
+            Assert.False(File.Exists(Path.Combine(paths.SessionsPath, "sub-1", "session.json")));
+
+            var sessions = await storage.ListSessionsAsync();
+            Assert.DoesNotContain(sessions, item => item.Id == "sub-1");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task LoadSessionAsync_does_not_load_subagent_session_by_id()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-load-{Guid.NewGuid():N}");

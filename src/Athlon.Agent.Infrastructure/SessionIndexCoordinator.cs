@@ -38,7 +38,7 @@ internal sealed class SessionIndexCoordinator
 
     public void ScheduleUpdate(SessionIndexEntry entry)
     {
-        if (AgentRunContext.IsSubAgentSessionPath(Path.Combine(entry.Path, "session.json")))
+        if (!SessionDirectoryLayout.IsEligibleForSessionMenu(_paths.SessionsPath, entry))
         {
             return;
         }
@@ -87,7 +87,7 @@ internal sealed class SessionIndexCoordinator
                     var merged = MergePendingEntries(cached);
                     if (IsSessionIndexFresh(indexPath, merged))
                     {
-                        return FilterTopLevelSessions(merged);
+                        return OrderMenuSessions(merged);
                     }
                 }
             }
@@ -143,8 +143,7 @@ internal sealed class SessionIndexCoordinator
 
     private async Task<bool> TryUpsertIndexEntryAsync(SessionIndexEntry entry, CancellationToken cancellationToken)
     {
-        var subAgentSessionIds = CollectSubAgentSessionIds();
-        if (IsSubAgentSessionEntry(entry, subAgentSessionIds))
+        if (!SessionDirectoryLayout.IsEligibleForSessionMenu(_paths.SessionsPath, entry))
         {
             return true;
         }
@@ -153,6 +152,7 @@ internal sealed class SessionIndexCoordinator
         {
             Directory.CreateDirectory(_paths.SessionsPath);
             var indexPath = Path.Combine(_paths.SessionsPath, "index.json");
+            var nestedSubAgentSessionIds = SessionDirectoryLayout.CollectNestedSubAgentSessionIds(_paths.SessionsPath);
             var entries = new Dictionary<string, SessionIndexEntry>(StringComparer.Ordinal);
 
             if (File.Exists(indexPath))
@@ -168,7 +168,13 @@ internal sealed class SessionIndexCoordinator
 
                     foreach (var existing in cached)
                     {
-                        entries[existing.Id] = existing;
+                        if (SessionDirectoryLayout.IsEligibleForSessionMenu(
+                                _paths.SessionsPath,
+                                existing,
+                                nestedSubAgentSessionIds))
+                        {
+                            entries[existing.Id] = existing;
+                        }
                     }
                 }
             }
@@ -228,17 +234,15 @@ internal sealed class SessionIndexCoordinator
             return Array.Empty<SessionIndexEntry>();
         }
 
-        var subAgentSessionIds = CollectSubAgentSessionIds();
-
-        foreach (var file in Directory.EnumerateFiles(_paths.SessionsPath, "session.json", SearchOption.AllDirectories))
+        var nestedSubAgentSessionIds = SessionDirectoryLayout.CollectNestedSubAgentSessionIds(_paths.SessionsPath);
+        foreach (var sessionJson in SessionDirectoryLayout.EnumerateTopLevelSessionJsonPaths(_paths.SessionsPath))
         {
-            if (AgentRunContext.IsSubAgentSessionPath(file))
-            {
-                continue;
-            }
-
-            var indexEntry = SessionJsonIndexReader.TryRead(file);
-            if (indexEntry is null || IsSubAgentSessionEntry(indexEntry, subAgentSessionIds))
+            var indexEntry = SessionJsonIndexReader.TryRead(sessionJson);
+            if (indexEntry is null
+                || !SessionDirectoryLayout.IsEligibleForSessionMenu(
+                    _paths.SessionsPath,
+                    indexEntry,
+                    nestedSubAgentSessionIds))
             {
                 continue;
             }
@@ -282,42 +286,16 @@ internal sealed class SessionIndexCoordinator
         return true;
     }
 
-    private SessionIndexEntry[] FilterTopLevelSessions(IEnumerable<SessionIndexEntry> entries)
+    private SessionIndexEntry[] OrderMenuSessions(IEnumerable<SessionIndexEntry> entries)
     {
-        var subAgentSessionIds = CollectSubAgentSessionIds();
+        var nestedSubAgentSessionIds = SessionDirectoryLayout.CollectNestedSubAgentSessionIds(_paths.SessionsPath);
         return entries
-            .Where(entry => !IsSubAgentSessionEntry(entry, subAgentSessionIds))
+            .Where(entry => SessionDirectoryLayout.IsEligibleForSessionMenu(
+                _paths.SessionsPath,
+                entry,
+                nestedSubAgentSessionIds))
             .OrderByDescending(item => item.UpdatedAt)
             .ThenBy(item => item.Id)
             .ToArray();
     }
-
-    private HashSet<string> CollectSubAgentSessionIds()
-    {
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        if (!Directory.Exists(_paths.SessionsPath))
-        {
-            return ids;
-        }
-
-        foreach (var file in Directory.EnumerateFiles(_paths.SessionsPath, "session.json", SearchOption.AllDirectories))
-        {
-            if (!AgentRunContext.IsSubAgentSessionPath(file))
-            {
-                continue;
-            }
-
-            var indexEntry = SessionJsonIndexReader.TryRead(file);
-            if (indexEntry is not null)
-            {
-                ids.Add(indexEntry.Id);
-            }
-        }
-
-        return ids;
-    }
-
-    private static bool IsSubAgentSessionEntry(SessionIndexEntry entry, ISet<string> subAgentSessionIds) =>
-        AgentRunContext.IsSubAgentSessionPath(Path.Combine(entry.Path, "session.json"))
-        || subAgentSessionIds.Contains(entry.Id);
 }

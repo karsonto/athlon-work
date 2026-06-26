@@ -6,7 +6,6 @@ using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Core.SubAgents;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -27,16 +26,21 @@ public sealed class FileStorageService(
 
     public async Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default)
     {
+        string sessionDir;
         using (await SessionWriteLock.AcquireAsync(session.Id, cancellationToken).ConfigureAwait(false))
         {
             EnsureSessionLogDirectories(session.Id);
-            var sessionDir = GetSessionDirectory(session);
+            sessionDir = GetSessionDirectory(session);
 
             await jsonFileStore.SaveAsync(Path.Combine(sessionDir, "session.json"), session, cancellationToken);
             _logger.Information("Session persisted to {SessionDir}", sessionDir);
         }
 
-        _indexCoordinator.ScheduleUpdate(session);
+        if (SessionDirectoryLayout.IsTopLevelSessionDirectory(paths.SessionsPath, sessionDir)
+            && !SessionDirectoryLayout.IsNestedSubAgentSessionId(paths.SessionsPath, session.Id))
+        {
+            _indexCoordinator.ScheduleUpdate(session);
+        }
     }
 
     public async Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default)
@@ -208,6 +212,11 @@ public sealed class FileStorageService(
             return null;
         }
 
+        if (SessionDirectoryLayout.IsNestedSubAgentSessionId(paths.SessionsPath, sessionId))
+        {
+            return null;
+        }
+
         var directPath = Path.Combine(GetSessionDirectory(sessionId), "session.json");
         if (File.Exists(directPath))
         {
@@ -232,20 +241,15 @@ public sealed class FileStorageService(
             }
         }
 
-        foreach (var file in Directory.EnumerateFiles(paths.SessionsPath, "session.json", SearchOption.AllDirectories))
+        foreach (var sessionJson in SessionDirectoryLayout.EnumerateTopLevelSessionJsonPaths(paths.SessionsPath))
         {
-            if (AgentRunContext.IsSubAgentSessionPath(file))
-            {
-                continue;
-            }
-
-            var indexEntry = SessionJsonIndexReader.TryRead(file);
+            var indexEntry = SessionJsonIndexReader.TryRead(sessionJson);
             if (indexEntry is null || !string.Equals(indexEntry.Id, sessionId, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            var session = await jsonFileStore.LoadAsync<AgentSession>(file, cancellationToken);
+            var session = await jsonFileStore.LoadAsync<AgentSession>(sessionJson, cancellationToken);
             return session is null ? null : ChatMessageMemorySanitizer.SanitizeSession(session);
         }
 
@@ -346,8 +350,22 @@ public sealed class FileStorageService(
 
     private string GetSessionDirectory(AgentSession session) => GetSessionDirectory(session.Id);
 
-    private string GetSessionDirectory(string sessionId) =>
-        runContextAccessor.ResolveSessionDirectory(paths.SessionsPath, sessionId);
+    private string GetSessionDirectory(string sessionId)
+    {
+        var resolved = runContextAccessor.ResolveSessionDirectory(paths.SessionsPath, sessionId);
+        if (runContextAccessor.Current?.Kind == AgentRunKind.SubAgent)
+        {
+            return resolved;
+        }
+
+        if (SessionDirectoryLayout.IsTopLevelSessionDirectory(paths.SessionsPath, resolved)
+            && SessionDirectoryLayout.TryFindNestedSubAgentDirectory(paths.SessionsPath, sessionId) is { } nested)
+        {
+            return nested;
+        }
+
+        return resolved;
+    }
 
     private string GetSessionTranscriptsDirectory(string sessionId) =>
         Path.Combine(GetSessionDirectory(sessionId), "transcripts");
