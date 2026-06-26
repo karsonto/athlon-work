@@ -322,6 +322,83 @@
                     </StackPanel>
                 </Border>
 
+                <Border Background="{DynamicResource Brush.PanelAlt}"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="8,8"
+                        Margin="0,0,0,8">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasModifiedFiles}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel>
+                        <TextBlock Text="{Binding ModifiedFilesHeader}"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                   Margin="0,0,0,6" />
+                        <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding ModifiedFiles}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:ModifiedFileViewModel}">
+                                        <Button Command="{Binding DataContext.OpenModifiedFileCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                Style="{StaticResource SessionHistoryButtonStyle}"
+                                                Padding="4,6"
+                                                Margin="0,0,0,4"
+                                                ToolTip="{Binding RelativePath}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding StatusGlyph}"
+                                                           FontSize="11"
+                                                           Margin="0,0,8,0"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.SubtleText}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Succeeded">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Success}" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Status}" Value="Failed">
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Warning}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <StackPanel Grid.Column="1" HorizontalAlignment="Stretch">
+                                                    <TextBlock Text="{Binding DisplayName}"
+                                                               FontSize="12"
+                                                               FontWeight="Medium"
+                                                               Foreground="{DynamicResource Brush.Text}"
+                                                               TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding RelativePath}"
+                                                               FontSize="10"
+                                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               Margin="0,1,0,0" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
                 <!-- Knowledge navigation button -->
                 <Button Command="{Binding NavigateCommand}"
                         CommandParameter="Knowledge"

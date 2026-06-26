@@ -36,6 +36,7 @@ public sealed class SessionTurnUiController
 
     private readonly Dispatcher _dispatcher;
     private readonly SessionStreamingUiContext _streaming = new();
+    private readonly SessionModifiedFilesTracker _modifiedFilesTracker = new();
     private readonly StreamingTokenBuffer _tokenBuffer;
     // Cache ViewModels by message ID so switching back to a previously-viewed
     // session reuses MarkdownMessageView / FlowDocument instead of rebuilding everything.
@@ -69,6 +70,10 @@ public sealed class SessionTurnUiController
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages { get; }
+
+    public ObservableCollection<ModifiedFileViewModel> ModifiedFiles => _modifiedFilesTracker.ModifiedFiles;
+
+    public bool HasModifiedFiles => _modifiedFilesTracker.HasModifiedFiles;
 
     public Action RequestScroll
     {
@@ -164,6 +169,7 @@ public sealed class SessionTurnUiController
                     if (!IsDisplayed)
                     {
                         _tokenBuffer.EnqueueEvent(streamEvent);
+                        RunOnUiSync(() => _modifiedFilesTracker.Process(streamEvent));
                         return Task.CompletedTask;
                     }
 
@@ -172,6 +178,7 @@ public sealed class SessionTurnUiController
                         FlushBufferedStreamingToUi();
                         DispatchToChatView(streamEvent);
                         _streaming.Process(streamEvent, Messages);
+                        _modifiedFilesTracker.Process(streamEvent);
                         if (IsDisplayed && ChatView is not null)
                         {
                             if (streamEvent is AgentStreamEvent.TextMessageEnd(var endMessageId))
@@ -241,6 +248,7 @@ public sealed class SessionTurnUiController
             {
                 Messages.Clear();
                 _viewModelCache.Clear();
+                _modifiedFilesTracker.Clear();
             }
             finally
             {
@@ -400,6 +408,7 @@ public sealed class SessionTurnUiController
         }
 
         TrimMessagesIfNeeded();
+        _modifiedFilesTracker.RebuildFromMessages(Messages);
         _bulkChatViewSyncDepth--;
         SyncChatView(immediate: true);
         RequestScrollImmediate();

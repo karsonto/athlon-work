@@ -152,6 +152,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         ApplySessionWorkspace();
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
+        WireModifiedFilesUi(_activeUi);
         ChatPage.PendingImageAttachments.CollectionChanged += (_, _) =>
         {
             ChatPage.OnPendingImagesChanged();
@@ -207,6 +208,14 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages => _activeUi.Messages;
+
+    public ObservableCollection<ModifiedFileViewModel> ModifiedFiles => _activeUi.ModifiedFiles;
+
+    public bool HasModifiedFiles => _activeUi.HasModifiedFiles;
+
+    public int ModifiedFilesCount => ModifiedFiles.Count;
+
+    public string ModifiedFilesHeader => $"已修改 {ModifiedFilesCount} 个文件";
 
     public ObservableCollection<AgentRecordGroupViewModel> AgentRecordGroups => _sessionHistory.AgentRecordGroups;
     public ObservableCollection<QueuedTurnViewModel> QueuedTurns => _sessionTurns.QueuedTurnPresenter.GetForSession(_displayedSessionId);
@@ -504,6 +513,25 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
     }
 
+    private void OnModifiedFilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(HasModifiedFiles));
+        OnPropertyChanged(nameof(ModifiedFilesCount));
+        OnPropertyChanged(nameof(ModifiedFilesHeader));
+    }
+
+    private void WireModifiedFilesUi(SessionTurnUiController ui)
+    {
+        ui.ModifiedFiles.CollectionChanged += OnModifiedFilesCollectionChanged;
+        OnPropertyChanged(nameof(ModifiedFiles));
+        OnPropertyChanged(nameof(HasModifiedFiles));
+        OnPropertyChanged(nameof(ModifiedFilesCount));
+        OnPropertyChanged(nameof(ModifiedFilesHeader));
+    }
+
+    private void UnwireModifiedFilesUi(SessionTurnUiController ui) =>
+        ui.ModifiedFiles.CollectionChanged -= OnModifiedFilesCollectionChanged;
+
     private void NotifyCommandStatesChanged()
     {
         SendCommand.NotifyCanExecuteChanged();
@@ -597,10 +625,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         _activeUi.SetDisplayed(false);
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
+        UnwireModifiedFilesUi(_activeUi);
         _displayedSessionId = session.Id;
         _session = session;
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         WireSessionUsageUi(_activeUi);
+        WireModifiedFilesUi(_activeUi);
         _activeUi.SetDisplayed(true);
         // 切换会话时重新绑定 WebChatView（如果已经初始化）
         if (_activeUi.ChatView is null)
@@ -728,6 +758,54 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public Task OpenWorkspaceFileInEditorAsync(string path) =>
         FileEditor.OpenFileAsync(path, _session.ActiveWorkspace);
+
+    public Task OpenWorkspaceFileForPreviewAsync(string relativeOrFullPath)
+    {
+        var fullPath = ResolveWorkspaceFilePath(relativeOrFullPath);
+        if (fullPath is null)
+        {
+            MessageBox.Show(
+                "无法解析文件路径。请先配置工作区。",
+                "无法预览",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return Task.CompletedTask;
+        }
+
+        return FileEditor.OpenFileAsync(fullPath, _session.ActiveWorkspace, readOnly: true);
+    }
+
+    [RelayCommand]
+    private Task OpenModifiedFileAsync(ModifiedFileViewModel? file)
+    {
+        if (file is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return OpenWorkspaceFileForPreviewAsync(file.RelativePath);
+    }
+
+    private string? ResolveWorkspaceFilePath(string relativeOrFullPath)
+    {
+        if (string.IsNullOrWhiteSpace(relativeOrFullPath))
+        {
+            return null;
+        }
+
+        if (Path.IsPathRooted(relativeOrFullPath))
+        {
+            return Path.GetFullPath(relativeOrFullPath);
+        }
+
+        if (string.IsNullOrWhiteSpace(_session.ActiveWorkspace))
+        {
+            return null;
+        }
+
+        var normalized = relativeOrFullPath.Replace('/', Path.DirectorySeparatorChar);
+        return Path.GetFullPath(Path.Combine(_session.ActiveWorkspace, normalized));
+    }
 
     [RelayCommand(CanExecute = nameof(CanOpenWorkspaceTreeNodeInEditor))]
     private async Task OpenWorkspaceTreeNodeInEditorAsync(WorkspaceTreeNodeViewModel? node)
@@ -1079,6 +1157,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _taskListChangedNotifier.TaskListChanged -= OnTaskListChanged;
         _composer.AtCompletionSourcesUpdated -= OnAtCompletionSourcesUpdated;
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
+        UnwireModifiedFilesUi(_activeUi);
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();
         _layout.Dispose();
