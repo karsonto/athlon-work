@@ -51,6 +51,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IJsonFileStore>(jsonFileStore);
         services.AddSingleton<ICredentialStore, DpapiCredentialStore>();
         services.AddSingleton<IImpSsoSessionStore, ImpSsoSessionStore>();
+        services.AddSingleton<ICurrentSsoUserContext, CurrentSsoUserContext>();
         services.AddHttpClient<IImpSsoAuthService, ImpSsoAuthService>(
             static client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddSingleton<IAppLogger>(logger);

@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
 using Athlon.Agent.Skills.Repository;
@@ -34,6 +35,7 @@ internal static class PromptTestHelpers
         return new SystemPromptOrchestrator(
             settings,
             host,
+            NullCurrentSsoUserContext.Instance,
             sections,
             preReasoningContributors ?? Array.Empty<IPreReasoningPromptContributor>());
     }

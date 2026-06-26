@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.SubAgents;
@@ -183,6 +184,7 @@ public sealed class SubAgentSessionsTests
             var prompt = new SubAgentSystemPromptOrchestrator(
                 settings,
                 new StubHostEnvironment(paths.SkillsPath),
+                NullCurrentSsoUserContext.Instance,
                 Array.Empty<Athlon.Agent.Core.Prompt.IEnvironmentPromptSection>(),
                 Array.Empty<Athlon.Agent.Core.Prompt.IPreReasoningPromptContributor>());
             var services = new ServiceCollection();

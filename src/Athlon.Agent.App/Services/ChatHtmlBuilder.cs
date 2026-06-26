@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
@@ -8,15 +9,19 @@ namespace Athlon.Agent.App.Services;
 /// <summary>构建 WebChatView 外壳 HTML 与 AG-UI 风格的事件驱动时间线脚本。</summary>
 public sealed class ChatHtmlBuilder
 {
-    public string BuildShellHtml()
+    private const string WelcomeDescription =
+        "Athlon Agent 可以帮您分析代码、生成原型、优化设计，或执行任何开发任务。";
+
+    public string BuildShellHtml(string? ssoDisplayName = null)
     {
         var assets = ChatMarkdownAssets.VirtualBaseUrl;
         return "<!DOCTYPE html><html><head>" +
             "<meta charset=\"utf-8\"/>" +
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"/>" +
-            $"<link rel=\"stylesheet\" href=\"{assets}github-dark.min.css\"/>" +
+            $"<link rel=\"stylesheet\" href=\"{assets}{ChatMarkdownAssets.GetHighlightStylesheet()}\"/>" +
             "<style>" + GetThemeStyles() + "</style>" +
-            "</head><body><div id=\"messages\"></div>" +
+            "</head><body>" + BuildEmptyStateHtml(ssoDisplayName) +
+            "<div id=\"messages\"></div>" +
             $"<script src=\"{assets}marked.min.js\"></script>" +
             $"<script src=\"{assets}highlight.min.js\"></script>" +
             "<script>" + GetTimelineScript() + "</script>" +
@@ -26,10 +31,13 @@ public sealed class ChatHtmlBuilder
     public string BuildDispatchScript(AgentStreamEvent streamEvent) =>
         $"handleEvent({ChatEventSerializer.Serialize(streamEvent)});";
 
-    public string BuildDocumentHtml(IReadOnlyList<ChatMessageViewModel> messages, bool showToolCalls = false)
+    public string BuildDocumentHtml(
+        IReadOnlyList<ChatMessageViewModel> messages,
+        bool showToolCalls = false,
+        string? ssoDisplayName = null)
     {
         const string footer = "</body></html>";
-        var shell = BuildShellHtml();
+        var shell = BuildShellHtml(ssoDisplayName);
         if (!shell.EndsWith(footer, StringComparison.Ordinal))
         {
             return shell;
@@ -54,6 +62,19 @@ public sealed class ChatHtmlBuilder
             footer;
 
         return shell[..^footer.Length] + replayScript;
+    }
+
+    private static string BuildEmptyStateHtml(string? ssoDisplayName)
+    {
+        var title = string.IsNullOrWhiteSpace(ssoDisplayName)
+            ? "开始新的对话"
+            : $"你好，{ssoDisplayName.Trim()}";
+        return
+            "<div id=\"empty-state\" class=\"empty-state\">" +
+            "<div class=\"empty-state-icon\">💬</div>" +
+            $"<h2 class=\"empty-state-title\">{WebUtility.HtmlEncode(title)}</h2>" +
+            $"<p class=\"empty-state-description\">{WebUtility.HtmlEncode(WelcomeDescription)}</p>" +
+            "</div>";
     }
 
     private static string GetThemeStyles()
@@ -154,6 +175,36 @@ public sealed class ChatHtmlBuilder
               flex-direction: column;
               gap: 16px;
               max-width: 100%;
+            }
+            .empty-state {
+              position: fixed;
+              inset: 0;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              padding: 24px;
+              text-align: center;
+              pointer-events: none;
+              z-index: 1;
+            }
+            .empty-state-icon {
+              font-size: 48px;
+              line-height: 1;
+              opacity: 0.5;
+              margin-bottom: 24px;
+            }
+            .empty-state-title {
+              font-size: 24px;
+              font-weight: 600;
+              color: {{assistantText}};
+              margin-bottom: 12px;
+            }
+            .empty-state-description {
+              font-size: 14px;
+              color: {{subtle}};
+              max-width: 400px;
+              line-height: 1.6;
             }
             @keyframes fadeIn {
               from { opacity: 0; transform: translateY(8px); }
@@ -557,6 +608,13 @@ public sealed class ChatHtmlBuilder
           window.scrollTo(0, document.body.scrollHeight);
         }
 
+        function updateEmptyStateVisibility() {
+          const emptyState = document.getElementById('empty-state');
+          const root = document.getElementById('messages');
+          if (!emptyState || !root) return;
+          emptyState.style.display = root.children.length === 0 ? 'flex' : 'none';
+        }
+
         function findAssistantContentNode(messageId) {
           if (!messageId) return null;
           const row = document.querySelector('.message-row.assistant-row[data-message-id="' + cssEscape(messageId) + '"]');
@@ -584,6 +642,7 @@ public sealed class ChatHtmlBuilder
             state.currentAssistantEl = row;
           }
           applyMarkdownHtml(findAssistantContentNode(messageId), html);
+          updateEmptyStateVisibility();
           scrollToBottom();
         }
 
@@ -726,6 +785,7 @@ public sealed class ChatHtmlBuilder
             document.getElementById('messages').appendChild(row);
             state.currentReasoningEl = row;
           }
+          updateEmptyStateVisibility();
           scrollToBottom();
         }
 
@@ -735,6 +795,7 @@ public sealed class ChatHtmlBuilder
           document.getElementById('messages').appendChild(row);
           state.currentAssistantEl = row;
           state.assistantStarted[messageId] = true;
+          updateEmptyStateVisibility();
         }
 
         function ensureReasoningBubble(messageId) {
@@ -743,6 +804,7 @@ public sealed class ChatHtmlBuilder
           document.getElementById('messages').appendChild(row);
           state.currentReasoningEl = row;
           state.reasoningStarted[messageId] = true;
+          updateEmptyStateVisibility();
         }
 
         function createToolCard(toolCallId, toolName) {
@@ -767,6 +829,7 @@ public sealed class ChatHtmlBuilder
           row.appendChild(details);
           document.getElementById('messages').appendChild(row);
           state.toolCalls.set(toolCallId, details);
+          updateEmptyStateVisibility();
           scrollToBottom();
         }
 
@@ -779,6 +842,7 @@ public sealed class ChatHtmlBuilder
           switch (event.type) {
             case 'RESET_TIMELINE':
               resetTimeline();
+              updateEmptyStateVisibility();
               break;
             case 'USER_MESSAGE':
               appendMessage('user', event.content || '');
@@ -890,6 +954,7 @@ public sealed class ChatHtmlBuilder
               handleEvent(event);
             } catch (e) { console.warn('replayEvents parse failed', e); }
           }
+          updateEmptyStateVisibility();
           scrollToBottom();
         }
         """;

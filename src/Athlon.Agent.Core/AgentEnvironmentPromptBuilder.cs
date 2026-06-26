@@ -1,4 +1,5 @@
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.Sso;
 
 namespace Athlon.Agent.Core;
 
@@ -11,6 +12,7 @@ public sealed class AgentEnvironmentPromptBuilder(
     private readonly SystemPromptOrchestrator _orchestrator = new(
         settings,
         host,
+        NullCurrentSsoUserContext.Instance,
         sections,
         Array.Empty<IPreReasoningPromptContributor>());
 

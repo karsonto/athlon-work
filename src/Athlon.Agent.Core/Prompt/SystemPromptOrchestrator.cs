@@ -1,10 +1,12 @@
 using System.Text;
+using Athlon.Agent.Core.Sso;
 
 namespace Athlon.Agent.Core.Prompt;
 
 public sealed class SystemPromptOrchestrator(
     AppSettings settings,
     IAgentHostEnvironment host,
+    ICurrentSsoUserContext ssoUserContext,
     IEnumerable<IEnvironmentPromptSection> sections,
     IEnumerable<IPreReasoningPromptContributor> preReasoningContributors) : ISystemPromptOrchestrator
 {
@@ -67,7 +69,8 @@ public sealed class SystemPromptOrchestrator(
             Tools = tools,
             SkillsDirectory = host.SkillsDirectory,
             Host = host,
-            PromptSettings = settings.Prompt
+            PromptSettings = settings.Prompt,
+            SsoUserDisplayName = ssoUserContext.DisplayName
         };
     }
 

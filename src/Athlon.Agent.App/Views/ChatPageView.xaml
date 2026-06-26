@@ -125,43 +125,6 @@
                                       HorizontalAlignment="Stretch"
                                       VerticalAlignment="Stretch" />
 
-                <!-- Empty state（叠在 WebView 上方） -->
-                <StackPanel HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            MaxWidth="720"
-                            Margin="24"
-                            Panel.ZIndex="1"
-                            IsHitTestVisible="False">
-                    <StackPanel.Style>
-                        <Style TargetType="StackPanel">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Messages.Count}" Value="0">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </StackPanel.Style>
-                    <TextBlock Text="💬"
-                               FontSize="48"
-                               HorizontalAlignment="Center"
-                               Opacity="0.5"
-                               Margin="0,0,0,24" />
-                    <TextBlock Text="开始新的对话"
-                               FontSize="24"
-                               FontWeight="SemiBold"
-                               HorizontalAlignment="Center"
-                               TextAlignment="Center" />
-                    <TextBlock Text="Athlon Agent 可以帮您分析代码、生成原型、优化设计，或执行任何开发任务。"
-                               Foreground="{DynamicResource Brush.SubtleText}"
-                               FontSize="14"
-                               HorizontalAlignment="Center"
-                               TextAlignment="Center"
-                               TextWrapping="Wrap"
-                               MaxWidth="400"
-                               Margin="0,12,0,0" />
-                </StackPanel>
-
                 <!-- Loading indicator -->
                 <StackPanel HorizontalAlignment="Center"
                             VerticalAlignment="Center"

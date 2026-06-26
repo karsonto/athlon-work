@@ -18,5 +18,7 @@ public sealed class EnvironmentPromptContext
 
     public required PromptSettings PromptSettings { get; init; }
 
+    public string? SsoUserDisplayName { get; init; }
+
     public bool HasWorkspace => !string.IsNullOrWhiteSpace(WorkspaceRoot);
 }

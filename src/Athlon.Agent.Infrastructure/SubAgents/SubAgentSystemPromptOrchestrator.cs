@@ -1,6 +1,7 @@
 using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure.Prompt;
 
 namespace Athlon.Agent.Infrastructure.SubAgents;
@@ -8,6 +9,7 @@ namespace Athlon.Agent.Infrastructure.SubAgents;
 public sealed class SubAgentSystemPromptOrchestrator(
     AppSettings settings,
     IAgentHostEnvironment host,
+    ICurrentSsoUserContext ssoUserContext,
     IEnumerable<IEnvironmentPromptSection> sections,
     IEnumerable<IPreReasoningPromptContributor> preReasoningContributors) : ISystemPromptOrchestrator
 {
@@ -77,7 +79,8 @@ public sealed class SubAgentSystemPromptOrchestrator(
             Tools = tools,
             SkillsDirectory = host.SkillsDirectory,
             Host = host,
-            PromptSettings = settings.Prompt
+            PromptSettings = settings.Prompt,
+            SsoUserDisplayName = ssoUserContext.DisplayName
         };
     }
 

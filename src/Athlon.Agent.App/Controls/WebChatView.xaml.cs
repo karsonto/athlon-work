@@ -7,7 +7,9 @@ using System.Windows.Threading;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
+using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Core.Streaming;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Web.WebView2.Core;
 
 namespace Athlon.Agent.App.Controls;
@@ -53,11 +55,6 @@ public partial class WebChatView : UserControl
     private void OnAppThemeChanged(object? sender, EventArgs e)
     {
         ApplyThemeBackground();
-        if (_pendingMessages.Count > 0)
-        {
-            _needsRender = true;
-            ScheduleRenderRetry();
-        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e) =>
@@ -179,7 +176,7 @@ public partial class WebChatView : UserControl
         try
         {
             var navigated = await NavigateHtmlAsync(
-                _htmlBuilder.BuildDocumentHtml(_pendingMessages, _pendingShowToolCalls),
+                _htmlBuilder.BuildDocumentHtml(_pendingMessages, _pendingShowToolCalls, ResolveSsoDisplayName()),
                 expectedGeneration).ConfigureAwait(true);
             if (!navigated || expectedGeneration != _renderGeneration)
             {
@@ -397,4 +394,14 @@ public partial class WebChatView : UserControl
 
     public Task ScrollToBottomAsync() =>
         ExecuteScriptWhenReadyAsync("scrollToBottom();");
+
+    private static string? ResolveSsoDisplayName()
+    {
+        if (Application.Current is not App { Services: { } services })
+        {
+            return null;
+        }
+
+        return services.GetService<ICurrentSsoUserContext>()?.DisplayName;
+    }
 }

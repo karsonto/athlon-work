@@ -1,6 +1,7 @@
 using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
 using Athlon.Agent.Skills.Repository;
@@ -34,7 +35,12 @@ public sealed class SystemPromptOrchestratorTests
             new ProductGuidanceSection()
         ];
 
-        var orchestrator = new SystemPromptOrchestrator(settings, host, sections, Array.Empty<IPreReasoningPromptContributor>());
+        var orchestrator = new SystemPromptOrchestrator(
+            settings,
+            host,
+            NullCurrentSsoUserContext.Instance,
+            sections,
+            Array.Empty<IPreReasoningPromptContributor>());
         var legacy = new AgentEnvironmentPromptBuilder(settings, host, sections);
 
         var session = AgentSession.Create("orchestrator-parity");

@@ -1,4 +1,5 @@
 using System.IO;
+using Athlon.Agent.App.Themes;
 
 namespace Athlon.Agent.App.Services;
 
@@ -11,4 +12,9 @@ internal static class ChatMarkdownAssets
 
     public static string AssetsDirectory =>
         Path.Combine(AppContext.BaseDirectory, "Assets", "Chat");
+
+    public static string GetHighlightStylesheet() =>
+        AppThemeManager.CurrentKind == AppThemeKind.Light
+            ? "github.min.css"
+            : "github-dark.min.css";
 }
