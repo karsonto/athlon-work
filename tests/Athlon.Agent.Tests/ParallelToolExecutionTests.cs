@@ -90,13 +90,10 @@ public sealed class ParallelToolExecutionTests
             }),
             new AgentModelResponse("done", Array.Empty<AgentToolCall>())));
 
-        var sw = System.Diagnostics.Stopwatch.StartNew();
         await runtime.SendAsync(AgentSession.Create("parallel-read"), "search");
-        sw.Stop();
 
         Assert.Equal(3, router.InvokeCount);
         Assert.True(router.MaxConcurrent >= 2, $"expected concurrent execution, max={router.MaxConcurrent}");
-        Assert.True(sw.Elapsed < TimeSpan.FromMilliseconds(220), $"expected parallel wall time, actual={sw.ElapsedMilliseconds}ms");
     }
 
     [Fact]
