@@ -91,6 +91,7 @@ public sealed class SubAgentBackgroundExecutor(
         var record = await taskStore.GetAsync(item.ParentSessionId, item.TaskId, cancellationToken).ConfigureAwait(false);
         if (record is null)
         {
+            _logger.Warning("Background sub-agent task not found (race?): parent={ParentId} task={TaskId}", item.ParentSessionId, item.TaskId);
             return;
         }
 

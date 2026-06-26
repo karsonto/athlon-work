@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.SubAgents;
 
@@ -5,27 +6,38 @@ namespace Athlon.Agent.Infrastructure.SubAgents;
 
 public sealed class FileSubAgentTaskStore(IAppPathProvider paths, IJsonFileStore jsonFileStore) : ISubAgentTaskStore
 {
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.Ordinal);
+
     public async Task<SubAgentTaskRecord> CreateAsync(
         string parentSessionId,
         string sessionKey,
         string subSessionId,
         CancellationToken cancellationToken = default)
     {
-        var list = await LoadAsync(parentSessionId, cancellationToken).ConfigureAwait(false);
-        var taskId = $"task_{Guid.NewGuid():N}";
-        var record = new SubAgentTaskRecord(
-            taskId,
-            parentSessionId,
-            sessionKey,
-            subSessionId,
-            "pending",
-            null,
-            null,
-            DateTimeOffset.UtcNow,
-            null);
-        list.Tasks.Add(record);
-        await SaveAsync(parentSessionId, list, cancellationToken).ConfigureAwait(false);
-        return record;
+        var gate = _locks.GetOrAdd(parentSessionId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var list = await LoadAsync(parentSessionId, cancellationToken).ConfigureAwait(false);
+            var taskId = $"task_{Guid.NewGuid():N}";
+            var record = new SubAgentTaskRecord(
+                taskId,
+                parentSessionId,
+                sessionKey,
+                subSessionId,
+                "pending",
+                null,
+                null,
+                DateTimeOffset.UtcNow,
+                null);
+            list.Tasks.Add(record);
+            await SaveAsync(parentSessionId, list, cancellationToken).ConfigureAwait(false);
+            return record;
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     public async Task<SubAgentTaskRecord?> GetAsync(
@@ -33,9 +45,18 @@ public sealed class FileSubAgentTaskStore(IAppPathProvider paths, IJsonFileStore
         string taskId,
         CancellationToken cancellationToken = default)
     {
-        var list = await LoadAsync(parentSessionId, cancellationToken).ConfigureAwait(false);
-        return list.Tasks.FirstOrDefault(task =>
-            string.Equals(task.TaskId, taskId, StringComparison.OrdinalIgnoreCase));
+        var gate = _locks.GetOrAdd(parentSessionId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var list = await LoadAsync(parentSessionId, cancellationToken).ConfigureAwait(false);
+            return list.Tasks.FirstOrDefault(task =>
+                string.Equals(task.TaskId, taskId, StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     public async Task UpdateAsync(
@@ -43,19 +64,28 @@ public sealed class FileSubAgentTaskStore(IAppPathProvider paths, IJsonFileStore
         SubAgentTaskRecord record,
         CancellationToken cancellationToken = default)
     {
-        var list = await LoadAsync(parentSessionId, cancellationToken).ConfigureAwait(false);
-        var index = list.Tasks.FindIndex(task =>
-            string.Equals(task.TaskId, record.TaskId, StringComparison.OrdinalIgnoreCase));
-        if (index < 0)
+        var gate = _locks.GetOrAdd(parentSessionId, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            list.Tasks.Add(record);
-        }
-        else
-        {
-            list.Tasks[index] = record;
-        }
+            var list = await LoadAsync(parentSessionId, cancellationToken).ConfigureAwait(false);
+            var index = list.Tasks.FindIndex(task =>
+                string.Equals(task.TaskId, record.TaskId, StringComparison.OrdinalIgnoreCase));
+            if (index < 0)
+            {
+                list.Tasks.Add(record);
+            }
+            else
+            {
+                list.Tasks[index] = record;
+            }
 
-        await SaveAsync(parentSessionId, list, cancellationToken).ConfigureAwait(false);
+            await SaveAsync(parentSessionId, list, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     private async Task<SubAgentTaskListFile> LoadAsync(string parentSessionId, CancellationToken cancellationToken)

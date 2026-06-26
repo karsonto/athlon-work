@@ -179,8 +179,8 @@ public sealed class ParallelToolExecutionTests
     }
 
     [Fact]
-    public void SubAgentSettings_DefaultMaxConcurrentSubAgents_IsFour() =>
-        Assert.Equal(4, new SubAgentSettings().MaxConcurrentSubAgents);
+    public void SubAgentSettings_DefaultMaxConcurrentSubAgents_IsTen() =>
+        Assert.Equal(10, new SubAgentSettings().MaxConcurrentSubAgents);
 
     private static AgentRuntime CreateRuntime(
         IFileStorageService storage,
