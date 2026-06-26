@@ -32,7 +32,7 @@ public partial class FileEditorView : UserControl
     private void OnThemeChanged(object? sender, EventArgs e)
     {
         ApplyEditorChrome();
-        if (_loadedDocument is null)
+        if (_loadedDocument is null || _loadedDocument.PreferMarkdownPreview)
         {
             return;
         }
@@ -84,7 +84,7 @@ public partial class FileEditorView : UserControl
 
     private void SyncEditorToActiveDocument()
     {
-        if (_suppressEditorChange || _loadedDocument is null)
+        if (_suppressEditorChange || _loadedDocument is null || _loadedDocument.PreferMarkdownPreview)
         {
             return;
         }
@@ -102,6 +102,8 @@ public partial class FileEditorView : UserControl
         if (ReferenceEquals(document, _loadedDocument))
         {
             ApplyReadOnlyState();
+            UpdateEditorSurfaceMode();
+            RefreshMarkdownPreview();
             return;
         }
 
@@ -124,6 +126,8 @@ public partial class FileEditorView : UserControl
                 CodeEditor.Document.Text = string.Empty;
                 CodeEditor.IsReadOnly = true;
                 CodeEditor.SyntaxHighlighting = null;
+                MarkdownPreview.Markdown = string.Empty;
+                UpdateEditorSurfaceMode();
                 return;
             }
 
@@ -131,7 +135,9 @@ public partial class FileEditorView : UserControl
             CodeEditor.SyntaxHighlighting = EditorSyntaxHighlighting.Resolve(document.FilePath);
             CodeEditor.TextArea.TextView.Redraw();
             CodeEditor.ScrollToHome();
+            RefreshMarkdownPreview();
             ApplyReadOnlyState();
+            UpdateEditorSurfaceMode();
         }
         finally
         {
@@ -144,6 +150,14 @@ public partial class FileEditorView : UserControl
         if (e.PropertyName == nameof(EditorDocumentViewModel.IsReadOnly))
         {
             ApplyReadOnlyState();
+            UpdateEditorSurfaceMode();
+            RefreshMarkdownPreview();
+            return;
+        }
+
+        if (e.PropertyName == nameof(EditorDocumentViewModel.Content))
+        {
+            RefreshMarkdownPreview();
         }
     }
 
@@ -152,14 +166,31 @@ public partial class FileEditorView : UserControl
         CodeEditor.IsReadOnly = _loadedDocument?.IsReadOnly ?? true;
     }
 
+    private void UpdateEditorSurfaceMode()
+    {
+        var useMarkdownPreview = _loadedDocument?.PreferMarkdownPreview ?? false;
+        CodeEditor.Visibility = useMarkdownPreview ? Visibility.Collapsed : Visibility.Visible;
+        MarkdownPreview.Visibility = useMarkdownPreview ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RefreshMarkdownPreview()
+    {
+        if (_loadedDocument is null || !_loadedDocument.PreferMarkdownPreview)
+        {
+            MarkdownPreview.Markdown = string.Empty;
+            return;
+        }
+
+        MarkdownPreview.Markdown = _loadedDocument.Content;
+    }
+
     private void OnCodeEditorTextChanged(object? sender, EventArgs e)
     {
-        if (_suppressEditorChange || _loadedDocument is null)
+        if (_suppressEditorChange || _loadedDocument is null || _loadedDocument.PreferMarkdownPreview)
         {
             return;
         }
 
         _loadedDocument.Content = CodeEditor.Document.Text;
     }
-
 }

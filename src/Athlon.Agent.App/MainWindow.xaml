@@ -162,7 +162,7 @@
                         Opacity="0.6"
                         SnapsToDevicePixels="True"
                         IsHitTestVisible="False"
-                        Margin="0,0,0,{Binding ContextSidebarComposerSplitOffsetFromBottom}">
+                        Margin="{Binding ContextSidebarComposerSplitBottomMargin}">
                     <Border.Style>
                         <Style TargetType="Border">
                             <Setter Property="Visibility" Value="Collapsed" />

@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:app="clr-namespace:Athlon.Agent.App"
              xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
+             xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
              x:Name="EditorRoot"
              Background="{DynamicResource Brush.Panel}"
              HorizontalAlignment="Stretch"
@@ -61,19 +62,29 @@
                 Background="{DynamicResource Brush.Panel}"
                 BorderBrush="{DynamicResource Brush.Border}"
                 BorderThickness="0,1,0,0"
-                Padding="0">
-            <avalonEdit:TextEditor x:Name="CodeEditor"
-                                   HorizontalAlignment="Stretch"
-                                   VerticalAlignment="Stretch"
-                                   FontFamily="Cascadia Code, Consolas, Courier New"
-                                   FontSize="14"
-                                   ShowLineNumbers="True"
-                                   WordWrap="False"
-                                   HorizontalScrollBarVisibility="Auto"
-                                   VerticalScrollBarVisibility="Auto"
-                                   Background="{DynamicResource Brush.CodeBackground}"
-                                   Foreground="{DynamicResource Brush.Text}"
-                                   BorderThickness="0" />
+                Padding="0"
+                ClipToBounds="True">
+            <Grid>
+                <avalonEdit:TextEditor x:Name="CodeEditor"
+                                       HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"
+                                       FontFamily="Cascadia Code, Consolas, Courier New"
+                                       FontSize="14"
+                                       ShowLineNumbers="True"
+                                       WordWrap="False"
+                                       HorizontalScrollBarVisibility="Auto"
+                                       VerticalScrollBarVisibility="Auto"
+                                       Background="{DynamicResource Brush.CodeBackground}"
+                                       Foreground="{DynamicResource Brush.Text}"
+                                       BorderThickness="0" />
+                <controls:MarkdownMessageView x:Name="MarkdownPreview"
+                                              Visibility="Collapsed"
+                                              HorizontalAlignment="Stretch"
+                                              VerticalAlignment="Stretch"
+                                              FillViewport="True"
+                                              Padding="20,16"
+                                              AssistantTone="True" />
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

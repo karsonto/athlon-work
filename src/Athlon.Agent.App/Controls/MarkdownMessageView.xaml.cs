@@ -57,7 +57,14 @@ public partial class MarkdownMessageView : UserControl
             nameof(MaxContentHeight),
             typeof(double),
             typeof(MarkdownMessageView),
-            new PropertyMetadata(480d, OnMaxContentHeightChanged));
+            new PropertyMetadata(480d, OnScrollLayoutChanged));
+
+    public static readonly DependencyProperty FillViewportProperty =
+        DependencyProperty.Register(
+            nameof(FillViewport),
+            typeof(bool),
+            typeof(MarkdownMessageView),
+            new PropertyMetadata(false, OnScrollLayoutChanged));
 
     public MarkdownMessageView()
     {
@@ -131,6 +138,12 @@ public partial class MarkdownMessageView : UserControl
         set => SetValue(MaxContentHeightProperty, value);
     }
 
+    public bool FillViewport
+    {
+        get => (bool)GetValue(FillViewportProperty);
+        set => SetValue(FillViewportProperty, value);
+    }
+
     private static void OnAssistantToneChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is MarkdownMessageView view)
@@ -139,11 +152,11 @@ public partial class MarkdownMessageView : UserControl
         }
     }
 
-    private static void OnMaxContentHeightChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    private static void OnScrollLayoutChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is MarkdownMessageView view)
         {
-            view.ApplyMaxHeight();
+            view.ApplyScrollLayout();
         }
     }
 
@@ -174,8 +187,20 @@ public partial class MarkdownMessageView : UserControl
         MarkdownViewer.Markdown = display;
     }
 
-    private void ApplyMaxHeight()
+    private void ApplyScrollLayout()
     {
+        if (FillViewport)
+        {
+            VerticalAlignment = VerticalAlignment.Stretch;
+            HostScroll.VerticalAlignment = VerticalAlignment.Stretch;
+            HostScroll.ClearValue(FrameworkElement.MaxHeightProperty);
+            HostScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            return;
+        }
+
+        VerticalAlignment = VerticalAlignment.Top;
+        HostScroll.VerticalAlignment = VerticalAlignment.Top;
+
         if (MaxContentHeight <= 0)
         {
             HostScroll.ClearValue(FrameworkElement.MaxHeightProperty);
@@ -189,7 +214,7 @@ public partial class MarkdownMessageView : UserControl
 
     private void ApplyTheme()
     {
-        ApplyMaxHeight();
+        ApplyScrollLayout();
 
         var textBrush = ChatMessageToneColors.GetMessageTextBrush(AssistantTone);
         MarkdownViewer.Foreground = textBrush;

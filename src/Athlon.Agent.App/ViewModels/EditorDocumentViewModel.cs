@@ -43,6 +43,18 @@ public sealed partial class EditorDocumentViewModel : ObservableObject
     [ObservableProperty]
     private bool _isReadOnly;
 
+    public bool IsMarkdownFile
+    {
+        get
+        {
+            var extension = Path.GetExtension(FilePath);
+            return extension.Equals(".md", StringComparison.OrdinalIgnoreCase)
+                || extension.Equals(".markdown", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    public bool PreferMarkdownPreview => IsReadOnly && IsMarkdownFile;
+
     public void MarkSaved(string content)
     {
         _savedContent = content;
