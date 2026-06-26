@@ -16,8 +16,9 @@ public sealed class ComposerAtCompletionService
     private volatile IReadOnlyList<AtCompletionItemViewModel> _skillSnapshot = Array.Empty<AtCompletionItemViewModel>();
     private int _buildGeneration;
     private string? _indexedWorkspace;
+    private volatile bool _fileIndexBuildInFlight;
 
-    public bool IsFileIndexEmpty => _fileSnapshot.Count == 0;
+    public event Action? SourcesUpdated;
 
     public void RefreshSources(
         IAgentSkillCatalog skillCatalog,
@@ -32,16 +33,26 @@ public sealed class ComposerAtCompletionService
         }
 
         _skillSnapshot = BuildSkillIndex(skillCatalog, settings);
+        RaiseSourcesUpdated();
 
         if (string.IsNullOrWhiteSpace(activeWorkspace) || !Directory.Exists(activeWorkspace))
         {
             _fileSnapshot = Array.Empty<AtCompletionItemViewModel>();
             _indexedWorkspace = null;
+            _fileIndexBuildInFlight = false;
             return;
         }
 
         var root = Path.GetFullPath(activeWorkspace);
+        if (string.Equals(_indexedWorkspace, root, StringComparison.OrdinalIgnoreCase)
+            && (_fileSnapshot.Count > 0 || _fileIndexBuildInFlight))
+        {
+            return;
+        }
+
         _indexedWorkspace = root;
+        _fileSnapshot = Array.Empty<AtCompletionItemViewModel>();
+        _fileIndexBuildInFlight = true;
         var generation = Interlocked.Increment(ref _buildGeneration);
         var patterns = ignorePatterns.ToArray();
         _ = Task.Run(() => BuildFileIndex(root, patterns, generation));
@@ -53,12 +64,16 @@ public sealed class ComposerAtCompletionService
         string? activeWorkspace,
         IReadOnlyCollection<string> ignorePatterns)
     {
-        if (!IsFileIndexEmpty)
+        if (_skillSnapshot.Count == 0)
         {
+            RefreshSources(skillCatalog, settings, activeWorkspace, ignorePatterns);
             return;
         }
 
-        RefreshSources(skillCatalog, settings, activeWorkspace, ignorePatterns);
+        if (_fileSnapshot.Count == 0)
+        {
+            RefreshSources(skillCatalog, settings, activeWorkspace, ignorePatterns);
+        }
     }
 
     public IReadOnlyList<AtCompletionItemViewModel> FilterMatches(string query) =>
@@ -167,6 +182,20 @@ public sealed class ComposerAtCompletionService
             .ToArray();
 
         _fileSnapshot = ordered;
+        _fileIndexBuildInFlight = false;
+        RaiseSourcesUpdated();
+    }
+
+    private void RaiseSourcesUpdated()
+    {
+        try
+        {
+            SourcesUpdated?.Invoke();
+        }
+        catch
+        {
+            // UI handlers must not break indexing.
+        }
     }
 
     private static void TrimCandidateBuffer(List<(AtCompletionItemViewModel Item, int Depth, DateTime LastWriteUtc)> candidates)

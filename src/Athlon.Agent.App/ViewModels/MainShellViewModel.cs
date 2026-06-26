@@ -50,6 +50,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private bool _shutdownCompleted;
     private bool _disposed;
     private int _sessionLoadGeneration;
+    private int _composerCaretIndex;
     private Controls.WebChatView? _savedChatView;
 
     public MainShellViewModel(
@@ -111,6 +112,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         KnowledgePageVm = knowledgePageVm;
         KnowledgePageVm.KnowledgeDataChanged += OnKnowledgeDataChanged;
         _taskListChangedNotifier.TaskListChanged += OnTaskListChanged;
+        _composer.AtCompletionSourcesUpdated += OnAtCompletionSourcesUpdated;
         ComposerKnowledge = composerKnowledge;
         ComposerHarness = composerHarness;
         ChatPage = chatPage;
@@ -165,6 +167,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                     break;
                 case nameof(ChatPageViewModel.IsComposerEmpty):
                     OnPropertyChanged(nameof(IsComposerEmpty));
+                    break;
+                case nameof(ChatPageViewModel.IsAtCompletionOpen):
+                    OnPropertyChanged(nameof(IsAtCompletionOpen));
+                    break;
+                case nameof(ChatPageViewModel.SelectedAtCompletionIndex):
+                    OnPropertyChanged(nameof(SelectedAtCompletionIndex));
                     break;
             }
         };
@@ -858,8 +866,24 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         && WorkspaceSessionBridge.IsPathUnderWorkspace(root, node.FullPath)
         && !WorkspaceSessionBridge.IsWorkspaceRootPath(root, node.FullPath);
 
-    public void UpdateComposerCompletion(string composerText, int caretIndex) =>
+    public void UpdateComposerCompletion(string composerText, int caretIndex)
+    {
+        _composerCaretIndex = caretIndex;
         ChatPage.UpdateComposerCompletion(composerText, caretIndex);
+    }
+
+    private void OnAtCompletionSourcesUpdated()
+    {
+        Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            if (!ChatPage.IsAtCompletionOpen)
+            {
+                return;
+            }
+
+            ChatPage.UpdateAtCompletion(ComposerText, _composerCaretIndex);
+        });
+    }
 
     public void UpdateAtCompletion(string composerText, int caretIndex) =>
         ChatPage.UpdateAtCompletion(composerText, caretIndex);
@@ -1049,6 +1073,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionTurns.TurnHost.TurnStateChanged -= OnTurnStateChanged;
         KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;
         _taskListChangedNotifier.TaskListChanged -= OnTaskListChanged;
+        _composer.AtCompletionSourcesUpdated -= OnAtCompletionSourcesUpdated;
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();

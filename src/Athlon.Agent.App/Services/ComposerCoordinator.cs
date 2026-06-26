@@ -27,7 +27,12 @@ public sealed class ComposerCoordinator
         _settings = settings;
         _imageAttachmentStore = imageAttachmentStore;
         _paths = paths;
+        _atCompletion.SourcesUpdated += OnAtCompletionSourcesUpdated;
     }
+
+    public event Action? AtCompletionSourcesUpdated;
+
+    private void OnAtCompletionSourcesUpdated() => AtCompletionSourcesUpdated?.Invoke();
 
     public void RefreshSources(
         string? activeWorkspace,
