@@ -50,6 +50,7 @@ public static class ThemeBrushResolver
             "Brush.AssistantBubble" => chrome.AssistantBubble,
             "Brush.Success" => chrome.Success,
             "Brush.SuccessSubtle" => chrome.SuccessSubtle,
+            "Brush.OnSuccess" => chrome.OnSuccess,
             "Brush.Danger" => chrome.Danger,
             "Brush.DangerHover" => chrome.DangerHover,
             "Brush.ErrorSubtle" => chrome.ErrorSubtle,

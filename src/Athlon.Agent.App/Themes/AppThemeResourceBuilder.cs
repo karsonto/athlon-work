@@ -36,6 +36,7 @@ internal static class AppThemeResourceBuilder
             ["Brush.AssistantBubble"] = Brush(c.AssistantBubble),
             ["Brush.Success"] = Brush(c.Success),
             ["Brush.SuccessSubtle"] = Brush(c.SuccessSubtle),
+            ["Brush.OnSuccess"] = Brush(c.OnSuccess),
             ["Brush.Danger"] = Brush(c.Danger),
             ["Brush.DangerHover"] = Brush(c.DangerHover),
             ["Brush.ErrorSubtle"] = Brush(c.ErrorSubtle),

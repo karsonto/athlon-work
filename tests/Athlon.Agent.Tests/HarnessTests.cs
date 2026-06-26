@@ -34,7 +34,8 @@ public sealed class HarnessTests
         var store = CreateTaskStore(root);
         var sessionContext = new ActiveAgentSessionContext();
         sessionContext.SetSession("session-1");
-        var tool = new TodoWriteTool(store, sessionContext, new HarnessNoOpAppLogger());
+        var notifier = new TaskListChangedNotifier();
+        var tool = new TodoWriteTool(store, sessionContext, notifier, new HarnessNoOpAppLogger());
 
         var replace = await tool.InvokeAsync(new ToolInvocation("todo_write", new Dictionary<string, string>
         {

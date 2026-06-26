@@ -49,6 +49,7 @@ public static class DarkAppThemePalette
         // Semantic
         Success = C("#10B981"),
         SuccessSubtle = Ca(0x26, "#10B981"),
+        OnSuccess = C("#FFFFFF"),
         Danger = C("#EF4444"),
         DangerHover = C("#DC2626"),
         ErrorSubtle = Ca(0x26, "#EF4444"),

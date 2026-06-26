@@ -29,6 +29,7 @@ public sealed class UiChromeColors
     public required Color AssistantBubble { get; init; }
     public required Color Success { get; init; }
     public required Color SuccessSubtle { get; init; }
+    public required Color OnSuccess { get; init; }
     public required Color Danger { get; init; }
     public required Color DangerHover { get; init; }
     public required Color ErrorSubtle { get; init; }

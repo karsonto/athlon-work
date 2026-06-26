@@ -76,7 +76,7 @@
                                           ToolTip="关闭后聊天中不显示 file_read、execute_command 等工具卡片；上下文压缩通知仍会显示。"
                                           VerticalAlignment="Center" />
                             </Grid>
-                            <TextBlock Text="长期记忆与任务列表请在聊天输入区通过 Harness 开关按会话启用。"
+                            <TextBlock Text="长期记忆与任务列表请在聊天输入区通过 Coding 开关按会话启用；任务进度显示在左侧栏。"
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12"

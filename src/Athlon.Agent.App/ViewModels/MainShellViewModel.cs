@@ -5,6 +5,7 @@ using System.IO;
 using System.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.App.Services;
@@ -40,6 +41,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly WorkspaceSessionBridge _workspaceBridge = new();
     private readonly ISessionUsageAccumulator _sessionUsageAccumulator;
     private readonly PageViewFactory _pageViewFactory;
+    private readonly ITaskListChangedNotifier _taskListChangedNotifier;
 
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -72,6 +74,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         FileEditorViewModel fileEditor,
         ComposerKnowledgeViewModel composerKnowledge,
         ComposerHarnessViewModel composerHarness,
+        ITaskListChangedNotifier taskListChangedNotifier,
         PageViewFactory pageViewFactory,
         ChatPageViewModel chatPage,
         ScheduleViewModel schedulePageVm)
@@ -90,6 +93,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionNavigation = sessionNavigation;
         _sessionUsageAccumulator = sessionUsageAccumulator;
         _pageViewFactory = pageViewFactory;
+        _taskListChangedNotifier = taskListChangedNotifier;
         _skillCatalog = skillCatalog;
         _appSettings = settings;
         _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
@@ -104,6 +108,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         SchedulePageVm = schedulePageVm;
         KnowledgePageVm = knowledgePageVm;
         KnowledgePageVm.KnowledgeDataChanged += OnKnowledgeDataChanged;
+        _taskListChangedNotifier.TaskListChanged += OnTaskListChanged;
         ComposerKnowledge = composerKnowledge;
         ComposerHarness = composerHarness;
         ChatPage = chatPage;
@@ -625,6 +630,16 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
     }
 
+    private void OnTaskListChanged(string sessionId)
+    {
+        if (!string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Application.Current?.Dispatcher.InvokeAsync(() => _ = ComposerHarness.RefreshTasksAsync());
+    }
+
     private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)
     {
         Application.Current?.Dispatcher.InvokeAsync(() =>
@@ -1013,6 +1028,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionTurns.TurnHost.TurnCompleted -= OnTurnCompleted;
         _sessionTurns.TurnHost.TurnStateChanged -= OnTurnStateChanged;
         KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;
+        _taskListChangedNotifier.TaskListChanged -= OnTaskListChanged;
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();

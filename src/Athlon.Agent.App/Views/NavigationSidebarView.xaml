@@ -294,6 +294,34 @@
                     </StackPanel>
                 </Border>
 
+                <Border Background="{DynamicResource Brush.PanelAlt}"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="8,8"
+                        Margin="0,0,0,8">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ComposerHarness.ShowTaskPanel}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <StackPanel>
+                        <TextBlock Text="任务计划"
+                                   FontSize="10"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                   Margin="0,0,0,6" />
+                        <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding ComposerHarness.Tasks}" />
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
                 <!-- Knowledge navigation button -->
                 <Button Command="{Binding NavigateCommand}"
                         CommandParameter="Knowledge"

@@ -77,6 +77,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISessionKnowledgeState, SessionKnowledgeState>();
         services.AddSingleton<ISessionHarnessState, SessionHarnessState>();
         services.AddSingleton<ISessionTaskListStore, FileSessionTaskListStore>();
+        services.AddSingleton<ITaskListChangedNotifier, TaskListChangedNotifier>();
         services.AddHttpClient<IEmbeddingClient, OpenAiCompatibleEmbeddingClient>(
             static client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddSingleton<AuditLogService>();

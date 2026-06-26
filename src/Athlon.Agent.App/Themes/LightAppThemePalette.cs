@@ -44,6 +44,7 @@ public static class LightAppThemePalette
         AssistantBubble = C(ReportHtmlLightColors.Slate50),
         Success = C(ReportHtmlLightColors.Green600),
         SuccessSubtle = Ca(0x1F, ReportHtmlLightColors.Green600),
+        OnSuccess = C("#FFFFFF"),
         Danger = C(ReportHtmlLightColors.Rose600),
         DangerHover = C(ReportHtmlLightColors.Rose700),
         ErrorSubtle = Ca(0x1F, ReportHtmlLightColors.Rose600),

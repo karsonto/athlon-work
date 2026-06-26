@@ -8,6 +8,7 @@ namespace Athlon.Agent.Infrastructure.Harness;
 public sealed class TodoWriteTool(
     ISessionTaskListStore taskListStore,
     IActiveAgentSessionContext activeSessionContext,
+    ITaskListChangedNotifier taskListChangedNotifier,
     IAppLogger logger) : IAgentTool, IHarnessTool, IExcludedFromChildAgentToolkit
 {
     private readonly IAppLogger _logger = logger.ForContext("TodoWriteTool");
@@ -95,6 +96,7 @@ public sealed class TodoWriteTool(
         try
         {
             var list = await taskListStore.ApplyMergeAsync(sessionId, normalized, merge, cancellationToken).ConfigureAwait(false);
+            taskListChangedNotifier.Notify(sessionId);
             var summary = BuildSummary(list);
             _logger.Information("Updated task list for session {SessionId}: {Summary}", sessionId, summary);
             return ToolResult.Success(summary, FormatListForAgent(list));

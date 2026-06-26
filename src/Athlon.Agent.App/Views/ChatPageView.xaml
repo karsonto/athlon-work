@@ -471,7 +471,7 @@
                                     </Button>
                                 </StackPanel>
                         </Grid>
-                        <!-- Knowledge / Harness chips row -->
+                        <!-- Knowledge chips row -->
                         <StackPanel Grid.Row="3"
                                     Orientation="Horizontal"
                                     Margin="4,0,4,4"
@@ -480,17 +480,7 @@
                                 <Style TargetType="StackPanel">
                                     <Setter Property="Visibility" Value="Collapsed" />
                                     <Style.Triggers>
-                                        <MultiDataTrigger>
-                                            <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding ComposerKnowledge.ShowKnowledgeChips}" Value="False" />
-                                                <Condition Binding="{Binding ComposerHarness.ShowTaskChips}" Value="False" />
-                                            </MultiDataTrigger.Conditions>
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                        </MultiDataTrigger>
                                         <DataTrigger Binding="{Binding ComposerKnowledge.ShowKnowledgeChips}" Value="True">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding ComposerHarness.ShowTaskChips}" Value="True">
                                             <Setter Property="Visibility" Value="Visible" />
                                         </DataTrigger>
                                     </Style.Triggers>
@@ -519,36 +509,6 @@
                                                            FontSize="12"
                                                            Foreground="{DynamicResource Brush.Accent}"
                                                            FontWeight="Medium"
-                                                           VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <ItemsControl ItemsSource="{Binding ComposerHarness.ActiveTasks}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type vm:ComposerHarnessTaskChipViewModel}">
-                                        <Border Background="{DynamicResource Brush.PanelAlt}"
-                                                BorderBrush="{DynamicResource Brush.Border}"
-                                                BorderThickness="1"
-                                                CornerRadius="12"
-                                                Padding="10,4"
-                                                Margin="0,0,6,0">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding StatusLabel}"
-                                                           FontSize="10"
-                                                           Foreground="{DynamicResource Brush.SubtleText}"
-                                                           Margin="0,0,6,0"
-                                                           VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Content}"
-                                                           FontSize="12"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           MaxWidth="220"
                                                            VerticalAlignment="Center" />
                                             </StackPanel>
                                         </Border>
