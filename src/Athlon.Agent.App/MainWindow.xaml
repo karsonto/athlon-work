@@ -154,12 +154,33 @@
                 Grid.Column="2"
                 Background="{DynamicResource Brush.AppBackground}"
                 BorderThickness="0">
-            <views:ContextSidebarView />
+            <Grid>
+                <views:ContextSidebarView />
+                <Border Height="1"
+                        VerticalAlignment="Bottom"
+                        Background="{DynamicResource Brush.Border}"
+                        Opacity="0.6"
+                        SnapsToDevicePixels="True"
+                        IsHitTestVisible="False"
+                        Margin="0,0,0,{Binding ContextSidebarComposerSplitOffsetFromBottom}">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsContextSidebarVisible}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                </Border>
+            </Grid>
         </Border>
 
-        <!-- 底部状态栏（主区域右侧） -->
+        <!-- 底部状态栏（主区域 + 右侧栏贯通） -->
         <Border Grid.Row="2"
                 Grid.Column="1"
+                Grid.ColumnSpan="2"
                 Background="{DynamicResource Brush.Chrome}"
                 BorderBrush="{DynamicResource Brush.Border}"
                 BorderThickness="0,1,0,0"

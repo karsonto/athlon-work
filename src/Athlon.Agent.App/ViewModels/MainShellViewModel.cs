@@ -254,7 +254,13 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public double ComposerHeight =>
         Math.Clamp(_appSettings.Ui.ComposerHeight, ComposerMinHeight, ComposerMaxHeight);
 
+    /// <summary>Distance from the bottom of the chat column to the composer resize line (matches ChatPageView row 3 height).</summary>
+    public double ContextSidebarComposerSplitOffsetFromBottom => ComposerHeight;
+
     public bool IsContextSidebarVisible => _appSettings.Ui.ContextSidebarVisible;
+
+    public GridLength ContextSidebarEdgeGutterWidth =>
+        IsContextSidebarVisible ? new GridLength(12) : new GridLength(0);
 
     public double ContextSidebarWidth =>
         Math.Clamp(_appSettings.Ui.ContextSidebarWidth, ContextSidebarMinWidth, ContextSidebarMaxWidth);
@@ -417,14 +423,18 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public void SetContextSidebarVisible(bool visible) =>
         _layout.SetContextSidebarVisible(visible, NotifyContextSidebarLayoutChanged);
 
+    public void UpdateComposerHeight(double height)
+    {
+        _layout.UpdateComposerHeight(height);
+        OnPropertyChanged(nameof(ComposerHeight));
+        OnPropertyChanged(nameof(ContextSidebarComposerSplitOffsetFromBottom));
+    }
+
     public void UpdateContextSidebarWidth(double width) =>
         _layout.UpdateContextSidebarWidth(width);
 
     public void UpdateNavigationSidebarWidth(double width) =>
         _layout.UpdateNavigationSidebarWidth(width);
-
-    public void UpdateComposerHeight(double height) =>
-        _layout.UpdateComposerHeight(height);
 
     /// <summary>将 WebChatView 绑定到当前活跃 UI 控制器，用于消息的增量渲染。</summary>
     public void AttachChatView(Controls.WebChatView chatView)
@@ -438,6 +448,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private void NotifyContextSidebarLayoutChanged()
     {
         OnPropertyChanged(nameof(IsContextSidebarVisible));
+        OnPropertyChanged(nameof(ContextSidebarEdgeGutterWidth));
         OnPropertyChanged(nameof(ContextSidebarWidth));
         OnPropertyChanged(nameof(ContextSidebarToggleToolTip));
         ContextSidebarLayoutChanged?.Invoke(this, EventArgs.Empty);
