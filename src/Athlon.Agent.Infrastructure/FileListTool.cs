@@ -34,7 +34,7 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
         var workspaceRoot = guard.Normalize(".");
         var ignorePatterns = guard.GetIgnorePatterns();
         var files = Directory.EnumerateFileSystemEntries(fullPath, "*", SearchOption.TopDirectoryOnly)
-            .Where(path => !WorkspacePathFilter.ShouldIgnoreEntryName(Path.GetFileName(path), ignorePatterns))
+            .Where(path => !WorkspacePathFilter.ShouldIgnorePath(path, ignorePatterns))
             .OrderBy(path => Directory.Exists(path) ? 0 : 1)
             .ThenBy(path => ToolPathNormalizer.ForModel(Path.GetRelativePath(workspaceRoot, path)))
             .Take(200)

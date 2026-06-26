@@ -12,15 +12,6 @@ public static class AtomicFile
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + ".tmp";
         await File.WriteAllTextAsync(temp, content, cancellationToken).ConfigureAwait(false);
-        BackupIfExists(path);
         File.Move(temp, path, true);
-    }
-
-    public static void BackupIfExists(string path)
-    {
-        if (File.Exists(path))
-        {
-            File.Copy(path, path + ".bak", true);
-        }
     }
 }

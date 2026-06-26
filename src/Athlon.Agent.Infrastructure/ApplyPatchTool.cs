@@ -6,7 +6,7 @@ public sealed class ApplyPatchTool(WorkspaceGuard guard, AuditLogService audit) 
 {
     public ToolDefinition Definition { get; } = new(
         "apply_patch",
-        "Apply a unified diff patch to workspace files (with backup). Use when file_edit fails due to exact-match errors. "
+        "Apply a unified diff patch to workspace files. Use when file_edit fails due to exact-match errors. "
             + "Patch must use standard --- / +++ / @@ headers.",
         new Dictionary<string, string>
         {
@@ -77,7 +77,6 @@ public sealed class ApplyPatchTool(WorkspaceGuard guard, AuditLogService audit) 
             }
 
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-            AtomicFile.BackupIfExists(fullPath);
             await File.WriteAllTextAsync(fullPath, patched, cancellationToken);
             appliedFiles.Add(relativePath);
         }
