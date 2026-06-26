@@ -121,6 +121,20 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         NotifyTaskCollectionChanged();
     }
 
+    public async Task ClearTaskPlanAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_sessionId))
+        {
+            return;
+        }
+
+        await _taskListStore.ReplaceAsync(_sessionId, new SessionTaskList()).ConfigureAwait(true);
+        Tasks.Clear();
+        PendingTaskCount = 0;
+        InProgressTaskCount = 0;
+        NotifyTaskCollectionChanged();
+    }
+
     private void ClearTasks()
     {
         Tasks.Clear();

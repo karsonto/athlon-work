@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
@@ -48,6 +49,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private SessionTurnUiController _activeUi;
     private bool _shutdownCompleted;
     private bool _disposed;
+    private int _sessionLoadGeneration;
     private Controls.WebChatView? _savedChatView;
 
     public MainShellViewModel(
@@ -194,11 +196,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         await RefreshMcpRuntimeAsync().ConfigureAwait(true);
 
         await RefreshSessionHistoryAsync().ConfigureAwait(true);
-        var latest = GetFirstAgentRecord();
-        if (latest is not null && _session.Messages.Count == 0)
-        {
-            await LoadSessionInternalAsync(latest.Id);
-        }
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages => _activeUi.Messages;
@@ -430,6 +427,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [RelayCommand]
     private async Task NewSession()
     {
+        CancelPendingSessionLoad();
+        IsLoadingSession = false;
         var previousSession = _session;
         _session = AgentSession.Create("New Chat");
         SwitchDisplayedSession(_session);
@@ -453,7 +452,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private async Task ClearContextAsync()
     {
         var confirm = MessageBox.Show(
-            "将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录）。\n\n会话 ID、工作区与标题会保留；磁盘上的 transcript 归档不会删除。\n\n下次发送消息时会重新构建系统提示（工作区、工具、技能等）。",
+            "将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录），并清空 Coding 任务计划。\n\n会话 ID、工作区与标题会保留；磁盘上的 transcript 归档不会删除。\n\n下次发送消息时会重新构建系统提示（工作区、工具、技能等）。",
             "清空上下文",
             MessageBoxButton.YesNo,
             MessageBoxImage.Warning);
@@ -471,6 +470,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _activeUi.Messages.Clear();
         await _storage.ClearConversationDisplayAsync(_session.Id);
         PendingImageAttachments.Clear();
+        await ComposerHarness.ClearTaskPlanAsync();
+        _taskListChangedNotifier.Notify(_session.Id);
 
         await _storage.SaveSessionAsync(_session);
         _sessionNavigation.Invalidate(_session.Id);
@@ -932,21 +933,31 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public bool HasAgentRecords => _sessionHistory.HasAgentRecords;
 
-    private SessionHistoryItemViewModel? GetFirstAgentRecord() => _sessionHistory.GetFirstAgentRecord();
-
     public async Task OpenSessionByIdAsync(string sessionId)
     {
         CurrentPage = AppPage.Chat;
         await LoadSessionInternalAsync(sessionId);
     }
 
+    private void CancelPendingSessionLoad() =>
+        Interlocked.Increment(ref _sessionLoadGeneration);
+
+    private bool IsSessionLoadCurrent(int loadGeneration) =>
+        loadGeneration == Volatile.Read(ref _sessionLoadGeneration);
+
     private async Task LoadSessionInternalAsync(string sessionId)
     {
+        var loadGeneration = Interlocked.Increment(ref _sessionLoadGeneration);
         IsLoadingSession = true;
         Settings.SettingsStatus = "正在加载对话…";
         try
         {
-            var snapshot = await _sessionNavigation.LoadSnapshotAsync(sessionId);
+            var snapshot = await _sessionNavigation.LoadSnapshotAsync(sessionId).ConfigureAwait(true);
+            if (!IsSessionLoadCurrent(loadGeneration))
+            {
+                return;
+            }
+
             if (snapshot is null)
             {
                 Settings.SettingsStatus = "无法加载该对话。";
@@ -959,17 +970,23 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             ComposerText = string.Empty;
             PendingImageAttachments.Clear();
 
+            if (!IsSessionLoadCurrent(loadGeneration))
+            {
+                return;
+            }
+
             if (snapshot.DisplayMessages.Count > 0)
             {
-                await _activeUi.HydrateDisplayAsync(_session, snapshot.DisplayMessages);
-            }
-            else if (_session.Messages.Count > 0)
-            {
-                await _activeUi.HydrateFromSessionAsync(_session);
+                await _activeUi.HydrateDisplayAsync(_session, snapshot.DisplayMessages).ConfigureAwait(true);
             }
             else
             {
-                await _activeUi.HydrateFromSessionAsync(_session);
+                await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
+            }
+
+            if (!IsSessionLoadCurrent(loadGeneration))
+            {
+                return;
             }
 
             ApplySessionWorkspace();
@@ -979,8 +996,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
         finally
         {
-            IsLoadingSession = false;
-            NotifyCommandStatesChanged();
+            if (IsSessionLoadCurrent(loadGeneration))
+            {
+                IsLoadingSession = false;
+                NotifyCommandStatesChanged();
+            }
         }
     }
 

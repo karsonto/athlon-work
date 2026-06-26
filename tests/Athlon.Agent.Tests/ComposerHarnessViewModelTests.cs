@@ -10,6 +10,30 @@ namespace Athlon.Agent.Tests;
 public sealed class ComposerHarnessViewModelTests
 {
     [Fact]
+    public async Task ClearTaskPlanAsync_ClearsStoreAndSidebarTasks()
+    {
+        var harness = new StubHarnessState(enabled: true);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "task", Status = AgentTaskStatuses.InProgress }
+        ]);
+        var vm = new ComposerHarnessViewModel(harness, store);
+
+        await vm.LoadForSessionAsync("session-1");
+        Assert.Single(vm.Tasks);
+        Assert.True(vm.ShowTaskPanel);
+
+        await vm.ClearTaskPlanAsync();
+
+        Assert.Empty(vm.Tasks);
+        Assert.False(vm.ShowTaskPanel);
+        Assert.Equal(0, vm.PendingTaskCount);
+        Assert.Equal(0, vm.InProgressTaskCount);
+        var list = await store.GetAsync("session-1");
+        Assert.Empty(list.Items);
+    }
+
+    [Fact]
     public async Task ShowTaskPanel_IsFalse_WhenHarnessDisabled()
     {
         var harness = new StubHarnessState(enabled: false);
