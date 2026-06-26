@@ -1,6 +1,7 @@
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Harness;
+using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.Harness;
 
@@ -160,6 +161,17 @@ public sealed class ComposerHarnessViewModelTests
                 : new SessionHarnessSnapshot(_enabledBySession.GetValueOrDefault(sessionId, enabled));
 
         public bool IsEnabled(string? sessionId) => GetSnapshot(sessionId).Enabled;
+
+        public bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor)
+        {
+            var run = runContextAccessor.Current;
+            if (run is null || run.Kind == AgentRunKind.SubAgent)
+            {
+                return false;
+            }
+
+            return IsEnabled(run.SessionId);
+        }
     }
 
     private sealed class MutableTaskListStore : ISessionTaskListStore
