@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:behaviors="clr-namespace:Athlon.Agent.App.Behaviors"
              xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
-             DataContext="{Binding Settings, RelativeSource={RelativeSource AncestorType=Window}}">
+             DataContext="{Binding Settings}">
     <ScrollViewer Padding="40,32" VerticalScrollBarVisibility="Auto" Background="{DynamicResource Brush.ChatBackground}">
                 <StackPanel MaxWidth="760">
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
