@@ -101,24 +101,21 @@
     </Style>
 
     <DataTemplate DataType="{x:Type vm:SessionTaskItemViewModel}">
-        <Border>
+        <Border RenderTransformOrigin="0.5,0.5">
+            <Border.RenderTransform>
+                <ScaleTransform ScaleX="1" ScaleY="1" />
+            </Border.RenderTransform>
             <Border.Style>
                 <Style TargetType="Border" BasedOn="{StaticResource SessionTaskItemContainerStyle}">
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding ShouldPlayCompletionAnimation}" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource Brush.SuccessSubtle}" />
                             <DataTrigger.EnterActions>
                                 <BeginStoryboard>
                                     <Storyboard>
-                                        <DoubleAnimation Storyboard.TargetName="CompletionHighlight"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         From="0"
-                                                         To="0.85"
-                                                         Duration="0:0:0.15"
-                                                         AutoReverse="True" />
-                                        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="IndicatorHost"
-                                                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)">
+                                        <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)">
                                             <EasingDoubleKeyFrame KeyTime="0:0:0" Value="1" />
-                                            <EasingDoubleKeyFrame KeyTime="0:0:0.15" Value="1.2">
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0.15" Value="1.03">
                                                 <EasingDoubleKeyFrame.EasingFunction>
                                                     <CubicEase EasingMode="EaseOut" />
                                                 </EasingDoubleKeyFrame.EasingFunction>
@@ -129,10 +126,9 @@
                                                 </EasingDoubleKeyFrame.EasingFunction>
                                             </EasingDoubleKeyFrame>
                                         </DoubleAnimationUsingKeyFrames>
-                                        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="IndicatorHost"
-                                                                     Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)">
+                                        <DoubleAnimationUsingKeyFrames Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)">
                                             <EasingDoubleKeyFrame KeyTime="0:0:0" Value="1" />
-                                            <EasingDoubleKeyFrame KeyTime="0:0:0.15" Value="1.2">
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0.15" Value="1.03">
                                                 <EasingDoubleKeyFrame.EasingFunction>
                                                     <CubicEase EasingMode="EaseOut" />
                                                 </EasingDoubleKeyFrame.EasingFunction>
@@ -143,11 +139,6 @@
                                                 </EasingDoubleKeyFrame.EasingFunction>
                                             </EasingDoubleKeyFrame>
                                         </DoubleAnimationUsingKeyFrames>
-                                        <DoubleAnimation Storyboard.TargetName="CompletedCheck"
-                                                         Storyboard.TargetProperty="Opacity"
-                                                         From="0"
-                                                         To="1"
-                                                         Duration="0:0:0.25" />
                                     </Storyboard>
                                 </BeginStoryboard>
                             </DataTrigger.EnterActions>
@@ -156,36 +147,24 @@
                 </Style>
             </Border.Style>
             <Grid>
-                <Border x:Name="CompletionHighlight"
-                        Background="{DynamicResource Brush.SuccessSubtle}"
-                        CornerRadius="6"
-                        Opacity="0"
-                        IsHitTestVisible="False" />
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="22" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid x:Name="IndicatorHost"
-                          Width="16"
-                          Height="16"
-                          HorizontalAlignment="Left"
-                          VerticalAlignment="Top"
-                          Margin="0,2,0,0"
-                          RenderTransformOrigin="0.5,0.5">
-                        <Grid.RenderTransform>
-                            <ScaleTransform ScaleX="1" ScaleY="1" />
-                        </Grid.RenderTransform>
-                        <Ellipse Style="{StaticResource SessionTaskPendingRingStyle}" />
-                        <Ellipse Style="{StaticResource SessionTaskInProgressDotStyle}" />
-                        <Ellipse Style="{StaticResource SessionTaskCompletedCircleStyle}" />
-                        <Path x:Name="CompletedCheck" Style="{StaticResource SessionTaskCompletedCheckStyle}" />
-                        <Path Style="{StaticResource SessionTaskCancelledMarkStyle}" />
-                    </Grid>
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding Content}"
-                               Style="{StaticResource SessionTaskContentTextStyle}" />
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid Width="16"
+                      Height="16"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Top"
+                      Margin="0,2,0,0">
+                    <Ellipse Style="{StaticResource SessionTaskPendingRingStyle}" />
+                    <Ellipse Style="{StaticResource SessionTaskInProgressDotStyle}" />
+                    <Ellipse Style="{StaticResource SessionTaskCompletedCircleStyle}" />
+                    <Path Style="{StaticResource SessionTaskCompletedCheckStyle}" />
+                    <Path Style="{StaticResource SessionTaskCancelledMarkStyle}" />
                 </Grid>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Content}"
+                           Style="{StaticResource SessionTaskContentTextStyle}" />
             </Grid>
         </Border>
     </DataTemplate>
