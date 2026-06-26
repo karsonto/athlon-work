@@ -26,6 +26,9 @@ public static class AppLayoutMetrics
     /// <summary>Hit target width/height of column/row splitters.</summary>
     public const double SplitterHitSize = 12;
 
+    /// <summary>Max content width for the chat composer (used with 85% column layout).</summary>
+    public const double ComposerMaxContentWidth = 1120;
+
     /// <summary>Inset of the visible splitter line inside the hit target.</summary>
     public const double SplitterLineInset = 0;
 }

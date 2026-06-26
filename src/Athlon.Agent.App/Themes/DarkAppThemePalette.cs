@@ -42,7 +42,7 @@ public static class DarkAppThemePalette
         SurfaceActive = C("#222226"),
 
         // Chat bubbles
-        UserBubble = C("#6366F1"),
+        UserBubble = C("#3A3A3C"),
         UserBubbleOpacity = 1,
         AssistantBubble = C("#121214"),
 

@@ -261,7 +261,7 @@
     <Style x:Key="ComposerOuterBorderStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.ChatBackground}" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="24,16,24,20" />
+        <Setter Property="Padding" Value="0,16,0,20" />
     </Style>
 
     <Style x:Key="ComposerInputWrapperStyle" TargetType="Border">
@@ -357,8 +357,7 @@
     <Style x:Key="ContextTabButtonStyle" TargetType="RadioButton">
         <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="BorderThickness" Value="0,0,0,2" />
-        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="12,10" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Cursor" Value="Hand" />
@@ -379,7 +378,7 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                            <Setter Property="FontWeight" Value="SemiBold" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

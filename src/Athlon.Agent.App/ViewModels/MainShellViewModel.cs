@@ -254,9 +254,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public double ComposerHeight =>
         Math.Clamp(_appSettings.Ui.ComposerHeight, ComposerMinHeight, ComposerMaxHeight);
 
-    /// <summary>Bottom margin aligning the context sidebar split line with the composer resize line.</summary>
-    public Thickness ContextSidebarComposerSplitBottomMargin => new(0, 0, 0, ComposerHeight);
-
     public bool IsContextSidebarVisible => _appSettings.Ui.ContextSidebarVisible;
 
     public GridLength ContextSidebarEdgeGutterWidth =>
@@ -427,7 +424,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         _layout.UpdateComposerHeight(height);
         OnPropertyChanged(nameof(ComposerHeight));
-        OnPropertyChanged(nameof(ContextSidebarComposerSplitBottomMargin));
     }
 
     public void UpdateContextSidebarWidth(double width) =>

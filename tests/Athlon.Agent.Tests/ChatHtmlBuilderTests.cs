@@ -15,10 +15,15 @@ public sealed class ChatHtmlBuilderTests
     {
         var html = _builder.BuildShellHtml();
 
+        Assert.Contains("id=\"chat-scroll\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"empty-state\"", html, StringComparison.Ordinal);
         Assert.Contains("开始新的对话", html, StringComparison.Ordinal);
         Assert.Contains("Athlon Agent 可以帮您分析代码", html, StringComparison.Ordinal);
         Assert.Contains("updateEmptyStateVisibility", html, StringComparison.Ordinal);
+        Assert.Contains("scroller.scrollTop", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("avatar-user", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("Athlon 助手", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(">您<", html, StringComparison.Ordinal);
     }
 
     [Fact]

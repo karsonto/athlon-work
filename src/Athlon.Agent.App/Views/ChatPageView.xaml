@@ -175,9 +175,16 @@
                     Panel.ZIndex="20"
                     Style="{StaticResource ComposerOuterBorderStyle}"
                     ClipToBounds="True">
-                <Border x:Name="ComposerInputWrapper"
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="0.75*" MinWidth="12" />
+                        <ColumnDefinition Width="8.5*"
+                                          MaxWidth="{x:Static app:AppLayoutMetrics.ComposerMaxContentWidth}" />
+                        <ColumnDefinition Width="0.75*" MinWidth="12" />
+                    </Grid.ColumnDefinitions>
+                <Border Grid.Column="1"
+                        x:Name="ComposerInputWrapper"
                         Style="{StaticResource ComposerInputWrapperStyle}"
-                        MaxWidth="900"
                         HorizontalAlignment="Stretch">
                     <Grid>
                         <Grid.RowDefinitions>
@@ -495,6 +502,7 @@
                                    Margin="4,8,0,0" />
                     </Grid>
                 </Border>
+                </Grid>
             </Border>
 
                 <!-- WPF-only gutter: keeps WebView2 HWND out of the splitter / sidebar edge -->

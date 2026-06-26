@@ -20,8 +20,8 @@ public sealed class ChatHtmlBuilder
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"/>" +
             $"<link rel=\"stylesheet\" href=\"{assets}{ChatMarkdownAssets.GetHighlightStylesheet()}\"/>" +
             "<style>" + GetThemeStyles() + "</style>" +
-            "</head><body>" + BuildEmptyStateHtml(ssoDisplayName) +
-            "<div id=\"messages\"></div>" +
+            "</head><body><div id=\"chat-scroll\">" + BuildEmptyStateHtml(ssoDisplayName) +
+            "<div id=\"messages\"></div></div>" +
             $"<script src=\"{assets}marked.min.js\"></script>" +
             $"<script src=\"{assets}highlight.min.js\"></script>" +
             "<script>" + GetTimelineScript() + "</script>" +
@@ -85,11 +85,8 @@ public sealed class ChatHtmlBuilder
         var scrollThumb = AppThemeColor.ToRgba(chrome.ScrollThumb, chrome.ScrollThumbOpacity);
 
         var chatBg = AppThemeColor.ToHex(chrome.ChatBackgroundTop);
-        var userBubble = isLight ? "#0284C7" : "#2563EB";
-        var userRing = isLight ? "#0284C7" : "rgba(59,130,246,0.6)";
-        var assistantAvatar = AppThemeColor.ToHex(chrome.Accent);
-        var assistantBubble = isLight ? "#FFFFFF" : "#262628";
-        var assistantRing = isLight ? "#E2E8F0" : "#3F3F46";
+        var userBubble = AppThemeColor.ToHex(chrome.UserBubble);
+        var userBubbleText = AppThemeColor.ToHex(chrome.Text);
         var assistantText = isLight ? "#1E293B" : "#F4F4F5";
         var reasoningBorder = isLight ? "rgba(221,214,254,0.7)" : "rgba(139,92,246,0.25)";
         var reasoningBg = isLight ? "rgba(245,243,255,0.5)" : "rgba(46,16,101,0.3)";
@@ -158,10 +155,17 @@ public sealed class ChatHtmlBuilder
               line-height: 1.5;
               color: {{assistantText}};
               background: {{chatBg}};
-              min-height: 100%;
+              height: 100%;
+              overflow: hidden;
               -webkit-font-smoothing: antialiased;
             }
-            body { padding: 24px 20px 24px 24px; }
+            #chat-scroll {
+              position: relative;
+              height: 100%;
+              overflow-x: hidden;
+              overflow-y: auto;
+              padding: 24px 20px 24px 24px;
+            }
             ::-webkit-scrollbar { width: 10px; height: 10px; }
             ::-webkit-scrollbar-track { background: transparent; }
             ::-webkit-scrollbar-thumb {
@@ -173,11 +177,11 @@ public sealed class ChatHtmlBuilder
             #messages {
               display: flex;
               flex-direction: column;
-              gap: 16px;
+              gap: 20px;
               max-width: 100%;
             }
             .empty-state {
-              position: fixed;
+              position: absolute;
               inset: 0;
               display: flex;
               flex-direction: column;
@@ -212,67 +216,33 @@ public sealed class ChatHtmlBuilder
             }
             .message-row {
               display: flex;
-              gap: 12px;
               align-items: flex-start;
               animation: fadeIn 0.25s ease;
             }
             .message-row.user { justify-content: flex-end; }
             .message-row.assistant { justify-content: flex-start; }
-            .avatar {
-              width: 40px;
-              height: 40px;
-              border-radius: 16px;
-              flex-shrink: 0;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              margin-top: 4px;
-            }
-            .avatar-spacer { visibility: hidden; }
-            .avatar-user {
-              background: {{userBubble}};
-              color: #fff;
-              box-shadow: 0 1px 2px rgba(15,23,42,0.08);
-            }
-            .avatar-assistant {
-              background: {{assistantAvatar}};
-              color: #fff;
-              font-weight: 700;
-              font-size: 15px;
-              box-shadow: 0 1px 2px rgba(2,132,199,0.2);
-            }
             .bubble {
               max-width: 85%;
-              border-radius: 24px;
-              padding: 16px 20px;
-              box-shadow: 0 1px 2px rgba(15,23,42,0.06);
             }
             .message-row.user .bubble {
               background: {{userBubble}};
-              color: #fff;
-              box-shadow: 0 0 0 1px {{userRing}};
+              color: {{userBubbleText}};
+              border-radius: 20px;
+              padding: 12px 16px;
+              box-shadow: none;
             }
             .message-row.assistant .bubble {
-              background: {{assistantBubble}};
+              background: transparent;
               color: {{assistantText}};
-              box-shadow: 0 0 0 1px {{assistantRing}};
+              padding: 0;
+              box-shadow: none;
             }
-            .bubble-header {
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              margin-bottom: 8px;
-              font-size: 14px;
-              font-weight: 500;
-            }
-            .message-row.user .bubble-header { color: rgba(255,255,255,0.95); }
-            .message-row.assistant .bubble-header { color: {{assistantText}}; }
             .user-text {
               white-space: pre-wrap;
               word-break: break-word;
               font-size: 14px;
               line-height: 1.75;
-              color: #fff;
+              color: {{userBubbleText}};
             }
             .reasoning-block {
               max-width: 85%;
@@ -530,8 +500,6 @@ public sealed class ChatHtmlBuilder
 
     private static string GetTimelineScript() =>
         """
-        const USER_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
-
         const state = {
           currentAssistantEl: null,
           currentReasoningEl: null,
@@ -604,8 +572,14 @@ public sealed class ChatHtmlBuilder
           }
         }
 
+        function getChatScroller() {
+          return document.getElementById('chat-scroll');
+        }
+
         function scrollToBottom() {
-          window.scrollTo(0, document.body.scrollHeight);
+          const scroller = getChatScroller();
+          if (!scroller) return;
+          scroller.scrollTop = scroller.scrollHeight;
         }
 
         function updateEmptyStateVisibility() {
@@ -724,9 +698,7 @@ public sealed class ChatHtmlBuilder
           const row = document.createElement('div');
           row.className = 'message-row user';
           row.innerHTML =
-            '<div class="avatar avatar-user">' + USER_ICON + '</div>' +
             '<div class="bubble">' +
-              '<div class="bubble-header"><span class="bubble-title">您</span></div>' +
               '<div class="message-content user-text">' + escapeHtml(content) + '</div>' +
             '</div>';
           return row;
@@ -737,9 +709,7 @@ public sealed class ChatHtmlBuilder
           row.className = 'message-row assistant assistant-row';
           row.dataset.messageId = messageId || '';
           row.innerHTML =
-            '<div class="avatar avatar-assistant">A</div>' +
             '<div class="bubble">' +
-              '<div class="bubble-header"><span class="bubble-title">Athlon 助手</span></div>' +
               '<div class="message-content md-root"></div>' +
             '</div>';
           return row;
@@ -750,7 +720,6 @@ public sealed class ChatHtmlBuilder
           row.className = 'message-row assistant reasoning-row';
           row.dataset.messageId = messageId || '';
           row.innerHTML =
-            '<div class="avatar avatar-spacer"></div>' +
             '<details class="reasoning-block" open>' +
               '<summary><span class="reasoning-chevron">›</span><span>思维链</span></summary>' +
               '<div class="reasoning-content message-content"></div>' +
@@ -825,7 +794,6 @@ public sealed class ChatHtmlBuilder
             '<div class="tool-section-label">result</div>' +
             '<div class="tool-result-html md-root"></div>' +
             '</div></div>';
-          row.innerHTML = '<div class="avatar avatar-spacer"></div>';
           row.appendChild(details);
           document.getElementById('messages').appendChild(row);
           state.toolCalls.set(toolCallId, details);

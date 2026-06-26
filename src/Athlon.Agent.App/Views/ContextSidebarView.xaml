@@ -29,7 +29,7 @@
                     </Grid>
                 </Border>
 
-                <UniformGrid Grid.Row="1" Columns="2" Background="{DynamicResource Brush.Chrome}">
+                <UniformGrid Grid.Row="1" Columns="2" Background="Transparent">
                     <RadioButton x:Name="ContextTabFiles"
                                  GroupName="ContextTabs"
                                  Content="文件"

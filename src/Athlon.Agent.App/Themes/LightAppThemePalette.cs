@@ -39,7 +39,7 @@ public static class LightAppThemePalette
         AccentSubtle = Ca(0x1F, ReportHtmlLightColors.Indigo500),
         SurfaceHover = C(ReportHtmlLightColors.Slate50),
         SurfaceActive = C(ReportHtmlLightColors.Slate100),
-        UserBubble = C(ReportHtmlLightColors.Indigo500),
+        UserBubble = C("#F2F2F2"),
         UserBubbleOpacity = 1,
         AssistantBubble = C(ReportHtmlLightColors.Slate50),
         Success = C(ReportHtmlLightColors.Green600),
