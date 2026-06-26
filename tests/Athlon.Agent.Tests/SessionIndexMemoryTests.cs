@@ -47,8 +47,7 @@ public sealed class SessionIndexMemoryTests
         var root = Path.Combine(Path.GetTempPath(), $"athlon-list-{Guid.NewGuid():N}");
         var paths = new TestAppPathProvider(root);
         paths.EnsureCreated();
-        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
-        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
 
         for (var i = 0; i < 3; i++)
         {
@@ -89,8 +88,7 @@ public sealed class SessionIndexMemoryTests
         var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-index-{Guid.NewGuid():N}");
         var paths = new TestAppPathProvider(root);
         paths.EnsureCreated();
-        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
-        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
 
         var parentDir = Path.Combine(paths.SessionsPath, "parent");
         var subDir = Path.Combine(parentDir, "subagents", "default", "sub-1");
@@ -123,8 +121,7 @@ public sealed class SessionIndexMemoryTests
         var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-cache-{Guid.NewGuid():N}");
         var paths = new TestAppPathProvider(root);
         paths.EnsureCreated();
-        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
-        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
 
         var parentDir = Path.Combine(paths.SessionsPath, "parent");
         Directory.CreateDirectory(parentDir);
@@ -204,8 +201,7 @@ public sealed class SessionIndexMemoryTests
         var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-leak-{Guid.NewGuid():N}");
         var paths = new TestAppPathProvider(root);
         paths.EnsureCreated();
-        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
-        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
 
         var parentDir = Path.Combine(paths.SessionsPath, "parent");
         var subDir = Path.Combine(parentDir, "subagents", "default", "sub-1");
@@ -240,8 +236,7 @@ public sealed class SessionIndexMemoryTests
         var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-redirect-{Guid.NewGuid():N}");
         var paths = new TestAppPathProvider(root);
         paths.EnsureCreated();
-        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
-        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
 
         var parentDir = Path.Combine(paths.SessionsPath, "parent");
         var subDir = Path.Combine(parentDir, "subagents", "default", "sub-1");
@@ -282,8 +277,7 @@ public sealed class SessionIndexMemoryTests
         var root = Path.Combine(Path.GetTempPath(), $"athlon-subagent-load-{Guid.NewGuid():N}");
         var paths = new TestAppPathProvider(root);
         paths.EnsureCreated();
-        using var logger = AppLogger.Create(new LoggingSettings(), paths.LogsPath);
-        var storage = new FileStorageService(logger, paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
 
         var parentDir = Path.Combine(paths.SessionsPath, "parent");
         var subDir = Path.Combine(parentDir, "subagents", "default", "sub-1");
