@@ -5,14 +5,12 @@ namespace Athlon.Agent.App.Services;
 /// <summary>Locates the bundled WebView2 Fixed Version runtime shipped with the app.</summary>
 internal static class WebView2RuntimeLocator
 {
-    private const string BundledRelativePath = "runtimes/webview2/x64";
-
     public static string? TryResolveBundledFolder() =>
         TryResolveBundledFolder(AppContext.BaseDirectory);
 
     internal static string? TryResolveBundledFolder(string baseDirectory)
     {
-        var direct = Path.Combine(baseDirectory, BundledRelativePath);
+        var direct = Path.Combine(baseDirectory, "runtimes", "webview2", "x64");
         if (File.Exists(Path.Combine(direct, "msedgewebview2.exe")))
         {
             return direct;
