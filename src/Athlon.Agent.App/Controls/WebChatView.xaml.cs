@@ -39,7 +39,6 @@ public partial class WebChatView : UserControl
         IsVisibleChanged += OnIsVisibleChanged;
         SizeChanged += OnSizeChanged;
         LayoutUpdated += OnLayoutUpdated;
-        AppThemeManager.ThemeChanged += OnAppThemeChanged;
     }
 
     public event EventHandler<string>? InitializationFailed;
@@ -97,8 +96,14 @@ public partial class WebChatView : UserControl
         }
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e) =>
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        AppThemeManager.ThemeChanged -= OnAppThemeChanged;
+        AppThemeManager.ThemeChanged += OnAppThemeChanged;
+        ApplyThemeBackground();
+        _ = ApplyThemeStylesAsync();
         _ = RunRenderPipelineSafeAsync(_renderGeneration);
+    }
 
     private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
