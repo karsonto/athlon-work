@@ -99,6 +99,31 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("github.min.css", script, StringComparison.Ordinal);
         Assert.DoesNotContain("github-dark.min.css", script, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void BuildShellHtml_uses_reasoning_state_labels_without_legacy_text()
+    {
+        var html = _builder.BuildShellHtml();
+
+        Assert.Contains("reasoning-label", html, StringComparison.Ordinal);
+        Assert.Contains("正在思考", html, StringComparison.Ordinal);
+        Assert.Contains("已思考", html, StringComparison.Ordinal);
+        Assert.Contains("trackReasoningDuration", html, StringComparison.Ordinal);
+        Assert.Contains("formatReasoningSeconds", html, StringComparison.Ordinal);
+        Assert.Contains("finalizeReasoningLabel", html, StringComparison.Ordinal);
+        Assert.Contains("updateReasoningThinkingLabel", html, StringComparison.Ordinal);
+        Assert.Contains("reasoningFinalizedMs", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("思维链", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildShellHtml_replayEvents_disables_reasoning_duration_tracking()
+    {
+        var html = _builder.BuildShellHtml();
+
+        Assert.Contains("state.trackReasoningDuration = false", html, StringComparison.Ordinal);
+        Assert.Contains("state.trackReasoningDuration = true", html, StringComparison.Ordinal);
+    }
 }
 
 public sealed class SignedInUserSectionTests

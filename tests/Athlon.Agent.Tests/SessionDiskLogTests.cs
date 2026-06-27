@@ -55,6 +55,7 @@ public sealed class SessionDiskLogTests
                     "ok",
                     null,
                     12));
+            await storage.FlushPendingToolCallLogsAsync();
             await storage.SaveSessionAsync(session);
 
             var sessionDir = Path.Combine(paths.SessionsPath, session.Id);

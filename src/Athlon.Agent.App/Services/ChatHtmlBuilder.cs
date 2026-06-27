@@ -554,7 +554,10 @@ public sealed class ChatHtmlBuilder
           currentReasoningEl: null,
           assistantStarted: {},
           reasoningStarted: {},
-          toolCalls: new Map()
+          toolCalls: new Map(),
+          trackReasoningDuration: true,
+          reasoningStartAt: {},
+          reasoningFinalizedMs: {}
         };
 
         function cssEscape(value) {
@@ -740,7 +743,66 @@ public sealed class ChatHtmlBuilder
           state.currentReasoningEl = null;
           state.assistantStarted = {};
           state.reasoningStarted = {};
+          state.reasoningStartAt = {};
+          state.reasoningFinalizedMs = {};
           state.toolCalls.clear();
+        }
+
+        function formatReasoningSeconds(ms) {
+          return Math.max(1, Math.round(ms / 1000)) + '秒';
+        }
+
+        function findReasoningRow(messageId) {
+          if (state.currentReasoningEl
+              && String(state.currentReasoningEl.dataset.messageId || '') === String(messageId || '')) {
+            return state.currentReasoningEl;
+          }
+          if (!messageId) return null;
+          return document.querySelector('.reasoning-row[data-message-id="' + cssEscape(messageId) + '"]');
+        }
+
+        function setReasoningLabelOnRow(row, text) {
+          if (!row) return;
+          const label = row.querySelector('.reasoning-label');
+          if (label) label.textContent = text;
+        }
+
+        function setReasoningLabel(messageId, text) {
+          setReasoningLabelOnRow(findReasoningRow(messageId), text);
+        }
+
+        function getReasoningElapsedMs(messageId) {
+          const start = state.reasoningStartAt[messageId];
+          return start ? performance.now() - start : 0;
+        }
+
+        function updateReasoningThinkingLabel(messageId) {
+          if (!state.trackReasoningDuration) {
+            setReasoningLabel(messageId, '正在思考');
+            return;
+          }
+          setReasoningLabel(
+            messageId,
+            '正在思考 (' + formatReasoningSeconds(getReasoningElapsedMs(messageId)) + ')');
+        }
+
+        function finalizeReasoningLabel(messageId) {
+          if (!messageId) return;
+          const row = findReasoningRow(messageId);
+          if (!row) return;
+          if (!state.trackReasoningDuration) {
+            setReasoningLabelOnRow(row, '已思考');
+            delete state.reasoningStartAt[messageId];
+            delete state.reasoningFinalizedMs[messageId];
+            return;
+          }
+          if (state.reasoningFinalizedMs[messageId] !== undefined) {
+            return;
+          }
+          const ms = getReasoningElapsedMs(messageId);
+          state.reasoningFinalizedMs[messageId] = ms;
+          setReasoningLabelOnRow(row, '已思考 (' + formatReasoningSeconds(ms) + ')');
+          delete state.reasoningStartAt[messageId];
         }
 
         function createUserRow(content) {
@@ -770,7 +832,7 @@ public sealed class ChatHtmlBuilder
           row.dataset.messageId = messageId || '';
           row.innerHTML =
             '<details class="reasoning-block" open>' +
-              '<summary><span class="reasoning-chevron">›</span><span>思维链</span></summary>' +
+              '<summary><span class="reasoning-chevron">›</span><span class="reasoning-label">正在思考</span></summary>' +
               '<div class="reasoning-content message-content"></div>' +
             '</details>';
           return row;
@@ -871,12 +933,21 @@ public sealed class ChatHtmlBuilder
             case 'REASONING_MESSAGE_START':
               state.currentReasoningEl = null;
               state.reasoningStarted[event.messageId] = false;
+              delete state.reasoningFinalizedMs[event.messageId];
+              if (state.trackReasoningDuration) {
+                state.reasoningStartAt[event.messageId] = performance.now();
+              }
               break;
             case 'REASONING_MESSAGE_CONTENT':
               if (!state.reasoningStarted[event.messageId]) ensureReasoningBubble(event.messageId);
+              if (state.trackReasoningDuration && !state.reasoningStartAt[event.messageId]) {
+                state.reasoningStartAt[event.messageId] = performance.now();
+              }
               appendMessage('reasoning', event.delta || '', true);
+              updateReasoningThinkingLabel(event.messageId);
               break;
             case 'REASONING_MESSAGE_END':
+              finalizeReasoningLabel(event.messageId);
               state.currentReasoningEl = null;
               break;
             case 'TEXT_MESSAGE_START':
@@ -884,6 +955,7 @@ public sealed class ChatHtmlBuilder
               state.assistantStarted[event.messageId] = false;
               break;
             case 'TEXT_MESSAGE_CONTENT':
+              finalizeReasoningLabel(event.messageId);
               if (!state.assistantStarted[event.messageId]) ensureAssistantBubble(event.messageId);
               appendMessage('assistant', event.delta || '', true);
               break;
@@ -1005,6 +1077,7 @@ public sealed class ChatHtmlBuilder
         }
 
         function replayEvents(events) {
+          state.trackReasoningDuration = false;
           resetTimeline();
           for (const raw of events) {
             try {
@@ -1014,6 +1087,7 @@ public sealed class ChatHtmlBuilder
           }
           updateEmptyStateVisibility();
           scrollToBottom();
+          state.trackReasoningDuration = true;
         }
         """;
 }

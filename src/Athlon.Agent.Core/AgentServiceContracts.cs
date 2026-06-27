@@ -61,6 +61,7 @@ public interface IFileStorageService
     Task<IReadOnlyList<ChatMessage>> LoadConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default);
     Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default);
     Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default);
+    Task FlushPendingToolCallLogsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default);
     Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default);
     Task<AppSettings> LoadSettingsAsync(CancellationToken cancellationToken = default);

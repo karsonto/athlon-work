@@ -163,6 +163,77 @@ public sealed class GrepFilesToolTests
         }
     }
 
+    [Fact]
+    public async Task InvokeAsync_ParallelScan_RespectsGlobalMaxMatches()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(workspaceRoot);
+
+        for (var i = 0; i < 250; i++)
+        {
+            await File.WriteAllTextAsync(Path.Combine(workspaceRoot, $"file-{i:D3}.txt"), "needle here");
+        }
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
+            {
+                ["pattern"] = "needle"
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("Found 200 matches", result.Summary);
+            Assert.Equal(200, result.Content!.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries).Length);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_ParallelScan_FindsMatchesAcrossFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, "alpha"));
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, "beta"));
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, "gamma"));
+
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "alpha", "one.txt"), "alpha-marker");
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "beta", "two.txt"), "beta-marker");
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "gamma", "three.txt"), "gamma-marker");
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
+            {
+                ["pattern"] = "marker"
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("Found 3 matches", result.Summary);
+            Assert.Contains("alpha", result.Content!, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("beta", result.Content!, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("gamma", result.Content!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static GrepFilesTool CreateTool(string workspaceRoot, string appDataRoot)
     {
         var context = new ActiveWorkspaceContext();

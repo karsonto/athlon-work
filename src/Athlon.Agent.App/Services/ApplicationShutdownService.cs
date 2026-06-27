@@ -39,6 +39,9 @@ public sealed class ApplicationShutdownService(
             .ShutdownAsync(turnWaitTimeout ?? DefaultTurnWaitTimeout, cancellationToken)
             .ConfigureAwait(false);
 
+        progress?.Report("正在刷新工具调用日志…");
+        await storage.FlushPendingToolCallLogsAsync(cancellationToken).ConfigureAwait(false);
+
         progress?.Report("正在结束命令行进程…");
         processRegistry.KillAll();
 

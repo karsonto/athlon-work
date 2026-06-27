@@ -21,6 +21,10 @@ public sealed class FileStorageService(
 {
     private readonly IAppLogger _logger = logger.ForContext("Storage");
     private readonly SessionIndexCoordinator _indexCoordinator = new(paths, jsonFileStore, runContextAccessor);
+    private ToolCallLogWriteQueue? _toolCallLogQueue;
+
+    private ToolCallLogWriteQueue ToolCallLogQueue =>
+        _toolCallLogQueue ??= new ToolCallLogWriteQueue(WriteToolCallLogCoreAsync, _logger);
 
     public string RootPath => paths.RootPath;
 
@@ -176,13 +180,17 @@ public sealed class FileStorageService(
     private string GetConversationDisplayPath(string sessionId) =>
         Path.Combine(GetSessionDirectory(sessionId), "conversation.jsonl");
 
-    public async Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(sessionId))
-        {
-            return;
-        }
+    public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) =>
+        ToolCallLogQueue.EnqueueAsync(sessionId, entry, cancellationToken);
 
+    public Task FlushPendingToolCallLogsAsync(CancellationToken cancellationToken = default) =>
+        ToolCallLogQueue.FlushAsync(cancellationToken);
+
+    private async Task WriteToolCallLogCoreAsync(
+        string sessionId,
+        SessionToolCallLogEntry entry,
+        CancellationToken cancellationToken)
+    {
         using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
         {
             EnsureSessionLogDirectories(sessionId);

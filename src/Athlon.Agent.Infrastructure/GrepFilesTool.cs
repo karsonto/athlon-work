@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using Athlon.Agent.Core;
 
@@ -42,61 +43,132 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
                 ? Directory.EnumerateFiles(fullPath, glob, SearchOption.AllDirectories)
                     .Where(file => !WorkspacePathFilter.ShouldIgnorePath(file, ignorePatterns))
                     .Take(MaxFilesToScan)
+                    .ToArray()
                 : Array.Empty<string>();
 
-        var matches = new List<string>();
-        foreach (var file in files)
+        var matchState = new GrepMatchState();
+        var matches = new ConcurrentBag<string>();
+        if (files.Length <= 1)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!File.Exists(file))
+            foreach (var file in files)
             {
-                continue;
-            }
-
-            var fileInfo = new FileInfo(file);
-            if (fileInfo.Length > MaxFileSizeBytes)
-            {
-                continue;
-            }
-
-            try
-            {
-                await using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 4096, useAsync: true);
-                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-                var lineNumber = 0;
-                while (!reader.EndOfStream)
+                cancellationToken.ThrowIfCancellationRequested();
+                await ScanFileAsync(file, matcher!, baseRoot, matches, matchState, cancellationToken).ConfigureAwait(false);
+                if (matchState.IsFull)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var line = await reader.ReadLineAsync(cancellationToken) ?? string.Empty;
-                    lineNumber++;
-                    if (!matcher!.IsMatch(line))
-                    {
-                        continue;
-                    }
-
-                    matches.Add($"{Path.GetRelativePath(baseRoot, file)}:{lineNumber}:{line.Trim()}");
-                    if (matches.Count >= MaxMatches)
-                    {
-                        break;
-                    }
+                    break;
                 }
             }
-            catch (IOException)
-            {
-                // Skip transiently locked/unreadable files so grep continues instead of hanging.
-            }
-            catch (UnauthorizedAccessException)
-            {
-                // Skip files without access permissions.
-            }
+        }
+        else
+        {
+            await Parallel.ForEachAsync(
+                files,
+                new ParallelOptions
+                {
+                    MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 2, 8),
+                    CancellationToken = cancellationToken
+                },
+                async (file, ct) =>
+                {
+                    if (matchState.IsFull)
+                    {
+                        return;
+                    }
 
-            if (matches.Count >= MaxMatches) break;
+                    await ScanFileAsync(file, matcher!, baseRoot, matches, matchState, ct).ConfigureAwait(false);
+                }).ConfigureAwait(false);
         }
 
-        await WorkspaceToolHelper.AuditAsync(audit, "grep_files", new { path = fullPath, pattern, regex = useRegex, count = matches.Count }, cancellationToken);
-        return matches.Count == 0
+        var orderedMatches = matches.OrderBy(static line => line, StringComparer.Ordinal).ToArray();
+        await WorkspaceToolHelper.AuditAsync(
+            audit,
+            "grep_files",
+            new { path = fullPath, pattern, regex = useRegex, count = orderedMatches.Length },
+            cancellationToken);
+        return orderedMatches.Length == 0
             ? ToolResult.Success("No matches found", "No matches found")
-            : ToolResult.Success($"Found {matches.Count} matches", string.Join(Environment.NewLine, matches));
+            : ToolResult.Success($"Found {orderedMatches.Length} matches", string.Join(Environment.NewLine, orderedMatches));
     }
 
+    private static async Task ScanFileAsync(
+        string file,
+        GrepLineMatcher.GrepLineMatcherInstance matcher,
+        string baseRoot,
+        ConcurrentBag<string> matches,
+        GrepMatchState matchState,
+        CancellationToken cancellationToken)
+    {
+        if (matchState.IsFull || !File.Exists(file))
+        {
+            return;
+        }
+
+        var fileInfo = new FileInfo(file);
+        if (fileInfo.Length > MaxFileSizeBytes)
+        {
+            return;
+        }
+
+        try
+        {
+            await using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 4096, useAsync: true);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            var lineNumber = 0;
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (matchState.IsFull)
+                {
+                    return;
+                }
+
+                var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                if (line is null)
+                {
+                    break;
+                }
+
+                lineNumber++;
+                if (!matcher.IsMatch(line))
+                {
+                    continue;
+                }
+
+                matchState.TryRecordMatch(matches, $"{Path.GetRelativePath(baseRoot, file)}:{lineNumber}:{line.Trim()}");
+            }
+        }
+        catch (IOException)
+        {
+            // Skip transiently locked/unreadable files so grep continues instead of hanging.
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Skip files without access permissions.
+        }
+    }
+
+    private sealed class GrepMatchState
+    {
+        private int _count;
+
+        public bool IsFull => Volatile.Read(ref _count) >= MaxMatches;
+
+        public bool TryRecordMatch(ConcurrentBag<string> matches, string formattedLine)
+        {
+            if (Volatile.Read(ref _count) >= MaxMatches)
+            {
+                return false;
+            }
+
+            var index = Interlocked.Increment(ref _count);
+            if (index <= MaxMatches)
+            {
+                matches.Add(formattedLine);
+                return true;
+            }
+
+            return false;
+        }
+    }
 }

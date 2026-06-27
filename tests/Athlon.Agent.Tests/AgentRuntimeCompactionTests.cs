@@ -211,6 +211,8 @@ public sealed class AgentRuntimeCompactionTests
 
             Task.CompletedTask;
 
+        public Task FlushPendingToolCallLogsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+
 
 
         public Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default) =>
