@@ -107,7 +107,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ToolCallStatus = ToolCallDisplayStatus.Running;
         CreatedAt = AppTimeZone.Now.ToString("HH:mm:ss");
         ToolHeader = $"Tool `{toolCall.Name}`";
-        ToolArgumentsText = ToolMessageDisplayParser.FormatArgumentsFull(toolCall.Arguments);
+        ToolArgumentsText = ToolMessageDisplayParser.FormatArgumentsFull(toolCall.Arguments, toolCall.Name);
         ToolSummary = string.Empty;
         ToolDetail = string.Empty;
         ToolDetailDisplay = string.Empty;
@@ -324,7 +324,26 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ToolCallId = toolCall.Id;
         ToolName = toolCall.Name;
         ToolHeader = $"Tool `{toolCall.Name}`";
-        ToolArgumentsText = ToolMessageDisplayParser.FormatArgumentsFull(toolCall.Arguments);
+        ToolArgumentsText = FileWriteToolArgumentsDisplay.IsFileWrite(toolCall.Name)
+            ? FileWriteToolArgumentsDisplay.FormatArgumentsForPersistedDisplay(toolCall.Arguments)
+            : ToolMessageDisplayParser.FormatArgumentsFull(toolCall.Arguments, toolCall.Name);
+        IsToolArgumentsStreaming = false;
+        ToolCallStatus = ToolCallDisplayStatus.Running;
+        IsToolRunning = true;
+    }
+
+    public void PromoteStreamingToolToRunningDisplay(string toolCallId, string toolName, string argumentsDisplayText)
+    {
+        if (!IsTool)
+        {
+            return;
+        }
+
+        StreamToolIndex = null;
+        ToolCallId = toolCallId;
+        ToolName = toolName;
+        ToolHeader = $"Tool `{toolName}`";
+        ToolArgumentsText = string.IsNullOrWhiteSpace(argumentsDisplayText) ? "…" : argumentsDisplayText;
         IsToolArgumentsStreaming = false;
         ToolCallStatus = ToolCallDisplayStatus.Running;
         IsToolRunning = true;

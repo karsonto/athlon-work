@@ -109,11 +109,10 @@ public sealed class SessionStreamingUiContext
                 if (_toolCallIdToIndex.TryGetValue(toolCallId, out var endIndex)
                     && _toolBubblesByIndex.TryGetValue(endIndex, out var endedTool))
                 {
-                    endedTool.PromoteStreamingToolToRunning(
-                        new AgentToolCall(
-                            toolCallId,
-                            string.IsNullOrWhiteSpace(endedTool.ToolName) ? "unknown" : endedTool.ToolName,
-                            ToolCallArgumentsParser.ParseJson(endedTool.ToolArgumentsText)));
+                    endedTool.PromoteStreamingToolToRunningDisplay(
+                        toolCallId,
+                        string.IsNullOrWhiteSpace(endedTool.ToolName) ? "unknown" : endedTool.ToolName,
+                        endedTool.ToolArgumentsText);
                     _toolBubblesByIndex.Remove(endIndex);
                     _outputToolBubbles[toolCallId] = endedTool;
                 }

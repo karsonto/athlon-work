@@ -52,6 +52,15 @@ public static class PasswordBoxBindingBehavior
             return;
         }
 
+        SyncBoundPassword(passwordBox);
+    }
+
+    /// <summary>
+    /// Pushes the current <see cref="PasswordBox.Password"/> into the bound view-model property.
+    /// Call before save commands so the latest input is not missed when binding has not flushed.
+    /// </summary>
+    public static void SyncBoundPassword(PasswordBox passwordBox)
+    {
         passwordBox.SetValue(IsUpdatingProperty, true);
         SetBoundPassword(passwordBox, passwordBox.Password);
         passwordBox.SetValue(IsUpdatingProperty, false);

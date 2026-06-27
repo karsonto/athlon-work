@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Athlon Agent — Icon</title>
+<style>
+  *,*::before,*::after{margin:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(157,110,252,.10), transparent 60%),
+      #0a0d13;
+    font-family:-apple-system,"SF Pro Display","Segoe UI","Helvetica Neue",sans-serif;
+    color:#e4e4e7;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+
+  /* ---------- Header ---------- */
+  header{padding:96px 24px 0;text-align:center}
+  .kicker{
+    font-size:12px;font-weight:600;letter-spacing:.18em;color:#6b7a93;
+    text-transform:uppercase;margin-bottom:16px;
+  }
+  h1{
+    font-size:clamp(32px,5vw,52px);font-weight:700;letter-spacing:-.024em;line-height:1.05;
+  }
+  .grad{
+    background:linear-gradient(135deg,#9D6EFC,#21CBFC);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  .lede{
+    font-size:17px;color:#6b7a93;max-width:520px;margin:16px auto 0;line-height:1.6;
+  }
+
+  /* ---------- Hero icon ---------- */
+  .hero{display:flex;justify-content:center;padding:64px 24px 88px}
+  .hero-icon{
+    width:280px;height:280px;flex-shrink:0;position:relative;
+    filter:drop-shadow(0 20px 60px rgba(157,110,252,.22));
+  }
+  .hero-icon svg{width:100%;height:100%;display:block}
+
+  /* ---------- Sections ---------- */
+  section{max-width:960px;margin:0 auto;padding:0 24px 96px}
+  section h2{
+    font-size:13px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+    color:#6b7a93;text-align:center;margin-bottom:32px;
+  }
+
+  /* Size matrix */
+  .sizes{
+    display:flex;flex-wrap:wrap;gap:28px;justify-content:center;align-items:flex-end;
+  }
+  .size{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .size .holder{
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.03);
+    border:1px solid rgba(255,255,255,.05);border-radius:14px;padding:16px;
+  }
+  .size .holder svg{display:block}
+  .size .dim{font-size:11px;color:#5a6880;letter-spacing:.04em;font-weight:600}
+
+  /* Backgrounds */
+  .bg-row{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;
+  }
+  .bg-card{
+    background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);
+    border-radius:14px;padding:28px 20px;text-align:center;
+  }
+  .bg-card .stage{
+    width:96px;height:96px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;
+    border-radius:16px;
+  }
+  .bg-card.dark .stage{background:#0a0d13}
+  .bg-card.light .stage{background:#f4f6fb}
+  .bg-card.grad .stage{background:linear-gradient(135deg,#1b253b,#0a0d13)}
+  .bg-card img,.bg-card svg{width:72px;height:72px}
+  .bg-card .lbl{font-size:12px;color:#6b7a93;font-weight:600;letter-spacing:.04em}
+
+  /* Token strip */
+  .tokens{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;
+  }
+  .token{
+    background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);
+    border-radius:12px;padding:18px 16px;
+  }
+  .swatch{width:36px;height:36px;border-radius:9px;margin-bottom:12px}
+  .tag{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#6b7a93;margin-bottom:4px}
+  .hex{font-size:14px;font-weight:600;color:#e4e4e7;font-variant-numeric:tabular-nums}
+  .role{font-size:11px;color:#5a6880;margin-top:3px;line-height:1.4}
+
+  /* Construction notes */
+  .notes{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;
+  }
+  .note{
+    background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);
+    border-radius:12px;padding:22px 20px;
+  }
+  .note .n{font-size:11px;font-weight:700;color:#9D6EFC;letter-spacing:.08em;margin-bottom:8px}
+  .note h3{font-size:15px;font-weight:600;color:#e4e4e7;margin-bottom:8px;letter-spacing:-.01em}
+  .note p{font-size:13px;color:#6b7a93;line-height:1.6}
+
+  footer{
+    padding:48px 24px 64px;text-align:center;color:#5a6880;font-size:12px;line-height:1.7;
+  }
+  footer a{color:#8b97ad;text-decoration:none;border-bottom:1px solid rgba(157,110,252,.4)}
+
+  @media (max-width:560px){
+    .hero-icon{width:200px;height:200px}
+    header{padding:64px 24px 0}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Athlon Agent · App Icon</div>
+  <h1>One mark.<br><span class="grad">An agent, ascending.</span></h1>
+  <p class="lede">A geometric "A" whose crossbar is a terminal cursor — Athlon letterform meets the agent loop, in a single legible stroke.</p>
+</header>
+
+<!-- ============ HERO ICON ============ -->
+<div class="hero">
+  <div class="hero-icon">
+    <!--
+      Concept: two gradient strokes form an upward "A".
+      Crossbar replaced by a terminal cursor block — the agent motif.
+      Background: dark rounded square with subtle inner facet for depth (no drop shadow).
+    -->
+    <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+      <defs>
+        <linearGradient id="gMain" gradientUnits="userSpaceOnUse" x1="128" y1="220" x2="128" y2="40">
+          <stop offset="0" stop-color="#9D6EFC"/>
+          <stop offset="1" stop-color="#21CBFC"/>
+        </linearGradient>
+        <linearGradient id="gBg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#222d47"/>
+          <stop offset="1" stop-color="#131a2a"/>
+        </linearGradient>
+      </defs>
+
+      <!-- tile -->
+      <rect x="24" y="24" width="208" height="208" rx="46" ry="46" fill="url(#gBg)" stroke="#2f3c5c" stroke-width="2"/>
+
+      <!-- subtle inner facet (top-left light edge), no shadow -->
+      <path d="M24 70 V70 A46 46 0 0 1 70 24 H186 A46 46 0 0 1 232 70" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="2"/>
+
+      <!-- left stroke of A -->
+      <path d="M128 60 L74 196 H96 L128 116 L160 196 H182 Z" fill="url(#gMain)"/>
+
+      <!-- terminal cursor block = crossbar -->
+      <rect x="110" y="150" width="36" height="22" rx="3" fill="url(#gMain)"/>
+      <!-- caret notch inside cursor -->
+      <path d="M120 156 l6 5 l-6 5" fill="none" stroke="#0a0d13" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+</div>
+
+<!-- ============ SIZE MATRIX ============ -->
+<section>
+  <h2>Legibility across sizes</h2>
+  <div class="sizes">
+    <!-- 16 -->
+    <div class="size">
+      <div class="holder" style="padding:10px">
+        <svg viewBox="0 0 256 256" width="16" height="16">
+          <rect x="24" y="24" width="208" height="208" rx="46" fill="#1b253b"/>
+          <path d="M128 60 L74 196 H96 L128 116 L160 196 H182 Z" fill="url(#gMain)"/>
+          <rect x="110" y="150" width="36" height="22" rx="3" fill="url(#gMain)"/>
+          <defs><linearGradient id="gMain" gradientUnits="userSpaceOnUse" x1="128" y1="220" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+        </svg>
+      </div>
+      <div class="dim">16 px</div>
+    </div>
+    <!-- 32 -->
+    <div class="size">
+      <div class="holder" style="padding:12px">
+        <svg viewBox="0 0 256 256" width="32" height="32">
+          <rect x="24" y="24" width="208" height="208" rx="46" fill="#1b253b"/>
+          <path d="M128 60 L74 196 H96 L128 116 L160 196 H182 Z" fill="url(#gMain2)"/>
+          <rect x="110" y="150" width="36" height="22" rx="3" fill="url(#gMain2)"/>
+          <defs><linearGradient id="gMain2" gradientUnits="userSpaceOnUse" x1="128" y1="220" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+        </svg>
+      </div>
+      <div class="dim">32 px</div>
+    </div>
+    <!-- 48 -->
+    <div class="size">
+      <div class="holder" style="padding:14px">
+        <svg viewBox="0 0 256 256" width="48" height="48">
+          <rect x="24" y="24" width="208" height="208" rx="46" fill="#1b253b"/>
+          <path d="M128 60 L74 196 H96 L128 116 L160 196 H182 Z" fill="url(#gMain3)"/>
+          <rect x="110" y="150" width="36" height="22" rx="3" fill="url(#gMain3)"/>
+          <defs><linearGradient id="gMain3" gradientUnits="userSpaceOnUse" x1="128" y1="220" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+        </svg>
+      </div>
+      <div class="dim">48 px</div>
+    </div>
+    <!-- 64 -->
+    <div class="size">
+      <div class="holder" style="padding:16px">
+        <svg viewBox="0 0 256 256" width="64" height="64">
+          <rect x="24" y="24" width="208" height="208" rx="46" fill="#1b253b"/>
+          <path d="M128 60 L74 196 H96 L128 116 L160 196 H182 Z" fill="url(#gMain4)"/>
+          <rect x="110" y="150" width="36" height="22" rx="3" fill="url(#gMain4)"/>
+          <defs><linearGradient id="gMain4" gradientUnits="userSpaceOnUse" x1="128" y1="220" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+        </svg>
+      </div>
+      <div class="dim">64 px</div>
+    </div>
+    <!-- 128 -->
+    <div class="size">
+      <div class="holder" style="padding:20px">
+        <svg viewBox="0 0 256 256" width="128" height="128">
+          <defs><linearGradient id="gMain5" gradientUnits="userSpaceOnUse" x1="128" y1="220" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient>
+          <linearGradient id="gBg5" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#222d47"/><stop offset="1" stop-color="#131a2a"/></linearGradient></defs>
+          <rect x="24" y="24" width="208" height="208" rx="46" fill="url(#gBg5)" stroke="#2f3c5c" stroke-width="2"/>
+          <path d="M128 60 L74 196 H96 L128 116 L160 196 H182 Z" fill="url(#gMain5)"/>
+          <rect x="110" y="150" width="36" height="22" rx="3" fill="url(#gMain5)"/>
+          <path d="M120 156 l6 5 l-6 5" fill="none" stroke="#0a0d13" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="dim">128 px</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BACKGROUNDS ============ -->
+<section>
+  <h2>On any surface</h2>
+  <div class="bg-row">
+    <div class="bg-card dark">
+      <div class="stage">
+        <svg viewBox="0 0 256 256" width="72" height="72">
+          <defs><linearGradient id="gMd" gradientUnits="userSpaceOnUse" x1="128" y1="220" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+          <rect x="24" y="24" width="208" height="208" rx="46" fill="#1b253b"/>
+          <path d="M128 60 L74 196 H96 L128 116 L160 196 H182 Z" fill="url(#gMd)"/>
+          <rect x="110" y="150" width="36" height="22" rx="3" fill="url(#gMd)"/>
+        </svg>
+      </div>
+      <div class="lbl">Dark theme</div>
+    </div>
+    <div class="bg-card light">
+      <div class="stage">
+        <svg viewBox="0 0 256 256" width="72" height="72">
+          <defs><linearGradient id="gMl" gradientUnits="userSpaceOnUse" x1="128" y1="220" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+          <rect x="24" y="24" width="208" height="208" rx="46" fill="#1b253b"/>
+          <path d="M128 60 L74 196 H96 L128 116 L160 196 H182 Z" fill="url(#gMl)"/>
+          <rect x="110" y="150" width="36" height="22" rx="3" fill="url(#gMl)"/>
+        </svg>
+      </div>
+      <div class="lbl">Light theme</div>
+    </div>
+    <div class="bg-card grad">
+      <div class="stage">
+        <svg viewBox="0 0 256 256" width="72" height="72">
+          <defs><linearGradient id="gMg" gradientUnits="userSpaceOnUse" x1="128" y1="220" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+          <rect x="24" y="24" width="208" height="208" rx="46" fill="#0a0d13"/>
+          <path d="M128 60 L74 196 H96 L128 116 L160 196 H182 Z" fill="url(#gMg)"/>
+          <rect x="110" y="150" width="36" height="22" rx="3" fill="url(#gMg)"/>
+        </svg>
+      </div>
+      <div class="lbl">Start menu</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DESIGN TOKENS ============ -->
+<section>
+  <h2>Design tokens</h2>
+  <div class="tokens">
+    <div class="token">
+      <div class="swatch" style="background:linear-gradient(135deg,#9D6EFC,#21CBFC)"></div>
+      <div class="tag">Accent</div><div class="hex">#9D6EFC → #21CBFC</div>
+      <div class="role">Single gradient, applied to the whole mark</div>
+    </div>
+    <div class="token">
+      <div class="swatch" style="background:#1B253B"></div>
+      <div class="tag">Tile</div><div class="hex">#1B253B</div>
+      <div class="role">Dark dev-tool base</div>
+    </div>
+    <div class="token">
+      <div class="swatch" style="background:#0a0d13"></div>
+      <div class="tag">Cursor notch</div><div class="hex">#0A0D13</div>
+      <div class="role">Cut-out from the cursor block</div>
+    </div>
+    <div class="token">
+      <div class="swatch" style="background:#2f3c5c"></div>
+      <div class="tag">Tile edge</div><div class="hex">#2F3C5C</div>
+      <div class="role">1px hairline border</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CONSTRUCTION ============ -->
+<section>
+  <h2>Why it works</h2>
+  <div class="notes">
+    <div class="note">
+      <div class="n">01 · ONE SYMBOL</div>
+      <h3>A single readable shape</h3>
+      <p>Two strokes form an "A". The crossbar is a terminal cursor block. One mark, two meanings — letter and agent — with zero decorative noise.</p>
+    </div>
+    <div class="note">
+      <div class="n">02 · FLAT DEPTH</div>
+      <h3>Facet, not shadow</h3>
+      <p>A subtle tile gradient and a 1px inner light edge give depth without drop shadows. Stays crisp at every size.</p>
+    </div>
+    <div class="note">
+      <div class="n">03 · 16px-TRUE</div>
+      <h3>Legible when tiny</h3>
+      <p>Bold geometry and high contrast keep the silhouette readable down to 16×16 — the size that decides whether an icon survives.</p>
+    </div>
+    <div class="note">
+      <div class="n">04 · BRAND-ALIGNED</div>
+      <h3>Inherits the system</h3>
+      <p>Same purple→cyan gradient and dark tile already used across the app theme. The icon is a distillation of the product, not a separate graphic.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Athlon Agent &mdash; native .NET 10 WPF AI coding agent for Windows</p>
+  <p style="margin-top:6px">
+    <a href="https://github.com/karsonto/athlon-work">GitHub</a> &middot;
+    Simple geometric icon &middot; Purple–cyan gradient &middot; Terminal-cursor motif
+  </p>
+</footer>
+
+</body>
+</html>

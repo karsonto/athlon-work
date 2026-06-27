@@ -431,20 +431,27 @@ internal static class OpenAiChatResponseParser
             return new Dictionary<string, string>();
         }
 
-        using var json = JsonDocument.Parse(argumentsJson);
-        if (json.RootElement.ValueKind != JsonValueKind.Object)
+        try
+        {
+            using var json = JsonDocument.Parse(argumentsJson);
+            if (json.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return new Dictionary<string, string>();
+            }
+
+            var arguments = json.RootElement.EnumerateObject()
+                .GroupBy(p => p.Name, StringComparer.Ordinal)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Last().Value.ValueKind == JsonValueKind.String
+                        ? g.Last().Value.GetString() ?? string.Empty
+                        : g.Last().Value.GetRawText(),
+                    StringComparer.Ordinal);
+            return ToolPathNormalizer.NormalizePathArguments(arguments);
+        }
+        catch (JsonException)
         {
             return new Dictionary<string, string>();
         }
-
-        var arguments = json.RootElement.EnumerateObject()
-            .GroupBy(p => p.Name, StringComparer.Ordinal)
-            .ToDictionary(
-                g => g.Key,
-                g => g.Last().Value.ValueKind == JsonValueKind.String
-                    ? g.Last().Value.GetString() ?? string.Empty
-                    : g.Last().Value.GetRawText(),
-                StringComparer.Ordinal);
-        return ToolPathNormalizer.NormalizePathArguments(arguments);
     }
 }

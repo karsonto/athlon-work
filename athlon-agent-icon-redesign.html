@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Athlon Agent — Final Icon Redesign</title>
+<style>
+  *,*::before,*::after{margin:0;box-sizing:border-box}
+  body{
+    background:#0b0f15;
+    font-family:-apple-system,"SF Pro Display","Helvetica Neue",sans-serif;
+    color:#e4e4e7;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    padding:80px 24px 0;text-align:center;
+  }
+  header .kicker{
+    font-size:12px;font-weight:600;letter-spacing:.1em;color:#6b7a93;text-transform:uppercase;margin-bottom:14px;
+  }
+  header h1{
+    font-size:44px;font-weight:700;letter-spacing:-.022em;margin-bottom:10px;
+  }
+  header .gradient-text{
+    background:linear-gradient(135deg,#9D6EFC,#21CBFC);-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  }
+  header p{
+    font-size:17px;color:#6b7a93;max-width:520px;margin:0 auto 44px;line-height:1.55;
+  }
+
+  .hero{
+    display:flex;justify-content:center;align-items:flex-start;padding:40px 24px 72px;
+    gap:56px;flex-wrap:wrap;
+  }
+  .hero-icon{
+    width:256px;height:256px;flex-shrink:0;position:relative;
+    filter:drop-shadow(0 16px 48px rgba(157,110,252,.18)) drop-shadow(0 4px 12px rgba(0,0,0,.5));
+  }
+  .hero-icon svg{width:100%;height:100%;display:block}
+  .hero-detail{
+    display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:420px;
+  }
+  .detail{
+    background:rgba(255,255,255,.04);border-radius:10px;padding:16px 18px;border:1px solid rgba(255,255,255,.04);
+    display:flex;flex-direction:column;gap:3px;
+  }
+  .detail .label{
+    font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#6b7a93;
+  }
+  .detail .value{font-size:16px;font-weight:700;color:#e4e4e7;line-height:1.35}
+  .detail .value.grad{background:linear-gradient(135deg,#9D6EFC,#21CBFC);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .detail .context{font-size:12px;color:#5a6880;line-height:1.45}
+
+  section{max-width:900px;margin:0 auto;padding:0 24px 80px}
+  section h2{font-size:22px;font-weight:700;letter-spacing:-.01em;margin-bottom:28px;text-align:center;color:#c4c9d4}
+
+  .tokens{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:56px;
+  }
+  .token{
+    background:rgba(255,255,255,.03);border-radius:10px;padding:20px;border:1px solid rgba(255,255,255,.04);
+  }
+  .token .swatch{
+    width:40px;height:40px;border-radius:8px;margin-bottom:10px;
+  }
+  .token .tag{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6b7a93;margin-bottom:2px}
+  .token .hex{font-size:14px;font-weight:600;color:#e4e4e7}
+  .token .role{font-size:11px;color:#5a6880;margin-top:2px}
+
+  .mocks{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:56px;
+  }
+  .mock{
+    background:rgba(255,255,255,.03);border-radius:12px;padding:24px 16px 16px;text-align:center;border:1px solid rgba(255,255,255,.04);
+  }
+  .mock .holder{margin:0 auto 12px;display:flex;align-items:center;justify-content:center}
+  .mock .holder svg{display:block}
+  .mock .name{font-size:12px;font-weight:600;color:#e4e4e7;margin-bottom:1px}
+  .mock .dim{font-size:10px;color:#5a6880}
+
+  .before-after{display:grid;grid-template-columns:1fr 1fr;gap:32px}
+  .ba{
+    background:rgba(255,255,255,.03);border-radius:14px;padding:30px;border:1px solid rgba(255,255,255,.04);text-align:center;
+  }
+  .ba h3{font-size:16px;font-weight:600;margin-bottom:16px}
+  .ba .thumb{
+    width:140px;height:140px;margin:0 auto;border-radius:24px;overflow:hidden;
+    box-shadow:0 8px 28px rgba(0,0,0,.45);
+  }
+  .ba .thumb svg{width:100%;height:100%;display:block}
+  .ba .thumb.white{background:#fff}
+  .ba ul{margin-top:16px;text-align:left;font-size:12px;color:#8e98a8;line-height:2;list-style:none;padding:0}
+  .ba ul .ok{color:#34d399}
+  .ba ul .no{color:#6b7a93}
+
+  footer{
+    text-align:center;padding:36px 24px 56px;color:#5a6880;font-size:12px;
+    border-top:1px solid rgba(255,255,255,.04);
+  }
+  footer a{color:#9D6EFC;text-decoration:none}
+  footer a:hover{text-decoration:underline}
+
+  /* SVG inside switch — reuse same gradient IDs */
+  svg .fx-bg{fill:#1B253B;stroke:#374871;stroke-width:2;stroke-miterlimit:10}
+  svg .fx-grad{fill:url(#fxMain)}
+  svg .fx-a{opacity:.7;fill:#9D6EFC}
+  svg .fx-b{opacity:.7;fill:#21CBFC}
+  svg .fx-c{opacity:.5;fill:#21CBFC}
+  svg .fx-line-grad{fill:none;stroke:url(#fxMain);stroke-width:2;stroke-miterlimit:10}
+  svg .fx-line-purple{fill:none;stroke:#9D6EFC;stroke-width:2;stroke-miterlimit:10}
+  svg .fx-fill-purple{fill:#9D6EFC}
+  svg .fx-text-white{fill:#FFFFFF;font-family:Verdana;font-weight:700;font-size:24px}
+  svg .fx-text-sub{fill:#A0B0D0;font-family:Verdana;font-size:10px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">Final Icon Redesign</div>
+  <h1><span class="gradient-text">Athlon Agent</span></h1>
+  <p>Dark dev‑tool aesthetic · Geometric faceted "A" · Purple‑to‑cyan gradient · Terminal‑cursor DNA</p>
+</header>
+
+<div class="hero">
+  <div class="hero-icon">
+    <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+      <style>
+        .s0{fill:#1B253B;stroke:#374871;stroke-width:2;stroke-miterlimit:10}
+        .s1{fill:url(#mg)}
+        .s2{opacity:.7;fill:#9D6EFC}
+        .s3{opacity:.7;fill:#21CBFC}
+        .s4{opacity:.5;fill:#21CBFC}
+        .s5{fill:none;stroke:url(#mg);stroke-width:2;stroke-miterlimit:10}
+        .s6{fill:none;stroke:#9D6EFC;stroke-width:2;stroke-miterlimit:10}
+        .s7{fill:#9D6EFC}
+        .s8{fill:#FFF;font-family:Verdana;font-weight:700;font-size:24px}
+        .s9{fill:#A0B0D0;font-family:Verdana;font-size:10px}
+      </style>
+      <defs>
+        <linearGradient id="mg" gradientUnits="userSpaceOnUse" x1="128" y1="230" x2="128" y2="40">
+          <stop offset="0" stop-color="#9D6EFC"/>
+          <stop offset="1" stop-color="#21CBFC"/>
+        </linearGradient>
+      </defs>
+      <rect x="28" y="28" class="s0" width="200" height="200" rx="20" ry="20"/>
+      <path class="s1" d="M128,50l42,90h-10l-32-65l-32,65H86L128,50z"/>
+      <polygon class="s0" points="110,110 146,110 128,140"/>
+      <polygon class="s2" points="170,140 185,160 155,160"/>
+      <polygon class="s3" points="86,140 71,160 101,160"/>
+      <polygon class="s4" points="128,50 115,75 141,75"/>
+      <line class="s5" x1="128" y1="125" x2="160" y2="110"/>
+      <line class="s6" x1="160" y1="110" x2="185" y2="125"/>
+      <line class="s6" x1="170" y1="140" x2="185" y2="125"/>
+      <rect x="156" y="106" class="s1" width="8" height="8" rx="1"/>
+      <rect x="181" y="121" class="s7" width="8" height="8" rx="1"/>
+      <text transform="matrix(1 0 0 1 76.8125 200)" class="s8">ATHLON</text>
+      <text transform="matrix(1 0 0 1 65.5132 222)" class="s9">AI DEVELOPMENT</text>
+    </svg>
+  </div>
+
+  <div class="hero-detail">
+    <div class="detail">
+      <span class="label">Shape</span>
+      <span class="value">Rounded Rect</span>
+      <span class="context">200×200 · rx=20 · dark navy fill #1B253B · #374871 stroke</span>
+    </div>
+    <div class="detail">
+      <span class="label">Symbol</span>
+      <span class="value grad">Geometric "A"</span>
+      <span class="context">2‑tone faceted: purple #9D6EFC + cyan #21CBFC · inverted center cutout</span>
+    </div>
+    <div class="detail">
+      <span class="label">Terminal</span>
+      <span class="value">Cursor lines + blocks</span>
+      <span class="context">Connected right‑edge lines → terminal chevron · 2 small code-block squares</span>
+    </div>
+    <div class="detail">
+      <span class="label">Typography</span>
+      <span class="value">ATHLON · AI DEVELOPMENT</span>
+      <span class="context">Verdana Bold 24px white · Verdana 10px #A0B0D0 subtitle</span>
+    </div>
+  </div>
+</div>
+
+<!-- COLOR TOKENS -->
+<section>
+  <h2>Design Tokens</h2>
+  <div class="tokens">
+    <div class="token">
+      <div class="swatch" style="background:#1B253B"></div>
+      <span class="tag">Background</span>
+      <span class="hex">#1B253B</span>
+      <span class="role">Deep navy · icon fill</span>
+    </div>
+    <div class="token">
+      <div class="swatch" style="background:#374871"></div>
+      <span class="tag">Stroke</span>
+      <span class="hex">#374871</span>
+      <span class="role">Muted border · frame edge</span>
+    </div>
+    <div class="token">
+      <div class="swatch" style="background:#9D6EFC"></div>
+      <span class="tag">Accent A</span>
+      <span class="hex">#9D6EFC</span>
+      <span class="role">Purple facet · left tone</span>
+    </div>
+    <div class="token">
+      <div class="swatch" style="background:#21CBFC"></div>
+      <span class="tag">Accent B</span>
+      <span class="hex">#21CBFC</span>
+      <span class="role">Cyan facet · right tone</span>
+    </div>
+    <div class="token">
+      <div class="swatch" style="background:#A0B0D0"></div>
+      <span class="tag">Subtitle</span>
+      <span class="hex">#A0B0D0</span>
+      <span class="role">Muted label · "AI DEVELOPMENT"</span>
+    </div>
+    <div class="token">
+      <div class="swatch" style="background:#FFFFFF"></div>
+      <span class="tag">Text</span>
+      <span class="hex">#FFFFFF</span>
+      <span class="role">Brand name · "ATHLON"</span>
+    </div>
+  </div>
+
+  <!-- SIZE MOCKUPS -->
+  <h2>Size Preview</h2>
+  <div class="mocks">
+    <!-- 16px -->
+    <div class="mock">
+      <div class="holder" style="width:16px;height:16px">
+        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" style="width:100%;height:100%">
+          <defs><linearGradient id="m1" gradientUnits="userSpaceOnUse" x1="128" y1="230" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+          <rect x="28" y="28" width="200" height="200" rx="20" ry="20" fill="#1B253B" stroke="#374871" stroke-width="2"/>
+          <path fill="url(#m1)" d="M128,50l42,90h-10l-32-65l-32,65H86L128,50z"/>
+          <polygon fill="#1B253B" points="110,110 146,110 128,140"/>
+        </svg>
+      </div>
+      <div class="name">Menu Bar</div>
+      <div class="dim">16 × 16</div>
+    </div>
+    <!-- 32px -->
+    <div class="mock">
+      <div class="holder" style="width:32px;height:32px">
+        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" style="width:100%;height:100%">
+          <defs><linearGradient id="m2" gradientUnits="userSpaceOnUse" x1="128" y1="230" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+          <rect x="28" y="28" width="200" height="200" rx="20" ry="20" fill="#1B253B" stroke="#374871" stroke-width="2"/>
+          <path fill="url(#m2)" d="M128,50l42,90h-10l-32-65l-32,65H86L128,50z"/>
+          <polygon fill="#1B253B" points="110,110 146,110 128,140"/>
+          <polygon opacity=".7" fill="#9D6EFC" points="170,140 185,160 155,160"/>
+          <polygon opacity=".7" fill="#21CBFC" points="86,140 71,160 101,160"/>
+        </svg>
+      </div>
+      <div class="name">Taskbar</div>
+      <div class="dim">32 × 32</div>
+    </div>
+    <!-- 64px -->
+    <div class="mock">
+      <div class="holder" style="width:64px;height:64px">
+        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" style="width:100%;height:100%">
+          <defs><linearGradient id="m3" gradientUnits="userSpaceOnUse" x1="128" y1="230" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+          <rect x="28" y="28" width="200" height="200" rx="20" ry="20" fill="#1B253B" stroke="#374871" stroke-width="2"/>
+          <path fill="url(#m3)" d="M128,50l42,90h-10l-32-65l-32,65H86L128,50z"/>
+          <polygon fill="#1B253B" points="110,110 146,110 128,140"/>
+          <polygon opacity=".7" fill="#9D6EFC" points="170,140 185,160 155,160"/>
+          <polygon opacity=".7" fill="#21CBFC" points="86,140 71,160 101,160"/>
+          <polygon opacity=".5" fill="#21CBFC" points="128,50 115,75 141,75"/>
+          <line fill="none" stroke="url(#m3)" stroke-width="2" x1="128" y1="125" x2="160" y2="110"/>
+          <line fill="none" stroke="#9D6EFC" stroke-width="2" x1="160" y1="110" x2="185" y2="125"/>
+          <line fill="none" stroke="#9D6EFC" stroke-width="2" x1="170" y1="140" x2="185" y2="125"/>
+          <rect x="156" y="106" fill="url(#m3)" width="8" height="8" rx="1"/>
+          <rect x="181" y="121" fill="#9D6EFC" width="8" height="8" rx="1"/>
+        </svg>
+      </div>
+      <div class="name">Start Menu</div>
+      <div class="dim">64 × 64</div>
+    </div>
+    <!-- 128px -->
+    <div class="mock">
+      <div class="holder" style="width:128px;height:128px">
+        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" style="width:100%;height:100%">
+          <defs><linearGradient id="m4" gradientUnits="userSpaceOnUse" x1="128" y1="230" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+          <rect x="28" y="28" width="200" height="200" rx="20" ry="20" fill="#1B253B" stroke="#374871" stroke-width="2"/>
+          <path fill="url(#m4)" d="M128,50l42,90h-10l-32-65l-32,65H86L128,50z"/>
+          <polygon fill="#1B253B" points="110,110 146,110 128,140"/>
+          <polygon opacity=".7" fill="#9D6EFC" points="170,140 185,160 155,160"/>
+          <polygon opacity=".7" fill="#21CBFC" points="86,140 71,160 101,160"/>
+          <polygon opacity=".5" fill="#21CBFC" points="128,50 115,75 141,75"/>
+          <line fill="none" stroke="url(#m4)" stroke-width="2" x1="128" y1="125" x2="160" y2="110"/>
+          <line fill="none" stroke="#9D6EFC" stroke-width="2" x1="160" y1="110" x2="185" y2="125"/>
+          <line fill="none" stroke="#9D6EFC" stroke-width="2" x1="170" y1="140" x2="185" y2="125"/>
+          <rect x="156" y="106" fill="url(#m4)" width="8" height="8" rx="1"/>
+          <rect x="181" y="121" fill="#9D6EFC" width="8" height="8" rx="1"/>
+          <text transform="matrix(1 0 0 1 76.8125 200)" fill="#FFF" font-family="Verdana" font-weight="700" font-size="24">ATHLON</text>
+          <text transform="matrix(1 0 0 1 65.5132 222)" fill="#A0B0D0" font-family="Verdana" font-size="10">AI DEVELOPMENT</text>
+        </svg>
+      </div>
+      <div class="name">GitHub</div>
+      <div class="dim">128 × 128</div>
+    </div>
+  </div>
+
+  <!-- BEFORE / AFTER -->
+  <h2>Before — After</h2>
+  <div class="before-after">
+    <div class="ba">
+      <h3 style="color:#6b7a93">Current</h3>
+      <div class="thumb white">
+        <svg viewBox="0 0 512 512" fill="none" style="width:100%;height:100%">
+          <defs>
+            <linearGradient id="ob" x1="72" y1="56" x2="440" y2="456"><stop offset="0" stop-color="#e0f2fe"/><stop offset=".55" stop-color="#7dd3fc"/><stop offset="1" stop-color="#0284c7"/></linearGradient>
+          </defs>
+          <rect width="512" height="512" rx="116" fill="url(#ob)"/>
+          <circle cx="386" cy="120" r="70" fill="#fff" opacity=".18"/>
+          <circle cx="118" cy="394" r="96" fill="#0ea5e9" opacity=".24"/>
+          <path fill="#0f172a" opacity=".12" d="M153 318c0 34 28 62 62 62h82c34 0 62-28 62-62v-90c0-34-28-62-62-62h-82c-34 0-62 28-62 62v90Z"/>
+          <path fill="#fff" d="M256 121c15 0 29 8 37 21l108 183c12 20-3 45-26 45h-27c-12 0-22-6-28-16l-18-32h-92l-18 32c-6 10-16 16-28 16h-27c-23 0-38-25-26-45l108-183c8-13 22-21 37-21Zm-25 148h50l-25-44-25 44Z"/>
+          <path fill="#0369a1" d="M183 212c0-16 13-29 29-29h88c16 0 29 13 29 29v74c0 16-13 29-29 29h-88c-16 0-29-13-29-29v-74Zm52 38a15 15 0 1 0-30 0Zm72 0a15 15 0 1 0-30 0Zm-74 40c-7 0-12 5-12 12s5 12 12 12h46c7 0 12-5 12-12s-5-12-12-12h-46Z" opacity=".9"/>
+        </svg>
+      </div>
+      <ul>
+        <li class="no">✗ Light blue consumer toy aesthetic</li>
+        <li class="no">✗ 6 disconnected shapes, no focal point</li>
+        <li class="no">✗ Bot face + spark = mixed metaphors</li>
+        <li class="no">✗ Drop shadow, gradient overload</li>
+        <li class="no">✗ Illegible at 16px</li>
+      </ul>
+    </div>
+    <div class="ba">
+      <h3 style="color:#e4e4e7">Redesigned</h3>
+      <div class="thumb">
+        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" style="width:100%;height:100%">
+          <defs><linearGradient id="nw" gradientUnits="userSpaceOnUse" x1="128" y1="230" x2="128" y2="40"><stop offset="0" stop-color="#9D6EFC"/><stop offset="1" stop-color="#21CBFC"/></linearGradient></defs>
+          <rect x="28" y="28" width="200" height="200" rx="20" ry="20" fill="#1B253B" stroke="#374871" stroke-width="2"/>
+          <path fill="url(#nw)" d="M128,50l42,90h-10l-32-65l-32,65H86L128,50z"/>
+          <polygon fill="#1B253B" points="110,110 146,110 128,140"/>
+          <polygon opacity=".7" fill="#9D6EFC" points="170,140 185,160 155,160"/>
+          <polygon opacity=".7" fill="#21CBFC" points="86,140 71,160 101,160"/>
+          <polygon opacity=".5" fill="#21CBFC" points="128,50 115,75 141,75"/>
+          <line fill="none" stroke="url(#nw)" stroke-width="2" x1="128" y1="125" x2="160" y2="110"/>
+          <line fill="none" stroke="#9D6EFC" stroke-width="2" x1="160" y1="110" x2="185" y2="125"/>
+          <line fill="none" stroke="#9D6EFC" stroke-width="2" x1="170" y1="140" x2="185" y2="125"/>
+          <rect x="156" y="106" fill="url(#nw)" width="8" height="8" rx="1"/>
+          <rect x="181" y="121" fill="#9D6EFC" width="8" height="8" rx="1"/>
+          <text transform="matrix(1 0 0 1 76.8125 200)" fill="#FFF" font-family="Verdana" font-weight="700" font-size="24">ATHLON</text>
+          <text transform="matrix(1 0 0 1 65.5132 222)" fill="#A0B0D0" font-family="Verdana" font-size="10">AI DEVELOPMENT</text>
+        </svg>
+      </div>
+      <ul>
+        <li class="ok">✓ Dark dev‑tool palette — no baby blue</li>
+        <li class="ok">✓ ONE unified symbol — fills the canvas</li>
+        <li class="ok">✓ Faceted depth, no drop shadows</li>
+        <li class="ok">✓ Terminal lines + cursor blocks = Agent</li>
+        <li class="ok">✓ Readable at 16px, rich at 256px</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>Athlon Agent &mdash; Native .NET 10 WPF AI Coding Agent for Windows</p>
+  <p style="margin-top:6px">
+    <a href="https://github.com/karsonto/athlon-work">GitHub</a> &middot;
+    Dark geometric faceted icon &middot; Purple‑cyan gradient &middot; Terminal‑first design language
+  </p>
+</footer>
+
+</body>
+</html>

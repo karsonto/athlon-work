@@ -87,18 +87,20 @@ internal static class ToolMessageDisplayParser
         return ToolCallDisplayStatus.Succeeded;
     }
 
-    public static string FormatArgumentsFull(IReadOnlyDictionary<string, string> arguments) =>
-        arguments.Count == 0
-            ? "(无参数)"
-            : string.Join(
-                Environment.NewLine,
-                arguments.Select(argument =>
-                {
-                    var value = string.Equals(argument.Key, ToolPathNormalizer.PathArgumentName, StringComparison.OrdinalIgnoreCase)
-                        ? ToolPathNormalizer.ForModel(argument.Value)
-                        : argument.Value;
-                    return $"{argument.Key} = {value}";
-                }));
+    public static string FormatArgumentsFull(IReadOnlyDictionary<string, string> arguments, string? toolName = null) =>
+        FileWriteToolArgumentsDisplay.IsFileWrite(toolName) && arguments.ContainsKey("content")
+            ? FileWriteToolArgumentsDisplay.FormatArgumentsForPersistedDisplay(arguments)
+            : arguments.Count == 0
+                ? "(无参数)"
+                : string.Join(
+                    Environment.NewLine,
+                    arguments.Select(argument =>
+                    {
+                        var value = string.Equals(argument.Key, ToolPathNormalizer.PathArgumentName, StringComparison.OrdinalIgnoreCase)
+                            ? ToolPathNormalizer.ForModel(argument.Value)
+                            : argument.Value;
+                        return $"{argument.Key} = {value}";
+                    }));
 
     public static string FormatArgumentsFromPersistedLine(string line)
     {

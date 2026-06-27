@@ -208,6 +208,51 @@ public sealed class SessionTurnUiControllerDisplayTests
         Assert.Null(tool);
     }
 
+    [Fact]
+    public async Task FileWrite_tool_args_show_summary_not_full_content()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.SetShowToolCalls(true);
+        ui.SetDisplayed(true);
+
+        var callbacks = ui.BuildCallbacks();
+        var largeContent = new string('x', 500);
+        var finalJson = $$"""{"path":"src/App.tsx","content":"{{largeContent}}"}""";
+
+        await EmitToolStart(callbacks, "call-fw", "file_write", 0);
+        await EmitToolArgs(callbacks, "call-fw", """{"path":"src/App.tsx","content":"xx""");
+        for (var i = 0; i < 8; i++)
+        {
+            var length = Math.Min(finalJson.Length, 50 + i * 20);
+            await EmitToolArgs(callbacks, "call-fw", finalJson[..length]);
+        }
+
+        await EmitToolArgs(callbacks, "call-fw", finalJson);
+
+        ui.SetDisplayed(false);
+        ui.SetDisplayed(true);
+
+        var toolBeforeEnd = await dispatcher.InvokeAsync(() =>
+            ui.Messages.LastOrDefault(message => message.IsTool));
+
+        Assert.NotNull(toolBeforeEnd);
+        Assert.Contains("src/App.tsx", toolBeforeEnd!.ToolArgumentsText, StringComparison.Ordinal);
+        Assert.Contains(FileWriteToolArgumentsDisplay.StreamingContentLabel, toolBeforeEnd.ToolArgumentsText, StringComparison.Ordinal);
+        Assert.DoesNotContain(largeContent, toolBeforeEnd.ToolArgumentsText, StringComparison.Ordinal);
+
+        await EmitToolEnd(callbacks, "call-fw");
+        ui.SetDisplayed(false);
+        ui.SetDisplayed(true);
+
+        var toolAfterEnd = await dispatcher.InvokeAsync(() =>
+            ui.Messages.LastOrDefault(message => message.IsTool));
+
+        Assert.NotNull(toolAfterEnd);
+        Assert.Contains("(500 chars)", toolAfterEnd!.ToolArgumentsText, StringComparison.Ordinal);
+        Assert.DoesNotContain(largeContent, toolAfterEnd.ToolArgumentsText, StringComparison.Ordinal);
+    }
+
     private static Task EmitText(AgentTurnCallbacks callbacks, string messageId, string delta) =>
         callbacks.OnStreamEvent!(new AgentStreamEvent.TextMessageContent(messageId, delta));
 

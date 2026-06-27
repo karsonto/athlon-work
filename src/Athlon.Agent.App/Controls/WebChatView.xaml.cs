@@ -29,6 +29,7 @@ public partial class WebChatView : UserControl
     private bool _renderRetryScheduled;
     private bool _renderInProgress;
     private bool _renderQueuedWhileInProgress;
+    private int _themeApplyGeneration;
 
     public WebChatView()
     {
@@ -55,6 +56,45 @@ public partial class WebChatView : UserControl
     private void OnAppThemeChanged(object? sender, EventArgs e)
     {
         ApplyThemeBackground();
+        _ = ApplyThemeStylesAsync();
+    }
+
+    public async Task ApplyThemeStylesAsync()
+    {
+        var generation = Interlocked.Increment(ref _themeApplyGeneration);
+        try
+        {
+            await EnsureReadyAsync().ConfigureAwait(true);
+            if (!await WaitForDocumentReadyAsync().ConfigureAwait(true))
+            {
+                return;
+            }
+
+            if (generation != _themeApplyGeneration)
+            {
+                return;
+            }
+
+            var updateScript =
+                "(function(){ if (typeof applyThemeUpdate !== 'function') return 'missing'; " +
+                "if (!document.getElementById('chat-theme-tokens')) return 'legacy'; " +
+                "try { " + _htmlBuilder.BuildThemeUpdateScript() + " return 'ok'; } catch (e) { return 'error'; } })();";
+            var result = await ChatWebView.CoreWebView2.ExecuteScriptAsync(updateScript).ConfigureAwait(true);
+            if (generation != _themeApplyGeneration)
+            {
+                return;
+            }
+
+            if (result is "\"missing\"" or "\"legacy\"" or "\"error\"")
+            {
+                _needsRender = true;
+                await RunRenderPipelineSafeAsync(Interlocked.Increment(ref _renderGeneration)).ConfigureAwait(true);
+            }
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"WebChatView ApplyThemeStyles failed: {ex.Message}");
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e) =>
@@ -269,20 +309,32 @@ public partial class WebChatView : UserControl
     {
         try
         {
-            using var document = JsonDocument.Parse(e.WebMessageAsJson);
-            var root = document.RootElement;
-            if (!root.TryGetProperty("type", out var type)
-                || !string.Equals(type.GetString(), "copy", StringComparison.Ordinal))
+            JsonDocument document;
+            try
+            {
+                document = JsonDocument.Parse(e.WebMessageAsJson);
+            }
+            catch (JsonException)
             {
                 return;
             }
 
-            var text = root.TryGetProperty("text", out var textElement)
-                ? textElement.GetString()
-                : null;
-            if (!string.IsNullOrEmpty(text))
+            using (document)
             {
-                Clipboard.SetText(text);
+                var root = document.RootElement;
+                if (!root.TryGetProperty("type", out var type)
+                    || !string.Equals(type.GetString(), "copy", StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                var text = root.TryGetProperty("text", out var textElement)
+                    ? textElement.GetString()
+                    : null;
+                if (!string.IsNullOrEmpty(text))
+                {
+                    Clipboard.SetText(text);
+                }
             }
         }
         catch (Exception ex)

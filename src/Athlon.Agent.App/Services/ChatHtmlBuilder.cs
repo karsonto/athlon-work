@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core.Streaming;
@@ -19,7 +20,9 @@ public sealed class ChatHtmlBuilder
             "<meta charset=\"utf-8\"/>" +
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"/>" +
             $"<link rel=\"stylesheet\" href=\"{assets}{ChatMarkdownAssets.GetHighlightStylesheet()}\"/>" +
-            "<style>" + GetThemeStyles() + "</style>" +
+            "<style id=\"chat-theme-tokens\">" + GetThemeTokenStyles() + "</style>" +
+            "<style id=\"chat-code-syntax\">" + GetCodeSyntaxOverrideStyles() + "</style>" +
+            "<style id=\"chat-shell-styles\">" + GetStaticShellStyles() + "</style>" +
             "</head><body><div id=\"chat-scroll\">" + BuildEmptyStateHtml(ssoDisplayName) +
             "<div id=\"messages\"></div></div>" +
             $"<script src=\"{assets}marked.min.js\"></script>" +
@@ -30,6 +33,22 @@ public sealed class ChatHtmlBuilder
 
     public string BuildDispatchScript(AgentStreamEvent streamEvent) =>
         $"handleEvent({ChatEventSerializer.Serialize(streamEvent)});";
+
+    /// <summary>Updates chat theme tokens in-place so theme switches do not reload the timeline.</summary>
+    public string BuildThemeUpdateScript()
+    {
+        var highlightHref = $"{ChatMarkdownAssets.VirtualBaseUrl}{ChatMarkdownAssets.GetHighlightStylesheet()}";
+        var tokensB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(GetThemeTokenStyles()));
+        var syntaxB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(GetCodeSyntaxOverrideStyles()));
+        return
+            "applyThemeUpdate(" +
+            JsonSerializer.Serialize(highlightHref) +
+            ", " +
+            JsonSerializer.Serialize(tokensB64) +
+            ", " +
+            JsonSerializer.Serialize(syntaxB64) +
+            ");";
+    }
 
     public string BuildDocumentHtml(
         IReadOnlyList<ChatMessageViewModel> messages,
@@ -77,33 +96,60 @@ public sealed class ChatHtmlBuilder
             "</div>";
     }
 
-    private static string GetThemeStyles()
+    private static string GetThemeTokenStyles()
     {
         var isLight = AppThemeManager.CurrentKind == AppThemeKind.Light;
         var chrome = AppThemeManager.Current.Chrome;
         var md = ThemeHtmlStyles.GetMarkdownPalette(assistantTone: true);
         var scrollThumb = AppThemeColor.ToRgba(chrome.ScrollThumb, chrome.ScrollThumbOpacity);
 
-        var chatBg = AppThemeColor.ToHex(chrome.ChatBackgroundTop);
-        var userBubble = AppThemeColor.ToHex(chrome.UserBubble);
-        var userBubbleText = AppThemeColor.ToHex(chrome.Text);
-        var assistantText = isLight ? "#1E293B" : "#F4F4F5";
-        var reasoningBorder = isLight ? "rgba(221,214,254,0.7)" : "rgba(139,92,246,0.25)";
-        var reasoningBg = isLight ? "rgba(245,243,255,0.5)" : "rgba(46,16,101,0.3)";
-        var reasoningRing = isLight ? "rgba(237,233,254,0.6)" : "rgba(139,92,246,0.15)";
-        var reasoningSummary = isLight ? "#4C1D95" : "#EDE9FE";
-        var reasoningText = isLight ? "#334155" : "#D4D4D8";
-        var subtle = AppThemeColor.ToHex(chrome.SubtleText);
-        var border = AppThemeColor.ToHex(chrome.Border);
-        var panel = AppThemeColor.ToHex(chrome.Panel);
-        var toolThinkingBg = AppThemeColor.ToHex(chrome.ToolThinkingBg);
-        var toolThinkingText = AppThemeColor.ToHex(chrome.ToolThinkingText);
-        var toolSuccessBg = AppThemeColor.ToHex(chrome.ToolSuccessBg);
-        var toolSuccessText = AppThemeColor.ToHex(chrome.ToolSuccessText);
-        var toolFailureBg = AppThemeColor.ToHex(chrome.ToolFailureBg);
-        var toolFailureText = AppThemeColor.ToHex(chrome.ToolFailureText);
-        var codeSyntaxOverrides = isLight
-            ? """
+        return $$"""
+            :root {
+              --chat-bg: {{AppThemeColor.ToHex(chrome.ChatBackgroundTop)}};
+              --assistant-text: {{(isLight ? "#1E293B" : "#F4F4F5")}};
+              --scroll-thumb: {{scrollThumb}};
+              --user-bubble: {{AppThemeColor.ToHex(chrome.UserBubble)}};
+              --user-bubble-text: {{AppThemeColor.ToHex(chrome.Text)}};
+              --reasoning-border: {{(isLight ? "rgba(221,214,254,0.7)" : "rgba(139,92,246,0.25)")}};
+              --reasoning-bg: {{(isLight ? "rgba(245,243,255,0.5)" : "rgba(46,16,101,0.3)")}};
+              --reasoning-ring: {{(isLight ? "rgba(237,233,254,0.6)" : "rgba(139,92,246,0.15)")}};
+              --reasoning-summary: {{(isLight ? "#4C1D95" : "#EDE9FE")}};
+              --reasoning-text: {{(isLight ? "#334155" : "#D4D4D8")}};
+              --subtle-text: {{AppThemeColor.ToHex(chrome.SubtleText)}};
+              --border: {{AppThemeColor.ToHex(chrome.Border)}};
+              --panel: {{AppThemeColor.ToHex(chrome.Panel)}};
+              --tool-thinking-bg: {{AppThemeColor.ToHex(chrome.ToolThinkingBg)}};
+              --tool-thinking-text: {{AppThemeColor.ToHex(chrome.ToolThinkingText)}};
+              --tool-success-bg: {{AppThemeColor.ToHex(chrome.ToolSuccessBg)}};
+              --tool-success-text: {{AppThemeColor.ToHex(chrome.ToolSuccessText)}};
+              --tool-failure-bg: {{AppThemeColor.ToHex(chrome.ToolFailureBg)}};
+              --tool-failure-text: {{AppThemeColor.ToHex(chrome.ToolFailureText)}};
+              --md-link: {{md.LinkColor}};
+              --md-inline-code-bg: {{md.InlineCodeBackground}};
+              --md-text: {{md.TextColor}};
+              --md-code-block-border: {{md.CodeBlockBorder}};
+              --md-code-block-bg: {{md.CodeBlockBackground}};
+              --md-code-header: {{md.CodeHeaderColor}};
+              --md-code-btn-border: {{md.CodeButtonBorder}};
+              --md-code-btn-bg: {{md.CodeButtonBackground}};
+              --md-code-btn-color: {{md.CodeButtonColor}};
+              --md-code-pre: {{md.CodePreColor}};
+              --md-table-border: {{md.TableBorder}};
+              --md-table-header-bg: {{md.TableHeaderBackground}};
+              --md-blockquote-color: {{md.BlockquoteColor}};
+              --md-blockquote-bg: {{md.BlockquoteBackground}};
+            }
+            """;
+    }
+
+    private static string GetCodeSyntaxOverrideStyles()
+    {
+        if (AppThemeManager.CurrentKind != AppThemeKind.Light)
+        {
+            return string.Empty;
+        }
+
+        return """
             .code-block pre,
             .code-block pre code,
             .code-block pre code.hljs {
@@ -144,359 +190,362 @@ public sealed class ChatHtmlBuilder
             .code-block .hljs-bullet {
               color: #0550AE !important;
             }
-            """
-            : string.Empty;
-
-        return $$"""
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            html, body {
-              font-family: "Inter", "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
-              font-size: 14px;
-              line-height: 1.5;
-              color: {{assistantText}};
-              background: {{chatBg}};
-              height: 100%;
-              overflow: hidden;
-              -webkit-font-smoothing: antialiased;
-            }
-            #chat-scroll {
-              position: relative;
-              height: 100%;
-              overflow-x: hidden;
-              overflow-y: auto;
-              padding: 24px 20px 24px 24px;
-            }
-            ::-webkit-scrollbar { width: 10px; height: 10px; }
-            ::-webkit-scrollbar-track { background: transparent; }
-            ::-webkit-scrollbar-thumb {
-              border: 2px solid transparent;
-              border-radius: 9999px;
-              background: {{scrollThumb}};
-              background-clip: padding-box;
-            }
-            #messages {
-              display: flex;
-              flex-direction: column;
-              gap: 20px;
-              max-width: 100%;
-            }
-            .empty-state {
-              position: absolute;
-              inset: 0;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              padding: 24px;
-              text-align: center;
-              pointer-events: none;
-              z-index: 1;
-            }
-            .empty-state-icon {
-              font-size: 48px;
-              line-height: 1;
-              opacity: 0.5;
-              margin-bottom: 24px;
-            }
-            .empty-state-title {
-              font-size: 24px;
-              font-weight: 600;
-              color: {{assistantText}};
-              margin-bottom: 12px;
-            }
-            .empty-state-description {
-              font-size: 14px;
-              color: {{subtle}};
-              max-width: 400px;
-              line-height: 1.6;
-            }
-            @keyframes fadeIn {
-              from { opacity: 0; transform: translateY(8px); }
-              to { opacity: 1; transform: translateY(0); }
-            }
-            .message-row {
-              display: flex;
-              align-items: flex-start;
-              animation: fadeIn 0.25s ease;
-            }
-            .message-row.user { justify-content: flex-end; }
-            .message-row.assistant { justify-content: flex-start; }
-            .bubble {
-              max-width: 85%;
-            }
-            .message-row.user .bubble {
-              background: {{userBubble}};
-              color: {{userBubbleText}};
-              border-radius: 20px;
-              padding: 12px 16px;
-              box-shadow: none;
-            }
-            .message-row.assistant .bubble {
-              background: transparent;
-              color: {{assistantText}};
-              padding: 0;
-              box-shadow: none;
-            }
-            .user-text {
-              white-space: pre-wrap;
-              word-break: break-word;
-              font-size: 14px;
-              line-height: 1.75;
-              color: {{userBubbleText}};
-            }
-            .reasoning-block {
-              max-width: 85%;
-              overflow: hidden;
-              border-radius: 16px;
-              border: 1px solid {{reasoningBorder}};
-              background: {{reasoningBg}};
-              box-shadow: 0 0 0 1px {{reasoningRing}};
-            }
-            .reasoning-block > summary {
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              padding: 10px 12px;
-              cursor: pointer;
-              list-style: none;
-              font-size: 12px;
-              font-weight: 500;
-              color: {{reasoningSummary}};
-              user-select: none;
-            }
-            .reasoning-block > summary::-webkit-details-marker { display: none; }
-            .reasoning-chevron {
-              display: inline-block;
-              font-size: 14px;
-              transition: transform 0.15s ease;
-            }
-            .reasoning-block[open] .reasoning-chevron { transform: rotate(90deg); }
-            .reasoning-content {
-              border-top: 1px solid {{reasoningBorder}};
-              padding: 10px 12px;
-              max-height: 288px;
-              overflow-y: auto;
-              white-space: pre-wrap;
-              word-break: break-word;
-              font-size: 12px;
-              line-height: 1.6;
-              color: {{reasoningText}};
-            }
-            .message-content {
-              white-space: pre-wrap;
-              word-break: break-word;
-              overflow-wrap: anywhere;
-            }
-            .message-content.md-root,
-            .tool-result-html.md-root {
-              white-space: normal;
-            }
-            .message-content.md-root p,
-            .tool-result-html.md-root p { margin: 0 0 12px; }
-            .message-content.md-root p:last-child,
-            .tool-result-html.md-root p:last-child { margin-bottom: 0; }
-            .message-content.md-root ul,
-            .message-content.md-root ol,
-            .tool-result-html.md-root ul,
-            .tool-result-html.md-root ol {
-              margin: 0 0 12px;
-              padding-left: 24px;
-            }
-            .message-content.md-root li,
-            .tool-result-html.md-root li { margin-bottom: 6px; }
-            .message-content.md-root h1,
-            .message-content.md-root h2,
-            .message-content.md-root h3,
-            .message-content.md-root h4,
-            .tool-result-html.md-root h1,
-            .tool-result-html.md-root h2,
-            .tool-result-html.md-root h3,
-            .tool-result-html.md-root h4 {
-              margin: 16px 0 10px;
-              font-weight: 600;
-              line-height: 1.35;
-            }
-            .message-content.md-root h1 { font-size: 1.5em; }
-            .message-content.md-root h2 { font-size: 1.3em; }
-            .message-content.md-root h3 { font-size: 1.15em; }
-            .message-content.md-root a,
-            .tool-result-html.md-root a {
-              color: {{md.LinkColor}};
-              text-decoration: underline;
-              text-underline-offset: 2px;
-            }
-            .message-content.md-root code:not(pre code),
-            .tool-result-html.md-root code:not(pre code) {
-              border-radius: 6px;
-              background: {{md.InlineCodeBackground}};
-              padding: 2px 6px;
-              font-family: Consolas, "Cascadia Code", monospace;
-              font-size: 0.9em;
-              color: {{md.TextColor}};
-            }
-            .message-content.md-root pre,
-            .tool-result-html.md-root pre,
-            .tool-pre {
-              margin: 0;
-              padding: 0;
-              border: none;
-              border-radius: 0;
-              background: transparent;
-              overflow: visible;
-              white-space: pre;
-            }
-            .code-block {
-              margin: 16px 0;
-              border: 1px solid {{md.CodeBlockBorder}};
-              border-radius: 16px;
-              overflow: hidden;
-              background: {{md.CodeBlockBackground}};
-            }
-            .code-block-header {
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 8px;
-              padding: 8px 16px;
-              border-bottom: 1px solid {{md.CodeBlockBorder}};
-              font-size: 12px;
-              color: {{md.CodeHeaderColor}};
-            }
-            .code-block-actions { display: flex; gap: 8px; }
-            .code-btn {
-              border: 1px solid {{md.CodeButtonBorder}};
-              border-radius: 6px;
-              background: {{md.CodeButtonBackground}};
-              color: {{md.CodeButtonColor}};
-              padding: 4px 8px;
-              font-size: 12px;
-              cursor: pointer;
-            }
-            .code-btn:hover {
-              background: {{md.CodeBlockBackground}};
-            }
-            .code-btn.copied {
-              border-color: rgba(16, 185, 129, 0.6);
-              background: rgba(16, 185, 129, 0.1);
-              color: #6EE7B7;
-            }
-            .code-block pre {
-              margin: 0;
-              padding: 16px;
-              overflow-x: auto;
-              font-size: 13px;
-              line-height: 1.5;
-              color: {{md.CodePreColor}};
-              background: {{md.CodeBlockBackground}};
-            }
-            .code-block pre code,
-            .code-block pre code.hljs {
-              font-family: Consolas, "Cascadia Code", monospace;
-              white-space: pre;
-              background: transparent;
-              padding: 0;
-            }
-            {{codeSyntaxOverrides}}
-            .message-content.md-root table,
-            .tool-result-html.md-root table {
-              width: 100%;
-              border-collapse: collapse;
-              margin: 16px 0;
-              font-size: 13px;
-            }
-            .message-content.md-root .table-wrap,
-            .tool-result-html.md-root .table-wrap {
-              margin: 16px 0;
-              overflow-x: auto;
-              border-radius: 12px;
-              border: 1px solid {{md.TableBorder}};
-            }
-            .message-content.md-root th,
-            .tool-result-html.md-root th {
-              background: {{md.TableHeaderBackground}};
-              padding: 8px 12px;
-              text-align: left;
-              font-weight: 600;
-              border-bottom: 1px solid {{md.TableBorder}};
-            }
-            .message-content.md-root td,
-            .tool-result-html.md-root td {
-              padding: 8px 12px;
-              border-top: 1px solid {{md.TableBorder}};
-              vertical-align: top;
-            }
-            .message-content.md-root blockquote,
-            .tool-result-html.md-root blockquote {
-              margin: 12px 0;
-              padding: 8px 14px;
-              border-left: 3px solid #3b82f6;
-              color: {{md.BlockquoteColor}};
-              background: {{md.BlockquoteBackground}};
-              border-radius: 0 8px 8px 0;
-            }
-            .message.tool {
-              max-width: 85%;
-              border-radius: 16px;
-              overflow: hidden;
-              border: 1px solid {{border}};
-              background: {{panel}};
-              box-shadow: 0 1px 2px rgba(15,23,42,0.06);
-            }
-            .message.tool > summary {
-              display: flex;
-              align-items: center;
-              flex-wrap: wrap;
-              gap: 8px;
-              padding: 10px 14px;
-              cursor: pointer;
-              list-style: none;
-              background: {{panel}};
-              user-select: none;
-              font-size: 13px;
-              font-weight: 500;
-              color: {{assistantText}};
-            }
-            .message.tool > summary::-webkit-details-marker { display: none; }
-            .message.tool > summary::before {
-              content: "›";
-              font-size: 14px;
-              color: {{subtle}};
-              margin-right: 4px;
-              transition: transform 0.15s ease;
-            }
-            .message.tool[open] > summary::before { transform: rotate(90deg); }
-            .tool-status {
-              font-size: 11px;
-              font-weight: 600;
-              padding: 2px 8px;
-              border-radius: 999px;
-              margin-left: auto;
-            }
-            .tool-status.running { background: {{toolThinkingBg}}; color: {{toolThinkingText}}; }
-            .tool-status.success { background: {{toolSuccessBg}}; color: {{toolSuccessText}}; }
-            .tool-status.failed { background: {{toolFailureBg}}; color: {{toolFailureText}}; }
-            .tool-status.cancelled { background: {{panel}}; color: {{subtle}}; }
-            .tool-body {
-              padding: 10px 14px 14px;
-              border-top: 1px solid {{border}};
-            }
-            .tool-header, .tool-summary-text {
-              font-size: 12px;
-              color: {{subtle}};
-              margin-bottom: 8px;
-              white-space: pre-wrap;
-            }
-            .tool-section-label {
-              font-size: 11px;
-              font-weight: 600;
-              color: {{subtle}};
-              margin: 8px 0 4px;
-              text-transform: uppercase;
-              letter-spacing: 0.05em;
-            }
-            .tool-result { margin-top: 8px; }
             """;
     }
+
+    private static string GetStaticShellStyles() =>
+        """
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+          font-family: "Inter", "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+          font-size: 14px;
+          line-height: 1.5;
+          color: var(--assistant-text);
+          background: var(--chat-bg);
+          height: 100%;
+          overflow: hidden;
+          -webkit-font-smoothing: antialiased;
+        }
+        #chat-scroll {
+          position: relative;
+          height: 100%;
+          overflow-x: hidden;
+          overflow-y: auto;
+          padding: 24px 20px 24px 24px;
+          background: var(--chat-bg);
+        }
+        ::-webkit-scrollbar { width: 10px; height: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+          border: 2px solid transparent;
+          border-radius: 9999px;
+          background: var(--scroll-thumb);
+          background-clip: padding-box;
+        }
+        #messages {
+          display: flex;
+          flex-direction: column;
+          gap: 20px;
+          max-width: 100%;
+        }
+        .empty-state {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          text-align: center;
+          pointer-events: none;
+          z-index: 1;
+        }
+        .empty-state-icon {
+          font-size: 48px;
+          line-height: 1;
+          opacity: 0.5;
+          margin-bottom: 24px;
+        }
+        .empty-state-title {
+          font-size: 24px;
+          font-weight: 600;
+          color: var(--assistant-text);
+          margin-bottom: 12px;
+        }
+        .empty-state-description {
+          font-size: 14px;
+          color: var(--subtle-text);
+          max-width: 400px;
+          line-height: 1.6;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .message-row {
+          display: flex;
+          align-items: flex-start;
+          animation: fadeIn 0.25s ease;
+        }
+        .message-row.user { justify-content: flex-end; }
+        .message-row.assistant { justify-content: flex-start; }
+        .bubble {
+          max-width: 85%;
+        }
+        .message-row.user .bubble {
+          background: var(--user-bubble);
+          color: var(--user-bubble-text);
+          border-radius: 20px;
+          padding: 12px 16px;
+          box-shadow: none;
+        }
+        .message-row.assistant .bubble {
+          background: transparent;
+          color: var(--assistant-text);
+          padding: 0;
+          box-shadow: none;
+        }
+        .user-text {
+          white-space: pre-wrap;
+          word-break: break-word;
+          font-size: 14px;
+          line-height: 1.75;
+          color: var(--user-bubble-text);
+        }
+        .reasoning-block {
+          max-width: 85%;
+          overflow: hidden;
+          border-radius: 16px;
+          border: 1px solid var(--reasoning-border);
+          background: var(--reasoning-bg);
+          box-shadow: 0 0 0 1px var(--reasoning-ring);
+        }
+        .reasoning-block > summary {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 12px;
+          cursor: pointer;
+          list-style: none;
+          font-size: 12px;
+          font-weight: 500;
+          color: var(--reasoning-summary);
+          user-select: none;
+        }
+        .reasoning-block > summary::-webkit-details-marker { display: none; }
+        .reasoning-chevron {
+          display: inline-block;
+          font-size: 14px;
+          transition: transform 0.15s ease;
+        }
+        .reasoning-block[open] .reasoning-chevron { transform: rotate(90deg); }
+        .reasoning-content {
+          border-top: 1px solid var(--reasoning-border);
+          padding: 10px 12px;
+          max-height: 288px;
+          overflow-y: auto;
+          white-space: pre-wrap;
+          word-break: break-word;
+          font-size: 12px;
+          line-height: 1.6;
+          color: var(--reasoning-text);
+        }
+        .message-content {
+          white-space: pre-wrap;
+          word-break: break-word;
+          overflow-wrap: anywhere;
+        }
+        .message-content.md-root,
+        .tool-result-html.md-root {
+          white-space: normal;
+        }
+        .message-content.md-root p,
+        .tool-result-html.md-root p { margin: 0 0 12px; }
+        .message-content.md-root p:last-child,
+        .tool-result-html.md-root p:last-child { margin-bottom: 0; }
+        .message-content.md-root ul,
+        .message-content.md-root ol,
+        .tool-result-html.md-root ul,
+        .tool-result-html.md-root ol {
+          margin: 0 0 12px;
+          padding-left: 24px;
+        }
+        .message-content.md-root li,
+        .tool-result-html.md-root li { margin-bottom: 6px; }
+        .message-content.md-root h1,
+        .message-content.md-root h2,
+        .message-content.md-root h3,
+        .message-content.md-root h4,
+        .tool-result-html.md-root h1,
+        .tool-result-html.md-root h2,
+        .tool-result-html.md-root h3,
+        .tool-result-html.md-root h4 {
+          margin: 16px 0 10px;
+          font-weight: 600;
+          line-height: 1.35;
+        }
+        .message-content.md-root h1 { font-size: 1.5em; }
+        .message-content.md-root h2 { font-size: 1.3em; }
+        .message-content.md-root h3 { font-size: 1.15em; }
+        .message-content.md-root a,
+        .tool-result-html.md-root a {
+          color: var(--md-link);
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        .message-content.md-root code:not(pre code),
+        .tool-result-html.md-root code:not(pre code) {
+          border-radius: 6px;
+          background: var(--md-inline-code-bg);
+          padding: 2px 6px;
+          font-family: Consolas, "Cascadia Code", monospace;
+          font-size: 0.9em;
+          color: var(--md-text);
+        }
+        .message-content.md-root pre,
+        .tool-result-html.md-root pre,
+        .tool-pre {
+          margin: 0;
+          padding: 0;
+          border: none;
+          border-radius: 0;
+          background: transparent;
+          overflow: visible;
+          white-space: pre;
+        }
+        .code-block {
+          margin: 16px 0;
+          border: 1px solid var(--md-code-block-border);
+          border-radius: 16px;
+          overflow: hidden;
+          background: var(--md-code-block-bg);
+        }
+        .code-block-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          padding: 8px 16px;
+          border-bottom: 1px solid var(--md-code-block-border);
+          font-size: 12px;
+          color: var(--md-code-header);
+        }
+        .code-block-actions { display: flex; gap: 8px; }
+        .code-btn {
+          border: 1px solid var(--md-code-btn-border);
+          border-radius: 6px;
+          background: var(--md-code-btn-bg);
+          color: var(--md-code-btn-color);
+          padding: 4px 8px;
+          font-size: 12px;
+          cursor: pointer;
+        }
+        .code-btn:hover {
+          background: var(--md-code-block-bg);
+        }
+        .code-btn.copied {
+          border-color: rgba(16, 185, 129, 0.6);
+          background: rgba(16, 185, 129, 0.1);
+          color: #6EE7B7;
+        }
+        .code-block pre {
+          margin: 0;
+          padding: 16px;
+          overflow-x: auto;
+          font-size: 13px;
+          line-height: 1.5;
+          color: var(--md-code-pre);
+          background: var(--md-code-block-bg);
+        }
+        .code-block pre code,
+        .code-block pre code.hljs {
+          font-family: Consolas, "Cascadia Code", monospace;
+          white-space: pre;
+          background: transparent;
+          padding: 0;
+        }
+        .message-content.md-root table,
+        .tool-result-html.md-root table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 16px 0;
+          font-size: 13px;
+        }
+        .message-content.md-root .table-wrap,
+        .tool-result-html.md-root .table-wrap {
+          margin: 16px 0;
+          overflow-x: auto;
+          border-radius: 12px;
+          border: 1px solid var(--md-table-border);
+        }
+        .message-content.md-root th,
+        .tool-result-html.md-root th {
+          background: var(--md-table-header-bg);
+          padding: 8px 12px;
+          text-align: left;
+          font-weight: 600;
+          border-bottom: 1px solid var(--md-table-border);
+        }
+        .message-content.md-root td,
+        .tool-result-html.md-root td {
+          padding: 8px 12px;
+          border-top: 1px solid var(--md-table-border);
+          vertical-align: top;
+        }
+        .message-content.md-root blockquote,
+        .tool-result-html.md-root blockquote {
+          margin: 12px 0;
+          padding: 8px 14px;
+          border-left: 3px solid #3b82f6;
+          color: var(--md-blockquote-color);
+          background: var(--md-blockquote-bg);
+          border-radius: 0 8px 8px 0;
+        }
+        .message.tool {
+          max-width: 85%;
+          border-radius: 16px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          background: var(--panel);
+          box-shadow: 0 1px 2px rgba(15,23,42,0.06);
+        }
+        .message.tool > summary {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 8px;
+          padding: 10px 14px;
+          cursor: pointer;
+          list-style: none;
+          background: var(--panel);
+          user-select: none;
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--assistant-text);
+        }
+        .message.tool > summary::-webkit-details-marker { display: none; }
+        .message.tool > summary::before {
+          content: "›";
+          font-size: 14px;
+          color: var(--subtle-text);
+          margin-right: 4px;
+          transition: transform 0.15s ease;
+        }
+        .message.tool[open] > summary::before { transform: rotate(90deg); }
+        .tool-status {
+          font-size: 11px;
+          font-weight: 600;
+          padding: 2px 8px;
+          border-radius: 999px;
+          margin-left: auto;
+        }
+        .tool-status.running { background: var(--tool-thinking-bg); color: var(--tool-thinking-text); }
+        .tool-status.success { background: var(--tool-success-bg); color: var(--tool-success-text); }
+        .tool-status.failed { background: var(--tool-failure-bg); color: var(--tool-failure-text); }
+        .tool-status.cancelled { background: var(--panel); color: var(--subtle-text); }
+        .tool-body {
+          padding: 10px 14px 14px;
+          border-top: 1px solid var(--border);
+        }
+        .tool-header, .tool-summary-text {
+          font-size: 12px;
+          color: var(--subtle-text);
+          margin-bottom: 8px;
+          white-space: pre-wrap;
+        }
+        .tool-section-label {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--subtle-text);
+          margin: 8px 0 4px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .tool-result { margin-top: 8px; }
+        """;
+
+    private static string GetThemeStyles() =>
+        GetThemeTokenStyles() + GetCodeSyntaxOverrideStyles() + GetStaticShellStyles();
 
     private static string GetTimelineScript() =>
         """
@@ -912,6 +961,47 @@ public sealed class ChatHtmlBuilder
               break;
             }
           }
+        }
+
+        function applyThemeTokensToRoot(tokensCss) {
+          var root = document.documentElement;
+          root.style.cssText = '';
+          tokensCss.replace(/(--[\\w-]+)\\s*:\\s*([^;]+);/g, function(_, name, value) {
+            root.style.setProperty(name.trim(), value.trim());
+          });
+        }
+
+        function syncThemeSurfaces() {
+          var rootStyle = getComputedStyle(document.documentElement);
+          var chatBg = rootStyle.getPropertyValue('--chat-bg').trim();
+          var assistantText = rootStyle.getPropertyValue('--assistant-text').trim();
+          if (chatBg) {
+            document.documentElement.style.backgroundColor = chatBg;
+            document.body.style.backgroundColor = chatBg;
+            var scroller = document.getElementById('chat-scroll');
+            if (scroller) scroller.style.backgroundColor = chatBg;
+          }
+          if (assistantText) {
+            document.body.style.color = assistantText;
+          }
+        }
+
+        function applyThemeUpdate(highlightHref, tokensB64, syntaxB64) {
+          var link = document.querySelector('head link[rel="stylesheet"]');
+          if (link) {
+            link.href = highlightHref;
+          }
+          var tokensCss = decodeBase64Utf8(tokensB64);
+          var tokensEl = document.getElementById('chat-theme-tokens');
+          if (tokensEl) {
+            tokensEl.textContent = tokensCss;
+          }
+          var syntaxEl = document.getElementById('chat-code-syntax');
+          if (syntaxEl) {
+            syntaxEl.textContent = decodeBase64Utf8(syntaxB64);
+          }
+          applyThemeTokensToRoot(tokensCss);
+          syncThemeSurfaces();
         }
 
         function replayEvents(events) {

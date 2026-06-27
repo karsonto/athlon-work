@@ -50,7 +50,11 @@
                             <PasswordBox x:Name="ApiKeyPasswordBox"
                                          behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
                                          Margin="0,6,0,6" />
-                            <TextBlock Text="API Key 使用 Windows DPAPI 加密保存在用户目录。"
+                            <TextBlock Text="{Binding HasStoredApiKey, StringFormat=已保存 Model API Key：{0}}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       FontSize="12"
+                                       Margin="0,0,0,6" />
+                            <TextBlock Text="API Key 使用 Windows DPAPI 加密保存在用户目录。PasswordBox 不会显示已保存的 Key；更换 Provider 后请重新粘贴并点「保存设置」。"
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap" />
                         </StackPanel>

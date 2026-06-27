@@ -37,6 +37,7 @@ public sealed class SessionTurnUiController
     private readonly Dispatcher _dispatcher;
     private readonly SessionStreamingUiContext _streaming = new();
     private readonly SessionModifiedFilesTracker _modifiedFilesTracker = new();
+    private readonly ToolCallArgsDisplayCoordinator _displayCoordinator = new();
     private readonly StreamingTokenBuffer _tokenBuffer;
     // Cache ViewModels by message ID so switching back to a previously-viewed
     // session reuses MarkdownMessageView / FlowDocument instead of rebuilding everything.
@@ -176,42 +177,7 @@ public sealed class SessionTurnUiController
                     return RunOnUiAsync(() =>
                     {
                         FlushBufferedStreamingToUi();
-                        DispatchToChatView(streamEvent);
-                        _streaming.Process(streamEvent, Messages);
-                        _modifiedFilesTracker.Process(streamEvent);
-                        if (IsDisplayed && ChatView is not null)
-                        {
-                            if (streamEvent is AgentStreamEvent.TextMessageEnd(var endMessageId))
-                            {
-                                var assistant = Messages.LastOrDefault(message =>
-                                    string.Equals(message.MessageId, endMessageId, StringComparison.Ordinal));
-                                if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
-                                {
-                                    _ = ChatView.ApplyAssistantMarkdownAsync(assistant);
-                                }
-                            }
-                            else if (streamEvent is AgentStreamEvent.ToolCallEnd(var endToolCallId))
-                            {
-                                var toolBubble = Messages.LastOrDefault(message =>
-                                    message.IsTool
-                                    && string.Equals(message.ToolCallId, endToolCallId, StringComparison.Ordinal));
-                                if (toolBubble is not null && toolBubble.HasToolArguments)
-                                {
-                                    _ = ChatView.DispatchEventAsync(
-                                        new AgentStreamEvent.ToolCallArgs(endToolCallId, toolBubble.ToolArgumentsText));
-                                }
-                            }
-                            else if (streamEvent is AgentStreamEvent.ToolCallResult(var toolCallId, _, _))
-                            {
-                                var toolMessage = Messages.LastOrDefault(message =>
-                                    message.IsTool
-                                    && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
-                                if (toolMessage is not null)
-                                {
-                                    _ = ChatView.ApplyToolResultMarkdownAsync(toolMessage);
-                                }
-                            }
-                        }
+                        ProcessUiStreamEvents(streamEvent, notifyTracker: true);
                     });
             }
         }
@@ -235,6 +201,7 @@ public sealed class SessionTurnUiController
             _tokenBuffer.ClearBuffers();
             _tokenBuffer.StopFlushTimer();
             _streaming.Reset();
+            _displayCoordinator.Reset();
         });
     }
 
@@ -370,6 +337,7 @@ public sealed class SessionTurnUiController
         _bulkChatViewSyncDepth++;
         Messages.Clear();
         _streaming.Reset();
+        _displayCoordinator.Reset();
 
         // Prune cache: remove entries that belong to old sessions (not in the new display list)
         var currentIds = new HashSet<string>(displayMessages.Select(m => m.Id), StringComparer.Ordinal);
@@ -569,11 +537,56 @@ public sealed class SessionTurnUiController
     {
         foreach (var streamEvent in _tokenBuffer.DrainPendingStreamEvents())
         {
-            DispatchToChatView(streamEvent);
-            _streaming.Process(streamEvent, Messages);
+            ProcessUiStreamEvents(streamEvent, notifyTracker: false);
         }
 
         FlushStreamingTokens();
+    }
+
+    private void ProcessUiStreamEvents(AgentStreamEvent streamEvent, bool notifyTracker)
+    {
+        if (notifyTracker)
+        {
+            _modifiedFilesTracker.Process(streamEvent);
+        }
+
+        foreach (var uiEvent in _displayCoordinator.MapForUi(streamEvent))
+        {
+            DispatchToChatView(uiEvent);
+            _streaming.Process(uiEvent, Messages);
+            NotifyChatViewAfterStreamEvent(uiEvent);
+        }
+    }
+
+    private void NotifyChatViewAfterStreamEvent(AgentStreamEvent streamEvent)
+    {
+        if (!IsDisplayed || ChatView is null)
+        {
+            return;
+        }
+
+        if (streamEvent is AgentStreamEvent.TextMessageEnd(var endMessageId))
+        {
+            var assistant = Messages.LastOrDefault(message =>
+                string.Equals(message.MessageId, endMessageId, StringComparison.Ordinal));
+            if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
+            {
+                _ = ChatView.ApplyAssistantMarkdownAsync(assistant);
+            }
+
+            return;
+        }
+
+        if (streamEvent is AgentStreamEvent.ToolCallResult(var toolCallId, _, _))
+        {
+            var toolMessage = Messages.LastOrDefault(message =>
+                message.IsTool
+                && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
+            if (toolMessage is not null)
+            {
+                _ = ChatView.ApplyToolResultMarkdownAsync(toolMessage);
+            }
+        }
     }
 
     private void FlushStreamingTokens()

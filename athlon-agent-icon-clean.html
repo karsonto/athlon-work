@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Athlon Agent — 简洁图标</title>
+<style>
+  *,*::before,*::after{margin:0;box-sizing:border-box}
+  body{
+    background:
+      radial-gradient(900px 460px at 50% -8%, rgba(157,110,252,.10), transparent 60%),
+      #0a0d13;
+    font-family:-apple-system,"SF Pro Display","Segoe UI","Helvetica Neue","PingFang SC",sans-serif;
+    color:#e4e4e7;-webkit-font-smoothing:antialiased;min-height:100vh;
+  }
+
+  /* ---------- Header ---------- */
+  header{padding:88px 24px 0;text-align:center}
+  .kicker{font-size:12px;font-weight:600;letter-spacing:.18em;color:#6b7a93;
+           text-transform:uppercase;margin-bottom:14px}
+  h1{font-size:clamp(30px,4.6vw,48px);font-weight:700;letter-spacing:-.024em;line-height:1.06}
+  .grad{background:linear-gradient(135deg,#9D6EFC,#21CBFC);
+        -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  .lede{font-size:16px;color:#6b7a93;max-width:520px;margin:14px auto 0;line-height:1.6}
+
+  /* ---------- Hero ---------- */
+  .hero{display:flex;justify-content:center;gap:40px;flex-wrap:wrap;
+         padding:56px 24px 72px;align-items:center}
+  .stage{
+    width:280px;height:280px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    filter:drop-shadow(0 18px 50px rgba(157,110,252,.20));
+  }
+  .stage svg{width:100%;height:100%;display:block}
+  .stage.mark-only{width:200px;height:200px;filter:none}
+
+  /* ---------- Sections ---------- */
+  section{max-width:920px;margin:0 auto;padding:0 24px 80px}
+  section h2{font-size:12px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+             color:#6b7a93;text-align:center;margin-bottom:28px}
+
+  /* Size matrix */
+  .sizes{display:flex;flex-wrap:wrap;gap:24px;justify-content:center;align-items:flex-end}
+  .size{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .size .holder{
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);
+    border-radius:12px;padding:14px;
+  }
+  .size .dim{font-size:11px;color:#5a6880;letter-spacing:.04em;font-weight:600}
+
+  /* Backgrounds */
+  .bg-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+  .bg-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);
+            border-radius:14px;padding:24px 18px;text-align:center}
+  .bg-card .stage-sm{width:84px;height:84px;margin:0 auto 12px;
+            display:flex;align-items:center;justify-content:center;border-radius:14px}
+  .bg-card.dark .stage-sm{background:#0a0d13}
+  .bg-card.light .stage-sm{background:#f4f6fb}
+  .bg-card.grad .stage-sm{background:linear-gradient(135deg,#1b253b,#0a0d13)}
+  .bg-card .lbl{font-size:12px;color:#6b7a93;font-weight:600;letter-spacing:.04em}
+
+  /* Tokens */
+  .tokens{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .token{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);
+          border-radius:12px;padding:16px 14px}
+  .swatch{width:34px;height:34px;border-radius:9px;margin-bottom:10px}
+  .tag{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+        color:#6b7a93;margin-bottom:4px}
+  .hex{font-size:14px;font-weight:600;color:#e4e4e7;font-variant-numeric:tabular-nums}
+  .role{font-size:11px;color:#5a6880;margin-top:3px;line-height:1.4}
+
+  /* Notes */
+  .notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+  .note{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.05);
+         border-radius:12px;padding:20px 18px}
+  .note .n{font-size:11px;font-weight:700;color:#9D6EFC;letter-spacing:.08em;margin-bottom:8px}
+  .note h3{font-size:15px;font-weight:600;color:#e4e4e7;margin-bottom:6px;letter-spacing:-.01em}
+  .note p{font-size:13px;color:#6b7a93;line-height:1.6}
+
+  footer{padding:32px 24px 56px;text-align:center;color:#5a6880;font-size:12px;line-height:1.7}
+  footer a{color:#8b97ad;text-decoration:none;border-bottom:1px solid rgba(157,110,252,.4)}
+
+  @media (max-width:560px){
+    .stage{width:200px;height:200px}
+    header{padding:56px 24px 0}
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== Reusable icon symbols ===== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- 主渐变：靛蓝 → 青，向上 -->
+    <linearGradient id="gMain" gradientUnits="userSpaceOnUse" x1="128" y1="210" x2="128" y2="50">
+      <stop offset="0" stop-color="#9D6EFC"/>
+      <stop offset="1" stop-color="#21CBFC"/>
+    </linearGradient>
+    <!-- 深色磁贴底色 -->
+    <linearGradient id="gBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#222d47"/>
+      <stop offset="1" stop-color="#131a2a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- #tile：圆角深色磁贴 + 渐变 A（横杠为终端提示符 >） -->
+  <symbol id="tile" viewBox="0 0 256 256">
+    <rect x="24" y="24" width="208" height="208" rx="46" ry="46"
+          fill="url(#gBg)" stroke="#2f3c5c" stroke-width="2"/>
+    <!-- A 字身：实心渐变，底部留出三角形负空间 -->
+    <path d="M128 58 L78 198 H98 L128 122 L158 198 H178 Z" fill="url(#gMain)"/>
+    <!-- 横杠 = 终端提示符 ">"，居于 A 的下半部 -->
+    <path d="M113 148 L140 160 L113 172"
+          fill="none" stroke="url(#gMain)" stroke-width="5"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+
+  <!-- #mark：仅 A 字身（无磁贴），用于浅色背景 -->
+  <symbol id="mark" viewBox="0 0 256 256">
+    <path d="M128 58 L78 198 H98 L128 122 L158 198 H178 Z" fill="url(#gMain)"/>
+    <path d="M113 148 L140 160 L113 172"
+          fill="none" stroke="url(#gMain)" stroke-width="5"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </symbol>
+</svg>
+
+<header>
+  <div class="kicker">Athlon Agent · 简洁图标</div>
+  <h1>一笔写 <span class="grad">A</span>。<br>横杠是一道终端提示符。</h1>
+  <p class="lede">几何字母 A，横杠被替换为 <code>&gt;</code> 终端提示符——Athlon 字形遇上 Agent 循环，单笔可辨，从 16px 到 128px 不失真。</p>
+</header>
+
+<!-- ============ HERO ============ -->
+<div class="hero">
+  <div class="stage"><svg viewBox="0 0 256 256"><use href="#tile"/></svg></div>
+  <div class="stage mark-only"><svg viewBox="0 0 256 256"><use href="#mark"/></svg></div>
+</div>
+
+<!-- ============ SIZE MATRIX ============ -->
+<section>
+  <h2>多尺寸可读性</h2>
+  <div class="sizes">
+    <div class="size"><div class="holder" style="padding:10px"><svg width="16"  height="16" viewBox="0 0 256 256"><use href="#tile"/></svg></div><div class="dim">16</div></div>
+    <div class="size"><div class="holder" style="padding:10px"><svg width="24"  height="24" viewBox="0 0 256 256"><use href="#tile"/></svg></div><div class="dim">24</div></div>
+    <div class="size"><div class="holder" style="padding:10px"><svg width="32"  height="32" viewBox="0 0 256 256"><use href="#tile"/></svg></div><div class="dim">32</div></div>
+    <div class="size"><div class="holder" style="padding:11px"><svg width="48"  height="48" viewBox="0 0 256 256"><use href="#tile"/></svg></div><div class="dim">48</div></div>
+    <div class="size"><div class="holder" style="padding:12px"><svg width="64"  height="64" viewBox="0 0 256 256"><use href="#tile"/></svg></div><div class="dim">64</div></div>
+    <div class="size"><div class="holder" style="padding:14px"><svg width="128" height="128" viewBox="0 0 256 256"><use href="#tile"/></svg></div><div class="dim">128</div></div>
+  </div>
+</section>
+
+<!-- ============ BACKGROUNDS ============ -->
+<section>
+  <h2>不同背景下的表现</h2>
+  <div class="bg-row">
+    <div class="bg-card dark">
+      <div class="stage-sm"><svg width="64" height="64" viewBox="0 0 256 256"><use href="#tile"/></svg></div>
+      <div class="lbl">深色 · 磁贴版</div>
+    </div>
+    <div class="bg-card light">
+      <div class="stage-sm"><svg width="64" height="64" viewBox="0 0 256 256"><use href="#mark"/></svg></div>
+      <div class="lbl">浅色 · 纯字标</div>
+    </div>
+    <div class="bg-card grad">
+      <div class="stage-sm"><svg width="64" height="64" viewBox="0 0 256 256"><use href="#tile"/></svg></div>
+      <div class="lbl">渐变背景</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TOKENS ============ -->
+<section>
+  <h2>色板</h2>
+  <div class="tokens">
+    <div class="token"><div class="swatch" style="background:#9D6EFC"></div>
+      <div class="tag">Indigo</div><div class="hex">#9D6EFC</div>
+      <div class="role">渐变起点 · 底</div></div>
+    <div class="token"><div class="swatch" style="background:#21CBFC"></div>
+      <div class="tag">Cyan</div><div class="hex">#21CBFC</div>
+      <div class="role">渐变终点 · 顶</div></div>
+    <div class="token"><div class="swatch" style="background:#131a2a"></div>
+      <div class="tag">Ink</div><div class="hex">#131A2A</div>
+      <div class="role">磁贴底色</div></div>
+    <div class="token"><div class="swatch" style="background:#2f3c5c"></div>
+      <div class="tag">Edge</div><div class="hex">#2F3C5C</div>
+      <div class="role">磁贴描边</div></div>
+  </div>
+</section>
+
+<!-- ============ NOTES ============ -->
+<section>
+  <h2>设计说明</h2>
+  <div class="notes">
+    <div class="note">
+      <div class="n">01 · 语义</div>
+      <h3>A 即 Athlon</h3>
+      <p>字母 A 是品牌首字母；横杠处的终端提示符 <code>&gt;</code> 暗示 Agent 与命令行，一行两义。</p>
+    </div>
+    <div class="note">
+      <div class="n">02 · 克制</div>
+      <h3>单笔单渐变</h3>
+      <p>无投影、无星花、无人脸。仅一道渐变贯穿字身与提示符，保证 16px 下仍可辨。</p>
+    </div>
+    <div class="note">
+      <div class="n">03 · 落地</div>
+      <h3>SVG 单源</h3>
+      <p>以 <code>&lt;symbol&gt;</code> 定义一次，<code>&lt;use&gt;</code> 复用于各尺寸；可直接导出为 <code>app-icon.svg</code>。</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Athlon Agent · 简洁图标方案 · 与 <a href="src/Athlon.Agent.App/Assets/app-icon.svg">现有 app-icon.svg</a> 相比去除了机器人脸与星花装饰。
+</footer>
+
+</body>
+</html>

@@ -118,8 +118,21 @@ public sealed class SessionModifiedFilesTrackerTests
         Assert.Equal(ModifiedFileStatus.Succeeded, tracker.ModifiedFiles[0].Status);
     }
 
+    [Fact]
+    public void FileWriteToolCallArgs_with_partial_json_still_extracts_path()
+    {
+        var tracker = new SessionModifiedFilesTracker();
+
+        tracker.Process(new AgentStreamEvent.ToolCallStart("call-1", "file_write", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("call-1", """{"path":"x.ts","content":"abc"""));
+
+        Assert.Single(tracker.ModifiedFiles);
+        Assert.Equal("x.ts", tracker.ModifiedFiles[0].RelativePath);
+    }
+
     [Theory]
     [InlineData("""{"path":"src/foo.ts"}""", "src/foo.ts")]
+    [InlineData("""{"path":"x.ts","content":"abc""", "x.ts")]
     [InlineData("path = src/bar.ts\ncontent = hi", "src/bar.ts")]
     public void ExtractPathFromArguments_supports_json_and_persisted_formats(string input, string expected)
     {

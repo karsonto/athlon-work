@@ -50,6 +50,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     public event EventHandler? SettingsSaved;
     public event EventHandler<bool>? EmbeddingApiKeyAvailabilityChanged;
 
+    /// <summary>Set by <c>SettingsPageView</c> to flush PasswordBox values before save.</summary>
+    public Action? SyncPendingSecrets { get; set; }
+
     [ObservableProperty]
     private string settingsStatus = "Settings are stored as JSON files under the app data folder.";
 
@@ -81,31 +84,60 @@ public sealed partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveSettingsAsync()
     {
+        SyncPendingSecrets?.Invoke();
+
+        var modelKeySaved = false;
         if (!string.IsNullOrWhiteSpace(ApiKey))
         {
-            await _credentialStore.SaveSecretAsync(ModelSettings.ApiKeySecretName, ApiKey).ConfigureAwait(true);
+            await _credentialStore
+                .SaveSecretAsync(ModelSettings.ApiKeySecretName, ApiKey.Trim())
+                .ConfigureAwait(true);
             ApiKey = string.Empty;
             HasStoredApiKey = true;
             OnPropertyChanged(nameof(ApiKey));
+            modelKeySaved = true;
         }
 
+        var embeddingKeySaved = false;
         if (!string.IsNullOrWhiteSpace(KnowledgeEmbeddingApiKey))
         {
             await _credentialStore
-                .SaveSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName, KnowledgeEmbeddingApiKey)
+                .SaveSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName, KnowledgeEmbeddingApiKey.Trim())
                 .ConfigureAwait(true);
             KnowledgeEmbeddingApiKey = string.Empty;
             HasStoredKnowledgeEmbeddingApiKey = true;
             OnPropertyChanged(nameof(KnowledgeEmbeddingApiKey));
             EmbeddingApiKeyAvailabilityChanged?.Invoke(this, true);
+            embeddingKeySaved = true;
         }
 
         Settings.Model.LegacyApiKeyCredentialName = null;
         PruneEmptyWorkspaces(Settings);
         SyncSkillsFromCatalog();
         await _storage.SaveSettingsAsync(Settings).ConfigureAwait(true);
-        SettingsStatus = $"Saved at {AppTimeZone.Now:HH:mm:ss}";
+        SettingsStatus = BuildSaveStatusMessage(modelKeySaved, embeddingKeySaved);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
+    }
+
+    public static string BuildSaveStatusMessage(bool modelKeySaved, bool embeddingKeySaved)
+    {
+        var time = AppTimeZone.Now.ToString("HH:mm:ss");
+        if (modelKeySaved && embeddingKeySaved)
+        {
+            return $"已保存（{time}），Model 与 Embedding API Key 已更新";
+        }
+
+        if (modelKeySaved)
+        {
+            return $"已保存（{time}），Model API Key 已更新";
+        }
+
+        if (embeddingKeySaved)
+        {
+            return $"已保存（{time}），Embedding API Key 已更新";
+        }
+
+        return $"已保存（{time}）；Model API Key 未变更（PasswordBox 为空时沿用已保存的 Key）";
     }
 
     private void OnMcpServerEnabledChanged() => McpConfigurationChanged?.Invoke(this, EventArgs.Empty);

@@ -75,6 +75,30 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("replayEvents", html, StringComparison.Ordinal);
         Assert.Contains("updateEmptyStateVisibility", html, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void BuildShellHtml_includes_theme_token_styles_and_applyThemeUpdate_helper()
+    {
+        var html = _builder.BuildShellHtml();
+
+        Assert.Contains("id=\"chat-theme-tokens\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"chat-code-syntax\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"chat-shell-styles\"", html, StringComparison.Ordinal);
+        Assert.Contains("--chat-bg:", html, StringComparison.Ordinal);
+        Assert.Contains("function applyThemeUpdate", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildThemeUpdateScript_updates_tokens_not_full_stylesheet()
+    {
+        AppThemeManager.Apply(AppThemeKind.Light);
+
+        var script = _builder.BuildThemeUpdateScript();
+
+        Assert.Contains("applyThemeUpdate(", script, StringComparison.Ordinal);
+        Assert.Contains("github.min.css", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("github-dark.min.css", script, StringComparison.Ordinal);
+    }
 }
 
 public sealed class SignedInUserSectionTests

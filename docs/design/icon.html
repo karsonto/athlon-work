@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Athlon Agent — Icon</title>
+<style>
+  :root {
+    /* 延续项目原有 sky-blue 品牌色，保持与现有图标资产一致 */
+    --athlon-ink:        #0c2a3f; /* 深蓝墨，A 字标 */
+    --athlon-accent:     #0ea5e9; /* 主色 sky-blue，火花 */
+    --athlon-accent-deep:#0369a1;
+    --canvas:            #f4f6f8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--canvas);
+    font: 14px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--athlon-ink);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 44px;
+    padding: 56px 24px;
+  }
+
+  /* ---------- 图标底板 ---------- */
+  .stage {
+    width: 320px;
+    height: 320px;
+    border-radius: 72px;            /* 圆角方框，呼应原 icon rx=116 比例 */
+    background: linear-gradient(150deg, #f0f9ff 0%, #bae6fd 55%, #38bdf8 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow:
+      0 1px 0 rgb(255 255 255 / .6) inset,
+      0 24px 48px -16px rgb(2 132 199 / .35);
+  }
+  .stage svg { width: 60%; height: 60%; display: block; }
+
+  /* ---------- 尺寸预览 ---------- */
+  .sizes { display: flex; align-items: flex-end; gap: 28px; }
+  .size  { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .tile {
+    background: linear-gradient(150deg, #f0f9ff 0%, #bae6fd 55%, #38bdf8 100%);
+    border-radius: 22%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 22%;
+  }
+  .tile svg { width: 100%; height: 100%; display: block; }
+  .size-128 .tile { width: 128px; height: 128px; }
+  .size-48  .tile { width: 48px;  height: 48px; }
+  .size-16  .tile { width: 16px;  height: 16px; border-radius: 4px; }
+  .label { font-size: 12px; color: #475569; letter-spacing: .02em; }
+
+  /* ---------- 说明 ---------- */
+  .note { max-width: 560px; text-align: center; color: #334155; }
+  .note h1 {
+    font-size: 18px; margin: 0 0 6px;
+    letter-spacing: .04em; text-transform: uppercase;
+    color: var(--athlon-accent-deep);
+  }
+  .note p { margin: 0; font-size: 13px; }
+  .swatches { display: flex; gap: 10px; justify-content: center; margin-top: 14px; }
+  .sw { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #475569; }
+  .sw i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1px solid rgb(0 0 0 / .08); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+  <!--
+    图标标记（可复用 SVG）：
+    一个几何 A，两根斜笔在顶端汇成尖顶，横杠替换为四角星火花
+    —— 把 "Athlon" 与 "AI Agent" 收进一笔。
+  -->
+  <svg viewBox="0 0 100 116" xmlns="http://www.w3.org/2000/svg" role="img"
+       aria-label="Athlon Agent 图标：A 字标叠加四角星火花">
+    <defs>
+      <!-- 单一四角星形状，横向拉伸后即横杠火花 -->
+      <symbol id="spark" viewBox="-50 -10 100 20" overflow="visible">
+        <path d="M0 -10 L50 0 L0 10 L-50 0 Z" fill="#0ea5e9"/>
+      </symbol>
+    </defs>
+
+    <!-- A 的左 / 右斜笔 -->
+    <path d="M50 4 L8 112 H30 L50 64 L70 112 H92 Z" fill="#0c2a3f"/>
+
+    <!-- 横杠 = 四角星火花 -->
+    <use href="#spark" x="0" y="74" width="100" height="20"/>
+  </svg>
+
+  <!-- 主图标 -->
+  <div class="stage">
+    <svg viewBox="0 0 100 116" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-label="Athlon Agent 图标：A 字标叠加四角星火花">
+      <path d="M50 4 L8 112 H30 L50 64 L70 112 H92 Z" fill="#0c2a3f"/>
+      <path d="M50 64 L100 74 L50 84 L0 74 Z" fill="#0ea5e9"/>
+    </svg>
+  </div>
+
+  <!-- 多尺寸预览：验证小尺寸下仍可辨识 -->
+  <div class="sizes">
+    <div class="size size-128">
+      <div class="tile">
+        <svg viewBox="0 0 100 116"><path d="M50 4 L8 112 H30 L50 64 L70 112 H92 Z" fill="#0c2a3f"/><path d="M50 64 L100 74 L50 84 L0 74 Z" fill="#0ea5e9"/></svg>
+      </div>
+      <span class="label">128</span>
+    </div>
+    <div class="size size-48">
+      <div class="tile">
+        <svg viewBox="0 0 100 116"><path d="M50 4 L8 112 H30 L50 64 L70 112 H92 Z" fill="#0c2a3f"/><path d="M50 64 L100 74 L50 84 L0 74 Z" fill="#0ea5e9"/></svg>
+      </div>
+      <span class="label">48</span>
+    </div>
+    <div class="size size-16">
+      <div class="tile">
+        <svg viewBox="0 0 100 116"><path d="M50 4 L8 112 H30 L50 64 L70 112 H92 Z" fill="#0c2a3f"/><path d="M50 64 L100 74 L50 84 L0 74 Z" fill="#0ea5e9"/></svg>
+      </div>
+      <span class="label">16</span>
+    </div>
+  </div>
+
+  <!-- 说明 -->
+  <div class="note">
+    <h1>Athlon Agent</h1>
+    <p>单一字标 <strong>A</strong>，横杠化作四角星火花 —— 把「Athlon」与「AI Agent」收进一笔。保留项目原有 sky-blue 品牌色，去除多余装饰。</p>
+    <div class="swatches">
+      <span class="sw"><i style="background:#0ea5e9"></i>#0EA5E9</span>
+      <span class="sw"><i style="background:#0c2a3f"></i>#0C2A3F</span>
+      <span class="sw"><i style="background:#bae6fd"></i>#BAE6FD</span>
+    </div>
+  </div>
+
+</body>
+</html>

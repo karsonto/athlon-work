@@ -23,19 +23,29 @@ internal static class ModifiedFilePathExtractor
             return null;
         }
 
-        var args = ToolCallArgumentsParser.ParseJson(argumentsJsonOrText);
-        if (args.TryGetValue(ToolPathNormalizer.PathArgumentName, out var jsonPath) && !string.IsNullOrWhiteSpace(jsonPath))
+        if (ToolCallStreamingJsonHelper.TryExtractStringProperty(argumentsJsonOrText, ToolPathNormalizer.PathArgumentName, out var streamingPath)
+            && !string.IsNullOrWhiteSpace(streamingPath))
         {
-            return ToolPathNormalizer.ForModel(jsonPath);
+            return ToolPathNormalizer.ForModel(streamingPath);
+        }
+
+        var trimmed = argumentsJsonOrText.TrimStart();
+        if (trimmed.StartsWith('{') && trimmed.EndsWith('}'))
+        {
+            var args = ToolCallArgumentsParser.ParseJson(argumentsJsonOrText);
+            if (args.TryGetValue(ToolPathNormalizer.PathArgumentName, out var jsonPath) && !string.IsNullOrWhiteSpace(jsonPath))
+            {
+                return ToolPathNormalizer.ForModel(jsonPath);
+            }
         }
 
         foreach (var line in argumentsJsonOrText.Replace("\r\n", "\n").Split('\n'))
         {
             const string prefix = "path = ";
-            var trimmed = line.Trim();
-            if (trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            var lineTrimmed = line.Trim();
+            if (lineTrimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
-                return ToolPathNormalizer.ForModel(trimmed[prefix.Length..].Trim());
+                return ToolPathNormalizer.ForModel(lineTrimmed[prefix.Length..].Trim());
             }
         }
 

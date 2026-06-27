@@ -401,14 +401,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         await _layout.PersistNowAsync();
     }
 
-    private void OnAppThemeChanged(object? sender, EventArgs e)
-    {
+    private void OnAppThemeChanged(object? sender, EventArgs e) =>
         NotifyThemeToggleStateChanged();
-        if (_savedChatView is not null)
-        {
-            _ = _savedChatView.LoadMessagesAsync(_activeUi.Messages, _activeUi.ShowToolCalls);
-        }
-    }
 
     private void NotifyThemeToggleStateChanged()
     {
