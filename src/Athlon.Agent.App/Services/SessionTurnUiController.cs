@@ -392,6 +392,7 @@ public sealed class SessionTurnUiController
         switch (e.Action)
         {
             case NotifyCollectionChangedAction.Reset:
+                _modifiedFilesTracker.RebuildFromMessages(Messages);
                 SyncChatView();
                 break;
             case NotifyCollectionChangedAction.Add:

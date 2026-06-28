@@ -144,7 +144,7 @@ public sealed class ComposerHarnessViewModelTests
     }
 
     [Fact]
-    public async Task RefreshTasksAsync_NotifiesAllTasksCompleted_WhenLastTaskCompletesPlan()
+    public async Task RefreshTasksAsync_NotifiesTaskCompleted_WhenLastTaskCompletesPlan()
     {
         var harness = new StubHarnessState(enabled: true);
         var store = new MutableTaskListStore(
@@ -168,7 +168,7 @@ public sealed class ComposerHarnessViewModelTests
     }
 
     [Fact]
-    public async Task RefreshTasksAsync_DoesNotNotifyAllTasksCompleted_WhenOnlyPartiallyComplete()
+    public async Task RefreshTasksAsync_NotifiesTaskCompleted_WhenOnlyPartiallyComplete()
     {
         var harness = new StubHarnessState(enabled: true);
         var store = new MutableTaskListStore(
@@ -187,11 +187,12 @@ public sealed class ComposerHarnessViewModelTests
         ]);
         await vm.RefreshTasksAsync();
 
-        Assert.Equal(0, notifier.CallCount);
+        Assert.Equal(1, notifier.CallCount);
+        Assert.Equal("first", notifier.LastCompletedTaskContent);
     }
 
     [Fact]
-    public async Task LoadForSessionAsync_DoesNotNotifyAllTasksCompleted_WhenPlanAlreadyComplete()
+    public async Task LoadForSessionAsync_DoesNotNotifyTaskCompleted_WhenPlanAlreadyComplete()
     {
         var harness = new StubHarnessState(enabled: true);
         var store = new MutableTaskListStore(
@@ -208,7 +209,7 @@ public sealed class ComposerHarnessViewModelTests
     }
 
     [Fact]
-    public async Task RefreshTasksAsync_DoesNotNotifyAllTasksCompleted_WhenAllCancelled()
+    public async Task RefreshTasksAsync_DoesNotNotifyTaskCompleted_WhenAllCancelled()
     {
         var harness = new StubHarnessState(enabled: true);
         var store = new MutableTaskListStore(
@@ -256,7 +257,7 @@ public sealed class ComposerHarnessViewModelTests
 
     private sealed class NoOpTaskPlanCompletionNotifier : ITaskPlanCompletionNotifier
     {
-        public void NotifyAllTasksCompleted(string lastCompletedTaskContent) { }
+        public void NotifyTaskCompleted(string completedTaskContent) { }
     }
 
     private sealed class RecordingTaskPlanCompletionNotifier : ITaskPlanCompletionNotifier
@@ -265,10 +266,10 @@ public sealed class ComposerHarnessViewModelTests
 
         public string? LastCompletedTaskContent { get; private set; }
 
-        public void NotifyAllTasksCompleted(string lastCompletedTaskContent)
+        public void NotifyTaskCompleted(string completedTaskContent)
         {
             CallCount++;
-            LastCompletedTaskContent = lastCompletedTaskContent;
+            LastCompletedTaskContent = completedTaskContent;
         }
     }
 

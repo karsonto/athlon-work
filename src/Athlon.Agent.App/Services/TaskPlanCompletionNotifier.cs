@@ -9,7 +9,7 @@ public sealed class TaskPlanCompletionNotifier : ITaskPlanCompletionNotifier
 {
     private TaskCompletionNoticeWindow? _activeWindow;
 
-    public void NotifyAllTasksCompleted(string lastCompletedTaskContent)
+    public void NotifyTaskCompleted(string completedTaskContent)
     {
         var app = Application.Current;
         if (app is null)
@@ -20,7 +20,7 @@ public sealed class TaskPlanCompletionNotifier : ITaskPlanCompletionNotifier
         app.Dispatcher.InvokeAsync(() =>
         {
             _activeWindow?.Close();
-            _activeWindow = new TaskCompletionNoticeWindow(Strings.Get("Notification_TaskPlanCompleteTitle"), lastCompletedTaskContent);
+            _activeWindow = new TaskCompletionNoticeWindow(Strings.Get("Notification_TaskCompleteTitle"), completedTaskContent);
             _activeWindow.Closed += (_, _) => _activeWindow = null;
             _activeWindow.Show();
         });

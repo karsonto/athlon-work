@@ -16,7 +16,6 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
     private readonly ITaskPlanCompletionNotifier _taskPlanCompletionNotifier;
     private readonly ILocalizationService _loc;
     private string _sessionId = "";
-    private bool _wasAllTasksDone;
 
     public ComposerHarnessViewModel(
         ISessionHarnessState harnessState,
@@ -53,7 +52,6 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         if (!string.Equals(_sessionId, sessionId, StringComparison.Ordinal))
         {
             Tasks.Clear();
-            _wasAllTasksDone = false;
         }
 
         _sessionId = sessionId;
@@ -101,7 +99,6 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         var list = await _taskListStore.GetAsync(_sessionId).ConfigureAwait(true);
         var incomingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var byId = Tasks.ToDictionary(task => task.Id, StringComparer.OrdinalIgnoreCase);
-        string? lastNewlyCompletedContent = null;
 
         foreach (var item in list.Items)
         {
@@ -113,7 +110,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
                 if (!wasCompleted && existing.IsCompleted)
                 {
                     existing.TriggerCompletionAnimation();
-                    lastNewlyCompletedContent = existing.Content;
+                    _taskPlanCompletionNotifier.NotifyTaskCompleted(existing.Content);
                 }
             }
             else
@@ -135,13 +132,6 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         InProgressTaskCount = list.Items.Count(i =>
             string.Equals(i.Status, AgentTaskStatuses.InProgress, StringComparison.OrdinalIgnoreCase));
 
-        var isAllTasksDone = IsPlanFullyDone(Tasks);
-        if (isAllTasksDone && !_wasAllTasksDone && lastNewlyCompletedContent is not null)
-        {
-            _taskPlanCompletionNotifier.NotifyAllTasksCompleted(lastNewlyCompletedContent);
-        }
-
-        _wasAllTasksDone = isAllTasksDone;
         NotifyTaskCollectionChanged();
     }
 
@@ -156,21 +146,14 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         Tasks.Clear();
         PendingTaskCount = 0;
         InProgressTaskCount = 0;
-        _wasAllTasksDone = false;
         NotifyTaskCollectionChanged();
     }
 
     private void ClearTasks()
     {
         Tasks.Clear();
-        _wasAllTasksDone = false;
         OnPropertyChanged(nameof(ShowTaskPanel));
     }
-
-    private static bool IsPlanFullyDone(IEnumerable<SessionTaskItemViewModel> tasks) =>
-        tasks.Any() &&
-        tasks.All(task => task.IsCompleted || task.IsCancelled) &&
-        tasks.Any(task => task.IsCompleted);
 
     private void NotifyTaskCollectionChanged()
     {
