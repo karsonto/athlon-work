@@ -277,6 +277,9 @@
   <data name="Context_OpenInEditor" xml:space="preserve">
     <value>Open in editor</value>
   </data>
+  <data name="Context_RemoveWorkspace" xml:space="preserve">
+    <value>Remove workspace</value>
+  </data>
   <data name="Context_TabFiles" xml:space="preserve">
     <value>Files</value>
   </data>
@@ -1119,6 +1122,9 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   </data>
   <data name="Shell_TargetMissing" xml:space="preserve">
     <value>Target does not exist or was already deleted.</value>
+  </data>
+  <data name="Shell_WorkspaceRemoved" xml:space="preserve">
+    <value>Workspace removed from this conversation</value>
   </data>
   <data name="Shell_WorkspaceStatus" xml:space="preserve">
     <value>Current conversation workspace: {0}</value>

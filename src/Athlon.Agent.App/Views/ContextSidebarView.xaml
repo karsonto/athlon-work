@@ -77,8 +77,8 @@
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <Button Grid.Column="1"
-                                        Content="{loc:Localize Key=Common_Configure}"
-                                        Command="{Binding ConfigureWorkspaceCommand}"
+                                        Content="{Binding WorkspacePanelActionLabel}"
+                                        Command="{Binding WorkspacePanelActionCommand}"
                                         Style="{StaticResource GhostButtonStyle}"
                                         Padding="8,4"
                                         FontSize="12"
@@ -91,6 +91,16 @@
                                 BorderThickness="1"
                                 CornerRadius="8"
                                 Padding="8">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasSessionWorkspace}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
                             <TreeView ItemsSource="{Binding Sidebar.WorkspaceTree}"
                                       Background="Transparent"
                                       BorderThickness="0"

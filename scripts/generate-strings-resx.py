@@ -170,6 +170,7 @@ ENTRIES: dict[str, tuple[str, str]] = {
     "Shell_LoadConversationFailed": ("无法加载该对话。", "Could not load this conversation."),
     "Shell_LoadConversationDone": ("已加载对话：{0}", "Loaded conversation: {0}"),
     "Shell_WorkspaceStatus": ("当前对话工作区：{0}", "Current conversation workspace: {0}"),
+    "Shell_WorkspaceRemoved": ("已移除当前对话的工作区", "Workspace removed from this conversation"),
     "Shell_ExitTitle": ("退出 Athlon Agent", "Exit Athlon Agent"),
     "Shell_ExitMessage": (
         "有对话正在生成或消息排队中，退出将停止所有任务。确定退出？",
@@ -196,6 +197,7 @@ ENTRIES: dict[str, tuple[str, str]] = {
     "Context_TabFiles": ("文件", "Files"),
     "Context_TabSkills": ("技能", "Skills"),
     "Context_Workspace": ("工作区", "Workspace"),
+    "Context_RemoveWorkspace": ("移除工作区", "Remove workspace"),
     "Chat_SettingsTooltip": ("设置", "Settings"),
     "Chat_LoadingConversation": ("正在加载对话…", "Loading conversation…"),
     "Chat_UploadImageTooltip": ("上传图片（支持 Ctrl+V 粘贴）", "Upload image (Ctrl+V to paste)"),

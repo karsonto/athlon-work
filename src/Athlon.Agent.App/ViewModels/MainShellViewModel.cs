@@ -315,6 +315,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [ObservableProperty]
     private bool isSsoUserVisible;
 
+    public string WorkspacePanelActionLabel =>
+        HasSessionWorkspace ? _loc["Context_RemoveWorkspace"] : _loc["Common_Configure"];
+
+    public bool HasSessionWorkspace =>
+        !string.IsNullOrWhiteSpace(_session.ActiveWorkspace);
+
     public ScheduleViewModel SchedulePageVm { get; }
     public KnowledgeViewModel KnowledgePageVm { get; }
 
@@ -423,6 +429,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         {
             ActiveWorkspaceName = _loc["Shell_NoWorkspace"];
         }
+
+        OnPropertyChanged(nameof(HasSessionWorkspace));
+        OnPropertyChanged(nameof(WorkspacePanelActionLabel));
     }
 
     private void OnAppThemeChanged(object? sender, EventArgs e) =>
@@ -737,6 +746,18 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     }
 
     [RelayCommand]
+    private async Task WorkspacePanelActionAsync()
+    {
+        if (HasSessionWorkspace)
+        {
+            await RemoveSessionWorkspaceAsync();
+            return;
+        }
+
+        await ConfigureWorkspaceAsync();
+    }
+
+    [RelayCommand]
     private async Task ConfigureWorkspaceAsync()
     {
         var dialog = new OpenFolderDialog
@@ -760,6 +781,24 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ApplySessionWorkspace();
         await SaveCurrentSessionIfNeededAsync();
         Settings.SettingsStatus = _loc.Format("Shell_WorkspaceStatus", folderName);
+    }
+
+    private async Task RemoveSessionWorkspaceAsync()
+    {
+        if (!HasSessionWorkspace)
+        {
+            return;
+        }
+
+        if (!await FileEditor.TryCloseAllTabsAsync().ConfigureAwait(true))
+        {
+            return;
+        }
+
+        _session = _session.WithWorkspace(null);
+        ApplySessionWorkspace();
+        await SaveCurrentSessionIfNeededAsync();
+        Settings.SettingsStatus = _loc["Shell_WorkspaceRemoved"];
     }
 
     private async Task OnSettingsSavedAsync()
@@ -982,13 +1021,15 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private void ApplySessionWorkspace()
     {
         SyncWorkspaceContext();
-        ActiveWorkspaceName = string.IsNullOrWhiteSpace(_workspaceContext.DisplayName)
-            ? _loc["Shell_NoWorkspace"]
-            : _workspaceContext.DisplayName!;
+        ActiveWorkspaceName = HasSessionWorkspace
+            ? _workspaceContext.DisplayName ?? _loc["Shell_NoWorkspace"]
+            : _loc["Shell_NoWorkspace"];
         RefreshAtCompletionSources(reloadSkills: true);
         Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
         ConfigureWorkspaceWatcher();
         OnPropertyChanged(nameof(Sidebar));
+        OnPropertyChanged(nameof(HasSessionWorkspace));
+        OnPropertyChanged(nameof(WorkspacePanelActionLabel));
     }
 
     private void SyncWorkspaceContext() =>

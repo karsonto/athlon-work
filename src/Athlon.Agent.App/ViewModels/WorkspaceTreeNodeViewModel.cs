@@ -90,7 +90,6 @@ public sealed class WorkspaceTreeNodeViewModel
         var tree = new ObservableCollection<WorkspaceTreeNodeViewModel>();
         if (string.IsNullOrWhiteSpace(rootPath) || !Directory.Exists(rootPath))
         {
-            tree.Add(Placeholder("未配置工作区"));
             return tree;
         }
 

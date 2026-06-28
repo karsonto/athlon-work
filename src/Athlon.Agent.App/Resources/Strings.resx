@@ -277,6 +277,9 @@
   <data name="Context_OpenInEditor" xml:space="preserve">
     <value>在编辑器中打开</value>
   </data>
+  <data name="Context_RemoveWorkspace" xml:space="preserve">
+    <value>移除工作区</value>
+  </data>
   <data name="Context_TabFiles" xml:space="preserve">
     <value>文件</value>
   </data>
@@ -1119,6 +1122,9 @@
   </data>
   <data name="Shell_TargetMissing" xml:space="preserve">
     <value>目标不存在或已被删除。</value>
+  </data>
+  <data name="Shell_WorkspaceRemoved" xml:space="preserve">
+    <value>已移除当前对话的工作区</value>
   </data>
   <data name="Shell_WorkspaceStatus" xml:space="preserve">
     <value>当前对话工作区：{0}</value>
