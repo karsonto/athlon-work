@@ -1,3 +1,4 @@
+using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Harness;
@@ -17,7 +18,7 @@ public sealed class ComposerHarnessViewModelTests
         [
             new AgentTaskItem { Id = "1", Content = "task", Status = AgentTaskStatuses.InProgress }
         ]);
-        var vm = new ComposerHarnessViewModel(harness, store);
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
 
         await vm.LoadForSessionAsync("session-1");
         Assert.Single(vm.Tasks);
@@ -38,7 +39,7 @@ public sealed class ComposerHarnessViewModelTests
     {
         var harness = new StubHarnessState(enabled: false);
         var store = new MutableTaskListStore();
-        var vm = new ComposerHarnessViewModel(harness, store);
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
 
         await vm.LoadForSessionAsync("session-1");
         store.SetItems([new AgentTaskItem { Id = "1", Content = "task", Status = AgentTaskStatuses.Pending }]);
@@ -53,7 +54,7 @@ public sealed class ComposerHarnessViewModelTests
     {
         var harness = new StubHarnessState(enabled: true);
         var store = new MutableTaskListStore();
-        var vm = new ComposerHarnessViewModel(harness, store);
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
 
         await vm.LoadForSessionAsync("session-1");
 
@@ -69,7 +70,7 @@ public sealed class ComposerHarnessViewModelTests
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Pending }
         ]);
-        var vm = new ComposerHarnessViewModel(harness, store);
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
 
         await vm.LoadForSessionAsync("session-1");
 
@@ -87,7 +88,7 @@ public sealed class ComposerHarnessViewModelTests
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Pending },
             new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.InProgress }
         ]);
-        var vm = new ComposerHarnessViewModel(harness, store);
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
         await vm.LoadForSessionAsync("session-1");
 
         store.SetItems(
@@ -112,7 +113,7 @@ public sealed class ComposerHarnessViewModelTests
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress }
         ]);
-        var vm = new ComposerHarnessViewModel(harness, store);
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
         await vm.LoadForSessionAsync("session-1");
 
         store.SetItems(
@@ -132,11 +133,98 @@ public sealed class ComposerHarnessViewModelTests
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed }
         ]);
-        var vm = new ComposerHarnessViewModel(harness, store);
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
 
         await vm.LoadForSessionAsync("session-1");
 
         Assert.False(vm.Tasks[0].ShouldPlayCompletionAnimation);
+    }
+
+    [Fact]
+    public async Task RefreshTasksAsync_NotifiesAllTasksCompleted_WhenLastTaskCompletesPlan()
+    {
+        var harness = new StubHarnessState(enabled: true);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed },
+            new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.InProgress }
+        ]);
+        var notifier = new RecordingTaskPlanCompletionNotifier();
+        var vm = new ComposerHarnessViewModel(harness, store, notifier);
+        await vm.LoadForSessionAsync("session-1");
+
+        store.SetItems(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed },
+            new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.Completed }
+        ]);
+        await vm.RefreshTasksAsync();
+
+        Assert.Equal(1, notifier.CallCount);
+        Assert.Equal("second", notifier.LastCompletedTaskContent);
+    }
+
+    [Fact]
+    public async Task RefreshTasksAsync_DoesNotNotifyAllTasksCompleted_WhenOnlyPartiallyComplete()
+    {
+        var harness = new StubHarnessState(enabled: true);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress },
+            new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.Pending }
+        ]);
+        var notifier = new RecordingTaskPlanCompletionNotifier();
+        var vm = new ComposerHarnessViewModel(harness, store, notifier);
+        await vm.LoadForSessionAsync("session-1");
+
+        store.SetItems(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed },
+            new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.Pending }
+        ]);
+        await vm.RefreshTasksAsync();
+
+        Assert.Equal(0, notifier.CallCount);
+    }
+
+    [Fact]
+    public async Task LoadForSessionAsync_DoesNotNotifyAllTasksCompleted_WhenPlanAlreadyComplete()
+    {
+        var harness = new StubHarnessState(enabled: true);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed },
+            new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.Completed }
+        ]);
+        var notifier = new RecordingTaskPlanCompletionNotifier();
+        var vm = new ComposerHarnessViewModel(harness, store, notifier);
+
+        await vm.LoadForSessionAsync("session-1");
+
+        Assert.Equal(0, notifier.CallCount);
+    }
+
+    [Fact]
+    public async Task RefreshTasksAsync_DoesNotNotifyAllTasksCompleted_WhenAllCancelled()
+    {
+        var harness = new StubHarnessState(enabled: true);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress },
+            new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.Pending }
+        ]);
+        var notifier = new RecordingTaskPlanCompletionNotifier();
+        var vm = new ComposerHarnessViewModel(harness, store, notifier);
+        await vm.LoadForSessionAsync("session-1");
+
+        store.SetItems(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Cancelled },
+            new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.Cancelled }
+        ]);
+        await vm.RefreshTasksAsync();
+
+        Assert.Equal(0, notifier.CallCount);
     }
 
     [Fact]
@@ -161,6 +249,24 @@ public sealed class ComposerHarnessViewModelTests
 
         Assert.True(result.Succeeded);
         Assert.Equal("session-1", notifiedSessionId);
+    }
+
+    private sealed class NoOpTaskPlanCompletionNotifier : ITaskPlanCompletionNotifier
+    {
+        public void NotifyAllTasksCompleted(string lastCompletedTaskContent) { }
+    }
+
+    private sealed class RecordingTaskPlanCompletionNotifier : ITaskPlanCompletionNotifier
+    {
+        public int CallCount { get; private set; }
+
+        public string? LastCompletedTaskContent { get; private set; }
+
+        public void NotifyAllTasksCompleted(string lastCompletedTaskContent)
+        {
+            CallCount++;
+            LastCompletedTaskContent = lastCompletedTaskContent;
+        }
     }
 
     private sealed class StubHarnessState(bool enabled) : ISessionHarnessState

@@ -1,5 +1,12 @@
 namespace Athlon.Agent.Core.Memory;
 
+public enum MemoryInlinePromptMode
+{
+    None,
+    Preview,
+    Full
+}
+
 public sealed class MemorySettings
 {
     /// <summary>Minimum gap between two consolidation runs.</summary>
@@ -28,4 +35,10 @@ public sealed class MemorySettings
 
     /// <summary>Names of memory directories/files excluded from workspace tools.</summary>
     public List<string> ExcludePatterns { get; set; } = new() { "memory/", "MEMORY.md" };
+
+    /// <summary>How much of MEMORY.md to inject into the system prompt when Coding is enabled.</summary>
+    public MemoryInlinePromptMode InlinePromptMode { get; set; } = MemoryInlinePromptMode.None;
+
+    /// <summary>Max characters to inline when <see cref="InlinePromptMode"/> is Preview.</summary>
+    public int MaxInlineMemoryChars { get; set; } = 800;
 }

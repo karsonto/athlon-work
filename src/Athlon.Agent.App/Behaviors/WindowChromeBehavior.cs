@@ -110,7 +110,10 @@ public sealed class WindowChromeBehavior : Behavior<FrameworkElement>
             return;
         }
 
-        MaximizeRestoreButton.Content = _window.WindowState == WindowState.Maximized ? "❐" : "□";
-        MaximizeRestoreButton.ToolTip = _window.WindowState == WindowState.Maximized ? "还原" : "最大化";
+        var isMaximized = _window.WindowState == WindowState.Maximized;
+        MaximizeRestoreButton.Content = null;
+        MaximizeRestoreButton.ContentTemplate = (DataTemplate)MaximizeRestoreButton.FindResource(
+            isMaximized ? "WindowCaptionRestoreIconTemplate" : "WindowCaptionMaximizeIconTemplate");
+        MaximizeRestoreButton.ToolTip = isMaximized ? "还原" : "最大化";
     }
 }

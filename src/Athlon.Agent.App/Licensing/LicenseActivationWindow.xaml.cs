@@ -138,8 +138,11 @@ public partial class LicenseActivationWindow : Window
             return;
         }
 
-        MaximizeRestoreButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
-        MaximizeRestoreButton.ToolTip = WindowState == WindowState.Maximized ? "还原" : "最大化";
+        var isMaximized = WindowState == WindowState.Maximized;
+        MaximizeRestoreButton.Content = null;
+        MaximizeRestoreButton.ContentTemplate = (DataTemplate)MaximizeRestoreButton.FindResource(
+            isMaximized ? "WindowCaptionRestoreIconTemplate" : "WindowCaptionMaximizeIconTemplate");
+        MaximizeRestoreButton.ToolTip = isMaximized ? "还原" : "最大化";
     }
 
     private void BrowseButton_OnClick(object sender, RoutedEventArgs e)

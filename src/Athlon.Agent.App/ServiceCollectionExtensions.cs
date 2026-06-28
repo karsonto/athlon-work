@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
 
     {
 
+        services.AddSingleton<ITaskPlanCompletionNotifier, TaskPlanCompletionNotifier>();
         services.AddSingleton<IChatScrollService, ChatScrollService>();
 
         services.AddSingleton<ComposerCoordinator>();
@@ -103,7 +104,9 @@ public static class ServiceCollectionExtensions
 
             sp.GetRequiredService<ISessionHarnessState>(),
 
-            sp.GetRequiredService<ISessionTaskListStore>()));
+            sp.GetRequiredService<ISessionTaskListStore>(),
+
+            sp.GetRequiredService<ITaskPlanCompletionNotifier>()));
 
         services.AddSingleton<ChatPageViewModel>();
 

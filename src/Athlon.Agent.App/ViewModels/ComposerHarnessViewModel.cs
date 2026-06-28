@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows.Threading;
+using Athlon.Agent.App.Services;
 using Athlon.Agent.Core.Harness;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -10,12 +11,18 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
 {
     private readonly ISessionHarnessState _harnessState;
     private readonly ISessionTaskListStore _taskListStore;
+    private readonly ITaskPlanCompletionNotifier _taskPlanCompletionNotifier;
     private string _sessionId = "";
+    private bool _wasAllTasksDone;
 
-    public ComposerHarnessViewModel(ISessionHarnessState harnessState, ISessionTaskListStore taskListStore)
+    public ComposerHarnessViewModel(
+        ISessionHarnessState harnessState,
+        ISessionTaskListStore taskListStore,
+        ITaskPlanCompletionNotifier taskPlanCompletionNotifier)
     {
         _harnessState = harnessState;
         _taskListStore = taskListStore;
+        _taskPlanCompletionNotifier = taskPlanCompletionNotifier;
     }
 
     public ObservableCollection<SessionTaskItemViewModel> Tasks { get; } = new();
@@ -40,6 +47,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         if (!string.Equals(_sessionId, sessionId, StringComparison.Ordinal))
         {
             Tasks.Clear();
+            _wasAllTasksDone = false;
         }
 
         _sessionId = sessionId;
@@ -87,6 +95,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         var list = await _taskListStore.GetAsync(_sessionId).ConfigureAwait(true);
         var incomingIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var byId = Tasks.ToDictionary(task => task.Id, StringComparer.OrdinalIgnoreCase);
+        string? lastNewlyCompletedContent = null;
 
         foreach (var item in list.Items)
         {
@@ -98,6 +107,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
                 if (!wasCompleted && existing.IsCompleted)
                 {
                     existing.TriggerCompletionAnimation();
+                    lastNewlyCompletedContent = existing.Content;
                 }
             }
             else
@@ -118,6 +128,14 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
             string.Equals(i.Status, AgentTaskStatuses.Pending, StringComparison.OrdinalIgnoreCase));
         InProgressTaskCount = list.Items.Count(i =>
             string.Equals(i.Status, AgentTaskStatuses.InProgress, StringComparison.OrdinalIgnoreCase));
+
+        var isAllTasksDone = IsPlanFullyDone(Tasks);
+        if (isAllTasksDone && !_wasAllTasksDone && lastNewlyCompletedContent is not null)
+        {
+            _taskPlanCompletionNotifier.NotifyAllTasksCompleted(lastNewlyCompletedContent);
+        }
+
+        _wasAllTasksDone = isAllTasksDone;
         NotifyTaskCollectionChanged();
     }
 
@@ -132,14 +150,21 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         Tasks.Clear();
         PendingTaskCount = 0;
         InProgressTaskCount = 0;
+        _wasAllTasksDone = false;
         NotifyTaskCollectionChanged();
     }
 
     private void ClearTasks()
     {
         Tasks.Clear();
+        _wasAllTasksDone = false;
         OnPropertyChanged(nameof(ShowTaskPanel));
     }
+
+    private static bool IsPlanFullyDone(IEnumerable<SessionTaskItemViewModel> tasks) =>
+        tasks.Any() &&
+        tasks.All(task => task.IsCompleted || task.IsCancelled) &&
+        tasks.Any(task => task.IsCompleted);
 
     private void NotifyTaskCollectionChanged()
     {

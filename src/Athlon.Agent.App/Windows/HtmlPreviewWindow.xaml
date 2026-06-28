@@ -32,11 +32,11 @@
                 <TextBlock Text="已在沙箱环境中渲染，不会影响当前页面"
                            Style="{StaticResource PreviewWindowSubtitleStyle}" />
             </StackPanel>
-            <Button Content="×"
-                    HorizontalAlignment="Right"
+            <Button HorizontalAlignment="Right"
                     VerticalAlignment="Top"
                     Click="CloseButton_OnClick"
                     ToolTip="关闭"
+                    ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
                     shell:WindowChrome.IsHitTestVisibleInChrome="True"
                     Style="{StaticResource WindowCloseCaptionButtonStyle}" />
         </Grid>

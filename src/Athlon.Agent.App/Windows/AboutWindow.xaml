@@ -39,10 +39,10 @@
                                FontSize="12"
                                Foreground="{DynamicResource Brush.SubtleText}"
                                VerticalAlignment="Center" />
-                    <Button Content="×"
-                            HorizontalAlignment="Right"
+                    <Button HorizontalAlignment="Right"
                             ToolTip="关闭"
                             Click="CloseButton_OnClick"
+                            ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True"
                             Style="{StaticResource WindowCloseCaptionButtonStyle}" />
                 </Grid>

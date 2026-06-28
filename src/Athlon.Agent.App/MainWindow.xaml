@@ -83,7 +83,8 @@
                 </StackPanel>
                 <StackPanel Orientation="Horizontal"
                             HorizontalAlignment="Right"
-                            VerticalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            Margin="0,0,2,0"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Command="{Binding SsoLogoutCommand}"
                             ToolTip="点击退出登录"
@@ -112,23 +113,23 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                    <Button Content="−"
-                            ToolTip="最小化"
+                    <Button ToolTip="最小化"
+                            ContentTemplate="{StaticResource WindowCaptionMinimizeIconTemplate}"
                             Style="{StaticResource WindowCaptionButtonStyle}">
                         <i:Interaction.Behaviors>
                             <behaviors:WindowCaptionButtonBehavior Action="Minimize" />
                         </i:Interaction.Behaviors>
                     </Button>
                     <Button x:Name="MaximizeRestoreButton"
-                            Content="□"
                             ToolTip="最大化"
+                            ContentTemplate="{StaticResource WindowCaptionMaximizeIconTemplate}"
                             Style="{StaticResource WindowCaptionButtonStyle}">
                         <i:Interaction.Behaviors>
                             <behaviors:WindowCaptionButtonBehavior Action="MaximizeRestore" />
                         </i:Interaction.Behaviors>
                     </Button>
-                    <Button Content="×"
-                            ToolTip="关闭"
+                    <Button ToolTip="关闭"
+                            ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
                             Style="{StaticResource WindowCloseCaptionButtonStyle}">
                         <i:Interaction.Behaviors>
                             <behaviors:WindowCaptionButtonBehavior Action="Close" />

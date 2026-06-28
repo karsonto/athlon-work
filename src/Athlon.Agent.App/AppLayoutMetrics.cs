@@ -11,6 +11,18 @@ public static class AppLayoutMetrics
     /// <summary>Custom window caption strip (minimize / maximize / close only).</summary>
     public const double WindowChromeHeight = 32;
 
+    /// <summary>Hit target width of a caption control (Cursor-style compact).</summary>
+    public const double WindowCaptionButtonWidth = 30;
+
+    /// <summary>Hit target height of a caption control.</summary>
+    public const double WindowCaptionButtonHeight = 32;
+
+    /// <summary>Hover pill corner radius for caption controls.</summary>
+    public static readonly CornerRadius WindowCaptionButtonCornerRadius = new(5);
+
+    /// <summary>Caption glyph size when using text-based window icons.</summary>
+    public const double WindowCaptionIconFontSize = 10;
+
     /// <summary>Per-panel header height (sidebar, chat, context).</summary>
     public const double PanelHeaderHeight = 56;
 

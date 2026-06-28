@@ -30,15 +30,15 @@ public sealed class AgentEnvironmentPromptBuilderTests
             var prompt = builder.Build(session, Array.Empty<ToolDefinition>());
 
             Assert.Contains("Host: Win", prompt, StringComparison.Ordinal);
-            Assert.Contains("UTC+8", prompt, StringComparison.Ordinal);
-            Assert.Matches(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", prompt);
+            Assert.Contains("tz=UTC+8", prompt, StringComparison.Ordinal);
+            Assert.DoesNotMatch(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", prompt);
             Assert.Contains("Encoding and locale:", prompt, StringComparison.Ordinal);
             Assert.Contains("UTF-8", prompt, StringComparison.Ordinal);
             Assert.Contains(@"TESTDOMAIN\karson", prompt, StringComparison.Ordinal);
             Assert.Contains($"skills={skillsPath}", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain($"none installed under {skillsPath}", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("~/.athlon-agent/skills", prompt, StringComparison.Ordinal);
-            Assert.Contains("Windows: cmd.exe only, not PowerShell.", prompt, StringComparison.Ordinal);
+            Assert.Contains("Shell: cmd.exe only, not PowerShell", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("prefer PowerShell", prompt, StringComparison.OrdinalIgnoreCase);
         }
         finally
@@ -75,11 +75,12 @@ public sealed class AgentEnvironmentPromptBuilderTests
             var session = AgentSession.Create("mcp-prompt-test").WithWorkspace(workspaceRoot);
             var prompt = builder.Build(session, tools);
 
-            Assert.Contains("Native tools are provided via function calling", prompt, StringComparison.Ordinal);
+            Assert.Contains("Native tools via function calling", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("file_list, file_read", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("- file_read: Read a file", prompt, StringComparison.Ordinal);
-            Assert.Contains("Available MCP tools:", prompt, StringComparison.Ordinal);
-            Assert.Contains("- mcp_enabled-server__echo: Echo via MCP", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain("Available MCP tools:", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain("- mcp_enabled-server__echo:", prompt, StringComparison.Ordinal);
+            Assert.Contains("advertised only via function schemas", prompt, StringComparison.Ordinal);
         }
         finally
         {

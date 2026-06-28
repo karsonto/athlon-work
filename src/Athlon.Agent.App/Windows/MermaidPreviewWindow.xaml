@@ -32,11 +32,11 @@
                 <TextBlock Text="使用安装包内置 Mermaid 离线渲染，无需互联网"
                            Style="{StaticResource PreviewWindowSubtitleStyle}" />
             </StackPanel>
-            <Button Content="×"
-                    HorizontalAlignment="Right"
+            <Button HorizontalAlignment="Right"
                     VerticalAlignment="Top"
                     Click="CloseButton_OnClick"
                     ToolTip="关闭"
+                    ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
                     shell:WindowChrome.IsHitTestVisibleInChrome="True"
                     Style="{StaticResource WindowCloseCaptionButtonStyle}" />
         </Grid>

@@ -70,18 +70,18 @@
                             Orientation="Horizontal"
                             VerticalAlignment="Center"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
-                    <Button Content="−"
-                            ToolTip="最小化"
+                    <Button ToolTip="最小化"
                             Click="MinimizeButton_OnClick"
+                            ContentTemplate="{StaticResource WindowCaptionMinimizeIconTemplate}"
                             Style="{StaticResource WindowCaptionButtonStyle}" />
                     <Button x:Name="MaximizeRestoreButton"
-                            Content="□"
                             ToolTip="最大化"
                             Click="MaximizeRestoreButton_OnClick"
+                            ContentTemplate="{StaticResource WindowCaptionMaximizeIconTemplate}"
                             Style="{StaticResource WindowCaptionButtonStyle}" />
-                    <Button Content="×"
-                            ToolTip="关闭"
+                    <Button ToolTip="关闭"
                             Click="CloseButton_OnClick"
+                            ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
                             Style="{StaticResource WindowCloseCaptionButtonStyle}" />
                 </StackPanel>
             </Grid>

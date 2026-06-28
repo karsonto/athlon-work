@@ -9,10 +9,9 @@ public sealed class HostEnvironmentSection : IEnvironmentPromptSection
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
         var host = context.Host;
-        var now = AppTimeZone.Now;
 
         var hostLine =
-            $"Host: Win {host.OsVersion} | {now:yyyy-MM-dd HH:mm} {AppTimeZone.PromptLabel} | {host.UserDomainName}\\{host.UserName}";
+            $"Host: Win {host.OsVersion} | tz={AppTimeZone.PromptLabel} | {host.UserDomainName}\\{host.UserName}";
         if (context.HasWorkspace)
         {
             hostLine += $" | cwd={context.WorkspaceRoot}";

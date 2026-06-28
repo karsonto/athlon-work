@@ -81,7 +81,7 @@ public sealed class HarnessTests
     {
         var memory = new StubLongTermMemory("remember this");
         var harness = RouterTestDependencies.CreateSessionHarnessState(enabled: false);
-        var contributor = new MemoryPromptContributor(memory, harness, new AgentRunContextAccessor());
+        var contributor = new MemoryPromptContributor(memory, harness, new AgentRunContextAccessor(), new AppSettings());
         var builder = new StringBuilder();
 
         contributor.Append(builder, CreatePromptContext());

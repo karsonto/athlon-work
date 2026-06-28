@@ -93,6 +93,7 @@ Output the COMPLETE new MEMORY.md content (not just a diff). Use markdown.
             return;
         }
 
+        consolidated = EnforceMaxLength(consolidated, maxChars);
         await longTermMemory.WriteCuratedAsync(consolidated, cancellationToken);
         await longTermMemory.WriteWatermarkAsync(runStart, cancellationToken);
         _logger.Information("MEMORY.md consolidated ({Length} chars), watermark advanced to {Watermark:O}",
@@ -115,5 +116,15 @@ Output the COMPLETE new MEMORY.md content (not just a diff). Use markdown.
             }
         }
         return sb.ToString();
+    }
+
+    public static string EnforceMaxLength(string content, int maxChars)
+    {
+        if (content.Length <= maxChars)
+        {
+            return content;
+        }
+
+        return content[..maxChars] + "\n\n...(truncated — use memory_get)...";
     }
 }

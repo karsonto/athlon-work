@@ -26,7 +26,6 @@ internal static class PromptTestHelpers
             new WorkspacePolicySection(),
             new WorkspaceFilesSection(),
             new CodingWorkflowSection(),
-            new FileToolsPolicySection(),
             new ToolsPolicySection(),
             new SkillsSection(settings, catalog),
             new ProductGuidanceSection()
