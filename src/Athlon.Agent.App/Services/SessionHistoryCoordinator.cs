@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
@@ -12,11 +13,15 @@ public sealed class SessionHistoryCoordinator : IDisposable
 
     private readonly IFileStorageService _storage;
     private CancellationTokenSource? _refreshCts;
+    private string? _currentSessionId;
+    private Func<string, bool>? _isSessionRunning;
+    private Action<string>? _stopSession;
 
     public SessionHistoryCoordinator(IFileStorageService storage)
     {
         _storage = storage;
         AgentRecordGroups = new ObservableCollection<AgentRecordGroupViewModel>();
+        AppCultureManager.CultureChanged += OnCultureChanged;
     }
 
     public ObservableCollection<AgentRecordGroupViewModel> AgentRecordGroups { get; }
@@ -37,6 +42,10 @@ public sealed class SessionHistoryCoordinator : IDisposable
         Func<string, bool> isSessionRunning,
         Action<string>? stopSession)
     {
+        _currentSessionId = currentSessionId;
+        _isSessionRunning = isSessionRunning;
+        _stopSession = stopSession;
+
         var entries = await _storage.ListSessionsAsync();
         AgentRecordGroups.Clear();
         foreach (var group in AgentRecordGrouping.Build(
@@ -84,6 +93,16 @@ public sealed class SessionHistoryCoordinator : IDisposable
         return null;
     }
 
+    private void OnCultureChanged(object? sender, EventArgs e)
+    {
+        if (_currentSessionId is null || _isSessionRunning is null)
+        {
+            return;
+        }
+
+        _ = RefreshAsync(_currentSessionId, _isSessionRunning, _stopSession);
+    }
+
     private static async Task DebouncedRefreshAsync(Func<Task> refreshAction, CancellationToken cancellationToken)
     {
         try
@@ -99,6 +118,7 @@ public sealed class SessionHistoryCoordinator : IDisposable
 
     public void Dispose()
     {
+        AppCultureManager.CultureChanged -= OnCultureChanged;
         _refreshCts?.Cancel();
         _refreshCts?.Dispose();
         _refreshCts = null;

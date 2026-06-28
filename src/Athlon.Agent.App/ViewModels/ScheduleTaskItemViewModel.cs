@@ -1,3 +1,4 @@
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Windows;
 using Athlon.Agent.Core;
@@ -12,6 +13,8 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
     private readonly AppSettings _settings;
     private readonly IFileStorageService _storage;
     private readonly SchedulerService _scheduler;
+    private readonly ILocalizationService _loc;
+    private readonly IUserNotifier _notifier;
     private readonly Action<ScheduleTaskItemViewModel>? _onDeleted;
     private readonly Func<string, Task>? _openSession;
 
@@ -20,6 +23,8 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
         AppSettings settings,
         IFileStorageService storage,
         SchedulerService scheduler,
+        ILocalizationService localization,
+        IUserNotifier notifier,
         Action<ScheduleTaskItemViewModel>? onDeleted = null,
         Func<string, Task>? openSession = null)
     {
@@ -27,6 +32,8 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
         _settings = settings;
         _storage = storage;
         _scheduler = scheduler;
+        _loc = localization;
+        _notifier = notifier;
         _onDeleted = onDeleted;
         _openSession = openSession;
         Refresh();
@@ -47,7 +54,7 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
     private string statusIcon = "⏳";
 
     [ObservableProperty]
-    private string statusDisplay = "就绪";
+    private string statusDisplay = "";
 
     [ObservableProperty]
     private string scheduleDescription = "";
@@ -96,7 +103,7 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
     {
         Title = _task.Title;
         PromptPreview = string.IsNullOrWhiteSpace(_task.Prompt)
-            ? "(无 Prompt)"
+            ? _loc["Schedule_NoPrompt"]
             : (_task.Prompt.Length > 120 ? _task.Prompt[..120] + "..." : _task.Prompt);
         Enabled = _task.Enabled;
         IsRunning = _task.LastStatus == "running";
@@ -111,10 +118,10 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
 
         ScheduleDescription = _task.Kind switch
         {
-            "daily" => $"每天 {_task.TimeOfDay}",
-            "at" => $"一次性 · {FormatAtTime(_task.AtTime)}",
-            "interval" => $"每隔 {_task.EveryMinutes} 分钟",
-            "manual" => "手动触发",
+            "daily" => _loc.Format("Schedule_DescriptionDaily", _task.TimeOfDay),
+            "at" => _loc.Format("Schedule_DescriptionAt", FormatAtTime(_task.AtTime)),
+            "interval" => _loc.Format("Schedule_DescriptionInterval", _task.EveryMinutes),
+            "manual" => _loc["Schedule_DescriptionManual"],
             _ => _task.Kind
         };
 
@@ -124,10 +131,10 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
 
         (StatusIcon, StatusDisplay) = _task.LastStatus switch
         {
-            "running" => ("▶️", "运行中"),
-            "success" => ("✅", "成功"),
-            "error" => ("❌", "失败"),
-            _ => ("⏳", "就绪")
+            "running" => ("▶️", _loc["Schedule_StatusRunning"]),
+            "success" => ("✅", _loc["Schedule_StatusSuccess"]),
+            "error" => ("❌", _loc["Schedule_StatusError"]),
+            _ => ("⏳", _loc["Schedule_StatusReady"])
         };
     }
 
@@ -167,7 +174,7 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
     [RelayCommand]
     private void Edit()
     {
-        var window = new ScheduleTaskEditWindow(_task);
+        var window = new ScheduleTaskEditWindow(_task, _notifier, _loc);
         window.Owner = System.Windows.Application.Current.MainWindow;
         if (window.ShowDialog() == true)
         {
@@ -179,13 +186,7 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
     [RelayCommand]
     private void Delete()
     {
-        var result = System.Windows.MessageBox.Show(
-            $"确定要删除定时任务「{_task.Title}」吗？",
-            "删除定时任务",
-            System.Windows.MessageBoxButton.YesNo,
-            System.Windows.MessageBoxImage.Question);
-
-        if (result != System.Windows.MessageBoxResult.Yes)
+        if (!_notifier.ConfirmYesNo("Schedule_DeleteTitle", "Schedule_DeleteMessage", _task.Title))
         {
             return;
         }

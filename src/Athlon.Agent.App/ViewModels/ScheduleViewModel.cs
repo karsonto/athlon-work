@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows;
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Windows;
 using Athlon.Agent.Core;
@@ -13,6 +14,8 @@ public sealed partial class ScheduleViewModel : ObservableObject
     private readonly AppSettings _settings;
     private readonly IFileStorageService _storage;
     private readonly SchedulerService _scheduler;
+    private readonly ILocalizationService _loc;
+    private readonly IUserNotifier _notifier;
     private readonly Func<string, Task>? _openSession;
     private bool _isSyncing;
 
@@ -20,13 +23,19 @@ public sealed partial class ScheduleViewModel : ObservableObject
         AppSettings settings,
         IFileStorageService storage,
         SchedulerService scheduler,
-        Lazy<ISessionHost> sessionHost)
+        Lazy<ISessionHost> sessionHost,
+        ILocalizationService localization,
+        IUserNotifier notifier)
     {
         _settings = settings;
         _storage = storage;
         _scheduler = scheduler;
+        _loc = localization;
+        _notifier = notifier;
         _openSession = id => sessionHost.Value.OpenSessionByIdAsync(id);
         _scheduler.TaskStatusChanged += OnTaskStatusChanged;
+        AppCultureManager.CultureChanged += OnCultureChanged;
+        InitializeFilterChips();
         SyncFromSettings();
         UpdateSchedulerState();
     }
@@ -48,13 +57,7 @@ public sealed partial class ScheduleViewModel : ObservableObject
     [ObservableProperty]
     private bool isSchedulerRunning;
 
-    public ObservableCollection<ScheduleFilterChipViewModel> FilterChips { get; } = new()
-    {
-        new ScheduleFilterChipViewModel("全部", 0) { IsSelected = true },
-        new ScheduleFilterChipViewModel("启用", 1),
-        new ScheduleFilterChipViewModel("运行中", 2),
-        new ScheduleFilterChipViewModel("已完成", 3)
-    };
+    public ObservableCollection<ScheduleFilterChipViewModel> FilterChips { get; } = new();
 
     partial void OnIsEnabledChanged(bool value)
     {
@@ -68,6 +71,15 @@ public sealed partial class ScheduleViewModel : ObservableObject
     {
         UpdateFilterChipSelection();
         ApplyFilter();
+    }
+
+    private void InitializeFilterChips()
+    {
+        FilterChips.Clear();
+        FilterChips.Add(new ScheduleFilterChipViewModel(_loc["Schedule_FilterAll"], 0) { IsSelected = true });
+        FilterChips.Add(new ScheduleFilterChipViewModel(_loc["Schedule_FilterEnabled"], 1));
+        FilterChips.Add(new ScheduleFilterChipViewModel(_loc["Schedule_FilterRunning"], 2));
+        FilterChips.Add(new ScheduleFilterChipViewModel(_loc["Schedule_FilterCompleted"], 3));
     }
 
     private void UpdateFilterChipSelection()
@@ -104,6 +116,8 @@ public sealed partial class ScheduleViewModel : ObservableObject
             _settings,
             _storage,
             _scheduler,
+            _loc,
+            _notifier,
             onDeleted: HandleTaskDeleted,
             openSession: _openSession);
 
@@ -118,8 +132,8 @@ public sealed partial class ScheduleViewModel : ObservableObject
     {
         var enabledCount = Tasks.Count(t => t.Enabled);
         TaskSummary = HasTasks
-            ? $"共 {Tasks.Count} 个任务，{enabledCount} 个启用"
-            : "暂无定时任务";
+            ? _loc.Format("Schedule_TaskSummary", Tasks.Count, enabledCount)
+            : _loc["Schedule_NoTasks"];
         IsEnabled = _settings.Schedule.Enabled;
         HasTasks = Tasks.Count > 0;
         IsSchedulerRunning = _scheduler.IsRunning;
@@ -196,7 +210,7 @@ public sealed partial class ScheduleViewModel : ObservableObject
     {
         var task = new ScheduledTask
         {
-            Title = "新建定时任务",
+            Title = _loc["Schedule_NewTaskDefaultTitle"],
             Kind = "daily",
             TimeOfDay = "09:00",
             Prompt = "",
@@ -205,7 +219,7 @@ public sealed partial class ScheduleViewModel : ObservableObject
             UpdatedAt = DateTime.UtcNow.ToString("O")
         };
 
-        var window = new ScheduleTaskEditWindow(task, isNew: true);
+        var window = new ScheduleTaskEditWindow(task, _notifier, _loc, isNew: true);
         window.Owner = Application.Current.MainWindow;
         if (window.ShowDialog() != true)
         {
@@ -220,8 +234,20 @@ public sealed partial class ScheduleViewModel : ObservableObject
         _ = PersistAsync();
     }
 
+    private void OnCultureChanged(object? sender, EventArgs e)
+    {
+        InitializeFilterChips();
+        UpdateFilterChipSelection();
+        RefreshState();
+        foreach (var task in Tasks)
+        {
+            task.Refresh();
+        }
+    }
+
     public void Dispose()
     {
+        AppCultureManager.CultureChanged -= OnCultureChanged;
         _scheduler.TaskStatusChanged -= OnTaskStatusChanged;
     }
 }

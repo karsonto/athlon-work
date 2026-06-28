@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Microsoft.Web.WebView2.Core;
@@ -26,8 +27,8 @@ public partial class MermaidPreviewWindow : Window
         {
             MessageBox.Show(
                 owner,
-                "未找到 ```mermaid 代码块。",
-                "无法预览",
+                Strings.Get("Preview_MermaidNoBlock"),
+                Strings.Get("Shell_CannotPreviewTitle"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
             return;
@@ -37,8 +38,8 @@ public partial class MermaidPreviewWindow : Window
         {
             MessageBox.Show(
                 owner,
-                $"缺少离线 Mermaid 资源：{MermaidPreviewHtmlBuilder.MermaidScriptPath}",
-                "无法预览",
+                Strings.Format("Preview_MermaidMissingAssets", MermaidPreviewHtmlBuilder.MermaidScriptPath),
+                Strings.Get("Shell_CannotPreviewTitle"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             return;
@@ -88,8 +89,8 @@ public partial class MermaidPreviewWindow : Window
         {
             MessageBox.Show(
                 this,
-                $"无法加载 Mermaid 预览：{exception.Message}",
-                "预览失败",
+                Strings.Format("Preview_MermaidFailedMessage", exception.Message),
+                Strings.Get("Preview_FailedTitle"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }

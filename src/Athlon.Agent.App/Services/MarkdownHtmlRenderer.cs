@@ -1,4 +1,6 @@
 using System.Net;
+using System.Text.Json;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Themes;
 using Markdig;
 
@@ -43,6 +45,7 @@ public static class MarkdownHtmlRenderer
             </head>
             <body>
               <div class="md-root">{body}</div>
+              <script>{BuildI18nBootstrapScript()}</script>
               <script>{BuildScript()}</script>
             </body>
             </html>
@@ -64,7 +67,7 @@ public static class MarkdownHtmlRenderer
             <head>
               <meta charset="UTF-8" />
               <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-              <title>HTML 预览</title>
+              <title>{WebUtility.HtmlEncode(Strings.Get("Preview_HtmlTitle"))}</title>
               <style>
                 body { margin: 0; min-height: 100vh; background: {{pageBackground}}; }
               </style>
@@ -275,6 +278,10 @@ public static class MarkdownHtmlRenderer
 
     private static string BuildScript() => """
         (function () {
+          function t(key) {
+            return (window.__mdI18n && window.__mdI18n[key]) || key;
+          }
+
           function post(payload) {
             if (window.chrome && window.chrome.webview) {
               // 必须传对象，不能 JSON.stringify；否则 C# 端 WebMessageAsJson 无法解析
@@ -298,7 +305,7 @@ public static class MarkdownHtmlRenderer
               var raw = code.textContent || '';
               var className = code.className || '';
               var match = className.match(/language-([\w-]+)/i);
-              var language = match ? match[1] : '代码';
+              var language = match ? match[1] : t('code');
               var canPreview = language.toLowerCase() === 'html';
 
               var wrapper = document.createElement('div');
@@ -317,7 +324,7 @@ public static class MarkdownHtmlRenderer
                 var previewBtn = document.createElement('button');
                 previewBtn.type = 'button';
                 previewBtn.className = 'code-btn';
-                previewBtn.textContent = '预览';
+                previewBtn.textContent = t('preview');
                 previewBtn.addEventListener('click', function () {
                   post({ type: 'preview', html: raw });
                 });
@@ -327,13 +334,13 @@ public static class MarkdownHtmlRenderer
               var copyBtn = document.createElement('button');
               copyBtn.type = 'button';
               copyBtn.className = 'code-btn';
-              copyBtn.textContent = '复制';
+              copyBtn.textContent = t('copy');
               copyBtn.addEventListener('click', function () {
                 post({ type: 'copy', text: raw, blockId: String(index) });
-                copyBtn.textContent = '已复制';
+                copyBtn.textContent = t('copied');
                 copyBtn.classList.add('copied');
                 setTimeout(function () {
-                  copyBtn.textContent = '复制';
+                  copyBtn.textContent = t('copy');
                   copyBtn.classList.remove('copied');
                 }, 1600);
               });
@@ -367,4 +374,13 @@ public static class MarkdownHtmlRenderer
           }
         })();
         """;
+
+    private static string BuildI18nBootstrapScript() =>
+        "window.__mdI18n=" + JsonSerializer.Serialize(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["copy"] = Strings.Get("Chat_Copy"),
+            ["copied"] = Strings.Get("Chat_Copied"),
+            ["code"] = Strings.Get("Chat_Code"),
+            ["preview"] = Strings.Get("Markdown_PreviewButton"),
+        }) + ";";
 }

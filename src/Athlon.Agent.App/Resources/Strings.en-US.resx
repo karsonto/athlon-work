@@ -1,0 +1,1201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="About_CheckUpdate" xml:space="preserve">
+    <value>Check for updates</value>
+  </data>
+  <data name="About_Contact" xml:space="preserve">
+    <value>For questions, contact the FTD AMS team.</value>
+  </data>
+  <data name="About_Description" xml:space="preserve">
+    <value>AI coding agent for your workspace.</value>
+  </data>
+  <data name="About_WindowTitle" xml:space="preserve">
+    <value>About Athlon Agent</value>
+  </data>
+  <data name="Chat_Code" xml:space="preserve">
+    <value>Code</value>
+  </data>
+  <data name="Chat_CompactionDefault" xml:space="preserve">
+    <value>Context compaction</value>
+  </data>
+  <data name="Chat_CompactionNotice" xml:space="preserve">
+    <value>Records below are kept in full; model context was compacted. New messages use the summary plus recent history.</value>
+  </data>
+  <data name="Chat_ComposerHint" xml:space="preserve">
+    <value>Press Enter to send, Shift+Enter for a new line</value>
+  </data>
+  <data name="Chat_ComposerPlaceholder" xml:space="preserve">
+    <value>Type a message... (Shift+Enter for new line, Enter to send)</value>
+  </data>
+  <data name="Chat_Copied" xml:space="preserve">
+    <value>Copied</value>
+  </data>
+  <data name="Chat_Copy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="Chat_ImageAttachmentCount" xml:space="preserve">
+    <value>{0} image(s) attached</value>
+  </data>
+  <data name="Chat_LoadingConversation" xml:space="preserve">
+    <value>Loading conversation…</value>
+  </data>
+  <data name="Chat_PauseReplyTooltip" xml:space="preserve">
+    <value>Pause current reply</value>
+  </data>
+  <data name="Chat_QueuedStatus" xml:space="preserve">
+    <value>Added to queue</value>
+  </data>
+  <data name="Chat_RenderFailed" xml:space="preserve">
+    <value>Chat render failed: {0}</value>
+  </data>
+  <data name="Chat_RenderInitFailed" xml:space="preserve">
+    <value>Chat render initialization failed: {0}</value>
+  </data>
+  <data name="Chat_RoleAssistant" xml:space="preserve">
+    <value>Athlon</value>
+  </data>
+  <data name="Chat_RoleContext" xml:space="preserve">
+    <value>Context</value>
+  </data>
+  <data name="Chat_RoleTool" xml:space="preserve">
+    <value>Tool</value>
+  </data>
+  <data name="Chat_RoleUser" xml:space="preserve">
+    <value>You</value>
+  </data>
+  <data name="Chat_SearchKnowledgePlaceholder" xml:space="preserve">
+    <value>Search knowledge spaces...</value>
+  </data>
+  <data name="Chat_Seconds" xml:space="preserve">
+    <value>{0}s</value>
+  </data>
+  <data name="Chat_SelectImages" xml:space="preserve">
+    <value>Select images</value>
+  </data>
+  <data name="Chat_SelectKnowledgeModule" xml:space="preserve">
+    <value>Select knowledge space</value>
+  </data>
+  <data name="Chat_SendTooltip" xml:space="preserve">
+    <value>Send (queues while generating)</value>
+  </data>
+  <data name="Chat_SettingsTooltip" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Chat_Thinking" xml:space="preserve">
+    <value>Thinking</value>
+  </data>
+  <data name="Chat_ThinkingWithDuration" xml:space="preserve">
+    <value>Thinking ({0})</value>
+  </data>
+  <data name="Chat_Thought" xml:space="preserve">
+    <value>Thought</value>
+  </data>
+  <data name="Chat_ThoughtWithDuration" xml:space="preserve">
+    <value>Thought ({0})</value>
+  </data>
+  <data name="Chat_ToolCallTitle" xml:space="preserve">
+    <value>Tool call</value>
+  </data>
+  <data name="Chat_ToolStatusCancelled" xml:space="preserve">
+    <value>Stopped</value>
+  </data>
+  <data name="Chat_ToolStatusFailed" xml:space="preserve">
+    <value>Failed</value>
+  </data>
+  <data name="Chat_ToolStatusPreparing" xml:space="preserve">
+    <value>Preparing…</value>
+  </data>
+  <data name="Chat_ToolStatusRunning" xml:space="preserve">
+    <value>Running…</value>
+  </data>
+  <data name="Chat_ToolStatusSucceeded" xml:space="preserve">
+    <value>Succeeded</value>
+  </data>
+  <data name="Chat_ToolStopped" xml:space="preserve">
+    <value>Stopped</value>
+  </data>
+  <data name="Chat_ToolStoppedContent" xml:space="preserve">
+    <value>(stopped)</value>
+  </data>
+  <data name="Chat_UploadImageTooltip" xml:space="preserve">
+    <value>Upload image (Ctrl+V to paste)</value>
+  </data>
+  <data name="Chat_WelcomeDescription" xml:space="preserve">
+    <value>Athlon Agent can help you analyze code, build prototypes, refine designs, or handle development tasks.</value>
+  </data>
+  <data name="Chat_WelcomeTitle" xml:space="preserve">
+    <value>Start a new conversation</value>
+  </data>
+  <data name="Chat_WelcomeTitleWithName" xml:space="preserve">
+    <value>Hello, {0}</value>
+  </data>
+  <data name="Common_About" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="Common_Add" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="Common_BackToChat" xml:space="preserve">
+    <value>Back to chat</value>
+  </data>
+  <data name="Common_Browse" xml:space="preserve">
+    <value>Browse…</value>
+  </data>
+  <data name="Common_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Common_Clear" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Common_Configure" xml:space="preserve">
+    <value>Configure</value>
+  </data>
+  <data name="Common_Confirm" xml:space="preserve">
+    <value>Confirm</value>
+  </data>
+  <data name="Common_Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Common_Help" xml:space="preserve">
+    <value>Help</value>
+  </data>
+  <data name="Common_Maximize" xml:space="preserve">
+    <value>Maximize</value>
+  </data>
+  <data name="Common_Minimize" xml:space="preserve">
+    <value>Minimize</value>
+  </data>
+  <data name="Common_No" xml:space="preserve">
+    <value>No</value>
+  </data>
+  <data name="Common_OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Common_ProductName" xml:space="preserve">
+    <value>Athlon Agent</value>
+  </data>
+  <data name="Common_Prompt" xml:space="preserve">
+    <value>Notice</value>
+  </data>
+  <data name="Common_Refresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="Common_Restore" xml:space="preserve">
+    <value>Restore</value>
+  </data>
+  <data name="Common_Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Common_Yes" xml:space="preserve">
+    <value>Yes</value>
+  </data>
+  <data name="ComposerKnowledge_ConfigRequired" xml:space="preserve">
+    <value>Configure embedding endpoint, model, and API key in Settings first</value>
+  </data>
+  <data name="ComposerKnowledge_Enabled" xml:space="preserve">
+    <value>Knowledge on · {0} space(s)</value>
+  </data>
+  <data name="ComposerKnowledge_ModuleMeta" xml:space="preserve">
+    <value>{0} document(s) · {1} chunk(s)</value>
+  </data>
+  <data name="ComposerKnowledge_PickerLabel" xml:space="preserve">
+    <value>Knowledge · {0}</value>
+  </data>
+  <data name="ComposerKnowledge_PickerSelect" xml:space="preserve">
+    <value>Select knowledge spaces</value>
+  </data>
+  <data name="ComposerKnowledge_SelectModules" xml:space="preserve">
+    <value>Click to select knowledge spaces</value>
+  </data>
+  <data name="Context_ClearTooltip" xml:space="preserve">
+    <value>Clear visible model history for this conversation</value>
+  </data>
+  <data name="Context_McpServers" xml:space="preserve">
+    <value>MCP servers</value>
+  </data>
+  <data name="Context_OpenInEditor" xml:space="preserve">
+    <value>Open in editor</value>
+  </data>
+  <data name="Context_TabFiles" xml:space="preserve">
+    <value>Files</value>
+  </data>
+  <data name="Context_TabSkills" xml:space="preserve">
+    <value>Skills</value>
+  </data>
+  <data name="Context_Title" xml:space="preserve">
+    <value>Context</value>
+  </data>
+  <data name="Context_Workspace" xml:space="preserve">
+    <value>Workspace</value>
+  </data>
+  <data name="Editor_CannotOpenMessage" xml:space="preserve">
+    <value>Could not open the file.</value>
+  </data>
+  <data name="Editor_CannotOpenTitle" xml:space="preserve">
+    <value>Cannot open</value>
+  </data>
+  <data name="Editor_SaveFailedMessage" xml:space="preserve">
+    <value>Save failed.</value>
+  </data>
+  <data name="Editor_SaveFailedTitle" xml:space="preserve">
+    <value>Save failed</value>
+  </data>
+  <data name="Editor_UnsavedMessage" xml:space="preserve">
+    <value>"{0}" has unsaved changes. Save?</value>
+  </data>
+  <data name="Editor_UnsavedTitle" xml:space="preserve">
+    <value>Unsaved changes</value>
+  </data>
+  <data name="FileWrite_StreamingContent" xml:space="preserve">
+    <value>content = streaming…</value>
+  </data>
+  <data name="FlowDoc_CopyNotice" xml:space="preserve">
+    <value>Copied</value>
+  </data>
+  <data name="Harness_DisabledTooltip" xml:space="preserve">
+    <value>Enable Coding (long-term memory and todo_write)</value>
+  </data>
+  <data name="Harness_EnabledTooltip" xml:space="preserve">
+    <value>Coding on · long-term memory + task list</value>
+  </data>
+  <data name="Harness_PickerOff" xml:space="preserve">
+    <value>Coding</value>
+  </data>
+  <data name="Harness_PickerOn" xml:space="preserve">
+    <value>Coding on</value>
+  </data>
+  <data name="Harness_TaskCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+  </data>
+  <data name="Harness_TaskCompleted" xml:space="preserve">
+    <value>Completed</value>
+  </data>
+  <data name="Harness_TaskInProgress" xml:space="preserve">
+    <value>In progress</value>
+  </data>
+  <data name="Harness_TaskPending" xml:space="preserve">
+    <value>Pending</value>
+  </data>
+  <data name="Knowledge_DefaultStatus" xml:space="preserve">
+    <value>Turn on the knowledge base toggle in the composer for the agent to use retrieval in answers.</value>
+  </data>
+  <data name="Knowledge_DeleteDocumentMenu" xml:space="preserve">
+    <value>Delete document</value>
+  </data>
+  <data name="Knowledge_DeleteDocumentMessage" xml:space="preserve">
+    <value>Delete document "{0}"?</value>
+  </data>
+  <data name="Knowledge_DeleteDocumentTitle" xml:space="preserve">
+    <value>Delete document</value>
+  </data>
+  <data name="Knowledge_DeleteModuleMenu" xml:space="preserve">
+    <value>Delete knowledge space</value>
+  </data>
+  <data name="Knowledge_DeleteModuleMessage" xml:space="preserve">
+    <value>Delete knowledge space "{0}" and all its documents and chunks?</value>
+  </data>
+  <data name="Knowledge_DeleteModuleTitle" xml:space="preserve">
+    <value>Delete knowledge space</value>
+  </data>
+  <data name="Knowledge_Description" xml:space="preserve">
+    <value>Description</value>
+  </data>
+  <data name="Knowledge_DocumentDeleted" xml:space="preserve">
+    <value>Deleted document "{0}".</value>
+  </data>
+  <data name="Knowledge_DocumentMeta" xml:space="preserve">
+    <value>{0} chunk(s) · {1} · {2}</value>
+  </data>
+  <data name="Knowledge_DocumentPreview" xml:space="preserve">
+    <value>Document preview</value>
+  </data>
+  <data name="Knowledge_DocumentStatus" xml:space="preserve">
+    <value>Document status: {0}</value>
+  </data>
+  <data name="Knowledge_DocumentStatusWithError" xml:space="preserve">
+    <value>Document status: {0}
+Error: {1}</value>
+  </data>
+  <data name="Knowledge_Documents" xml:space="preserve">
+    <value>Documents</value>
+  </data>
+  <data name="Knowledge_DropHint" xml:space="preserve">
+    <value>Drag files into the area below to upload to the current knowledge space.</value>
+  </data>
+  <data name="Knowledge_DropReleaseHint" xml:space="preserve">
+    <value>Release to upload files to the current knowledge space</value>
+  </data>
+  <data name="Knowledge_IndexComplete" xml:space="preserve">
+    <value>Indexing complete</value>
+  </data>
+  <data name="Knowledge_IndexFailedMessage" xml:space="preserve">
+    <value>Could not index {0}: {1}</value>
+  </data>
+  <data name="Knowledge_IndexFailedTitle" xml:space="preserve">
+    <value>Knowledge indexing failed</value>
+  </data>
+  <data name="Knowledge_IndexPartialFailed" xml:space="preserve">
+    <value>Some documents failed to index</value>
+  </data>
+  <data name="Knowledge_IndexProgress" xml:space="preserve">
+    <value>File {0}/{1} · {2}: {3}</value>
+  </data>
+  <data name="Knowledge_IndexingFile" xml:space="preserve">
+    <value>Indexing {0} ...</value>
+  </data>
+  <data name="Knowledge_IndexingPrepare" xml:space="preserve">
+    <value>Preparing index...</value>
+  </data>
+  <data name="Knowledge_Loading" xml:space="preserve">
+    <value>Loading knowledge base…</value>
+  </data>
+  <data name="Knowledge_ModuleCreated" xml:space="preserve">
+    <value>Created knowledge space "{0}".</value>
+  </data>
+  <data name="Knowledge_ModuleDeleted" xml:space="preserve">
+    <value>Deleted knowledge space "{0}".</value>
+  </data>
+  <data name="Knowledge_ModuleMeta" xml:space="preserve">
+    <value>{0} document(s) · {1} chunk(s)</value>
+  </data>
+  <data name="Knowledge_ModuleNameRequired" xml:space="preserve">
+    <value>Knowledge space name cannot be empty.</value>
+  </data>
+  <data name="Knowledge_ModuleNotSelected" xml:space="preserve">
+    <value>Not selected</value>
+  </data>
+  <data name="Knowledge_ModuleSaveFailed" xml:space="preserve">
+    <value>Failed to save knowledge space: {0}</value>
+  </data>
+  <data name="Knowledge_ModuleSaved" xml:space="preserve">
+    <value>Knowledge space saved: {0}</value>
+  </data>
+  <data name="Knowledge_Modules" xml:space="preserve">
+    <value>Knowledge spaces</value>
+  </data>
+  <data name="Knowledge_Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Knowledge_NewModule" xml:space="preserve">
+    <value>New knowledge space</value>
+  </data>
+  <data name="Knowledge_NewModuleDefaultName" xml:space="preserve">
+    <value>New knowledge space {0}</value>
+  </data>
+  <data name="Knowledge_NoModules" xml:space="preserve">
+    <value>No knowledge spaces yet</value>
+  </data>
+  <data name="Knowledge_NoModulesHint" xml:space="preserve">
+    <value>Create your first knowledge space below.</value>
+  </data>
+  <data name="Knowledge_NoSearchHits" xml:space="preserve">
+    <value>No results. Scope: {0}.</value>
+  </data>
+  <data name="Knowledge_Reindex" xml:space="preserve">
+    <value>Reindex</value>
+  </data>
+  <data name="Knowledge_ReindexComplete" xml:space="preserve">
+    <value>Reindex complete</value>
+  </data>
+  <data name="Knowledge_ReindexDone" xml:space="preserve">
+    <value>Reindex complete.</value>
+  </data>
+  <data name="Knowledge_ReindexFailed" xml:space="preserve">
+    <value>Reindex failed: {0}</value>
+  </data>
+  <data name="Knowledge_ReindexPrepare" xml:space="preserve">
+    <value>Preparing reindex...</value>
+  </data>
+  <data name="Knowledge_Reindexing" xml:space="preserve">
+    <value>Reindexing {0} ...</value>
+  </data>
+  <data name="Knowledge_ScopeDocument" xml:space="preserve">
+    <value>Document "{0}"</value>
+  </data>
+  <data name="Knowledge_ScopeModule" xml:space="preserve">
+    <value>Knowledge space "{0}"</value>
+  </data>
+  <data name="Knowledge_SearchQueryRequired" xml:space="preserve">
+    <value>Enter a search query.</value>
+  </data>
+  <data name="Knowledge_SearchResultsHint" xml:space="preserve">
+    <value>Select a knowledge space or document on the left, then enter a query to test search.</value>
+  </data>
+  <data name="Knowledge_SearchScopeLine" xml:space="preserve">
+    <value>Scope: {0}</value>
+  </data>
+  <data name="Knowledge_SearchScopeRequired" xml:space="preserve">
+    <value>Select a knowledge space or document on the left first.</value>
+  </data>
+  <data name="Knowledge_SearchTest" xml:space="preserve">
+    <value>Search test</value>
+  </data>
+  <data name="Knowledge_SelectDocumentPreview" xml:space="preserve">
+    <value>Select a document to preview extracted text.</value>
+  </data>
+  <data name="Knowledge_SelectModuleFirst" xml:space="preserve">
+    <value>Select or create a knowledge space first.</value>
+  </data>
+  <data name="Knowledge_TestSearch" xml:space="preserve">
+    <value>Test search</value>
+  </data>
+  <data name="Knowledge_Title" xml:space="preserve">
+    <value>Knowledge</value>
+  </data>
+  <data name="Knowledge_TitleDialog" xml:space="preserve">
+    <value>Knowledge</value>
+  </data>
+  <data name="Knowledge_UploadAllSucceeded" xml:space="preserve">
+    <value>Upload finished. {0} document(s) processed.</value>
+  </data>
+  <data name="Knowledge_UploadDialogTitle" xml:space="preserve">
+    <value>Upload knowledge documents</value>
+  </data>
+  <data name="Knowledge_UploadFilter" xml:space="preserve">
+    <value>Knowledge documents|*.txt;*.md;*.pdf;*.docx;*.csv;*.xlsx;*.pptx|All files|*.*</value>
+  </data>
+  <data name="Knowledge_UploadPartial" xml:space="preserve">
+    <value>Upload finished: {0} succeeded, {1} failed.</value>
+  </data>
+  <data name="License_AccountMismatch" xml:space="preserve">
+    <value>License does not match the current Windows sign-in account.</value>
+  </data>
+  <data name="License_BrowseDialogTitle" xml:space="preserve">
+    <value>Select license file</value>
+  </data>
+  <data name="License_CurrentWindowsAccount" xml:space="preserve">
+    <value>Current Windows account</value>
+  </data>
+  <data name="License_Expired" xml:space="preserve">
+    <value>License has expired. Request a renewal from your administrator.</value>
+  </data>
+  <data name="License_FileFilter" xml:space="preserve">
+    <value>License files (*.lic)|*.lic|All files (*.*)|*.*</value>
+  </data>
+  <data name="License_InvalidFormat" xml:space="preserve">
+    <value>Invalid license format. Ensure you pasted the complete JSON content.</value>
+  </data>
+  <data name="License_InvalidPayload" xml:space="preserve">
+    <value>License content could not be parsed.</value>
+  </data>
+  <data name="License_InvalidSignature" xml:space="preserve">
+    <value>Invalid license signature. Request a new license from your administrator.</value>
+  </data>
+  <data name="License_Missing" xml:space="preserve">
+    <value>No valid license file found. Paste or import the license provided by your administrator.</value>
+  </data>
+  <data name="License_ReadFileFailed" xml:space="preserve">
+    <value>Failed to read file: {0}</value>
+  </data>
+  <data name="License_SamAccountLabel" xml:space="preserve">
+    <value>Sam: {0}</value>
+  </data>
+  <data name="License_SaveFailed" xml:space="preserve">
+    <value>Failed to save license: {0}</value>
+  </data>
+  <data name="License_Subtitle" xml:space="preserve">
+    <value>Activate License</value>
+  </data>
+  <data name="License_UnsupportedVersion" xml:space="preserve">
+    <value>Unsupported license version. Upgrade the client or contact your administrator.</value>
+  </data>
+  <data name="License_UpnAccountLabel" xml:space="preserve">
+    <value>UPN: {0}</value>
+  </data>
+  <data name="License_UpnNone" xml:space="preserve">
+    <value>UPN: (none)</value>
+  </data>
+  <data name="License_ValidationFailed" xml:space="preserve">
+    <value>License validation failed.</value>
+  </data>
+  <data name="License_WindowTitle" xml:space="preserve">
+    <value>Activate Athlon Agent</value>
+  </data>
+  <data name="License_WrongProduct" xml:space="preserve">
+    <value>This license is not valid for Athlon Agent.</value>
+  </data>
+  <data name="Markdown_ContentCopied" xml:space="preserve">
+    <value>Content copied to clipboard</value>
+  </data>
+  <data name="Markdown_CopyCode" xml:space="preserve">
+    <value>Copy code block</value>
+  </data>
+  <data name="Markdown_CopyContent" xml:space="preserve">
+    <value>Copy content</value>
+  </data>
+  <data name="Markdown_PreviewButton" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="Markdown_PreviewHtml" xml:space="preserve">
+    <value>Preview HTML</value>
+  </data>
+  <data name="Markdown_PreviewMermaid" xml:space="preserve">
+    <value>View Mermaid diagram</value>
+  </data>
+  <data name="Nav_Knowledge" xml:space="preserve">
+    <value>Knowledge</value>
+  </data>
+  <data name="Nav_NewAgent" xml:space="preserve">
+    <value>New Agent</value>
+  </data>
+  <data name="Nav_NewSessionTooltip" xml:space="preserve">
+    <value>New session</value>
+  </data>
+  <data name="Nav_NoAgentRecords" xml:space="preserve">
+    <value>No agent sessions yet</value>
+  </data>
+  <data name="Nav_Queued" xml:space="preserve">
+    <value>Queued</value>
+  </data>
+  <data name="Nav_RemoveFromQueue" xml:space="preserve">
+    <value>Remove from queue</value>
+  </data>
+  <data name="Nav_Schedule" xml:space="preserve">
+    <value>Scheduled tasks</value>
+  </data>
+  <data name="Nav_StopGeneration" xml:space="preserve">
+    <value>Stop generation</value>
+  </data>
+  <data name="Nav_TaskPlan" xml:space="preserve">
+    <value>Task plan</value>
+  </data>
+  <data name="Notification_TaskCompleteTitle" xml:space="preserve">
+    <value>Task complete</value>
+  </data>
+  <data name="Notification_TaskPlanCompleteTitle" xml:space="preserve">
+    <value>Task plan completed</value>
+  </data>
+  <data name="Preview_FailedTitle" xml:space="preserve">
+    <value>Preview failed</value>
+  </data>
+  <data name="Preview_HtmlFailedMessage" xml:space="preserve">
+    <value>Could not load HTML preview: {0}</value>
+  </data>
+  <data name="Preview_HtmlSubtitle" xml:space="preserve">
+    <value>Rendered in a sandbox environment; does not affect the current page</value>
+  </data>
+  <data name="Preview_HtmlTitle" xml:space="preserve">
+    <value>HTML preview</value>
+  </data>
+  <data name="Preview_MermaidFailedMessage" xml:space="preserve">
+    <value>Could not load Mermaid preview: {0}</value>
+  </data>
+  <data name="Preview_MermaidMissingAssets" xml:space="preserve">
+    <value>Offline Mermaid assets missing: {0}</value>
+  </data>
+  <data name="Preview_MermaidNoBlock" xml:space="preserve">
+    <value>No ```mermaid code block found.</value>
+  </data>
+  <data name="Preview_MermaidSubtitle" xml:space="preserve">
+    <value>Rendered offline with bundled Mermaid; no internet required</value>
+  </data>
+  <data name="Preview_MermaidTitle" xml:space="preserve">
+    <value>Mermaid diagram preview</value>
+  </data>
+  <data name="RecordGroup_Earlier" xml:space="preserve">
+    <value>Earlier</value>
+  </data>
+  <data name="RecordGroup_Last7Days" xml:space="preserve">
+    <value>Last 7 days</value>
+  </data>
+  <data name="RecordGroup_Today" xml:space="preserve">
+    <value>Today</value>
+  </data>
+  <data name="Schedule_AtTime" xml:space="preserve">
+    <value>Run at</value>
+  </data>
+  <data name="Schedule_DeleteMessage" xml:space="preserve">
+    <value>Delete scheduled task "{0}"?</value>
+  </data>
+  <data name="Schedule_DeleteTitle" xml:space="preserve">
+    <value>Delete scheduled task</value>
+  </data>
+  <data name="Schedule_DeleteTooltip" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Schedule_DescriptionAt" xml:space="preserve">
+    <value>One-time · {0}</value>
+  </data>
+  <data name="Schedule_DescriptionDaily" xml:space="preserve">
+    <value>Daily at {0}</value>
+  </data>
+  <data name="Schedule_DescriptionInterval" xml:space="preserve">
+    <value>Every {0} minute(s)</value>
+  </data>
+  <data name="Schedule_DescriptionManual" xml:space="preserve">
+    <value>Manual</value>
+  </data>
+  <data name="Schedule_EditTitle" xml:space="preserve">
+    <value>Edit scheduled task</value>
+  </data>
+  <data name="Schedule_EditTooltip" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="Schedule_EndLabel" xml:space="preserve">
+    <value>End: </value>
+  </data>
+  <data name="Schedule_ExpandResultTooltip" xml:space="preserve">
+    <value>Expand or collapse run result</value>
+  </data>
+  <data name="Schedule_FilterAll" xml:space="preserve">
+    <value>All</value>
+  </data>
+  <data name="Schedule_FilterCompleted" xml:space="preserve">
+    <value>Completed</value>
+  </data>
+  <data name="Schedule_FilterEnabled" xml:space="preserve">
+    <value>Enabled</value>
+  </data>
+  <data name="Schedule_FilterRunning" xml:space="preserve">
+    <value>Running</value>
+  </data>
+  <data name="Schedule_HideResult" xml:space="preserve">
+    <value>Hide result</value>
+  </data>
+  <data name="Schedule_IntervalMinutes" xml:space="preserve">
+    <value>Interval (minutes)</value>
+  </data>
+  <data name="Schedule_InvalidDateTime" xml:space="preserve">
+    <value>Enter a valid date/time, e.g. 2025-12-31 18:00.</value>
+  </data>
+  <data name="Schedule_InvalidInterval" xml:space="preserve">
+    <value>Enter a valid interval in minutes (positive integer).</value>
+  </data>
+  <data name="Schedule_InvalidTime" xml:space="preserve">
+    <value>Enter a valid time, e.g. 09:00.</value>
+  </data>
+  <data name="Schedule_Kind" xml:space="preserve">
+    <value>Schedule type</value>
+  </data>
+  <data name="Schedule_KindAt" xml:space="preserve">
+    <value>One-time</value>
+  </data>
+  <data name="Schedule_KindDaily" xml:space="preserve">
+    <value>Daily at fixed time</value>
+  </data>
+  <data name="Schedule_KindInterval" xml:space="preserve">
+    <value>Interval</value>
+  </data>
+  <data name="Schedule_KindManual" xml:space="preserve">
+    <value>Manual</value>
+  </data>
+  <data name="Schedule_LastResult" xml:space="preserve">
+    <value>Last run result</value>
+  </data>
+  <data name="Schedule_NewTask" xml:space="preserve">
+    <value>New scheduled task</value>
+  </data>
+  <data name="Schedule_NewTaskDefaultTitle" xml:space="preserve">
+    <value>New scheduled task</value>
+  </data>
+  <data name="Schedule_NewTitle" xml:space="preserve">
+    <value>New scheduled task</value>
+  </data>
+  <data name="Schedule_NextRun" xml:space="preserve">
+    <value>Next: </value>
+  </data>
+  <data name="Schedule_NoPrompt" xml:space="preserve">
+    <value>(No prompt)</value>
+  </data>
+  <data name="Schedule_NoTasks" xml:space="preserve">
+    <value>No scheduled tasks yet</value>
+  </data>
+  <data name="Schedule_NoTasksHint" xml:space="preserve">
+    <value>Click "New scheduled task" above, or ask the agent to create one (e.g. "remind me every day at 9").</value>
+  </data>
+  <data name="Schedule_Prompt" xml:space="preserve">
+    <value>Prompt / instruction</value>
+  </data>
+  <data name="Schedule_RunNowTooltip" xml:space="preserve">
+    <value>Run now</value>
+  </data>
+  <data name="Schedule_ShowResult" xml:space="preserve">
+    <value>Show run result</value>
+  </data>
+  <data name="Schedule_StartLabel" xml:space="preserve">
+    <value>Start: </value>
+  </data>
+  <data name="Schedule_StatusError" xml:space="preserve">
+    <value>Failed</value>
+  </data>
+  <data name="Schedule_StatusReady" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+  <data name="Schedule_StatusRunning" xml:space="preserve">
+    <value>Running</value>
+  </data>
+  <data name="Schedule_StatusSuccess" xml:space="preserve">
+    <value>Succeeded</value>
+  </data>
+  <data name="Schedule_StopTooltip" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="Schedule_Subtitle" xml:space="preserve">
+    <value>Manage scheduled AI agent tasks.</value>
+  </data>
+  <data name="Schedule_TaskName" xml:space="preserve">
+    <value>Task name</value>
+  </data>
+  <data name="Schedule_TaskSummary" xml:space="preserve">
+    <value>{0} task(s), {1} enabled</value>
+  </data>
+  <data name="Schedule_TimeOfDay" xml:space="preserve">
+    <value>Time of day</value>
+  </data>
+  <data name="Schedule_Title" xml:space="preserve">
+    <value>Scheduled tasks</value>
+  </data>
+  <data name="Schedule_TitleRequired" xml:space="preserve">
+    <value>Enter a task name.</value>
+  </data>
+  <data name="Schedule_ToggleAllTooltip" xml:space="preserve">
+    <value>Enable or disable all scheduled tasks</value>
+  </data>
+  <data name="Schedule_ViewConversation" xml:space="preserve">
+    <value>View conversation</value>
+  </data>
+  <data name="Schedule_Workspace" xml:space="preserve">
+    <value>Working directory</value>
+  </data>
+  <data name="Schedule_WorkspaceMissing" xml:space="preserve">
+    <value>Directory does not exist: {0}
+Save anyway?</value>
+  </data>
+  <data name="Schedule_WorkspaceRequired" xml:space="preserve">
+    <value>Required. The agent runs tasks in this directory.</value>
+  </data>
+  <data name="Schedule_WorkspaceRequiredPrompt" xml:space="preserve">
+    <value>Enter a working directory.</value>
+  </data>
+  <data name="Settings_ApiKeyDpapiHint" xml:space="preserve">
+    <value>API keys are encrypted with Windows DPAPI in your user profile. The password box does not show saved keys; paste again after changing provider and click Save settings.</value>
+  </data>
+  <data name="Settings_ApiKeyLabel" xml:space="preserve">
+    <value>API Key</value>
+  </data>
+  <data name="Settings_ApiKeySaved" xml:space="preserve">
+    <value>Saved model API key: {0}</value>
+  </data>
+  <data name="Settings_BatchSize" xml:space="preserve">
+    <value>Batch Size</value>
+  </data>
+  <data name="Settings_ChunkOverlapChars" xml:space="preserve">
+    <value>Chunk overlap characters</value>
+  </data>
+  <data name="Settings_ChunkOverlapHint" xml:space="preserve">
+    <value>Overlapping characters between adjacent chunks</value>
+  </data>
+  <data name="Settings_ChunkTargetChars" xml:space="preserve">
+    <value>Chunk target characters</value>
+  </data>
+  <data name="Settings_ChunkTargetCharsHint" xml:space="preserve">
+    <value>Hard split by character count, regardless of paragraphs</value>
+  </data>
+  <data name="Settings_ContextCompactionTitle" xml:space="preserve">
+    <value>Context &amp; token ROI</value>
+  </data>
+  <data name="Settings_DefaultStatus" xml:space="preserve">
+    <value>Settings are stored as JSON files under the app data folder.</value>
+  </data>
+  <data name="Settings_DynamicCompaction" xml:space="preserve">
+    <value>Dynamic compaction (budget utilization)</value>
+  </data>
+  <data name="Settings_DynamicCompactionTooltip" xml:space="preserve">
+    <value>Enable dynamic three-tier compaction</value>
+  </data>
+  <data name="Settings_EmbeddingApiKey" xml:space="preserve">
+    <value>Embedding API Key</value>
+  </data>
+  <data name="Settings_EmbeddingApiKeySaved" xml:space="preserve">
+    <value>Saved knowledge embedding API key: {0}</value>
+  </data>
+  <data name="Settings_EmbeddingEndpoint" xml:space="preserve">
+    <value>Embedding Endpoint</value>
+  </data>
+  <data name="Settings_EmbeddingModel" xml:space="preserve">
+    <value>Embedding Model</value>
+  </data>
+  <data name="Settings_EnableStreaming" xml:space="preserve">
+    <value>Enable streaming output (SSE)</value>
+  </data>
+  <data name="Settings_Endpoint" xml:space="preserve">
+    <value>Endpoint</value>
+  </data>
+  <data name="Settings_KnowledgeEmbeddingHint" xml:space="preserve">
+    <value>Configure infrastructure for vector retrieval. Enable the knowledge base per session in the composer and choose knowledge spaces.</value>
+  </data>
+  <data name="Settings_KnowledgeEmbeddingTitle" xml:space="preserve">
+    <value>Knowledge embedding</value>
+  </data>
+  <data name="Settings_Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="Settings_Language_Auto" xml:space="preserve">
+    <value>Follow system</value>
+  </data>
+  <data name="Settings_Language_en_US" xml:space="preserve">
+    <value>English (US)</value>
+  </data>
+  <data name="Settings_Language_zh_CN" xml:space="preserve">
+    <value>Chinese (Simplified)</value>
+  </data>
+  <data name="Settings_MaxTokensHint" xml:space="preserve">
+    <value>Maximum output tokens per reply (leave empty for API default). Affects completions only, not context summarization.</value>
+  </data>
+  <data name="Settings_MaxTokensLabel" xml:space="preserve">
+    <value>Max Tokens</value>
+  </data>
+  <data name="Settings_McpAutoThresholdChars" xml:space="preserve">
+    <value>Auto threshold (schema characters)</value>
+  </data>
+  <data name="Settings_McpAutoThresholdTools" xml:space="preserve">
+    <value>Auto threshold (tool count)</value>
+  </data>
+  <data name="Settings_McpSearchEnabled" xml:space="preserve">
+    <value>Enable MCP on-demand tool discovery (search mode)</value>
+  </data>
+  <data name="Settings_McpSearchMode" xml:space="preserve">
+    <value>Mode (direct/search/auto)</value>
+  </data>
+  <data name="Settings_McpSearchTitle" xml:space="preserve">
+    <value>MCP Search Mode</value>
+  </data>
+  <data name="Settings_McpServersHint" xml:space="preserve">
+    <value>MCP servers are loaded from {0}; this page only toggles enablement. Add, remove, and command args in the JSON config.</value>
+  </data>
+  <data name="Settings_McpServersTitle" xml:space="preserve">
+    <value>Installed MCP servers</value>
+  </data>
+  <data name="Settings_MinScore" xml:space="preserve">
+    <value>Min Score</value>
+  </data>
+  <data name="Settings_ModelNameLabel" xml:space="preserve">
+    <value>Model Name</value>
+  </data>
+  <data name="Settings_ModelSection" xml:space="preserve">
+    <value>Model</value>
+  </data>
+  <data name="Settings_ProactiveCompaction" xml:space="preserve">
+    <value>Proactive compaction (session persistence)</value>
+  </data>
+  <data name="Settings_ProactiveCompactionTooltip" xml:space="preserve">
+    <value>Enable session-level truncate/compact compaction</value>
+  </data>
+  <data name="Settings_Provider" xml:space="preserve">
+    <value>Provider</value>
+  </data>
+  <data name="Settings_RequestHygiene" xml:space="preserve">
+    <value>Request boundary hygiene (before each API call)</value>
+  </data>
+  <data name="Settings_SaveSettings" xml:space="preserve">
+    <value>Save settings</value>
+  </data>
+  <data name="Settings_SaveStatusBoth" xml:space="preserve">
+    <value>Saved ({0}); model and embedding API keys updated</value>
+  </data>
+  <data name="Settings_SaveStatusEmbedding" xml:space="preserve">
+    <value>Saved ({0}); embedding API key updated</value>
+  </data>
+  <data name="Settings_SaveStatusModel" xml:space="preserve">
+    <value>Saved ({0}); model API key updated</value>
+  </data>
+  <data name="Settings_SaveStatusNoChange" xml:space="preserve">
+    <value>Saved ({0}); model API key unchanged (empty field keeps the stored key)</value>
+  </data>
+  <data name="Settings_ShowToolCalls" xml:space="preserve">
+    <value>Show tool calls</value>
+  </data>
+  <data name="Settings_ShowToolCallsTooltip" xml:space="preserve">
+    <value>When off, tool cards such as file_read and execute_command are hidden in chat; compaction notices still appear.</value>
+  </data>
+  <data name="Settings_SkillsDescription" xml:space="preserve">
+    <value>Skills load automatically from {0}; this page controls which are enabled. Disabled skills are omitted from the system prompt and @skill completion. Saved to {1}.</value>
+  </data>
+  <data name="Settings_SkillsTitle" xml:space="preserve">
+    <value>Installed skills</value>
+  </data>
+  <data name="Settings_StormThreshold" xml:space="preserve">
+    <value>Storm threshold</value>
+  </data>
+  <data name="Settings_Subtitle" xml:space="preserve">
+    <value>Configure model, MCP, skills, workspaces, context compaction, and tool permissions.</value>
+  </data>
+  <data name="Settings_Title" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Settings_ToolStorm" xml:space="preserve">
+    <value>Tool storm suppression</value>
+  </data>
+  <data name="Settings_TopK" xml:space="preserve">
+    <value>TopK</value>
+  </data>
+  <data name="Settings_TrainingDataDescription" xml:space="preserve">
+    <value>Automatically extracts training data from correction trajectories, overflow recovery, and tool-selection DPO into ~/.athlon-agent/training-data/. Samples are produced only when tool failure→user fix→retry succeeds, or timeout→continue→complete; normal use is unaffected.</value>
+  </data>
+  <data name="Settings_TrainingDataTitle" xml:space="preserve">
+    <value>Training data collection</value>
+  </data>
+  <data name="Settings_TrainingDataTooltip" xml:space="preserve">
+    <value>Enable training data collection</value>
+  </data>
+  <data name="Settings_UiMemoryHint" xml:space="preserve">
+    <value>Enable long-term memory and task lists per session via the Coding toggle in the composer; task progress appears in the left sidebar.</value>
+  </data>
+  <data name="Settings_UiSection" xml:space="preserve">
+    <value>Interface</value>
+  </data>
+  <data name="Settings_VectorDimension" xml:space="preserve">
+    <value>Vector dimension</value>
+  </data>
+  <data name="Shell_CannotPreviewMessage" xml:space="preserve">
+    <value>Could not resolve the file path. Configure a workspace first.</value>
+  </data>
+  <data name="Shell_CannotPreviewTitle" xml:space="preserve">
+    <value>Cannot preview</value>
+  </data>
+  <data name="Shell_ClearContextDone" xml:space="preserve">
+    <value>Context cleared.</value>
+  </data>
+  <data name="Shell_ClearContextMessage" xml:space="preserve">
+    <value>This clears all visible model history for the current conversation (user, assistant, tool, and compaction records) and clears the Coding task plan.
+
+Session ID, workspace, and title are kept; transcript archives on disk are not deleted.
+
+The system prompt will be rebuilt on the next message (workspace, tools, skills, etc.).</value>
+  </data>
+  <data name="Shell_ClearContextTitle" xml:space="preserve">
+    <value>Clear context</value>
+  </data>
+  <data name="Shell_ContextSidebarClose" xml:space="preserve">
+    <value>Close right sidebar (Ctrl+Alt+B)</value>
+  </data>
+  <data name="Shell_ContextSidebarOpen" xml:space="preserve">
+    <value>Open right sidebar (Ctrl+Alt+B)</value>
+  </data>
+  <data name="Shell_DeleteConversationDone" xml:space="preserve">
+    <value>Conversation deleted.</value>
+  </data>
+  <data name="Shell_DeleteConversationMessage" xml:space="preserve">
+    <value>Delete conversation "{0}"? This cannot be undone.</value>
+  </data>
+  <data name="Shell_DeleteConversationTitle" xml:space="preserve">
+    <value>Delete conversation</value>
+  </data>
+  <data name="Shell_DeleteFailedMessage" xml:space="preserve">
+    <value>Could not delete "{0}": {1}</value>
+  </data>
+  <data name="Shell_DeleteFailedStatus" xml:space="preserve">
+    <value>Delete failed: {0}</value>
+  </data>
+  <data name="Shell_DeleteFailedTitle" xml:space="preserve">
+    <value>Delete failed</value>
+  </data>
+  <data name="Shell_DeleteFileMessage" xml:space="preserve">
+    <value>Delete file "{0}"? This cannot be undone.</value>
+  </data>
+  <data name="Shell_DeleteFolderMessage" xml:space="preserve">
+    <value>Delete folder "{0}" and all its contents? This cannot be undone.</value>
+  </data>
+  <data name="Shell_DeleteNodeTitle" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Shell_DeleteSuccess" xml:space="preserve">
+    <value>Deleted {0} "{1}".</value>
+  </data>
+  <data name="Shell_ExitMessage" xml:space="preserve">
+    <value>A reply is generating or messages are queued. Exiting will stop all tasks. Exit anyway?</value>
+  </data>
+  <data name="Shell_ExitTitle" xml:space="preserve">
+    <value>Exit Athlon Agent</value>
+  </data>
+  <data name="Shell_FileKind" xml:space="preserve">
+    <value>file</value>
+  </data>
+  <data name="Shell_FolderKind" xml:space="preserve">
+    <value>folder</value>
+  </data>
+  <data name="Shell_LoadConversationDone" xml:space="preserve">
+    <value>Loaded conversation: {0}</value>
+  </data>
+  <data name="Shell_LoadConversationFailed" xml:space="preserve">
+    <value>Could not load this conversation.</value>
+  </data>
+  <data name="Shell_LoadingConversation" xml:space="preserve">
+    <value>Loading conversation…</value>
+  </data>
+  <data name="Shell_ModifiedFilesHeader" xml:space="preserve">
+    <value>{0} modified file(s)</value>
+  </data>
+  <data name="Shell_NoWorkspace" xml:space="preserve">
+    <value>No workspace configured</value>
+  </data>
+  <data name="Shell_OpenFolderFailedMessage" xml:space="preserve">
+    <value>Could not open folder: {0}</value>
+  </data>
+  <data name="Shell_OpenFolderFailedTitle" xml:space="preserve">
+    <value>Open failed</value>
+  </data>
+  <data name="Shell_SaveConversationFailed" xml:space="preserve">
+    <value>Failed to save conversation: {0}</value>
+  </data>
+  <data name="Shell_SelectWorkspace" xml:space="preserve">
+    <value>Select agent workspace</value>
+  </data>
+  <data name="Shell_ShuttingDown" xml:space="preserve">
+    <value>Shutting down…</value>
+  </data>
+  <data name="Shell_StatusBarLogs" xml:space="preserve">
+    <value>Logs: {0}</value>
+  </data>
+  <data name="Shell_StatusBarModel" xml:space="preserve">
+    <value>Model: {0}</value>
+  </data>
+  <data name="Shell_SwitchToDark" xml:space="preserve">
+    <value>Switch to dark mode</value>
+  </data>
+  <data name="Shell_SwitchToLight" xml:space="preserve">
+    <value>Switch to light mode</value>
+  </data>
+  <data name="Shell_TargetMissing" xml:space="preserve">
+    <value>Target does not exist or was already deleted.</value>
+  </data>
+  <data name="Shell_WorkspaceStatus" xml:space="preserve">
+    <value>Current conversation workspace: {0}</value>
+  </data>
+  <data name="Shutdown_ClosingMcp" xml:space="preserve">
+    <value>Closing MCP connections…</value>
+  </data>
+  <data name="Shutdown_FlushingToolLogs" xml:space="preserve">
+    <value>Flushing tool call logs…</value>
+  </data>
+  <data name="Shutdown_KillingProcesses" xml:space="preserve">
+    <value>Ending shell processes…</value>
+  </data>
+  <data name="Shutdown_ReleasingLogs" xml:space="preserve">
+    <value>Releasing logs…</value>
+  </data>
+  <data name="Shutdown_SavingSettings" xml:space="preserve">
+    <value>Saving settings…</value>
+  </data>
+  <data name="Shutdown_StoppingScheduler" xml:space="preserve">
+    <value>Stopping scheduled tasks…</value>
+  </data>
+  <data name="Shutdown_StoppingTurns" xml:space="preserve">
+    <value>Stopping generation…</value>
+  </data>
+  <data name="Sso_CancelLogin" xml:space="preserve">
+    <value>Cancel sign-in</value>
+  </data>
+  <data name="Sso_LoginFailed" xml:space="preserve">
+    <value>IMP SSO sign-in failed.</value>
+  </data>
+  <data name="Sso_LoginFailedWithMessage" xml:space="preserve">
+    <value>IMP SSO sign-in failed: {0}</value>
+  </data>
+  <data name="Sso_LogoutConfirm" xml:space="preserve">
+    <value>Sign out of your account?</value>
+  </data>
+  <data name="Sso_LogoutTitle" xml:space="preserve">
+    <value>Sign out</value>
+  </data>
+  <data name="Sso_LogoutTooltip" xml:space="preserve">
+    <value>Click to sign out</value>
+  </data>
+  <data name="Sso_WaitingMessage" xml:space="preserve">
+    <value>Complete sign-in in your browser. The app will continue automatically.</value>
+  </data>
+  <data name="Sso_WaitingTitle" xml:space="preserve">
+    <value>Waiting for IMP sign-in</value>
+  </data>
+  <data name="Sso_WindowTitle" xml:space="preserve">
+    <value>IMP SSO sign-in</value>
+  </data>
+  <data name="Startup_FailedTitle" xml:space="preserve">
+    <value>Athlon Agent failed to start</value>
+  </data>
+  <data name="Tool_DefaultHeader" xml:space="preserve">
+    <value>Tool call</value>
+  </data>
+  <data name="Tool_EvictedHeader" xml:space="preserve">
+    <value>① Tool result archived · {0}</value>
+  </data>
+  <data name="Tool_NoArgs" xml:space="preserve">
+    <value>(no arguments)</value>
+  </data>
+  <data name="Update_Applying" xml:space="preserve">
+    <value>Installing update and restarting…</value>
+  </data>
+  <data name="Update_AvailableMessage" xml:space="preserve">
+    <value>Version {0} is available. Download and install now?</value>
+  </data>
+  <data name="Update_AvailableTitle" xml:space="preserve">
+    <value>Update available</value>
+  </data>
+  <data name="Update_Cancelled" xml:space="preserve">
+    <value>Version {0} found. Installation cancelled.</value>
+  </data>
+  <data name="Update_UpToDate" xml:space="preserve">
+    <value>You are on the latest version.</value>
+  </data>
+</root>

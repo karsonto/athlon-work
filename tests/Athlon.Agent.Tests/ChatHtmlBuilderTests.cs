@@ -1,4 +1,6 @@
 using System.Text;
+using Athlon.Agent.App.Localization;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.Core;
@@ -10,6 +12,11 @@ public sealed class ChatHtmlBuilderTests
 {
     private readonly ChatHtmlBuilder _builder = new();
 
+    public ChatHtmlBuilderTests()
+    {
+        AppCultureManager.SetCulture("zh-CN");
+    }
+
     [Fact]
     public void BuildShellHtml_without_sso_user_shows_default_welcome_title()
     {
@@ -17,8 +24,8 @@ public sealed class ChatHtmlBuilderTests
 
         Assert.Contains("id=\"chat-scroll\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"empty-state\"", html, StringComparison.Ordinal);
-        Assert.Contains("开始新的对话", html, StringComparison.Ordinal);
-        Assert.Contains("Athlon Agent 可以帮您分析代码", html, StringComparison.Ordinal);
+        Assert.Contains(Strings.Get("Chat_WelcomeTitle"), html, StringComparison.Ordinal);
+        Assert.Contains(Strings.Get("Chat_WelcomeDescription")[..20], html, StringComparison.Ordinal);
         Assert.Contains("updateEmptyStateVisibility", html, StringComparison.Ordinal);
         Assert.Contains("scroller.scrollTop", html, StringComparison.Ordinal);
         Assert.DoesNotContain("avatar-user", html, StringComparison.Ordinal);
@@ -53,16 +60,18 @@ public sealed class ChatHtmlBuilderTests
     {
         var html = _builder.BuildShellHtml("Zhang San");
 
-        Assert.Contains("你好，Zhang San", html, StringComparison.Ordinal);
-        Assert.DoesNotContain("开始新的对话", html, StringComparison.Ordinal);
+        Assert.Contains(Strings.Format("Chat_WelcomeTitleWithName", "Zhang San"), html, StringComparison.Ordinal);
+        Assert.DoesNotContain(Strings.Get("Chat_WelcomeTitle"), html, StringComparison.Ordinal);
     }
 
     [Fact]
     public void BuildShellHtml_encodes_sso_display_name()
     {
         var html = _builder.BuildShellHtml("<script>alert(1)</script>");
+        var encodedTitle = System.Net.WebUtility.HtmlEncode(
+            Strings.Format("Chat_WelcomeTitleWithName", "<script>alert(1)</script>"));
 
-        Assert.Contains("你好，&lt;script&gt;alert(1)&lt;/script&gt;", html, StringComparison.Ordinal);
+        Assert.Contains(encodedTitle, html, StringComparison.Ordinal);
         Assert.DoesNotContain("<script>alert(1)</script>", html, StringComparison.Ordinal);
     }
 
@@ -71,7 +80,7 @@ public sealed class ChatHtmlBuilderTests
     {
         var html = _builder.BuildDocumentHtml([], showToolCalls: false, ssoDisplayName: "Li Si");
 
-        Assert.Contains("你好，Li Si", html, StringComparison.Ordinal);
+        Assert.Contains(Strings.Format("Chat_WelcomeTitleWithName", "Li Si"), html, StringComparison.Ordinal);
         Assert.Contains("replayEvents", html, StringComparison.Ordinal);
         Assert.Contains("updateEmptyStateVisibility", html, StringComparison.Ordinal);
     }
@@ -105,9 +114,11 @@ public sealed class ChatHtmlBuilderTests
     {
         var html = _builder.BuildShellHtml();
 
-        Assert.Contains("reasoning-label", html, StringComparison.Ordinal);
-        Assert.Contains("正在思考", html, StringComparison.Ordinal);
-        Assert.Contains("已思考", html, StringComparison.Ordinal);
+        Assert.Contains("function t(key)", html, StringComparison.Ordinal);
+        Assert.Contains("applyChatI18n", html, StringComparison.Ordinal);
+        Assert.Contains("\"thinking\"", html, StringComparison.Ordinal);
+        Assert.Contains("\"thought\"", html, StringComparison.Ordinal);
+        Assert.Contains("window.__chatI18n", html, StringComparison.Ordinal);
         Assert.Contains("trackReasoningDuration", html, StringComparison.Ordinal);
         Assert.Contains("formatReasoningSeconds", html, StringComparison.Ordinal);
         Assert.Contains("finalizeReasoningLabel", html, StringComparison.Ordinal);

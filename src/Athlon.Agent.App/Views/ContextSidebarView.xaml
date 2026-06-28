@@ -4,7 +4,8 @@
              xmlns:app="clr-namespace:Athlon.Agent.App"
              xmlns:behaviors="clr-namespace:Athlon.Agent.App.Behaviors"
              xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
-             xmlns:i="http://schemas.microsoft.com/xaml/behaviors">
+             xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderRowHeight}" />
@@ -14,7 +15,7 @@
 
                 <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}">
                     <Grid>
-                        <TextBlock Text="上下文"
+                        <TextBlock Text="{loc:Localize Key=Context_Title}"
                                    FontSize="12"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Brush.TextSecondary}"
@@ -22,7 +23,7 @@
                         <Button Command="{Binding ClearContextCommand}"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center"
-                                ToolTip="清空当前对话在模型中的可见历史"
+                                ToolTip="{loc:Localize Key=Context_ClearTooltip}"
                                 Style="{StaticResource IconButtonStyle}">
                             <TextBlock Text="🗑" FontSize="14" />
                         </Button>
@@ -32,12 +33,12 @@
                 <UniformGrid Grid.Row="1" Columns="2" Background="Transparent">
                     <RadioButton x:Name="ContextTabFiles"
                                  GroupName="ContextTabs"
-                                 Content="文件"
+                                 Content="{loc:Localize Key=Context_TabFiles}"
                                  IsChecked="True"
                                  Style="{StaticResource ContextTabButtonStyle}" />
                     <RadioButton x:Name="ContextTabSkills"
                                  GroupName="ContextTabs"
-                                 Content="技能"
+                                 Content="{loc:Localize Key=Context_TabSkills}"
                                  Style="{StaticResource ContextTabButtonStyle}" />
                 </UniformGrid>
 
@@ -66,7 +67,7 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="工作区"
+                                    <TextBlock Text="{loc:Localize Key=Context_Workspace}"
                                                Foreground="{DynamicResource Brush.SubtleText}"
                                                FontSize="11"
                                                Margin="0,0,0,2" />
@@ -76,7 +77,7 @@
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <Button Grid.Column="1"
-                                        Content="配置"
+                                        Content="{loc:Localize Key=Common_Configure}"
                                         Command="{Binding ConfigureWorkspaceCommand}"
                                         Style="{StaticResource GhostButtonStyle}"
                                         Padding="8,4"
@@ -107,7 +108,7 @@
                                         <Setter Property="ContextMenu">
                                             <Setter.Value>
                                                 <ContextMenu Style="{StaticResource MarkdownContextMenuStyle}">
-                                                    <MenuItem Header="在编辑器中打开"
+                                                    <MenuItem Header="{loc:Localize Key=Context_OpenInEditor}"
                                                               Style="{StaticResource MarkdownContextMenuItemStyle}"
                                                               Command="{Binding PlacementTarget.Tag.OpenWorkspaceTreeNodeInEditorCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
@@ -115,7 +116,7 @@
                                                               Style="{StaticResource MarkdownContextMenuItemStyle}"
                                                               Command="{Binding PlacementTarget.Tag.OpenWorkspaceTreeNodeInExplorerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
-                                                    <MenuItem Header="删除"
+                                                    <MenuItem Header="{loc:Localize Key=Common_Delete}"
                                                               Style="{StaticResource MarkdownContextMenuItemStyle}"
                                                               Command="{Binding PlacementTarget.Tag.DeleteWorkspaceItemCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
@@ -156,7 +157,7 @@
                     </ScrollViewer.Style>
                     <!-- Skills + MCP tab -->
                     <StackPanel>
-                        <TextBlock Text="技能" Foreground="{DynamicResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBlock Text="{loc:Localize Key=Context_TabSkills}" Foreground="{DynamicResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
                         <Border Background="{DynamicResource Brush.Panel}"
                                 BorderBrush="{DynamicResource Brush.Border}"
                                 BorderThickness="1"
@@ -176,7 +177,7 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </Border>
-                        <TextBlock Text="MCP 服务器" Foreground="{DynamicResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBlock Text="{loc:Localize Key=Context_McpServers}" Foreground="{DynamicResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
                         <Border Background="{DynamicResource Brush.Panel}"
                                 BorderBrush="{DynamicResource Brush.Border}"
                                 BorderThickness="1"

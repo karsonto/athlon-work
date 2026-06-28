@@ -1,3 +1,5 @@
+using Athlon.Agent.App.Localization;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
 
 namespace Athlon.Agent.App.ViewModels;
@@ -17,9 +19,9 @@ public static class AgentRecordGrouping
         var today = AppTimeZone.Today;
         var last7Start = today.AddDays(-7);
 
-        var todayGroup = new AgentRecordGroupViewModel(TodayKey, "今天", isExpandedByDefault: true);
-        var last7Group = new AgentRecordGroupViewModel(Last7DaysKey, "过去 7 天", isExpandedByDefault: true);
-        var earlierGroup = new AgentRecordGroupViewModel(EarlierKey, "更早", isExpandedByDefault: false);
+        var todayGroup = new AgentRecordGroupViewModel(TodayKey, Strings.Get("RecordGroup_Today"), isExpandedByDefault: true);
+        var last7Group = new AgentRecordGroupViewModel(Last7DaysKey, Strings.Get("RecordGroup_Last7Days"), isExpandedByDefault: true);
+        var earlierGroup = new AgentRecordGroupViewModel(EarlierKey, Strings.Get("RecordGroup_Earlier"), isExpandedByDefault: false);
 
         foreach (var entry in entries)
         {

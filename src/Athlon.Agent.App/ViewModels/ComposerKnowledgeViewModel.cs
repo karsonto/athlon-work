@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Data;
+using Athlon.Agent.App.Localization;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Knowledge;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -13,6 +15,7 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
     private readonly ISessionKnowledgeState _sessionKnowledgeState;
     private readonly IKnowledgeStore _store;
     private readonly AppSettings _settings;
+    private readonly ILocalizationService _loc;
     private string _sessionId = "";
     private bool _suppressSave;
     private bool _hasStoredEmbeddingApiKey;
@@ -20,11 +23,14 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
     public ComposerKnowledgeViewModel(
         ISessionKnowledgeState sessionKnowledgeState,
         IKnowledgeStore store,
-        AppSettings settings)
+        AppSettings settings,
+        ILocalizationService localization)
     {
         _sessionKnowledgeState = sessionKnowledgeState;
         _store = store;
         _settings = settings;
+        _loc = localization;
+        AppCultureManager.CultureChanged += OnCultureChanged;
         FilteredModulesView = CollectionViewSource.GetDefaultView(Modules);
         FilteredModulesView.Filter = FilterModules;
     }
@@ -46,14 +52,14 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
     public bool ShowKnowledgeChips => SelectedModuleCount > 0;
 
     public string KnowledgeButtonToolTip => !IsEmbeddingConfigured()
-        ? "请先在设置页配置 Embedding Endpoint、Model 和 API Key"
+        ? _loc["ComposerKnowledge_ConfigRequired"]
         : IsKnowledgeActive
-            ? $"知识库已启用 · {SelectedModuleCount} 个知识空间"
-            : "点击选择知识空间";
+            ? _loc.Format("ComposerKnowledge_Enabled", SelectedModuleCount)
+            : _loc["ComposerKnowledge_SelectModules"];
 
     public string KnowledgePickerLabel => SelectedModuleCount == 0
-        ? "选择知识空间"
-        : $"知识库 · {SelectedModuleCount}";
+        ? _loc["ComposerKnowledge_PickerSelect"]
+        : _loc.Format("ComposerKnowledge_PickerLabel", SelectedModuleCount);
 
     public int SelectedModuleCount => Modules.Count(module => module.IsSelected);
 
@@ -158,6 +164,13 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowKnowledgeChips));
         OnPropertyChanged(nameof(IsKnowledgeActive));
         OnPropertyChanged(nameof(KnowledgeButtonToolTip));
+        OnPropertyChanged(nameof(KnowledgePickerLabel));
+    }
+
+    private void OnCultureChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(KnowledgeButtonToolTip));
+        OnPropertyChanged(nameof(KnowledgePickerLabel));
     }
 
     private bool IsEmbeddingConfigured() =>
@@ -177,7 +190,7 @@ public sealed partial class ComposerKnowledgeModuleItemViewModel : ObservableObj
     {
         ModuleId = summary.Module.Id;
         Name = summary.Module.Name;
-        MetaText = $"{summary.DocumentCount} 个文档 · {summary.ChunkCount} 个切片";
+        MetaText = Strings.Format("ComposerKnowledge_ModuleMeta", summary.DocumentCount, summary.ChunkCount);
         _isSelected = isSelected;
         _onSelectionChanged = onSelectionChanged;
     }

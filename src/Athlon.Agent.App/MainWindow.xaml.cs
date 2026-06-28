@@ -27,7 +27,8 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         MainShellViewModel viewModel,
         ClipboardImageAttachmentReader clipboardImageReader,
         AppUpdateService updateService,
-        PageViewFactory pageViewFactory)
+        PageViewFactory pageViewFactory,
+        MainWindowShutdownCoordinator shutdownCoordinator)
     {
         App.StartupTrace("MainWindow constructor entered");
         InitializeComponent();
@@ -36,7 +37,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         _clipboardImageReader = clipboardImageReader;
         _updateService = updateService;
         _pageViewFactory = pageViewFactory;
-        _shutdownCoordinator = new MainWindowShutdownCoordinator();
+        _shutdownCoordinator = shutdownCoordinator;
         _layoutBinder = new MainWindowLayoutBinder(_viewModel, new MainWindowLayoutElements
         {
             NavigationSidebarColumn = NavigationSidebarColumn,

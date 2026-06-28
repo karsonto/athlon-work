@@ -1,5 +1,6 @@
 using System.Text;
 using System.Windows.Threading;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
@@ -37,7 +38,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsTool = message.Role == MessageRole.Tool;
         IsCompaction = message.Role == MessageRole.Compaction;
         UserAttachmentSummary = message.ImageAttachments is { Count: > 0 }
-            ? $"已附图片 {message.ImageAttachments.Count} 张"
+            ? Strings.Format("Chat_ImageAttachmentCount", message.ImageAttachments.Count)
             : string.Empty;
         IsHiddenPlaceholder = isFoldedHistoryPlaceholder
             ? false
@@ -46,12 +47,12 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             || SubAgentAutoContinuePrompt.IsAutoContinueMessage(message))
             || IsAssistantToolCallsOnly(message);
         DisplayRole = IsUser
-            ? "您"
+            ? Strings.Get("Chat_RoleUser")
             : IsTool
-                ? "工具"
+                ? Strings.Get("Chat_RoleTool")
                 : IsCompaction
-                    ? "上下文"
-                    : "Athlon 助手";
+                    ? Strings.Get("Chat_RoleContext")
+                    : Strings.Get("Chat_RoleAssistant");
 
         if (IsTool)
         {
@@ -102,7 +103,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsTool = true;
         IsCompaction = false;
         IsHiddenPlaceholder = false;
-        DisplayRole = "工具";
+        DisplayRole = Strings.Get("Chat_RoleTool");
         IsToolRunning = true;
         ToolCallStatus = ToolCallDisplayStatus.Running;
         CreatedAt = AppTimeZone.Now.ToString("HH:mm:ss");
@@ -160,8 +161,8 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public bool AssistantTone => !IsUser;
     public string CompactionCardTitle { get; } = string.Empty;
     public string CardTitle => IsCompaction
-        ? (string.IsNullOrWhiteSpace(CompactionCardTitle) ? "上下文压缩" : CompactionCardTitle)
-        : "工具调用";
+        ? (string.IsNullOrWhiteSpace(CompactionCardTitle) ? Strings.Get("Chat_CompactionDefault") : CompactionCardTitle)
+        : Strings.Get("Chat_ToolCallTitle");
     public string DisplayRole { get; }
 
     public string? ToolCallId { get; private set; }
@@ -233,11 +234,11 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     public string ToolStatusLabel => ToolCallStatus switch
     {
-        ToolCallDisplayStatus.Preparing => "准备中…",
-        ToolCallDisplayStatus.Running => "执行中…",
-        ToolCallDisplayStatus.Succeeded => "成功",
-        ToolCallDisplayStatus.Failed => "失败",
-        ToolCallDisplayStatus.Cancelled => "已停止",
+        ToolCallDisplayStatus.Preparing => Strings.Get("Chat_ToolStatusPreparing"),
+        ToolCallDisplayStatus.Running => Strings.Get("Chat_ToolStatusRunning"),
+        ToolCallDisplayStatus.Succeeded => Strings.Get("Chat_ToolStatusSucceeded"),
+        ToolCallDisplayStatus.Failed => Strings.Get("Chat_ToolStatusFailed"),
+        ToolCallDisplayStatus.Cancelled => Strings.Get("Chat_ToolStatusCancelled"),
         _ => string.Empty
     };
 
@@ -273,7 +274,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsTool = true;
         IsCompaction = false;
         IsHiddenPlaceholder = false;
-        DisplayRole = "工具";
+        DisplayRole = Strings.Get("Chat_RoleTool");
         ToolCallStatus = ToolCallDisplayStatus.Preparing;
         CreatedAt = AppTimeZone.Now.ToString("HH:mm:ss");
         ToolHeader = "Tool …";
@@ -359,7 +360,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         StreamToolIndex = null;
         IsToolArgumentsStreaming = false;
         ToolCallStatus = ToolCallDisplayStatus.Cancelled;
-        ToolSummary = "已停止";
+        ToolSummary = Strings.Get("Chat_ToolStopped");
     }
 
     public void AppendStreamingToken(string token)
@@ -447,7 +448,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsReasoningStreaming = false;
         if (string.IsNullOrWhiteSpace(Content))
         {
-            Content = "（已停止）";
+            Content = Strings.Get("Chat_ToolStoppedContent");
         }
     }
 
@@ -547,7 +548,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
         IsToolRunning = false;
         ToolCallStatus = ToolCallDisplayStatus.Cancelled;
-        ToolSummary = "已停止";
+        ToolSummary = Strings.Get("Chat_ToolStopped");
     }
 
     /// <summary>Appends incremental stdout/stderr output while the tool is still running.</summary>
@@ -592,7 +593,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     private static string AppendCompactionDisplayNotice(string summary)
     {
-        const string notice = "以下记录仍完整保留；模型上下文已压缩，新消息基于摘要 + 最近历史。";
+        var notice = Strings.Get("Chat_CompactionNotice");
         return string.IsNullOrWhiteSpace(summary) ? notice : $"{summary}\n\n{notice}";
     }
 

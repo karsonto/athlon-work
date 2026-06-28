@@ -1,6 +1,8 @@
 using System.IO;
 using System.Windows;
 using Athlon.Agent.App.Licensing;
+using Athlon.Agent.App.Localization;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
@@ -30,6 +32,8 @@ public partial class App : Application
         try
         {
             var startupSettings = AppSettingsLoader.Load();
+            AppCultureManager.ApplyFromSettings(startupSettings.Ui);
+            StartupTrace($"Culture applied: {AppCultureManager.Current.Name}");
 
             StartupUpdateGate.CheckBeforeStartupGates(startupSettings);
             StartupTrace("Startup update gate passed");
@@ -94,7 +98,7 @@ public partial class App : Application
             StartupTrace(exception.ToString());
             MessageBox.Show(
                 exception.ToString(),
-                "Athlon Agent failed to start",
+                Strings.Get("Startup_FailedTitle"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             Shutdown(-1);

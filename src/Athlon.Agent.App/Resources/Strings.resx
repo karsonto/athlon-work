@@ -1,0 +1,1201 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="About_CheckUpdate" xml:space="preserve">
+    <value>检查更新</value>
+  </data>
+  <data name="About_Contact" xml:space="preserve">
+    <value>如有问题，请联系 FTD AMS 团队。</value>
+  </data>
+  <data name="About_Description" xml:space="preserve">
+    <value>AI coding agent for your workspace.</value>
+  </data>
+  <data name="About_WindowTitle" xml:space="preserve">
+    <value>About Athlon Agent</value>
+  </data>
+  <data name="Chat_Code" xml:space="preserve">
+    <value>代码</value>
+  </data>
+  <data name="Chat_CompactionDefault" xml:space="preserve">
+    <value>上下文压缩</value>
+  </data>
+  <data name="Chat_CompactionNotice" xml:space="preserve">
+    <value>以下记录仍完整保留；模型上下文已压缩，新消息基于摘要 + 最近历史。</value>
+  </data>
+  <data name="Chat_ComposerHint" xml:space="preserve">
+    <value>按 Enter 发送消息，Shift+Enter 换行</value>
+  </data>
+  <data name="Chat_ComposerPlaceholder" xml:space="preserve">
+    <value>输入消息... (Shift+Enter 换行，Enter 发送)</value>
+  </data>
+  <data name="Chat_Copied" xml:space="preserve">
+    <value>已复制</value>
+  </data>
+  <data name="Chat_Copy" xml:space="preserve">
+    <value>复制</value>
+  </data>
+  <data name="Chat_ImageAttachmentCount" xml:space="preserve">
+    <value>已附图片 {0} 张</value>
+  </data>
+  <data name="Chat_LoadingConversation" xml:space="preserve">
+    <value>正在加载对话…</value>
+  </data>
+  <data name="Chat_PauseReplyTooltip" xml:space="preserve">
+    <value>暂停当前回复</value>
+  </data>
+  <data name="Chat_QueuedStatus" xml:space="preserve">
+    <value>已加入排队</value>
+  </data>
+  <data name="Chat_RenderFailed" xml:space="preserve">
+    <value>聊天渲染失败：{0}</value>
+  </data>
+  <data name="Chat_RenderInitFailed" xml:space="preserve">
+    <value>聊天渲染初始化失败：{0}</value>
+  </data>
+  <data name="Chat_RoleAssistant" xml:space="preserve">
+    <value>Athlon 助手</value>
+  </data>
+  <data name="Chat_RoleContext" xml:space="preserve">
+    <value>上下文</value>
+  </data>
+  <data name="Chat_RoleTool" xml:space="preserve">
+    <value>工具</value>
+  </data>
+  <data name="Chat_RoleUser" xml:space="preserve">
+    <value>您</value>
+  </data>
+  <data name="Chat_SearchKnowledgePlaceholder" xml:space="preserve">
+    <value>搜索知识空间...</value>
+  </data>
+  <data name="Chat_Seconds" xml:space="preserve">
+    <value>{0}秒</value>
+  </data>
+  <data name="Chat_SelectImages" xml:space="preserve">
+    <value>选择图片</value>
+  </data>
+  <data name="Chat_SelectKnowledgeModule" xml:space="preserve">
+    <value>选择知识空间</value>
+  </data>
+  <data name="Chat_SendTooltip" xml:space="preserve">
+    <value>发送（生成中将加入排队）</value>
+  </data>
+  <data name="Chat_SettingsTooltip" xml:space="preserve">
+    <value>设置</value>
+  </data>
+  <data name="Chat_Thinking" xml:space="preserve">
+    <value>正在思考</value>
+  </data>
+  <data name="Chat_ThinkingWithDuration" xml:space="preserve">
+    <value>正在思考 ({0})</value>
+  </data>
+  <data name="Chat_Thought" xml:space="preserve">
+    <value>已思考</value>
+  </data>
+  <data name="Chat_ThoughtWithDuration" xml:space="preserve">
+    <value>已思考 ({0})</value>
+  </data>
+  <data name="Chat_ToolCallTitle" xml:space="preserve">
+    <value>工具调用</value>
+  </data>
+  <data name="Chat_ToolStatusCancelled" xml:space="preserve">
+    <value>已停止</value>
+  </data>
+  <data name="Chat_ToolStatusFailed" xml:space="preserve">
+    <value>失败</value>
+  </data>
+  <data name="Chat_ToolStatusPreparing" xml:space="preserve">
+    <value>准备中…</value>
+  </data>
+  <data name="Chat_ToolStatusRunning" xml:space="preserve">
+    <value>执行中…</value>
+  </data>
+  <data name="Chat_ToolStatusSucceeded" xml:space="preserve">
+    <value>成功</value>
+  </data>
+  <data name="Chat_ToolStopped" xml:space="preserve">
+    <value>已停止</value>
+  </data>
+  <data name="Chat_ToolStoppedContent" xml:space="preserve">
+    <value>（已停止）</value>
+  </data>
+  <data name="Chat_UploadImageTooltip" xml:space="preserve">
+    <value>上传图片（支持 Ctrl+V 粘贴）</value>
+  </data>
+  <data name="Chat_WelcomeDescription" xml:space="preserve">
+    <value>Athlon Agent 可以帮您分析代码、生成原型、优化设计，或执行任何开发任务。</value>
+  </data>
+  <data name="Chat_WelcomeTitle" xml:space="preserve">
+    <value>开始新的对话</value>
+  </data>
+  <data name="Chat_WelcomeTitleWithName" xml:space="preserve">
+    <value>你好，{0}</value>
+  </data>
+  <data name="Common_About" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="Common_Add" xml:space="preserve">
+    <value>新增</value>
+  </data>
+  <data name="Common_BackToChat" xml:space="preserve">
+    <value>返回对话</value>
+  </data>
+  <data name="Common_Browse" xml:space="preserve">
+    <value>浏览…</value>
+  </data>
+  <data name="Common_Cancel" xml:space="preserve">
+    <value>取消</value>
+  </data>
+  <data name="Common_Clear" xml:space="preserve">
+    <value>清空</value>
+  </data>
+  <data name="Common_Close" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="Common_Configure" xml:space="preserve">
+    <value>配置</value>
+  </data>
+  <data name="Common_Confirm" xml:space="preserve">
+    <value>确认</value>
+  </data>
+  <data name="Common_Delete" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="Common_Help" xml:space="preserve">
+    <value>Help</value>
+  </data>
+  <data name="Common_Maximize" xml:space="preserve">
+    <value>最大化</value>
+  </data>
+  <data name="Common_Minimize" xml:space="preserve">
+    <value>最小化</value>
+  </data>
+  <data name="Common_No" xml:space="preserve">
+    <value>否</value>
+  </data>
+  <data name="Common_OK" xml:space="preserve">
+    <value>确定</value>
+  </data>
+  <data name="Common_ProductName" xml:space="preserve">
+    <value>Athlon Agent</value>
+  </data>
+  <data name="Common_Prompt" xml:space="preserve">
+    <value>提示</value>
+  </data>
+  <data name="Common_Refresh" xml:space="preserve">
+    <value>刷新</value>
+  </data>
+  <data name="Common_Restore" xml:space="preserve">
+    <value>还原</value>
+  </data>
+  <data name="Common_Save" xml:space="preserve">
+    <value>保存</value>
+  </data>
+  <data name="Common_Yes" xml:space="preserve">
+    <value>是</value>
+  </data>
+  <data name="ComposerKnowledge_ConfigRequired" xml:space="preserve">
+    <value>请先在设置页配置 Embedding Endpoint、Model 和 API Key</value>
+  </data>
+  <data name="ComposerKnowledge_Enabled" xml:space="preserve">
+    <value>知识库已启用 · {0} 个知识空间</value>
+  </data>
+  <data name="ComposerKnowledge_ModuleMeta" xml:space="preserve">
+    <value>{0} 个文档 · {1} 个切片</value>
+  </data>
+  <data name="ComposerKnowledge_PickerLabel" xml:space="preserve">
+    <value>知识库 · {0}</value>
+  </data>
+  <data name="ComposerKnowledge_PickerSelect" xml:space="preserve">
+    <value>选择知识空间</value>
+  </data>
+  <data name="ComposerKnowledge_SelectModules" xml:space="preserve">
+    <value>点击选择知识空间</value>
+  </data>
+  <data name="Context_ClearTooltip" xml:space="preserve">
+    <value>清空当前对话在模型中的可见历史</value>
+  </data>
+  <data name="Context_McpServers" xml:space="preserve">
+    <value>MCP 服务器</value>
+  </data>
+  <data name="Context_OpenInEditor" xml:space="preserve">
+    <value>在编辑器中打开</value>
+  </data>
+  <data name="Context_TabFiles" xml:space="preserve">
+    <value>文件</value>
+  </data>
+  <data name="Context_TabSkills" xml:space="preserve">
+    <value>技能</value>
+  </data>
+  <data name="Context_Title" xml:space="preserve">
+    <value>上下文</value>
+  </data>
+  <data name="Context_Workspace" xml:space="preserve">
+    <value>工作区</value>
+  </data>
+  <data name="Editor_CannotOpenMessage" xml:space="preserve">
+    <value>无法打开文件。</value>
+  </data>
+  <data name="Editor_CannotOpenTitle" xml:space="preserve">
+    <value>无法打开</value>
+  </data>
+  <data name="Editor_SaveFailedMessage" xml:space="preserve">
+    <value>保存失败。</value>
+  </data>
+  <data name="Editor_SaveFailedTitle" xml:space="preserve">
+    <value>保存失败</value>
+  </data>
+  <data name="Editor_UnsavedMessage" xml:space="preserve">
+    <value>「{0}」有未保存的更改，是否保存？</value>
+  </data>
+  <data name="Editor_UnsavedTitle" xml:space="preserve">
+    <value>未保存的更改</value>
+  </data>
+  <data name="FileWrite_StreamingContent" xml:space="preserve">
+    <value>content = 传输中…</value>
+  </data>
+  <data name="FlowDoc_CopyNotice" xml:space="preserve">
+    <value>已复制</value>
+  </data>
+  <data name="Harness_DisabledTooltip" xml:space="preserve">
+    <value>启用 Coding（长期记忆与 todo_write）</value>
+  </data>
+  <data name="Harness_EnabledTooltip" xml:space="preserve">
+    <value>Coding 已启用 · 长期记忆 + 任务列表</value>
+  </data>
+  <data name="Harness_PickerOff" xml:space="preserve">
+    <value>Coding</value>
+  </data>
+  <data name="Harness_PickerOn" xml:space="preserve">
+    <value>Coding 开</value>
+  </data>
+  <data name="Harness_TaskCancelled" xml:space="preserve">
+    <value>已取消</value>
+  </data>
+  <data name="Harness_TaskCompleted" xml:space="preserve">
+    <value>已完成</value>
+  </data>
+  <data name="Harness_TaskInProgress" xml:space="preserve">
+    <value>进行中</value>
+  </data>
+  <data name="Harness_TaskPending" xml:space="preserve">
+    <value>待办</value>
+  </data>
+  <data name="Knowledge_DefaultStatus" xml:space="preserve">
+    <value>在聊天输入区开启知识库开关后，Agent 才会使用知识库检索来回答你的问题。</value>
+  </data>
+  <data name="Knowledge_DeleteDocumentMenu" xml:space="preserve">
+    <value>删除文档</value>
+  </data>
+  <data name="Knowledge_DeleteDocumentMessage" xml:space="preserve">
+    <value>确定删除文档「{0}」吗？</value>
+  </data>
+  <data name="Knowledge_DeleteDocumentTitle" xml:space="preserve">
+    <value>删除文档</value>
+  </data>
+  <data name="Knowledge_DeleteModuleMenu" xml:space="preserve">
+    <value>删除知识空间</value>
+  </data>
+  <data name="Knowledge_DeleteModuleMessage" xml:space="preserve">
+    <value>确定删除知识空间「{0}」及其全部文档和切片吗？</value>
+  </data>
+  <data name="Knowledge_DeleteModuleTitle" xml:space="preserve">
+    <value>删除知识空间</value>
+  </data>
+  <data name="Knowledge_Description" xml:space="preserve">
+    <value>描述</value>
+  </data>
+  <data name="Knowledge_DocumentDeleted" xml:space="preserve">
+    <value>已删除文档「{0}」。</value>
+  </data>
+  <data name="Knowledge_DocumentMeta" xml:space="preserve">
+    <value>{0} 个切片 · {1} · {2}</value>
+  </data>
+  <data name="Knowledge_DocumentPreview" xml:space="preserve">
+    <value>文档预览</value>
+  </data>
+  <data name="Knowledge_DocumentStatus" xml:space="preserve">
+    <value>文档状态：{0}</value>
+  </data>
+  <data name="Knowledge_DocumentStatusWithError" xml:space="preserve">
+    <value>文档状态：{0}
+错误：{1}</value>
+  </data>
+  <data name="Knowledge_Documents" xml:space="preserve">
+    <value>文档</value>
+  </data>
+  <data name="Knowledge_DropHint" xml:space="preserve">
+    <value>将文件拖拽到下方区域可上传到当前知识空间。</value>
+  </data>
+  <data name="Knowledge_DropReleaseHint" xml:space="preserve">
+    <value>松开以上传文件到当前知识空间</value>
+  </data>
+  <data name="Knowledge_IndexComplete" xml:space="preserve">
+    <value>索引完成</value>
+  </data>
+  <data name="Knowledge_IndexFailedMessage" xml:space="preserve">
+    <value>无法索引 {0}：{1}</value>
+  </data>
+  <data name="Knowledge_IndexFailedTitle" xml:space="preserve">
+    <value>知识库索引失败</value>
+  </data>
+  <data name="Knowledge_IndexPartialFailed" xml:space="preserve">
+    <value>部分文档索引失败</value>
+  </data>
+  <data name="Knowledge_IndexProgress" xml:space="preserve">
+    <value>文件 {0}/{1} · {2}：{3}</value>
+  </data>
+  <data name="Knowledge_IndexingFile" xml:space="preserve">
+    <value>正在索引 {0} ...</value>
+  </data>
+  <data name="Knowledge_IndexingPrepare" xml:space="preserve">
+    <value>准备索引...</value>
+  </data>
+  <data name="Knowledge_Loading" xml:space="preserve">
+    <value>正在加载知识库…</value>
+  </data>
+  <data name="Knowledge_ModuleCreated" xml:space="preserve">
+    <value>已创建知识空间「{0}」。</value>
+  </data>
+  <data name="Knowledge_ModuleDeleted" xml:space="preserve">
+    <value>已删除知识空间「{0}」。</value>
+  </data>
+  <data name="Knowledge_ModuleMeta" xml:space="preserve">
+    <value>{0} 个文档 · {1} 个切片</value>
+  </data>
+  <data name="Knowledge_ModuleNameRequired" xml:space="preserve">
+    <value>知识空间名称不能为空。</value>
+  </data>
+  <data name="Knowledge_ModuleNotSelected" xml:space="preserve">
+    <value>未选择</value>
+  </data>
+  <data name="Knowledge_ModuleSaveFailed" xml:space="preserve">
+    <value>保存知识空间失败：{0}</value>
+  </data>
+  <data name="Knowledge_ModuleSaved" xml:space="preserve">
+    <value>知识空间已保存：{0}</value>
+  </data>
+  <data name="Knowledge_Modules" xml:space="preserve">
+    <value>知识空间</value>
+  </data>
+  <data name="Knowledge_Name" xml:space="preserve">
+    <value>名称</value>
+  </data>
+  <data name="Knowledge_NewModule" xml:space="preserve">
+    <value>新建知识空间</value>
+  </data>
+  <data name="Knowledge_NewModuleDefaultName" xml:space="preserve">
+    <value>新知识空间 {0}</value>
+  </data>
+  <data name="Knowledge_NoModules" xml:space="preserve">
+    <value>还没有知识空间</value>
+  </data>
+  <data name="Knowledge_NoModulesHint" xml:space="preserve">
+    <value>点击下方按钮创建第一个知识空间。</value>
+  </data>
+  <data name="Knowledge_NoSearchHits" xml:space="preserve">
+    <value>没有命中结果。检索范围：{0}。</value>
+  </data>
+  <data name="Knowledge_Reindex" xml:space="preserve">
+    <value>重新索引</value>
+  </data>
+  <data name="Knowledge_ReindexComplete" xml:space="preserve">
+    <value>重新索引完成</value>
+  </data>
+  <data name="Knowledge_ReindexDone" xml:space="preserve">
+    <value>重新索引完成。</value>
+  </data>
+  <data name="Knowledge_ReindexFailed" xml:space="preserve">
+    <value>重新索引失败：{0}</value>
+  </data>
+  <data name="Knowledge_ReindexPrepare" xml:space="preserve">
+    <value>准备重新索引...</value>
+  </data>
+  <data name="Knowledge_Reindexing" xml:space="preserve">
+    <value>正在重新索引 {0} ...</value>
+  </data>
+  <data name="Knowledge_ScopeDocument" xml:space="preserve">
+    <value>文档「{0}」</value>
+  </data>
+  <data name="Knowledge_ScopeModule" xml:space="preserve">
+    <value>知识空间「{0}」</value>
+  </data>
+  <data name="Knowledge_SearchQueryRequired" xml:space="preserve">
+    <value>请输入检索问题。</value>
+  </data>
+  <data name="Knowledge_SearchResultsHint" xml:space="preserve">
+    <value>在左侧选择知识空间或文档后，输入问题可测试检索效果。</value>
+  </data>
+  <data name="Knowledge_SearchScopeLine" xml:space="preserve">
+    <value>检索范围：{0}</value>
+  </data>
+  <data name="Knowledge_SearchScopeRequired" xml:space="preserve">
+    <value>请先在左侧选择一个知识空间或文档。</value>
+  </data>
+  <data name="Knowledge_SearchTest" xml:space="preserve">
+    <value>检索测试</value>
+  </data>
+  <data name="Knowledge_SelectDocumentPreview" xml:space="preserve">
+    <value>选择一个文档查看抽取文本预览。</value>
+  </data>
+  <data name="Knowledge_SelectModuleFirst" xml:space="preserve">
+    <value>请先选择或创建一个知识空间。</value>
+  </data>
+  <data name="Knowledge_TestSearch" xml:space="preserve">
+    <value>测试检索</value>
+  </data>
+  <data name="Knowledge_Title" xml:space="preserve">
+    <value>知识库</value>
+  </data>
+  <data name="Knowledge_TitleDialog" xml:space="preserve">
+    <value>知识库</value>
+  </data>
+  <data name="Knowledge_UploadAllSucceeded" xml:space="preserve">
+    <value>上传处理完成，共 {0} 个文档。</value>
+  </data>
+  <data name="Knowledge_UploadDialogTitle" xml:space="preserve">
+    <value>上传知识库文档</value>
+  </data>
+  <data name="Knowledge_UploadFilter" xml:space="preserve">
+    <value>知识库文档|*.txt;*.md;*.pdf;*.docx;*.csv;*.xlsx;*.pptx|所有文件|*.*</value>
+  </data>
+  <data name="Knowledge_UploadPartial" xml:space="preserve">
+    <value>上传完成：成功 {0} 个，失败 {1} 个。</value>
+  </data>
+  <data name="License_AccountMismatch" xml:space="preserve">
+    <value>License 与当前 Windows 登录账号不匹配。</value>
+  </data>
+  <data name="License_BrowseDialogTitle" xml:space="preserve">
+    <value>选择 License 文件</value>
+  </data>
+  <data name="License_CurrentWindowsAccount" xml:space="preserve">
+    <value>当前 Windows 账号</value>
+  </data>
+  <data name="License_Expired" xml:space="preserve">
+    <value>License 已过期。请向管理员申请续期。</value>
+  </data>
+  <data name="License_FileFilter" xml:space="preserve">
+    <value>License 文件 (*.lic)|*.lic|所有文件 (*.*)|*.*</value>
+  </data>
+  <data name="License_InvalidFormat" xml:space="preserve">
+    <value>License 格式无效。请确认粘贴的是完整的 JSON 内容。</value>
+  </data>
+  <data name="License_InvalidPayload" xml:space="preserve">
+    <value>License 内容无法解析。</value>
+  </data>
+  <data name="License_InvalidSignature" xml:space="preserve">
+    <value>License 签名无效。请向管理员索取新的 License。</value>
+  </data>
+  <data name="License_Missing" xml:space="preserve">
+    <value>未找到有效的 License 文件。请粘贴或导入管理员提供的 License。</value>
+  </data>
+  <data name="License_ReadFileFailed" xml:space="preserve">
+    <value>读取文件失败：{0}</value>
+  </data>
+  <data name="License_SamAccountLabel" xml:space="preserve">
+    <value>Sam：{0}</value>
+  </data>
+  <data name="License_SaveFailed" xml:space="preserve">
+    <value>保存 License 失败：{0}</value>
+  </data>
+  <data name="License_Subtitle" xml:space="preserve">
+    <value>激活 License</value>
+  </data>
+  <data name="License_UnsupportedVersion" xml:space="preserve">
+    <value>License 版本不受支持，请升级客户端或联系管理员。</value>
+  </data>
+  <data name="License_UpnAccountLabel" xml:space="preserve">
+    <value>UPN：{0}</value>
+  </data>
+  <data name="License_UpnNone" xml:space="preserve">
+    <value>UPN：(无)</value>
+  </data>
+  <data name="License_ValidationFailed" xml:space="preserve">
+    <value>License 校验失败。</value>
+  </data>
+  <data name="License_WindowTitle" xml:space="preserve">
+    <value>激活 Athlon Agent</value>
+  </data>
+  <data name="License_WrongProduct" xml:space="preserve">
+    <value>该 License 不适用于 Athlon Agent。</value>
+  </data>
+  <data name="Markdown_ContentCopied" xml:space="preserve">
+    <value>内容已复制到剪贴板</value>
+  </data>
+  <data name="Markdown_CopyCode" xml:space="preserve">
+    <value>复制代码块</value>
+  </data>
+  <data name="Markdown_CopyContent" xml:space="preserve">
+    <value>复制内容</value>
+  </data>
+  <data name="Markdown_PreviewButton" xml:space="preserve">
+    <value>预览</value>
+  </data>
+  <data name="Markdown_PreviewHtml" xml:space="preserve">
+    <value>预览 HTML</value>
+  </data>
+  <data name="Markdown_PreviewMermaid" xml:space="preserve">
+    <value>查看 Mermaid 图表</value>
+  </data>
+  <data name="Nav_Knowledge" xml:space="preserve">
+    <value>知识库</value>
+  </data>
+  <data name="Nav_NewAgent" xml:space="preserve">
+    <value>New Agent</value>
+  </data>
+  <data name="Nav_NewSessionTooltip" xml:space="preserve">
+    <value>新建会话</value>
+  </data>
+  <data name="Nav_NoAgentRecords" xml:space="preserve">
+    <value>暂无 Agent 记录</value>
+  </data>
+  <data name="Nav_Queued" xml:space="preserve">
+    <value>排队中</value>
+  </data>
+  <data name="Nav_RemoveFromQueue" xml:space="preserve">
+    <value>从队列移除</value>
+  </data>
+  <data name="Nav_Schedule" xml:space="preserve">
+    <value>定时任务</value>
+  </data>
+  <data name="Nav_StopGeneration" xml:space="preserve">
+    <value>停止生成</value>
+  </data>
+  <data name="Nav_TaskPlan" xml:space="preserve">
+    <value>任务计划</value>
+  </data>
+  <data name="Notification_TaskCompleteTitle" xml:space="preserve">
+    <value>任务完成</value>
+  </data>
+  <data name="Notification_TaskPlanCompleteTitle" xml:space="preserve">
+    <value>任务计划已完成</value>
+  </data>
+  <data name="Preview_FailedTitle" xml:space="preserve">
+    <value>预览失败</value>
+  </data>
+  <data name="Preview_HtmlFailedMessage" xml:space="preserve">
+    <value>无法加载 HTML 预览：{0}</value>
+  </data>
+  <data name="Preview_HtmlSubtitle" xml:space="preserve">
+    <value>已在沙箱环境中渲染，不会影响当前页面</value>
+  </data>
+  <data name="Preview_HtmlTitle" xml:space="preserve">
+    <value>HTML 预览</value>
+  </data>
+  <data name="Preview_MermaidFailedMessage" xml:space="preserve">
+    <value>无法加载 Mermaid 预览：{0}</value>
+  </data>
+  <data name="Preview_MermaidMissingAssets" xml:space="preserve">
+    <value>缺少离线 Mermaid 资源：{0}</value>
+  </data>
+  <data name="Preview_MermaidNoBlock" xml:space="preserve">
+    <value>未找到 ```mermaid 代码块。</value>
+  </data>
+  <data name="Preview_MermaidSubtitle" xml:space="preserve">
+    <value>使用安装包内置 Mermaid 离线渲染，无需互联网</value>
+  </data>
+  <data name="Preview_MermaidTitle" xml:space="preserve">
+    <value>Mermaid 图表预览</value>
+  </data>
+  <data name="RecordGroup_Earlier" xml:space="preserve">
+    <value>更早</value>
+  </data>
+  <data name="RecordGroup_Last7Days" xml:space="preserve">
+    <value>过去 7 天</value>
+  </data>
+  <data name="RecordGroup_Today" xml:space="preserve">
+    <value>今天</value>
+  </data>
+  <data name="Schedule_AtTime" xml:space="preserve">
+    <value>执行时间点</value>
+  </data>
+  <data name="Schedule_DeleteMessage" xml:space="preserve">
+    <value>确定要删除定时任务「{0}」吗？</value>
+  </data>
+  <data name="Schedule_DeleteTitle" xml:space="preserve">
+    <value>删除定时任务</value>
+  </data>
+  <data name="Schedule_DeleteTooltip" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="Schedule_DescriptionAt" xml:space="preserve">
+    <value>一次性 · {0}</value>
+  </data>
+  <data name="Schedule_DescriptionDaily" xml:space="preserve">
+    <value>每天 {0}</value>
+  </data>
+  <data name="Schedule_DescriptionInterval" xml:space="preserve">
+    <value>每隔 {0} 分钟</value>
+  </data>
+  <data name="Schedule_DescriptionManual" xml:space="preserve">
+    <value>手动触发</value>
+  </data>
+  <data name="Schedule_EditTitle" xml:space="preserve">
+    <value>编辑定时任务</value>
+  </data>
+  <data name="Schedule_EditTooltip" xml:space="preserve">
+    <value>编辑</value>
+  </data>
+  <data name="Schedule_EndLabel" xml:space="preserve">
+    <value>结束: </value>
+  </data>
+  <data name="Schedule_ExpandResultTooltip" xml:space="preserve">
+    <value>展开或收起运行结果</value>
+  </data>
+  <data name="Schedule_FilterAll" xml:space="preserve">
+    <value>全部</value>
+  </data>
+  <data name="Schedule_FilterCompleted" xml:space="preserve">
+    <value>已完成</value>
+  </data>
+  <data name="Schedule_FilterEnabled" xml:space="preserve">
+    <value>启用</value>
+  </data>
+  <data name="Schedule_FilterRunning" xml:space="preserve">
+    <value>运行中</value>
+  </data>
+  <data name="Schedule_HideResult" xml:space="preserve">
+    <value>收起结果</value>
+  </data>
+  <data name="Schedule_IntervalMinutes" xml:space="preserve">
+    <value>间隔时间（分钟）</value>
+  </data>
+  <data name="Schedule_InvalidDateTime" xml:space="preserve">
+    <value>请输入有效的日期时间格式，例如 2025-12-31 18:00。</value>
+  </data>
+  <data name="Schedule_InvalidInterval" xml:space="preserve">
+    <value>请输入有效的间隔分钟数（正整数）。</value>
+  </data>
+  <data name="Schedule_InvalidTime" xml:space="preserve">
+    <value>请输入有效的时间格式，例如 09:00。</value>
+  </data>
+  <data name="Schedule_Kind" xml:space="preserve">
+    <value>调度类型</value>
+  </data>
+  <data name="Schedule_KindAt" xml:space="preserve">
+    <value>一次性</value>
+  </data>
+  <data name="Schedule_KindDaily" xml:space="preserve">
+    <value>每天固定时间</value>
+  </data>
+  <data name="Schedule_KindInterval" xml:space="preserve">
+    <value>间隔执行</value>
+  </data>
+  <data name="Schedule_KindManual" xml:space="preserve">
+    <value>手动触发</value>
+  </data>
+  <data name="Schedule_LastResult" xml:space="preserve">
+    <value>上次运行结果</value>
+  </data>
+  <data name="Schedule_NewTask" xml:space="preserve">
+    <value>新建定时任务</value>
+  </data>
+  <data name="Schedule_NewTaskDefaultTitle" xml:space="preserve">
+    <value>新建定时任务</value>
+  </data>
+  <data name="Schedule_NewTitle" xml:space="preserve">
+    <value>新建定时任务</value>
+  </data>
+  <data name="Schedule_NextRun" xml:space="preserve">
+    <value>下次: </value>
+  </data>
+  <data name="Schedule_NoPrompt" xml:space="preserve">
+    <value>(无 Prompt)</value>
+  </data>
+  <data name="Schedule_NoTasks" xml:space="preserve">
+    <value>暂无定时任务</value>
+  </data>
+  <data name="Schedule_NoTasksHint" xml:space="preserve">
+    <value>点击上方「新建定时任务」按钮创建第一个任务，或告诉 AI Agent「每天 9 点提醒我」来自动创建。</value>
+  </data>
+  <data name="Schedule_Prompt" xml:space="preserve">
+    <value>Prompt / 指令</value>
+  </data>
+  <data name="Schedule_RunNowTooltip" xml:space="preserve">
+    <value>立即执行</value>
+  </data>
+  <data name="Schedule_ShowResult" xml:space="preserve">
+    <value>显示运行结果</value>
+  </data>
+  <data name="Schedule_StartLabel" xml:space="preserve">
+    <value>开始: </value>
+  </data>
+  <data name="Schedule_StatusError" xml:space="preserve">
+    <value>失败</value>
+  </data>
+  <data name="Schedule_StatusReady" xml:space="preserve">
+    <value>就绪</value>
+  </data>
+  <data name="Schedule_StatusRunning" xml:space="preserve">
+    <value>运行中</value>
+  </data>
+  <data name="Schedule_StatusSuccess" xml:space="preserve">
+    <value>成功</value>
+  </data>
+  <data name="Schedule_StopTooltip" xml:space="preserve">
+    <value>停止运行</value>
+  </data>
+  <data name="Schedule_Subtitle" xml:space="preserve">
+    <value>管理 AI Agent 定时执行的任务。</value>
+  </data>
+  <data name="Schedule_TaskName" xml:space="preserve">
+    <value>任务名称</value>
+  </data>
+  <data name="Schedule_TaskSummary" xml:space="preserve">
+    <value>共 {0} 个任务，{1} 个启用</value>
+  </data>
+  <data name="Schedule_TimeOfDay" xml:space="preserve">
+    <value>执行时间</value>
+  </data>
+  <data name="Schedule_Title" xml:space="preserve">
+    <value>定时任务</value>
+  </data>
+  <data name="Schedule_TitleRequired" xml:space="preserve">
+    <value>请输入任务名称。</value>
+  </data>
+  <data name="Schedule_ToggleAllTooltip" xml:space="preserve">
+    <value>启用/禁用所有定时任务</value>
+  </data>
+  <data name="Schedule_ViewConversation" xml:space="preserve">
+    <value>查看对话</value>
+  </data>
+  <data name="Schedule_Workspace" xml:space="preserve">
+    <value>工作目录</value>
+  </data>
+  <data name="Schedule_WorkspaceMissing" xml:space="preserve">
+    <value>目录不存在：{0}
+仍要保存吗？</value>
+  </data>
+  <data name="Schedule_WorkspaceRequired" xml:space="preserve">
+    <value>必填。Agent 将在此目录下执行任务。</value>
+  </data>
+  <data name="Schedule_WorkspaceRequiredPrompt" xml:space="preserve">
+    <value>请输入工作目录。</value>
+  </data>
+  <data name="Settings_ApiKeyDpapiHint" xml:space="preserve">
+    <value>API Key 使用 Windows DPAPI 加密保存在用户目录。PasswordBox 不会显示已保存的 Key；更换 Provider 后请重新粘贴并点「保存设置」。</value>
+  </data>
+  <data name="Settings_ApiKeyLabel" xml:space="preserve">
+    <value>API Key</value>
+  </data>
+  <data name="Settings_ApiKeySaved" xml:space="preserve">
+    <value>已保存 Model API Key：{0}</value>
+  </data>
+  <data name="Settings_BatchSize" xml:space="preserve">
+    <value>Batch Size</value>
+  </data>
+  <data name="Settings_ChunkOverlapChars" xml:space="preserve">
+    <value>切片重叠字符</value>
+  </data>
+  <data name="Settings_ChunkOverlapHint" xml:space="preserve">
+    <value>相邻切片重叠的字符数</value>
+  </data>
+  <data name="Settings_ChunkTargetChars" xml:space="preserve">
+    <value>切片目标字符</value>
+  </data>
+  <data name="Settings_ChunkTargetCharsHint" xml:space="preserve">
+    <value>按固定字符数硬切，与段落无关</value>
+  </data>
+  <data name="Settings_ContextCompactionTitle" xml:space="preserve">
+    <value>上下文与 Token ROI</value>
+  </data>
+  <data name="Settings_DefaultStatus" xml:space="preserve">
+    <value>设置保存在应用数据目录下的 JSON 文件中。</value>
+  </data>
+  <data name="Settings_DynamicCompaction" xml:space="preserve">
+    <value>动态压缩（预算利用率）</value>
+  </data>
+  <data name="Settings_DynamicCompactionTooltip" xml:space="preserve">
+    <value>启用动态三级压缩策略</value>
+  </data>
+  <data name="Settings_EmbeddingApiKey" xml:space="preserve">
+    <value>Embedding API Key</value>
+  </data>
+  <data name="Settings_EmbeddingApiKeySaved" xml:space="preserve">
+    <value>已保存知识库 Embedding API Key：{0}</value>
+  </data>
+  <data name="Settings_EmbeddingEndpoint" xml:space="preserve">
+    <value>Embedding Endpoint</value>
+  </data>
+  <data name="Settings_EmbeddingModel" xml:space="preserve">
+    <value>Embedding Model</value>
+  </data>
+  <data name="Settings_EnableStreaming" xml:space="preserve">
+    <value>启用流式输出（SSE）</value>
+  </data>
+  <data name="Settings_Endpoint" xml:space="preserve">
+    <value>Endpoint</value>
+  </data>
+  <data name="Settings_KnowledgeEmbeddingHint" xml:space="preserve">
+    <value>配置向量检索所需的基础设施。在聊天输入区为每个会话单独开启知识库并选择知识空间。</value>
+  </data>
+  <data name="Settings_KnowledgeEmbeddingTitle" xml:space="preserve">
+    <value>知识库 Embedding</value>
+  </data>
+  <data name="Settings_Language" xml:space="preserve">
+    <value>语言</value>
+  </data>
+  <data name="Settings_Language_Auto" xml:space="preserve">
+    <value>跟随系统</value>
+  </data>
+  <data name="Settings_Language_en_US" xml:space="preserve">
+    <value>English (US)</value>
+  </data>
+  <data name="Settings_Language_zh_CN" xml:space="preserve">
+    <value>简体中文</value>
+  </data>
+  <data name="Settings_MaxTokensHint" xml:space="preserve">
+    <value>单次回复最大输出 token（留空则使用 API 默认值）。仅影响对话补全，不影响上下文摘要。</value>
+  </data>
+  <data name="Settings_MaxTokensLabel" xml:space="preserve">
+    <value>Max Tokens</value>
+  </data>
+  <data name="Settings_McpAutoThresholdChars" xml:space="preserve">
+    <value>Auto 阈值 (schema 字符)</value>
+  </data>
+  <data name="Settings_McpAutoThresholdTools" xml:space="preserve">
+    <value>Auto 阈值 (工具数)</value>
+  </data>
+  <data name="Settings_McpSearchEnabled" xml:space="preserve">
+    <value>启用 MCP 按需工具发现（search 模式）</value>
+  </data>
+  <data name="Settings_McpSearchMode" xml:space="preserve">
+    <value>模式 (direct/search/auto)</value>
+  </data>
+  <data name="Settings_McpSearchTitle" xml:space="preserve">
+    <value>MCP Search Mode</value>
+  </data>
+  <data name="Settings_McpServersHint" xml:space="preserve">
+    <value>MCP 服务从 {0} 读取；此页面仅控制每个服务是否启用。新增、删除和命令参数请直接修改 JSON 配置。</value>
+  </data>
+  <data name="Settings_McpServersTitle" xml:space="preserve">
+    <value>Installed MCP Servers</value>
+  </data>
+  <data name="Settings_MinScore" xml:space="preserve">
+    <value>Min Score</value>
+  </data>
+  <data name="Settings_ModelNameLabel" xml:space="preserve">
+    <value>Model Name</value>
+  </data>
+  <data name="Settings_ModelSection" xml:space="preserve">
+    <value>Model</value>
+  </data>
+  <data name="Settings_ProactiveCompaction" xml:space="preserve">
+    <value>主动压缩（会话持久化层）</value>
+  </data>
+  <data name="Settings_ProactiveCompactionTooltip" xml:space="preserve">
+    <value>启用 truncate / compact 等会话级压缩</value>
+  </data>
+  <data name="Settings_Provider" xml:space="preserve">
+    <value>Provider</value>
+  </data>
+  <data name="Settings_RequestHygiene" xml:space="preserve">
+    <value>发送边界卫生（每轮 API 前）</value>
+  </data>
+  <data name="Settings_SaveSettings" xml:space="preserve">
+    <value>保存设置</value>
+  </data>
+  <data name="Settings_SaveStatusBoth" xml:space="preserve">
+    <value>已保存（{0}），Model 与 Embedding API Key 已更新</value>
+  </data>
+  <data name="Settings_SaveStatusEmbedding" xml:space="preserve">
+    <value>已保存（{0}），Embedding API Key 已更新</value>
+  </data>
+  <data name="Settings_SaveStatusModel" xml:space="preserve">
+    <value>已保存（{0}），Model API Key 已更新</value>
+  </data>
+  <data name="Settings_SaveStatusNoChange" xml:space="preserve">
+    <value>已保存（{0}）；Model API Key 未变更（PasswordBox 为空时沿用已保存的 Key）</value>
+  </data>
+  <data name="Settings_ShowToolCalls" xml:space="preserve">
+    <value>显示工具调用</value>
+  </data>
+  <data name="Settings_ShowToolCallsTooltip" xml:space="preserve">
+    <value>关闭后聊天中不显示 file_read、execute_command 等工具卡片；上下文压缩通知仍会显示。</value>
+  </data>
+  <data name="Settings_SkillsDescription" xml:space="preserve">
+    <value>技能从 {0} 自动加载；此页面控制每个技能是否启用。关闭后不会出现在系统提示与 @skill 补全中。保存设置后写入 {1}。</value>
+  </data>
+  <data name="Settings_SkillsTitle" xml:space="preserve">
+    <value>Installed Skills</value>
+  </data>
+  <data name="Settings_StormThreshold" xml:space="preserve">
+    <value>Storm 阈值</value>
+  </data>
+  <data name="Settings_Subtitle" xml:space="preserve">
+    <value>配置模型、MCP、技能、工作区、上下文压缩与工具权限。</value>
+  </data>
+  <data name="Settings_Title" xml:space="preserve">
+    <value>设置</value>
+  </data>
+  <data name="Settings_ToolStorm" xml:space="preserve">
+    <value>Tool storm 抑制</value>
+  </data>
+  <data name="Settings_TopK" xml:space="preserve">
+    <value>TopK</value>
+  </data>
+  <data name="Settings_TrainingDataDescription" xml:space="preserve">
+    <value>自动从修正轨迹、溢出恢复轨迹、工具选型 DPO 中提取训练数据，写入 ~/.athlon-agent/training-data/。仅当 agent 调用工具失败→用户修正→重试成功、或超时→继续→完成时产出样本，不影响正常使用。</value>
+  </data>
+  <data name="Settings_TrainingDataTitle" xml:space="preserve">
+    <value>训练数据采集</value>
+  </data>
+  <data name="Settings_TrainingDataTooltip" xml:space="preserve">
+    <value>启用训练数据采集</value>
+  </data>
+  <data name="Settings_UiMemoryHint" xml:space="preserve">
+    <value>长期记忆与任务列表请在聊天输入区通过 Coding 开关按会话启用；任务进度显示在左侧栏。</value>
+  </data>
+  <data name="Settings_UiSection" xml:space="preserve">
+    <value>界面</value>
+  </data>
+  <data name="Settings_VectorDimension" xml:space="preserve">
+    <value>向量维度</value>
+  </data>
+  <data name="Shell_CannotPreviewMessage" xml:space="preserve">
+    <value>无法解析文件路径。请先配置工作区。</value>
+  </data>
+  <data name="Shell_CannotPreviewTitle" xml:space="preserve">
+    <value>无法预览</value>
+  </data>
+  <data name="Shell_ClearContextDone" xml:space="preserve">
+    <value>上下文已清空。</value>
+  </data>
+  <data name="Shell_ClearContextMessage" xml:space="preserve">
+    <value>将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录），并清空 Coding 任务计划。
+
+会话 ID、工作区与标题会保留；磁盘上的 transcript 归档不会删除。
+
+下次发送消息时会重新构建系统提示（工作区、工具、技能等）。</value>
+  </data>
+  <data name="Shell_ClearContextTitle" xml:space="preserve">
+    <value>清空上下文</value>
+  </data>
+  <data name="Shell_ContextSidebarClose" xml:space="preserve">
+    <value>关闭右侧栏 (Ctrl+Alt+B)</value>
+  </data>
+  <data name="Shell_ContextSidebarOpen" xml:space="preserve">
+    <value>打开右侧栏 (Ctrl+Alt+B)</value>
+  </data>
+  <data name="Shell_DeleteConversationDone" xml:space="preserve">
+    <value>对话已删除。</value>
+  </data>
+  <data name="Shell_DeleteConversationMessage" xml:space="preserve">
+    <value>确定删除对话「{0}」吗？此操作无法撤销。</value>
+  </data>
+  <data name="Shell_DeleteConversationTitle" xml:space="preserve">
+    <value>删除对话</value>
+  </data>
+  <data name="Shell_DeleteFailedMessage" xml:space="preserve">
+    <value>无法删除「{0}」：{1}</value>
+  </data>
+  <data name="Shell_DeleteFailedStatus" xml:space="preserve">
+    <value>删除失败：{0}</value>
+  </data>
+  <data name="Shell_DeleteFailedTitle" xml:space="preserve">
+    <value>删除失败</value>
+  </data>
+  <data name="Shell_DeleteFileMessage" xml:space="preserve">
+    <value>确定删除文件「{0}」吗？此操作无法撤销。</value>
+  </data>
+  <data name="Shell_DeleteFolderMessage" xml:space="preserve">
+    <value>确定删除文件夹「{0}」及其全部内容吗？此操作无法撤销。</value>
+  </data>
+  <data name="Shell_DeleteNodeTitle" xml:space="preserve">
+    <value>删除</value>
+  </data>
+  <data name="Shell_DeleteSuccess" xml:space="preserve">
+    <value>已删除{0}「{1}」。</value>
+  </data>
+  <data name="Shell_ExitMessage" xml:space="preserve">
+    <value>有对话正在生成或消息排队中，退出将停止所有任务。确定退出？</value>
+  </data>
+  <data name="Shell_ExitTitle" xml:space="preserve">
+    <value>退出 Athlon Agent</value>
+  </data>
+  <data name="Shell_FileKind" xml:space="preserve">
+    <value>文件</value>
+  </data>
+  <data name="Shell_FolderKind" xml:space="preserve">
+    <value>文件夹</value>
+  </data>
+  <data name="Shell_LoadConversationDone" xml:space="preserve">
+    <value>已加载对话：{0}</value>
+  </data>
+  <data name="Shell_LoadConversationFailed" xml:space="preserve">
+    <value>无法加载该对话。</value>
+  </data>
+  <data name="Shell_LoadingConversation" xml:space="preserve">
+    <value>正在加载对话…</value>
+  </data>
+  <data name="Shell_ModifiedFilesHeader" xml:space="preserve">
+    <value>已修改 {0} 个文件</value>
+  </data>
+  <data name="Shell_NoWorkspace" xml:space="preserve">
+    <value>未配置工作区</value>
+  </data>
+  <data name="Shell_OpenFolderFailedMessage" xml:space="preserve">
+    <value>无法打开文件夹：{0}</value>
+  </data>
+  <data name="Shell_OpenFolderFailedTitle" xml:space="preserve">
+    <value>打开失败</value>
+  </data>
+  <data name="Shell_SaveConversationFailed" xml:space="preserve">
+    <value>保存对话失败：{0}</value>
+  </data>
+  <data name="Shell_SelectWorkspace" xml:space="preserve">
+    <value>选择 Agent 工作区</value>
+  </data>
+  <data name="Shell_ShuttingDown" xml:space="preserve">
+    <value>正在关闭…</value>
+  </data>
+  <data name="Shell_StatusBarLogs" xml:space="preserve">
+    <value>Logs: {0}</value>
+  </data>
+  <data name="Shell_StatusBarModel" xml:space="preserve">
+    <value>模型: {0}</value>
+  </data>
+  <data name="Shell_SwitchToDark" xml:space="preserve">
+    <value>切换到深色模式</value>
+  </data>
+  <data name="Shell_SwitchToLight" xml:space="preserve">
+    <value>切换到浅色模式</value>
+  </data>
+  <data name="Shell_TargetMissing" xml:space="preserve">
+    <value>目标不存在或已被删除。</value>
+  </data>
+  <data name="Shell_WorkspaceStatus" xml:space="preserve">
+    <value>当前对话工作区：{0}</value>
+  </data>
+  <data name="Shutdown_ClosingMcp" xml:space="preserve">
+    <value>正在关闭 MCP 连接…</value>
+  </data>
+  <data name="Shutdown_FlushingToolLogs" xml:space="preserve">
+    <value>正在刷新工具调用日志…</value>
+  </data>
+  <data name="Shutdown_KillingProcesses" xml:space="preserve">
+    <value>正在结束命令行进程…</value>
+  </data>
+  <data name="Shutdown_ReleasingLogs" xml:space="preserve">
+    <value>正在释放日志…</value>
+  </data>
+  <data name="Shutdown_SavingSettings" xml:space="preserve">
+    <value>正在保存设置…</value>
+  </data>
+  <data name="Shutdown_StoppingScheduler" xml:space="preserve">
+    <value>正在停止定时任务…</value>
+  </data>
+  <data name="Shutdown_StoppingTurns" xml:space="preserve">
+    <value>正在停止生成任务…</value>
+  </data>
+  <data name="Sso_CancelLogin" xml:space="preserve">
+    <value>取消登录</value>
+  </data>
+  <data name="Sso_LoginFailed" xml:space="preserve">
+    <value>IMP SSO 登录失败。</value>
+  </data>
+  <data name="Sso_LoginFailedWithMessage" xml:space="preserve">
+    <value>IMP SSO 登录失败：{0}</value>
+  </data>
+  <data name="Sso_LogoutConfirm" xml:space="preserve">
+    <value>确定要退出登录吗？</value>
+  </data>
+  <data name="Sso_LogoutTitle" xml:space="preserve">
+    <value>退出登录</value>
+  </data>
+  <data name="Sso_LogoutTooltip" xml:space="preserve">
+    <value>点击退出登录</value>
+  </data>
+  <data name="Sso_WaitingMessage" xml:space="preserve">
+    <value>请在浏览器中完成登录，成功后自动继续。</value>
+  </data>
+  <data name="Sso_WaitingTitle" xml:space="preserve">
+    <value>正在等待 IMP 登录</value>
+  </data>
+  <data name="Sso_WindowTitle" xml:space="preserve">
+    <value>IMP SSO 登录</value>
+  </data>
+  <data name="Startup_FailedTitle" xml:space="preserve">
+    <value>Athlon Agent 启动失败</value>
+  </data>
+  <data name="Tool_DefaultHeader" xml:space="preserve">
+    <value>工具调用</value>
+  </data>
+  <data name="Tool_EvictedHeader" xml:space="preserve">
+    <value>① 工具结果归档 · {0}</value>
+  </data>
+  <data name="Tool_NoArgs" xml:space="preserve">
+    <value>(无参数)</value>
+  </data>
+  <data name="Update_Applying" xml:space="preserve">
+    <value>正在安装更新并重启…</value>
+  </data>
+  <data name="Update_AvailableMessage" xml:space="preserve">
+    <value>发现新版本 {0}，是否现在下载并安装？</value>
+  </data>
+  <data name="Update_AvailableTitle" xml:space="preserve">
+    <value>发现更新</value>
+  </data>
+  <data name="Update_Cancelled" xml:space="preserve">
+    <value>发现新版本 {0}，已取消安装。</value>
+  </data>
+  <data name="Update_UpToDate" xml:space="preserve">
+    <value>当前已是最新版本。</value>
+  </data>
+</root>

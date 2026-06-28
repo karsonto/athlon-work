@@ -1,3 +1,4 @@
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -10,6 +11,8 @@ namespace Athlon.Agent.Tests;
 
 public sealed class ComposerHarnessViewModelTests
 {
+    private static readonly ILocalizationService Localization = new LocalizationService();
+
     [Fact]
     public async Task ClearTaskPlanAsync_ClearsStoreAndSidebarTasks()
     {
@@ -18,7 +21,7 @@ public sealed class ComposerHarnessViewModelTests
         [
             new AgentTaskItem { Id = "1", Content = "task", Status = AgentTaskStatuses.InProgress }
         ]);
-        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
 
         await vm.LoadForSessionAsync("session-1");
         Assert.Single(vm.Tasks);
@@ -39,7 +42,7 @@ public sealed class ComposerHarnessViewModelTests
     {
         var harness = new StubHarnessState(enabled: false);
         var store = new MutableTaskListStore();
-        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
 
         await vm.LoadForSessionAsync("session-1");
         store.SetItems([new AgentTaskItem { Id = "1", Content = "task", Status = AgentTaskStatuses.Pending }]);
@@ -54,7 +57,7 @@ public sealed class ComposerHarnessViewModelTests
     {
         var harness = new StubHarnessState(enabled: true);
         var store = new MutableTaskListStore();
-        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
 
         await vm.LoadForSessionAsync("session-1");
 
@@ -70,7 +73,7 @@ public sealed class ComposerHarnessViewModelTests
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Pending }
         ]);
-        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
 
         await vm.LoadForSessionAsync("session-1");
 
@@ -88,7 +91,7 @@ public sealed class ComposerHarnessViewModelTests
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Pending },
             new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.InProgress }
         ]);
-        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
         await vm.LoadForSessionAsync("session-1");
 
         store.SetItems(
@@ -113,7 +116,7 @@ public sealed class ComposerHarnessViewModelTests
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress }
         ]);
-        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
         await vm.LoadForSessionAsync("session-1");
 
         store.SetItems(
@@ -133,7 +136,7 @@ public sealed class ComposerHarnessViewModelTests
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed }
         ]);
-        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier());
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
 
         await vm.LoadForSessionAsync("session-1");
 
@@ -150,7 +153,7 @@ public sealed class ComposerHarnessViewModelTests
             new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.InProgress }
         ]);
         var notifier = new RecordingTaskPlanCompletionNotifier();
-        var vm = new ComposerHarnessViewModel(harness, store, notifier);
+        var vm = new ComposerHarnessViewModel(harness, store, notifier, Localization);
         await vm.LoadForSessionAsync("session-1");
 
         store.SetItems(
@@ -174,7 +177,7 @@ public sealed class ComposerHarnessViewModelTests
             new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.Pending }
         ]);
         var notifier = new RecordingTaskPlanCompletionNotifier();
-        var vm = new ComposerHarnessViewModel(harness, store, notifier);
+        var vm = new ComposerHarnessViewModel(harness, store, notifier, Localization);
         await vm.LoadForSessionAsync("session-1");
 
         store.SetItems(
@@ -197,7 +200,7 @@ public sealed class ComposerHarnessViewModelTests
             new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.Completed }
         ]);
         var notifier = new RecordingTaskPlanCompletionNotifier();
-        var vm = new ComposerHarnessViewModel(harness, store, notifier);
+        var vm = new ComposerHarnessViewModel(harness, store, notifier, Localization);
 
         await vm.LoadForSessionAsync("session-1");
 
@@ -214,7 +217,7 @@ public sealed class ComposerHarnessViewModelTests
             new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.Pending }
         ]);
         var notifier = new RecordingTaskPlanCompletionNotifier();
-        var vm = new ComposerHarnessViewModel(harness, store, notifier);
+        var vm = new ComposerHarnessViewModel(harness, store, notifier, Localization);
         await vm.LoadForSessionAsync("session-1");
 
         store.SetItems(

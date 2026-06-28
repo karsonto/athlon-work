@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:behaviors="clr-namespace:Athlon.Agent.App.Behaviors"
              xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
+             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
              DataContext="{Binding Settings}">
     <ScrollViewer Padding="40,32" VerticalScrollBarVisibility="Auto" Background="{DynamicResource Brush.ChatBackground}">
                 <StackPanel MaxWidth="760">
@@ -11,27 +12,27 @@
                                 CommandParameter="Chat"
                                 Style="{StaticResource GhostIconButtonStyle}"
                                 Margin="0,0,8,0"
-                                ToolTip="返回对话"
+                                ToolTip="{loc:Localize Key=Common_BackToChat}"
                                 Content="←" />
-                        <TextBlock Text="设置" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <TextBlock Text="{loc:Localize Key=Settings_Title}" FontSize="28" FontWeight="SemiBold" VerticalAlignment="Center" />
                     </StackPanel>
-                    <TextBlock Text="配置模型、MCP、技能、工作区、上下文压缩与工具权限。"
+                    <TextBlock Text="{loc:Localize Key=Settings_Subtitle}"
                                Foreground="{DynamicResource Brush.SubtleText}"
                                Margin="0,0,0,24" />
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="Model" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
-                            <TextBlock Text="Provider" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBlock Text="{loc:Localize Key=Settings_ModelSection}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,14" />
+                            <TextBlock Text="{loc:Localize Key=Settings_Provider}" Foreground="{DynamicResource Brush.SubtleText}" />
                             <TextBox Text="{Binding Settings.Model.Provider, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
-                            <TextBlock Text="Endpoint" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBlock Text="{loc:Localize Key=Settings_Endpoint}" Foreground="{DynamicResource Brush.SubtleText}" />
                             <TextBox Text="{Binding Settings.Model.Endpoint, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
-                            <TextBlock Text="Model Name" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBlock Text="{loc:Localize Key=Settings_ModelNameLabel}" Foreground="{DynamicResource Brush.SubtleText}" />
                             <TextBox Text="{Binding Settings.Model.ModelName, UpdateSourceTrigger=PropertyChanged}" Margin="0,6,0,12" />
-                            <TextBlock Text="Max Tokens" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBlock Text="{loc:Localize Key=Settings_MaxTokensLabel}" Foreground="{DynamicResource Brush.SubtleText}" />
                             <TextBox Text="{Binding ModelMaxTokensText, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,6,0,6" />
-                            <TextBlock Text="单次回复最大输出 token（留空则使用 API 默认值）。仅影响对话补全，不影响上下文摘要。"
+                            <TextBlock Text="{loc:Localize Key=Settings_MaxTokensHint}"
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        Margin="0,0,0,12" />
@@ -40,13 +41,13 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="启用流式输出（SSE）" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Settings_EnableStreaming}" VerticalAlignment="Center" />
                                 <CheckBox Grid.Column="1"
                                           Style="{StaticResource McpToggleSwitchStyle}"
                                           IsChecked="{Binding Settings.Model.EnableStreaming, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center" />
                             </Grid>
-                            <TextBlock Text="API Key" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBlock Text="{loc:Localize Key=Settings_ApiKeyLabel}" Foreground="{DynamicResource Brush.SubtleText}" />
                             <PasswordBox x:Name="ApiKeyPasswordBox"
                                          behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
                                          Margin="0,6,0,6" />
@@ -54,7 +55,7 @@
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        FontSize="12"
                                        Margin="0,0,0,6" />
-                            <TextBlock Text="API Key 使用 Windows DPAPI 加密保存在用户目录。PasswordBox 不会显示已保存的 Key；更换 Provider 后请重新粘贴并点「保存设置」。"
+                            <TextBlock Text="{loc:Localize Key=Settings_ApiKeyDpapiHint}"
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap" />
                         </StackPanel>
@@ -62,7 +63,7 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="界面"
+                            <TextBlock Text="{loc:Localize Key=Settings_UiSection}"
                                        FontSize="16"
                                        FontWeight="SemiBold"
                                        Margin="0,0,0,14" />
@@ -71,20 +72,29 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="显示工具调用"
+                                <TextBlock Text="{loc:Localize Key=Settings_ShowToolCalls}"
                                            VerticalAlignment="Center"
-                                           ToolTip="关闭后聊天中不显示 file_read、execute_command 等工具卡片；上下文压缩通知仍会显示。" />
+                                           ToolTip="{loc:Localize Key=Settings_ShowToolCallsTooltip}" />
                                 <CheckBox Grid.Column="1"
                                           Style="{StaticResource McpToggleSwitchStyle}"
                                           IsChecked="{Binding Settings.Ui.ShowToolCalls, UpdateSourceTrigger=PropertyChanged}"
-                                          ToolTip="关闭后聊天中不显示 file_read、execute_command 等工具卡片；上下文压缩通知仍会显示。"
+                                          ToolTip="{loc:Localize Key=Settings_ShowToolCallsTooltip}"
                                           VerticalAlignment="Center" />
                             </Grid>
-                            <TextBlock Text="长期记忆与任务列表请在聊天输入区通过 Coding 开关按会话启用；任务进度显示在左侧栏。"
+                            <TextBlock Text="{loc:Localize Key=Settings_UiMemoryHint}"
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
                                        FontSize="12"
                                        Margin="0,10,0,0" />
+                            <TextBlock Text="{loc:Localize Key=Settings_Language}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       Margin="0,14,0,6" />
+                            <ComboBox ItemsSource="{Binding LanguageOptions}"
+                                      SelectedValue="{Binding Language, UpdateSourceTrigger=PropertyChanged}"
+                                      SelectedValuePath="Value"
+                                      DisplayMemberPath="DisplayName"
+                                      MinWidth="200"
+                                      HorizontalAlignment="Left" />
                         </StackPanel>
                     </Border>
 
@@ -98,12 +108,12 @@
                                                         Height="22"
                                                         Margin="0,0,10,0"
                                                         VerticalAlignment="Center" />
-                                        <TextBlock Text="知识库 Embedding"
+                                        <TextBlock Text="{loc:Localize Key=Settings_KnowledgeEmbeddingTitle}"
                                                    FontSize="16"
                                                    FontWeight="SemiBold"
                                                    VerticalAlignment="Center" />
                                     </StackPanel>
-                                    <TextBlock Text="配置向量检索所需的基础设施。在聊天输入区为每个会话单独开启知识库并选择知识空间。"
+                                    <TextBlock Text="{loc:Localize Key=Settings_KnowledgeEmbeddingHint}"
                                                Foreground="{DynamicResource Brush.SubtleText}"
                                                TextWrapping="Wrap"
                                                FontSize="12"
@@ -111,10 +121,10 @@
                                 </StackPanel>
                             </Grid>
 
-                            <TextBlock Text="Embedding Endpoint" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBlock Text="{loc:Localize Key=Settings_EmbeddingEndpoint}" Foreground="{DynamicResource Brush.SubtleText}" />
                             <TextBox Text="{Binding Settings.Knowledge.Embedding.Endpoint, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,6,0,10" />
-                            <TextBlock Text="Embedding Model" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBlock Text="{loc:Localize Key=Settings_EmbeddingModel}" Foreground="{DynamicResource Brush.SubtleText}" />
                             <TextBox Text="{Binding Settings.Knowledge.Embedding.Model, UpdateSourceTrigger=PropertyChanged}"
                                      Margin="0,6,0,10" />
                             <Grid Margin="0,0,0,10">
@@ -124,12 +134,12 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="向量维度" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBlock Text="{loc:Localize Key=Settings_VectorDimension}" Foreground="{DynamicResource Brush.SubtleText}" />
                                     <TextBox Text="{Binding KnowledgeEmbeddingDimensionText, UpdateSourceTrigger=PropertyChanged}"
                                              Margin="0,6,0,0" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Batch Size" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBlock Text="{loc:Localize Key=Settings_BatchSize}" Foreground="{DynamicResource Brush.SubtleText}" />
                                     <TextBox Text="{Binding KnowledgeEmbeddingBatchSizeText, UpdateSourceTrigger=PropertyChanged}"
                                              Margin="0,6,0,0" />
                                 </StackPanel>
@@ -141,8 +151,8 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="切片目标字符" Foreground="{DynamicResource Brush.SubtleText}" />
-                                    <TextBlock Text="按固定字符数硬切，与段落无关"
+                                    <TextBlock Text="{loc:Localize Key=Settings_ChunkTargetChars}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBlock Text="{loc:Localize Key=Settings_ChunkTargetCharsHint}"
                                                Foreground="{DynamicResource Brush.SubtleText}"
                                                FontSize="11"
                                                Margin="0,2,0,0" />
@@ -150,8 +160,8 @@
                                              Margin="0,6,0,0" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="切片重叠字符" Foreground="{DynamicResource Brush.SubtleText}" />
-                                    <TextBlock Text="相邻切片重叠的字符数"
+                                    <TextBlock Text="{loc:Localize Key=Settings_ChunkOverlapChars}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBlock Text="{loc:Localize Key=Settings_ChunkOverlapHint}"
                                                Foreground="{DynamicResource Brush.SubtleText}"
                                                FontSize="11"
                                                Margin="0,2,0,0" />
@@ -166,17 +176,17 @@
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="TopK" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBlock Text="{loc:Localize Key=Settings_TopK}" Foreground="{DynamicResource Brush.SubtleText}" />
                                     <TextBox Text="{Binding KnowledgeSearchTopKText, UpdateSourceTrigger=PropertyChanged}"
                                              Margin="0,6,0,0" />
                                 </StackPanel>
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Min Score" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBlock Text="{loc:Localize Key=Settings_MinScore}" Foreground="{DynamicResource Brush.SubtleText}" />
                                     <TextBox Text="{Binding KnowledgeSearchMinScoreText, UpdateSourceTrigger=PropertyChanged}"
                                              Margin="0,6,0,0" />
                                 </StackPanel>
                             </Grid>
-                            <TextBlock Text="Embedding API Key" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBlock Text="{loc:Localize Key=Settings_EmbeddingApiKey}" Foreground="{DynamicResource Brush.SubtleText}" />
                             <PasswordBox x:Name="KnowledgeEmbeddingApiKeyPasswordBox"
                                          behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding KnowledgeEmbeddingApiKey, UpdateSourceTrigger=PropertyChanged}"
                                          Margin="0,6,0,6" />
@@ -188,17 +198,17 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="上下文与 Token ROI" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="{loc:Localize Key=Settings_ContextCompactionTitle}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="主动压缩（会话持久化层）" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Settings_ProactiveCompaction}" VerticalAlignment="Center" />
                                 <CheckBox Grid.Column="1"
                                           Style="{StaticResource McpToggleSwitchStyle}"
                                           IsChecked="{Binding Settings.ContextCompaction.Enabled, UpdateSourceTrigger=PropertyChanged}"
-                                          ToolTip="启用 truncate / compact 等会话级压缩"
+                                          ToolTip="{loc:Localize Key=Settings_ProactiveCompactionTooltip}"
                                           VerticalAlignment="Center" />
                             </Grid>
                             <Grid Margin="0,0,0,8">
@@ -206,11 +216,11 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="动态压缩（预算利用率）" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Settings_DynamicCompaction}" VerticalAlignment="Center" />
                                 <CheckBox Grid.Column="1"
                                           Style="{StaticResource McpToggleSwitchStyle}"
                                           IsChecked="{Binding Settings.ContextCompaction.DynamicCompaction.Enabled, UpdateSourceTrigger=PropertyChanged}"
-                                          ToolTip="启用动态三级压缩策略"
+                                          ToolTip="{loc:Localize Key=Settings_DynamicCompactionTooltip}"
                                           VerticalAlignment="Center" />
                             </Grid>
                             <Grid Margin="0,0,0,8">
@@ -218,7 +228,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="发送边界卫生（每轮 API 前）" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Settings_RequestHygiene}" VerticalAlignment="Center" />
                                 <CheckBox Grid.Column="1"
                                           Style="{StaticResource McpToggleSwitchStyle}"
                                           IsChecked="{Binding Settings.ContextCompaction.RequestHistoryHygiene.Enabled, UpdateSourceTrigger=PropertyChanged}"
@@ -229,7 +239,7 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Tool storm 抑制" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Settings_ToolStorm}" VerticalAlignment="Center" />
                                 <CheckBox Grid.Column="1"
                                           Style="{StaticResource McpToggleSwitchStyle}"
                                           IsChecked="{Binding Settings.ContextCompaction.ToolStorm.Enabled, UpdateSourceTrigger=PropertyChanged}"
@@ -240,7 +250,7 @@
                                     <ColumnDefinition Width="160" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Storm 阈值" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Settings_StormThreshold}" VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1"
                                          Text="{Binding Settings.ContextCompaction.ToolStorm.Threshold, UpdateSourceTrigger=PropertyChanged}" />
                             </Grid>
@@ -249,8 +259,8 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="MCP Search Mode" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
-                            <CheckBox Content="启用 MCP 按需工具发现（search 模式）"
+                            <TextBlock Text="{loc:Localize Key=Settings_McpSearchTitle}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <CheckBox Content="{loc:Localize Key=Settings_McpSearchEnabled}"
                                       IsChecked="{Binding Settings.McpSearch.Enabled, UpdateSourceTrigger=PropertyChanged}"
                                       Margin="0,0,0,8" />
                             <Grid Margin="0,0,0,8">
@@ -258,7 +268,7 @@
                                     <ColumnDefinition Width="160" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="模式 (direct/search/auto)" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Settings_McpSearchMode}" VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1"
                                          Text="{Binding Settings.McpSearch.Mode, UpdateSourceTrigger=PropertyChanged}" />
                             </Grid>
@@ -267,7 +277,7 @@
                                     <ColumnDefinition Width="160" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Auto 阈值 (工具数)" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Settings_McpAutoThresholdTools}" VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1"
                                          Text="{Binding Settings.McpSearch.AutoThresholdToolCount, UpdateSourceTrigger=PropertyChanged}" />
                             </Grid>
@@ -276,7 +286,7 @@
                                     <ColumnDefinition Width="160" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
-                                <TextBlock Text="Auto 阈值 (schema 字符)" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Settings_McpAutoThresholdChars}" VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1"
                                          Text="{Binding Settings.McpSearch.AutoThresholdSchemaChars, UpdateSourceTrigger=PropertyChanged}" />
                             </Grid>
@@ -285,7 +295,7 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="Installed MCP Servers" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="{loc:Localize Key=Settings_McpServersTitle}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <TextBlock Text="{Binding McpConfigPath, StringFormat=MCP 服务从 {0} 读取；此页面仅控制每个服务是否启用。新增、删除和命令参数请直接修改 JSON 配置。}"
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
@@ -362,7 +372,7 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
-                            <TextBlock Text="Installed Skills" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+                            <TextBlock Text="{loc:Localize Key=Settings_SkillsTitle}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <TextBlock Text="{Binding SkillsSettingsDescription}"
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        TextWrapping="Wrap"
@@ -446,11 +456,11 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel>
-                                <TextBlock Text="训练数据采集"
+                                <TextBlock Text="{loc:Localize Key=Settings_TrainingDataTitle}"
                                            FontSize="16"
                                            FontWeight="SemiBold"
                                            VerticalAlignment="Center" />
-                                <TextBlock Text="自动从修正轨迹、溢出恢复轨迹、工具选型 DPO 中提取训练数据，写入 ~/.athlon-agent/training-data/。仅当 agent 调用工具失败→用户修正→重试成功、或超时→继续→完成时产出样本，不影响正常使用。"
+                                <TextBlock Text="{loc:Localize Key=Settings_TrainingDataDescription}"
                                            Foreground="{DynamicResource Brush.SubtleText}"
                                            TextWrapping="Wrap"
                                            FontSize="12"
@@ -459,14 +469,14 @@
                             <CheckBox Grid.Column="1"
                                       Style="{StaticResource McpToggleSwitchStyle}"
                                       IsChecked="{Binding Settings.TrainingData.Enabled, UpdateSourceTrigger=PropertyChanged}"
-                                      ToolTip="启用训练数据采集"
+                                      ToolTip="{loc:Localize Key=Settings_TrainingDataTooltip}"
                                       VerticalAlignment="Center" />
                         </Grid>
                     </Border>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,24">
                         <TextBlock Text="{Binding SettingsStatus}" Foreground="{DynamicResource Brush.SubtleText}" VerticalAlignment="Center" Margin="0,0,12,0" />
-                        <Button Content="保存设置" Command="{Binding SaveSettingsCommand}" Style="{StaticResource GhostButtonStyle}" />
+                        <Button Content="{loc:Localize Key=Settings_SaveSettings}" Command="{Binding SaveSettingsCommand}" Style="{StaticResource GhostButtonStyle}" />
                     </StackPanel>
                 </StackPanel>
     </ScrollViewer>

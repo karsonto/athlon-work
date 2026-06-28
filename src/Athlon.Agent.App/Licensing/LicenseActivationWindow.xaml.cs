@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core.Licensing;
 using Microsoft.Win32;
 
@@ -27,10 +28,10 @@ public partial class LicenseActivationWindow : Window
         UpdateMaximizeRestoreButton();
 
         ApplyFailure(initialFailure);
-        SamAccountText.Text = $"Sam：{_account.SamAccountName}";
+        SamAccountText.Text = Strings.Format("License_SamAccountLabel", _account.SamAccountName);
         UpnAccountText.Text = string.IsNullOrWhiteSpace(_account.UserPrincipalName)
-            ? "UPN：(无)"
-            : $"UPN：{_account.UserPrincipalName}";
+            ? Strings.Get("License_UpnNone")
+            : Strings.Format("License_UpnAccountLabel", _account.UserPrincipalName);
     }
 
     private void ApplyFailure(LicenseValidationResult failure)
@@ -91,7 +92,7 @@ public partial class LicenseActivationWindow : Window
         }
         catch (Exception ex)
         {
-            ShowInlineError($"保存 License 失败：{ex.Message}");
+            ShowInlineError(Strings.Format("License_SaveFailed", ex.Message));
             return;
         }
 
@@ -142,15 +143,15 @@ public partial class LicenseActivationWindow : Window
         MaximizeRestoreButton.Content = null;
         MaximizeRestoreButton.ContentTemplate = (DataTemplate)MaximizeRestoreButton.FindResource(
             isMaximized ? "WindowCaptionRestoreIconTemplate" : "WindowCaptionMaximizeIconTemplate");
-        MaximizeRestoreButton.ToolTip = isMaximized ? "还原" : "最大化";
+        MaximizeRestoreButton.ToolTip = isMaximized ? Strings.Get("Common_Restore") : Strings.Get("Common_Maximize");
     }
 
     private void BrowseButton_OnClick(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
         {
-            Title = "选择 License 文件",
-            Filter = "License 文件 (*.lic)|*.lic|所有文件 (*.*)|*.*",
+            Title = Strings.Get("License_BrowseDialogTitle"),
+            Filter = Strings.Get("License_FileFilter"),
             CheckFileExists = true,
         };
 
@@ -166,7 +167,7 @@ public partial class LicenseActivationWindow : Window
         }
         catch (Exception ex)
         {
-            ShowInlineError($"读取文件失败：{ex.Message}");
+            ShowInlineError(Strings.Format("License_ReadFileFailed", ex.Message));
         }
     }
 

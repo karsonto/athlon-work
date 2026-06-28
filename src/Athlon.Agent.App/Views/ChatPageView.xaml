@@ -5,7 +5,8 @@
              xmlns:behaviors="clr-namespace:Athlon.Agent.App.Behaviors"
              xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
              xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
-             xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels">
+             xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
+             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization">
     <Grid Background="{DynamicResource Brush.ChatBackground}" ClipToBounds="True">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition x:Name="EditorPaneColumn" Width="0" MinWidth="0" MaxWidth="1200" />
@@ -93,7 +94,7 @@
                             </Button>
                             <Button Command="{Binding NavigateCommand}"
                                     CommandParameter="Settings"
-                                    ToolTip="设置"
+                                    ToolTip="{loc:Localize Key=Chat_SettingsTooltip}"
                                     Style="{StaticResource HeaderIconButtonStyle}"
                                     Margin="4,0,0,0">
                                 <Button.Resources>
@@ -152,7 +153,7 @@
                                HorizontalAlignment="Center"
                                Opacity="0.7"
                                Margin="0,0,0,12" />
-                    <TextBlock Text="正在加载对话…"
+                    <TextBlock Text="{loc:Localize Key=Chat_LoadingConversation}"
                                FontSize="16"
                                Foreground="{DynamicResource Brush.SubtleText}"
                                HorizontalAlignment="Center" />
@@ -263,7 +264,7 @@
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
                                     <Button Command="{Binding SelectImagesCommand}"
                                             Style="{StaticResource ComposerToolButtonStyle}"
-                                            ToolTip="上传图片（支持 Ctrl+V 粘贴）">
+                                            ToolTip="{loc:Localize Key=Chat_UploadImageTooltip}">
                                         <TextBlock Text="+" FontSize="18" FontWeight="SemiBold" Margin="0,-2,0,0" />
                                     </Button>
                                     <Button x:Name="KnowledgePickerButton"
@@ -349,7 +350,7 @@
                                             MaxWidth="420"
                                             MaxHeight="360">
                                         <StackPanel>
-                                            <TextBlock Text="选择知识空间"
+                                            <TextBlock Text="{loc:Localize Key=Chat_SelectKnowledgeModule}"
                                                        FontWeight="SemiBold"
                                                        Margin="0,0,0,8" />
                                             <TextBox x:Name="KnowledgeSearchBox"
@@ -372,7 +373,7 @@
                                                                             CornerRadius="6">
                                                                         <Grid>
                                                                             <ScrollViewer x:Name="PART_ContentHost" Padding="{TemplateBinding Padding}" />
-                                                                            <TextBlock Text="搜索知识空间..."
+                                                                            <TextBlock Text="{loc:Localize Key=Chat_SearchKnowledgePlaceholder}"
                                                                                        Foreground="{DynamicResource Brush.SubtleText}"
                                                                                        FontSize="12"
                                                                                        IsHitTestVisible="False"
@@ -428,7 +429,7 @@
                                 </Popup>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                                     <Button Command="{Binding StopCommand}"
-                                            ToolTip="暂停当前回复"
+                                            ToolTip="{loc:Localize Key=Chat_PauseReplyTooltip}"
                                             Margin="0,0,8,0">
                                         <Button.Style>
                                             <Style TargetType="Button" BasedOn="{StaticResource DangerCircleButtonStyle}">
@@ -443,7 +444,7 @@
                                         <TextBlock Text="■" FontSize="12" />
                                     </Button>
                                     <Button Command="{Binding SendCommand}"
-                                            ToolTip="发送（生成中将加入排队）"
+                                            ToolTip="{loc:Localize Key=Chat_SendTooltip}"
                                             Style="{StaticResource ComposerSendButtonStyle}">
                                         <TextBlock Text="➤" FontSize="12" />
                                     </Button>
@@ -496,7 +497,7 @@
                         </StackPanel>
 
                         <TextBlock Grid.Row="4"
-                                   Text="按 Enter 发送消息，Shift+Enter 换行"
+                                   Text="{loc:Localize Key=Chat_ComposerHint}"
                                    Foreground="{DynamicResource Brush.DisabledText}"
                                    FontSize="11"
                                    Margin="4,8,0,0" />

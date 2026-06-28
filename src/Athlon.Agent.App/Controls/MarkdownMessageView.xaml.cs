@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.Windows;
@@ -366,7 +367,7 @@ public partial class MarkdownMessageView : UserControl
 
         _previewHtmlMenuItem = new MenuItem
         {
-            Header = "预览 HTML",
+            Header = Strings.Get("Markdown_PreviewHtml"),
             Style = Application.Current.FindResource("MarkdownContextMenuItemStyle") as Style,
             Visibility = Visibility.Collapsed,
         };
@@ -381,7 +382,7 @@ public partial class MarkdownMessageView : UserControl
 
         _previewMermaidMenuItem = new MenuItem
         {
-            Header = "查看 Mermaid 图表",
+            Header = Strings.Get("Markdown_PreviewMermaid"),
             Style = Application.Current.FindResource("MarkdownContextMenuItemStyle") as Style,
             Visibility = Visibility.Collapsed,
         };
@@ -391,7 +392,7 @@ public partial class MarkdownMessageView : UserControl
 
         var copyItem = new MenuItem
         {
-            Header = "复制内容",
+            Header = Strings.Get("Markdown_CopyContent"),
             Style = Application.Current.FindResource("MarkdownContextMenuItemStyle") as Style,
         };
         copyItem.Click += (_, _) =>
@@ -401,7 +402,7 @@ public partial class MarkdownMessageView : UserControl
                 Clipboard.SetText(Markdown);
                 if (Application.Current.MainWindow?.DataContext is ViewModels.MainShellViewModel vm)
                 {
-                    vm.ShowCopyNotice("内容已复制到剪贴板");
+                    vm.ShowCopyNotice(Strings.Get("Markdown_ContentCopied"));
                 }
             }
         };
@@ -409,7 +410,7 @@ public partial class MarkdownMessageView : UserControl
 
         _copyCodeBlockMenuItem = new MenuItem
         {
-            Header = "复制代码块",
+            Header = Strings.Get("Markdown_CopyCode"),
             Style = Application.Current.FindResource("MarkdownContextMenuItemStyle") as Style,
             Visibility = Visibility.Collapsed,
         };
@@ -424,7 +425,7 @@ public partial class MarkdownMessageView : UserControl
             Clipboard.SetText(cardState.Text);
             if (Application.Current.MainWindow?.DataContext is ViewModels.MainShellViewModel vm)
             {
-                vm.ShowCopyNotice("已复制");
+                vm.ShowCopyNotice(Strings.Get("FlowDoc_CopyNotice"));
             }
         };
         menu.Items.Add(_copyCodeBlockMenuItem);

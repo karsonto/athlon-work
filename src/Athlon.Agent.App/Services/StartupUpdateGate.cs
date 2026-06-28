@@ -1,4 +1,5 @@
 using System.Windows;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
 
 namespace Athlon.Agent.App.Services;
@@ -31,9 +32,10 @@ internal static class StartupUpdateGate
                 return;
             }
 
+            var version = updateInfo.TargetFullRelease.Version;
             var result = MessageBox.Show(
-                $"发现新版本 {updateInfo.TargetFullRelease.Version}，是否现在下载并安装？",
-                AppVersionInfo.ProductName,
+                Strings.Format("Update_AvailableMessage", version),
+                Strings.Get("Update_AvailableTitle"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Information);
             if (result != MessageBoxResult.Yes)

@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="About Athlon Agent"
+        xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+        Title="{loc:Localize Key=About_WindowTitle}"
         Icon="/Assets/app-icon.ico"
         Height="400"
         Width="440"
@@ -35,12 +36,12 @@
                     BorderThickness="0,0,0,1"
                     MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
                 <Grid Margin="12,0">
-                    <TextBlock Text="About Athlon Agent"
+                    <TextBlock Text="{loc:Localize Key=About_WindowTitle}"
                                FontSize="12"
                                Foreground="{DynamicResource Brush.SubtleText}"
                                VerticalAlignment="Center" />
                     <Button HorizontalAlignment="Right"
-                            ToolTip="关闭"
+                            ToolTip="{loc:Localize Key=Common_Close}"
                             Click="CloseButton_OnClick"
                             ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True"
@@ -58,7 +59,7 @@
                        HorizontalAlignment="Center"
                        RenderOptions.BitmapScalingMode="HighQuality" />
                 <TextBlock x:Name="ProductNameText"
-                           Text="Athlon Agent"
+                           Text="{loc:Localize Key=Common_ProductName}"
                            FontSize="22"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource Brush.Text}"
@@ -68,7 +69,7 @@
                            FontSize="13"
                            Foreground="{DynamicResource Brush.SubtleText}"
                            HorizontalAlignment="Center" />
-                <TextBlock Text="AI coding agent for your workspace."
+                <TextBlock Text="{loc:Localize Key=About_Description}"
                            FontSize="13"
                            Foreground="{DynamicResource Brush.SubtleText}"
                            TextAlignment="Center"
@@ -76,7 +77,7 @@
                            MaxWidth="320"
                            HorizontalAlignment="Center"
                            Margin="0,16,0,0" />
-                <TextBlock Text="如有问题，请联系 FTD AMS 团队。"
+                <TextBlock Text="{loc:Localize Key=About_Contact}"
                            FontSize="12"
                            Foreground="{DynamicResource Brush.SubtleText}"
                            TextAlignment="Center"
@@ -101,12 +102,12 @@
                     BorderThickness="0,1,0,0"
                     Padding="16,12">
                 <Grid>
-                    <Button Content="检查更新"
+                    <Button Content="{loc:Localize Key=About_CheckUpdate}"
                             HorizontalAlignment="Left"
                             MinWidth="96"
                             Click="CheckUpdateButton_OnClick"
                             Style="{StaticResource GhostButtonStyle}" />
-                    <Button Content="确定"
+                    <Button Content="{loc:Localize Key=Common_OK}"
                             HorizontalAlignment="Right"
                             MinWidth="88"
                             IsDefault="True"

@@ -9,9 +9,10 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
         xmlns:views="clr-namespace:Athlon.Agent.App.Views"
+        xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Athlon Agent"
+        Title="{loc:Localize Key=Common_ProductName}"
         Icon="/Assets/app-icon.ico"
         Height="768"
         Width="1366"
@@ -74,9 +75,9 @@
                     <Menu Style="{StaticResource TitleBarMenuStyle}"
                           shell:WindowChrome.IsHitTestVisibleInChrome="True"
                           VerticalAlignment="Stretch">
-                        <MenuItem Header="Help"
+                        <MenuItem Header="{loc:Localize Key=Common_Help}"
                                   Style="{StaticResource TitleBarTopMenuItemStyle}">
-                            <MenuItem Header="About"
+                            <MenuItem Header="{loc:Localize Key=Common_About}"
                                       Click="HelpAboutMenuItem_OnClick" />
                         </MenuItem>
                     </Menu>
@@ -87,7 +88,7 @@
                             Margin="0,0,2,0"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button Command="{Binding SsoLogoutCommand}"
-                            ToolTip="点击退出登录"
+                            ToolTip="{loc:Localize Key=Sso_LogoutTooltip}"
                             Margin="0,0,4,0"
                             Padding="12,0"
                             MinWidth="46"
@@ -113,7 +114,7 @@
                             </Style>
                         </Button.Style>
                     </Button>
-                    <Button ToolTip="最小化"
+                    <Button ToolTip="{loc:Localize Key=Common_Minimize}"
                             ContentTemplate="{StaticResource WindowCaptionMinimizeIconTemplate}"
                             Style="{StaticResource WindowCaptionButtonStyle}">
                         <i:Interaction.Behaviors>
@@ -121,14 +122,14 @@
                         </i:Interaction.Behaviors>
                     </Button>
                     <Button x:Name="MaximizeRestoreButton"
-                            ToolTip="最大化"
+                            ToolTip="{loc:Localize Key=Common_Maximize}"
                             ContentTemplate="{StaticResource WindowCaptionMaximizeIconTemplate}"
                             Style="{StaticResource WindowCaptionButtonStyle}">
                         <i:Interaction.Behaviors>
                             <behaviors:WindowCaptionButtonBehavior Action="MaximizeRestore" />
                         </i:Interaction.Behaviors>
                     </Button>
-                    <Button ToolTip="关闭"
+                    <Button ToolTip="{loc:Localize Key=Common_Close}"
                             ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
                             Style="{StaticResource WindowCloseCaptionButtonStyle}">
                         <i:Interaction.Behaviors>
@@ -275,7 +276,7 @@
             <StackPanel VerticalAlignment="Center"
                         HorizontalAlignment="Center"
                         MaxWidth="420">
-                <TextBlock Text="正在关闭…"
+                <TextBlock Text="{loc:Localize Key=Shell_ShuttingDown}"
                            FontSize="18"
                            FontWeight="SemiBold"
                            Foreground="{DynamicResource Brush.SubtleText}"

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.Infrastructure;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -10,11 +11,18 @@ namespace Athlon.Agent.App.ViewModels;
 public sealed partial class FileEditorViewModel : ObservableObject
 {
     private readonly WorkspaceFileEditorService _editorService;
+    private readonly ILocalizationService _loc;
+    private readonly IUserNotifier _notifier;
     private EditorDocumentViewModel? _activeDocument;
 
-    public FileEditorViewModel(WorkspaceFileEditorService editorService)
+    public FileEditorViewModel(
+        WorkspaceFileEditorService editorService,
+        ILocalizationService localization,
+        IUserNotifier notifier)
     {
         _editorService = editorService;
+        _loc = localization;
+        _notifier = notifier;
         Tabs = new ObservableCollection<EditorDocumentViewModel>();
         Tabs.CollectionChanged += (_, _) =>
         {
@@ -52,11 +60,15 @@ public sealed partial class FileEditorViewModel : ObservableObject
         var result = await _editorService.TryOpenAsync(fullPath).ConfigureAwait(true);
         if (!result.Succeeded || result.Content is null || result.FullPath is null)
         {
-            MessageBox.Show(
-                result.ErrorMessage ?? "无法打开文件。",
-                "无法打开",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            if (result.ErrorMessage is null)
+            {
+                _notifier.Info("Editor_CannotOpenTitle", "Editor_CannotOpenMessage");
+            }
+            else
+            {
+                _notifier.WarningText("Editor_CannotOpenTitle", result.ErrorMessage);
+            }
+
             return false;
         }
 
@@ -101,11 +113,7 @@ public sealed partial class FileEditorViewModel : ObservableObject
 
         if (document.IsDirty)
         {
-            var answer = MessageBox.Show(
-                $"「{document.DisplayName}」有未保存的更改，是否保存？",
-                "未保存的更改",
-                MessageBoxButton.YesNoCancel,
-                MessageBoxImage.Question);
+            var answer = _notifier.AskYesNoCancel("Editor_UnsavedTitle", "Editor_UnsavedMessage", document.DisplayName);
             if (answer == MessageBoxResult.Cancel)
             {
                 return;
@@ -140,11 +148,15 @@ public sealed partial class FileEditorViewModel : ObservableObject
         var result = await _editorService.SaveAsync(document.FilePath, document.Content).ConfigureAwait(true);
         if (!result.Succeeded)
         {
-            MessageBox.Show(
-                result.ErrorMessage ?? "保存失败。",
-                "保存失败",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            if (result.ErrorMessage is null)
+            {
+                _notifier.Warning("Editor_SaveFailedTitle", "Editor_SaveFailedMessage");
+            }
+            else
+            {
+                _notifier.WarningText("Editor_SaveFailedTitle", result.ErrorMessage);
+            }
+
             return false;
         }
 
@@ -159,11 +171,7 @@ public sealed partial class FileEditorViewModel : ObservableObject
             var document = Tabs[0];
             if (document.IsDirty)
             {
-                var answer = MessageBox.Show(
-                    $"「{document.DisplayName}」有未保存的更改，是否保存？",
-                    "未保存的更改",
-                    MessageBoxButton.YesNoCancel,
-                    MessageBoxImage.Question);
+                var answer = _notifier.AskYesNoCancel("Editor_UnsavedTitle", "Editor_UnsavedMessage", document.DisplayName);
                 if (answer == MessageBoxResult.Cancel)
                 {
                     return false;

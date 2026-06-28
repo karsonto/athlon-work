@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core.Streaming;
@@ -10,9 +11,6 @@ namespace Athlon.Agent.App.Services;
 /// <summary>构建 WebChatView 外壳 HTML 与 AG-UI 风格的事件驱动时间线脚本。</summary>
 public sealed class ChatHtmlBuilder
 {
-    private const string WelcomeDescription =
-        "Athlon Agent 可以帮您分析代码、生成原型、优化设计，或执行任何开发任务。";
-
     public string BuildShellHtml(string? ssoDisplayName = null)
     {
         var assets = ChatMarkdownAssets.VirtualBaseUrl;
@@ -27,6 +25,7 @@ public sealed class ChatHtmlBuilder
             "<div id=\"messages\"></div></div>" +
             $"<script src=\"{assets}marked.min.js\"></script>" +
             $"<script src=\"{assets}highlight.min.js\"></script>" +
+            "<script>" + BuildI18nBootstrapScript() + "</script>" +
             "<script>" + GetTimelineScript() + "</script>" +
             "</body></html>";
     }
@@ -83,16 +82,40 @@ public sealed class ChatHtmlBuilder
         return shell[..^footer.Length] + replayScript;
     }
 
+    public string BuildI18nUpdateScript()
+    {
+        var i18nJson = JsonSerializer.Serialize(BuildChatI18n());
+        return "window.__chatI18n=" + i18nJson + ";if(typeof applyChatI18n==='function')applyChatI18n();";
+    }
+
+    private static string BuildI18nBootstrapScript() =>
+        "window.__chatI18n=" + JsonSerializer.Serialize(BuildChatI18n()) + ";";
+
+    private static IReadOnlyDictionary<string, string> BuildChatI18n() =>
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["copy"] = Strings.Get("Chat_Copy"),
+            ["copied"] = Strings.Get("Chat_Copied"),
+            ["code"] = Strings.Get("Chat_Code"),
+            ["thinking"] = Strings.Get("Chat_Thinking"),
+            ["thought"] = Strings.Get("Chat_Thought"),
+            ["seconds"] = Strings.Get("Chat_Seconds"),
+            ["welcomeTitle"] = Strings.Get("Chat_WelcomeTitle"),
+            ["welcomeTitleWithName"] = Strings.Get("Chat_WelcomeTitleWithName"),
+            ["welcomeDescription"] = Strings.Get("Chat_WelcomeDescription"),
+        };
+
     private static string BuildEmptyStateHtml(string? ssoDisplayName)
     {
         var title = string.IsNullOrWhiteSpace(ssoDisplayName)
-            ? "开始新的对话"
-            : $"你好，{ssoDisplayName.Trim()}";
+            ? Strings.Get("Chat_WelcomeTitle")
+            : Strings.Format("Chat_WelcomeTitleWithName", ssoDisplayName.Trim());
+        var description = Strings.Get("Chat_WelcomeDescription");
         return
             "<div id=\"empty-state\" class=\"empty-state\">" +
             "<div class=\"empty-state-icon\">💬</div>" +
             $"<h2 class=\"empty-state-title\">{WebUtility.HtmlEncode(title)}</h2>" +
-            $"<p class=\"empty-state-description\">{WebUtility.HtmlEncode(WelcomeDescription)}</p>" +
+            $"<p class=\"empty-state-description\">{WebUtility.HtmlEncode(description)}</p>" +
             "</div>";
     }
 
@@ -560,6 +583,34 @@ public sealed class ChatHtmlBuilder
           reasoningFinalizedMs: {}
         };
 
+        function t(key) {
+          return (window.__chatI18n && window.__chatI18n[key]) || key;
+        }
+
+        function applyChatI18n() {
+          const empty = document.getElementById('empty-state');
+          if (empty) {
+            const title = empty.querySelector('.empty-state-title');
+            const desc = empty.querySelector('.empty-state-description');
+            if (title && !title.dataset.userTitle) title.textContent = t('welcomeTitle');
+            if (desc) desc.textContent = t('welcomeDescription');
+          }
+          document.querySelectorAll('.code-btn').forEach(function (btn) {
+            if (!btn.classList.contains('copied')) btn.textContent = t('copy');
+          });
+          document.querySelectorAll('.reasoning-label').forEach(function (label) {
+            const row = label.closest('.reasoning-row');
+            const messageId = row && row.dataset.messageId;
+            if (messageId && state.reasoningFinalizedMs[messageId] !== undefined) {
+              finalizeReasoningLabel(messageId);
+            } else if (messageId && state.reasoningStartAt[messageId]) {
+              updateReasoningThinkingLabel(messageId);
+            } else if (!label.textContent || label.textContent.indexOf('思考') >= 0 || label.textContent.indexOf('Think') >= 0) {
+              label.textContent = t('thinking');
+            }
+          });
+        }
+
         function cssEscape(value) {
           if (window.CSS && typeof CSS.escape === 'function') return CSS.escape(String(value));
           return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -698,7 +749,7 @@ public sealed class ChatHtmlBuilder
             const raw = code.textContent || '';
             const className = code.className || '';
             const match = className.match(/language-([\w#+-]+)/i);
-            const language = match ? match[1] : '代码';
+            const language = match ? match[1] : t('code');
 
             const wrapper = document.createElement('div');
             wrapper.className = 'code-block';
@@ -715,13 +766,13 @@ public sealed class ChatHtmlBuilder
             const copyBtn = document.createElement('button');
             copyBtn.type = 'button';
             copyBtn.className = 'code-btn';
-            copyBtn.textContent = '复制';
+            copyBtn.textContent = t('copy');
             copyBtn.addEventListener('click', function () {
               post({ type: 'copy', text: raw, blockId: String(index) });
-              copyBtn.textContent = '已复制';
+              copyBtn.textContent = t('copied');
               copyBtn.classList.add('copied');
               setTimeout(function () {
-                copyBtn.textContent = '复制';
+                copyBtn.textContent = t('copy');
                 copyBtn.classList.remove('copied');
               }, 1600);
             });
@@ -749,7 +800,7 @@ public sealed class ChatHtmlBuilder
         }
 
         function formatReasoningSeconds(ms) {
-          return Math.max(1, Math.round(ms / 1000)) + '秒';
+          return t('seconds').replace('{0}', String(Math.max(1, Math.round(ms / 1000))));
         }
 
         function findReasoningRow(messageId) {
@@ -778,12 +829,12 @@ public sealed class ChatHtmlBuilder
 
         function updateReasoningThinkingLabel(messageId) {
           if (!state.trackReasoningDuration) {
-            setReasoningLabel(messageId, '正在思考');
+            setReasoningLabel(messageId, t('thinking'));
             return;
           }
           setReasoningLabel(
             messageId,
-            '正在思考 (' + formatReasoningSeconds(getReasoningElapsedMs(messageId)) + ')');
+            t('thinking') + ' (' + formatReasoningSeconds(getReasoningElapsedMs(messageId)) + ')');
         }
 
         function finalizeReasoningLabel(messageId) {
@@ -791,7 +842,7 @@ public sealed class ChatHtmlBuilder
           const row = findReasoningRow(messageId);
           if (!row) return;
           if (!state.trackReasoningDuration) {
-            setReasoningLabelOnRow(row, '已思考');
+            setReasoningLabelOnRow(row, t('thought'));
             delete state.reasoningStartAt[messageId];
             delete state.reasoningFinalizedMs[messageId];
             return;
@@ -801,7 +852,7 @@ public sealed class ChatHtmlBuilder
           }
           const ms = getReasoningElapsedMs(messageId);
           state.reasoningFinalizedMs[messageId] = ms;
-          setReasoningLabelOnRow(row, '已思考 (' + formatReasoningSeconds(ms) + ')');
+          setReasoningLabelOnRow(row, t('thought') + ' (' + formatReasoningSeconds(ms) + ')');
           delete state.reasoningStartAt[messageId];
         }
 
@@ -832,7 +883,7 @@ public sealed class ChatHtmlBuilder
           row.dataset.messageId = messageId || '';
           row.innerHTML =
             '<details class="reasoning-block" open>' +
-              '<summary><span class="reasoning-chevron">›</span><span class="reasoning-label">正在思考</span></summary>' +
+              '<summary><span class="reasoning-chevron">›</span><span class="reasoning-label">' + t('thinking') + '</span></summary>' +
               '<div class="reasoning-content message-content"></div>' +
             '</details>';
           return row;

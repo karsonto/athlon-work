@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
              mc:Ignorable="d"
              d:DesignHeight="120"
              d:DesignWidth="600">
@@ -13,7 +14,7 @@
                  TextChanged="ComposerTextBox_OnTextChanged"
                  PreviewKeyDown="ComposerTextBox_OnPreviewKeyDown" />
         <TextBlock x:Name="PlaceholderText"
-                   Text="输入消息... (Shift+Enter 换行，Enter 发送)"
+                   Text="{loc:Localize Key=Chat_ComposerPlaceholder}"
                    Foreground="{DynamicResource Brush.SubtleText}"
                    Margin="12,12,0,0"
                    IsHitTestVisible="False"

@@ -2,6 +2,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core.Streaming;
 
@@ -172,7 +173,7 @@ internal static class ChatEventSerializer
     {
         var toolCallId = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;
         var toolName = message.IsCompaction
-            ? (string.IsNullOrWhiteSpace(message.CompactionCardTitle) ? "上下文压缩" : message.CompactionCardTitle)
+            ? (string.IsNullOrWhiteSpace(message.CompactionCardTitle) ? Strings.Get("Chat_CompactionDefault") : message.CompactionCardTitle)
             : string.IsNullOrWhiteSpace(message.ToolName) ? "tool" : message.ToolName;
 
         yield return SerializeAgui("TOOL_CALL_START", new { toolCallId, toolCallName = toolName });

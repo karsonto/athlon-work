@@ -3,7 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:app="clr-namespace:Athlon.Agent.App"
              xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
-             xmlns:controls="clr-namespace:Athlon.Agent.App.Controls">
+             xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
+             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -23,14 +24,14 @@
             <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}" Padding="12,0">
                 <Button Command="{Binding NewSessionCommand}"
                         VerticalAlignment="Center"
-                        ToolTip="新建会话"
-                        Content="New Agent"
+                        ToolTip="{loc:Localize Key=Nav_NewSessionTooltip}"
+                        Content="{loc:Localize Key=Nav_NewAgent}"
                         Style="{StaticResource NewSessionButtonStyle}" />
             </Border>
 
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="12,8">
                 <StackPanel>
-                    <TextBlock Text="暂无 Agent 记录"
+                    <TextBlock Text="{loc:Localize Key=Nav_NoAgentRecords}"
                                FontSize="12"
                                Foreground="{DynamicResource Brush.SubtleText}"
                                Margin="12,8">
@@ -144,7 +145,7 @@
                                                                     VerticalAlignment="Center">
                                                             <Button Command="{Binding StopSessionCommand}"
                                                                     Content="■"
-                                                                    ToolTip="停止生成"
+                                                                    ToolTip="{loc:Localize Key=Nav_StopGeneration}"
                                                                     Foreground="{DynamicResource Brush.Warning}">
                                                                 <Button.Style>
                                                                     <Style TargetType="Button" BasedOn="{StaticResource SessionActionButtonStyle}">
@@ -160,7 +161,7 @@
                                                             <Button Command="{Binding DataContext.DeleteSessionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                     CommandParameter="{Binding}"
                                                                     Content="×"
-                                                                    ToolTip="删除"
+                                                                    ToolTip="{loc:Localize Key=Common_Delete}"
                                                                     Style="{StaticResource SessionActionButtonStyle}" />
                                                         </StackPanel>
                                                     </Grid>
@@ -193,7 +194,7 @@
                         </Style>
                     </Border.Style>
                     <StackPanel>
-                        <TextBlock Text="排队中"
+                        <TextBlock Text="{loc:Localize Key=Nav_Queued}"
                                    FontSize="10"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Brush.SubtleText}"
@@ -270,7 +271,7 @@
                                                         Content="×"
                                                         Command="{Binding DataContext.RemoveQueuedTurnCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                         CommandParameter="{Binding}"
-                                                        ToolTip="从队列移除"
+                                                        ToolTip="{loc:Localize Key=Nav_RemoveFromQueue}"
                                                         Style="{StaticResource SessionDeleteButtonStyle}" />
                                             </Grid>
                                         </Border>
@@ -298,7 +299,7 @@
                         </Style>
                     </Border.Style>
                     <StackPanel>
-                        <TextBlock Text="任务计划"
+                        <TextBlock Text="{loc:Localize Key=Nav_TaskPlan}"
                                    FontSize="10"
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Brush.SubtleText}"
@@ -390,13 +391,13 @@
                 <Button Command="{Binding NavigateCommand}"
                         CommandParameter="Knowledge"
                         Style="{StaticResource NavBottomButtonStyle}"
-                        ToolTip="知识库"
+                        ToolTip="{loc:Localize Key=Nav_Knowledge}"
                         Margin="0,0,0,8">
                     <StackPanel Orientation="Horizontal">
                         <ContentControl Style="{StaticResource KnowledgeNavIconStyle}"
                                         Margin="0,0,10,0"
                                         VerticalAlignment="Center" />
-                        <TextBlock Text="知识库" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                        <TextBlock Text="{loc:Localize Key=Nav_Knowledge}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
 
@@ -404,12 +405,12 @@
                 <Button Command="{Binding NavigateCommand}"
                         CommandParameter="Schedule"
                         Style="{StaticResource NavBottomButtonStyle}"
-                        ToolTip="定时任务">
+                        ToolTip="{loc:Localize Key=Nav_Schedule}">
                     <StackPanel Orientation="Horizontal">
                         <ContentControl Style="{StaticResource ScheduleNavIconStyle}"
                                         Margin="0,0,10,0"
                                         VerticalAlignment="Center" />
-                        <TextBlock Text="定时任务" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                        <TextBlock Text="{loc:Localize Key=Nav_Schedule}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
             </StackPanel>

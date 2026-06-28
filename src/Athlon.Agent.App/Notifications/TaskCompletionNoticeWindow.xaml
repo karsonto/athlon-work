@@ -1,7 +1,8 @@
 <Window x:Class="Athlon.Agent.App.Notifications.TaskCompletionNoticeWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="任务计划已完成"
+        xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+        Title="{loc:Localize Key=Notification_TaskPlanCompleteTitle}"
         Icon="/Assets/app-icon.ico"
         Width="300"
         SizeToContent="Height"
@@ -50,7 +51,7 @@
 
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                 <TextBlock x:Name="TitleText"
-                           Text="任务计划已完成"
+                           Text="{loc:Localize Key=Notification_TaskPlanCompleteTitle}"
                            FontSize="14"
                            FontWeight="SemiBold"
                            Foreground="#0F172A" />

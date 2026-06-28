@@ -1,7 +1,8 @@
 <Window x:Class="Athlon.Agent.App.Windows.ScheduleTaskEditWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="编辑定时任务"
+        xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+        Title="{loc:Localize Key=Schedule_EditTitle}"
         Width="520"
         Height="560"
         WindowStartupLocation="CenterOwner"
@@ -18,24 +19,24 @@
         </Grid.RowDefinitions>
 
         <TextBlock x:Name="HeaderText"
-                   Text="编辑定时任务"
+                   Text="{loc:Localize Key=Schedule_EditTitle}"
                    FontSize="20"
                    FontWeight="SemiBold"
                    Margin="0,0,0,20" />
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock Text="任务名称" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBlock Text="{loc:Localize Key=Schedule_TaskName}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
                 <TextBox x:Name="TitleBox" Padding="10,8" Margin="0,0,0,16" />
 
-                <TextBlock Text="工作目录" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                <TextBlock Text="必填。Agent 将在此目录下执行任务。"
+                <TextBlock Text="{loc:Localize Key=Schedule_Workspace}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBlock Text="{loc:Localize Key=Schedule_WorkspaceRequired}"
                            Foreground="{DynamicResource Brush.SubtleText}"
                            FontSize="11"
                            Margin="0,0,0,6" />
                 <TextBox x:Name="WorkspaceBox" Padding="10,8" Margin="0,0,0,16" />
 
-                <TextBlock Text="Prompt / 指令" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBlock Text="{loc:Localize Key=Schedule_Prompt}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
                 <TextBox x:Name="PromptBox"
                          Padding="10,8"
                          Margin="0,0,0,16"
@@ -43,13 +44,13 @@
                          TextWrapping="Wrap"
                          AcceptsReturn="True" />
 
-                <TextBlock Text="调度类型" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBlock Text="{loc:Localize Key=Schedule_Kind}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
                 <ComboBox x:Name="KindCombo"
                           Margin="0,0,0,16">
-                    <ComboBoxItem Tag="daily" Content="每天固定时间" />
-                    <ComboBoxItem Tag="interval" Content="间隔执行" />
-                    <ComboBoxItem Tag="at" Content="一次性" />
-                    <ComboBoxItem Tag="manual" Content="手动触发" />
+                    <ComboBoxItem Tag="daily" Content="{loc:Localize Key=Schedule_KindDaily}" />
+                    <ComboBoxItem Tag="interval" Content="{loc:Localize Key=Schedule_KindInterval}" />
+                    <ComboBoxItem Tag="at" Content="{loc:Localize Key=Schedule_KindAt}" />
+                    <ComboBoxItem Tag="manual" Content="{loc:Localize Key=Schedule_KindManual}" />
                 </ComboBox>
 
                 <Border x:Name="DailyPanel"
@@ -60,7 +61,7 @@
                         Padding="16"
                         Margin="0,0,0,16">
                     <StackPanel>
-                        <TextBlock Text="执行时间" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBlock Text="{loc:Localize Key=Schedule_TimeOfDay}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
                         <TextBox x:Name="TimeOfDayBox" Text="09:00" Padding="10,8" Width="120" HorizontalAlignment="Left" />
                     </StackPanel>
                 </Border>
@@ -74,7 +75,7 @@
                         Margin="0,0,0,16"
                         Visibility="Collapsed">
                     <StackPanel>
-                        <TextBlock Text="间隔时间（分钟）" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBlock Text="{loc:Localize Key=Schedule_IntervalMinutes}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
                         <TextBox x:Name="IntervalBox" Text="60" Padding="10,8" Width="120" HorizontalAlignment="Left" />
                     </StackPanel>
                 </Border>
@@ -88,7 +89,7 @@
                         Margin="0,0,0,16"
                         Visibility="Collapsed">
                     <StackPanel>
-                        <TextBlock Text="执行时间点" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBlock Text="{loc:Localize Key=Schedule_AtTime}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
                         <TextBox x:Name="AtTimeBox" Padding="10,8" Width="220" HorizontalAlignment="Left" />
                     </StackPanel>
                 </Border>
@@ -99,12 +100,12 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,16,0,0">
-            <Button Content="取消"
+            <Button Content="{loc:Localize Key=Common_Cancel}"
                     IsCancel="True"
                     Style="{StaticResource GhostButtonStyle}"
                     Margin="0,0,12,0" />
             <Button x:Name="SaveButton"
-                    Content="保存"
+                    Content="{loc:Localize Key=Common_Save}"
                     Click="SaveButton_Click"
                     Style="{StaticResource GhostButtonStyle}"
                     Foreground="{DynamicResource Brush.Accent}" />

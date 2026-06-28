@@ -1,3 +1,4 @@
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
 using Athlon.Agent.App.ViewModels;
 
@@ -20,7 +21,7 @@ internal static class ToolMessageDisplayParser
         argumentsText = string.Empty;
         status = ToolCallDisplayStatus.Succeeded;
         var lines = content.Replace("\r\n", "\n").Split('\n');
-        header = "工具调用";
+        header = Strings.Get("Tool_DefaultHeader");
         summary = string.Empty;
 
         foreach (var line in lines)
@@ -37,7 +38,7 @@ internal static class ToolMessageDisplayParser
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(line) && header == "工具调用" && line.StartsWith("Tool `", StringComparison.Ordinal))
+            if (!string.IsNullOrWhiteSpace(line) && header == Strings.Get("Tool_DefaultHeader") && line.StartsWith("Tool `", StringComparison.Ordinal))
             {
                 header = line.Trim();
                 toolName = TryParseToolName(header);
@@ -54,7 +55,7 @@ internal static class ToolMessageDisplayParser
         detail = content.Trim();
         if (detail.Contains("[Tool result evicted", StringComparison.OrdinalIgnoreCase))
         {
-            header = $"① 工具结果归档 · {header}";
+            header = Strings.Format("Tool_EvictedHeader", header);
         }
     }
 
@@ -91,7 +92,7 @@ internal static class ToolMessageDisplayParser
         FileWriteToolArgumentsDisplay.IsFileWrite(toolName) && arguments.ContainsKey("content")
             ? FileWriteToolArgumentsDisplay.FormatArgumentsForPersistedDisplay(arguments)
             : arguments.Count == 0
-                ? "(无参数)"
+                ? Strings.Get("Tool_NoArgs")
                 : string.Join(
                     Environment.NewLine,
                     arguments.Select(argument =>
@@ -106,7 +107,7 @@ internal static class ToolMessageDisplayParser
     {
         if (string.IsNullOrWhiteSpace(line) || string.Equals(line, "(none)", StringComparison.OrdinalIgnoreCase))
         {
-            return "(无参数)";
+            return Strings.Get("Tool_NoArgs");
         }
 
         if (!line.Contains(';'))

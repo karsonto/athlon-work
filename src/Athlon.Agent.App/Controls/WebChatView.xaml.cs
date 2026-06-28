@@ -4,6 +4,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Athlon.Agent.App.Localization;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
@@ -30,6 +32,7 @@ public partial class WebChatView : UserControl
     private bool _renderInProgress;
     private bool _renderQueuedWhileInProgress;
     private int _themeApplyGeneration;
+    private int _i18nApplyGeneration;
 
     public WebChatView()
     {
@@ -46,6 +49,7 @@ public partial class WebChatView : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         AppThemeManager.ThemeChanged -= OnAppThemeChanged;
+        AppCultureManager.CultureChanged -= OnAppCultureChanged;
         if (ChatWebView.CoreWebView2 is not null)
         {
             ChatWebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
@@ -56,6 +60,40 @@ public partial class WebChatView : UserControl
     {
         ApplyThemeBackground();
         _ = ApplyThemeStylesAsync();
+    }
+
+    private void OnAppCultureChanged(object? sender, EventArgs e)
+    {
+        _needsRender = true;
+        _ = ApplyI18nAsync();
+        _ = RunRenderPipelineSafeAsync(Interlocked.Increment(ref _renderGeneration));
+    }
+
+    public async Task ApplyI18nAsync()
+    {
+        var generation = Interlocked.Increment(ref _i18nApplyGeneration);
+        try
+        {
+            await EnsureReadyAsync().ConfigureAwait(true);
+            if (!await WaitForDocumentReadyAsync().ConfigureAwait(true))
+            {
+                return;
+            }
+
+            if (generation != _i18nApplyGeneration)
+            {
+                return;
+            }
+
+            var script =
+                "(function(){ if (typeof applyChatI18n !== 'function') return 'missing'; " +
+                "try { " + _htmlBuilder.BuildI18nUpdateScript() + " return 'ok'; } catch (e) { return 'error'; } })();";
+            await ChatWebView.CoreWebView2.ExecuteScriptAsync(script).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"WebChatView ApplyI18n failed: {ex.Message}");
+        }
     }
 
     public async Task ApplyThemeStylesAsync()
@@ -100,6 +138,8 @@ public partial class WebChatView : UserControl
     {
         AppThemeManager.ThemeChanged -= OnAppThemeChanged;
         AppThemeManager.ThemeChanged += OnAppThemeChanged;
+        AppCultureManager.CultureChanged -= OnAppCultureChanged;
+        AppCultureManager.CultureChanged += OnAppCultureChanged;
         ApplyThemeBackground();
         _ = ApplyThemeStylesAsync();
         _ = RunRenderPipelineSafeAsync(_renderGeneration);
@@ -185,7 +225,7 @@ public partial class WebChatView : UserControl
         catch (Exception ex)
         {
             App.StartupTrace($"WebChatView render pipeline failed: {ex}");
-            ReportInitializationFailure($"聊天渲染失败：{ex.Message}");
+            ReportInitializationFailure(Strings.Format("Chat_RenderFailed", ex.Message));
         }
     }
 
@@ -294,7 +334,7 @@ public partial class WebChatView : UserControl
         {
             _initTask = null;
             App.StartupTrace($"WebChatView initialization failed: {ex}");
-            ReportInitializationFailure($"聊天渲染初始化失败：{ex.Message}");
+            ReportInitializationFailure(Strings.Format("Chat_RenderInitFailed", ex.Message));
             throw;
         }
     }

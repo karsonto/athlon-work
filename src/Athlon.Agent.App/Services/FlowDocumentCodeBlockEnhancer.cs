@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
+using Athlon.Agent.App.Resources;
 
 namespace Athlon.Agent.App.Services;
 
@@ -187,11 +188,11 @@ public static class FlowDocumentCodeBlockEnhancer
     {
         if (fencedBlocks is null || codeBlockIndex >= fencedBlocks.Count)
         {
-            return "代码";
+            return Strings.Get("Chat_Code");
         }
 
         var language = fencedBlocks[codeBlockIndex].Language;
-        return string.IsNullOrWhiteSpace(language) ? "代码" : language;
+        return string.IsNullOrWhiteSpace(language) ? Strings.Get("Chat_Code") : language;
     }
 
     private static string ResolveCodeText(Block block, FencedBlockInfo? fencedBlock)
@@ -446,7 +447,7 @@ public static class FlowDocumentCodeBlockEnhancer
 
         var copyButton = new Button
         {
-            Content = "复制",
+            Content = Strings.Get("Chat_Copy"),
             Style = copyButtonStyle,
         };
         copyButton.Click += (_, _) =>
@@ -456,7 +457,7 @@ public static class FlowDocumentCodeBlockEnhancer
                 Clipboard.SetText(codeText);
                 if (Application.Current?.MainWindow?.DataContext is ViewModels.MainShellViewModel vm)
                 {
-                    vm.ShowCopyNotice("已复制");
+                    vm.ShowCopyNotice(Strings.Get("FlowDoc_CopyNotice"));
                 }
             }
         };

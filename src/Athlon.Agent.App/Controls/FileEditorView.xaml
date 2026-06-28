@@ -4,6 +4,7 @@
              xmlns:app="clr-namespace:Athlon.Agent.App"
              xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
              xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
+             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
              x:Name="EditorRoot"
              Background="{DynamicResource Brush.Panel}"
              HorizontalAlignment="Stretch"
@@ -49,7 +50,7 @@
                                         Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         CommandParameter="{Binding}"
                                         Style="{StaticResource EditorTabCloseButtonStyle}"
-                                        ToolTip="关闭" />
+                                        ToolTip="{loc:Localize Key=Common_Close}" />
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>

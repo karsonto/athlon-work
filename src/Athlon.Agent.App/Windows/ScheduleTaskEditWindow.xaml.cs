@@ -1,6 +1,7 @@
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 
@@ -9,12 +10,20 @@ namespace Athlon.Agent.App.Windows;
 public partial class ScheduleTaskEditWindow : Window
 {
     private readonly ScheduledTask _task;
+    private readonly IUserNotifier _notifier;
+    private readonly ILocalizationService _loc;
 
-    public ScheduleTaskEditWindow(ScheduledTask task, bool isNew = false)
+    public ScheduleTaskEditWindow(
+        ScheduledTask task,
+        IUserNotifier notifier,
+        ILocalizationService localization,
+        bool isNew = false)
     {
         InitializeComponent();
         _task = task;
-        var dialogTitle = isNew ? "新建定时任务" : "编辑定时任务";
+        _notifier = notifier;
+        _loc = localization;
+        var dialogTitle = isNew ? _loc["Schedule_NewTitle"] : _loc["Schedule_EditTitle"];
         Title = dialogTitle;
         HeaderText.Text = dialogTitle;
 
@@ -56,14 +65,14 @@ public partial class ScheduleTaskEditWindow : Window
     {
         if (string.IsNullOrWhiteSpace(TitleBox.Text))
         {
-            MessageBox.Show("请输入任务名称。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _notifier.Warning("Common_Prompt", "Schedule_TitleRequired");
             TitleBox.Focus();
             return;
         }
 
         if (string.IsNullOrWhiteSpace(WorkspaceBox.Text))
         {
-            MessageBox.Show("请输入工作目录。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _notifier.Warning("Common_Prompt", "Schedule_WorkspaceRequiredPrompt");
             WorkspaceBox.Focus();
             return;
         }
@@ -71,12 +80,7 @@ public partial class ScheduleTaskEditWindow : Window
         var workspace = WorkspaceBox.Text.Trim();
         if (!Directory.Exists(workspace))
         {
-            var confirm = MessageBox.Show(
-                $"目录不存在：{workspace}\n仍要保存吗？",
-                "提示",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-            if (confirm != MessageBoxResult.Yes)
+            if (!_notifier.ConfirmYesNo("Common_Prompt", "Schedule_WorkspaceMissing", workspace))
             {
                 WorkspaceBox.Focus();
                 return;
@@ -87,21 +91,21 @@ public partial class ScheduleTaskEditWindow : Window
 
         if (kind == "daily" && !TimeOnly.TryParse(TimeOfDayBox.Text, out _))
         {
-            MessageBox.Show("请输入有效的时间格式，例如 09:00。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _notifier.Warning("Common_Prompt", "Schedule_InvalidTime");
             TimeOfDayBox.Focus();
             return;
         }
 
         if (kind == "interval" && (!int.TryParse(IntervalBox.Text, out var minutes) || minutes <= 0))
         {
-            MessageBox.Show("请输入有效的间隔分钟数（正整数）。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _notifier.Warning("Common_Prompt", "Schedule_InvalidInterval");
             IntervalBox.Focus();
             return;
         }
 
         if (kind == "at" && !DateTime.TryParse(AtTimeBox.Text, out _))
         {
-            MessageBox.Show("请输入有效的日期时间格式，例如 2025-12-31 18:00。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _notifier.Warning("Common_Prompt", "Schedule_InvalidDateTime");
             AtTimeBox.Focus();
             return;
         }

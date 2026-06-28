@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Threading;
+using Athlon.Agent.App.Localization;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core.Harness;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -12,17 +14,21 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
     private readonly ISessionHarnessState _harnessState;
     private readonly ISessionTaskListStore _taskListStore;
     private readonly ITaskPlanCompletionNotifier _taskPlanCompletionNotifier;
+    private readonly ILocalizationService _loc;
     private string _sessionId = "";
     private bool _wasAllTasksDone;
 
     public ComposerHarnessViewModel(
         ISessionHarnessState harnessState,
         ISessionTaskListStore taskListStore,
-        ITaskPlanCompletionNotifier taskPlanCompletionNotifier)
+        ITaskPlanCompletionNotifier taskPlanCompletionNotifier,
+        ILocalizationService localization)
     {
         _harnessState = harnessState;
         _taskListStore = taskListStore;
         _taskPlanCompletionNotifier = taskPlanCompletionNotifier;
+        _loc = localization;
+        AppCultureManager.CultureChanged += OnCultureChanged;
     }
 
     public ObservableCollection<SessionTaskItemViewModel> Tasks { get; } = new();
@@ -33,10 +39,10 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
     public bool ShowTaskPanel => IsHarnessActive && Tasks.Count > 0;
 
     public string HarnessButtonToolTip => IsHarnessActive
-        ? "Coding 已启用 · 长期记忆 + 任务列表"
-        : "启用 Coding（长期记忆与 todo_write）";
+        ? _loc["Harness_EnabledTooltip"]
+        : _loc["Harness_DisabledTooltip"];
 
-    public string HarnessPickerLabel => IsHarnessActive ? "Coding 开" : "Coding";
+    public string HarnessPickerLabel => IsHarnessActive ? _loc["Harness_PickerOn"] : _loc["Harness_PickerOff"];
 
     public int PendingTaskCount { get; private set; }
 
@@ -181,6 +187,16 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         OnPropertyChanged(nameof(HarnessPickerLabel));
         OnPropertyChanged(nameof(ShowTaskPanel));
     }
+
+    private void OnCultureChanged(object? sender, EventArgs e)
+    {
+        NotifyHarnessStateChanged();
+        NotifyTaskCollectionChanged();
+        foreach (var task in Tasks)
+        {
+            task.NotifyStatusFlagsChanged();
+        }
+    }
 }
 
 public sealed partial class SessionTaskItemViewModel : ObservableObject
@@ -218,10 +234,10 @@ public sealed partial class SessionTaskItemViewModel : ObservableObject
 
     public string StatusLabel => Status switch
     {
-        _ when IsInProgress => "进行中",
-        _ when IsCompleted => "已完成",
-        _ when IsCancelled => "已取消",
-        _ => "待办",
+        _ when IsInProgress => Strings.Get("Harness_TaskInProgress"),
+        _ when IsCompleted => Strings.Get("Harness_TaskCompleted"),
+        _ when IsCancelled => Strings.Get("Harness_TaskCancelled"),
+        _ => Strings.Get("Harness_TaskPending"),
     };
 
     public void UpdateFrom(AgentTaskItem item)
@@ -257,7 +273,7 @@ public sealed partial class SessionTaskItemViewModel : ObservableObject
         ShouldPlayCompletionAnimation = false;
     }
 
-    private void NotifyStatusFlagsChanged()
+    internal void NotifyStatusFlagsChanged()
     {
         OnPropertyChanged(nameof(IsPending));
         OnPropertyChanged(nameof(IsInProgress));

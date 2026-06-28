@@ -1,4 +1,5 @@
 using System.Windows;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
@@ -31,21 +32,21 @@ public sealed class ApplicationShutdownService(
 
         CloseSecondaryWindows();
 
-        progress?.Report("正在停止定时任务…");
+        progress?.Report(Strings.Get("Shutdown_StoppingScheduler"));
         scheduler.Stop();
 
-        progress?.Report("正在停止生成任务…");
+        progress?.Report(Strings.Get("Shutdown_StoppingTurns"));
         await turnHost
             .ShutdownAsync(turnWaitTimeout ?? DefaultTurnWaitTimeout, cancellationToken)
             .ConfigureAwait(false);
 
-        progress?.Report("正在刷新工具调用日志…");
+        progress?.Report(Strings.Get("Shutdown_FlushingToolLogs"));
         await storage.FlushPendingToolCallLogsAsync(cancellationToken).ConfigureAwait(false);
 
-        progress?.Report("正在结束命令行进程…");
+        progress?.Report(Strings.Get("Shutdown_KillingProcesses"));
         processRegistry.KillAll();
 
-        progress?.Report("正在保存设置…");
+        progress?.Report(Strings.Get("Shutdown_SavingSettings"));
         try
         {
             await storage.SaveSettingsAsync(appSettings, cancellationToken).ConfigureAwait(false);
@@ -55,10 +56,10 @@ public sealed class ApplicationShutdownService(
             // Best-effort persist on exit.
         }
 
-        progress?.Report("正在关闭 MCP 连接…");
+        progress?.Report(Strings.Get("Shutdown_ClosingMcp"));
         await DisposeMcpAsync().ConfigureAwait(false);
 
-        progress?.Report("正在释放日志…");
+        progress?.Report(Strings.Get("Shutdown_ReleasingLogs"));
         ReleaseLogging();
 
         ApplicationShutdownState.MarkCompleted();

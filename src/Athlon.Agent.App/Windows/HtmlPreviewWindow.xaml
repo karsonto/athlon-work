@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-        Title="HTML 预览"
+        xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+        Title="{loc:Localize Key=Preview_HtmlTitle}"
         Width="1200"
         Height="820"
         MinWidth="720"
@@ -27,15 +28,15 @@
               Margin="0,0,0,12"
               MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
             <StackPanel>
-                <TextBlock Text="HTML 预览"
+                <TextBlock Text="{loc:Localize Key=Preview_HtmlTitle}"
                            Style="{StaticResource PreviewWindowTitleStyle}" />
-                <TextBlock Text="已在沙箱环境中渲染，不会影响当前页面"
+                <TextBlock Text="{loc:Localize Key=Preview_HtmlSubtitle}"
                            Style="{StaticResource PreviewWindowSubtitleStyle}" />
             </StackPanel>
             <Button HorizontalAlignment="Right"
                     VerticalAlignment="Top"
                     Click="CloseButton_OnClick"
-                    ToolTip="关闭"
+                    ToolTip="{loc:Localize Key=Common_Close}"
                     ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
                     shell:WindowChrome.IsHitTestVisibleInChrome="True"
                     Style="{StaticResource WindowCloseCaptionButtonStyle}" />

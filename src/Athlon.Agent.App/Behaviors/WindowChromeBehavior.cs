@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Athlon.Agent.App.Resources;
 using Microsoft.Xaml.Behaviors;
 
 namespace Athlon.Agent.App.Behaviors;
@@ -114,6 +115,6 @@ public sealed class WindowChromeBehavior : Behavior<FrameworkElement>
         MaximizeRestoreButton.Content = null;
         MaximizeRestoreButton.ContentTemplate = (DataTemplate)MaximizeRestoreButton.FindResource(
             isMaximized ? "WindowCaptionRestoreIconTemplate" : "WindowCaptionMaximizeIconTemplate");
-        MaximizeRestoreButton.ToolTip = isMaximized ? "还原" : "最大化";
+        MaximizeRestoreButton.ToolTip = isMaximized ? Strings.Get("Common_Restore") : Strings.Get("Common_Maximize");
     }
 }

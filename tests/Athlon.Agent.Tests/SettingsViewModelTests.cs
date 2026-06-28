@@ -1,3 +1,4 @@
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -14,6 +15,7 @@ public sealed class SettingsViewModelTests
     [InlineData(false, false, "Model API Key 未变更")]
     public void BuildSaveStatusMessage_describes_key_updates(bool modelKeySaved, bool embeddingKeySaved, string expectedFragment)
     {
+        AppCultureManager.SetCulture("zh-CN");
         var message = SettingsViewModel.BuildSaveStatusMessage(modelKeySaved, embeddingKeySaved);
         Assert.Contains(expectedFragment, message, StringComparison.Ordinal);
     }
@@ -38,11 +40,13 @@ public sealed class SettingsViewModelTests
             paths,
             credentials,
             storage,
-            new ApiKeySecretMigrationService(credentials))
+            new ApiKeySecretMigrationService(credentials),
+            new LocalizationService())
         {
             ApiKey = "sk-or-v1-test-key"
         };
 
+        AppCultureManager.SetCulture("zh-CN");
         await viewModel.SaveSettingsCommand.ExecuteAsync(null);
 
         Assert.Equal("sk-or-v1-test-key", credentials.GetSaved(ModelSettings.ApiKeySecretName));
@@ -70,7 +74,8 @@ public sealed class SettingsViewModelTests
             paths,
             credentials,
             storage,
-            new ApiKeySecretMigrationService(credentials));
+            new ApiKeySecretMigrationService(credentials),
+            new LocalizationService());
         viewModel.SyncPendingSecrets = () => viewModel.ApiKey = "sk-or-v1-from-password-box";
 
         await viewModel.SaveSettingsCommand.ExecuteAsync(null);

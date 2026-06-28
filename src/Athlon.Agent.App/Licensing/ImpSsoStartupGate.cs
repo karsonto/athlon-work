@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Threading;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.Sso;
@@ -50,8 +51,8 @@ public static class ImpSsoStartupGate
         catch (Exception ex)
         {
             ShowStartupMessage(
-                $"IMP SSO 登录失败：{ex.Message}",
-                "Athlon Agent",
+                Strings.Format("Sso_LoginFailedWithMessage", ex.Message),
+                Strings.Get("Common_ProductName"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             return false;
@@ -148,7 +149,7 @@ public static class ImpSsoStartupGate
         {
             ShowStartupMessage(
                 result.Message,
-                "Athlon Agent",
+                Strings.Get("Common_ProductName"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
             OpenUrl($"https://{settings.ImpDomain}/icbcasia/imp/index.html?noRoleForSubApp=true");
@@ -156,8 +157,8 @@ public static class ImpSsoStartupGate
         }
 
         ShowStartupMessage(
-            string.IsNullOrWhiteSpace(result.Message) ? "IMP SSO 登录失败。" : result.Message,
-            "Athlon Agent",
+            string.IsNullOrWhiteSpace(result.Message) ? Strings.Get("Sso_LoginFailed") : result.Message,
+            Strings.Get("Common_ProductName"),
             MessageBoxButton.OK,
             MessageBoxImage.Error);
         return false;

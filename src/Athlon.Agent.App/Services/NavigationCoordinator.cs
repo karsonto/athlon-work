@@ -1,4 +1,4 @@
-using System.Windows;
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Sso;
@@ -10,11 +10,16 @@ public sealed class NavigationCoordinator
 {
     private readonly AppSettings _appSettings;
     private readonly IImpSsoSessionStore? _ssoSessionStore;
+    private readonly IUserNotifier _notifier;
 
-    public NavigationCoordinator(AppSettings appSettings, IImpSsoSessionStore? ssoSessionStore)
+    public NavigationCoordinator(
+        AppSettings appSettings,
+        IImpSsoSessionStore? ssoSessionStore,
+        IUserNotifier notifier)
     {
         _appSettings = appSettings;
         _ssoSessionStore = ssoSessionStore;
+        _notifier = notifier;
     }
 
     public (string DisplayName, bool IsVisible) GetSsoDisplayState()
@@ -61,11 +66,7 @@ public sealed class NavigationCoordinator
             return false;
         }
 
-        return MessageBox.Show(
-            "确定要退出登录吗？",
-            AppVersionInfo.ProductName,
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question) == MessageBoxResult.Yes;
+        return _notifier.ConfirmYesNo("Sso_LogoutTitle", "Sso_LogoutConfirm");
     }
 
     public void ClearSsoSession() => _ssoSessionStore?.Clear();

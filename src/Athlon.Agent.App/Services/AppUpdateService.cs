@@ -1,4 +1,5 @@
-using System.Windows;
+using Athlon.Agent.App.Localization;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
 using Velopack;
 
@@ -7,10 +8,12 @@ namespace Athlon.Agent.App.Services;
 public sealed class AppUpdateService
 {
     private readonly AppSettings _settings;
+    private readonly IUserNotifier _notifier;
 
-    public AppUpdateService(AppSettings settings)
+    public AppUpdateService(AppSettings settings, IUserNotifier notifier)
     {
         _settings = settings;
+        _notifier = notifier;
     }
 
     public async Task<AppUpdateCheckResult> CheckAndPromptAsync()
@@ -28,15 +31,10 @@ public sealed class AppUpdateService
                 return AppUpdateCheckResult.UpToDate();
             }
 
-            var result = MessageBox.Show(
-                $"发现新版本 {updateInfo.TargetFullRelease.Version}，是否现在下载并安装？",
-                AppVersionInfo.ProductName,
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Information);
-
-            if (result != MessageBoxResult.Yes)
+            var version = updateInfo.TargetFullRelease.Version.ToString();
+            if (!_notifier.ConfirmYesNo("Update_AvailableTitle", "Update_AvailableMessage", version))
             {
-                return AppUpdateCheckResult.UpdateAvailableNotApplied(updateInfo.TargetFullRelease.Version.ToString());
+                return AppUpdateCheckResult.UpdateAvailableNotApplied(version);
             }
 
             await AppUpdateCoordinator.DownloadAndApplyAsync(baseUrl, updateInfo).ConfigureAwait(false);
@@ -55,13 +53,13 @@ public sealed record AppUpdateCheckResult(AppUpdateCheckStatus Status, string Me
         new(AppUpdateCheckStatus.Skipped, reason);
 
     public static AppUpdateCheckResult UpToDate() =>
-        new(AppUpdateCheckStatus.UpToDate, "当前已是最新版本。");
+        new(AppUpdateCheckStatus.UpToDate, Strings.Get("Update_UpToDate"));
 
     public static AppUpdateCheckResult UpdateAvailableNotApplied(string version) =>
-        new(AppUpdateCheckStatus.UpdateAvailable, $"发现新版本 {version}，已取消安装。");
+        new(AppUpdateCheckStatus.UpdateAvailable, Strings.Format("Update_Cancelled", version));
 
     public static AppUpdateCheckResult UpdateApplied() =>
-        new(AppUpdateCheckStatus.UpdateApplied, "正在安装更新并重启…");
+        new(AppUpdateCheckStatus.UpdateApplied, Strings.Get("Update_Applying"));
 
     public static AppUpdateCheckResult Failed(string message) =>
         new(AppUpdateCheckStatus.Failed, message);

@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Input;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Microsoft.Web.WebView2.Core;
@@ -52,8 +53,8 @@ public partial class HtmlPreviewWindow : Window
         {
             MessageBox.Show(
                 this,
-                $"无法加载 HTML 预览：{exception.Message}",
-                "预览失败",
+                Strings.Format("Preview_HtmlFailedMessage", exception.Message),
+                Strings.Get("Preview_FailedTitle"),
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
         }

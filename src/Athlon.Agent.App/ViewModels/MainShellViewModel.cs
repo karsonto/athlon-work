@@ -17,6 +17,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 
 using System.Windows.Controls;
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Navigation;
 using Athlon.Agent.App.Themes;
 
@@ -43,6 +44,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly ISessionUsageAccumulator _sessionUsageAccumulator;
     private readonly PageViewFactory _pageViewFactory;
     private readonly ITaskListChangedNotifier _taskListChangedNotifier;
+    private readonly ILocalizationService _loc;
+    private readonly IUserNotifier _notifier;
 
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -80,7 +83,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ITaskListChangedNotifier taskListChangedNotifier,
         PageViewFactory pageViewFactory,
         ChatPageViewModel chatPage,
-        ScheduleViewModel schedulePageVm)
+        ScheduleViewModel schedulePageVm,
+        ILocalizationService localization,
+        IUserNotifier notifier)
     {
         _storage = storage;
         _workspaceContext = workspaceContext;
@@ -97,6 +102,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionUsageAccumulator = sessionUsageAccumulator;
         _pageViewFactory = pageViewFactory;
         _taskListChangedNotifier = taskListChangedNotifier;
+        _loc = localization;
+        _notifier = notifier;
         _skillCatalog = skillCatalog;
         _appSettings = settings;
         _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
@@ -178,6 +185,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
         };
         AppThemeManager.ThemeChanged += OnAppThemeChanged;
+        AppCultureManager.CultureChanged += OnCultureChanged;
+        RefreshLocalizedStrings();
         CurrentPageView = _pageViewFactory.GetOrCreate(CurrentPage);
         _ = InitializeAsync();
     }
@@ -186,7 +195,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public string ThemeToggleGlyph => IsLightTheme ? "☾" : "☀";
 
-    public string ThemeToggleToolTip => IsLightTheme ? "切换到深色模式" : "切换到浅色模式";
+    public string ThemeToggleToolTip =>
+        IsLightTheme ? _loc["Shell_SwitchToDark"] : _loc["Shell_SwitchToLight"];
 
     public bool HasChatMessages => Messages.Count > 0;
 
@@ -215,7 +225,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public int ModifiedFilesCount => ModifiedFiles.Count;
 
-    public string ModifiedFilesHeader => $"已修改 {ModifiedFilesCount} 个文件";
+    public string ModifiedFilesHeader => _loc.Format("Shell_ModifiedFilesHeader", ModifiedFilesCount);
 
     public ObservableCollection<AgentRecordGroupViewModel> AgentRecordGroups => _sessionHistory.AgentRecordGroups;
     public ObservableCollection<QueuedTurnViewModel> QueuedTurns => _sessionTurns.QueuedTurnPresenter.GetForSession(_displayedSessionId);
@@ -263,7 +273,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         Math.Clamp(_appSettings.Ui.ContextSidebarWidth, ContextSidebarMinWidth, ContextSidebarMaxWidth);
 
     public string ContextSidebarToggleToolTip =>
-        IsContextSidebarVisible ? "关闭右侧栏 (Ctrl+Alt+B)" : "打开右侧栏 (Ctrl+Alt+B)";
+        IsContextSidebarVisible ? _loc["Shell_ContextSidebarClose"] : _loc["Shell_ContextSidebarOpen"];
 
     public const double ContextSidebarCollapseDragThreshold = UiLayoutConstraints.ContextSidebarCollapseDragThreshold;
 
@@ -282,7 +292,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private bool isLoadingSession;
 
     [ObservableProperty]
-    private string shutdownStatusText = "正在关闭…";
+    private string shutdownStatusText = string.Empty;
 
     [ObservableProperty]
     private AppPage currentPage = AppPage.Chat;
@@ -401,6 +411,20 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         await _layout.PersistNowAsync();
     }
 
+    private void OnCultureChanged(object? sender, EventArgs e) => RefreshLocalizedStrings();
+
+    private void RefreshLocalizedStrings()
+    {
+        ShutdownStatusText = _loc["Shell_ShuttingDown"];
+        OnPropertyChanged(nameof(ThemeToggleToolTip));
+        OnPropertyChanged(nameof(ModifiedFilesHeader));
+        OnPropertyChanged(nameof(ContextSidebarToggleToolTip));
+        if (string.IsNullOrWhiteSpace(_session.ActiveWorkspace))
+        {
+            ActiveWorkspaceName = _loc["Shell_NoWorkspace"];
+        }
+    }
+
     private void OnAppThemeChanged(object? sender, EventArgs e) =>
         NotifyThemeToggleStateChanged();
 
@@ -473,12 +497,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [RelayCommand(CanExecute = nameof(CanClearContext))]
     private async Task ClearContextAsync()
     {
-        var confirm = MessageBox.Show(
-            "将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录），并清空 Coding 任务计划。\n\n会话 ID、工作区与标题会保留；磁盘上的 transcript 归档不会删除。\n\n下次发送消息时会重新构建系统提示（工作区、工具、技能等）。",
-            "清空上下文",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes)
+        if (!_notifier.ConfirmYesNo("Shell_ClearContextTitle", "Shell_ClearContextMessage"))
         {
             return;
         }
@@ -497,7 +516,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         await _storage.SaveSessionAsync(_session);
         _sessionNavigation.Invalidate(_session.Id);
-        Settings.SettingsStatus = "上下文已清空。";
+        Settings.SettingsStatus = _loc["Shell_ClearContextDone"];
         NotifyCommandStatesChanged();
     }
 
@@ -571,12 +590,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
-        var confirm = MessageBox.Show(
-            $"确定删除对话「{item.Title}」吗？此操作无法撤销。",
-            "删除对话",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-        if (confirm != MessageBoxResult.Yes)
+        if (!_notifier.ConfirmYesNo("Shell_DeleteConversationTitle", "Shell_DeleteConversationMessage", item.Title))
         {
             return;
         }
@@ -605,7 +619,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         await RefreshSessionHistoryAsync();
-        Settings.SettingsStatus = "对话已删除。";
+        Settings.SettingsStatus = _loc["Shell_DeleteConversationDone"];
         NotifyCommandStatesChanged();
     }
 
@@ -727,7 +741,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         var dialog = new OpenFolderDialog
         {
-            Title = "Select agent workspace",
+            Title = _loc["Shell_SelectWorkspace"],
             Multiselect = false
         };
 
@@ -745,7 +759,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _session = _session.WithWorkspace(dialog.FolderName);
         ApplySessionWorkspace();
         await SaveCurrentSessionIfNeededAsync();
-        Settings.SettingsStatus = $"当前对话工作区：{folderName}";
+        Settings.SettingsStatus = _loc.Format("Shell_WorkspaceStatus", folderName);
     }
 
     private async Task OnSettingsSavedAsync()
@@ -765,11 +779,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         var fullPath = ResolveWorkspaceFilePath(relativeOrFullPath);
         if (fullPath is null)
         {
-            MessageBox.Show(
-                "无法解析文件路径。请先配置工作区。",
-                "无法预览",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            _notifier.Info("Shell_CannotPreviewTitle", "Shell_CannotPreviewMessage");
             return Task.CompletedTask;
         }
 
@@ -852,11 +862,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
         catch (Exception exception)
         {
-            MessageBox.Show(
-                $"无法打开文件夹：{exception.Message}",
-                "打开失败",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            _notifier.Warning("Shell_OpenFolderFailedTitle", "Shell_OpenFolderFailedMessage", exception.Message);
         }
     }
 
@@ -895,12 +901,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         var path = Path.GetFullPath(node.FullPath);
-        var kind = node.IsDirectory ? "文件夹" : "文件";
-        var prompt = node.IsDirectory
-            ? $"确定删除{kind}「{node.Name}」及其全部内容吗？此操作无法撤销。"
-            : $"确定删除{kind}「{node.Name}」吗？此操作无法撤销。";
+        var kind = node.IsDirectory ? _loc["Shell_FolderKind"] : _loc["Shell_FileKind"];
+        var messageKey = node.IsDirectory ? "Shell_DeleteFolderMessage" : "Shell_DeleteFileMessage";
 
-        if (MessageBox.Show(prompt, "删除", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        if (!_notifier.ConfirmYesNo("Shell_DeleteNodeTitle", messageKey, node.Name))
         {
             return;
         }
@@ -920,23 +924,19 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
             else
             {
-                Settings.SettingsStatus = "目标不存在或已被删除。";
+                Settings.SettingsStatus = _loc["Shell_TargetMissing"];
                 Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
                 return;
             }
 
             RefreshAtCompletionSources();
             Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
-            Settings.SettingsStatus = $"已删除{kind}「{node.Name}」。";
+            Settings.SettingsStatus = _loc.Format("Shell_DeleteSuccess", kind, node.Name);
         }
         catch (Exception exception)
         {
-            MessageBox.Show(
-                $"无法删除「{node.Name}」：{exception.Message}",
-                "删除失败",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            Settings.SettingsStatus = $"删除失败：{exception.Message}";
+            _notifier.Warning("Shell_DeleteFailedTitle", "Shell_DeleteFailedMessage", node.Name, exception.Message);
+            Settings.SettingsStatus = _loc.Format("Shell_DeleteFailedStatus", exception.Message);
         }
     }
 
@@ -982,7 +982,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private void ApplySessionWorkspace()
     {
         SyncWorkspaceContext();
-        ActiveWorkspaceName = string.IsNullOrWhiteSpace(_workspaceContext.DisplayName) ? "未配置工作区" : _workspaceContext.DisplayName!;
+        ActiveWorkspaceName = string.IsNullOrWhiteSpace(_workspaceContext.DisplayName)
+            ? _loc["Shell_NoWorkspace"]
+            : _workspaceContext.DisplayName!;
         RefreshAtCompletionSources(reloadSkills: true);
         Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
         ConfigureWorkspaceWatcher();
@@ -1025,7 +1027,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         catch (Exception ex)
         {
             Application.Current?.Dispatcher.InvokeAsync(() =>
-                Settings.SettingsStatus = $"保存对话失败：{ex.Message}");
+                Settings.SettingsStatus = _loc.Format("Shell_SaveConversationFailed", ex.Message));
         }
     }
 
@@ -1056,7 +1058,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         var loadGeneration = Interlocked.Increment(ref _sessionLoadGeneration);
         IsLoadingSession = true;
-        Settings.SettingsStatus = "正在加载对话…";
+        Settings.SettingsStatus = _loc["Shell_LoadingConversation"];
         try
         {
             var snapshot = await _sessionNavigation.LoadSnapshotAsync(sessionId).ConfigureAwait(true);
@@ -1067,7 +1069,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
             if (snapshot is null)
             {
-                Settings.SettingsStatus = "无法加载该对话。";
+                Settings.SettingsStatus = _loc["Shell_LoadConversationFailed"];
                 return;
             }
 
@@ -1098,7 +1100,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
             ApplySessionWorkspace();
             UpdateDisplayedBusyState();
-            Settings.SettingsStatus = $"已加载对话：{_session.Title}";
+            Settings.SettingsStatus = _loc.Format("Shell_LoadConversationDone", _session.Title);
 
         }
         finally
@@ -1152,6 +1154,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private void UnsubscribeEvents()
     {
         AppThemeManager.ThemeChanged -= OnAppThemeChanged;
+        AppCultureManager.CultureChanged -= OnCultureChanged;
         _sessionTurns.TurnHost.TurnCompleted -= OnTurnCompleted;
         _sessionTurns.TurnHost.TurnStateChanged -= OnTurnStateChanged;
         KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;

@@ -1,5 +1,5 @@
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Navigation;
-
 using Athlon.Agent.App.Services;
 
 using Athlon.Agent.App.ViewModels;
@@ -34,8 +34,11 @@ public static class ServiceCollectionExtensions
 
     {
 
+        services.AddSingleton<ILocalizationService, LocalizationService>();
+        services.AddSingleton<IUserNotifier, UserNotifier>();
         services.AddSingleton<ITaskPlanCompletionNotifier, TaskPlanCompletionNotifier>();
         services.AddSingleton<IChatScrollService, ChatScrollService>();
+        services.AddSingleton<MainWindowShutdownCoordinator>();
 
         services.AddSingleton<ComposerCoordinator>();
 
@@ -59,7 +62,9 @@ public static class ServiceCollectionExtensions
 
                 ? sp.GetService<IImpSsoSessionStore>()
 
-                : null));
+                : null,
+
+            sp.GetRequiredService<IUserNotifier>()));
 
         services.AddSingleton<SessionTurnCoordinator>();
 
@@ -72,7 +77,11 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton(sp => new FileEditorViewModel(
 
-            sp.GetRequiredService<WorkspaceFileEditorService>()));
+            sp.GetRequiredService<WorkspaceFileEditorService>(),
+
+            sp.GetRequiredService<ILocalizationService>(),
+
+            sp.GetRequiredService<IUserNotifier>()));
 
         services.AddSingleton(sp => new ContextSidebarViewModel(
 
@@ -90,7 +99,11 @@ public static class ServiceCollectionExtensions
 
             sp.GetRequiredService<IKnowledgeIndexer>(),
 
-            sp.GetRequiredService<IKnowledgeSearchService>()));
+            sp.GetRequiredService<IKnowledgeSearchService>(),
+
+            sp.GetRequiredService<ILocalizationService>(),
+
+            sp.GetRequiredService<IUserNotifier>()));
 
         services.AddSingleton(sp => new ComposerKnowledgeViewModel(
 
@@ -98,7 +111,9 @@ public static class ServiceCollectionExtensions
 
             sp.GetRequiredService<IKnowledgeStore>(),
 
-            sp.GetRequiredService<AppSettings>()));
+            sp.GetRequiredService<AppSettings>(),
+
+            sp.GetRequiredService<ILocalizationService>()));
 
         services.AddSingleton(sp => new ComposerHarnessViewModel(
 
@@ -106,7 +121,9 @@ public static class ServiceCollectionExtensions
 
             sp.GetRequiredService<ISessionTaskListStore>(),
 
-            sp.GetRequiredService<ITaskPlanCompletionNotifier>()));
+            sp.GetRequiredService<ITaskPlanCompletionNotifier>(),
+
+            sp.GetRequiredService<ILocalizationService>()));
 
         services.AddSingleton<ChatPageViewModel>();
 

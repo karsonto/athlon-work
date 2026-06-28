@@ -1,3 +1,4 @@
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
 
 namespace Athlon.Agent.App.Services;
@@ -5,7 +6,7 @@ namespace Athlon.Agent.App.Services;
 internal static class FileWriteToolArgumentsDisplay
 {
     public const string FileWriteToolName = "file_write";
-    public const string StreamingContentLabel = "content = 传输中…";
+    public static string StreamingContentLabel => Strings.Get("FileWrite_StreamingContent");
 
     public static bool IsFileWrite(string? toolName) =>
         string.Equals(toolName, FileWriteToolName, StringComparison.Ordinal);
@@ -31,14 +32,14 @@ internal static class FileWriteToolArgumentsDisplay
             return FormatFinal(path, length);
         }
 
-        return "(无参数)";
+        return Strings.Get("Tool_NoArgs");
     }
 
     public static string FormatArgumentsForPersistedDisplay(IReadOnlyDictionary<string, string> arguments)
     {
         if (!arguments.TryGetValue(ToolPathNormalizer.PathArgumentName, out var path) || string.IsNullOrWhiteSpace(path))
         {
-            return "(无参数)";
+            return Strings.Get("Tool_NoArgs");
         }
 
         arguments.TryGetValue("content", out var content);

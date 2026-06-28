@@ -1,5 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using Athlon.Agent.App.Localization;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Knowledge;
@@ -19,6 +21,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ICredentialStore _credentialStore;
     private readonly IFileStorageService _storage;
     private readonly ApiKeySecretMigrationService _apiKeySecretMigration;
+    private readonly ILocalizationService _loc;
 
     public SettingsViewModel(
         AppSettings settings,
@@ -27,7 +30,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         IAppPathProvider paths,
         ICredentialStore credentialStore,
         IFileStorageService storage,
-        ApiKeySecretMigrationService apiKeySecretMigration)
+        ApiKeySecretMigrationService apiKeySecretMigration,
+        ILocalizationService localization)
     {
         Settings = settings;
         _mcpRegistry = mcpRegistry;
@@ -36,6 +40,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         _credentialStore = credentialStore;
         _storage = storage;
         _apiKeySecretMigration = apiKeySecretMigration;
+        _loc = localization;
+        Language = Settings.Ui.Language;
+        SettingsStatus = _loc["Settings_DefaultStatus"];
+        AppCultureManager.CultureChanged += OnCultureChanged;
         foreach (var server in Settings.McpServers)
         {
             McpServers.Add(new McpServerItemViewModel(server, _mcpRegistry, OnMcpServerEnabledChanged));
@@ -54,7 +62,10 @@ public sealed partial class SettingsViewModel : ObservableObject
     public Action? SyncPendingSecrets { get; set; }
 
     [ObservableProperty]
-    private string settingsStatus = "Settings are stored as JSON files under the app data folder.";
+    private string settingsStatus = string.Empty;
+
+    [ObservableProperty]
+    private string language = "Auto";
 
     [ObservableProperty]
     private string apiKey = string.Empty;
@@ -114,6 +125,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         Settings.Model.LegacyApiKeyCredentialName = null;
         PruneEmptyWorkspaces(Settings);
         SyncSkillsFromCatalog();
+        Settings.Ui.Language = Language;
+        AppCultureManager.ApplyFromSettings(Settings.Ui);
         await _storage.SaveSettingsAsync(Settings).ConfigureAwait(true);
         SettingsStatus = BuildSaveStatusMessage(modelKeySaved, embeddingKeySaved);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
@@ -124,20 +137,20 @@ public sealed partial class SettingsViewModel : ObservableObject
         var time = AppTimeZone.Now.ToString("HH:mm:ss");
         if (modelKeySaved && embeddingKeySaved)
         {
-            return $"已保存（{time}），Model 与 Embedding API Key 已更新";
+            return Strings.Format("Settings_SaveStatusBoth", time);
         }
 
         if (modelKeySaved)
         {
-            return $"已保存（{time}），Model API Key 已更新";
+            return Strings.Format("Settings_SaveStatusModel", time);
         }
 
         if (embeddingKeySaved)
         {
-            return $"已保存（{time}），Embedding API Key 已更新";
+            return Strings.Format("Settings_SaveStatusEmbedding", time);
         }
 
-        return $"已保存（{time}）；Model API Key 未变更（PasswordBox 为空时沿用已保存的 Key）";
+        return Strings.Format("Settings_SaveStatusNoChange", time);
     }
 
     private void OnMcpServerEnabledChanged() => McpConfigurationChanged?.Invoke(this, EventArgs.Empty);
@@ -176,7 +189,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     public string SettingsConfigPath => Path.Combine(_paths.ConfigPath, "settings.json");
     public string SkillsDirectoryPath => _paths.SkillsPath;
     public string SkillsSettingsDescription =>
-        $"技能从 {SkillsDirectoryPath} 自动加载；此页面控制每个技能是否启用。关闭后不会出现在系统提示与 @skill 补全中。保存设置后写入 {SettingsConfigPath}。";
+        _loc.Format("Settings_SkillsDescription", SkillsDirectoryPath, SettingsConfigPath);
+
+    public IReadOnlyList<LanguageOption> LanguageOptions => AppCultureManager.GetLanguageOptions();
+
+    partial void OnLanguageChanged(string value) => Settings.Ui.Language = value;
+
+    private void OnCultureChanged(object? sender, EventArgs e)
+    {
+        OnPropertyChanged(nameof(LanguageOptions));
+        OnPropertyChanged(nameof(SkillsSettingsDescription));
+    }
+
     public string[] Sections { get; } = { "Models", "MCP", "Skills", "Workspace", "Tool Permissions", "Appearance" };
     public ObservableCollection<McpServerItemViewModel> McpServers { get; } = new();
     public ObservableCollection<SkillItemViewModel> Skills { get; } = new();

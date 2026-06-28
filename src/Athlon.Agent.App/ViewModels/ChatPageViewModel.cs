@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Windows;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -77,7 +78,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
     {
         var dialog = new OpenFileDialog
         {
-            Title = "选择图片",
+            Title = Strings.Get("Chat_SelectImages"),
             Multiselect = true,
             Filter = "Image Files|*.png;*.jpg;*.jpeg;*.webp;*.gif"
         };
@@ -129,7 +130,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         if (_sessionTurns.IsRunning(displayedSessionId))
         {
             _sessionTurns.EnqueueTurn(displayedSessionId, input, imageAttachments, ui);
-            _setSettingsStatus!("已加入排队");
+            _setSettingsStatus!(Strings.Get("Chat_QueuedStatus"));
             _notifyCommandStatesChanged!();
             return;
         }

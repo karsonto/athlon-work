@@ -1,7 +1,8 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
-using System.Windows;
+using Athlon.Agent.App.Localization;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core.Knowledge;
 using Microsoft.Win32;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -17,6 +18,8 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private readonly IKnowledgeStore _store;
     private readonly IKnowledgeIndexer _indexer;
     private readonly IKnowledgeSearchService _searchService;
+    private readonly ILocalizationService _loc;
+    private readonly IUserNotifier _notifier;
     private string _sessionId = "";
     private string? _activeSearchModuleId;
     private string? _activeSearchDocumentId;
@@ -27,11 +30,20 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     public KnowledgeViewModel(
         IKnowledgeStore store,
         IKnowledgeIndexer indexer,
-        IKnowledgeSearchService searchService)
+        IKnowledgeSearchService searchService,
+        ILocalizationService localization,
+        IUserNotifier notifier)
     {
         _store = store;
         _indexer = indexer;
         _searchService = searchService;
+        _loc = localization;
+        _notifier = notifier;
+        AppCultureManager.CultureChanged += OnCultureChanged;
+        StatusText = _loc["Knowledge_DefaultStatus"];
+        SearchResults = _loc["Knowledge_SearchResultsHint"];
+        DocumentPreview = _loc["Knowledge_SelectDocumentPreview"];
+        RefreshLocalizedStrings();
     }
 
     public ObservableCollection<KnowledgeModuleItemViewModel> Modules { get; } = new();
@@ -51,16 +63,16 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private string _moduleDescription = "";
 
     [ObservableProperty]
-    private string _documentPreview = "选择一个文档查看抽取文本预览。";
+    private string _documentPreview = "";
 
     [ObservableProperty]
-    private string _statusText = "在聊天输入区开启知识库开关后，Agent 才会使用知识库检索来回答你的问题。";
+    private string _statusText = "";
 
     [ObservableProperty]
     private string _searchQuery = "";
 
     [ObservableProperty]
-    private string _searchResults = "在左侧选择知识空间或文档后，输入问题可测试检索效果。";
+    private string _searchResults = "";
 
     [ObservableProperty]
     private bool _isIndexing;
@@ -161,7 +173,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             SelectedDocument = null;
             _activeSearchModuleId = node.Module.Module.Id;
             _activeSearchDocumentId = null;
-            DocumentPreview = "选择一个文档查看抽取文本预览。";
+            DocumentPreview = _loc["Knowledge_SelectDocumentPreview"];
             return;
         }
 
@@ -180,7 +192,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     {
         var index = Modules.Count + 1;
         var name = string.IsNullOrWhiteSpace(ModuleName)
-            ? $"新知识空间 {index}"
+            ? _loc.Format("Knowledge_NewModuleDefaultName", index)
             : ModuleName.Trim();
 
         var module = await _store.SaveModuleAsync(new KnowledgeModule
@@ -191,8 +203,8 @@ public sealed partial class KnowledgeViewModel : ObservableObject
 
         InvalidateCache();
         await RefreshAsync(module.Id);
-        StatusText = $"已创建知识空间「{module.Name}」。";
-        KnowledgeDataChanged?.Invoke();;
+        StatusText = _loc.Format("Knowledge_ModuleCreated", module.Name);
+        KnowledgeDataChanged?.Invoke();
     }
 
     [RelayCommand]
@@ -200,7 +212,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(ModuleName))
         {
-            MessageBox.Show("知识空间名称不能为空。", "知识库", MessageBoxButton.OK, MessageBoxImage.Information);
+            _notifier.Info("Knowledge_TitleDialog", "Knowledge_ModuleNameRequired");
             return;
         }
 
@@ -212,13 +224,13 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             var saved = await _store.SaveModuleAsync(module);
             InvalidateCache();
             await RefreshAsync(saved.Id);
-            StatusText = $"知识空间已保存：{SelectedModule?.Module.Name ?? "未选择"}";
+            StatusText = _loc.Format("Knowledge_ModuleSaved", SelectedModule?.Module.Name ?? _loc["Knowledge_ModuleNotSelected"]);
             KnowledgeDataChanged?.Invoke();
         }
         catch (Exception exception)
         {
-            MessageBox.Show($"保存知识空间失败：{exception.Message}", "知识库", MessageBoxButton.OK, MessageBoxImage.Warning);
-            StatusText = $"保存知识空间失败：{exception.Message}";
+            _notifier.Warning("Knowledge_TitleDialog", "Knowledge_ModuleSaveFailed", exception.Message);
+            StatusText = _loc.Format("Knowledge_ModuleSaveFailed", exception.Message);
         }
     }
 
@@ -238,15 +250,15 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     {
         if (SelectedModule is null)
         {
-            MessageBox.Show("请先选择或创建一个知识空间。", "知识库", MessageBoxButton.OK, MessageBoxImage.Information);
+            _notifier.Info("Knowledge_TitleDialog", "Knowledge_SelectModuleFirst");
             return;
         }
 
         var dialog = new OpenFileDialog
         {
-            Title = "上传知识库文档",
+            Title = _loc["Knowledge_UploadDialogTitle"],
             Multiselect = true,
-            Filter = "知识库文档|*.txt;*.md;*.pdf;*.docx;*.csv;*.xlsx;*.pptx|所有文件|*.*"
+            Filter = _loc["Knowledge_UploadFilter"]
         };
 
         if (dialog.ShowDialog() != true)
@@ -261,7 +273,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     {
         if (SelectedModule is null)
         {
-            MessageBox.Show("请先选择或创建一个知识空间。", "知识库", MessageBoxButton.OK, MessageBoxImage.Information);
+            _notifier.Info("Knowledge_TitleDialog", "Knowledge_SelectModuleFirst");
             return;
         }
 
@@ -273,7 +285,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
 
         IsIndexing = true;
         IndexingProgress = 0;
-        IndexingProgressText = "准备索引...";
+        IndexingProgressText = _loc["Knowledge_IndexingPrepare"];
         var succeeded = 0;
         var failed = 0;
         for (var index = 0; index < files.Length; index++)
@@ -281,7 +293,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             var fileName = files[index];
             try
             {
-                StatusText = $"正在索引 {Path.GetFileName(fileName)} ...";
+                StatusText = _loc.Format("Knowledge_IndexingFile", Path.GetFileName(fileName));
                 var progress = new Progress<KnowledgeIndexingProgress>(value =>
                     UpdateIndexingProgress(value, index, files.Length));
                 await _indexer.ImportDocumentAsync(SelectedModule.Module.Id, fileName, progress: progress);
@@ -290,17 +302,17 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             catch (Exception exception)
             {
                 failed++;
-                MessageBox.Show($"无法索引 {Path.GetFileName(fileName)}：{exception.Message}", "知识库索引失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+                _notifier.Warning("Knowledge_IndexFailedTitle", "Knowledge_IndexFailedMessage", Path.GetFileName(fileName), exception.Message);
             }
         }
 
         InvalidateCache();
         await RefreshAsync(SelectedModule.Module.Id);
         StatusText = failed == 0
-            ? $"上传处理完成，共 {succeeded} 个文档。"
-            : $"上传完成：成功 {succeeded} 个，失败 {failed} 个。";
+            ? _loc.Format("Knowledge_UploadAllSucceeded", succeeded)
+            : _loc.Format("Knowledge_UploadPartial", succeeded, failed);
         IndexingProgress = failed == 0 ? 100 : Math.Clamp(IndexingProgress, 0, 99);
-        IndexingProgressText = failed == 0 ? "索引完成" : "部分文档索引失败";
+        IndexingProgressText = failed == 0 ? _loc["Knowledge_IndexComplete"] : _loc["Knowledge_IndexPartialFailed"];
         IsIndexing = false;
         KnowledgeDataChanged?.Invoke();
     }
@@ -341,7 +353,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private async Task DeleteModuleAsync(KnowledgeModuleItemViewModel module)
     {
         var name = module.Module.Name;
-        if (MessageBox.Show($"确定删除知识空间「{name}」及其全部文档和切片吗？", "删除知识空间", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        if (!_notifier.ConfirmYesNo("Knowledge_DeleteModuleTitle", "Knowledge_DeleteModuleMessage", name))
         {
             return;
         }
@@ -349,17 +361,17 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         await _store.DeleteModuleAsync(module.Module.Id);
         SelectedModule = null;
         SelectedDocument = null;
-        DocumentPreview = "选择一个文档查看抽取文本预览。";
+        DocumentPreview = _loc["Knowledge_SelectDocumentPreview"];
         InvalidateCache();
         await RefreshAsync();
-        StatusText = $"已删除知识空间「{name}」。";
+        StatusText = _loc.Format("Knowledge_ModuleDeleted", name);
         KnowledgeDataChanged?.Invoke();
     }
 
     private async Task DeleteDocumentAsync(KnowledgeDocumentItemViewModel document)
     {
         var fileName = document.Document.FileName;
-        if (MessageBox.Show($"确定删除文档「{fileName}」吗？", "删除文档", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+        if (!_notifier.ConfirmYesNo("Knowledge_DeleteDocumentTitle", "Knowledge_DeleteDocumentMessage", fileName))
         {
             return;
         }
@@ -367,11 +379,11 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         var moduleId = document.Document.ModuleId;
         await _store.DeleteDocumentAsync(document.Document.Id);
         SelectedDocument = null;
-        DocumentPreview = "选择一个文档查看抽取文本预览。";
+        DocumentPreview = _loc["Knowledge_SelectDocumentPreview"];
         InvalidateCache();
         await RefreshAsync(moduleId);
-        StatusText = $"已删除文档「{fileName}」。";
-        KnowledgeDataChanged?.Invoke();;
+        StatusText = _loc.Format("Knowledge_DocumentDeleted", fileName);
+        KnowledgeDataChanged?.Invoke();
     }
 
     [RelayCommand]
@@ -386,21 +398,21 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         {
             IsIndexing = true;
             IndexingProgress = 0;
-            IndexingProgressText = "准备重新索引...";
-            StatusText = $"正在重新索引 {SelectedDocument.Document.FileName} ...";
+            IndexingProgressText = _loc["Knowledge_ReindexPrepare"];
+            StatusText = _loc.Format("Knowledge_Reindexing", SelectedDocument.Document.FileName);
             var progress = new Progress<KnowledgeIndexingProgress>(value =>
                 UpdateIndexingProgress(value, fileIndex: 0, fileCount: 1));
             await _indexer.ReindexDocumentAsync(SelectedDocument.Document.Id, progress: progress);
             InvalidateCache();
             await RefreshAsync(SelectedModule?.Module.Id);
-            StatusText = "重新索引完成。";
+            StatusText = _loc["Knowledge_ReindexDone"];
             IndexingProgress = 100;
-            IndexingProgressText = "重新索引完成";
+            IndexingProgressText = _loc["Knowledge_ReindexComplete"];
             KnowledgeDataChanged?.Invoke();
         }
         catch (Exception exception)
         {
-            MessageBox.Show($"重新索引失败：{exception.Message}", "知识库", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _notifier.Warning("Knowledge_TitleDialog", "Knowledge_ReindexFailed", exception.Message);
         }
         finally
         {
@@ -413,14 +425,14 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(SearchQuery))
         {
-            SearchResults = "请输入检索问题。";
+            SearchResults = _loc["Knowledge_SearchQueryRequired"];
             return;
         }
 
         var moduleId = _activeSearchModuleId ?? SelectedModule?.Module.Id;
         if (string.IsNullOrWhiteSpace(moduleId))
         {
-            SearchResults = "请先在左侧选择一个知识空间或文档。";
+            SearchResults = _loc["Knowledge_SearchScopeRequired"];
             return;
         }
 
@@ -432,12 +444,12 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             documentId);
         if (hits.Count == 0)
         {
-            SearchResults = $"没有命中结果。检索范围：{scopeText}。";
+            SearchResults = _loc.Format("Knowledge_NoSearchHits", scopeText);
             return;
         }
 
         var builder = new StringBuilder();
-        builder.AppendLine($"检索范围：{scopeText}");
+        builder.AppendLine(_loc.Format("Knowledge_SearchScopeLine", scopeText));
         builder.AppendLine();
         foreach (var hit in hits)
         {
@@ -488,7 +500,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
             string.Equals(module.Module.Id, moduleId, StringComparison.OrdinalIgnoreCase))?.Module.Name ?? moduleId;
         if (string.IsNullOrWhiteSpace(documentId))
         {
-            return $"知识空间「{moduleName}」";
+            return _loc.Format("Knowledge_ScopeModule", moduleName);
         }
 
         var documentName = SelectedDocument is not null
@@ -496,7 +508,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
                 ? SelectedDocument.Document.FileName
                 : Documents.FirstOrDefault(document =>
                     string.Equals(document.Document.Id, documentId, StringComparison.OrdinalIgnoreCase))?.Document.FileName ?? documentId;
-        return $"文档「{documentName}」";
+        return _loc.Format("Knowledge_ScopeDocument", documentName);
     }
 
     private void UpdateIndexingProgress(KnowledgeIndexingProgress progress, int fileIndex, int fileCount)
@@ -506,26 +518,48 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         IndexingProgress = Math.Clamp(overallPercent, 0, 100);
         IndexingProgressText = fileCount == 1
             ? $"{progress.Stage}：{progress.Message}"
-            : $"文件 {fileIndex + 1}/{fileCount} · {progress.Stage}：{progress.Message}";
+            : _loc.Format("Knowledge_IndexProgress", fileIndex + 1, fileCount, progress.Stage, progress.Message);
         StatusText = progress.Message;
     }
 
-    private static string ReadDocumentPreview(KnowledgeDocument? document)
+    private string ReadDocumentPreview(KnowledgeDocument? document)
     {
         if (document is null)
         {
-            return "选择一个文档查看抽取文本预览。";
+            return _loc["Knowledge_SelectDocumentPreview"];
         }
 
         if (!File.Exists(document.ExtractedPath))
         {
             return string.IsNullOrWhiteSpace(document.LastError)
-                ? $"文档状态：{document.Status}"
-                : $"文档状态：{document.Status}\n错误：{document.LastError}";
+                ? _loc.Format("Knowledge_DocumentStatus", document.Status)
+                : _loc.Format("Knowledge_DocumentStatusWithError", document.Status, document.LastError);
         }
 
         var text = File.ReadAllText(document.ExtractedPath);
         return text.Length <= 5000 ? text : text[..5000] + "\n... (truncated)";
+    }
+
+    private void OnCultureChanged(object? sender, EventArgs e) => RefreshLocalizedStrings();
+
+    private void RefreshLocalizedStrings()
+    {
+        if (SelectedDocument is null)
+        {
+            DocumentPreview = _loc["Knowledge_SelectDocumentPreview"];
+        }
+        else
+        {
+            DocumentPreview = ReadDocumentPreview(SelectedDocument.Document);
+        }
+
+        if (string.IsNullOrWhiteSpace(SearchQuery))
+        {
+            SearchResults = _loc["Knowledge_SearchResultsHint"];
+        }
+
+        OnPropertyChanged(nameof(Modules));
+        OnPropertyChanged(nameof(DocumentTree));
     }
 }
 
@@ -541,7 +575,7 @@ public sealed class KnowledgeModuleItemViewModel
     public KnowledgeModule Module { get; }
     public int DocumentCount { get; }
     public int ChunkCount { get; }
-    public string MetaText => $"{DocumentCount} 个文档 · {ChunkCount} 个切片";
+    public string MetaText => Strings.Format("Knowledge_ModuleMeta", DocumentCount, ChunkCount);
 }
 
 public sealed class KnowledgeDocumentItemViewModel(KnowledgeDocument document)
@@ -549,7 +583,11 @@ public sealed class KnowledgeDocumentItemViewModel(KnowledgeDocument document)
     public KnowledgeDocument Document { get; } = document;
     public string FileName => Document.FileName;
     public string StatusText => Document.Status.ToString();
-    public string MetaText => $"{Document.ChunkCount} 个切片 · {Document.FileType} · {Document.UpdatedAt:yyyy-MM-dd HH:mm}";
+    public string MetaText => Strings.Format(
+        "Knowledge_DocumentMeta",
+        Document.ChunkCount,
+        Document.FileType,
+        Document.UpdatedAt.ToString("yyyy-MM-dd HH:mm"));
 }
 
 public sealed class KnowledgeTreeNodeViewModel
@@ -565,7 +603,9 @@ public sealed class KnowledgeTreeNodeViewModel
     public string MetaText { get; }
     public bool IsModule { get; }
     public string Glyph => IsModule ? "📁" : "📄";
-    public string DeleteMenuHeader => IsModule ? "删除知识空间" : "删除文档";
+    public string DeleteMenuHeader => IsModule
+        ? Strings.Get("Knowledge_DeleteModuleMenu")
+        : Strings.Get("Knowledge_DeleteDocumentMenu");
     public KnowledgeModuleItemViewModel? Module { get; private init; }
     public KnowledgeDocumentItemViewModel? Document { get; private init; }
     public ObservableCollection<KnowledgeTreeNodeViewModel> Children { get; } = new();

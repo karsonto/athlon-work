@@ -4,6 +4,7 @@
              xmlns:behaviors="clr-namespace:Athlon.Agent.App.Behaviors"
              xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
              xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
+             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
              x:Name="DropZoneRoot">
     <Grid>
         <TreeView x:Name="DocumentTree"
@@ -63,7 +64,7 @@
                 Background="{DynamicResource Brush.AccentSubtle}"
                 Opacity="0"
                 Visibility="Visible">
-            <TextBlock Text="松开以上传文件到当前知识空间"
+            <TextBlock Text="{loc:Localize Key=Knowledge_DropReleaseHint}"
                        Foreground="{DynamicResource Brush.Accent}"
                        FontWeight="SemiBold"
                        FontSize="14"
