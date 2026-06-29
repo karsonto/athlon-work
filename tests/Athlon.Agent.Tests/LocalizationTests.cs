@@ -7,6 +7,24 @@ namespace Athlon.Agent.Tests;
 public sealed class LocalizationTests
 {
     [Fact]
+    public void UiSettings_default_language_is_zhCN()
+    {
+        var ui = new UiSettings();
+
+        Assert.Equal("zh-CN", ui.Language);
+    }
+
+    [Fact]
+    public void ApplyFromSettings_with_default_ui_uses_chinese_strings()
+    {
+        var ui = new UiSettings();
+        AppCultureManager.ApplyFromSettings(ui);
+
+        Assert.Equal("zh-CN", AppCultureManager.Current.Name);
+        Assert.Equal("确定", Strings.Get("Common_OK"));
+    }
+
+    [Fact]
     public void SetCulture_enUS_returns_english_strings()
     {
         var ui = new UiSettings { Language = "en-US" };

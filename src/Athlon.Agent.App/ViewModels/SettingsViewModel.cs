@@ -65,7 +65,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string settingsStatus = string.Empty;
 
     [ObservableProperty]
-    private string language = "Auto";
+    private string language = "zh-CN";
 
     [ObservableProperty]
     private string apiKey = string.Empty;
@@ -193,7 +193,11 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<LanguageOption> LanguageOptions => AppCultureManager.GetLanguageOptions();
 
-    partial void OnLanguageChanged(string value) => Settings.Ui.Language = value;
+    partial void OnLanguageChanged(string value)
+    {
+        Settings.Ui.Language = value;
+        AppCultureManager.ApplyFromSettings(Settings.Ui);
+    }
 
     private void OnCultureChanged(object? sender, EventArgs e)
     {

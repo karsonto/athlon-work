@@ -1,4 +1,5 @@
 using Athlon.Agent.App.Localization;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -8,6 +9,28 @@ namespace Athlon.Agent.Tests;
 
 public sealed class SettingsViewModelTests
 {
+    [Fact]
+    public void Changing_language_applies_culture_immediately_without_save()
+    {
+        AppCultureManager.SetCulture("en-US");
+        var settings = new AppSettings { Ui = { Language = "en-US" } };
+        var viewModel = new SettingsViewModel(
+            settings,
+            new TestMcpRegistry(),
+            new EmptySkillCatalog(),
+            new TestAppPathProvider(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
+            new RecordingCredentialStore(),
+            new NoOpStorage(),
+            new ApiKeySecretMigrationService(new RecordingCredentialStore()),
+            new LocalizationService());
+
+        viewModel.Language = "zh-CN";
+
+        Assert.Equal("zh-CN", settings.Ui.Language);
+        Assert.Equal("zh-CN", AppCultureManager.Current.Name);
+        Assert.Equal("确定", Strings.Get("Common_OK"));
+    }
+
     [Theory]
     [InlineData(true, true, "Model 与 Embedding API Key 已更新")]
     [InlineData(true, false, "Model API Key 已更新")]
@@ -53,6 +76,39 @@ public sealed class SettingsViewModelTests
         Assert.True(await credentials.HasSecretAsync(ModelSettings.ApiKeySecretName));
         Assert.Equal(string.Empty, viewModel.ApiKey);
         Assert.Contains("Model API Key 已更新", viewModel.SettingsStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SaveSettingsAsync_persists_language_to_settings_file()
+    {
+        using var temp = new TempDirectoryScope("athlon-settings-language");
+        var paths = new TestAppPathProvider(temp.Root);
+        paths.EnsureCreated();
+        var storage = new FileStorageService(
+            new NoOpLogger(),
+            paths,
+            new JsonFileStore(),
+            new AgentRunContextAccessor());
+        var settings = new AppSettings();
+        var viewModel = new SettingsViewModel(
+            settings,
+            new TestMcpRegistry(),
+            new EmptySkillCatalog(),
+            paths,
+            new RecordingCredentialStore(),
+            storage,
+            new ApiKeySecretMigrationService(new RecordingCredentialStore()),
+            new LocalizationService())
+        {
+            Language = "zh-CN"
+        };
+
+        await viewModel.SaveSettingsCommand.ExecuteAsync(null);
+
+        var json = await File.ReadAllTextAsync(Path.Combine(paths.ConfigPath, "settings.json"));
+        var reloaded = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(json, JsonFileStore.Options);
+        Assert.NotNull(reloaded);
+        Assert.Equal("zh-CN", reloaded!.Ui.Language);
     }
 
     [Fact]

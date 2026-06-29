@@ -46,6 +46,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ILicenseValidator, LicenseValidator>();
         services.AddSingleton<ILicenseStore, LicenseStore>();
         services.AddSingleton<IAgentHostEnvironment, AgentHostEnvironment>();
+        services.AddSingleton<IStartupLog, StartupLog>();
         services.AddAthlonSkills();
         services.AddAthlonEnvironmentPrompt();
         services.AddSingleton<IJsonFileStore>(jsonFileStore);

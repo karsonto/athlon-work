@@ -71,4 +71,55 @@ public sealed class SkillLoadingTests
             }
         }
     }
+
+    [Fact]
+    public void FileSystemSkillRepository_LogsSkillLoadFailures()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-tests", Guid.NewGuid().ToString("N"));
+        var validDir = Path.Combine(root, "valid-skill");
+        var invalidDir = Path.Combine(root, "invalid-skill");
+        Directory.CreateDirectory(validDir);
+        Directory.CreateDirectory(invalidDir);
+
+        File.WriteAllText(
+            Path.Combine(validDir, SkillUtil.SkillFileName),
+            """
+            ---
+            name: valid_skill
+            description: Valid skill for tests
+            ---
+            Follow these steps.
+            """);
+
+        File.WriteAllText(
+            Path.Combine(invalidDir, SkillUtil.SkillFileName),
+            """
+            ---
+            name: invalid_skill
+            ---
+            Missing description frontmatter.
+            """);
+
+        var failures = new List<(string Dir, Exception Exception)>();
+        try
+        {
+            var repo = new FileSystemSkillRepository(
+                root,
+                (dir, ex) => failures.Add((dir, ex)));
+            var skills = repo.GetAllSkills();
+
+            Assert.Single(skills);
+            Assert.Equal("valid_skill", skills[0].Name);
+            Assert.Single(failures);
+            Assert.Equal(invalidDir, failures[0].Dir, ignoreCase: true);
+            Assert.Contains("description", failures[0].Exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
 }

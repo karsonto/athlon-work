@@ -83,6 +83,7 @@ public partial class App : Application
             }
 
             var settings = _services.GetRequiredService<AppSettings>();
+            AppCultureManager.ApplyFromSettings(settings.Ui);
             AppThemeManager.ApplyFromSettings(settings.Ui);
             StartupTrace($"Theme applied: {AppThemeManager.CurrentKind}");
 

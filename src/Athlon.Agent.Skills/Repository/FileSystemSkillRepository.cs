@@ -6,8 +6,9 @@ namespace Athlon.Agent.Skills.Repository;
 public sealed class FileSystemSkillRepository : IAgentSkillRepository
 {
     private readonly string _baseDir;
+    private readonly Action<string, Exception>? _onSkillLoadFailed;
 
-    public FileSystemSkillRepository(string baseDir)
+    public FileSystemSkillRepository(string baseDir, Action<string, Exception>? onSkillLoadFailed = null)
     {
         if (string.IsNullOrWhiteSpace(baseDir))
         {
@@ -15,6 +16,7 @@ public sealed class FileSystemSkillRepository : IAgentSkillRepository
         }
 
         _baseDir = Path.GetFullPath(baseDir);
+        _onSkillLoadFailed = onSkillLoadFailed;
         Directory.CreateDirectory(_baseDir);
     }
 
@@ -30,7 +32,8 @@ public sealed class FileSystemSkillRepository : IAgentSkillRepository
 
     public IReadOnlyList<string> GetAllSkillNames() => SkillFileSystemHelper.GetAllSkillNames(_baseDir);
 
-    public IReadOnlyList<AgentSkill> GetAllSkills() => SkillFileSystemHelper.GetAllSkills(_baseDir);
+    public IReadOnlyList<AgentSkill> GetAllSkills() =>
+        SkillFileSystemHelper.GetAllSkills(_baseDir, _onSkillLoadFailed);
 
     public bool SkillExists(string skillName) => SkillFileSystemHelper.SkillExists(_baseDir, skillName);
 

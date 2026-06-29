@@ -111,7 +111,9 @@ public static class SkillFileSystemHelper
         return skillNames;
     }
 
-    public static IReadOnlyList<AgentSkill> GetAllSkills(string baseDir)
+    public static IReadOnlyList<AgentSkill> GetAllSkills(
+        string baseDir,
+        Action<string, Exception>? onSkillLoadFailed = null)
     {
         if (!Directory.Exists(baseDir))
         {
@@ -130,9 +132,10 @@ public static class SkillFileSystemHelper
             {
                 skills.Add(LoadSkillFromDirectory(dir));
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 // Skip invalid skill folders, matching AgentScope behavior.
+                onSkillLoadFailed?.Invoke(dir, ex);
             }
         }
 
