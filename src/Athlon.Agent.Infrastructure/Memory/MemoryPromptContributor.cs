@@ -29,7 +29,7 @@ public sealed class MemoryPromptContributor(
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
-        if (!harnessState.IsEnabledForActiveRun(runContextAccessor) || PromptModeHelper.IsChatOnly(context))
+        if (!harnessState.IsCodingModeForActiveRun(runContextAccessor) || PromptModeHelper.IsChatOnly(context))
         {
             return;
         }

@@ -1,6 +1,7 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Memory;
+using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
 
@@ -60,23 +61,80 @@ public sealed class CompositeToolRouterHarnessTests
         Assert.True(result.Succeeded);
     }
 
-    private static CompositeToolRouter CreateRouter(bool harnessEnabled)
+    [Fact]
+    public void ListTools_WhenAskMode_ExcludesWriteAndExecuteTools()
     {
-        var tools = new IAgentTool[]
+        var router = CreateRouter(SessionAgentMode.Ask, includeWriteTools: true, includeSubAgentTools: true);
+
+        var names = router.ListTools().Select(tool => tool.Name).ToArray();
+
+        Assert.Contains("file_list", names);
+        Assert.DoesNotContain("file_write", names);
+        Assert.DoesNotContain("file_edit", names);
+        Assert.DoesNotContain("apply_patch", names);
+        Assert.DoesNotContain("execute_command", names);
+        Assert.DoesNotContain("memory_search", names);
+        Assert.DoesNotContain("todo_write", names);
+        Assert.DoesNotContain("sessions_spawn", names);
+    }
+
+    [Fact]
+    public void ListTools_WhenAgentMode_IncludesSubAgentTools()
+    {
+        var router = CreateRouter(SessionAgentMode.Agent, includeWriteTools: false, includeSubAgentTools: true);
+
+        var names = router.ListTools().Select(tool => tool.Name).ToArray();
+
+        Assert.Contains("sessions_spawn", names);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_WhenAskMode_ReturnsNotFoundForBlockedTools()
+    {
+        var router = CreateRouter(SessionAgentMode.Ask, includeWriteTools: true, includeSubAgentTools: true);
+        var writeResult = await router.InvokeAsync(new ToolInvocation("file_write", new Dictionary<string, string>()));
+        var commandResult = await router.InvokeAsync(new ToolInvocation("execute_command", new Dictionary<string, string>()));
+        var spawnResult = await router.InvokeAsync(new ToolInvocation("sessions_spawn", new Dictionary<string, string>()));
+
+        Assert.False(writeResult.Succeeded);
+        Assert.False(commandResult.Succeeded);
+        Assert.False(spawnResult.Succeeded);
+    }
+
+    private static CompositeToolRouter CreateRouter(bool harnessEnabled) =>
+        CreateRouter(harnessEnabled ? SessionAgentMode.Coding : SessionAgentMode.Agent, includeWriteTools: false, includeSubAgentTools: false);
+
+    private static CompositeToolRouter CreateRouter(SessionAgentMode mode, bool includeWriteTools, bool includeSubAgentTools = false)
+    {
+        var tools = new List<IAgentTool>
         {
             new StubNamedTool("file_list"),
             new StubMemoryTool("memory_search"),
             new StubMemoryTool("memory_get"),
-            new StubHarnessTool("todo_write")
+            new StubHarnessTool("todo_write"),
         };
+
+        if (includeWriteTools)
+        {
+            tools.Add(new StubNamedTool("file_write"));
+            tools.Add(new StubNamedTool("file_edit"));
+            tools.Add(new StubNamedTool("apply_patch"));
+            tools.Add(new StubNamedTool("execute_command"));
+        }
+
+        if (includeSubAgentTools)
+        {
+            tools.Add(new StubSubAgentTool("sessions_spawn"));
+        }
+
         return new CompositeToolRouter(
             tools,
             new StubMcpRegistry([]),
             new AppSettings(),
             RouterTestDependencies.CreateSessionContext(),
             RouterTestDependencies.CreateSessionKnowledgeState(),
-            RouterTestDependencies.CreateSessionHarnessState(harnessEnabled),
-            RouterTestDependencies.CreateRunContextAccessor(harnessEnabled),
+            RouterTestDependencies.CreateSessionHarnessState(mode),
+            RouterTestDependencies.CreateRunContextAccessor(mode),
             RouterTestDependencies.CreateWorkspaceGuard());
     }
 
@@ -95,6 +153,13 @@ public sealed class CompositeToolRouterHarnessTests
     }
 
     private sealed class StubHarnessTool(string name) : IAgentTool, IHarnessTool
+    {
+        public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
+        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ToolResult.Success("ok"));
+    }
+
+    private sealed class StubSubAgentTool(string name) : IAgentTool, ISubAgentTool, IExcludedFromChildAgentToolkit
     {
         public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>

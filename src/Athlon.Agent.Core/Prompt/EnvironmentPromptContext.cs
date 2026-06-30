@@ -1,5 +1,7 @@
 namespace Athlon.Agent.Core.Prompt;
 
+using Athlon.Agent.Core.Harness;
+
 public sealed class EnvironmentPromptContext
 {
     public required AgentSession Session { get; init; }
@@ -19,6 +21,8 @@ public sealed class EnvironmentPromptContext
     public required PromptSettings PromptSettings { get; init; }
 
     public string? SsoUserDisplayName { get; init; }
+
+    public SessionAgentMode AgentMode { get; init; } = SessionAgentMode.Agent;
 
     public bool HasWorkspace => !string.IsNullOrWhiteSpace(WorkspaceRoot);
 }

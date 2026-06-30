@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure.Prompt;
@@ -21,6 +22,7 @@ internal static class PromptTestHelpers
         IEnvironmentPromptSection[] sections =
         [
             new BasePersonaSection(),
+            new AgentModeSection(),
             new HostEnvironmentSection(),
             new EncodingPolicySection(),
             new WorkspacePolicySection(),
@@ -36,6 +38,7 @@ internal static class PromptTestHelpers
             settings,
             host,
             NullCurrentSsoUserContext.Instance,
+            DefaultSessionHarnessState.Instance,
             sections,
             preReasoningContributors ?? Array.Empty<IPreReasoningPromptContributor>());
     }

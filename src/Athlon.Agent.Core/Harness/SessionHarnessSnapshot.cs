@@ -1,13 +1,71 @@
 namespace Athlon.Agent.Core.Harness;
 
+public enum SessionAgentMode
+{
+    Agent = 0,
+    Coding = 1,
+    Ask = 2,
+}
+
 public sealed class SessionHarnessFile
 {
     public bool Enabled { get; set; }
+
+    public string? Mode { get; set; }
 }
 
-public sealed record SessionHarnessSnapshot(bool Enabled)
+public sealed record SessionHarnessSnapshot(SessionAgentMode Mode)
 {
-    public static SessionHarnessSnapshot Empty { get; } = new(false);
+    public static SessionHarnessSnapshot Empty { get; } = new(SessionAgentMode.Agent);
+
+    public static SessionHarnessSnapshot FromPersisted(SessionHarnessFile? file)
+    {
+        if (file is null)
+        {
+            return Empty;
+        }
+
+        if (!string.IsNullOrWhiteSpace(file.Mode)
+            && TryParseMode(file.Mode, out var parsed))
+        {
+            return new SessionHarnessSnapshot(parsed);
+        }
+
+        return file.Enabled
+            ? new SessionHarnessSnapshot(SessionAgentMode.Coding)
+            : new SessionHarnessSnapshot(SessionAgentMode.Agent);
+    }
+
+    public static bool TryParseMode(string? value, out SessionAgentMode mode)
+    {
+        if (string.Equals(value, "agent", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = SessionAgentMode.Agent;
+            return true;
+        }
+
+        if (string.Equals(value, "coding", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = SessionAgentMode.Coding;
+            return true;
+        }
+
+        if (string.Equals(value, "ask", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = SessionAgentMode.Ask;
+            return true;
+        }
+
+        mode = SessionAgentMode.Agent;
+        return false;
+    }
+
+    public string ToPersistedMode() => Mode switch
+    {
+        SessionAgentMode.Coding => "coding",
+        SessionAgentMode.Ask => "ask",
+        _ => "agent",
+    };
 }
 
 public interface ISessionHarnessState
@@ -18,7 +76,17 @@ public interface ISessionHarnessState
 
     SessionHarnessSnapshot GetSnapshot(string? sessionId);
 
+    SessionAgentMode GetMode(string? sessionId);
+
+    bool IsCodingMode(string? sessionId);
+
+    bool IsAskMode(string? sessionId);
+
     bool IsEnabled(string? sessionId);
+
+    bool IsCodingModeForActiveRun(IAgentRunContextAccessor runContextAccessor);
+
+    bool IsAskModeForActiveRun(IAgentRunContextAccessor runContextAccessor);
 
     bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor);
 }

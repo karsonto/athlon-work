@@ -19,6 +19,14 @@ public sealed class FileToolsPolicySection : IEnvironmentPromptSection
         builder.AppendLine("- grep_files uses literal matching by default; set regex to true for .NET regular expressions.");
         builder.AppendLine("- Use file_read with offset and limit to read in chunks; do not assume a single read covers the whole file.");
         builder.AppendLine("- When file_read returns truncated: true or a next_offset in the meta footer, continue with that offset.");
+
+        if (PromptModeHelper.IsAskMode(context))
+        {
+            builder.AppendLine("- Ask mode is read-only: do not use file_write, file_edit, or apply_patch.");
+            builder.AppendLine();
+            return;
+        }
+
         builder.AppendLine("- file_read line output uses N| prefixes for display only; file_edit old_text must match disk content without those prefixes.");
         builder.AppendLine("- Editing: if file_edit fails, re-read the file and retry once; after two failures switch to apply_patch or file_write (small files only). Never retry the same old_text a third time.");
         builder.AppendLine("- Paths from file_list, glob_files, or grep_files are exact on-disk names. Copy them character-for-character into file_read, file_write, file_edit, apply_patch, and execute_command.");

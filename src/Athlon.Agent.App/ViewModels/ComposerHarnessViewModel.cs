@@ -33,15 +33,28 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
     public ObservableCollection<SessionTaskItemViewModel> Tasks { get; } = new();
 
     [ObservableProperty]
-    private bool _isHarnessActive;
+    private SessionAgentMode _selectedMode = SessionAgentMode.Agent;
+
+    [ObservableProperty]
+    private bool _isModePickerOpen;
+
+    public bool IsHarnessActive => SelectedMode == SessionAgentMode.Coding;
 
     public bool ShowTaskPanel => IsHarnessActive && Tasks.Count > 0;
 
-    public string HarnessButtonToolTip => IsHarnessActive
-        ? _loc["Harness_EnabledTooltip"]
-        : _loc["Harness_DisabledTooltip"];
+    public string HarnessButtonToolTip => SelectedMode switch
+    {
+        SessionAgentMode.Coding => _loc["Harness_Mode_Coding_Tooltip"],
+        SessionAgentMode.Ask => _loc["Harness_Mode_Ask_Tooltip"],
+        _ => _loc["Harness_Mode_Agent_Tooltip"],
+    };
 
-    public string HarnessPickerLabel => IsHarnessActive ? _loc["Harness_PickerOn"] : _loc["Harness_PickerOff"];
+    public string HarnessPickerLabel => SelectedMode switch
+    {
+        SessionAgentMode.Coding => _loc["Harness_Mode_Coding"],
+        SessionAgentMode.Ask => _loc["Harness_Mode_Ask"],
+        _ => _loc["Harness_Mode_Agent"],
+    };
 
     public int PendingTaskCount { get; private set; }
 
@@ -56,27 +69,36 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
 
         _sessionId = sessionId;
         await _harnessState.LoadAsync(sessionId).ConfigureAwait(true);
-        IsHarnessActive = _harnessState.IsEnabled(sessionId);
+        SelectedMode = _harnessState.GetMode(sessionId);
         await RefreshTasksAsync().ConfigureAwait(true);
         NotifyHarnessStateChanged();
     }
 
     [RelayCommand]
-    private async Task ToggleHarnessAsync()
+    private void ToggleModePicker()
     {
-        if (string.IsNullOrWhiteSpace(_sessionId))
+        IsModePickerOpen = !IsModePickerOpen;
+    }
+
+    [RelayCommand]
+    private async Task SelectModeAsync(SessionAgentMode mode)
+    {
+        if (string.IsNullOrWhiteSpace(_sessionId) || SelectedMode == mode)
         {
+            IsModePickerOpen = false;
             return;
         }
 
-        var next = !IsHarnessActive;
-        await _harnessState.SaveAsync(_sessionId, new SessionHarnessSnapshot(next)).ConfigureAwait(true);
-        IsHarnessActive = next;
-        if (!next)
+        var wasCoding = SelectedMode == SessionAgentMode.Coding;
+        await _harnessState.SaveAsync(_sessionId, new SessionHarnessSnapshot(mode)).ConfigureAwait(true);
+        SelectedMode = mode;
+        IsModePickerOpen = false;
+
+        if (wasCoding && mode != SessionAgentMode.Coding)
         {
             ClearTasks();
         }
-        else
+        else if (mode == SessionAgentMode.Coding)
         {
             await RefreshTasksAsync().ConfigureAwait(true);
         }
@@ -162,6 +184,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         OnPropertyChanged(nameof(InProgressTaskCount));
         OnPropertyChanged(nameof(HarnessButtonToolTip));
         OnPropertyChanged(nameof(HarnessPickerLabel));
+        OnPropertyChanged(nameof(IsHarnessActive));
     }
 
     private void NotifyHarnessStateChanged()
@@ -169,7 +192,10 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         OnPropertyChanged(nameof(HarnessButtonToolTip));
         OnPropertyChanged(nameof(HarnessPickerLabel));
         OnPropertyChanged(nameof(ShowTaskPanel));
+        OnPropertyChanged(nameof(IsHarnessActive));
     }
+
+    partial void OnSelectedModeChanged(SessionAgentMode value) => NotifyHarnessStateChanged();
 
     private void OnCultureChanged(object? sender, EventArgs e)
     {

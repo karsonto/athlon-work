@@ -80,7 +80,9 @@ public sealed class ChatOnlyPromptTests
 
             var prompt = orchestrator.PrepareForTurn(session, tools).Text;
 
-            Assert.Contains("coding agent", prompt, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("workspace agent", prompt, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("Session mode:", prompt, StringComparison.Ordinal);
+            Assert.Contains("Agent mode", prompt, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("File tools:", prompt, StringComparison.Ordinal);
             Assert.Contains($"Workspace root: {workspaceRoot}", prompt, StringComparison.Ordinal);
         }

@@ -1,5 +1,6 @@
 using System.Text;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Tests;
@@ -11,6 +12,15 @@ public sealed class CodingWorkflowSectionTests
     {
         var builder = new StringBuilder();
         new CodingWorkflowSection().Append(builder, CreateContext(hasWorkspace: false));
+
+        Assert.Equal(string.Empty, builder.ToString());
+    }
+
+    [Fact]
+    public void Append_SkipsContent_InAskMode()
+    {
+        var builder = new StringBuilder();
+        new CodingWorkflowSection().Append(builder, CreateContext(hasWorkspace: true, SessionAgentMode.Ask));
 
         Assert.Equal(string.Empty, builder.ToString());
     }
@@ -30,7 +40,7 @@ public sealed class CodingWorkflowSectionTests
         Assert.Contains("apply_patch", text, StringComparison.Ordinal);
     }
 
-    private static EnvironmentPromptContext CreateContext(bool hasWorkspace) =>
+    private static EnvironmentPromptContext CreateContext(bool hasWorkspace, SessionAgentMode mode = SessionAgentMode.Agent) =>
         new()
         {
             Session = AgentSession.Create("coding-workflow-test"),
@@ -44,6 +54,7 @@ public sealed class CodingWorkflowSectionTests
             ],
             SkillsDirectory = @"C:\Users\test\.athlon-agent\skills",
             Host = new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
-            PromptSettings = new PromptSettings()
+            PromptSettings = new PromptSettings(),
+            AgentMode = mode,
         };
 }

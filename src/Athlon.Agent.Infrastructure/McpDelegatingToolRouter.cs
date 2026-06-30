@@ -2,6 +2,7 @@ using Athlon.Agent.Core;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Memory;
+using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -38,8 +39,15 @@ internal sealed class McpDelegatingToolRouter(
                 && sessionKnowledgeState.ShouldExposeKnowledgeTool(activeSessionContext.SessionId);
         }
 
-        if (!sessionHarnessState.IsEnabledForActiveRun(runContextAccessor)
+        if (!sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor)
             && tool is ILongTermMemoryTool or IHarnessTool)
+        {
+            return false;
+        }
+
+        if (sessionHarnessState.IsAskModeForActiveRun(runContextAccessor)
+            && (tool.Definition.Name is "file_write" or "file_edit" or "apply_patch" or "execute_command"
+                || tool is ISubAgentTool))
         {
             return false;
         }

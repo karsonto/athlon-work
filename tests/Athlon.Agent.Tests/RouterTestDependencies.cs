@@ -16,12 +16,12 @@ internal static class RouterTestDependencies
     }
 
     public static AgentRunContextAccessor CreateRunContextAccessor(
-        bool harnessEnabled = false,
+        SessionAgentMode mode = SessionAgentMode.Agent,
         AgentRunKind kind = AgentRunKind.Root,
         string sessionId = "test-session")
     {
         var accessor = new AgentRunContextAccessor();
-        if (!harnessEnabled && kind == AgentRunKind.Root)
+        if (mode == SessionAgentMode.Agent && kind == AgentRunKind.Root)
         {
             return accessor;
         }
@@ -43,12 +43,21 @@ internal static class RouterTestDependencies
                 "reviewer",
                 null,
                 null,
-                []);
+                null);
         }
 
         accessor.Push(runContext);
         return accessor;
     }
+
+    public static AgentRunContextAccessor CreateRunContextAccessor(
+        bool harnessEnabled,
+        AgentRunKind kind = AgentRunKind.Root,
+        string sessionId = "test-session") =>
+        CreateRunContextAccessor(
+            harnessEnabled ? SessionAgentMode.Coding : SessionAgentMode.Agent,
+            kind,
+            sessionId);
 
     public static ISessionKnowledgeState CreateSessionKnowledgeState(
         bool enabled = false,
@@ -57,8 +66,11 @@ internal static class RouterTestDependencies
             enabled,
             moduleIds.ToHashSet(StringComparer.OrdinalIgnoreCase)));
 
-    public static ISessionHarnessState CreateSessionHarnessState(bool enabled = false) =>
-        new StubSessionHarnessState(new SessionHarnessSnapshot(enabled));
+    public static ISessionHarnessState CreateSessionHarnessState(SessionAgentMode mode = SessionAgentMode.Agent) =>
+        new StubSessionHarnessState(new SessionHarnessSnapshot(mode));
+
+    public static ISessionHarnessState CreateSessionHarnessState(bool enabled) =>
+        CreateSessionHarnessState(enabled ? SessionAgentMode.Coding : SessionAgentMode.Agent);
 
     public static WorkspaceGuard CreateWorkspaceGuard(bool configured = true, string? workspaceRoot = null)
     {
@@ -88,17 +100,27 @@ internal static class RouterTestDependencies
 
         public SessionHarnessSnapshot GetSnapshot(string? sessionId) => snapshot;
 
-        public bool IsEnabled(string? sessionId) => snapshot.Enabled;
+        public SessionAgentMode GetMode(string? sessionId) => snapshot.Mode;
 
-        public bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor)
+        public bool IsCodingMode(string? sessionId) => snapshot.Mode == SessionAgentMode.Coding;
+
+        public bool IsAskMode(string? sessionId) => snapshot.Mode == SessionAgentMode.Ask;
+
+        public bool IsEnabled(string? sessionId) => IsCodingMode(sessionId);
+
+        public bool IsCodingModeForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
+            IsActiveRun(runContextAccessor) && IsCodingMode(runContextAccessor.Current!.SessionId);
+
+        public bool IsAskModeForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
+            IsActiveRun(runContextAccessor) && IsAskMode(runContextAccessor.Current!.SessionId);
+
+        public bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
+            IsCodingModeForActiveRun(runContextAccessor);
+
+        private static bool IsActiveRun(IAgentRunContextAccessor runContextAccessor)
         {
             var run = runContextAccessor.Current;
-            if (run is null || run.Kind == AgentRunKind.SubAgent)
-            {
-                return false;
-            }
-
-            return snapshot.Enabled;
+            return run is not null && run.Kind != AgentRunKind.SubAgent;
         }
     }
 

@@ -19,12 +19,28 @@ public sealed class HarnessTests
         var root = CreateTempRoot();
         var state = CreateHarnessState(root);
 
-        await state.SaveAsync("session-1", new SessionHarnessSnapshot(true));
+        await state.SaveAsync("session-1", new SessionHarnessSnapshot(SessionAgentMode.Coding));
 
         var reloaded = CreateHarnessState(root);
         await reloaded.LoadAsync("session-1");
 
-        Assert.True(reloaded.IsEnabled("session-1"));
+        Assert.True(reloaded.IsCodingMode("session-1"));
+    }
+
+    [Fact]
+    public async Task SessionHarnessState_MigratesLegacyEnabledFlag()
+    {
+        var root = CreateTempRoot();
+        var sessionDir = Path.Combine(root, "sessions", "session-legacy");
+        Directory.CreateDirectory(sessionDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(sessionDir, "harness.json"),
+            """{"Enabled":true}""");
+
+        var state = CreateHarnessState(root);
+        await state.LoadAsync("session-legacy");
+
+        Assert.Equal(SessionAgentMode.Coding, state.GetMode("session-legacy"));
     }
 
     [Fact]

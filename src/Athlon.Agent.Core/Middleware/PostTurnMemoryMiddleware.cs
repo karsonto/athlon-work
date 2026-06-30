@@ -14,7 +14,7 @@ public sealed class PostTurnMemoryMiddleware(
 
     public override ValueTask OnTurnCompletedAsync(AgentTurnInvocation invocation, CancellationToken cancellationToken)
     {
-        if (!harnessState.IsEnabledForActiveRun(runContextAccessor))
+        if (!harnessState.IsCodingModeForActiveRun(runContextAccessor))
         {
             return ValueTask.CompletedTask;
         }

@@ -1,5 +1,6 @@
 using System.Text;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure.Prompt;
@@ -38,6 +39,7 @@ public sealed class SystemPromptOrchestratorTests
             settings,
             host,
             NullCurrentSsoUserContext.Instance,
+            DefaultSessionHarnessState.Instance,
             sections,
             Array.Empty<IPreReasoningPromptContributor>());
         var legacy = new AgentEnvironmentPromptBuilder(settings, host, sections);

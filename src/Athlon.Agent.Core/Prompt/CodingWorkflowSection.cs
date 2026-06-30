@@ -8,7 +8,7 @@ public sealed class CodingWorkflowSection : IEnvironmentPromptSection
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
-        if (PromptModeHelper.IsChatOnly(context))
+        if (PromptModeHelper.IsChatOnly(context) || PromptModeHelper.IsAskMode(context))
         {
             return;
         }

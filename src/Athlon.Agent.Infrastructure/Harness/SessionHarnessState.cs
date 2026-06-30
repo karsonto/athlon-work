@@ -22,7 +22,7 @@ public sealed class SessionHarnessState(
 
         var path = GetHarnessFilePath(sessionId);
         var file = await jsonFileStore.LoadAsync<SessionHarnessFile>(path, cancellationToken).ConfigureAwait(false);
-        _cache[sessionId] = file is null ? EmptySnapshot : new SessionHarnessSnapshot(file.Enabled);
+        _cache[sessionId] = SessionHarnessSnapshot.FromPersisted(file);
     }
 
     public async Task SaveAsync(string sessionId, SessionHarnessSnapshot state, CancellationToken cancellationToken = default)
@@ -34,7 +34,10 @@ public sealed class SessionHarnessState(
 
         var path = GetHarnessFilePath(sessionId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        await jsonFileStore.SaveAsync(path, new SessionHarnessFile { Enabled = state.Enabled }, cancellationToken).ConfigureAwait(false);
+        await jsonFileStore.SaveAsync(
+            path,
+            new SessionHarnessFile { Mode = state.ToPersistedMode() },
+            cancellationToken).ConfigureAwait(false);
         _cache[sessionId] = state;
     }
 
@@ -48,9 +51,24 @@ public sealed class SessionHarnessState(
         return _cache.TryGetValue(sessionId, out var snapshot) ? snapshot : EmptySnapshot;
     }
 
-    public bool IsEnabled(string? sessionId) => GetSnapshot(sessionId).Enabled;
+    public SessionAgentMode GetMode(string? sessionId) => GetSnapshot(sessionId).Mode;
 
-    public bool IsEnabledForActiveRun(IAgentRunContextAccessor accessor)
+    public bool IsCodingMode(string? sessionId) => GetMode(sessionId) == SessionAgentMode.Coding;
+
+    public bool IsAskMode(string? sessionId) => GetMode(sessionId) == SessionAgentMode.Ask;
+
+    public bool IsEnabled(string? sessionId) => IsCodingMode(sessionId);
+
+    public bool IsCodingModeForActiveRun(IAgentRunContextAccessor accessor) =>
+        IsActiveRunMode(accessor, IsCodingMode);
+
+    public bool IsAskModeForActiveRun(IAgentRunContextAccessor accessor) =>
+        IsActiveRunMode(accessor, IsAskMode);
+
+    public bool IsEnabledForActiveRun(IAgentRunContextAccessor accessor) =>
+        IsCodingModeForActiveRun(accessor);
+
+    private bool IsActiveRunMode(IAgentRunContextAccessor accessor, Func<string?, bool> predicate)
     {
         var run = accessor.Current;
         if (run is null || run.Kind == AgentRunKind.SubAgent)
@@ -58,7 +76,7 @@ public sealed class SessionHarnessState(
             return false;
         }
 
-        return IsEnabled(run.SessionId);
+        return predicate(run.SessionId);
     }
 
     private string GetHarnessFilePath(string sessionId)

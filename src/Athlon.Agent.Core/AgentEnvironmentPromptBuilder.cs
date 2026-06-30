@@ -1,4 +1,5 @@
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Sso;
 
 namespace Athlon.Agent.Core;
@@ -13,6 +14,7 @@ public sealed class AgentEnvironmentPromptBuilder(
         settings,
         host,
         NullCurrentSsoUserContext.Instance,
+        DefaultSessionHarnessState.Instance,
         sections,
         Array.Empty<IPreReasoningPromptContributor>());
 

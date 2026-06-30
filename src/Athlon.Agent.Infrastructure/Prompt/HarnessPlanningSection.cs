@@ -1,11 +1,9 @@
 using System.Text;
-using Athlon.Agent.Core;
-using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Infrastructure.Prompt;
 
-public sealed class HarnessPlanningSection(ISessionHarnessState harnessState) : IEnvironmentPromptSection
+public sealed class HarnessPlanningSection : IEnvironmentPromptSection
 {
     public int Order => 405;
 
@@ -13,7 +11,7 @@ public sealed class HarnessPlanningSection(ISessionHarnessState harnessState) : 
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
-        if (!harnessState.IsEnabled(context.Session.Id) || PromptModeHelper.IsChatOnly(context))
+        if (!PromptModeHelper.IsCodingMode(context) || PromptModeHelper.IsChatOnly(context))
         {
             return;
         }

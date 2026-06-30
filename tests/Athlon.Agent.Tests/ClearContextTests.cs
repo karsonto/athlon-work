@@ -17,14 +17,20 @@ public sealed class ClearContextTests
     [Fact]
     public void BuildModelMessages_AfterClearThenNewUser_IncludesSystemAndUser()
     {
-        var history = new[] { ChatMessage.Create(MessageRole.User, "fresh start") };
+        var createdAt = new DateTimeOffset(2026, 6, 30, 14, 30, 0, TimeSpan.Zero);
+        var history = new[]
+        {
+            new ChatMessage("user-1", MessageRole.User, "fresh start", createdAt)
+        };
 
         var messages = AgentRuntime.BuildModelMessages("system-prompt", history);
 
         Assert.Equal(2, messages.Count);
         Assert.Equal("system", messages[0].Role);
         Assert.Equal("user", messages[1].Role);
-        Assert.Equal("fresh start", messages[1].Content);
+        var content = Assert.IsType<string>(messages[1].Content);
+        Assert.StartsWith("[2026-06-30 22:30 UTC+8]", content, StringComparison.Ordinal);
+        Assert.Contains("fresh start", content, StringComparison.Ordinal);
     }
 
     [Fact]

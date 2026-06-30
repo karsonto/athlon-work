@@ -328,17 +328,26 @@
   <data name="FlowDoc_CopyNotice" xml:space="preserve">
     <value>已复制</value>
   </data>
-  <data name="Harness_DisabledTooltip" xml:space="preserve">
-    <value>启用 Coding（长期记忆与 todo_write）</value>
+  <data name="Harness_Mode_Agent" xml:space="preserve">
+    <value>Agent</value>
   </data>
-  <data name="Harness_EnabledTooltip" xml:space="preserve">
-    <value>Coding 已启用 · 长期记忆 + 任务列表</value>
+  <data name="Harness_Mode_Agent_Tooltip" xml:space="preserve">
+    <value>完整 Agent 能力（无长期记忆与任务规划）</value>
   </data>
-  <data name="Harness_PickerOff" xml:space="preserve">
+  <data name="Harness_Mode_Ask" xml:space="preserve">
+    <value>Ask</value>
+  </data>
+  <data name="Harness_Mode_Ask_Tooltip" xml:space="preserve">
+    <value>只读问答：禁用写文件、执行命令与子代理</value>
+  </data>
+  <data name="Harness_Mode_Coding" xml:space="preserve">
     <value>Coding</value>
   </data>
-  <data name="Harness_PickerOn" xml:space="preserve">
-    <value>Coding 开</value>
+  <data name="Harness_Mode_Coding_Tooltip" xml:space="preserve">
+    <value>启用长期记忆与任务规划</value>
+  </data>
+  <data name="Harness_Picker_SelectMode" xml:space="preserve">
+    <value>选择 Agent 模式</value>
   </data>
   <data name="Harness_TaskCancelled" xml:space="preserve">
     <value>已取消</value>

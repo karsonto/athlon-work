@@ -1,5 +1,6 @@
 using System.Text;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Tests;
@@ -29,7 +30,19 @@ public sealed class FileToolsPolicySectionTests
         Assert.Equal(string.Empty, builder.ToString());
     }
 
-    private static EnvironmentPromptContext CreateContext(bool hasWorkspace, bool chatOnly = false) =>
+    [Fact]
+    public void Append_AskMode_OmitsEditingGuidance()
+    {
+        var builder = new StringBuilder();
+        new FileToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, mode: SessionAgentMode.Ask));
+
+        var text = builder.ToString();
+        Assert.Contains("read-only", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("character-for-character", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("N| prefixes", text, StringComparison.Ordinal);
+    }
+
+    private static EnvironmentPromptContext CreateContext(bool hasWorkspace, bool chatOnly = false, SessionAgentMode mode = SessionAgentMode.Agent) =>
         new()
         {
             Session = chatOnly
@@ -41,6 +54,7 @@ public sealed class FileToolsPolicySectionTests
                 : [],
             SkillsDirectory = @"C:\Users\test\.athlon-agent\skills",
             Host = new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
-            PromptSettings = new PromptSettings()
+            PromptSettings = new PromptSettings(),
+            AgentMode = mode,
         };
 }

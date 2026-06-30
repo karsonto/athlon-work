@@ -1,5 +1,6 @@
 using System.Text;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Tests;
@@ -53,7 +54,22 @@ public sealed class ToolsPolicySectionTests
         Assert.DoesNotContain("- mcp_server__search:", text, StringComparison.Ordinal);
     }
 
-    private static EnvironmentPromptContext CreateContext(bool hasWorkspace, IReadOnlyList<ToolDefinition> tools) =>
+    [Fact]
+    public void Append_AskMode_UsesReadOnlyPolicyWithoutShellGuidance()
+    {
+        var builder = new StringBuilder();
+        new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools: [], mode: SessionAgentMode.Ask));
+
+        var text = builder.ToString();
+        Assert.Contains("read-only", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("file_write", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("cmd.exe", text, StringComparison.Ordinal);
+    }
+
+    private static EnvironmentPromptContext CreateContext(
+        bool hasWorkspace,
+        IReadOnlyList<ToolDefinition> tools,
+        SessionAgentMode mode = SessionAgentMode.Agent) =>
         new()
         {
             Session = AgentSession.Create("tools-policy-test"),
@@ -61,6 +77,7 @@ public sealed class ToolsPolicySectionTests
             Tools = tools,
             SkillsDirectory = @"C:\Users\test\.athlon-agent\skills",
             Host = new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
-            PromptSettings = new PromptSettings()
+            PromptSettings = new PromptSettings(),
+            AgentMode = mode,
         };
 }

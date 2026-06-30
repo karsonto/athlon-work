@@ -10,6 +10,7 @@ public static class PromptServiceCollectionExtensions
     {
         services.AddSingleton<IEnvironmentPromptSection, SignedInUserSection>();
         services.AddSingleton<IEnvironmentPromptSection, BasePersonaSection>();
+        services.AddSingleton<IEnvironmentPromptSection, AgentModeSection>();
         services.AddSingleton<IEnvironmentPromptSection, HostEnvironmentSection>();
         services.AddSingleton<IEnvironmentPromptSection, EncodingPolicySection>();
         services.AddSingleton<IEnvironmentPromptSection, WorkspacePolicySection>();

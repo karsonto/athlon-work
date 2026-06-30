@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Infrastructure;
@@ -185,6 +186,7 @@ public sealed class SubAgentSessionsTests
                 settings,
                 new StubHostEnvironment(paths.SkillsPath),
                 NullCurrentSsoUserContext.Instance,
+                DefaultSessionHarnessState.Instance,
                 Array.Empty<Athlon.Agent.Core.Prompt.IEnvironmentPromptSection>(),
                 Array.Empty<Athlon.Agent.Core.Prompt.IPreReasoningPromptContributor>());
             var services = new ServiceCollection();

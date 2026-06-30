@@ -16,7 +16,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task ClearTaskPlanAsync_ClearsStoreAndSidebarTasks()
     {
-        var harness = new StubHarnessState(enabled: true);
+        var harness = new StubHarnessState(SessionAgentMode.Coding);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "task", Status = AgentTaskStatuses.InProgress }
@@ -40,7 +40,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task ShowTaskPanel_IsFalse_WhenHarnessDisabled()
     {
-        var harness = new StubHarnessState(enabled: false);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore();
         var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
 
@@ -55,7 +55,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task ShowTaskPanel_IsFalse_WhenTaskListEmpty()
     {
-        var harness = new StubHarnessState(enabled: true);
+        var harness = new StubHarnessState(SessionAgentMode.Coding);
         var store = new MutableTaskListStore();
         var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
 
@@ -68,7 +68,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task ShowTaskPanel_IsTrue_WhenHarnessEnabledAndTasksExist()
     {
-        var harness = new StubHarnessState(enabled: true);
+        var harness = new StubHarnessState(SessionAgentMode.Coding);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Pending }
@@ -85,7 +85,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_MergesById_UpdatesStatusAndAddsRemovesItems()
     {
-        var harness = new StubHarnessState(enabled: true);
+        var harness = new StubHarnessState(SessionAgentMode.Coding);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Pending },
@@ -111,7 +111,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_TriggersCompletionAnimation_WhenStatusBecomesCompleted()
     {
-        var harness = new StubHarnessState(enabled: true);
+        var harness = new StubHarnessState(SessionAgentMode.Coding);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress }
@@ -131,7 +131,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_DoesNotTriggerCompletionAnimation_ForInitiallyCompletedTask()
     {
-        var harness = new StubHarnessState(enabled: true);
+        var harness = new StubHarnessState(SessionAgentMode.Coding);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed }
@@ -146,7 +146,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_NotifiesTaskCompleted_WhenLastTaskCompletesPlan()
     {
-        var harness = new StubHarnessState(enabled: true);
+        var harness = new StubHarnessState(SessionAgentMode.Coding);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed },
@@ -170,7 +170,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_NotifiesTaskCompleted_WhenOnlyPartiallyComplete()
     {
-        var harness = new StubHarnessState(enabled: true);
+        var harness = new StubHarnessState(SessionAgentMode.Coding);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress },
@@ -194,7 +194,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task LoadForSessionAsync_DoesNotNotifyTaskCompleted_WhenPlanAlreadyComplete()
     {
-        var harness = new StubHarnessState(enabled: true);
+        var harness = new StubHarnessState(SessionAgentMode.Coding);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed },
@@ -211,7 +211,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_DoesNotNotifyTaskCompleted_WhenAllCancelled()
     {
-        var harness = new StubHarnessState(enabled: true);
+        var harness = new StubHarnessState(SessionAgentMode.Coding);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress },
@@ -273,30 +273,57 @@ public sealed class ComposerHarnessViewModelTests
         }
     }
 
-    private sealed class StubHarnessState(bool enabled) : ISessionHarnessState
+    [Fact]
+    public async Task SelectModeAsync_PersistsModeAndClearsTasksWhenLeavingCoding()
     {
-        private readonly Dictionary<string, bool> _enabledBySession = new(StringComparer.OrdinalIgnoreCase);
+        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "task", Status = AgentTaskStatuses.Pending }
+        ]);
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
+        await vm.LoadForSessionAsync("session-1");
+
+        Assert.Equal(SessionAgentMode.Coding, vm.SelectedMode);
+        Assert.Single(vm.Tasks);
+
+        await vm.SelectModeCommand.ExecuteAsync(SessionAgentMode.Ask);
+
+        Assert.Equal(SessionAgentMode.Ask, vm.SelectedMode);
+        Assert.Empty(vm.Tasks);
+        Assert.False(vm.IsModePickerOpen);
+    }
+
+    private sealed class StubHarnessState(SessionAgentMode mode) : ISessionHarnessState
+    {
+        private readonly Dictionary<string, SessionAgentMode> _modeBySession = new(StringComparer.OrdinalIgnoreCase);
 
         public Task LoadAsync(string sessionId, CancellationToken cancellationToken = default)
         {
-            _enabledBySession[sessionId] = enabled;
+            _modeBySession[sessionId] = mode;
             return Task.CompletedTask;
         }
 
         public Task SaveAsync(string sessionId, SessionHarnessSnapshot state, CancellationToken cancellationToken = default)
         {
-            _enabledBySession[sessionId] = state.Enabled;
+            _modeBySession[sessionId] = state.Mode;
             return Task.CompletedTask;
         }
 
         public SessionHarnessSnapshot GetSnapshot(string? sessionId) =>
             string.IsNullOrWhiteSpace(sessionId)
                 ? SessionHarnessSnapshot.Empty
-                : new SessionHarnessSnapshot(_enabledBySession.GetValueOrDefault(sessionId, enabled));
+                : new SessionHarnessSnapshot(_modeBySession.GetValueOrDefault(sessionId, mode));
 
-        public bool IsEnabled(string? sessionId) => GetSnapshot(sessionId).Enabled;
+        public SessionAgentMode GetMode(string? sessionId) => GetSnapshot(sessionId).Mode;
 
-        public bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor)
+        public bool IsCodingMode(string? sessionId) => GetMode(sessionId) == SessionAgentMode.Coding;
+
+        public bool IsAskMode(string? sessionId) => GetMode(sessionId) == SessionAgentMode.Ask;
+
+        public bool IsEnabled(string? sessionId) => IsCodingMode(sessionId);
+
+        public bool IsCodingModeForActiveRun(IAgentRunContextAccessor runContextAccessor)
         {
             var run = runContextAccessor.Current;
             if (run is null || run.Kind == AgentRunKind.SubAgent)
@@ -304,8 +331,22 @@ public sealed class ComposerHarnessViewModelTests
                 return false;
             }
 
-            return IsEnabled(run.SessionId);
+            return IsCodingMode(run.SessionId);
         }
+
+        public bool IsAskModeForActiveRun(IAgentRunContextAccessor runContextAccessor)
+        {
+            var run = runContextAccessor.Current;
+            if (run is null || run.Kind == AgentRunKind.SubAgent)
+            {
+                return false;
+            }
+
+            return IsAskMode(run.SessionId);
+        }
+
+        public bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
+            IsCodingModeForActiveRun(runContextAccessor);
     }
 
     private sealed class MutableTaskListStore : ISessionTaskListStore
