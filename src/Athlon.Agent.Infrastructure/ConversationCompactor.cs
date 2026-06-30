@@ -130,9 +130,7 @@ public sealed class ConversationCompactor(
         var summaryMessage = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath);
         var compactMessages = new List<ChatMessage>();
 
-        var strategy = request.Force
-            ? CompactionStrategy.ForceCompact
-            : CompactionStrategy.ConversationCompact;
+        var strategy = request.Strategy;
         var layers = new List<CompactionLayer> { CompactionLayer.ConversationCompact };
         if (truncateArgsApplied)
         {

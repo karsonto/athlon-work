@@ -16,7 +16,17 @@ public sealed class PreCompletionOptions
         AllowTruncateArgs = true,
         AllowConversationCompact = true,
         ForceConversationCompact = true,
-        EmitCompactionAudit = true
+        EmitCompactionAudit = true,
+        Strategy = CompactionStrategy.ForceCompact
+    };
+
+    public static PreCompletionOptions ManualCompact { get; } = new()
+    {
+        AllowTruncateArgs = true,
+        AllowConversationCompact = true,
+        ForceConversationCompact = true,
+        EmitCompactionAudit = true,
+        Strategy = CompactionStrategy.ManualCompact
     };
 
     public bool AllowTruncateArgs { get; init; } = true;
@@ -28,4 +38,6 @@ public sealed class PreCompletionOptions
     public bool EmitCompactionAudit { get; init; } = true;
 
     public CompactionKind CompactionKind { get; init; } = CompactionKind.ConversationCompact;
+
+    public CompactionStrategy Strategy { get; init; } = CompactionStrategy.ConversationCompact;
 }

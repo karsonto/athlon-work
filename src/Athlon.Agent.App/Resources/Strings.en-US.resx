@@ -271,6 +271,9 @@
   <data name="Context_ClearTooltip" xml:space="preserve">
     <value>Clear visible model history for this conversation</value>
   </data>
+  <data name="Context_CompactTooltip" xml:space="preserve">
+    <value>Compress conversation context (LLM summary)</value>
+  </data>
   <data name="Context_McpServers" xml:space="preserve">
     <value>MCP servers</value>
   </data>
@@ -1029,6 +1032,21 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   </data>
   <data name="Shell_ClearContextTitle" xml:space="preserve">
     <value>Clear context</value>
+  </data>
+  <data name="Shell_CompactContextDone" xml:space="preserve">
+    <value>Context compressed. You can continue chatting.</value>
+  </data>
+  <data name="Shell_CompactContextMessage" xml:space="preserve">
+    <value>Earlier messages will be replaced with a summary; full history is archived to transcripts. Continue?</value>
+  </data>
+  <data name="Shell_CompactContextSkipped" xml:space="preserve">
+    <value>Conversation is too short to compress.</value>
+  </data>
+  <data name="Shell_CompactContextTitle" xml:space="preserve">
+    <value>Compress context</value>
+  </data>
+  <data name="Shell_CompactingContext" xml:space="preserve">
+    <value>Compressing context…</value>
   </data>
   <data name="Shell_ContextSidebarClose" xml:space="preserve">
     <value>Close right sidebar (Ctrl+Alt+B)</value>

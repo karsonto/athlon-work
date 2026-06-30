@@ -136,6 +136,7 @@ public sealed class ToolResultEvictorTests
 
         public Task<IReadOnlyList<ChatMessage>> LoadConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ChatMessage>>(Array.Empty<ChatMessage>());
+        public Task ReplaceConversationDisplayAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;

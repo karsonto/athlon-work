@@ -32,6 +32,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly IImpSsoSessionStore? _ssoSessionStore;
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly SessionTurnCoordinator _sessionTurns;
+    private readonly SessionCompactionService _compactionService;
     private readonly ComposerCoordinator _composer;
     private readonly LayoutCoordinator _layout;
     private readonly NavigationCoordinator _navigation;
@@ -63,6 +64,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         IAppPathProvider paths,
         IAgentSkillCatalog skillCatalog,
         SessionTurnCoordinator sessionTurns,
+        SessionCompactionService compactionService,
         ComposerCoordinator composer,
         LayoutCoordinator layout,
         NavigationCoordinator navigation,
@@ -91,6 +93,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _workspaceContext = workspaceContext;
         _mcpRegistry = mcpRegistry;
         _sessionTurns = sessionTurns;
+        _compactionService = compactionService;
         _composer = composer;
         _layout = layout;
         _navigation = navigation;
@@ -529,12 +532,51 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         NotifyCommandStatesChanged();
     }
 
+    [RelayCommand(CanExecute = nameof(CanCompactContext))]
+    private async Task CompactContextAsync()
+    {
+        if (!_notifier.ConfirmYesNo("Shell_CompactContextTitle", "Shell_CompactContextMessage"))
+        {
+            return;
+        }
+
+        Settings.SettingsStatus = _loc["Shell_CompactingContext"];
+        ManualCompactionResult result;
+        try
+        {
+            result = await _compactionService.CompactAsync(_session).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Settings.SettingsStatus = ex.Message;
+            return;
+        }
+
+        if (!result.Compacted)
+        {
+            Settings.SettingsStatus = _loc["Shell_CompactContextSkipped"];
+            NotifyCommandStatesChanged();
+            return;
+        }
+
+        _session = result.Session;
+        await _storage.ReplaceConversationDisplayAsync(_session.Id, _session.Messages).ConfigureAwait(true);
+        _sessionNavigation.Invalidate(_session.Id);
+        await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
+        SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
+        Settings.SettingsStatus = _loc["Shell_CompactContextDone"];
+        NotifyCommandStatesChanged();
+    }
+
+    private bool CanCompactContext() => Messages.Count > 0 && !IsBusy;
+
     private bool CanClearContext() => Messages.Count > 0 && !IsBusy;
 
     private void OnMessagesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(HasChatMessages));
         ClearContextCommand.NotifyCanExecuteChanged();
+        CompactContextCommand.NotifyCanExecuteChanged();
 
         if (IsBusy && e.Action == NotifyCollectionChangedAction.Add)
         {
@@ -565,6 +607,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         SendCommand.NotifyCanExecuteChanged();
         ClearContextCommand.NotifyCanExecuteChanged();
+        CompactContextCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(HasChatMessages));
     }
 
@@ -1227,6 +1270,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     partial void OnIsBusyChanged(bool value)
     {
         ClearContextCommand.NotifyCanExecuteChanged();
+        CompactContextCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
     }
 

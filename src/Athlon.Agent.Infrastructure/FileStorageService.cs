@@ -104,6 +104,30 @@ public sealed class FileStorageService(
         }
     }
 
+    public async Task ReplaceConversationDisplayAsync(
+        string sessionId,
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            EnsureSessionLogDirectories(sessionId);
+            var path = GetConversationDisplayPath(sessionId);
+            var builder = new StringBuilder();
+            foreach (var message in messages)
+            {
+                builder.AppendLine(JsonSerializer.Serialize(message, JsonFileStore.JsonLineOptions));
+            }
+
+            await AtomicFile.WriteAllTextAsync(path, builder.ToString(), cancellationToken);
+        }
+    }
+
     public async Task<IReadOnlyList<ChatMessage>> LoadConversationDisplayAsync(
         string sessionId,
         CancellationToken cancellationToken = default)

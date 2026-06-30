@@ -271,6 +271,9 @@
   <data name="Context_ClearTooltip" xml:space="preserve">
     <value>清空当前对话在模型中的可见历史</value>
   </data>
+  <data name="Context_CompactTooltip" xml:space="preserve">
+    <value>压缩当前对话上下文（LLM 摘要）</value>
+  </data>
   <data name="Context_McpServers" xml:space="preserve">
     <value>MCP 服务器</value>
   </data>
@@ -1029,6 +1032,21 @@
   </data>
   <data name="Shell_ClearContextTitle" xml:space="preserve">
     <value>清空上下文</value>
+  </data>
+  <data name="Shell_CompactContextDone" xml:space="preserve">
+    <value>上下文已压缩，可继续对话。</value>
+  </data>
+  <data name="Shell_CompactContextMessage" xml:space="preserve">
+    <value>将用摘要替换较早的对话记录，完整记录会归档到 transcripts。继续？</value>
+  </data>
+  <data name="Shell_CompactContextSkipped" xml:space="preserve">
+    <value>当前对话过短，无需压缩。</value>
+  </data>
+  <data name="Shell_CompactContextTitle" xml:space="preserve">
+    <value>压缩上下文</value>
+  </data>
+  <data name="Shell_CompactingContext" xml:space="preserve">
+    <value>正在压缩上下文…</value>
   </data>
   <data name="Shell_ContextSidebarClose" xml:space="preserve">
     <value>关闭右侧栏 (Ctrl+Alt+B)</value>

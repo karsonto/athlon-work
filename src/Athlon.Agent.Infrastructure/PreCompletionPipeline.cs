@@ -123,6 +123,7 @@ public sealed class PreCompletionPipeline(
                 options.CompactionKind,
                 force,
                 options.EmitCompactionAudit,
+                options.Strategy,
                 runtimeContext with { Budget = budget },
                 plan with
                 {
@@ -188,6 +189,7 @@ public sealed class PreCompletionPipeline(
                 options.CompactionKind,
                 options.ForceConversationCompact,
                 options.EmitCompactionAudit,
+                options.Strategy,
                 runtimeContext,
                 reEvictApplied
                     ? new DynamicCompactionPlan(

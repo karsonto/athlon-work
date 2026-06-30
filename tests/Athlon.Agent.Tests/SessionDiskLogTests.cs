@@ -95,6 +95,45 @@ public sealed class SessionDiskLogTests
     }
 
     [Fact]
+    public async Task ReplaceConversationDisplayAsync_RewritesDisplayLog()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-replace-display-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var session = AgentSession.Create("replace-display-session");
+        var first = ChatMessage.Create(MessageRole.User, "first");
+        var second = ChatMessage.Create(MessageRole.Assistant, "second");
+
+        try
+        {
+            await storage.AppendConversationMessageAsync(session.Id, first);
+            await storage.AppendConversationMessageAsync(session.Id, second);
+
+            var replacement = new[]
+            {
+                CompactionMessageContent.CreateCompactionMessage(
+                    CompactionMessageContent.CreateConversationCompact(100, 50, 2, null, "summary")),
+                ChatMessage.Create(MessageRole.Assistant, "second")
+            };
+            await storage.ReplaceConversationDisplayAsync(session.Id, replacement);
+
+            var loaded = await storage.LoadConversationDisplayAsync(session.Id);
+            Assert.Equal(2, loaded.Count);
+            Assert.Equal(MessageRole.Compaction, loaded[0].Role);
+            Assert.Equal(MessageRole.Assistant, loaded[1].Role);
+            Assert.DoesNotContain(loaded, message => message.Content.Contains("first", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task AgentRuntime_PersistsUserMessageBeforeModelReturns()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-runtime-log-{Guid.NewGuid():N}");

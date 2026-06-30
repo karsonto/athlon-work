@@ -68,6 +68,8 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<SessionTurnCoordinator>();
 
+        services.AddSingleton<SessionCompactionService>();
+
         services.AddSingleton<SubAgentCompletionContinuationService>();
 
         services.AddSingleton<ISubAgentCompletionNotifier>(sp =>
