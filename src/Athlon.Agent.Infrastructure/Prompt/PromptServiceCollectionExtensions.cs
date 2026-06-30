@@ -25,6 +25,7 @@ public static class PromptServiceCollectionExtensions
         services.AddSingleton<IEnvironmentPromptSection, SubAgentPersonaSection>();
         services.AddSingleton<IPreReasoningPromptContributor, WorkspaceFilesPromptContributor>();
         services.AddSingleton<ISystemPromptOrchestrator, SystemPromptOrchestrator>();
+        services.AddSingleton<IAgentEnvironmentPromptBuilder, EnvironmentPromptBuilderAdapter>();
         return services;
     }
 }
