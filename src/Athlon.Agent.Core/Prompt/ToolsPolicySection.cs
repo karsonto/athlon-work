@@ -4,7 +4,7 @@ namespace Athlon.Agent.Core.Prompt;
 
 public sealed class ToolsPolicySection : IEnvironmentPromptSection
 {
-    public int Order => 450;
+    public int Order => 500;
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
@@ -27,10 +27,6 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
         }
 
         builder.AppendLine("- Native tools via function calling; use each tool's schema. Do not guess file contents.");
-        builder.AppendLine("- Search: literal strings → grep_files; regex/patterns → grep_files with regex true; filenames → glob_files. Prefer search before file_read on large files.");
-        builder.AppendLine("- file_read: use offset and limit; continue on truncated or next_offset; N| line prefixes are display-only — file_edit old_text must match disk without them.");
-        builder.AppendLine("- Editing: if file_edit fails, re-read once then apply_patch or file_write (small files); never retry the same old_text a third time.");
-        builder.AppendLine("- Paths: copy verbatim from file_list, glob_files, or grep_files tool results into file_read, file_write, file_edit, apply_patch, and execute_command. Never insert spaces between Latin letters and CJK in filenames.");
         builder.AppendLine("- Writes: explain intent before file_write, file_edit, or apply_patch.");
         builder.AppendLine("- Read-only tools (file_read, grep_files, glob_files, file_list, memory_search) may run in parallel when they do not depend on each other and no writes or execute_command appear in the same round.");
         builder.AppendLine("- Shell: cmd.exe only, not PowerShell; quote paths with spaces or non-ASCII; workspace file paths in commands must come from tool results, not paraphrased text.");

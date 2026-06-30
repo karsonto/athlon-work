@@ -7,27 +7,32 @@ namespace Athlon.Agent.Tests;
 public sealed class ToolsPolicySectionTests
 {
     [Fact]
-    public void Append_WorkspaceMode_IncludesMergedFileAndShellRules()
+    public void Append_WorkspaceMode_IncludesGeneralToolRules()
     {
         var builder = new StringBuilder();
         new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools: []));
 
         var text = builder.ToString();
         Assert.Contains("Tools:", text, StringComparison.Ordinal);
-        Assert.Contains("grep_files", text, StringComparison.Ordinal);
-        Assert.Contains("file_edit old_text", text, StringComparison.Ordinal);
         Assert.Contains("Shell: cmd.exe only", text, StringComparison.Ordinal);
-        Assert.Contains("CJK", text, StringComparison.Ordinal);
+        Assert.Contains("Native tools via function calling", text, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Append_WorkspaceMode_DoesNotDuplicatePathGuidance()
+    public void Append_WorkspaceMode_DoesNotDuplicateFileToolGuidance()
     {
-        var builder = new StringBuilder();
-        new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools: []));
+        var fileBuilder = new StringBuilder();
+        new FileToolsPolicySection().Append(fileBuilder, CreateContext(hasWorkspace: true, tools: []));
+        var toolsBuilder = new StringBuilder();
+        new ToolsPolicySection().Append(toolsBuilder, CreateContext(hasWorkspace: true, tools: []));
 
-        var text = builder.ToString();
-        Assert.Equal(1, CountOccurrences(text, "copy verbatim from file_list"));
+        var fileText = fileBuilder.ToString();
+        var toolsText = toolsBuilder.ToString();
+        Assert.Contains("character-for-character", fileText, StringComparison.Ordinal);
+        Assert.Contains("N| prefixes", fileText, StringComparison.Ordinal);
+        Assert.DoesNotContain("N| prefixes", toolsText, StringComparison.Ordinal);
+        Assert.DoesNotContain("character-for-character", toolsText, StringComparison.Ordinal);
+        Assert.DoesNotContain("Prefer search before file_read", toolsText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -46,19 +51,6 @@ public sealed class ToolsPolicySectionTests
         Assert.Contains("advertised only via function schemas", text, StringComparison.Ordinal);
         Assert.DoesNotContain("- mcp_server__echo:", text, StringComparison.Ordinal);
         Assert.DoesNotContain("- mcp_server__search:", text, StringComparison.Ordinal);
-    }
-
-    private static int CountOccurrences(string text, string value)
-    {
-        var count = 0;
-        var index = 0;
-        while ((index = text.IndexOf(value, index, StringComparison.Ordinal)) >= 0)
-        {
-            count++;
-            index += value.Length;
-        }
-
-        return count;
     }
 
     private static EnvironmentPromptContext CreateContext(bool hasWorkspace, IReadOnlyList<ToolDefinition> tools) =>

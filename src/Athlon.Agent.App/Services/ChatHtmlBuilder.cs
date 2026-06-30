@@ -967,6 +967,33 @@ public sealed class ChatHtmlBuilder
           return state.toolCalls.get(toolCallId) || document.querySelector('[data-tool-call-id="' + toolCallId + '"]');
         }
 
+        function applyToolStatusBadge(badge, status) {
+          if (!badge) return;
+          const normalized = (status || 'succeeded').toLowerCase();
+          const cssClass = normalized === 'succeeded' || normalized === 'success'
+            ? 'success'
+            : normalized === 'failed' || normalized === 'failure'
+              ? 'failed'
+              : normalized === 'cancelled' || normalized === 'canceled'
+                ? 'cancelled'
+                : normalized === 'running'
+                  ? 'running'
+                  : normalized === 'preparing'
+                    ? 'running'
+                    : 'success';
+          const label = cssClass === 'success'
+            ? 'success'
+            : cssClass === 'failed'
+              ? 'failed'
+              : cssClass === 'cancelled'
+                ? 'cancelled'
+                : cssClass === 'running'
+                  ? 'running'
+                  : normalized;
+          badge.textContent = label;
+          badge.className = 'tool-status ' + cssClass;
+        }
+
         function handleEvent(event) {
           if (!event || !event.type) return;
           switch (event.type) {
@@ -1035,8 +1062,7 @@ public sealed class ChatHtmlBuilder
             case 'TOOL_CALL_END': {
               const card = getToolCard(event.toolCallId);
               if (card) {
-                const badge = card.querySelector('.tool-status');
-                if (badge) { badge.textContent = 'done'; badge.className = 'tool-status success'; }
+                applyToolStatusBadge(card.querySelector('.tool-status'), event.status || 'running');
               }
               break;
             }
@@ -1054,8 +1080,7 @@ public sealed class ChatHtmlBuilder
             case 'TOOL_CALL_RESULT': {
               const card = getToolCard(event.toolCallId);
               if (!card) break;
-              const badge = card.querySelector('.tool-status');
-              if (badge) { badge.textContent = 'success'; badge.className = 'tool-status success'; }
+              applyToolStatusBadge(card.querySelector('.tool-status'), event.status || 'succeeded');
               if (event.header) {
                 let header = card.querySelector('.tool-header');
                 if (!header) {

@@ -84,6 +84,33 @@ public sealed class ChatDisplayPolicyTests
     }
 
     [Fact]
+    public void BuildReplayEvents_includes_failed_tool_status()
+    {
+        var toolCall = new AgentToolCall("call-fail", "read_file", new Dictionary<string, string>());
+        var toolContent = AgentRuntime.FormatToolResult(toolCall, ToolResult.Failure("Read failed", "file not found"));
+        var messages = new List<ChatMessageViewModel>
+        {
+            new(ChatMessage.Create(MessageRole.Tool, toolContent))
+        };
+
+        var events = ChatEventSerializer.BuildReplayEvents(messages, showToolCalls: true);
+        var resultEvent = Assert.Single(events, json => json.Contains("TOOL_CALL_RESULT", StringComparison.Ordinal));
+        Assert.Contains("\"status\":\"failed\"", resultEvent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Serialize_includes_failed_status_for_tool_call_result_stream_event()
+    {
+        var toolCall = new AgentToolCall("call-fail", "read_file", new Dictionary<string, string>());
+        var toolContent = AgentRuntime.FormatToolResult(toolCall, ToolResult.Failure("Read failed", "file not found"));
+        var streamEvent = new AgentStreamEvent.ToolCallResult("call-fail", toolContent, "msg-fail");
+
+        var json = ChatEventSerializer.Serialize(streamEvent);
+
+        Assert.Contains("\"status\":\"failed\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void IsToolStreamEvent_matches_tool_stream_types()
     {
         Assert.True(ChatDisplayPolicy.IsToolStreamEvent(new AgentStreamEvent.ToolCallStart("id", "tool", 0)));

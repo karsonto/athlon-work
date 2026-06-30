@@ -30,8 +30,14 @@ internal static class ChatEventSerializer
             AgentStreamEvent.ReasoningMessageEnd e => SerializeAgui("REASONING_MESSAGE_END", new { messageId = e.MessageId }),
             AgentStreamEvent.ToolCallStart e => SerializeAgui("TOOL_CALL_START", new { toolCallId = e.ToolCallId, toolCallName = e.ToolName }),
             AgentStreamEvent.ToolCallArgs e => SerializeAgui("TOOL_CALL_ARGS", new { toolCallId = e.ToolCallId, delta = e.Delta }),
-            AgentStreamEvent.ToolCallEnd e => SerializeAgui("TOOL_CALL_END", new { toolCallId = e.ToolCallId }),
-            AgentStreamEvent.ToolCallResult e => SerializeAgui("TOOL_CALL_RESULT", new { toolCallId = e.ToolCallId, content = e.Content, messageId = e.MessageId }),
+            AgentStreamEvent.ToolCallEnd e => SerializeAgui("TOOL_CALL_END", new { toolCallId = e.ToolCallId, status = "running" }),
+            AgentStreamEvent.ToolCallResult e => SerializeAgui("TOOL_CALL_RESULT", new
+            {
+                toolCallId = e.ToolCallId,
+                content = e.Content,
+                messageId = e.MessageId,
+                status = ParseToolStatusFromContent(e.Content)
+            }),
             AgentStreamEvent.ToolCallOutput e => SerializeAgui("TOOL_CALL_OUTPUT", new { toolCallId = e.ToolCallId, delta = e.Delta }),
             _ => "{}"
         };
@@ -81,6 +87,7 @@ internal static class ChatEventSerializer
             messageId = message.MessageId,
             header = message.ToolHeader,
             summary = message.ToolSummary,
+            status = SerializeToolStatus(message.ToolCallStatus),
             markdownB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(detail)),
             htmlB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(MarkdownHtmlRenderer.ToHtmlFragment(detail)))
         });
@@ -183,7 +190,7 @@ internal static class ChatEventSerializer
             yield return SerializeAgui("TOOL_CALL_ARGS", new { toolCallId, delta = message.ToolArgumentsText });
         }
 
-        yield return SerializeAgui("TOOL_CALL_END", new { toolCallId });
+        yield return SerializeAgui("TOOL_CALL_END", new { toolCallId, status = "running" });
 
         var detail = !string.IsNullOrWhiteSpace(message.ToolDetailExpandedDisplay)
             ? message.ToolDetailExpandedDisplay
@@ -199,10 +206,35 @@ internal static class ChatEventSerializer
                 messageId = message.MessageId,
                 header = message.ToolHeader,
                 summary = message.ToolSummary,
+                status = SerializeToolStatus(message.ToolCallStatus),
                 markdownB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(detail)),
                 htmlB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(MarkdownHtmlRenderer.ToHtmlFragment(detail)))
             });
         }
+    }
+
+    private static string SerializeToolStatus(ToolCallDisplayStatus status) =>
+        status switch
+        {
+            ToolCallDisplayStatus.Running => "running",
+            ToolCallDisplayStatus.Failed => "failed",
+            ToolCallDisplayStatus.Cancelled => "cancelled",
+            ToolCallDisplayStatus.Preparing => "preparing",
+            _ => "succeeded"
+        };
+
+    private static string ParseToolStatusFromContent(string content)
+    {
+        ToolMessageDisplayParser.ParseToolContent(
+            content,
+            out _,
+            out _,
+            out _,
+            out _,
+            out _,
+            out _,
+            out var status);
+        return SerializeToolStatus(status);
     }
 
     private static string SerializeAgui(string type, object payload)

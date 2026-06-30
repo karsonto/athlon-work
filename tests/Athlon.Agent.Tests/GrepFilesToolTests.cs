@@ -164,7 +164,7 @@ public sealed class GrepFilesToolTests
     }
 
     [Fact]
-    public async Task InvokeAsync_ParallelScan_RespectsGlobalMaxMatches()
+    public async Task InvokeAsync_SequentialScan_RespectsGlobalMaxMatches()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
         var workspaceRoot = Path.Combine(root, "workspace");
@@ -198,7 +198,7 @@ public sealed class GrepFilesToolTests
     }
 
     [Fact]
-    public async Task InvokeAsync_ParallelScan_FindsMatchesAcrossFiles()
+    public async Task InvokeAsync_SequentialScan_FindsMatchesAcrossFiles()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
         var workspaceRoot = Path.Combine(root, "workspace");
@@ -224,6 +224,79 @@ public sealed class GrepFilesToolTests
             Assert.Contains("alpha", result.Content!, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("beta", result.Content!, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("gamma", result.Content!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_SequentialScan_PreservesEnumerationOrder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, "aaa"));
+        Directory.CreateDirectory(Path.Combine(workspaceRoot, "zzz"));
+
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "aaa", "first.txt"), "order-marker");
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "zzz", "last.txt"), "order-marker");
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
+            {
+                ["pattern"] = "order-marker"
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            var lines = result.Content!.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+            Assert.Equal(2, lines.Length);
+            Assert.Contains("aaa", lines[0], StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("zzz", lines[1], StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_SequentialScan_StopsAtMaxMatchesInFileOrder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(workspaceRoot);
+
+        for (var i = 0; i < 250; i++)
+        {
+            await File.WriteAllTextAsync(Path.Combine(workspaceRoot, $"file-{i:D3}.txt"), "cap-marker");
+        }
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
+            {
+                ["pattern"] = "cap-marker"
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("Found 200 matches", result.Summary);
+            var lines = result.Content!.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+            Assert.Equal(200, lines.Length);
+            Assert.Contains("file-000.txt", lines[0], StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("file-199.txt", lines[^1], StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("file-200.txt", result.Content!, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
