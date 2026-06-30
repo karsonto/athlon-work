@@ -1,3 +1,4 @@
+using System.IO;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Middleware;
