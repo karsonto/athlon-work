@@ -19,6 +19,7 @@ public sealed class PreCompletionPipeline(
         CancellationToken cancellationToken = default)
     {
         options ??= PreCompletionOptions.Default;
+        var isManualCompact = options.Strategy == CompactionStrategy.ManualCompact;
 
         if (!options.AllowConversationCompact)
         {
@@ -54,7 +55,8 @@ public sealed class PreCompletionPipeline(
             cfg.DynamicCompaction,
             runtimeContext.ForceOverflow);
 
-        if (!force
+        if (!isManualCompact
+            && !force
             && pressure == ContextPressureLevel.Normal
             && !ContextPressureEvaluator.MeetsStaticTruncateThreshold(conversation, cfg)
             && budget.TotalUtilization < ContextPressureEvaluator.ResolveTruncateThreshold(cfg.DynamicCompaction))
@@ -63,6 +65,10 @@ public sealed class PreCompletionPipeline(
         }
 
         var plan = DynamicCompactionPlan.Create(pressure, budget, conversation, cfg, force);
+        if (isManualCompact)
+        {
+            plan = plan with { ApplyConversationCompact = true };
+        }
 
         var truncateApplied = false;
         var reEvictApplied = false;
@@ -109,9 +115,14 @@ public sealed class PreCompletionPipeline(
             }
         }
 
-        if (!plan.ApplyConversationCompact)
+        if (!plan.ApplyConversationCompact && !isManualCompact)
         {
             return session;
+        }
+
+        if (isManualCompact)
+        {
+            plan = plan with { ApplyConversationCompact = true };
         }
 
         pressure = ContextPressureEvaluator.Evaluate(budget, cfg.DynamicCompaction, runtimeContext.ForceOverflow);

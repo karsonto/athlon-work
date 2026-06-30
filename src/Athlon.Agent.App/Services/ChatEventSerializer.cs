@@ -89,9 +89,14 @@ internal static class ChatEventSerializer
             summary = message.ToolSummary,
             status = SerializeToolStatus(message.ToolCallStatus),
             markdownB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(detail)),
-            htmlB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(MarkdownHtmlRenderer.ToHtmlFragment(detail)))
+            htmlB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(RenderToolResultHtml(message, detail)))
         });
     }
+
+    private static string RenderToolResultHtml(ChatMessageViewModel message, string detail) =>
+        message.IsCompaction && message.IsToolRunning
+            ? MarkdownHtmlRenderer.ToPlainTextHtmlFragment(detail)
+            : MarkdownHtmlRenderer.ToHtmlFragment(detail);
 
     public static string SerializeEventsToJsonArray(IReadOnlyList<string> eventJsonStrings)
     {
@@ -192,6 +197,11 @@ internal static class ChatEventSerializer
 
         yield return SerializeAgui("TOOL_CALL_END", new { toolCallId, status = "running" });
 
+        if (message.IsCompaction && message.IsToolRunning)
+        {
+            yield break;
+        }
+
         var detail = !string.IsNullOrWhiteSpace(message.ToolDetailExpandedDisplay)
             ? message.ToolDetailExpandedDisplay
             : !string.IsNullOrWhiteSpace(message.ToolDetail)
@@ -208,7 +218,7 @@ internal static class ChatEventSerializer
                 summary = message.ToolSummary,
                 status = SerializeToolStatus(message.ToolCallStatus),
                 markdownB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(detail)),
-                htmlB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(MarkdownHtmlRenderer.ToHtmlFragment(detail)))
+                htmlB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(RenderToolResultHtml(message, detail)))
             });
         }
     }

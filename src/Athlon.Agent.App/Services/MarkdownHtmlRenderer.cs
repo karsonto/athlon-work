@@ -13,6 +13,17 @@ public static class MarkdownHtmlRenderer
         .UseSoftlineBreakAsHardlineBreak()
         .Build();
 
+    /// <summary>将纯文本转为 HTML 片段，不经过 Markdig（用于简单状态文案）。</summary>
+    public static string ToPlainTextHtmlFragment(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        return $"<p>{WebUtility.HtmlEncode(text)}</p>";
+    }
+
     /// <summary>将 Markdown 转为 HTML 片段；解析失败时回退为转义后的纯文本。</summary>
     public static string ToHtmlFragment(string? markdown)
     {
@@ -25,9 +36,9 @@ public static class MarkdownHtmlRenderer
         {
             return Markdown.ToHtml(markdown, Pipeline);
         }
-        catch (ArgumentException)
+        catch (Exception)
         {
-            return $"<pre>{WebUtility.HtmlEncode(markdown)}</pre>";
+            return ToPlainTextHtmlFragment(markdown);
         }
     }
 

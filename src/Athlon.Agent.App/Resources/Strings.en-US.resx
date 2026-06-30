@@ -76,8 +76,17 @@
   <data name="Chat_CompactionDefault" xml:space="preserve">
     <value>Context compaction</value>
   </data>
+  <data name="Chat_CompactionCancelled" xml:space="preserve">
+    <value>Compaction cancelled.</value>
+  </data>
+  <data name="Chat_CompactionManualLayersSubtitle" xml:space="preserve">
+    <value>Trigger: manual compaction · Layers: ① tool result eviction → ② truncate args → ③ LLM conversation summary</value>
+  </data>
   <data name="Chat_CompactionNotice" xml:space="preserve">
     <value>Records below are kept in full; model context was compacted. New messages use the summary plus recent history.</value>
+  </data>
+  <data name="Chat_CompactionRunning" xml:space="preserve">
+    <value>Compacting context…</value>
   </data>
   <data name="Chat_ComposerHint" xml:space="preserve">
     <value>Press Enter to send, Shift+Enter for a new line</value>
@@ -1033,11 +1042,17 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   <data name="Shell_ClearContextTitle" xml:space="preserve">
     <value>Clear context</value>
   </data>
+  <data name="Shell_CompactContextCancelled" xml:space="preserve">
+    <value>Context compaction cancelled.</value>
+  </data>
   <data name="Shell_CompactContextDone" xml:space="preserve">
     <value>Context compressed. You can continue chatting.</value>
   </data>
   <data name="Shell_CompactContextMessage" xml:space="preserve">
     <value>Earlier messages will be replaced with a summary; full history is archived to transcripts. Continue?</value>
+  </data>
+  <data name="Shell_CompactContextFailed" xml:space="preserve">
+    <value>Context compaction failed. Please try again later.</value>
   </data>
   <data name="Shell_CompactContextSkipped" xml:space="preserve">
     <value>Conversation is too short to compress.</value>

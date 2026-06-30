@@ -24,6 +24,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
     private Action? _syncWorkspaceContext;
     private Action<bool>? _setIsBusy;
     private Func<IReadOnlyList<string>>? _getIgnorePatterns;
+    private Func<bool>? _tryCancelCompaction;
 
     public ChatPageViewModel(
         ComposerCoordinator composer,
@@ -45,7 +46,8 @@ public sealed partial class ChatPageViewModel : ObservableObject
         Action notifyCommandStatesChanged,
         Action syncWorkspaceContext,
         Action<bool> setIsBusy,
-        Func<IReadOnlyList<string>> getIgnorePatterns)
+        Func<IReadOnlyList<string>> getIgnorePatterns,
+        Func<bool> tryCancelCompaction)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
@@ -55,6 +57,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         _syncWorkspaceContext = syncWorkspaceContext;
         _setIsBusy = setIsBusy;
         _getIgnorePatterns = getIgnorePatterns;
+        _tryCancelCompaction = tryCancelCompaction;
     }
 
     [ObservableProperty]
@@ -162,6 +165,11 @@ public sealed partial class ChatPageViewModel : ObservableObject
     [RelayCommand]
     private void Stop()
     {
+        if (_tryCancelCompaction?.Invoke() == true)
+        {
+            return;
+        }
+
         var sessionId = _getDisplayedSessionId!();
         _sessionTurns.TurnHost.Cancel(sessionId);
         _sessionTurns.QueuedTurnPresenter.Clear(sessionId);

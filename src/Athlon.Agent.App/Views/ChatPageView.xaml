@@ -435,7 +435,7 @@
                                             <Style TargetType="Button" BasedOn="{StaticResource DangerCircleButtonStyle}">
                                                 <Setter Property="Visibility" Value="Collapsed" />
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsBusy}" Value="True">
+                                                    <DataTrigger Binding="{Binding IsComposerStopVisible}" Value="True">
                                                         <Setter Property="Visibility" Value="Visible" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
@@ -444,8 +444,17 @@
                                         <TextBlock Text="■" FontSize="12" />
                                     </Button>
                                     <Button Command="{Binding SendCommand}"
-                                            ToolTip="{loc:Localize Key=Chat_SendTooltip}"
-                                            Style="{StaticResource ComposerSendButtonStyle}">
+                                            ToolTip="{loc:Localize Key=Chat_SendTooltip}">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource ComposerSendButtonStyle}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsCompacting}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
                                         <TextBlock Text="➤" FontSize="12" />
                                     </Button>
                                 </StackPanel>

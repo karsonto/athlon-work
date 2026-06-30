@@ -134,7 +134,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             NotifyCommandStatesChanged,
             SyncWorkspaceContext,
             busy => IsBusy = busy,
-            () => _workspaceContext.IgnorePatterns);
+            () => _workspaceContext.IgnorePatterns,
+            TryCancelCompaction);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Settings.SettingsSaved += async (_, _) => await OnSettingsSavedAsync();
@@ -281,6 +282,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public const double ContextSidebarCollapseDragThreshold = UiLayoutConstraints.ContextSidebarCollapseDragThreshold;
 
     private CancellationTokenSource? _copyNoticeCts;
+    private CancellationTokenSource? _compactionCts;
 
     [ObservableProperty]
     private string copyNotice = string.Empty;
@@ -290,6 +292,13 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     [ObservableProperty]
     private bool isBusy;
+
+    [ObservableProperty]
+    private bool isCompacting;
+
+    public bool IsComposerStopVisible => IsBusy || IsCompacting;
+
+    public bool IsComposerSendVisible => !IsCompacting;
 
     [ObservableProperty]
     private bool isLoadingSession;
@@ -540,35 +549,90 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
+        _compactionCts?.Cancel();
+        _compactionCts?.Dispose();
+        _compactionCts = new CancellationTokenSource();
+        var compactionToken = _compactionCts.Token;
+        IsCompacting = true;
+        NotifyComposerCompactionStateChanged();
+        _activeUi.BeginManualCompactionBubble();
         Settings.SettingsStatus = _loc["Shell_CompactingContext"];
-        ManualCompactionResult result;
+        NotifyCommandStatesChanged();
+
         try
         {
-            result = await _compactionService.CompactAsync(_session).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            Settings.SettingsStatus = ex.Message;
-            return;
-        }
+            ManualCompactionResult result;
+            try
+            {
+                result = await _compactionService.CompactAsync(_session, compactionToken).ConfigureAwait(true);
+            }
+            catch (OperationCanceledException)
+            {
+                _activeUi.CancelManualCompactionBubble();
+                Settings.SettingsStatus = _loc["Shell_CompactContextCancelled"];
+                return;
+            }
+            catch (Exception ex)
+            {
+                _activeUi.DismissManualCompactionBubble();
+                Settings.SettingsStatus = ex.Message;
+                return;
+            }
 
-        if (!result.Compacted)
+            if (!result.Compacted)
+            {
+                _activeUi.DismissManualCompactionBubble();
+                Settings.SettingsStatus = _loc["Shell_CompactContextFailed"];
+                return;
+            }
+
+            _session = result.Session;
+            await _storage.ReplaceConversationDisplayAsync(_session.Id, _session.Messages).ConfigureAwait(true);
+            _sessionNavigation.Invalidate(_session.Id);
+            await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
+            SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
+            Settings.SettingsStatus = _loc["Shell_CompactContextDone"];
+        }
+        finally
         {
-            Settings.SettingsStatus = _loc["Shell_CompactContextSkipped"];
+            IsCompacting = false;
+            _compactionCts?.Dispose();
+            _compactionCts = null;
+            NotifyComposerCompactionStateChanged();
             NotifyCommandStatesChanged();
-            return;
         }
-
-        _session = result.Session;
-        await _storage.ReplaceConversationDisplayAsync(_session.Id, _session.Messages).ConfigureAwait(true);
-        _sessionNavigation.Invalidate(_session.Id);
-        await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
-        SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
-        Settings.SettingsStatus = _loc["Shell_CompactContextDone"];
-        NotifyCommandStatesChanged();
     }
 
-    private bool CanCompactContext() => Messages.Count > 0 && !IsBusy;
+    private bool TryCancelCompaction()
+    {
+        if (!IsCompacting)
+        {
+            return false;
+        }
+
+        CancelCompaction();
+        return true;
+    }
+
+    private void CancelCompaction()
+    {
+        if (!IsCompacting)
+        {
+            return;
+        }
+
+        _compactionCts?.Cancel();
+    }
+
+    private void NotifyComposerCompactionStateChanged()
+    {
+        OnPropertyChanged(nameof(IsComposerStopVisible));
+        OnPropertyChanged(nameof(IsComposerSendVisible));
+        CompactContextCommand.NotifyCanExecuteChanged();
+        SendCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanCompactContext() => Messages.Count > 0 && !IsBusy && !IsCompacting;
 
     private bool CanClearContext() => Messages.Count > 0 && !IsBusy;
 
@@ -1248,6 +1312,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         UnwireModifiedFilesUi(_activeUi);
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();
+        _compactionCts?.Cancel();
+        _compactionCts?.Dispose();
         _layout.Dispose();
         _sessionHistory.Dispose();
         _workspaceBridge.Dispose();
@@ -1272,7 +1338,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ClearContextCommand.NotifyCanExecuteChanged();
         CompactContextCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(IsComposerStopVisible));
     }
+
+    partial void OnIsCompactingChanged(bool value) => NotifyComposerCompactionStateChanged();
 
     private void RefreshAtCompletionSources(bool reloadSkills = false) =>
         _composer.RefreshSources(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns, reloadSkills);

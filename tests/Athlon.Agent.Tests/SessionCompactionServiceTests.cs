@@ -10,7 +10,7 @@ namespace Athlon.Agent.Tests;
 public sealed class SessionCompactionServiceTests
 {
     [Fact]
-    public async Task CompactAsync_ShortConversation_ReturnsNotCompacted()
+    public async Task CompactAsync_SingleMessage_StillCompresses()
     {
         var service = CreateService();
         var session = AgentSession.Create("short").WithMessages(
@@ -20,8 +20,8 @@ public sealed class SessionCompactionServiceTests
 
         var result = await service.CompactAsync(session);
 
-        Assert.False(result.Compacted);
-        Assert.Single(result.Session.Messages);
+        Assert.True(result.Compacted);
+        Assert.Contains(result.Session.Messages, message => message.Role == MessageRole.Compaction);
     }
 
     [Fact]

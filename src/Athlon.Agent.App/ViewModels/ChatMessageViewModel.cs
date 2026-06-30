@@ -12,6 +12,8 @@ namespace Athlon.Agent.App.ViewModels;
 
 public sealed partial class ChatMessageViewModel : ObservableObject
 {
+    public const string PendingManualCompactionMessageId = "pending-manual-compaction";
+
     public const int MaxToolDetailDisplayChars = 16_384;
     public const int DeferredMarkdownThresholdChars = 8_192;
     private const int ToolDetailPreviewChars = 4_096;
@@ -91,6 +93,34 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             IsToolRunning = false;
             ApplyDeferredMarkdownPolicy();
         }
+    }
+
+    private ChatMessageViewModel(string pendingCompactionId)
+    {
+        MessageId = pendingCompactionId;
+        ToolCallId = pendingCompactionId;
+        Role = MessageRole.Compaction.ToString();
+        IsUser = false;
+        IsTool = false;
+        IsCompaction = true;
+        IsHiddenPlaceholder = false;
+        DisplayRole = Strings.Get("Chat_RoleContext");
+        CompactionCardTitle = CompactionAuditDisplay.GetCardTitle(CompactionStrategy.ManualCompact);
+        ToolHeader = Strings.Get("Chat_CompactionManualLayersSubtitle");
+        ToolSummary = Strings.Get("Chat_CompactionRunning");
+        ToolDetail = string.Empty;
+        ToolDetailDisplay = string.Empty;
+        ToolName = string.Empty;
+        ToolArgumentsText = string.Empty;
+        Content = string.Empty;
+        ReasoningContent = string.Empty;
+        UserAttachmentSummary = string.Empty;
+        CreatedAt = AppTimeZone.Now.ToString("HH:mm:ss");
+        IsToolRunning = true;
+        ToolCallStatus = ToolCallDisplayStatus.Running;
+        IsExpanded = true;
+        IsStreaming = false;
+        IsReasoningStreaming = false;
     }
 
     private ChatMessageViewModel(AgentToolCall toolCall)
@@ -256,6 +286,9 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     private void ToggleToolExpand() => IsExpanded = !IsExpanded;
 
     public static ChatMessageViewModel CreatePendingTool(AgentToolCall toolCall) => new(toolCall);
+
+    public static ChatMessageViewModel CreatePendingManualCompaction() =>
+        new(PendingManualCompactionMessageId);
 
     public static ChatMessageViewModel CreateStreamingTool(int streamIndex) => new(streamIndex);
 
@@ -549,6 +582,34 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsToolRunning = false;
         ToolCallStatus = ToolCallDisplayStatus.Cancelled;
         ToolSummary = Strings.Get("Chat_ToolStopped");
+    }
+
+    public void MarkCompactionCancelled()
+    {
+        if (!IsCompaction || !IsToolRunning)
+        {
+            return;
+        }
+
+        IsToolRunning = false;
+        ToolCallStatus = ToolCallDisplayStatus.Cancelled;
+        ToolSummary = Strings.Get("Chat_CompactionCancelled");
+    }
+
+    public void ApplyCompletedCompaction(ChatMessage auditMessage)
+    {
+        if (!IsCompaction || auditMessage.Role != MessageRole.Compaction)
+        {
+            return;
+        }
+
+        var display = CompactionAuditDisplay.Parse(auditMessage.Content);
+        ToolHeader = display.StrategySubtitle;
+        ToolSummary = AppendCompactionDisplayNotice(display.Summary);
+        AssignToolDetail(display.Detail);
+        IsToolRunning = false;
+        ToolCallStatus = ToolCallDisplayStatus.Succeeded;
+        IsExpanded = false;
     }
 
     /// <summary>Appends incremental stdout/stderr output while the tool is still running.</summary>

@@ -414,6 +414,180 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public async Task ConversationCompactor_Cancellation_DoesNotModifySession()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var settings = new AppSettings
+            {
+                ContextCompaction = new ContextCompactionSettings
+                {
+                    TriggerMessages = 2,
+                    KeepMessages = 1,
+                    SummaryMaxTokens = 512,
+                    MaxConversationCharsForSummary = 10_000
+                }
+            };
+
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+            var session = AgentSession.Create("cancel-compact-session")
+                .WithMessages(new[]
+                {
+                    ChatMessage.Create(MessageRole.User, "old"),
+                    ChatMessage.Create(MessageRole.Assistant, "earlier"),
+                    ChatMessage.Create(MessageRole.User, "hello"),
+                    ChatMessage.Create(MessageRole.Assistant, "hi")
+                });
+            var originalCount = session.Messages.Count;
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            var compactor = new ConversationCompactor(
+                settings,
+                new CancellingModelClient(),
+                storage,
+                new TruncateArgsService(),
+                new SessionUsageAccumulator(),
+                new NoOpLogger());
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                compactor.CompactIfNeededAsync(
+                    session,
+                    new CompactionExecutionRequest(
+                        CompactionKind.ConversationCompact,
+                        Force: true,
+                        EmitAudit: true,
+                        Strategy: CompactionStrategy.ManualCompact),
+                    cts.Token));
+
+            Assert.Equal(originalCount, session.Messages.Count);
+            Assert.DoesNotContain(session.Messages, message => message.Role == MessageRole.Compaction);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ConversationCompactor_ManualForce_CompactsWhenConversationShorterThanKeepMessages()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var settings = new AppSettings
+            {
+                ContextCompaction = new ContextCompactionSettings
+                {
+                    TriggerMessages = 100,
+                    KeepMessages = 20,
+                    SummaryMaxTokens = 512,
+                    MaxConversationCharsForSummary = 10_000
+                }
+            };
+
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+            var session = AgentSession.Create("short-manual").WithMessages(new[]
+            {
+                ChatMessage.Create(MessageRole.User, "one"),
+                ChatMessage.Create(MessageRole.Assistant, "two"),
+                ChatMessage.Create(MessageRole.User, "three"),
+            });
+
+            var compactor = new ConversationCompactor(
+                settings,
+                new FakeModelClient("summary text"),
+                storage,
+                new TruncateArgsService(),
+                new SessionUsageAccumulator(),
+                new NoOpLogger());
+
+            var result = await compactor.CompactIfNeededAsync(
+                session,
+                new CompactionExecutionRequest(
+                    CompactionKind.ConversationCompact,
+                    Force: true,
+                    EmitAudit: true,
+                    Strategy: CompactionStrategy.ManualCompact));
+
+            Assert.True(result.Compacted);
+            Assert.Contains(result.Session.Messages, message => message.Role == MessageRole.Compaction);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ConversationCompactor_ManualForce_CompactsSingleMessageConversation()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var settings = new AppSettings
+            {
+                ContextCompaction = new ContextCompactionSettings
+                {
+                    TriggerMessages = 100,
+                    KeepMessages = 20,
+                    SummaryMaxTokens = 512,
+                    MaxConversationCharsForSummary = 10_000
+                }
+            };
+
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+            var session = AgentSession.Create("single-manual").WithMessages(new[]
+            {
+                ChatMessage.Create(MessageRole.User, "only message"),
+            });
+
+            var compactor = new ConversationCompactor(
+                settings,
+                new FakeModelClient("summary text"),
+                storage,
+                new TruncateArgsService(),
+                new SessionUsageAccumulator(),
+                new NoOpLogger());
+
+            var result = await compactor.CompactIfNeededAsync(
+                session,
+                new CompactionExecutionRequest(
+                    CompactionKind.ConversationCompact,
+                    Force: true,
+                    EmitAudit: true,
+                    Strategy: CompactionStrategy.ManualCompact));
+
+            Assert.True(result.Compacted);
+            Assert.Contains(result.Session.Messages, message => message.Role == MessageRole.Compaction);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
     public void CompactionMessageContent_IsSummaryPlaceholder_DetectsMarker()
     {
         var content = $"{ConversationCompactionDefaults.SummaryMessageMarker}\nsummary";
@@ -829,6 +1003,20 @@ public sealed class CompactionTests
             Func<StreamingToolCallDelta, Task>? onToolCallDelta = null,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new AgentModelResponse(content, Array.Empty<AgentToolCall>()));
+    }
+
+    private sealed class CancellingModelClient : IAgentModelClient
+    {
+        public Task<AgentModelResponse> CompleteAsync(
+            AgentModelRequest request,
+            Func<string, Task>? onTextDelta = null,
+            Func<string, Task>? onReasoningDelta = null,
+            Func<StreamingToolCallDelta, Task>? onToolCallDelta = null,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(new AgentModelResponse("summary", Array.Empty<AgentToolCall>()));
+        }
     }
 
     private sealed class NoOpLogger : IAppLogger

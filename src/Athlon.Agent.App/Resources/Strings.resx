@@ -76,8 +76,17 @@
   <data name="Chat_CompactionDefault" xml:space="preserve">
     <value>上下文压缩</value>
   </data>
+  <data name="Chat_CompactionCancelled" xml:space="preserve">
+    <value>压缩已取消。</value>
+  </data>
+  <data name="Chat_CompactionManualLayersSubtitle" xml:space="preserve">
+    <value>触发：用户手动压缩 · 层级：① 工具结果归档 → ② 工具参数截断 → ③ LLM 对话摘要</value>
+  </data>
   <data name="Chat_CompactionNotice" xml:space="preserve">
     <value>以下记录仍完整保留；模型上下文已压缩，新消息基于摘要 + 最近历史。</value>
+  </data>
+  <data name="Chat_CompactionRunning" xml:space="preserve">
+    <value>正在压缩上下文…</value>
   </data>
   <data name="Chat_ComposerHint" xml:space="preserve">
     <value>按 Enter 发送消息，Shift+Enter 换行</value>
@@ -1033,11 +1042,17 @@
   <data name="Shell_ClearContextTitle" xml:space="preserve">
     <value>清空上下文</value>
   </data>
+  <data name="Shell_CompactContextCancelled" xml:space="preserve">
+    <value>已取消压缩。</value>
+  </data>
   <data name="Shell_CompactContextDone" xml:space="preserve">
     <value>上下文已压缩，可继续对话。</value>
   </data>
   <data name="Shell_CompactContextMessage" xml:space="preserve">
     <value>将用摘要替换较早的对话记录，完整记录会归档到 transcripts。继续？</value>
+  </data>
+  <data name="Shell_CompactContextFailed" xml:space="preserve">
+    <value>上下文压缩失败，请稍后重试。</value>
   </data>
   <data name="Shell_CompactContextSkipped" xml:space="preserve">
     <value>当前对话过短，无需压缩。</value>

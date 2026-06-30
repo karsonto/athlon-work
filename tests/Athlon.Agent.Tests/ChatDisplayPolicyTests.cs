@@ -84,6 +84,18 @@ public sealed class ChatDisplayPolicyTests
     }
 
     [Fact]
+    public void BuildReplayEvents_includes_running_pending_manual_compaction()
+    {
+        var pending = ChatMessageViewModel.CreatePendingManualCompaction();
+        var events = ChatEventSerializer.BuildReplayEvents([pending], showToolCalls: false);
+
+        Assert.Contains(events, json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal));
+        Assert.Contains(events, json => json.Contains(ChatMessageViewModel.PendingManualCompactionMessageId, StringComparison.Ordinal));
+        Assert.Contains(events, json => json.Contains("TOOL_CALL_END", StringComparison.Ordinal));
+        Assert.DoesNotContain(events, json => json.Contains("TOOL_CALL_RESULT", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void BuildReplayEvents_includes_failed_tool_status()
     {
         var toolCall = new AgentToolCall("call-fail", "read_file", new Dictionary<string, string>());

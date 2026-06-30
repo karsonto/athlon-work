@@ -42,6 +42,66 @@ public sealed class SessionTurnUiControllerCompactionTests
         Assert.Single(ui.Messages, message => message.IsCompaction);
     }
 
+    [Fact]
+    public async Task BeginManualCompactionBubble_AddsRunningCompactionCard()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            ui.Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "one")));
+            ui.BeginManualCompactionBubble();
+        });
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            Assert.Equal(2, ui.Messages.Count);
+            var pending = Assert.Single(ui.Messages, message => message.IsCompaction);
+            Assert.True(pending.IsToolRunning);
+            Assert.Equal(ChatMessageViewModel.PendingManualCompactionMessageId, pending.MessageId);
+            Assert.Equal(CompactionAuditDisplay.GetCardTitle(CompactionStrategy.ManualCompact), pending.CompactionCardTitle);
+        });
+    }
+
+    [Fact]
+    public async Task CancelManualCompactionBubble_RemovesPendingCompactionCard()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            ui.BeginManualCompactionBubble();
+            ui.CancelManualCompactionBubble();
+        });
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            Assert.Empty(ui.Messages);
+        });
+    }
+
+    [Fact]
+    public async Task DismissManualCompactionBubble_RemovesPendingWithoutCancelledState()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            ui.BeginManualCompactionBubble();
+            var pending = Assert.Single(ui.Messages);
+            Assert.Equal(ToolCallDisplayStatus.Running, pending.ToolCallStatus);
+            ui.DismissManualCompactionBubble();
+        });
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            Assert.Empty(ui.Messages);
+        });
+    }
+
     private static Task<Dispatcher> StartStaDispatcherAsync()
     {
         var tcs = new TaskCompletionSource<Dispatcher>(TaskCreationOptions.RunContinuationsAsynchronously);

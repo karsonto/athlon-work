@@ -26,6 +26,7 @@ public sealed class ConversationCompactor(
             return new ConversationCompactResult(session, false);
         }
 
+        var isManualCompact = request.Strategy == CompactionStrategy.ManualCompact;
         var truncateArgsApplied = request.Plan?.ApplyTruncateArgs == true;
         if (!cfg.DynamicCompaction.Enabled)
         {
@@ -44,14 +45,15 @@ public sealed class ConversationCompactor(
             conversation,
             cfg,
             request.RuntimeContext?.Budget);
-        var shouldCompact = request.RuntimeContext is { } runtime && cfg.DynamicCompaction.Enabled
-            ? ContextPressureEvaluator.ShouldCompact(
-                runtime.Budget,
-                conversation,
-                cfg,
-                request.Plan?.Pressure ?? ContextPressureLevel.Normal,
-                request.Force)
-            : ConversationCutoffPlanner.ShouldCompact(conversation, estimatedTokens, cfg, request.Force);
+        var shouldCompact = isManualCompact
+            || (request.RuntimeContext is { } runtime && cfg.DynamicCompaction.Enabled
+                ? ContextPressureEvaluator.ShouldCompact(
+                    runtime.Budget,
+                    conversation,
+                    cfg,
+                    request.Plan?.Pressure ?? ContextPressureLevel.Normal,
+                    request.Force)
+                : ConversationCutoffPlanner.ShouldCompact(conversation, estimatedTokens, cfg, request.Force));
 
         if (!shouldCompact)
         {
@@ -64,6 +66,24 @@ public sealed class ConversationCompactor(
             estimatedTokens,
             cfg,
             keepTokenBudget);
+        if (cutoff <= 0 && isManualCompact)
+        {
+            cutoff = ResolveManualCompactCutoff(conversation, cfg);
+        }
+        else if (cutoff <= 0
+            && request.Force
+            && request.Strategy == CompactionStrategy.ForceCompact
+            && conversation.Count > 1)
+        {
+            var keepCount = cfg.KeepMessages > 0
+                ? Math.Min(cfg.KeepMessages, conversation.Count - 1)
+                : 1;
+            keepCount = Math.Max(1, Math.Min(keepCount, conversation.Count - 1));
+            cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(
+                conversation,
+                conversation.Count - keepCount);
+        }
+
         if (cutoff <= 0)
         {
             _logger.Debug("Compaction triggered but safe cutoff is 0 — skipping");
@@ -120,6 +140,10 @@ public sealed class ConversationCompactor(
             {
                 summary = "(Summary unavailable)";
             }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
@@ -190,6 +214,27 @@ public sealed class ConversationCompactor(
             request.Force);
 
         return new ConversationCompactResult(session, true);
+    }
+
+    private static int ResolveManualCompactCutoff(
+        IReadOnlyList<ChatMessage> conversation,
+        ContextCompactionSettings cfg)
+    {
+        if (conversation.Count == 0)
+        {
+            return 0;
+        }
+
+        if (conversation.Count == 1)
+        {
+            return 1;
+        }
+
+        var keepCount = cfg.KeepMessages > 0
+            ? Math.Min(cfg.KeepMessages, conversation.Count - 1)
+            : 1;
+        keepCount = Math.Max(1, Math.Min(keepCount, conversation.Count - 1));
+        return ConversationCutoffPlanner.FindSafeCutoffPoint(conversation, conversation.Count - keepCount);
     }
 
     private static string BuildSummaryPrompt(string template, string formattedMessages, string? mustPreserveAppendix)
