@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Athlon.Agent.Infrastructure.Sso;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -20,6 +21,7 @@ internal static class WindowsCmdEncoding
         // Force UTF-8 for Python so tool output is stable across hosts.
         startInfo.Environment["PYTHONIOENCODING"] = "utf-8";
         startInfo.Environment["PYTHONUTF8"] = "1";
+        SsoEenoEnvironment.TryApply(startInfo);
 
         // StandardInputEncoding 只能在 RedirectStandardInput=true 时设置；
         // execute_command 当前不读 stdin，所以避免触发 .NET 异常。

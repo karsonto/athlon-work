@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.Sso;
 
 namespace Athlon.Agent.Tests;
 
@@ -24,6 +25,46 @@ public sealed class WindowsCmdEncodingTests
         Assert.NotNull(startInfo.StandardErrorEncoding);
         Assert.Equal("utf-8", startInfo.StandardOutputEncoding!.WebName);
         Assert.Equal("utf-8", startInfo.StandardErrorEncoding!.WebName);
+    }
+
+    [Fact]
+    public void ApplyTo_SetsAthlonEeno_WhenTestOverrideProvidesValue()
+    {
+        SsoEenoEnvironment.TestOverride = () => "dGVzdA==";
+        try
+        {
+            var startInfo = new ProcessStartInfo("cmd.exe", "/c echo hello")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+
+            WindowsCmdEncoding.ApplyTo(startInfo);
+
+            Assert.Equal("dGVzdA==", startInfo.Environment[SsoEenoEnvironment.EnvVarName]);
+        }
+        finally
+        {
+            SsoEenoEnvironment.TestOverride = null;
+        }
+    }
+
+    [Fact]
+    public void ApplyTo_DoesNotSetAthlonEeno_WhenTestOverrideIsNull()
+    {
+        SsoEenoEnvironment.TestOverride = null;
+
+        var startInfo = new ProcessStartInfo("cmd.exe", "/c echo hello")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false
+        };
+
+        WindowsCmdEncoding.ApplyTo(startInfo);
+
+        Assert.False(startInfo.Environment.ContainsKey(SsoEenoEnvironment.EnvVarName));
     }
 }
 
