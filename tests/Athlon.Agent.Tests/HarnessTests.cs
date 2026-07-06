@@ -135,7 +135,8 @@ public sealed class HarnessTests
         var invocation = CreateTurnInvocation(accessor);
 
         await middleware.OnTurnCompletedAsync(invocation, CancellationToken.None);
-        await Task.Delay(50);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await processor.WaitForCallAsync(cts.Token);
 
         Assert.Equal(1, processor.CallCount);
     }
@@ -250,11 +251,17 @@ public sealed class HarnessTests
 
     private sealed class RecordingPostTurnMemoryProcessor : IPostTurnMemoryProcessor
     {
+        private readonly TaskCompletionSource _called = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public int CallCount { get; private set; }
+
+        public Task WaitForCallAsync(CancellationToken cancellationToken = default) =>
+            _called.Task.WaitAsync(cancellationToken);
 
         public Task ProcessAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
         {
             CallCount++;
+            _called.TrySetResult();
             return Task.CompletedTask;
         }
     }
