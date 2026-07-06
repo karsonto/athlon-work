@@ -45,29 +45,6 @@ public static class AppCultureManager
     public static CultureInfo ResolveCulture(string? language)
     {
         var normalized = NormalizeLanguageSetting(language);
-        if (normalized.Equals("Auto", StringComparison.OrdinalIgnoreCase))
-        {
-            var system = CultureInfo.CurrentUICulture;
-            var name = system.Name;
-            if (SupportedCultures.Contains(name))
-            {
-                return CultureInfo.GetCultureInfo(name);
-            }
-
-            var twoLetter = system.TwoLetterISOLanguageName;
-            if (twoLetter.Equals("zh", StringComparison.OrdinalIgnoreCase))
-            {
-                return CultureInfo.GetCultureInfo("zh-CN");
-            }
-
-            if (twoLetter.Equals("en", StringComparison.OrdinalIgnoreCase))
-            {
-                return CultureInfo.GetCultureInfo("en-US");
-            }
-
-            return FallbackCulture;
-        }
-
         return SupportedCultures.Contains(normalized)
             ? CultureInfo.GetCultureInfo(normalized)
             : FallbackCulture;
@@ -77,13 +54,13 @@ public static class AppCultureManager
     {
         if (string.IsNullOrWhiteSpace(language))
         {
-            return "Auto";
+            return "zh-CN";
         }
 
         var trimmed = language.Trim();
         if (trimmed.Equals("Auto", StringComparison.OrdinalIgnoreCase))
         {
-            return "Auto";
+            return "zh-CN";
         }
 
         if (trimmed.Equals("zh-CN", StringComparison.OrdinalIgnoreCase)
@@ -98,12 +75,11 @@ public static class AppCultureManager
             return "en-US";
         }
 
-        return trimmed;
+        return SupportedCultures.Contains(trimmed) ? trimmed : "zh-CN";
     }
 
     public static IReadOnlyList<LanguageOption> GetLanguageOptions() =>
     [
-        new("Auto", Strings.Get("Settings_Language_Auto")),
         new("zh-CN", Strings.Get("Settings_Language_zh_CN")),
         new("en-US", Strings.Get("Settings_Language_en_US")),
     ];

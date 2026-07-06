@@ -54,6 +54,43 @@ public sealed class LocalizationTests
     }
 
     [Fact]
+    public void GetLanguageOptions_excludes_auto_and_includes_zhCN_and_enUS()
+    {
+        AppCultureManager.SetCulture("zh-CN");
+
+        var options = AppCultureManager.GetLanguageOptions();
+
+        Assert.Equal(2, options.Count);
+        Assert.Equal("zh-CN", options[0].Value);
+        Assert.Equal("en-US", options[1].Value);
+        Assert.DoesNotContain(options, option => option.Value.Equals("Auto", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void NormalizeLanguageSetting_maps_auto_and_empty_to_zhCN()
+    {
+        Assert.Equal("zh-CN", AppCultureManager.NormalizeLanguageSetting(null));
+        Assert.Equal("zh-CN", AppCultureManager.NormalizeLanguageSetting(""));
+        Assert.Equal("zh-CN", AppCultureManager.NormalizeLanguageSetting("Auto"));
+    }
+
+    [Fact]
+    public void ResolveCulture_maps_auto_to_zhCN()
+    {
+        Assert.Equal("zh-CN", AppCultureManager.ResolveCulture("Auto").Name);
+    }
+
+    [Fact]
+    public void SetCulture_migrates_auto_setting_to_zhCN()
+    {
+        var ui = new UiSettings { Language = "Auto" };
+        AppCultureManager.SetCulture("Auto", ui);
+
+        Assert.Equal("zh-CN", ui.Language);
+        Assert.Equal("zh-CN", AppCultureManager.Current.Name);
+    }
+
+    [Fact]
     public void EnUs_resx_contains_all_default_keys()
     {
         AppCultureManager.SetCulture("zh-CN");

@@ -5,7 +5,7 @@
 ## 架构
 
 ```
-UiSettings.Language (Auto | zh-CN | en-US)
+UiSettings.Language (zh-CN | en-US)
         ↓
 AppCultureManager.ApplyFromSettings / SetCulture
   → Thread.CurrentUICulture / CurrentCulture
@@ -40,7 +40,7 @@ AppCultureManager.ApplyFromSettings / SetCulture
 
 ## 语言设置
 
-- `UiSettings.Language`：默认 `zh-CN`；可选 `Auto`（跟随系统，不支持的语言回退 zh-CN）、`zh-CN`、`en-US`。
+- `UiSettings.Language`：默认 `zh-CN`；可选 `zh-CN`、`en-US`。历史值 `Auto` 会在加载时迁移为 `zh-CN`。
 - 启动时在 License/SSO 门禁之前调用 `AppCultureManager.ApplyFromSettings`。
 
 ## 新增字符串检查清单

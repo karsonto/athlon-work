@@ -194,7 +194,7 @@ public sealed class WorkspaceSettings
 }
 public sealed class UiSettings
 {
-    /// <summary>Auto | zh-CN | en-US</summary>
+    /// <summary>zh-CN | en-US</summary>
     public string Language { get; set; } = "zh-CN";
     public string Theme { get; set; } = "Dark";
     public double FontSize { get; set; } = 14;
