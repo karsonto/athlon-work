@@ -60,8 +60,25 @@ jobs:
           vpk download github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --outputDir Releases
 
       - name: Pack Velopack release
+        shell: pwsh
         run: |
-          vpk pack -u AthlonAgent -v ${{ steps.version.outputs.version }} -p publish -e Athlon.Agent.App.exe --packTitle "Athlon Agent" --icon src/Athlon.Agent.App/Assets/app-icon.ico --outputDir Releases
+          $version = "${{ steps.version.outputs.version }}"
+          $releasesDir = "Releases"
+          if (Test-Path $releasesDir) {
+            # Allow re-packing the same version after a tag force-push.
+            Get-ChildItem $releasesDir -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -like "*$version*" } |
+              Remove-Item -Force -ErrorAction SilentlyContinue
+            $manifest = Join-Path $releasesDir "releases.win.json"
+            if (Test-Path $manifest) {
+              $doc = Get-Content $manifest -Raw | ConvertFrom-Json
+              if ($null -ne $doc.Assets) {
+                $doc.Assets = @($doc.Assets | Where-Object { $_.Version -ne $version })
+                $doc | ConvertTo-Json -Depth 32 | Set-Content $manifest -Encoding utf8NoBOM
+              }
+            }
+          }
+          vpk pack -u AthlonAgent -v $version -p publish -e Athlon.Agent.App.exe --packTitle "Athlon Agent" --icon src/Athlon.Agent.App/Assets/app-icon.ico --outputDir Releases -y
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Velopack pack failed."
             exit 1
