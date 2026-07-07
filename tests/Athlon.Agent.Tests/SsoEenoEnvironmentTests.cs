@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure;
@@ -46,7 +48,7 @@ public sealed class SsoEenoEnvironmentTests
     }
 
     [Fact]
-    public void TryGetEncryptedValue_ReturnsPkcs1Base64_WhenSsoValidAndPublicKeyPresent()
+    public void TryGetEncryptedValue_ReturnsOaepEncryptedJson_WhenSsoValidAndPublicKeyPresent()
     {
         using var keys = CreateKeyPair();
         var paths = CreatePaths();
@@ -55,15 +57,58 @@ public sealed class SsoEenoEnvironmentTests
             Path.Combine(paths.ConfigPath, SsoEenoEnvironment.PublicKeyFileName),
             keys.PublicPem);
 
-        var store = new FakeSsoSessionStore(CreateValidSession("000974115"));
+        var session = CreateValidSession("000974115");
+        var store = new FakeSsoSessionStore(session);
         var settings = new AppSettings { Sso = { Enabled = true } };
 
         var encrypted = SsoEenoEnvironment.TryGetEncryptedValue(settings, store, paths);
 
         Assert.False(string.IsNullOrWhiteSpace(encrypted));
+
         var cipher = Convert.FromBase64String(encrypted!);
-        var plain = keys.PrivateKey.Decrypt(cipher, RSAEncryptionPadding.Pkcs1);
-        Assert.Equal("000974115", Encoding.UTF8.GetString(plain));
+        var json = Encoding.UTF8.GetString(
+            keys.PrivateKey.Decrypt(cipher, RSAEncryptionPadding.OaepSHA256)
+        );
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        Assert.Equal("000974115", root.GetProperty("user_id").GetString());
+        Assert.Equal("refresh", root.GetProperty("token_type").GetString());
+
+        var jti = root.GetProperty("jti").GetString();
+        Assert.NotNull(jti);
+        Assert.InRange(jti.Length, 20, 30);
+
+        Assert.Equal(session.ExpiresAt.UtcDateTime.ToString("o"),
+            root.GetProperty("expires_at").GetString());
+        Assert.Equal(session.LoggedInAt.UtcDateTime.ToString("o"),
+            root.GetProperty("issued_at").GetString());
+    }
+
+    [Fact]
+    public void TryApply_SetsMcpRefreshTokenEnvironmentVariable()
+    {
+        using var keys = CreateKeyPair();
+        var paths = CreatePaths();
+        Directory.CreateDirectory(paths.ConfigPath);
+        File.WriteAllText(
+            Path.Combine(paths.ConfigPath, SsoEenoEnvironment.PublicKeyFileName),
+            keys.PublicPem);
+
+        var session = CreateValidSession("000974115");
+        var store = new FakeSsoSessionStore(session);
+        var settings = new AppSettings { Sso = { Enabled = true } };
+
+        SsoEenoEnvironment.TestOverride = () => SsoEenoEnvironment.TryGetEncryptedValue(settings, store, paths);
+
+        var startInfo = new ProcessStartInfo("test.exe");
+        SsoEenoEnvironment.TryApply(startInfo);
+
+        Assert.True(startInfo.Environment.ContainsKey(SsoEenoEnvironment.EnvVarName));
+        Assert.Equal("MCP_REFRESH_TOKEN", SsoEenoEnvironment.EnvVarName);
+
+        SsoEenoEnvironment.TestOverride = null;
     }
 
     private static ImpSsoSession CreateValidSession(string userId = "000974115")

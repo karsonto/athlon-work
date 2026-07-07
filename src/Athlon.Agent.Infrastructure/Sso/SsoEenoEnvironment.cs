@@ -1,14 +1,19 @@
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Sso;
 
 namespace Athlon.Agent.Infrastructure.Sso;
 
+/// <summary>
+/// MCP Refresh Token 加密与环境变量注入
+/// 使用 RSA-OAEP (SHA256) 加密包含用户信息的 JSON Token
+/// </summary>
 internal static class SsoEenoEnvironment
 {
-    internal const string EnvVarName = "ATHLON_EENO";
+    internal const string EnvVarName = "MCP_REFRESH_TOKEN";
     internal const string PublicKeyFileName = "public_key.pem";
 
     internal static Func<string?>? TestOverride { get; set; }
@@ -20,6 +25,21 @@ internal static class SsoEenoEnvironment
         {
             startInfo.Environment[EnvVarName] = encrypted;
         }
+    }
+
+    /// <summary>
+    /// 生成 URL-safe 的 Token 唯一标识（模仿 Python secrets.token_urlsafe(16)）
+    /// </summary>
+    private static string GenerateJti()
+    {
+        byte[] randomBytes = new byte[16];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(randomBytes);
+
+        return Convert.ToBase64String(randomBytes)
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
     }
 
     internal static string? TryGetEncryptedValue(
@@ -52,10 +72,26 @@ internal static class SsoEenoEnvironment
 
         try
         {
+            var tokenData = new
+            {
+                user_id = userId,
+                token_type = "refresh",
+                jti = GenerateJti(),
+                expires_at = session.ExpiresAt.UtcDateTime.ToString("o"),
+                issued_at = session.LoggedInAt.UtcDateTime.ToString("o")
+            };
+
+            string json = JsonSerializer.Serialize(tokenData);
+
             var pem = File.ReadAllText(publicKeyPath);
             using var rsa = RSA.Create();
             rsa.ImportFromPem(pem);
-            var cipher = rsa.Encrypt(Encoding.UTF8.GetBytes(userId), RSAEncryptionPadding.Pkcs1);
+
+            var cipher = rsa.Encrypt(
+                Encoding.UTF8.GetBytes(json),
+                RSAEncryptionPadding.OaepSHA256
+            );
+
             return Convert.ToBase64String(cipher);
         }
         catch
