@@ -27,6 +27,9 @@ internal static class SsoEenoEnvironment
         }
     }
 
+    private static string FormatUtcSeconds(DateTimeOffset value) =>
+        value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'");
+
     /// <summary>
     /// 生成 URL-safe 的 Token 唯一标识（模仿 Python secrets.token_urlsafe(16)）
     /// </summary>
@@ -77,8 +80,8 @@ internal static class SsoEenoEnvironment
                 user_id = userId,
                 token_type = "refresh",
                 jti = GenerateJti(),
-                expires_at = session.ExpiresAt.UtcDateTime.ToString("o"),
-                issued_at = session.LoggedInAt.UtcDateTime.ToString("o")
+                expires_at = FormatUtcSeconds(session.ExpiresAt),
+                issued_at = FormatUtcSeconds(session.LoggedInAt)
             };
 
             string json = JsonSerializer.Serialize(tokenData);

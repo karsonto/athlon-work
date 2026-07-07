@@ -80,9 +80,9 @@ public sealed class SsoEenoEnvironmentTests
         Assert.NotNull(jti);
         Assert.InRange(jti.Length, 20, 30);
 
-        Assert.Equal(session.ExpiresAt.UtcDateTime.ToString("o"),
+        Assert.Equal(session.ExpiresAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"),
             root.GetProperty("expires_at").GetString());
-        Assert.Equal(session.LoggedInAt.UtcDateTime.ToString("o"),
+        Assert.Equal(session.LoggedInAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"),
             root.GetProperty("issued_at").GetString());
     }
 
