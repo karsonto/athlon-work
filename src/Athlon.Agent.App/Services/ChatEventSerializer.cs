@@ -121,6 +121,14 @@ internal static class ChatEventSerializer
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
+    public static string BuildReplayEventsJson(
+        IReadOnlyList<ChatMessageViewModel> messages,
+        bool showToolCalls = false)
+    {
+        var events = BuildReplayEvents(messages, showToolCalls);
+        return SerializeEventsToJsonArray(events);
+    }
+
     public static IReadOnlyList<string> BuildReplayEvents(
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls = false)

@@ -33,6 +33,7 @@ public partial class WebChatView : UserControl
     private bool _renderQueuedWhileInProgress;
     private int _themeApplyGeneration;
     private int _i18nApplyGeneration;
+    private bool _shellLoaded;
 
     public WebChatView()
     {
@@ -50,6 +51,8 @@ public partial class WebChatView : UserControl
     {
         AppThemeManager.ThemeChanged -= OnAppThemeChanged;
         AppCultureManager.CultureChanged -= OnAppCultureChanged;
+        _shellLoaded = false;
+        _documentReady = false;
         if (ChatWebView.CoreWebView2 is not null)
         {
             ChatWebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
@@ -260,16 +263,30 @@ public partial class WebChatView : UserControl
         _renderInProgress = true;
         try
         {
-            var navigated = await NavigateHtmlAsync(
-                _htmlBuilder.BuildDocumentHtml(_pendingMessages, _pendingShowToolCalls, ResolveSsoDisplayName()),
-                expectedGeneration).ConfigureAwait(true);
-            if (!navigated || expectedGeneration != _renderGeneration)
+            if (_shellLoaded)
             {
-                return;
-            }
+                // Shell already loaded — replay messages via JS events (incremental, no navigation).
+                var replayScript = _htmlBuilder.BuildReplayScript(_pendingMessages, _pendingShowToolCalls);
+                await ExecuteScriptWhenReadyAsync(replayScript).ConfigureAwait(true);
 
-            _needsRender = false;
-            App.StartupTrace($"WebChatView rendered {_pendingMessages.Count} messages");
+                _needsRender = false;
+                App.StartupTrace($"WebChatView replayed {_pendingMessages.Count} messages via JS");
+            }
+            else
+            {
+                // First load or shell missing — do full navigation.
+                var navigated = await NavigateHtmlAsync(
+                    _htmlBuilder.BuildDocumentHtml(_pendingMessages, _pendingShowToolCalls, ResolveSsoDisplayName()),
+                    expectedGeneration).ConfigureAwait(true);
+                if (!navigated || expectedGeneration != _renderGeneration)
+                {
+                    return;
+                }
+
+                _shellLoaded = true;
+                _needsRender = false;
+                App.StartupTrace($"WebChatView rendered {_pendingMessages.Count} messages via navigation");
+            }
         }
         finally
         {
@@ -328,6 +345,22 @@ public partial class WebChatView : UserControl
 
             ApplyThemeBackground();
             _initialized = true;
+
+            // Load the shell page once (CSS, JS libs, timeline script).
+            // All subsequent message rendering uses JS replay via ExecuteScriptAsync,
+            // avoiding full WebView navigation overhead.
+            try
+            {
+                var shellHtml = _htmlBuilder.BuildShellHtml(ResolveSsoDisplayName());
+                await NavigateHtmlAsync(shellHtml, _renderGeneration).ConfigureAwait(true);
+                _shellLoaded = true;
+                App.StartupTrace("WebChatView shell loaded");
+            }
+            catch (Exception ex)
+            {
+                App.StartupTrace($"WebChatView shell load failed: {ex}");
+            }
+
             App.StartupTrace("WebChatView initialization completed");
         }
         catch (Exception ex)
