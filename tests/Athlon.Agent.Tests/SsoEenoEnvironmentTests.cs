@@ -12,43 +12,20 @@ namespace Athlon.Agent.Tests;
 public sealed class SsoEenoEnvironmentTests
 {
     [Fact]
-    public void TryGetEncryptedValue_ReturnsNull_WhenSsoDisabled()
+    public void EnrichSessionWithMcpToken_ReturnsUnchanged_WhenPublicKeyMissing()
     {
         var paths = CreatePaths();
-        var store = new FakeSsoSessionStore(CreateValidSession());
-        var settings = new AppSettings { Sso = { Enabled = false } };
+        var session = CreateValidSession();
 
-        var encrypted = SsoEenoEnvironment.TryGetEncryptedValue(settings, store, paths);
+        var enriched = SsoEenoEnvironment.EnrichSessionWithMcpToken(session, paths);
 
-        Assert.Null(encrypted);
+        Assert.Same(session, enriched);
+        Assert.Null(enriched.Jti);
+        Assert.Null(enriched.McpRefreshToken);
     }
 
     [Fact]
-    public void TryGetEncryptedValue_ReturnsNull_WhenSessionExpired()
-    {
-        var paths = CreatePaths();
-        var store = new FakeSsoSessionStore(CreateExpiredSession());
-        var settings = new AppSettings { Sso = { Enabled = true } };
-
-        var encrypted = SsoEenoEnvironment.TryGetEncryptedValue(settings, store, paths);
-
-        Assert.Null(encrypted);
-    }
-
-    [Fact]
-    public void TryGetEncryptedValue_ReturnsNull_WhenPublicKeyMissing()
-    {
-        var paths = CreatePaths();
-        var store = new FakeSsoSessionStore(CreateValidSession());
-        var settings = new AppSettings { Sso = { Enabled = true } };
-
-        var encrypted = SsoEenoEnvironment.TryGetEncryptedValue(settings, store, paths);
-
-        Assert.Null(encrypted);
-    }
-
-    [Fact]
-    public void TryGetEncryptedValue_ReturnsOaepEncryptedJson_WhenSsoValidAndPublicKeyPresent()
+    public void EnrichSessionWithMcpToken_ReturnsOaepEncryptedJson_WhenPublicKeyPresent()
     {
         using var keys = CreateKeyPair();
         var paths = CreatePaths();
@@ -58,14 +35,14 @@ public sealed class SsoEenoEnvironmentTests
             keys.PublicPem);
 
         var session = CreateValidSession("000974115");
-        var store = new FakeSsoSessionStore(session);
-        var settings = new AppSettings { Sso = { Enabled = true } };
 
-        var encrypted = SsoEenoEnvironment.TryGetEncryptedValue(settings, store, paths);
+        var enriched = SsoEenoEnvironment.EnrichSessionWithMcpToken(session, paths);
 
-        Assert.False(string.IsNullOrWhiteSpace(encrypted));
+        Assert.False(string.IsNullOrWhiteSpace(enriched.Jti));
+        Assert.False(string.IsNullOrWhiteSpace(enriched.McpRefreshToken));
+        Assert.InRange(enriched.Jti!.Length, 20, 30);
 
-        var cipher = Convert.FromBase64String(encrypted!);
+        var cipher = Convert.FromBase64String(enriched.McpRefreshToken!);
         var json = Encoding.UTF8.GetString(
             keys.PrivateKey.Decrypt(cipher, RSAEncryptionPadding.OaepSHA256)
         );
@@ -75,11 +52,7 @@ public sealed class SsoEenoEnvironmentTests
 
         Assert.Equal("000974115", root.GetProperty("user_id").GetString());
         Assert.Equal("refresh", root.GetProperty("token_type").GetString());
-
-        var jti = root.GetProperty("jti").GetString();
-        Assert.NotNull(jti);
-        Assert.InRange(jti.Length, 20, 30);
-
+        Assert.Equal(enriched.Jti, root.GetProperty("jti").GetString());
         Assert.Equal(session.ExpiresAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"),
             root.GetProperty("expires_at").GetString());
         Assert.Equal(session.LoggedInAt.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"),
@@ -87,7 +60,7 @@ public sealed class SsoEenoEnvironmentTests
     }
 
     [Fact]
-    public void TryApply_SetsMcpRefreshTokenEnvironmentVariable()
+    public void EnrichSessionWithMcpToken_IsIdempotent_WhenTokenAlreadyPresent()
     {
         using var keys = CreateKeyPair();
         var paths = CreatePaths();
@@ -97,21 +70,101 @@ public sealed class SsoEenoEnvironmentTests
             keys.PublicPem);
 
         var session = CreateValidSession("000974115");
-        var store = new FakeSsoSessionStore(session);
+        var enriched = SsoEenoEnvironment.EnrichSessionWithMcpToken(session, paths);
+        var enrichedAgain = SsoEenoEnvironment.EnrichSessionWithMcpToken(enriched, paths);
+
+        Assert.Same(enriched, enrichedAgain);
+    }
+
+    [Fact]
+    public void TryGetStoredEncryptedValue_ReturnsNull_WhenSsoDisabled()
+    {
+        var store = new FakeSsoSessionStore(CreateValidSession(withToken: true));
+        var settings = new AppSettings { Sso = { Enabled = false } };
+
+        var encrypted = SsoEenoEnvironment.TryGetStoredEncryptedValue(settings, store);
+
+        Assert.Null(encrypted);
+    }
+
+    [Fact]
+    public void TryGetStoredEncryptedValue_ReturnsNull_WhenSessionExpired()
+    {
+        var store = new FakeSsoSessionStore(CreateExpiredSession(withToken: true));
         var settings = new AppSettings { Sso = { Enabled = true } };
 
-        SsoEenoEnvironment.TestOverride = () => SsoEenoEnvironment.TryGetEncryptedValue(settings, store, paths);
+        var encrypted = SsoEenoEnvironment.TryGetStoredEncryptedValue(settings, store);
+
+        Assert.Null(encrypted);
+    }
+
+    [Fact]
+    public void TryGetStoredEncryptedValue_ReturnsNull_WhenTokenMissing()
+    {
+        var store = new FakeSsoSessionStore(CreateValidSession());
+        var settings = new AppSettings { Sso = { Enabled = true } };
+
+        var encrypted = SsoEenoEnvironment.TryGetStoredEncryptedValue(settings, store);
+
+        Assert.Null(encrypted);
+    }
+
+    [Fact]
+    public void TryGetStoredEncryptedValue_ReturnsPersistedToken_WhenPresent()
+    {
+        const string token = "dGVzdC10b2tlbg==";
+        var store = new FakeSsoSessionStore(CreateValidSession(withToken: true, mcpRefreshToken: token));
+        var settings = new AppSettings { Sso = { Enabled = true } };
+
+        var encrypted = SsoEenoEnvironment.TryGetStoredEncryptedValue(settings, store);
+
+        Assert.Equal(token, encrypted);
+    }
+
+    [Fact]
+    public void TryApply_SetsMcpRefreshTokenEnvironmentVariable()
+    {
+        const string token = "dGVzdC10b2tlbg==";
+        var store = new FakeSsoSessionStore(CreateValidSession(withToken: true, mcpRefreshToken: token));
+        var settings = new AppSettings { Sso = { Enabled = true } };
+
+        SsoEenoEnvironment.TestOverride = () => SsoEenoEnvironment.TryGetStoredEncryptedValue(settings, store);
 
         var startInfo = new ProcessStartInfo("test.exe");
         SsoEenoEnvironment.TryApply(startInfo);
 
-        Assert.True(startInfo.Environment.ContainsKey(SsoEenoEnvironment.EnvVarName));
-        Assert.Equal("MCP_REFRESH_TOKEN", SsoEenoEnvironment.EnvVarName);
+        Assert.Equal(token, startInfo.Environment[SsoEenoEnvironment.EnvVarName]);
 
         SsoEenoEnvironment.TestOverride = null;
     }
 
-    private static ImpSsoSession CreateValidSession(string userId = "000974115")
+    [Fact]
+    public void EnrichSessionWithMcpToken_PersistsThroughSessionStore()
+    {
+        using var keys = CreateKeyPair();
+        var paths = CreatePaths();
+        paths.EnsureCreated();
+        Directory.CreateDirectory(paths.ConfigPath);
+        File.WriteAllText(
+            Path.Combine(paths.ConfigPath, SsoEenoEnvironment.PublicKeyFileName),
+            keys.PublicPem);
+
+        var session = CreateValidSession("000974115");
+        var enriched = SsoEenoEnvironment.EnrichSessionWithMcpToken(session, paths);
+
+        var store = new ImpSsoSessionStore(paths);
+        store.SaveSession(enriched);
+
+        var loaded = store.GetCachedSession();
+        Assert.NotNull(loaded);
+        Assert.Equal(enriched.Jti, loaded!.Jti);
+        Assert.Equal(enriched.McpRefreshToken, loaded.McpRefreshToken);
+    }
+
+    private static ImpSsoSession CreateValidSession(
+        string userId = "000974115",
+        bool withToken = false,
+        string? mcpRefreshToken = null)
     {
         var now = DateTimeOffset.UtcNow;
         return new ImpSsoSession
@@ -120,11 +173,13 @@ public sealed class SsoEenoEnvironmentTests
             UserId = userId,
             DisplayName = "Test User",
             LoggedInAt = now,
-            ExpiresAt = now.AddHours(24)
+            ExpiresAt = now.AddHours(24),
+            Jti = withToken ? "fixed-jti-value" : null,
+            McpRefreshToken = withToken ? mcpRefreshToken ?? "dGVzdC10b2tlbg==" : null
         };
     }
 
-    private static ImpSsoSession CreateExpiredSession()
+    private static ImpSsoSession CreateExpiredSession(bool withToken = false)
     {
         var now = DateTimeOffset.UtcNow;
         return new ImpSsoSession
@@ -133,7 +188,9 @@ public sealed class SsoEenoEnvironmentTests
             UserId = "000974115",
             DisplayName = "Test User",
             LoggedInAt = now.AddHours(-25),
-            ExpiresAt = now.AddHours(-1)
+            ExpiresAt = now.AddHours(-1),
+            Jti = withToken ? "fixed-jti-value" : null,
+            McpRefreshToken = withToken ? "dGVzdC10b2tlbg==" : null
         };
     }
 

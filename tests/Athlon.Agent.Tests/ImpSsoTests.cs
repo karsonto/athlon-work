@@ -181,7 +181,9 @@ public sealed class ImpSsoSessionStoreTests
             UserId = "000974115",
             DisplayName = "Zhang San",
             LoggedInAt = DateTimeOffset.UtcNow,
-            ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
+            ExpiresAt = DateTimeOffset.UtcNow.AddHours(24),
+            Jti = "session-jti",
+            McpRefreshToken = "dGVzdC10b2tlbg=="
         };
 
         store.SaveSession(session);
@@ -190,6 +192,8 @@ public sealed class ImpSsoSessionStoreTests
         Assert.NotNull(loaded);
         Assert.Equal(session.SsoToken, loaded!.SsoToken);
         Assert.Equal(session.DisplayName, loaded.DisplayName);
+        Assert.Equal(session.Jti, loaded.Jti);
+        Assert.Equal(session.McpRefreshToken, loaded.McpRefreshToken);
         Assert.False(store.IsExpired(loaded));
 
         store.Clear();

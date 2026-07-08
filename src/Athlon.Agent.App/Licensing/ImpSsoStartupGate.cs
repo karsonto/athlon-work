@@ -33,6 +33,7 @@ public static class ImpSsoStartupGate
         var cached = store.GetCachedSession();
         if (cached is not null && !store.IsExpired(cached))
         {
+            EnsureMcpRefreshToken(store, cached, paths);
             return true;
         }
 
@@ -46,7 +47,7 @@ public static class ImpSsoStartupGate
             waitingWindow.Closing += (_, _) => loginCts.Cancel();
             waitingWindow.Show();
 
-            return RunBrowserLoginWithMessagePump(settings, store, loginCts.Token);
+            return RunBrowserLoginWithMessagePump(settings, store, paths, loginCts.Token);
         }
         catch (Exception ex)
         {
@@ -67,13 +68,31 @@ public static class ImpSsoStartupGate
     /// Runs SSO login off the UI thread while pumping the dispatcher so the waiting window stays responsive.
     /// Blocking <c>GetResult()</c> on the UI thread would deadlock when async continuations capture the WPF sync context.
     /// </summary>
+    private static void EnsureMcpRefreshToken(
+        ImpSsoSessionStore store,
+        ImpSsoSession session,
+        IAppPathProvider paths)
+    {
+        if (!string.IsNullOrWhiteSpace(session.McpRefreshToken))
+        {
+            return;
+        }
+
+        var enriched = SsoEenoEnvironment.EnrichSessionWithMcpToken(session, paths);
+        if (!string.IsNullOrWhiteSpace(enriched.McpRefreshToken))
+        {
+            store.SaveSession(enriched);
+        }
+    }
+
     private static bool RunBrowserLoginWithMessagePump(
         SsoSettings settings,
         ImpSsoSessionStore store,
+        IAppPathProvider paths,
         CancellationToken cancellationToken)
     {
         var loginTask = Task.Run(async () =>
-            await PerformBrowserLoginAsync(settings, store, cancellationToken).ConfigureAwait(false),
+            await PerformBrowserLoginAsync(settings, store, paths, cancellationToken).ConfigureAwait(false),
             cancellationToken);
 
         var frame = new DispatcherFrame();
@@ -101,6 +120,7 @@ public static class ImpSsoStartupGate
     private static async Task<bool> PerformBrowserLoginAsync(
         SsoSettings settings,
         ImpSsoSessionStore store,
+        IAppPathProvider paths,
         CancellationToken cancellationToken)
     {
         using var callbackServer = new ImpSsoCallbackServer(settings);
@@ -126,7 +146,8 @@ public static class ImpSsoStartupGate
 
             if (result.IsValid && result.Session is not null)
             {
-                store.SaveSession(result.Session);
+                var session = SsoEenoEnvironment.EnrichSessionWithMcpToken(result.Session, paths);
+                store.SaveSession(session);
                 return true;
             }
 

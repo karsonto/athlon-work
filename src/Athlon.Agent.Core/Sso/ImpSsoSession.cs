@@ -12,5 +12,9 @@ public sealed class ImpSsoSession
 
     public DateTimeOffset ExpiresAt { get; init; }
 
+    public string? Jti { get; init; }
+
+    public string? McpRefreshToken { get; init; }
+
     public bool IsExpired(DateTimeOffset now) => now >= ExpiresAt;
 }

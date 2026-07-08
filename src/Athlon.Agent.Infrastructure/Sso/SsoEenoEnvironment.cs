@@ -20,11 +20,77 @@ internal static class SsoEenoEnvironment
 
     internal static void TryApply(ProcessStartInfo startInfo)
     {
-        var encrypted = TestOverride?.Invoke() ?? TryGetEncryptedValueDefault();
+        var encrypted = TestOverride?.Invoke() ?? TryGetStoredEncryptedValueDefault();
         if (!string.IsNullOrEmpty(encrypted))
         {
             startInfo.Environment[EnvVarName] = encrypted;
         }
+    }
+
+    /// <summary>
+    /// 登录成功后为 session 生成 jti 与 MCP refresh token，并随 session 持久化。
+    /// </summary>
+    internal static ImpSsoSession EnrichSessionWithMcpToken(ImpSsoSession session, IAppPathProvider paths)
+    {
+        if (!string.IsNullOrWhiteSpace(session.McpRefreshToken) && !string.IsNullOrWhiteSpace(session.Jti))
+        {
+            return session;
+        }
+
+        var userId = session.UserId?.Trim();
+        if (string.IsNullOrEmpty(userId))
+        {
+            return session;
+        }
+
+        var publicKeyPath = Path.Combine(paths.ConfigPath, PublicKeyFileName);
+        if (!File.Exists(publicKeyPath))
+        {
+            return session;
+        }
+
+        try
+        {
+            var jti = session.Jti ?? GenerateJti();
+            var encrypted = EncryptSessionToken(session, jti, publicKeyPath);
+            if (encrypted is null)
+            {
+                return session;
+            }
+
+            return new ImpSsoSession
+            {
+                SsoToken = session.SsoToken,
+                UserId = session.UserId,
+                DisplayName = session.DisplayName,
+                LoggedInAt = session.LoggedInAt,
+                ExpiresAt = session.ExpiresAt,
+                Jti = jti,
+                McpRefreshToken = encrypted
+            };
+        }
+        catch
+        {
+            return session;
+        }
+    }
+
+    internal static string? TryGetStoredEncryptedValue(
+        AppSettings settings,
+        IImpSsoSessionStore sessionStore)
+    {
+        if (!settings.Sso.Enabled)
+        {
+            return null;
+        }
+
+        var session = sessionStore.GetCachedSession();
+        if (session is null || sessionStore.IsExpired(session))
+        {
+            return null;
+        }
+
+        return string.IsNullOrWhiteSpace(session.McpRefreshToken) ? null : session.McpRefreshToken;
     }
 
     private static string FormatUtcSeconds(DateTimeOffset value) =>
@@ -45,65 +111,32 @@ internal static class SsoEenoEnvironment
             .TrimEnd('=');
     }
 
-    internal static string? TryGetEncryptedValue(
-        AppSettings settings,
-        IImpSsoSessionStore sessionStore,
-        IAppPathProvider paths)
+    private static string? EncryptSessionToken(ImpSsoSession session, string jti, string publicKeyPath)
     {
-        if (!settings.Sso.Enabled)
+        var tokenData = new
         {
-            return null;
-        }
+            user_id = session.UserId.Trim(),
+            token_type = "refresh",
+            jti,
+            expires_at = FormatUtcSeconds(session.ExpiresAt),
+            issued_at = FormatUtcSeconds(session.LoggedInAt)
+        };
 
-        var session = sessionStore.GetCachedSession();
-        if (session is null || sessionStore.IsExpired(session))
-        {
-            return null;
-        }
+        string json = JsonSerializer.Serialize(tokenData);
 
-        var userId = session.UserId?.Trim();
-        if (string.IsNullOrEmpty(userId))
-        {
-            return null;
-        }
+        var pem = File.ReadAllText(publicKeyPath);
+        using var rsa = RSA.Create();
+        rsa.ImportFromPem(pem);
 
-        var publicKeyPath = Path.Combine(paths.ConfigPath, PublicKeyFileName);
-        if (!File.Exists(publicKeyPath))
-        {
-            return null;
-        }
+        var cipher = rsa.Encrypt(
+            Encoding.UTF8.GetBytes(json),
+            RSAEncryptionPadding.OaepSHA256
+        );
 
-        try
-        {
-            var tokenData = new
-            {
-                user_id = userId,
-                token_type = "refresh",
-                jti = GenerateJti(),
-                expires_at = FormatUtcSeconds(session.ExpiresAt),
-                issued_at = FormatUtcSeconds(session.LoggedInAt)
-            };
-
-            string json = JsonSerializer.Serialize(tokenData);
-
-            var pem = File.ReadAllText(publicKeyPath);
-            using var rsa = RSA.Create();
-            rsa.ImportFromPem(pem);
-
-            var cipher = rsa.Encrypt(
-                Encoding.UTF8.GetBytes(json),
-                RSAEncryptionPadding.OaepSHA256
-            );
-
-            return Convert.ToBase64String(cipher);
-        }
-        catch
-        {
-            return null;
-        }
+        return Convert.ToBase64String(cipher);
     }
 
-    private static string? TryGetEncryptedValueDefault()
+    private static string? TryGetStoredEncryptedValueDefault()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -112,10 +145,9 @@ internal static class SsoEenoEnvironment
 
         try
         {
-            var paths = new AppPathProvider();
             var settings = AppSettingsLoader.Load();
-            var store = new ImpSsoSessionStore(paths);
-            return TryGetEncryptedValue(settings, store, paths);
+            var store = new ImpSsoSessionStore(new AppPathProvider());
+            return TryGetStoredEncryptedValue(settings, store);
         }
         catch
         {
