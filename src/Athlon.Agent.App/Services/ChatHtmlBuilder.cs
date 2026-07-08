@@ -428,6 +428,7 @@ public sealed class ChatHtmlBuilder
           background: transparent;
           overflow: visible;
           white-space: pre;
+          overflow-wrap: break-word;
         }
         .code-block {
           margin: 16px 0;
@@ -1067,8 +1068,12 @@ public sealed class ChatHtmlBuilder
             case 'TOOL_CALL_ARGS': {
               const card = getToolCard(event.toolCallId);
               const pre = card && card.querySelector('.tool-args');
-              // delta is the full JSON snapshot built so far, not an incremental chunk
-              if (pre) pre.textContent = event.delta || '';
+              if (pre) {
+                // delta is the full JSON snapshot built so far, not an incremental chunk
+                var raw = event.delta || '';
+                try { pre.textContent = JSON.stringify(JSON.parse(raw), null, 2); }
+                catch (e) { pre.textContent = raw; }
+              }
               scrollToBottom();
               break;
             }
