@@ -1232,11 +1232,13 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 return;
             }
 
-            if (snapshot.DisplayMessages.Count > 0)
+            // 如果 SessionTurnUiController 已有内存消息（来自正在进行的流式输出），
+            // 说明缓存是最新的，不应被磁盘 snapshot 覆盖。
+            if (_activeUi.Messages.Count == 0 && snapshot.DisplayMessages.Count > 0)
             {
                 await _activeUi.HydrateDisplayAsync(_session, snapshot.DisplayMessages).ConfigureAwait(true);
             }
-            else
+            else if (_activeUi.Messages.Count == 0)
             {
                 await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
             }
