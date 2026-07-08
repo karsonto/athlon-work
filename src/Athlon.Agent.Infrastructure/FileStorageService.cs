@@ -178,6 +178,13 @@ public sealed class FileStorageService(
                 }
             }
 
+            // Strip heavy tool result content for display only (full content remains in conversation.jsonl
+            // for model context reconstruction).
+            for (var i = 0; i < messages.Count; i++)
+            {
+                messages[i] = StripToolContentForDisplay(messages[i]);
+            }
+
             return ChatMessageMemorySanitizer.SanitizeMessages(messages);
         }
     }
@@ -401,4 +408,46 @@ public sealed class FileStorageService(
 
     private string GetSessionTranscriptsDirectory(string sessionId) =>
         Path.Combine(GetSessionDirectory(sessionId), "transcripts");
+
+    /// <summary>
+    /// Strips heavy tool result content from a ChatMessage for UI display, keeping only metadata
+    /// (ToolCallId, tool name, status, arguments, summary). The full content is preserved in
+    /// conversation.jsonl for model context reconstruction.
+    /// </summary>
+    private static ChatMessage StripToolContentForDisplay(ChatMessage message)
+    {
+        if (message.Role != MessageRole.Tool)
+        {
+            return message;
+        }
+
+        var content = message.Content;
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return message;
+        }
+
+        var lines = content.Replace("\r\n", "\n").Split('\n');
+        var resultLines = new List<string>(capacity: 6);
+        var passedSummary = false;
+
+        foreach (var line in lines)
+        {
+            resultLines.Add(line);
+
+            if (line.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
+            {
+                passedSummary = true;
+            }
+            else if (passedSummary && line.Length == 0)
+            {
+                // Blank line after Summary — this is the separator before the large content body.
+                // Keep the blank line, then stop.
+                break;
+            }
+        }
+
+        var stripped = string.Join("\n", resultLines);
+        return message with { Content = stripped };
+    }
 }
