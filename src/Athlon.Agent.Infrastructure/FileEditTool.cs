@@ -1,15 +1,4 @@
-using System.Diagnostics;
-using System.Net.Http.Json;
-using System.Runtime.Versioning;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Compaction;
-using Microsoft.Extensions.DependencyInjection;
-using Serilog;
-using Serilog.Core;
-using Serilog.Events;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -23,17 +12,43 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         {
             ["path"] = ToolPathDescriptions.WorkspaceRelativePath,
             ["old_text"] = "Exact substring from the file (no line-number prefixes)",
-            ["new_text"] = "Replacement",
+            ["new_text"] = "Replacement (empty string deletes matched text)",
             ["replace_all"] = "Optional true to replace all occurrences"
         },
         RequiresApproval: true);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!WorkspaceToolHelper.TryResolveNormalizedPath(invocation, guard, out var fullPath, out var error)) return error;
-        if (!ToolArguments.TryGetRequired(invocation, "old_text", out var oldText, out error)) return error;
-        if (!ToolArguments.TryGetRequired(invocation, "new_text", out var newText, out error)) return error;
-        var content = await File.ReadAllTextAsync(fullPath, cancellationToken);
+        if (!WorkspaceToolHelper.TryResolveNormalizedPath(invocation, guard, out var fullPath, out var error))
+        {
+            return error;
+        }
+
+        if (!ToolArguments.TryGetRequired(invocation, "old_text", out var oldText, out error))
+        {
+            return error;
+        }
+
+        if (!TryGetNewText(invocation, out var newText, out error))
+        {
+            return error;
+        }
+
+        if (!File.Exists(fullPath))
+        {
+            return ToolResult.Failure("File not found", fullPath);
+        }
+
+        string content;
+        try
+        {
+            content = await File.ReadAllTextAsync(fullPath, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return ToolResult.Failure("Read failed", $"Could not read '{ToolPathNormalizer.ForModel(invocation.Arguments.GetValueOrDefault(ToolPathNormalizer.PathArgumentName) ?? fullPath)}': {ex.Message}");
+        }
+
         var replaceAll = invocation.Arguments.TryGetValue("replace_all", out var value) && bool.TryParse(value, out var parsed) && parsed;
 
         var match = FileEditMatcher.TryMatch(content, oldText, replaceAll);
@@ -49,7 +64,17 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
 
         var effectiveNewText = FileEditMatcher.ResolveNewText(oldText, newText, match);
         var updated = FileEditMatcher.ApplyReplace(content, match.MatchedOldText, effectiveNewText, replaceAll);
-        await File.WriteAllTextAsync(fullPath, updated, cancellationToken);
+
+        try
+        {
+            await AtomicFile.WriteAllTextAsync(fullPath, updated, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            var modelPath = ToolPathNormalizer.ForModel(invocation.Arguments.GetValueOrDefault(ToolPathNormalizer.PathArgumentName) ?? fullPath);
+            return ToolResult.Failure("Write failed", $"Failed to write '{modelPath}': {ex.Message}");
+        }
+
         await WorkspaceToolHelper.AuditAsync(
             audit,
             "file_edit",
@@ -62,6 +87,27 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
                 normalized = match.Kind != OldTextCandidateKind.Exact
             },
             cancellationToken);
-        return ToolResult.Success($"Edited {Path.GetFileName(fullPath)} ({(replaceAll ? match.Occurrences : 1)} replacement(s))");
+
+        var replacementCount = replaceAll ? match.Occurrences : 1;
+        var summary = effectiveNewText.Length == 0
+            ? $"Deleted text in {Path.GetFileName(fullPath)} ({replacementCount} replacement(s))"
+            : $"Edited {Path.GetFileName(fullPath)} ({replacementCount} replacement(s))";
+        return ToolResult.Success(summary);
+    }
+
+    private static bool TryGetNewText(ToolInvocation invocation, out string newText, out ToolResult error)
+    {
+        if (!invocation.Arguments.TryGetValue("new_text", out newText!))
+        {
+            newText = string.Empty;
+            error = ToolResult.Failure(
+                "Missing argument",
+                "file_edit requires `new_text`. Pass \"\" (empty string) to delete the matched text.");
+            return false;
+        }
+
+        newText ??= string.Empty;
+        error = ToolResult.Success("OK");
+        return true;
     }
 }

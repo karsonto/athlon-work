@@ -58,6 +58,59 @@ public sealed class FileEditToolTests
     }
 
     [Fact]
+    public async Task InvokeAsync_AllowsEmptyNewText_ToDeleteMatchedText()
+    {
+        var root = CreateWorkspaceRoot();
+        var file = Path.Combine(root, "sample.txt");
+        await File.WriteAllTextAsync(file, "hello world");
+
+        try
+        {
+            var tool = CreateTool(root);
+            var result = await tool.InvokeAsync(new ToolInvocation("file_edit", new Dictionary<string, string>
+            {
+                ["path"] = "sample.txt",
+                ["old_text"] = " world",
+                ["new_text"] = string.Empty
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Contains("Deleted text", result.Summary, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("hello", await File.ReadAllTextAsync(file));
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_FailsWithHelpfulMessage_WhenNewTextMissing()
+    {
+        var root = CreateWorkspaceRoot();
+        var file = Path.Combine(root, "sample.txt");
+        await File.WriteAllTextAsync(file, "hello");
+
+        try
+        {
+            var tool = CreateTool(root);
+            var result = await tool.InvokeAsync(new ToolInvocation("file_edit", new Dictionary<string, string>
+            {
+                ["path"] = "sample.txt",
+                ["old_text"] = "hello"
+            }));
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("Missing argument", result.Summary);
+            Assert.Contains("empty string", result.Error!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public async Task InvokeAsync_WhenTextMissing_ReturnsHelpfulError()
     {
         var root = CreateWorkspaceRoot();
