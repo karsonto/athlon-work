@@ -274,9 +274,14 @@ public sealed class ComposerAtCompletionService
             return skills.ToArray();
         }
 
-        var combined = new AtCompletionItemViewModel[skills.Count + Math.Min(remaining, files.Count)];
-        skills.CopyTo(combined, 0);
-        for (var i = 0; i < Math.Min(remaining, files.Count); i++)
+        var takeFiles = Math.Min(remaining, files.Count);
+        var combined = new AtCompletionItemViewModel[skills.Count + takeFiles];
+        for (var i = 0; i < skills.Count; i++)
+        {
+            combined[i] = skills[i];
+        }
+
+        for (var i = 0; i < takeFiles; i++)
         {
             combined[skills.Count + i] = files[i];
         }
