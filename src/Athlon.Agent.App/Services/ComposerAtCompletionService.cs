@@ -76,14 +76,43 @@ public sealed class ComposerAtCompletionService
         }
     }
 
-    public IReadOnlyList<AtCompletionItemViewModel> FilterMatches(string query) =>
-        _fileSnapshot
-            .Concat(_skillSnapshot)
-            .Where(item => MatchesQuery(item.MatchText, query))
+    public IReadOnlyList<AtCompletionItemViewModel> FilterMatches(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            // Snapshots are already ranked (skills, then shallow/recent files). Avoid sorting thousands of items on the UI thread.
+            return TakeCompletionItems(_skillSnapshot, _fileSnapshot);
+        }
+
+        var matches = new List<AtCompletionItemViewModel>(MaxCompletionItems);
+        foreach (var item in _skillSnapshot)
+        {
+            if (MatchesQuery(item.MatchText, query))
+            {
+                matches.Add(item);
+            }
+        }
+
+        foreach (var item in _fileSnapshot)
+        {
+            if (!MatchesQuery(item.MatchText, query))
+            {
+                continue;
+            }
+
+            matches.Add(item);
+            if (matches.Count >= MaxCompletionItems * 4)
+            {
+                break;
+            }
+        }
+
+        return matches
             .OrderBy(item => Rank(item.MatchText, query))
             .ThenBy(item => item.PrimaryText, StringComparer.OrdinalIgnoreCase)
             .Take(MaxCompletionItems)
             .ToArray();
+    }
 
     public static bool TryGetQuery(string text, int caretIndex, out string query)
     {
@@ -124,45 +153,7 @@ public sealed class ComposerAtCompletionService
         var candidates = new List<(AtCompletionItemViewModel Item, int Depth, DateTime LastWriteUtc)>();
         try
         {
-            foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
-            {
-                if (generation != _buildGeneration)
-                {
-                    return;
-                }
-
-                if (WorkspacePathFilter.ShouldIgnorePath(path, ignorePatterns))
-                {
-                    continue;
-                }
-
-                var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-                var depth = relative.Count(c => c == '/');
-                DateTime lastWriteUtc;
-                try
-                {
-                    lastWriteUtc = File.GetLastWriteTimeUtc(path);
-                }
-                catch
-                {
-                    lastWriteUtc = DateTime.MinValue;
-                }
-
-                candidates.Add((
-                    new AtCompletionItemViewModel(
-                        Type: "文件",
-                        PrimaryText: Path.GetFileName(path),
-                        SecondaryText: relative,
-                        InsertText: $"@{relative}",
-                        MatchText: $"{relative} {Path.GetFileName(path)}"),
-                    depth,
-                    lastWriteUtc));
-
-                if (candidates.Count > MaxIndexedFiles * 2)
-                {
-                    TrimCandidateBuffer(candidates);
-                }
-            }
+            IndexWorkspaceDirectory(root, root, ignorePatterns, generation, candidates);
         }
         catch
         {
@@ -196,6 +187,101 @@ public sealed class ComposerAtCompletionService
         {
             // UI handlers must not break indexing.
         }
+    }
+
+    private void IndexWorkspaceDirectory(
+        string root,
+        string directoryPath,
+        IReadOnlyList<string> ignorePatterns,
+        int generation,
+        List<(AtCompletionItemViewModel Item, int Depth, DateTime LastWriteUtc)> candidates)
+    {
+        if (generation != _buildGeneration)
+        {
+            return;
+        }
+
+        IEnumerable<string> entries;
+        try
+        {
+            entries = Directory.EnumerateFileSystemEntries(directoryPath);
+        }
+        catch
+        {
+            return;
+        }
+
+        foreach (var entry in entries)
+        {
+            if (generation != _buildGeneration)
+            {
+                return;
+            }
+
+            var entryName = Path.GetFileName(entry);
+            if (WorkspacePathFilter.ShouldIgnoreEntryName(entryName, ignorePatterns))
+            {
+                continue;
+            }
+
+            if (Directory.Exists(entry))
+            {
+                IndexWorkspaceDirectory(root, entry, ignorePatterns, generation, candidates);
+                continue;
+            }
+
+            var relative = Path.GetRelativePath(root, entry).Replace('\\', '/');
+            var depth = relative.Count(c => c == '/');
+            DateTime lastWriteUtc;
+            try
+            {
+                lastWriteUtc = File.GetLastWriteTimeUtc(entry);
+            }
+            catch
+            {
+                lastWriteUtc = DateTime.MinValue;
+            }
+
+            candidates.Add((
+                new AtCompletionItemViewModel(
+                    Type: "文件",
+                    PrimaryText: entryName,
+                    SecondaryText: relative,
+                    InsertText: $"@{relative}",
+                    MatchText: $"{relative} {entryName}"),
+                depth,
+                lastWriteUtc));
+
+            if (candidates.Count > MaxIndexedFiles * 2)
+            {
+                TrimCandidateBuffer(candidates);
+            }
+        }
+    }
+
+    private static IReadOnlyList<AtCompletionItemViewModel> TakeCompletionItems(
+        IReadOnlyList<AtCompletionItemViewModel> skills,
+        IReadOnlyList<AtCompletionItemViewModel> files)
+    {
+        if (skills.Count >= MaxCompletionItems)
+        {
+            return skills.Take(MaxCompletionItems).ToArray();
+        }
+
+        var remaining = MaxCompletionItems - skills.Count;
+        if (remaining <= 0 || files.Count == 0)
+        {
+            return skills.ToArray();
+        }
+
+        var combined = new AtCompletionItemViewModel[skills.Count + Math.Min(remaining, files.Count)];
+        skills.CopyTo(combined, 0);
+        for (var i = 0; i < Math.Min(remaining, files.Count); i++)
+        {
+            combined[skills.Count + i] = files[i];
+        }
+
+        return combined;
     }
 
     private static void TrimCandidateBuffer(List<(AtCompletionItemViewModel Item, int Depth, DateTime LastWriteUtc)> candidates)

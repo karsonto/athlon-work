@@ -61,11 +61,7 @@ public sealed class ComposerCoordinator
 
         EnsureFileIndexBuilt(activeWorkspace, ignorePatterns);
         var sorted = _atCompletion.FilterMatches(query);
-        items.Clear();
-        foreach (var item in sorted)
-        {
-            items.Add(item);
-        }
+        ReplaceCompletionItems(items, sorted);
 
         if (items.Count == 0)
         {
@@ -188,6 +184,17 @@ public sealed class ComposerCoordinator
         }
 
         return _imageAttachmentStore.SaveFromFile(sessionId, attachment.LocalPath);
+    }
+
+    private static void ReplaceCompletionItems(
+        ObservableCollection<AtCompletionItemViewModel> items,
+        IReadOnlyList<AtCompletionItemViewModel> next)
+    {
+        items.Clear();
+        foreach (var item in next)
+        {
+            items.Add(item);
+        }
     }
 
     private static bool ImageAttachmentsMatch(ImageAttachment left, ImageAttachment right) =>
