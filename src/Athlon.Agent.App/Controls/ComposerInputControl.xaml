@@ -8,93 +8,6 @@
              d:DesignHeight="120"
              d:DesignWidth="600">
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
-        <!-- Inline overlay avoids HWND Popup conflicts with WebView2 above the composer. -->
-        <Border Grid.Row="0"
-                Margin="0,0,0,6"
-                Background="{DynamicResource Brush.Panel}"
-                BorderBrush="{DynamicResource Brush.Border}"
-                BorderThickness="1"
-                CornerRadius="10"
-                Padding="6"
-                MinWidth="340"
-                MaxWidth="560"
-                MaxHeight="240"
-                Panel.ZIndex="2"
-                IsHitTestVisible="True">
-            <Border.Style>
-                <Style TargetType="Border">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsAtCompletionOpen}" Value="True">
-                            <Setter Property="Visibility" Value="Visible" />
-                        </DataTrigger>
-                    </Style.Triggers>
-                </Style>
-            </Border.Style>
-            <ListBox x:Name="AtCompletionListBox"
-                     ItemsSource="{Binding AtCompletionItems}"
-                     SelectedIndex="{Binding SelectedAtCompletionIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                     Focusable="False"
-                     KeyboardNavigation.DirectionalNavigation="Contained"
-                     MouseDoubleClick="AtCompletionListBox_OnMouseDoubleClick"
-                     BorderThickness="0"
-                     Background="Transparent"
-                     ScrollViewer.VerticalScrollBarVisibility="Auto"
-                     ItemContainerStyle="{StaticResource CompletionListBoxItemStyle}">
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <Grid Margin="2,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0"
-                                    BorderThickness="1"
-                                    CornerRadius="8"
-                                    Padding="6,2"
-                                    Margin="0,0,8,0">
-                                <Border.Style>
-                                    <Style TargetType="Border">
-                                        <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionFileBadgeBg}" />
-                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionFileBadgeBorder}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Type}" Value="技能">
-                                                <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionSkillBadgeBg}" />
-                                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionSkillBadgeBorder}" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Border.Style>
-                                <TextBlock Text="{Binding Type}" FontSize="11">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionFileBadgeText}" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Type}" Value="技能">
-                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionSkillBadgeText}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                            </Border>
-                            <StackPanel Grid.Column="1">
-                                <TextBlock Text="{Binding PrimaryText}" FontSize="13" FontWeight="SemiBold" />
-                                <TextBlock Text="{Binding SecondaryText}"
-                                           FontSize="11"
-                                           Foreground="{DynamicResource Brush.SubtleText}"
-                                           TextTrimming="CharacterEllipsis" />
-                            </StackPanel>
-                        </Grid>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
-        </Border>
-        <Grid Grid.Row="1">
         <TextBox x:Name="ComposerTextBox"
                  Text="{Binding ComposerText, UpdateSourceTrigger=PropertyChanged}"
                  Style="{StaticResource ComposerTextBoxStyle}"
@@ -107,6 +20,88 @@
                    IsHitTestVisible="False"
                    FontSize="14"
                    Visibility="Visible" />
-        </Grid>
+        <Popup IsOpen="{Binding IsAtCompletionOpen, Mode=OneWay}"
+               PlacementTarget="{Binding ElementName=ComposerTextBox}"
+               Placement="Top"
+               StaysOpen="False"
+               AllowsTransparency="True">
+            <Border Background="{DynamicResource Brush.Panel}"
+                    BorderBrush="{DynamicResource Brush.Border}"
+                    BorderThickness="1"
+                    CornerRadius="10"
+                    Padding="6"
+                    MinWidth="340"
+                    MaxWidth="560"
+                    MaxHeight="240">
+                <ListBox x:Name="AtCompletionListBox"
+                         ItemsSource="{Binding AtCompletionItems}"
+                         SelectedIndex="{Binding SelectedAtCompletionIndex, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                         Focusable="False"
+                         KeyboardNavigation.DirectionalNavigation="Contained"
+                         MouseDoubleClick="AtCompletionListBox_OnMouseDoubleClick"
+                         BorderThickness="0"
+                         Background="Transparent"
+                         ScrollViewer.VerticalScrollBarVisibility="Auto"
+                         ItemContainerStyle="{StaticResource CompletionListBoxItemStyle}">
+                    <ListBox.Style>
+                        <Style TargetType="ListBox">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsAtCompletionOpen}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.Style>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="2,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Padding="6,2"
+                                        Margin="0,0,8,0">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionFileBadgeBg}" />
+                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionFileBadgeBorder}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Type}" Value="技能">
+                                                    <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionSkillBadgeBg}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionSkillBadgeBorder}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <TextBlock Text="{Binding Type}" FontSize="11">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionFileBadgeText}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Type}" Value="技能">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionSkillBadgeText}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Border>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding PrimaryText}" FontSize="13" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding SecondaryText}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Border>
+        </Popup>
     </Grid>
 </UserControl>
