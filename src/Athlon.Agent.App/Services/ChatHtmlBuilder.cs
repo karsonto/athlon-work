@@ -82,19 +82,6 @@ public sealed class ChatHtmlBuilder
         return shell[..^footer.Length] + replayScript;
     }
 
-    /// <summary>
-    /// Generates a JavaScript snippet that resets the timeline and replays all messages
-    /// via the existing replayEvents() function. Used for incremental rendering after
-    /// the shell page has been loaded once — no full WebView navigation needed.
-    /// </summary>
-    public string BuildReplayScript(
-        IReadOnlyList<ChatMessageViewModel> messages,
-        bool showToolCalls = false)
-    {
-        var eventsJson = ChatEventSerializer.BuildReplayEventsJson(messages, showToolCalls);
-        return $"replayEvents({eventsJson});";
-    }
-
     public string BuildI18nUpdateScript()
     {
         var i18nJson = JsonSerializer.Serialize(BuildChatI18n());
