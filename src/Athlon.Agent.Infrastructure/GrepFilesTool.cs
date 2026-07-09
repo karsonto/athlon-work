@@ -3,7 +3,7 @@ using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool, IParallelizableAgentTool
+public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, AppSettings settings) : IAgentTool, IParallelizableAgentTool
 {
     private const int MaxFilesToScan = 2000;
     private const int MaxMatches = 200;
@@ -35,48 +35,67 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
         var glob = invocation.Arguments.GetValueOrDefault("glob") ?? "*";
         var ignorePatterns = guard.GetIgnorePatterns();
         var baseRoot = guard.Normalize(".");
-        var files = File.Exists(fullPath)
+        var allFiles = File.Exists(fullPath)
             ? new[] { fullPath }
             : Directory.Exists(fullPath)
                 ? Directory.EnumerateFiles(fullPath, glob, SearchOption.AllDirectories)
                     .Where(file => !WorkspacePathFilter.ShouldIgnorePath(file, ignorePatterns))
                     .Take(MaxFilesToScan)
+                    .ToArray()
                 : Array.Empty<string>();
 
         var matches = new List<string>();
-        foreach (var file in files)
+        var matchCount = 0;
+        var matchLock = new object();
+
+        // Compute reasonable parallelism: avoid over-subscription on small file sets
+        var maxDegree = allFiles.Length < 8
+            ? 1
+            : settings.ParallelToolExecution.MaxDegreeOfParallelism;
+        var parallelOptions = new ParallelOptions
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            CancellationToken = cancellationToken,
+            MaxDegreeOfParallelism = maxDegree
+        };
+
+        await Parallel.ForEachAsync(allFiles, parallelOptions, async (file, ct) =>
+        {
+            // Early exit: enough matches found
+            if (Volatile.Read(ref matchCount) >= MaxMatches)
+                return;
+
             if (!File.Exists(file))
-            {
-                continue;
-            }
+                return;
 
             var fileInfo = new FileInfo(file);
             if (fileInfo.Length > MaxFileSizeBytes)
-            {
-                continue;
-            }
+                return;
 
             try
             {
                 await using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 4096, useAsync: true);
                 using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
                 var lineNumber = 0;
-                while (!reader.EndOfStream)
+                string? line;
+                while ((line = await reader.ReadLineAsync(ct).ConfigureAwait(false)) is not null)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) ?? string.Empty;
+                    ct.ThrowIfCancellationRequested();
+
+                    if (Volatile.Read(ref matchCount) >= MaxMatches)
+                        return;
+
                     lineNumber++;
                     if (!matcher!.IsMatch(line))
-                    {
                         continue;
-                    }
 
-                    matches.Add($"{Path.GetRelativePath(baseRoot, file)}:{lineNumber}:{line.Trim()}");
-                    if (matches.Count >= MaxMatches)
+                    var matchLine = $"{Path.GetRelativePath(baseRoot, file)}:{lineNumber}:{line.Trim()}";
+                    lock (matchLock)
                     {
-                        break;
+                        if (matchCount < MaxMatches)
+                        {
+                            matches.Add(matchLine);
+                            matchCount++;
+                        }
                     }
                 }
             }
@@ -88,12 +107,7 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
             {
                 // Skip files without access permissions.
             }
-
-            if (matches.Count >= MaxMatches)
-            {
-                break;
-            }
-        }
+        }).ConfigureAwait(false);
 
         await WorkspaceToolHelper.AuditAsync(audit, "grep_files", new { path = fullPath, pattern, regex = useRegex, count = matches.Count }, cancellationToken);
         return matches.Count == 0

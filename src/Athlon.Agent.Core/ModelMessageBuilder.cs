@@ -58,8 +58,19 @@ internal static class ModelMessageBuilder
             case MessageRole.Assistant:
                 return AppendAssistantModelMessages(messages, history, index, includeReasoningInModelContext);
             case MessageRole.Tool:
-                messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(message.Content)));
+            {
+                var toolCallId = ExtractToolCallId(message.Content);
+                if (toolCallId is not null)
+                {
+                    var stripped = StripToolCallIdAndMetadata(message.Content);
+                    messages.Add(new AgentModelMessage("tool", stripped, toolCallId));
+                }
+                else
+                {
+                    messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(message.Content)));
+                }
                 return index;
+            }
             case MessageRole.Summary:
                 messages.Add(new AgentModelMessage("user", $"History summary: {message.Content}"));
                 return index;
@@ -105,6 +116,41 @@ internal static class ModelMessageBuilder
         }
 
         return null;
+    }
+
+    /// <summary>Strip the metadata header (ToolCallId / status / arguments / summary) from a tool result,
+    /// keeping only the actual output content.</summary>
+    public static string StripToolCallIdAndMetadata(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+            return content;
+
+        var lines = content.Split(["\r\n", "\n"], StringSplitOptions.None);
+        var startIndex = 0;
+
+        // Skip ToolCallId line
+        if (lines.Length > startIndex && lines[startIndex].StartsWith("ToolCallId:", StringComparison.OrdinalIgnoreCase))
+            startIndex++;
+        // Skip Tool status line
+        if (lines.Length > startIndex && lines[startIndex].StartsWith("Tool `", StringComparison.Ordinal))
+            startIndex++;
+        // Skip empty line after status
+        if (lines.Length > startIndex && lines[startIndex].Length == 0)
+            startIndex++;
+        // Skip Arguments line
+        if (lines.Length > startIndex && lines[startIndex].StartsWith("Arguments:", StringComparison.OrdinalIgnoreCase))
+            startIndex++;
+        // Skip Summary line
+        if (lines.Length > startIndex && lines[startIndex].StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
+            startIndex++;
+        // Skip the trailing empty line after the metadata block
+        if (lines.Length > startIndex && lines[startIndex].Length == 0)
+            startIndex++;
+
+        if (startIndex >= lines.Length)
+            return string.Empty;
+
+        return string.Join(Environment.NewLine, lines[startIndex..]);
     }
 
     private static int AppendAssistantModelMessages(
@@ -154,9 +200,10 @@ internal static class ModelMessageBuilder
         messages.Add(new AgentModelMessage("assistant", message.Content, ToolCalls: toolCalls, ReasoningContent: reasoningContent));
         foreach (var toolCall in toolCalls)
         {
-            var content = toolByCallId.TryGetValue(toolCall.Id, out var toolMessage)
+            var rawContent = toolByCallId.TryGetValue(toolCall.Id, out var toolMessage)
                 ? toolMessage.Content
                 : "Tool did not run or the result was not recorded.";
+            var content = StripToolCallIdAndMetadata(rawContent);
             messages.Add(new AgentModelMessage("tool", content, toolCall.Id));
         }
 

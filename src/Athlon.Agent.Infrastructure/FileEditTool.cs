@@ -4,10 +4,14 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool
 {
+    /// <summary>Maximum file size in bytes for file_edit. Larger files should use apply_patch.</summary>
+    public const long MaxFileEditBytes = 512 * 1024;
+
     public ToolDefinition Definition { get; } = new(
         "file_edit",
         "Replace exact text in a file. old_text must match disk content exactly — not file_read's N|line prefixes. "
-            + "If matching fails, use apply_patch with a unified diff instead.",
+            + "If matching fails, use apply_patch with a unified diff instead. "
+            + $"For files larger than {MaxFileEditBytes / 1024} KiB, use apply_patch.",
         ToolSchema.Object()
             .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true)
             .String("old_text", "Exact substring from the file (no line-number prefixes)", required: true)
@@ -36,6 +40,17 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         if (!File.Exists(fullPath))
         {
             return ToolResult.Failure("File not found", fullPath);
+        }
+
+        // Threshold check: large files should use apply_patch instead
+        var fileInfo = new FileInfo(fullPath);
+        if (fileInfo.Length > MaxFileEditBytes)
+        {
+            var displayPath = ToolPathNormalizer.ForModel(invocation.Arguments.GetValueOrDefault(ToolPathNormalizer.PathArgumentName) ?? fullPath);
+            return ToolResult.Failure(
+                "File too large for file_edit",
+                $"File '{displayPath}' is {fileInfo.Length:N0} bytes, exceeding the {MaxFileEditBytes / 1024} KiB file_edit threshold. "
+                    + "Use apply_patch with a unified diff instead.");
         }
 
         string content;
@@ -87,11 +102,16 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
             },
             cancellationToken);
 
+        // Generate diff for display
+        var relativePath = Path.GetRelativePath(guard.Normalize("."), fullPath)
+            .Replace('\\', '/');
+        var diff = UnifiedDiffGenerator.Generate(content, updated, relativePath);
+
         var replacementCount = replaceAll ? match.Occurrences : 1;
         var summary = effectiveNewText.Length == 0
             ? $"Deleted text in {Path.GetFileName(fullPath)} ({replacementCount} replacement(s))"
             : $"Edited {Path.GetFileName(fullPath)} ({replacementCount} replacement(s))";
-        return ToolResult.Success(summary);
+        return ToolResult.Success(summary, diff);
     }
 
     private static bool TryGetNewText(ToolInvocation invocation, out string newText, out ToolResult error)
