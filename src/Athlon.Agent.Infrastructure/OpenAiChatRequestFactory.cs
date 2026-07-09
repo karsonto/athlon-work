@@ -73,33 +73,14 @@ internal static class OpenAiChatRequestFactory
         return result;
     }
 
-    private static object ToOpenAiTool(ToolDefinition tool)
+    private static object ToOpenAiTool(ToolDefinition tool) => new
     {
-        var properties = tool.Parameters.ToDictionary(
-            parameter => parameter.Key,
-            parameter => (object)new Dictionary<string, object?>
-            {
-                ["type"] = "string",
-                ["description"] = parameter.Value
-            });
-
-        return new
+        type = "function",
+        function = new
         {
-            type = "function",
-            function = new
-            {
-                name = tool.Name,
-                description = tool.Description,
-                parameters = new
-                {
-                    type = "object",
-                    properties,
-                    required = tool.Parameters
-                        .Where(parameter => !parameter.Value.StartsWith("Optional", StringComparison.OrdinalIgnoreCase))
-                        .Select(parameter => parameter.Key)
-                        .ToArray()
-                }
-            }
-        };
-    }
+            name = tool.Name,
+            description = tool.Description,
+            parameters = tool.ParametersSchema.ToOpenAiParameters()
+        }
+    };
 }

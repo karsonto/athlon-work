@@ -15,11 +15,10 @@ public sealed class KnowledgeSearchTool(
     public ToolDefinition Definition => new(
         Name: "knowledge_search",
         Description: "Search the global knowledge base modules explicitly enabled for the current session. Use for questions that may need uploaded reference documents. If no modules are enabled, the tool returns no results.",
-        Parameters: new Dictionary<string, string>
-        {
-            ["query"] = "Natural-language search query.",
-            ["topK"] = "Optional max number of chunks to return."
-        });
+        ToolSchema.Object()
+            .String("query", "Natural-language search query.", required: true)
+            .Integer("topK", "Max number of chunks to return.")
+            .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {

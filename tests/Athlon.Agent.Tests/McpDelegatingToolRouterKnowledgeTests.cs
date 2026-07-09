@@ -114,7 +114,7 @@ public sealed class McpDelegatingToolRouterKnowledgeTests
         public ToolDefinition Definition { get; } = new(
             "knowledge_search",
             "Search knowledge base",
-            new Dictionary<string, string> { ["query"] = "query" });
+            ToolSchema.Object().String("query", "query", required: true).Build());
 
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
@@ -122,7 +122,7 @@ public sealed class McpDelegatingToolRouterKnowledgeTests
 
     private sealed class StubNamedTool(string name) : IAgentTool
     {
-        public ToolDefinition Definition { get; } = new(name, name, new Dictionary<string, string>());
+        public ToolDefinition Definition { get; } = new(name, name, ToolSchema.Object().Build());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
     }

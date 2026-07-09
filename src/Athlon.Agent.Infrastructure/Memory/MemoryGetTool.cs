@@ -11,12 +11,11 @@ public sealed class MemoryGetTool(ILongTermMemory longTermMemory, IAppLogger log
     public ToolDefinition Definition => new(
         Name: "memory_get",
         Description: "Read specific lines from a memory file. Use after memory_search to pull full context around matched lines. Path is relative to memory directory (e.g., MEMORY.md or 2026-04-01.md).",
-        Parameters: new Dictionary<string, string>
-        {
-            ["path"] = "Relative path to the memory file (e.g., MEMORY.md or 2026-04-01.md)",
-            ["start_line"] = "Start line number (1-based, inclusive)",
-            ["end_line"] = "End line number (1-based, inclusive)"
-        });
+        ToolSchema.Object()
+            .String("path", "Relative path to the memory file (e.g., MEMORY.md or 2026-04-01.md)", required: true)
+            .Integer("start_line", "Start line number (1-based, inclusive)", required: true)
+            .Integer("end_line", "End line number (1-based, inclusive)", required: true)
+            .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {

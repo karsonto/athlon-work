@@ -55,7 +55,7 @@ public sealed class AgentRuntimeToolFailureTests
     private sealed class ThrowingToolRouter : IToolRouter
     {
         public IReadOnlyList<ToolDefinition> ListTools() =>
-            new[] { new ToolDefinition("boom", "throws", new Dictionary<string, string>()) };
+            new[] { new ToolDefinition("boom", "throws", ToolSchema.Object().Build()) };
 
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException(

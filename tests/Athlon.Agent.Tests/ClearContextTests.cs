@@ -59,7 +59,7 @@ public sealed class ClearContextTests
 
             var tools = new[]
             {
-                new ToolDefinition("file_read", "Read a file", new Dictionary<string, string>())
+                new ToolDefinition("file_read", "Read a file", ToolSchema.Object().Build())
             };
 
             var builder = PromptTestHelpers.CreateBuilder(new MinimalHostEnvironment(), settings);

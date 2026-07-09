@@ -11,11 +11,10 @@ public sealed class SessionsHistoryTool(
     public ToolDefinition Definition => new(
         Name: "sessions_history",
         Description: "Read recent transcript lines from a sub-agent session.",
-        Parameters: new Dictionary<string, string>
-        {
-            ["session_key"] = "Required session_key from sessions_spawn or sessions_list.",
-            ["limit"] = "Max messages to return (default 20)."
-        },
+        ParametersSchema: ToolSchema.Object()
+            .String("session_key", "Session key from sessions_spawn or sessions_list.", required: true)
+            .Integer("limit", "Max messages to return (default 20).")
+            .Build(),
         Group: ToolGroup.SubAgent);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)

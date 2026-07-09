@@ -35,7 +35,7 @@ internal sealed class TestMcpRegistry(IReadOnlyList<McpCatalogEntry>? catalog = 
         _catalog.Select(entry => new ToolDefinition(
             entry.EncodedName,
             entry.Description,
-            new Dictionary<string, string> { ["argumentsJson"] = entry.InputSchemaJson },
+            ToolSchema.FromMcp(entry.InputSchemaJson),
             Source: "mcp")).ToArray();
 
     public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>

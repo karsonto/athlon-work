@@ -20,12 +20,11 @@ public sealed class ExecuteCommandTool(
             + "After code changes, verify with project-appropriate checks (e.g. mvn -q -pl <module> compile, npx eslint <path>, pytest <test file>) on only the files you changed. "
             + "Console I/O uses UTF-8 (chcp 65001). "
         + $"Default timeout {DefaultTimeoutSeconds}s (max {MaxTimeoutSeconds}s); timeout ends only this tool, not the agent turn.",
-        new Dictionary<string, string>
-        {
-            ["command"] = "Command line (quote paths that contain spaces or non-ASCII characters)",
-            ["cwd"] = ToolPathDescriptions.OptionalWorkspaceRelativeCwd,
-            ["timeout"] = $"Timeout in seconds (default {DefaultTimeoutSeconds}, max {MaxTimeoutSeconds})"
-        },
+        ToolSchema.Object()
+            .String("command", "Command line (quote paths that contain spaces or non-ASCII characters)", required: true)
+            .String("cwd", ToolPathDescriptions.OptionalWorkspaceRelativeCwd)
+            .Integer("timeout", $"Timeout in seconds (default {DefaultTimeoutSeconds}, max {MaxTimeoutSeconds})")
+            .Build(),
         RequiresApproval: true,
         Group: ToolGroup.Builtin,
         MaxOutputChars: MaxCapturedOutputChars,

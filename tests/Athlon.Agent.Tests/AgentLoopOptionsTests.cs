@@ -76,7 +76,7 @@ public sealed class AgentLoopOptionsTests
     private sealed class LoopTestToolRouter : IToolRouter
     {
         public IReadOnlyList<ToolDefinition> ListTools() =>
-            [new ToolDefinition("noop", "noop", new Dictionary<string, string>())];
+            [new ToolDefinition("noop", "noop", ToolSchema.Object().Build())];
 
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ran", "tool-output"));

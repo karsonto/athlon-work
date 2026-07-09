@@ -8,11 +8,10 @@ public sealed class ApplyPatchTool(WorkspaceGuard guard, AuditLogService audit) 
         "apply_patch",
         "Apply a unified diff patch to workspace files. Use when file_edit fails due to exact-match errors. "
             + "Patch must use standard --- / +++ / @@ headers.",
-        new Dictionary<string, string>
-        {
-            ["patch"] = "Unified diff text (--- / +++ / @@ hunks)",
-            ["path"] = "Optional workspace-relative path; when set, only hunks for this file are applied"
-        },
+        ToolSchema.Object()
+            .String("patch", "Unified diff text (--- / +++ / @@ hunks)", required: true)
+            .String("path", "Workspace-relative path; when set, only hunks for this file are applied")
+            .Build(),
         RequiresApproval: true);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)

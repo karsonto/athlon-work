@@ -11,7 +11,7 @@ public sealed class SessionsListTool(
     public ToolDefinition Definition => new(
         Name: "sessions_list",
         Description: "List sub-agent sessions for the current parent session.",
-        Parameters: new Dictionary<string, string>(),
+        ParametersSchema: ToolSchema.Object().Build(),
         Group: ToolGroup.SubAgent);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)

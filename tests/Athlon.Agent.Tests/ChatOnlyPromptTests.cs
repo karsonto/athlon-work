@@ -34,7 +34,7 @@ public sealed class ChatOnlyPromptTests
         var session = AgentSession.Create("chat-only-kb");
         var tools = new[]
         {
-            new ToolDefinition("knowledge_search", "Search knowledge base", new Dictionary<string, string> { ["query"] = "query" })
+            new ToolDefinition("knowledge_search", "Search knowledge base", ToolSchema.Object().String("query", "query", required: true).Build())
         };
 
         var prompt = orchestrator.PrepareForTurn(session, tools).Text;
@@ -75,7 +75,7 @@ public sealed class ChatOnlyPromptTests
             var session = AgentSession.Create("workspace-mode").WithWorkspace(workspaceRoot);
             var tools = new[]
             {
-                new ToolDefinition("file_read", "Read a file", new Dictionary<string, string> { ["path"] = "path" })
+                new ToolDefinition("file_read", "Read a file", ToolSchema.Object().String("path", "path", required: true).Build())
             };
 
             var prompt = orchestrator.PrepareForTurn(session, tools).Text;

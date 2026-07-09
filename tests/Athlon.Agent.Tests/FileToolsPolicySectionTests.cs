@@ -50,7 +50,7 @@ public sealed class FileToolsPolicySectionTests
                 : AgentSession.Create("file-tools-test").WithWorkspace(@"C:\work\demo"),
             WorkspaceRoot = hasWorkspace && !chatOnly ? @"C:\work\demo" : null,
             Tools = chatOnly
-                ? [new ToolDefinition("knowledge_search", "Search knowledge", new Dictionary<string, string>())]
+                ? [new ToolDefinition("knowledge_search", "Search knowledge", ToolSchema.Object().Build())]
                 : [],
             SkillsDirectory = @"C:\Users\test\.athlon-agent\skills",
             Host = new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),

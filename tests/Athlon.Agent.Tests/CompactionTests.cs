@@ -610,7 +610,7 @@ public sealed class CompactionTests
         var model = new ModelSettings { MaxTokens = 8192 };
         var tools = new[]
         {
-            new ToolDefinition("file_read", "Read files", new Dictionary<string, string> { ["path"] = "path" })
+            new ToolDefinition("file_read", "Read files", ToolSchema.Object().String("path", "path", required: true).Build())
         };
         var messages = new[] { ChatMessage.Create(MessageRole.User, new string('x', 5000)) };
 

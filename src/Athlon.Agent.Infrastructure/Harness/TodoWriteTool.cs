@@ -21,11 +21,10 @@ public sealed class TodoWriteTool(
             + "(pending, in_progress, completed, cancelled). "
             + "Set merge=true to update existing items by id; merge=false to replace the full list. "
             + "Do not use for trivial single-step requests or pure Q&A.",
-        Parameters: new Dictionary<string, string>
-        {
-            ["todos"] = "JSON array string, e.g. [{\"id\":\"1\",\"content\":\"...\",\"status\":\"pending\"}]",
-            ["merge"] = "true to merge by id, false to replace entire list (default true)"
-        });
+        ParametersSchema: ToolSchema.Object()
+            .String("todos", "JSON array string, e.g. [{\"id\":\"1\",\"content\":\"...\",\"status\":\"pending\"}]", required: true)
+            .Boolean("merge", "Merge by id when true; replace entire list when false", defaultValue: true)
+            .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {

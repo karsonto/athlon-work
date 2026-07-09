@@ -265,7 +265,7 @@ public sealed class AgentRuntimeProgressTests
     private sealed class ScriptedToolRouter : IToolRouter
     {
         public IReadOnlyList<ToolDefinition> ListTools() =>
-            new[] { new ToolDefinition("alpha", "a", new Dictionary<string, string>()), new ToolDefinition("beta", "b", new Dictionary<string, string>()) };
+            new[] { new ToolDefinition("alpha", "a", ToolSchema.Object().Build()), new ToolDefinition("beta", "b", ToolSchema.Object().Build()) };
 
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success($"ran {invocation.ToolName}"));
@@ -277,7 +277,7 @@ public sealed class AgentRuntimeProgressTests
         public bool CapturedOnThreadPool { get; private set; }
 
         public IReadOnlyList<ToolDefinition> ListTools() =>
-            new[] { new ToolDefinition("alpha", "a", new Dictionary<string, string>()) };
+            new[] { new ToolDefinition("alpha", "a", ToolSchema.Object().Build()) };
 
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
         {
@@ -294,7 +294,7 @@ public sealed class AgentRuntimeProgressTests
         public IReadOnlyList<Athlon.Agent.Mcp.McpServerStatus> GetStatuses() => Array.Empty<Athlon.Agent.Mcp.McpServerStatus>();
 
         public IReadOnlyList<ToolDefinition> ListToolDefinitions() =>
-            new[] { new ToolDefinition("mcp_demo__echo", "echo", new Dictionary<string, string> { ["argumentsJson"] = "args" }, Source: "mcp") };
+            new[] { new ToolDefinition("mcp_demo__echo", "echo", ToolSchema.FromMcp("""{"type":"object","properties":{"argumentsJson":{"type":"string"}},"required":["argumentsJson"]}"""), Source: "mcp") };
 
         public IReadOnlyList<McpCatalogEntry> ListCatalogEntries() =>
             [new McpCatalogEntry("demo", "echo", "mcp_demo__echo", "echo", "{}")];

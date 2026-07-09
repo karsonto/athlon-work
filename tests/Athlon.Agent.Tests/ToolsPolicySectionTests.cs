@@ -41,9 +41,9 @@ public sealed class ToolsPolicySectionTests
     {
         var tools = new[]
         {
-            new ToolDefinition("file_read", "Read a file", new Dictionary<string, string>()),
-            new ToolDefinition("mcp_server__echo", "Echo via MCP", new Dictionary<string, string>(), Source: "mcp"),
-            new ToolDefinition("mcp_server__search", "Search via MCP", new Dictionary<string, string>(), Source: "mcp")
+            new ToolDefinition("file_read", "Read a file", ToolSchema.Object().Build()),
+            new ToolDefinition("mcp_server__echo", "Echo via MCP", ToolSchema.Object().Build(), Source: "mcp"),
+            new ToolDefinition("mcp_server__search", "Search via MCP", ToolSchema.Object().Build(), Source: "mcp")
         };
         var builder = new StringBuilder();
         new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools));

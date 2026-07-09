@@ -10,7 +10,7 @@ public sealed class ToolInvocationPolicyTests
         var definition = new ToolDefinition(
             "blocked",
             "blocked tool",
-            new Dictionary<string, string>(),
+            ToolSchema.Object().Build(),
             InvocationPolicy: ToolInvocationPolicy.Deny);
 
         var result = ToolInvocationPolicyEnforcer.TryBlockInvocation(definition);
@@ -25,7 +25,7 @@ public sealed class ToolInvocationPolicyTests
         var definition = new ToolDefinition(
             "execute_command",
             "cmd",
-            new Dictionary<string, string>(),
+            ToolSchema.Object().Build(),
             InvocationPolicy: ToolInvocationPolicy.Ask);
 
         Assert.Null(ToolInvocationPolicyEnforcer.TryBlockInvocation(definition));
@@ -37,7 +37,7 @@ public sealed class ToolInvocationPolicyTests
         var definition = new ToolDefinition(
             "execute_command",
             "cmd",
-            new Dictionary<string, string>(),
+            ToolSchema.Object().Build(),
             InvocationPolicy: ToolInvocationPolicy.Ask);
         var call = new AgentToolCall("call-1", "execute_command", new Dictionary<string, string> { ["command"] = "dir" });
 

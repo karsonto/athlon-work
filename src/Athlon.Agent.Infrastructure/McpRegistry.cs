@@ -57,10 +57,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 definitions.Add(new ToolDefinition(
                     encoded,
                     string.IsNullOrWhiteSpace(tool.Description) ? $"MCP tool {tool.Name} (server: {serverName})." : tool.Description,
-                    new Dictionary<string, string>
-                    {
-                        ["argumentsJson"] = $"JSON string for MCP inputSchema: {tool.InputSchemaJson}"
-                    },
+                    ToolSchema.FromMcp(tool.InputSchemaJson),
                     RequiresApproval: false,
                     Source: "mcp"));
             }

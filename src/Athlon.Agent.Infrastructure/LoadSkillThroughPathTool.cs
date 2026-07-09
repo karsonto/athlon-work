@@ -50,10 +50,9 @@ public sealed class LoadSkillThroughPathTool(ISkillRuntime skillRuntime) : IAgen
             + "- Do not use '.', './', directories only, or absolute paths.\n"
             + "- The response includes Files root when the skill is on disk — use it for execute_command script paths.\n\n"
             + $"**Available skill names:** {skillIdList}",
-            new Dictionary<string, string>
-            {
-                ["skillId"] = "The skill name from SKILL.md frontmatter (see Available skill names in the description).",
-                ["path"] = "Relative resource path within the skill. Use 'SKILL.md' for full instructions."
-            });
+            ToolSchema.Object()
+                .String("skillId", "The skill name from SKILL.md frontmatter (see Available skill names in the description).", required: true)
+                .String("path", "Relative resource path within the skill. Use 'SKILL.md' for full instructions.", required: true)
+                .Build());
     }
 }

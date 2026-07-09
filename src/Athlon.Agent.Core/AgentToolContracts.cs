@@ -8,7 +8,7 @@ namespace Athlon.Agent.Core;
 public sealed record ToolDefinition(
     string Name,
     string Description,
-    IReadOnlyDictionary<string, string> Parameters,
+    ToolJsonSchema ParametersSchema,
     bool RequiresApproval = false,
     string Source = "native",
     ToolGroup Group = ToolGroup.Builtin,

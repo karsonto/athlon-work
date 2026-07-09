@@ -18,11 +18,10 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
     public ToolDefinition Definition { get; } = new(
         "glob_files",
         "Find files matching a glob pattern.",
-        new Dictionary<string, string>
-        {
-            ["pattern"] = "Glob pattern (supports ** and {a,b} extensions), e.g. **/*.cs or **/*.{png,jpg}",
-            ["path"] = ToolPathDescriptions.OptionalWorkspaceRelativeDirectory
-        });
+        ToolSchema.Object()
+            .String("pattern", "Glob pattern (supports ** and {a,b} extensions), e.g. **/*.cs or **/*.{png,jpg}", required: true)
+            .String("path", ToolPathDescriptions.OptionalWorkspaceRelativeDirectory)
+            .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {

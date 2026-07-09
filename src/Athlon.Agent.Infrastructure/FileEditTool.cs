@@ -8,13 +8,12 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         "file_edit",
         "Replace exact text in a file. old_text must match disk content exactly — not file_read's N|line prefixes. "
             + "If matching fails, use apply_patch with a unified diff instead.",
-        new Dictionary<string, string>
-        {
-            ["path"] = ToolPathDescriptions.WorkspaceRelativePath,
-            ["old_text"] = "Exact substring from the file (no line-number prefixes)",
-            ["new_text"] = "Replacement (empty string deletes matched text)",
-            ["replace_all"] = "Optional true to replace all occurrences"
-        },
+        ToolSchema.Object()
+            .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true)
+            .String("old_text", "Exact substring from the file (no line-number prefixes)", required: true)
+            .String("new_text", "Replacement (empty string deletes matched text)", required: true)
+            .Boolean("replace_all", "Replace all occurrences")
+            .Build(),
         RequiresApproval: true);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)

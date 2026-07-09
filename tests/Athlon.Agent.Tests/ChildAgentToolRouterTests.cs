@@ -14,7 +14,7 @@ public sealed class ChildAgentToolRouterTests
     {
         var subAgent = new StubSubAgentTool();
         var other = new StubNamedTool("file_list");
-        var registry = new StubMcpRegistry([new ToolDefinition("mcp__srv__search", "mcp", new Dictionary<string, string>())]);
+        var registry = new StubMcpRegistry([new ToolDefinition("mcp__srv__search", "mcp", ToolSchema.Object().Build())]);
 
         var settings = new AppSettings();
         var router = new ChildAgentToolRouter(
@@ -60,7 +60,7 @@ public sealed class ChildAgentToolRouterTests
     public async Task InvokeAsync_RoutesMcpThroughSharedRegistry()
     {
         var registry = new StubMcpRegistry([]);
-        registry.Definitions.Add(new ToolDefinition("mcp__srv__ping", "ping", new Dictionary<string, string>()));
+        registry.Definitions.Add(new ToolDefinition("mcp__srv__ping", "ping", ToolSchema.Object().Build()));
         var settings = new AppSettings();
         var router = new ChildAgentToolRouter(
             Array.Empty<IAgentTool>(),
@@ -80,21 +80,21 @@ public sealed class ChildAgentToolRouterTests
 
     private sealed class StubSubAgentTool : IAgentTool, IExcludedFromChildAgentToolkit
     {
-        public ToolDefinition Definition => new("sessions_spawn", "sub", new Dictionary<string, string>());
+        public ToolDefinition Definition => new("sessions_spawn", "sub", ToolSchema.Object().Build());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
     }
 
     private sealed class StubNamedTool(string name) : IAgentTool
     {
-        public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
+        public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
     }
 
     private sealed class StubMemoryTool(string name) : IAgentTool, ILongTermMemoryTool
     {
-        public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
+        public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
     }

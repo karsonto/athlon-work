@@ -66,11 +66,7 @@ public static class ContextBudgetCalculator
             total += ContextTokenEstimator.EstimateTextTokens(tool.Name, calibrationMultiplier);
             total += ContextTokenEstimator.EstimateTextTokens(tool.Description, calibrationMultiplier);
             total += ContextTokenEstimator.EstimateTextTokens(tool.Source, calibrationMultiplier);
-            foreach (var parameter in tool.Parameters)
-            {
-                total += ContextTokenEstimator.EstimateTextTokens(parameter.Key, calibrationMultiplier);
-                total += ContextTokenEstimator.EstimateTextTokens(parameter.Value, calibrationMultiplier);
-            }
+            total += ContextTokenEstimator.EstimateTextTokens(tool.ParametersSchema.ToCanonicalJson(), calibrationMultiplier);
         }
 
         return total + ContextTokenEstimator.EstimateTextTokens("schema-overhead", calibrationMultiplier);

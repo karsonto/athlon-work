@@ -18,7 +18,9 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
     public ToolDefinition Definition { get; } = new(
         "file_list",
         "List files in a directory.",
-        new Dictionary<string, string> { ["path"] = ToolPathDescriptions.OptionalWorkspaceRelativeDirectory });
+        ToolSchema.Object()
+            .String("path", ToolPathDescriptions.OptionalWorkspaceRelativeDirectory)
+            .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {

@@ -11,10 +11,9 @@ public sealed class SubAgentTaskOutputTool(
     public ToolDefinition Definition => new(
         Name: "task_output",
         Description: "Retrieve the result of an async sub-agent task (status accepted + task_id).",
-        Parameters: new Dictionary<string, string>
-        {
-            ["task_id"] = "Required task id from sessions_spawn or sessions_send."
-        },
+        ParametersSchema: ToolSchema.Object()
+            .String("task_id", "Task id from sessions_spawn or sessions_send.", required: true)
+            .Build(),
         Group: ToolGroup.SubAgent);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)

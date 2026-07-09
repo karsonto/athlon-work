@@ -49,8 +49,8 @@ public sealed class CodingWorkflowSectionTests
             IgnorePatterns = [".git"],
             Tools =
             [
-                new ToolDefinition("file_read", "Read", new Dictionary<string, string>()),
-                new ToolDefinition("execute_command", "Run", new Dictionary<string, string>())
+                new ToolDefinition("file_read", "Read", ToolSchema.Object().Build()),
+                new ToolDefinition("execute_command", "Run", ToolSchema.Object().Build())
             ],
             SkillsDirectory = @"C:\Users\test\.athlon-agent\skills",
             Host = new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),

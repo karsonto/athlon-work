@@ -69,8 +69,8 @@ public sealed class AgentEnvironmentPromptBuilderTests
 
             var tools = new[]
             {
-                new ToolDefinition("file_read", "Read a file", new Dictionary<string, string>()),
-                new ToolDefinition("mcp_enabled-server__echo", "Echo via MCP", new Dictionary<string, string>(), Source: "mcp")
+                new ToolDefinition("file_read", "Read a file", ToolSchema.Object().Build()),
+                new ToolDefinition("mcp_enabled-server__echo", "Echo via MCP", ToolSchema.Object().Build(), Source: "mcp")
             };
 
             var session = AgentSession.Create("mcp-prompt-test").WithWorkspace(workspaceRoot);
@@ -179,7 +179,7 @@ public sealed class AgentEnvironmentPromptBuilderTests
 
         var prompt = builder.Build(
             AgentSession.Create("no-mcp"),
-            [new ToolDefinition("file_list", "List files", new Dictionary<string, string>())]);
+            [new ToolDefinition("file_list", "List files", ToolSchema.Object().Build())]);
 
         Assert.DoesNotContain("Available MCP tools:", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("none (no enabled MCP servers with tools).", prompt, StringComparison.Ordinal);

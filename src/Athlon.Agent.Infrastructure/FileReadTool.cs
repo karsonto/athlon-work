@@ -8,14 +8,13 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, Ap
         "file_read",
         "Read file content with line numbers (N|line) for display. Large files require offset/limit; "
             + "use grep_files to locate content first. Do not use N| prefixes in file_edit old_text.",
-        new Dictionary<string, string>
-        {
-            ["path"] = ToolPathDescriptions.WorkspaceRelativePath,
-            ["offset"] = "Optional 0-indexed start line. Default: 0",
-            ["limit"] = $"Optional max lines (default {FileReadSettingsDefaults.DefaultLineLimit}, max {FileReadSettingsDefaults.MaxLinesPerCall})",
-            ["start_line"] = "Optional 1-indexed start line",
-            ["end_line"] = "Optional 1-indexed end line (inclusive)"
-        });
+        ToolSchema.Object()
+            .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true)
+            .Integer("offset", "0-indexed start line. Default: 0")
+            .Integer("limit", $"Max lines (default {FileReadSettingsDefaults.DefaultLineLimit}, max {FileReadSettingsDefaults.MaxLinesPerCall})")
+            .Integer("start_line", "1-indexed start line")
+            .Integer("end_line", "1-indexed end line (inclusive)")
+            .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {

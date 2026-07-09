@@ -15,9 +15,7 @@ public static class ToolCatalogFingerprint
                 tool.Name,
                 tool.Description,
                 tool.Source,
-                Parameters = tool.Parameters
-                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
-                    .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal)
+                ParametersSchema = tool.ParametersSchema.ToCanonicalJson()
             })
             .ToArray();
 

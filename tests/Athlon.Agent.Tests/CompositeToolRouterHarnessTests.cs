@@ -140,28 +140,28 @@ public sealed class CompositeToolRouterHarnessTests
 
     private sealed class StubNamedTool(string name) : IAgentTool
     {
-        public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
+        public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
     }
 
     private sealed class StubMemoryTool(string name) : IAgentTool, ILongTermMemoryTool
     {
-        public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
+        public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
     }
 
     private sealed class StubHarnessTool(string name) : IAgentTool, IHarnessTool
     {
-        public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
+        public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
     }
 
     private sealed class StubSubAgentTool(string name) : IAgentTool, ISubAgentTool, IExcludedFromChildAgentToolkit
     {
-        public ToolDefinition Definition => new(name, name, new Dictionary<string, string>());
+        public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
     }

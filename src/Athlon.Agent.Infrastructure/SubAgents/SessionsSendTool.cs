@@ -13,13 +13,12 @@ public sealed class SessionsSendTool(
         Description:
             "Send a message to an existing sub-agent session. "
             + "Provide session_key or label. timeout_seconds=0 runs asynchronously.",
-        Parameters: new Dictionary<string, string>
-        {
-            ["session_key"] = "Stable key from sessions_spawn (sub:parent:child).",
-            ["label"] = "Alternative lookup when you used a label at spawn time.",
-            ["message"] = "Required task message for this turn.",
-            ["timeout_seconds"] = "Sync wait in seconds. 0 = async background task."
-        },
+        ParametersSchema: ToolSchema.Object()
+            .String("session_key", "Stable key from sessions_spawn (sub:parent:child).")
+            .String("label", "Alternative lookup when you used a label at spawn time.")
+            .String("message", "Task message for this turn.", required: true)
+            .Integer("timeout_seconds", "Sync wait in seconds. 0 = async background task.")
+            .Build(),
         Group: ToolGroup.SubAgent);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)

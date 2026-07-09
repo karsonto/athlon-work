@@ -14,13 +14,12 @@ public sealed class SessionsSpawnTool(
             "Spawn a sub-agent session with a role and optional first message. "
             + "Use label to reuse the same child across turns. "
             + "timeout_seconds=0 runs asynchronously and returns task_id.",
-        Parameters: new Dictionary<string, string>
-        {
-            ["role"] = "Required. Who the child agent is: responsibilities, boundaries, output style.",
-            ["message"] = "Optional first task message for the child.",
-            ["label"] = "Optional stable label; reuses an existing child session when matched.",
-            ["timeout_seconds"] = "Sync wait in seconds (default from settings). 0 = async background task."
-        },
+        ParametersSchema: ToolSchema.Object()
+            .String("role", "Who the child agent is: responsibilities, boundaries, output style.", required: true)
+            .String("message", "First task message for the child.")
+            .String("label", "Stable label; reuses an existing child session when matched.")
+            .Integer("timeout_seconds", "Sync wait in seconds (default from settings). 0 = async background task.")
+            .Build(),
         Group: ToolGroup.SubAgent);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)

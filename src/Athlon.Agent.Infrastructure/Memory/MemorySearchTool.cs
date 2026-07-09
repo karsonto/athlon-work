@@ -11,10 +11,9 @@ public sealed class MemorySearchTool(ILongTermMemory longTermMemory, IAppLogger 
     public ToolDefinition Definition => new(
         Name: "memory_search",
         Description: "Search through long-term memory files (MEMORY.md and memory/*.md) for relevant information. Use before answering questions about prior work, decisions, dates, people, preferences, or todos.",
-        Parameters: new Dictionary<string, string>
-        {
-            ["query"] = "Keywords to search for in memory files"
-        });
+        ToolSchema.Object()
+            .String("query", "Keywords to search for in memory files", required: true)
+            .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {

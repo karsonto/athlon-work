@@ -18,12 +18,11 @@ internal static class McpSearchGatewayTools
             new GatewayTool(
                 SearchToolName,
                 "Search connected MCP tools by natural-language intent. In search mode, always call this before mcp_call when the target MCP tool is not already known.",
-                new Dictionary<string, string>
-                {
-                    ["query"] = "The user intent or task to find MCP tools for.",
-                    ["topK"] = "Optional maximum number of matching tools to return.",
-                    ["serverName"] = "Optional MCP server name to search within."
-                },
+                ToolSchema.Object()
+                    .String("query", "The user intent or task to find MCP tools for.", required: true)
+                    .Integer("topK", "Maximum number of matching tools to return.")
+                    .String("serverName", "MCP server name to search within.")
+                    .Build(),
                 async invocation =>
                 {
                     var query = invocation.Arguments.GetValueOrDefault("query") ?? string.Empty;
@@ -63,7 +62,9 @@ internal static class McpSearchGatewayTools
             new GatewayTool(
                 DescribeToolName,
                 "Return the full schema and metadata for a connected MCP tool found by mcp_search.",
-                new Dictionary<string, string> { ["toolId"] = "Encoded MCP tool id from mcp_search." },
+                ToolSchema.Object()
+                    .String("toolId", "Encoded MCP tool id from mcp_search.", required: true)
+                    .Build(),
                 async invocation =>
                 {
                     var toolId = invocation.Arguments.GetValueOrDefault("toolId") ?? string.Empty;
@@ -88,11 +89,10 @@ internal static class McpSearchGatewayTools
             new GatewayTool(
                 CallToolName,
                 "Call a connected MCP tool by encoded tool id with JSON arguments.",
-                new Dictionary<string, string>
-                {
-                    ["toolId"] = "Encoded MCP tool id from mcp_search.",
-                    ["argumentsJson"] = "JSON arguments matching the MCP tool input schema."
-                },
+                ToolSchema.Object()
+                    .String("toolId", "Encoded MCP tool id from mcp_search.", required: true)
+                    .String("argumentsJson", "JSON arguments matching the MCP tool input schema.", required: true)
+                    .Build(),
                 async invocation =>
                 {
                     var toolId = invocation.Arguments.GetValueOrDefault("toolId") ?? string.Empty;
@@ -110,7 +110,7 @@ internal static class McpSearchGatewayTools
             new GatewayTool(
                 RefreshCatalogToolName,
                 "Refresh the MCP tool catalog and rebuild the local search index.",
-                new Dictionary<string, string>(),
+                ToolSchema.Object().Build(),
                 async _ =>
                 {
                     await refreshCatalogAsync();
@@ -139,10 +139,10 @@ internal static class McpSearchGatewayTools
     private sealed class GatewayTool(
         string name,
         string description,
-        IReadOnlyDictionary<string, string> parameters,
+        ToolJsonSchema parametersSchema,
         Func<ToolInvocation, Task<ToolResult>> execute) : IAgentTool
     {
-        public ToolDefinition Definition { get; } = new(name, description, parameters, RequiresApproval: false, Source: "mcp-search");
+        public ToolDefinition Definition { get; } = new(name, description, parametersSchema, RequiresApproval: false, Source: "mcp-search");
 
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             execute(invocation);

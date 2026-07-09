@@ -261,9 +261,9 @@ public sealed class ParallelToolExecutionTests
 
         public IReadOnlyList<ToolDefinition> ListTools() =>
         [
-            new ToolDefinition("file_read", "read", new Dictionary<string, string>()),
-            new ToolDefinition("grep_files", "grep", new Dictionary<string, string>()),
-            new ToolDefinition("file_write", "write", new Dictionary<string, string>())
+            new ToolDefinition("file_read", "read", ToolSchema.Object().Build()),
+            new ToolDefinition("grep_files", "grep", ToolSchema.Object().Build()),
+            new ToolDefinition("file_write", "write", ToolSchema.Object().Build())
         ];
 
         public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)

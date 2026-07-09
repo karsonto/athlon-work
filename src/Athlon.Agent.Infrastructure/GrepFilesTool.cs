@@ -12,13 +12,12 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit) :
     public ToolDefinition Definition { get; } = new(
         "grep_files",
         "Search file contents for a text pattern (literal by default; set regex to true for .NET regular expressions).",
-        new Dictionary<string, string>
-        {
-            ["pattern"] = "Text pattern (literal or regex). Regex example with regex true: class\\s+\\w+",
-            ["path"] = ToolPathDescriptions.OptionalWorkspaceRelativeDirectory,
-            ["glob"] = "Optional file glob filter, e.g. *.cs",
-            ["regex"] = "Optional true to treat pattern as .NET regular expression (default: false, literal case-insensitive)"
-        });
+        ToolSchema.Object()
+            .String("pattern", "Text pattern (literal or regex). Regex example with regex true: class\\s+\\w+", required: true)
+            .String("path", ToolPathDescriptions.OptionalWorkspaceRelativeDirectory)
+            .String("glob", "File glob filter, e.g. *.cs")
+            .Boolean("regex", "Treat pattern as .NET regular expression (default: false, literal case-insensitive)")
+            .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {

@@ -7,11 +7,10 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
     public ToolDefinition Definition { get; } = new(
         "file_write",
         "Create or overwrite a file. Use empty string for content to create a zero-byte file.",
-        new Dictionary<string, string>
-        {
-            ["path"] = ToolPathDescriptions.WorkspaceRelativePath,
-            ["content"] = "New content (empty string allowed)"
-        },
+        ToolSchema.Object()
+            .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true)
+            .String("content", "New content (empty string allowed)", required: true)
+            .Build(),
         RequiresApproval: true);
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
