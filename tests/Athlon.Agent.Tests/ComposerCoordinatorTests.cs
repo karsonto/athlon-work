@@ -111,6 +111,63 @@ public sealed class ComposerCoordinatorTests
         Assert.DoesNotContain(items, item => item.PrimaryText == "disabled-skill");
     }
 
+    [Fact]
+    public void EnsureFileIndexBuilt_NoSkills_DoesNotRefreshAgainAfterInitialization()
+    {
+        var service = new ComposerAtCompletionService();
+        var catalog = new StubSkillCatalog([]);
+        var settings = new AppSettings();
+        var updateCount = 0;
+        var reentered = false;
+        service.SourcesUpdated += () =>
+        {
+            updateCount++;
+            if (!reentered)
+            {
+                reentered = true;
+                service.EnsureFileIndexBuilt(catalog, settings, activeWorkspace: null, ignorePatterns: []);
+            }
+        };
+
+        service.EnsureFileIndexBuilt(catalog, settings, activeWorkspace: null, ignorePatterns: []);
+        service.EnsureFileIndexBuilt(catalog, settings, activeWorkspace: null, ignorePatterns: []);
+
+        Assert.Equal(1, updateCount);
+    }
+
+    [Fact]
+    public async Task EnsureFileIndexBuilt_EmptyWorkspace_DoesNotRefreshAfterEmptyIndexCompletes()
+    {
+        var workspace = Path.Combine(Path.GetTempPath(), "composer-empty-workspace-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspace);
+        try
+        {
+            var service = new ComposerAtCompletionService();
+            var catalog = new StubSkillCatalog([CreateSkill("test-skill")]);
+            var indexCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var updateCount = 0;
+            service.SourcesUpdated += () =>
+            {
+                if (Interlocked.Increment(ref updateCount) == 2)
+                {
+                    indexCompleted.TrySetResult();
+                }
+            };
+
+            service.EnsureFileIndexBuilt(catalog, new AppSettings(), workspace, ignorePatterns: []);
+            await indexCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            var countAfterIndexCompleted = Volatile.Read(ref updateCount);
+
+            service.EnsureFileIndexBuilt(catalog, new AppSettings(), workspace, ignorePatterns: []);
+
+            Assert.Equal(countAfterIndexCompleted, Volatile.Read(ref updateCount));
+        }
+        finally
+        {
+            Directory.Delete(workspace, recursive: true);
+        }
+    }
+
     private static AgentSkill CreateSkill(string name) =>
         new(
             new Dictionary<string, object>

@@ -12,10 +12,13 @@ public sealed class ComposerAtCompletionService
     private const int MaxCompletionItems = 30;
     private const int MaxIndexedFiles = 4000;
 
+    private readonly object _fileIndexStateLock = new();
     private volatile IReadOnlyList<AtCompletionItemViewModel> _fileSnapshot = Array.Empty<AtCompletionItemViewModel>();
     private volatile IReadOnlyList<AtCompletionItemViewModel> _skillSnapshot = Array.Empty<AtCompletionItemViewModel>();
     private int _buildGeneration;
     private string? _indexedWorkspace;
+    private volatile bool _skillIndexInitialized;
+    private volatile bool _fileIndexInitialized;
     private volatile bool _fileIndexBuildInFlight;
 
     public event Action? SourcesUpdated;
@@ -33,29 +36,45 @@ public sealed class ComposerAtCompletionService
         }
 
         _skillSnapshot = BuildSkillIndex(skillCatalog, settings);
-        RaiseSourcesUpdated();
+        _skillIndexInitialized = true;
 
         if (string.IsNullOrWhiteSpace(activeWorkspace) || !Directory.Exists(activeWorkspace))
         {
-            _fileSnapshot = Array.Empty<AtCompletionItemViewModel>();
-            _indexedWorkspace = null;
-            _fileIndexBuildInFlight = false;
+            lock (_fileIndexStateLock)
+            {
+                Interlocked.Increment(ref _buildGeneration);
+                _fileSnapshot = Array.Empty<AtCompletionItemViewModel>();
+                _indexedWorkspace = null;
+                _fileIndexInitialized = true;
+                _fileIndexBuildInFlight = false;
+            }
+
+            RaiseSourcesUpdated();
             return;
         }
 
         var root = Path.GetFullPath(activeWorkspace);
-        if (string.Equals(_indexedWorkspace, root, StringComparison.OrdinalIgnoreCase)
-            && (_fileSnapshot.Count > 0 || _fileIndexBuildInFlight))
+        int? generation = null;
+        lock (_fileIndexStateLock)
         {
-            return;
+            if (!string.Equals(_indexedWorkspace, root, StringComparison.OrdinalIgnoreCase)
+                || (_fileSnapshot.Count == 0 && !_fileIndexBuildInFlight))
+            {
+                _indexedWorkspace = root;
+                _fileSnapshot = Array.Empty<AtCompletionItemViewModel>();
+                _fileIndexInitialized = false;
+                _fileIndexBuildInFlight = true;
+                generation = Interlocked.Increment(ref _buildGeneration);
+            }
         }
 
-        _indexedWorkspace = root;
-        _fileSnapshot = Array.Empty<AtCompletionItemViewModel>();
-        _fileIndexBuildInFlight = true;
-        var generation = Interlocked.Increment(ref _buildGeneration);
-        var patterns = ignorePatterns.ToArray();
-        _ = Task.Run(() => BuildFileIndex(root, patterns, generation));
+        if (generation is not null)
+        {
+            var patterns = ignorePatterns.ToArray();
+            _ = Task.Run(() => BuildFileIndex(root, patterns, generation.Value));
+        }
+
+        RaiseSourcesUpdated();
     }
 
     public void EnsureFileIndexBuilt(
@@ -64,13 +83,37 @@ public sealed class ComposerAtCompletionService
         string? activeWorkspace,
         IReadOnlyCollection<string> ignorePatterns)
     {
-        if (_skillSnapshot.Count == 0)
+        if (!_skillIndexInitialized)
         {
             RefreshSources(skillCatalog, settings, activeWorkspace, ignorePatterns);
             return;
         }
 
-        if (_fileSnapshot.Count == 0)
+        if (string.IsNullOrWhiteSpace(activeWorkspace) || !Directory.Exists(activeWorkspace))
+        {
+            bool shouldRefresh;
+            lock (_fileIndexStateLock)
+            {
+                shouldRefresh = !_fileIndexInitialized || _indexedWorkspace is not null;
+            }
+
+            if (shouldRefresh)
+            {
+                RefreshSources(skillCatalog, settings, activeWorkspace, ignorePatterns);
+            }
+
+            return;
+        }
+
+        var root = Path.GetFullPath(activeWorkspace);
+        bool shouldRefresh;
+        lock (_fileIndexStateLock)
+        {
+            var isCurrentWorkspace = string.Equals(_indexedWorkspace, root, StringComparison.OrdinalIgnoreCase);
+            shouldRefresh = !isCurrentWorkspace || (!_fileIndexInitialized && !_fileIndexBuildInFlight);
+        }
+
+        if (shouldRefresh)
         {
             RefreshSources(skillCatalog, settings, activeWorkspace, ignorePatterns);
         }
@@ -169,11 +212,6 @@ public sealed class ComposerAtCompletionService
             // Keep whatever was indexed successfully.
         }
 
-        if (generation != _buildGeneration)
-        {
-            return;
-        }
-
         var ordered = candidates
             .OrderBy(item => item.Depth)
             .ThenByDescending(item => item.LastWriteUtc)
@@ -181,8 +219,18 @@ public sealed class ComposerAtCompletionService
             .Select(item => item.Item)
             .ToArray();
 
-        _fileSnapshot = ordered;
-        _fileIndexBuildInFlight = false;
+        lock (_fileIndexStateLock)
+        {
+            if (generation != _buildGeneration)
+            {
+                return;
+            }
+
+            _fileSnapshot = ordered;
+            _fileIndexInitialized = true;
+            _fileIndexBuildInFlight = false;
+        }
+
         RaiseSourcesUpdated();
     }
 
