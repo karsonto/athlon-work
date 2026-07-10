@@ -91,13 +91,13 @@ public sealed class ComposerAtCompletionService
 
         if (string.IsNullOrWhiteSpace(activeWorkspace) || !Directory.Exists(activeWorkspace))
         {
-            bool shouldRefresh;
+            bool needsRefresh;
             lock (_fileIndexStateLock)
             {
-                shouldRefresh = !_fileIndexInitialized || _indexedWorkspace is not null;
+                needsRefresh = !_fileIndexInitialized || _indexedWorkspace is not null;
             }
 
-            if (shouldRefresh)
+            if (needsRefresh)
             {
                 RefreshSources(skillCatalog, settings, activeWorkspace, ignorePatterns);
             }
