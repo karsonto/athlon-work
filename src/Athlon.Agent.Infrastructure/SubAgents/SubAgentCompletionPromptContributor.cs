@@ -8,7 +8,7 @@ namespace Athlon.Agent.Infrastructure.SubAgents;
 public sealed class SubAgentCompletionPromptContributor(
     AppSettings settings,
     Lazy<ISubAgentSessionManager> sessionManager,
-    IAgentRunContextAccessor runContextAccessor) : IPreReasoningPromptContributor
+    IAgentRunContextAccessor runContextAccessor) : IRuntimeContextContributor
 {
     public int Priority => 30;
 

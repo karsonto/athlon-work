@@ -142,12 +142,11 @@ public sealed class AgentEnvironmentPromptBuilderTests
         {
             var orchestrator = PromptTestHelpers.CreateOrchestrator(
                 new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
-                settings,
-                preReasoningContributors: [new WorkspaceFilesPromptContributor()]);
+                settings);
             var session = AgentSession.Create("agents-md").WithWorkspace(root);
             var tools = Array.Empty<ToolDefinition>();
             var frozen = orchestrator.PrepareForTurn(session, tools);
-            var prompt = orchestrator.BuildForReasoningIteration(frozen, session, tools);
+            var prompt = frozen.Text;
 
             Assert.Contains("## AGENTS.md", prompt, StringComparison.Ordinal);
             Assert.Contains("# Project rules", prompt, StringComparison.Ordinal);

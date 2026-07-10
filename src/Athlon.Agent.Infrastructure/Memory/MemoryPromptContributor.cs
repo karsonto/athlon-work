@@ -7,14 +7,14 @@ using Athlon.Agent.Core.Prompt;
 namespace Athlon.Agent.Infrastructure.Memory;
 
 /// <summary>
-/// Optionally injects curated MEMORY.md into the system prompt before each reasoning iteration.
+/// Optionally injects curated MEMORY.md into ephemeral runtime context before each reasoning iteration.
 /// Only when harness is enabled for the session. Default mode is None (use memory_search / memory_get).
 /// </summary>
 public sealed class MemoryPromptContributor(
     ILongTermMemory longTermMemory,
     ISessionHarnessState harnessState,
     IAgentRunContextAccessor runContextAccessor,
-    AppSettings settings) : IPreReasoningPromptContributor
+    AppSettings settings) : IRuntimeContextContributor
 {
     private const string TruncationNotice = "\n\n...(truncated — use memory_get)...";
     private const string PreviewHint = "Use memory_search / memory_get for full memory.";

@@ -75,7 +75,7 @@ public static class ConversationCutoffPlanner
             return SemanticCutoffPlanner.DetermineCutoffIndex(messages, settings, keepTokenBudgetOverride.Value);
         }
 
-        if (keepTokenBudgetOverride is > 0)
+        if (keepTokenBudgetOverride is not null)
         {
             var rawCutoff = DetermineTruncateArgsCutoffFromKeepBudget(
                 messages,

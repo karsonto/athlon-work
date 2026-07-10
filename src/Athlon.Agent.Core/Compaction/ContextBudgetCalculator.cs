@@ -8,7 +8,8 @@ public static class ContextBudgetCalculator
         IReadOnlyList<ChatMessage> messages,
         ContextCompactionSettings compactionSettings,
         ModelSettings modelSettings,
-        double calibrationMultiplier = 1.0)
+        double calibrationMultiplier = 1.0,
+        string? runtimeContext = null)
     {
         var dynamic = compactionSettings.DynamicCompaction;
         var totalWindow = Math.Max(1, compactionSettings.ContextWindowTokens);
@@ -16,11 +17,12 @@ public static class ContextBudgetCalculator
             ? modelSettings.MaxTokens.Value
             : dynamic.DefaultReservedOutputTokens;
 
-        var systemTokens = ContextTokenEstimator.EstimateTextTokens(environmentPrompt, calibrationMultiplier);
+        var systemTokens = ContextTokenEstimator.EstimateTextTokens(environmentPrompt, calibrationMultiplier)
+            + ContextTokenEstimator.EstimateTextTokens(runtimeContext ?? string.Empty, calibrationMultiplier);
         var toolsTokens = EstimateToolsTokens(tools, calibrationMultiplier);
         var margin = (int)Math.Floor(totalWindow * dynamic.SafetyMarginRatio);
         var fixedOverhead = systemTokens + toolsTokens + margin;
-        var historyBudget = Math.Max(512, totalWindow - reservedOutput - fixedOverhead);
+        var historyBudget = Math.Max(0, totalWindow - reservedOutput - fixedOverhead);
 
         var conversation = FilterConversation(messages);
         var estimatedHistory = ContextTokenEstimator.Estimate(

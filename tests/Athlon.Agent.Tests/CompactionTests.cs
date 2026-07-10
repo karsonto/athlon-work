@@ -627,6 +627,71 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public void ContextBudgetCalculator_IncludesRuntimeContextInOverhead()
+    {
+        var settings = new ContextCompactionSettings { ContextWindowTokens = 100_000 };
+        var model = new ModelSettings { MaxTokens = 8192 };
+
+        var withoutRuntimeContext = ContextBudgetCalculator.Compute(
+            "system",
+            [],
+            [],
+            settings,
+            model);
+        var withRuntimeContext = ContextBudgetCalculator.Compute(
+            "system",
+            [],
+            [],
+            settings,
+            model,
+            runtimeContext: new string('r', 1000));
+
+        Assert.True(withRuntimeContext.FixedOverhead > withoutRuntimeContext.FixedOverhead);
+        Assert.True(withRuntimeContext.HistoryBudget < withoutRuntimeContext.HistoryBudget);
+    }
+
+    [Fact]
+    public void ContextBudgetCalculator_DoesNotAllocateHistoryWhenFixedContextExceedsWindow()
+    {
+        var settings = new ContextCompactionSettings
+        {
+            ContextWindowTokens = 1000,
+            DynamicCompaction = new DynamicCompactionSettings { Enabled = true }
+        };
+        var budget = ContextBudgetCalculator.Compute(
+            "system",
+            [],
+            [],
+            settings,
+            new ModelSettings { MaxTokens = 500 },
+            runtimeContext: new string('r', 10_000));
+
+        Assert.Equal(0, budget.HistoryBudget);
+        Assert.True(budget.FixedOverhead + budget.ReservedOutput > budget.TotalWindow);
+        Assert.Equal(
+            0,
+            ContextPressureEvaluator.ResolveKeepTokenBudget(
+                budget,
+                ContextPressureLevel.Overflow,
+                [],
+                settings,
+                includesConversationCompact: true));
+
+        var conversation = new[]
+        {
+            ChatMessage.Create(MessageRole.User, "old question"),
+            ChatMessage.Create(MessageRole.Assistant, "old answer")
+        };
+        Assert.Equal(
+            conversation.Length,
+            ConversationCutoffPlanner.DetermineCutoffIndex(
+                conversation,
+                ContextTokenEstimator.Estimate(conversation),
+                settings,
+                keepTokenBudgetOverride: 0));
+    }
+
+    [Fact]
     public void ContextBudgetSnapshot_TotalUtilization_IncludesFixedOverhead()
     {
         var budget = new ContextBudgetSnapshot(200_000, 8192, 40_000, 120_000, 50_000, 0.42);

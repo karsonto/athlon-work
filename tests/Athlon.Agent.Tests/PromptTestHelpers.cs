@@ -14,7 +14,7 @@ internal static class PromptTestHelpers
         IAgentHostEnvironment host,
         AppSettings? settings = null,
         IAgentSkillCatalog? catalog = null,
-        IEnumerable<IPreReasoningPromptContributor>? preReasoningContributors = null)
+        IEnumerable<IRuntimeContextContributor>? runtimeContextContributors = null)
     {
         settings ??= new AppSettings();
         catalog ??= new AgentSkillCatalog(new FileSystemSkillRepository(Path.Combine(Path.GetTempPath(), "empty-skills-" + Guid.NewGuid().ToString("N"))));
@@ -40,7 +40,7 @@ internal static class PromptTestHelpers
             NullCurrentSsoUserContext.Instance,
             DefaultSessionHarnessState.Instance,
             sections,
-            preReasoningContributors ?? Array.Empty<IPreReasoningPromptContributor>());
+            new RuntimeContextAssembler(runtimeContextContributors ?? Array.Empty<IRuntimeContextContributor>()));
     }
 
     public static ISystemPromptOrchestrator CreateStaticOrchestrator(string text = "prompt") =>
@@ -57,6 +57,8 @@ internal static class PromptTestHelpers
         private readonly FrozenSystemPrompt _frozen = new(text.TrimEnd() + Environment.NewLine);
 
         public FrozenSystemPrompt PrepareForTurn(AgentSession session, IReadOnlyList<ToolDefinition> tools) => _frozen;
+
+        public string? BuildRuntimeContext(AgentSession session, IReadOnlyList<ToolDefinition> tools) => null;
 
         public string BuildForReasoningIteration(
             FrozenSystemPrompt frozen,

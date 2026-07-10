@@ -63,16 +63,16 @@ public static class ContextPressureEvaluator
 
         if (pressure != ContextPressureLevel.Overflow && !includesConversationCompact)
         {
-            return Math.Max(staticKeep, 512);
+            return Math.Min(budget.HistoryBudget, Math.Max(staticKeep, 512));
         }
 
         var keepTargetUtil = pressure == ContextPressureLevel.Overflow
             ? dynamic.OverflowPostCompactionUtilization
             : dynamic.PostCompactionUtilization;
         var targetHistory = (int)Math.Floor(keepTargetUtil * budget.UsablePromptWindow - budget.FixedOverhead);
-        var dynamicKeep = Math.Max(512, targetHistory);
+        var dynamicKeep = Math.Max(0, targetHistory);
 
-        return Math.Max(dynamicKeep, staticKeep);
+        return Math.Min(budget.HistoryBudget, Math.Max(dynamicKeep, staticKeep));
     }
 
     public static bool ShouldApplyTruncateArgs(

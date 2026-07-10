@@ -19,6 +19,8 @@ public sealed class AgentTurnInvocation
 
     public string? EnvironmentPrompt { get; set; }
 
+    public string? RuntimeContext { get; set; }
+
     public IReadOnlyList<ToolDefinition>? Tools { get; set; }
 
     public FrozenSystemPrompt? FrozenPrompt { get; set; }

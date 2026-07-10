@@ -13,8 +13,7 @@ internal sealed class AgentTurnCoordinator(
     IPromptPressureStore promptPressureStore,
     AppSettings settings,
     IAgentRunContextAccessor runContextAccessor,
-    Func<ISystemPromptOrchestrator> resolveSystemPromptOrchestrator,
-    Func<AgentSession, AgentTurnCallbacks?, PreCompletionOptions, string, IReadOnlyList<ToolDefinition>, ContextPressureLevel, CancellationToken, Task<AgentSession>> runPreCompletionPipelineAsync,
+    Func<AgentSession, AgentTurnCallbacks?, PreCompletionOptions, string, string?, IReadOnlyList<ToolDefinition>, ContextPressureLevel, CancellationToken, Task<AgentSession>> runPreCompletionPipelineAsync,
     IAppLogger logger)
 {
     private readonly IAppLogger _logger = logger.ForContext("AgentTurnCoordinator");
@@ -30,6 +29,7 @@ internal sealed class AgentTurnCoordinator(
         string environmentPrompt,
         ModelMessageCache? modelMessageCache,
         int contextSavingsTokens,
+        string? runtimeContext,
         CancellationToken cancellationToken)
     {
         try
@@ -41,7 +41,7 @@ internal sealed class AgentTurnCoordinator(
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
                 delta => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
                 cancellationToken).ConfigureAwait(false);
-            await RecordModelUsageAsync(session, callbacks, environmentPrompt, tools, response, contextSavingsTokens).ConfigureAwait(false);
+            await RecordModelUsageAsync(session, callbacks, environmentPrompt, runtimeContext, tools, response, contextSavingsTokens).ConfigureAwait(false);
             return (session, response);
         }
         catch (HttpRequestException ex) when (AgentRuntime.IsContextLengthError(ex))
@@ -53,20 +53,18 @@ internal sealed class AgentTurnCoordinator(
                 callbacks,
                 PreCompletionOptions.ForceCompact,
                 environmentPrompt,
+                runtimeContext,
                 tools,
                 ContextPressureLevel.Overflow,
                 cancellationToken).ConfigureAwait(false);
 
             modelMessageCache?.Invalidate();
-            environmentPrompt = resolveSystemPromptOrchestrator().BuildForReasoningIteration(
-                frozenPrompt,
-                session,
-                tools);
             var retryResult = ModelMessagesForApiBuilder.Build(
                 modelMessageCache,
-                environmentPrompt,
+                frozenPrompt.Text,
                 session.Messages,
-                settings.ContextCompaction);
+                settings.ContextCompaction,
+                runtimeContext);
             var allowToolCalls = ScheduleTurnScope.Current?.AllowToolCalls ?? true;
             var response = await modelClient.CompleteAsync(
                 new AgentModelRequest(retryResult.Messages, tools, AllowToolCalls: allowToolCalls),
@@ -74,7 +72,7 @@ internal sealed class AgentTurnCoordinator(
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
                 delta => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
                 cancellationToken).ConfigureAwait(false);
-            await RecordModelUsageAsync(session, callbacks, environmentPrompt, tools, response, retryResult.EstimatedSavingsTokens).ConfigureAwait(false);
+            await RecordModelUsageAsync(session, callbacks, environmentPrompt, runtimeContext, tools, response, retryResult.EstimatedSavingsTokens).ConfigureAwait(false);
             return (session, response);
         }
     }
@@ -83,6 +81,7 @@ internal sealed class AgentTurnCoordinator(
         AgentSession session,
         AgentTurnCallbacks? callbacks,
         string environmentPrompt,
+        string? runtimeContext,
         IReadOnlyList<ToolDefinition> tools,
         AgentModelResponse response,
         int contextSavingsTokens)
@@ -99,7 +98,8 @@ internal sealed class AgentTurnCoordinator(
             session.Messages,
             settings.ContextCompaction,
             settings.Model,
-            multiplier);
+            multiplier,
+            runtimeContext);
         var estimatedPromptTokens = budget.FixedOverhead + budget.EstimatedHistory;
         tokenEstimatorCalibrator.Observe(session.Id, estimatedPromptTokens, response.Usage.PromptTokens);
         promptPressureStore.Record(session.Id, response.Usage.PromptTokens.Value);

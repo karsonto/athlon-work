@@ -87,6 +87,8 @@ public sealed class AgentLoopOptionsTests
         public Athlon.Agent.Core.Prompt.FrozenSystemPrompt PrepareForTurn(AgentSession session, IReadOnlyList<ToolDefinition> tools) =>
             new("sys");
 
+        public string? BuildRuntimeContext(AgentSession session, IReadOnlyList<ToolDefinition> tools) => null;
+
         public string BuildForReasoningIteration(
             Athlon.Agent.Core.Prompt.FrozenSystemPrompt frozen,
             AgentSession session,

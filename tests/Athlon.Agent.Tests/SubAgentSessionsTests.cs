@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Harness;
+using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Infrastructure;
@@ -188,7 +189,7 @@ public sealed class SubAgentSessionsTests
                 NullCurrentSsoUserContext.Instance,
                 DefaultSessionHarnessState.Instance,
                 Array.Empty<Athlon.Agent.Core.Prompt.IEnvironmentPromptSection>(),
-                Array.Empty<Athlon.Agent.Core.Prompt.IPreReasoningPromptContributor>());
+                new RuntimeContextAssembler(Array.Empty<IRuntimeContextContributor>()));
             var services = new ServiceCollection();
             services.AddSingleton<IAgentOrchestrator>(orchestrator);
             var serviceProvider = services.BuildServiceProvider();

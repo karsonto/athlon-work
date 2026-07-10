@@ -41,7 +41,7 @@ public sealed class SystemPromptOrchestratorTests
             NullCurrentSsoUserContext.Instance,
             DefaultSessionHarnessState.Instance,
             sections,
-            Array.Empty<IPreReasoningPromptContributor>());
+            new RuntimeContextAssembler(Array.Empty<IRuntimeContextContributor>()));
         var legacy = new AgentEnvironmentPromptBuilder(settings, host, sections);
 
         var session = AgentSession.Create("orchestrator-parity");
@@ -70,21 +70,24 @@ public sealed class SystemPromptOrchestratorTests
     }
 
     [Fact]
-    public void BuildForReasoningIteration_WithContributor_AppendsContent()
+    public void BuildRuntimeContext_WithContributor_ReturnsEphemeralContent()
     {
         var orchestrator = PromptTestHelpers.CreateOrchestrator(
             new PromptTestHelpers.FakeHostEnvironment(
                 @"C:\Users\test\.athlon-agent\skills",
                 @"C:\Users\test\.athlon-agent"),
-            preReasoningContributors: [new TestPreReasoningContributor()]);
+            runtimeContextContributors: [new TestRuntimeContextContributor()]);
 
         var session = AgentSession.Create("pre-reasoning");
         var tools = Array.Empty<ToolDefinition>();
         var frozen = orchestrator.PrepareForTurn(session, tools);
         var iteration = orchestrator.BuildForReasoningIteration(frozen, session, tools);
+        var runtimeContext = orchestrator.BuildRuntimeContext(session, tools);
 
-        Assert.StartsWith(frozen.Text.TrimEnd(), iteration.TrimEnd(), StringComparison.Ordinal);
-        Assert.Contains("PRE_REASONING_MARKER", iteration, StringComparison.Ordinal);
+        Assert.Equal(frozen.Text, iteration);
+        Assert.NotNull(runtimeContext);
+        Assert.Contains("<runtime_context>", runtimeContext, StringComparison.Ordinal);
+        Assert.Contains("PRE_REASONING_MARKER", runtimeContext, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -136,7 +139,7 @@ public sealed class SystemPromptOrchestratorTests
             adapter.Build(session, Array.Empty<ToolDefinition>()));
     }
 
-    private sealed class TestPreReasoningContributor : IPreReasoningPromptContributor
+    private sealed class TestRuntimeContextContributor : IRuntimeContextContributor
     {
         public int Priority => 100;
 

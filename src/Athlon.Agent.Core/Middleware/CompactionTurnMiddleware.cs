@@ -48,7 +48,8 @@ public sealed class CompactionTurnMiddleware(
                 invocation.Session.Messages,
                 settings.ContextCompaction,
                 settings.Model,
-                multiplier);
+                multiplier,
+                invocation.RuntimeContext);
             budget = ApplyPromptPressure(budget, invocation.Session.Id);
             runtimeContext = new CompactionRuntimeContext(
                 budget,

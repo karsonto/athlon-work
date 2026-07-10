@@ -2,7 +2,7 @@ using System.Text;
 
 namespace Athlon.Agent.Core.Prompt;
 
-public interface IPreReasoningPromptContributor
+public interface IRuntimeContextContributor
 {
     int Priority { get; }
 

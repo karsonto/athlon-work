@@ -55,7 +55,6 @@ public sealed class AgentRuntime(
         promptPressureStore,
         settings,
         runContextAccessor,
-        ResolveSystemPromptOrchestrator,
         RunForceCompactPreCompletionAsync,
         logger);
 
@@ -129,7 +128,7 @@ public sealed class AgentRuntime(
             LogToolCatalogDrift(session.Id, toolCatalogFingerprint);
 
             var frozenPrompt = activePrompt.PrepareForTurn(session, tools);
-            var environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
+            var environmentPrompt = frozenPrompt.Text;
             var modelToolRound = 0;
             var maxModelToolRounds = runContext.LoopOptions?.MaxModelToolRounds;
             var modelMessageCache = new ModelMessageCache();
@@ -169,15 +168,17 @@ public sealed class AgentRuntime(
             {
                 turnInvocation.Session = session;
                 turnInvocation.EnvironmentPrompt = environmentPrompt;
+                var runtimeContext = activePrompt.BuildRuntimeContext(session, tools);
+                turnInvocation.RuntimeContext = runtimeContext;
                 await turnPipeline.OnBeforeModelRoundAsync(turnInvocation, cancellationToken).ConfigureAwait(false);
                 session = turnInvocation.Session;
-                environmentPrompt = activePrompt.BuildForReasoningIteration(frozenPrompt, session, tools);
                 turnInvocation.EnvironmentPrompt = environmentPrompt;
                 var hygieneResult = ModelMessagesForApiBuilder.Build(
                     modelMessageCache,
                     environmentPrompt,
                     session.Messages,
-                    settings.ContextCompaction);
+                    settings.ContextCompaction,
+                    runtimeContext);
 
                 var assistantMessageId = Guid.NewGuid().ToString("N");
                 var (updatedSession, response) = await TurnCoordinator.CompleteWithOverflowRetryAsync(
@@ -191,6 +192,7 @@ public sealed class AgentRuntime(
                     environmentPrompt,
                     modelMessageCache,
                     hygieneResult.EstimatedSavingsTokens,
+                    runtimeContext,
                     cancellationToken).ConfigureAwait(false);
                 session = updatedSession;
 
@@ -304,6 +306,7 @@ public sealed class AgentRuntime(
         AgentTurnCallbacks? callbacks,
         PreCompletionOptions options,
         string environmentPrompt,
+        string? runtimeContext,
         IReadOnlyList<ToolDefinition> tools,
         ContextPressureLevel pressureOverride,
         CancellationToken cancellationToken)
@@ -316,6 +319,7 @@ public sealed class AgentRuntime(
             Callbacks = callbacks,
             StreamAdapter = new AgentStreamAdapter(session.Id, Guid.NewGuid().ToString("N")),
             EnvironmentPrompt = environmentPrompt,
+            RuntimeContext = runtimeContext,
             Tools = tools
         };
         return await compactionMiddleware.RunPreCompletionAsync(

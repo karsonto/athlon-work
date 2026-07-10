@@ -8,7 +8,7 @@ namespace Athlon.Agent.Infrastructure.Harness;
 public sealed class TaskListPromptContributor(
     ISessionHarnessState harnessState,
     ISessionTaskListStore taskListStore,
-    IAgentRunContextAccessor runContextAccessor) : IPreReasoningPromptContributor
+    IAgentRunContextAccessor runContextAccessor) : IRuntimeContextContributor
 {
     public int Priority => 35;
 

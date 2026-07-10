@@ -6,7 +6,7 @@ namespace Athlon.Agent.Tests;
 public sealed class ModelMessageBuilderTests
 {
     [Fact]
-    public void BuildForSession_PrependsTimestampToUserMessage()
+    public void BuildForSession_AppendsTimestampToUserMessage()
     {
         var createdAt = new DateTimeOffset(2026, 6, 28, 6, 30, 0, TimeSpan.Zero);
         var history = new[]
@@ -19,8 +19,8 @@ public sealed class ModelMessageBuilderTests
         var userMessage = Assert.Single(result.Messages, message => message.Role == "user");
         var content = Assert.IsType<string>(userMessage.Content);
 
-        Assert.StartsWith("[2026-06-28 14:30 UTC+8]", content, StringComparison.Ordinal);
-        Assert.Contains("Hello", content, StringComparison.Ordinal);
+        Assert.StartsWith("Hello", content, StringComparison.Ordinal);
+        Assert.EndsWith("[2026-06-28 14:30 UTC+8]", content, StringComparison.Ordinal);
     }
 
     [Fact]

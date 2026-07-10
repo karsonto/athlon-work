@@ -13,7 +13,7 @@ public sealed class SubAgentSystemPromptOrchestrator(
     ICurrentSsoUserContext ssoUserContext,
     ISessionHarnessState harnessState,
     IEnumerable<IEnvironmentPromptSection> sections,
-    IEnumerable<IPreReasoningPromptContributor> preReasoningContributors) : ISystemPromptOrchestrator
+    RuntimeContextAssembler runtimeContextAssembler) : ISystemPromptOrchestrator
 {
     private static readonly HashSet<Type> ExcludedSectionTypes =
     [
@@ -28,9 +28,6 @@ public sealed class SubAgentSystemPromptOrchestrator(
     private readonly IReadOnlyList<IEnvironmentPromptSection> _preCallSections =
         FilterSections(sections, PromptSectionPlacement.PreCall);
 
-    private readonly IReadOnlyList<IPreReasoningPromptContributor> _preReasoningContributors =
-        preReasoningContributors.OrderBy(contributor => contributor.Priority).ToArray();
-
     public FrozenSystemPrompt PrepareForTurn(AgentSession session, IReadOnlyList<ToolDefinition> tools)
     {
         var context = CreateContext(session, tools);
@@ -43,22 +40,11 @@ public sealed class SubAgentSystemPromptOrchestrator(
     public string BuildForReasoningIteration(
         FrozenSystemPrompt frozen,
         AgentSession session,
-        IReadOnlyList<ToolDefinition> tools)
-    {
-        if (_preReasoningContributors.Count == 0)
-        {
-            return frozen.Text;
-        }
+        IReadOnlyList<ToolDefinition> tools) =>
+        frozen.Text;
 
-        var context = CreateContext(session, tools);
-        var builder = new StringBuilder(frozen.Text);
-        foreach (var contributor in _preReasoningContributors)
-        {
-            contributor.Append(builder, context);
-        }
-
-        return FormatPrompt(builder);
-    }
+    public string? BuildRuntimeContext(AgentSession session, IReadOnlyList<ToolDefinition> tools) =>
+        runtimeContextAssembler.Build(CreateContext(session, tools));
 
     private static IReadOnlyList<IEnvironmentPromptSection> FilterSections(
         IEnumerable<IEnvironmentPromptSection> sections,

@@ -16,7 +16,7 @@ public sealed class AgentEnvironmentPromptBuilder(
         NullCurrentSsoUserContext.Instance,
         DefaultSessionHarnessState.Instance,
         sections,
-        Array.Empty<IPreReasoningPromptContributor>());
+        new RuntimeContextAssembler(Array.Empty<IRuntimeContextContributor>()));
 
     public string Build(AgentSession session, IReadOnlyList<ToolDefinition> tools) =>
         _orchestrator.PrepareForTurn(session, tools).Text;

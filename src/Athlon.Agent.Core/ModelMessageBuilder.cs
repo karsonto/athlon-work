@@ -229,7 +229,7 @@ internal static class ModelMessageBuilder
     {
         if (message.ImageAttachments is not { Count: > 0 })
         {
-            return PrependUserTimestamp(message.Content, message.CreatedAt);
+            return AppendUserTimestamp(message.Content, message.CreatedAt);
         }
 
         var parts = new List<object>
@@ -237,7 +237,7 @@ internal static class ModelMessageBuilder
             new Dictionary<string, object?>
             {
                 ["type"] = "text",
-                ["text"] = PrependUserTimestamp(message.Content, message.CreatedAt)
+                ["text"] = AppendUserTimestamp(message.Content, message.CreatedAt)
             }
         };
 
@@ -262,13 +262,13 @@ internal static class ModelMessageBuilder
         return parts;
     }
 
-    internal static string PrependUserTimestamp(string content, DateTimeOffset createdAt)
+    internal static string AppendUserTimestamp(string content, DateTimeOffset createdAt)
     {
         var local = AppTimeZone.ToChina(createdAt);
-        var prefix = $"[{local:yyyy-MM-dd HH:mm} {AppTimeZone.PromptLabel}]";
+        var timestamp = $"[{local:yyyy-MM-dd HH:mm} {AppTimeZone.PromptLabel}]";
         return string.IsNullOrEmpty(content)
-            ? prefix
-            : $"{prefix}{Environment.NewLine}{Environment.NewLine}{content}";
+            ? timestamp
+            : $"{content}{Environment.NewLine}{Environment.NewLine}{timestamp}";
     }
 
     private static string FormatArguments(IReadOnlyDictionary<string, string> arguments) =>

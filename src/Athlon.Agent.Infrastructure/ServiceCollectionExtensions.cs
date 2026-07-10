@@ -122,7 +122,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IAgentTool, SessionsHistoryTool>();
             services.AddSingleton<IAgentTool, SessionsPendingCompletionsTool>();
             services.AddSingleton<IAgentTool, SubAgentTaskOutputTool>();
-            services.AddSingleton<IPreReasoningPromptContributor, SubAgentCompletionPromptContributor>();
+            services.AddSingleton<IRuntimeContextContributor, SubAgentCompletionPromptContributor>();
         }
 
         services.AddSingleton<TruncateArgsService>();
@@ -141,8 +141,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, MemorySearchTool>();
         services.AddSingleton<IAgentTool, MemoryGetTool>();
         services.AddSingleton<IAgentTool, TodoWriteTool>();
-        services.AddSingleton<IPreReasoningPromptContributor, MemoryPromptContributor>();
-        services.AddSingleton<IPreReasoningPromptContributor, TaskListPromptContributor>();
+        services.AddSingleton<IRuntimeContextContributor, MemoryPromptContributor>();
+        services.AddSingleton<IRuntimeContextContributor, TaskListPromptContributor>();
         services.AddSingleton<CompactionTurnMiddleware>();
         services.AddSingleton<IAgentTurnMiddleware, CompactionTurnMiddleware>();
         services.AddSingleton<IAgentTurnMiddleware, PostTurnMemoryMiddleware>();
