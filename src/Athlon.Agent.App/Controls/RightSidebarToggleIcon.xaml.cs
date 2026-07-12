@@ -1,10 +1,13 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Animation;
 
 namespace Athlon.Agent.App.Controls;
 
 public partial class RightSidebarToggleIcon : UserControl
 {
+    private const double IconTransitionDurationMs = 200;
+
     public static readonly DependencyProperty IsPanelOpenProperty =
         DependencyProperty.Register(
             nameof(IsPanelOpen),
@@ -15,7 +18,7 @@ public partial class RightSidebarToggleIcon : UserControl
     public RightSidebarToggleIcon()
     {
         InitializeComponent();
-        UpdatePanelFillOpacity(IsPanelOpen);
+        UpdatePanelFillOpacity(IsPanelOpen, animate: false);
     }
 
     public bool IsPanelOpen
@@ -28,9 +31,27 @@ public partial class RightSidebarToggleIcon : UserControl
     {
         if (d is RightSidebarToggleIcon icon && e.NewValue is bool isOpen)
         {
-            icon.UpdatePanelFillOpacity(isOpen);
+            icon.UpdatePanelFillOpacity(isOpen, animate: true);
         }
     }
 
-    private void UpdatePanelFillOpacity(bool isOpen) => PanelFill.Opacity = isOpen ? 1.0 : 0.35;
+    private void UpdatePanelFillOpacity(bool isOpen, bool animate)
+    {
+        var target = isOpen ? 1.0 : 0.35;
+        if (!animate)
+        {
+            PanelFill.BeginAnimation(UIElement.OpacityProperty, null);
+            PanelFill.Opacity = target;
+            return;
+        }
+
+        PanelFill.BeginAnimation(
+            UIElement.OpacityProperty,
+            new DoubleAnimation
+            {
+                To = target,
+                Duration = TimeSpan.FromMilliseconds(IconTransitionDurationMs),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut }
+            });
+    }
 }

@@ -110,6 +110,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _notifier = notifier;
         _skillCatalog = skillCatalog;
         _appSettings = settings;
+        _contextSidebarEdgeGutterWidth = _appSettings.Ui.ContextSidebarVisible ? 12 : 0;
         _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
         _displayedSessionId = _session.Id;
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
@@ -262,7 +263,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public double EditorPaneWidth =>
         Math.Clamp(_appSettings.Ui.EditorPaneWidth, EditorPaneMinWidth, EditorPaneMaxWidth);
 
-    public event EventHandler? ContextSidebarLayoutChanged;
+    public event EventHandler<ContextSidebarLayoutChangedEventArgs>? ContextSidebarLayoutChanged;
 
     public double NavigationSidebarWidth =>
         Math.Clamp(_appSettings.Ui.NavigationSidebarWidth, NavigationSidebarMinWidth, NavigationSidebarMaxWidth);
@@ -270,10 +271,13 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public double ComposerHeight =>
         Math.Clamp(_appSettings.Ui.ComposerHeight, ComposerMinHeight, ComposerMaxHeight);
 
+    private double _contextSidebarEdgeGutterWidth = 12;
+    private bool _contextSidebarLayoutAnimate;
+
     public bool IsContextSidebarVisible => _appSettings.Ui.ContextSidebarVisible;
 
     public GridLength ContextSidebarEdgeGutterWidth =>
-        IsContextSidebarVisible ? new GridLength(12) : new GridLength(0);
+        new GridLength(_contextSidebarEdgeGutterWidth);
 
     public double ContextSidebarWidth =>
         Math.Clamp(_appSettings.Ui.ContextSidebarWidth, ContextSidebarMinWidth, ContextSidebarMaxWidth);
@@ -427,7 +431,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [RelayCommand]
     private async Task ToggleContextSidebarAsync()
     {
-        SetContextSidebarVisible(!_appSettings.Ui.ContextSidebarVisible);
+        SetContextSidebarVisible(!_appSettings.Ui.ContextSidebarVisible, animate: true);
         await _layout.PersistNowAsync();
     }
 
@@ -458,8 +462,22 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         OnPropertyChanged(nameof(ThemeToggleToolTip));
     }
 
-    public void SetContextSidebarVisible(bool visible) =>
+    public void SetContextSidebarVisible(bool visible, bool animate = false)
+    {
+        _contextSidebarLayoutAnimate = animate;
         _layout.SetContextSidebarVisible(visible, NotifyContextSidebarLayoutChanged);
+    }
+
+    internal void SetContextSidebarEdgeGutterWidth(double width)
+    {
+        if (Math.Abs(_contextSidebarEdgeGutterWidth - width) < 0.01)
+        {
+            return;
+        }
+
+        _contextSidebarEdgeGutterWidth = width;
+        OnPropertyChanged(nameof(ContextSidebarEdgeGutterWidth));
+    }
 
     public void UpdateComposerHeight(double height)
     {
@@ -484,11 +502,19 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private void NotifyContextSidebarLayoutChanged()
     {
+        var animate = _contextSidebarLayoutAnimate;
+        _contextSidebarLayoutAnimate = false;
+        if (!animate)
+        {
+            SetContextSidebarEdgeGutterWidth(IsContextSidebarVisible ? 12 : 0);
+        }
+
         OnPropertyChanged(nameof(IsContextSidebarVisible));
-        OnPropertyChanged(nameof(ContextSidebarEdgeGutterWidth));
         OnPropertyChanged(nameof(ContextSidebarWidth));
         OnPropertyChanged(nameof(ContextSidebarToggleToolTip));
-        ContextSidebarLayoutChanged?.Invoke(this, EventArgs.Empty);
+        ContextSidebarLayoutChanged?.Invoke(
+            this,
+            new ContextSidebarLayoutChangedEventArgs { Animate = animate });
     }
 
     public Task PersistUiLayoutForSidebarAsync() => _layout.PersistNowAsync();

@@ -154,6 +154,7 @@
         <Border x:Name="ContextSidebarPanel"
                 Grid.Row="1"
                 Grid.Column="2"
+                ClipToBounds="True"
                 Background="{DynamicResource Brush.AppBackground}"
                 BorderThickness="0">
             <views:ContextSidebarView />

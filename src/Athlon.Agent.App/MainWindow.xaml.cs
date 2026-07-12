@@ -19,7 +19,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     private readonly PageViewFactory _pageViewFactory;
     private bool _shutdownInProgress;
     private readonly PropertyChangedEventHandler _viewModelPropertyChangedHandler;
-    private readonly EventHandler _contextSidebarLayoutChangedHandler;
+    private readonly EventHandler<ContextSidebarLayoutChangedEventArgs> _contextSidebarLayoutChangedHandler;
     private readonly RoutedEventHandler _loadedHandler;
     private readonly CancelEventHandler _closingHandler;
 
@@ -48,8 +48,8 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         });
         DataContext = _viewModel;
         _viewModelPropertyChangedHandler = OnViewModelPropertyChanged;
-        _contextSidebarLayoutChangedHandler = (_, _) =>
-            ExecuteOnUiThread(_layoutBinder.ApplyContextSidebar);
+        _contextSidebarLayoutChangedHandler = (_, args) =>
+            ExecuteOnUiThread(() => _layoutBinder.ApplyContextSidebar(args));
         _loadedHandler = OnMainWindowLoaded;
         _closingHandler = OnMainWindowClosing;
         _viewModel.ContextSidebarLayoutChanged += _contextSidebarLayoutChangedHandler;
@@ -174,7 +174,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 
         if (e.PropertyName == nameof(MainShellViewModel.HasChatMessages))
         {
-            ExecuteOnUiThread(_layoutBinder.ApplyContextSidebar);
+            ExecuteOnUiThread(() => _layoutBinder.ApplyContextSidebarImmediate());
         }
 
         if (e.PropertyName == nameof(MainShellViewModel.HasOpenEditorTabs))
