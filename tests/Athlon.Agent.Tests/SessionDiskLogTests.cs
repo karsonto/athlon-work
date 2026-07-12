@@ -1,6 +1,7 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Infrastructure;
+using System.Text.Json;
 
 namespace Athlon.Agent.Tests;
 
@@ -131,6 +132,111 @@ public sealed class SessionDiskLogTests
                 Directory.Delete(root, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public async Task ConversationDisplayPages_ReadTailThenAllEarlierMessages()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-pages-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var sessionId = "paged-session";
+        var sessionDir = Path.Combine(paths.SessionsPath, sessionId);
+        Directory.CreateDirectory(sessionDir);
+        var logPath = Path.Combine(sessionDir, "conversation.jsonl");
+        var start = DateTimeOffset.Parse("2026-01-01T00:00:00Z");
+        var messages = Enumerable.Range(0, 1000)
+            .Select(index => new ChatMessage(
+                $"m-{index:D4}",
+                MessageRole.User,
+                $"第 {index} 条消息 🌏",
+                start.AddSeconds(index),
+                null,
+                null,
+                null,
+                null))
+            .ToArray();
+        var lines = messages.Select(message => JsonSerializer.Serialize(message, JsonFileStore.JsonLineOptions));
+        await File.WriteAllTextAsync(logPath, string.Join("\r\n", lines));
+
+        try
+        {
+            var first = await storage.LoadConversationDisplayPageAsync(sessionId, pageSize: 100);
+            Assert.Equal("m-0900", first.Messages[0].Id);
+            Assert.Equal("m-0999", first.Messages[^1].Id);
+            Assert.NotNull(first.OlderCursor);
+
+            var loaded = new List<ChatMessage>(first.Messages);
+            var cursor = first.OlderCursor;
+            while (cursor is not null)
+            {
+                var page = await storage.LoadConversationDisplayPageAsync(sessionId, cursor, pageSize: 73);
+                loaded.InsertRange(0, page.Messages);
+                cursor = page.OlderCursor;
+            }
+
+            Assert.Equal(1000, loaded.Count);
+            Assert.Equal(1000, loaded.Select(message => message.Id).Distinct(StringComparer.Ordinal).Count());
+            Assert.Equal(messages.Select(message => message.Id), loaded.Select(message => message.Id));
+            Assert.Contains("🌏", loaded[123].Content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ConversationDisplayPage_PreservesLegacyParsingAndDeduplicates()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-legacy-pages-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var sessionId = "legacy-page";
+        var sessionDir = Path.Combine(paths.SessionsPath, sessionId);
+        Directory.CreateDirectory(sessionDir);
+        var logPath = Path.Combine(sessionDir, "conversation.jsonl");
+        var legacy = """{"id":"legacy-1","role":"user","content":"旧格式","time":"2026-01-01T00:00:00Z"}""";
+        await File.WriteAllTextAsync(logPath, $"{legacy}\n{legacy}\n");
+
+        try
+        {
+            var page = await storage.LoadConversationDisplayPageAsync(sessionId, pageSize: 10);
+
+            var message = Assert.Single(page.Messages);
+            Assert.Equal("legacy-1", message.Id);
+            Assert.Equal("旧格式", message.Content);
+            Assert.Null(page.OlderCursor);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ConversationDisplayPage_ObservesCancellation()
+    {
+        var storage = new FileStorageService(
+            new NoOpLogger(),
+            new TestAppPathProvider(Path.GetTempPath()),
+            new JsonFileStore(),
+            new AgentRunContextAccessor());
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => storage.LoadConversationDisplayPageAsync(
+                $"missing-{Guid.NewGuid():N}",
+                cancellationToken: cancellation.Token));
     }
 
     [Fact]

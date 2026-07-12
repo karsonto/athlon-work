@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 
@@ -31,6 +32,74 @@ public sealed class SessionIndexMemoryTests
             Assert.Equal("session-a", entry!.Id);
             Assert.Equal("大对话", entry.Title);
             Assert.Equal(sessionDir, entry.Path);
+            Assert.Equal(1, entry.MessageCount);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void Legacy_index_without_message_count_remains_readable()
+    {
+        const string json = """
+            [{"id":"legacy","title":"Old chat","path":"C:\\sessions\\legacy","updatedAt":"2026-01-01T00:00:00Z"}]
+            """;
+
+        var entries = JsonSerializer.Deserialize<List<SessionIndexEntry>>(json, JsonFileStore.Options);
+
+        var entry = Assert.Single(entries!);
+        Assert.Equal("legacy", entry.Id);
+        Assert.Null(entry.MessageCount);
+    }
+
+    [Fact]
+    public void History_item_falls_back_to_session_json_for_legacy_index()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-legacy-count-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(
+            Path.Combine(root, "session.json"),
+            """{"messages":[{"id":"one"},{"id":"two"}]}""");
+
+        try
+        {
+            var entry = new SessionIndexEntry(
+                "legacy",
+                "Old chat",
+                root,
+                DateTimeOffset.Parse("2026-01-01T00:00:00Z"));
+            var item = new SessionHistoryItemViewModel(entry, false, false, null);
+
+            Assert.Contains("2 条消息", item.MetaText, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Pending_index_entry_carries_message_count()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-index-count-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var session = AgentSession.Create("counted")
+            .WithMessage(ChatMessage.Create(MessageRole.User, "one"))
+            .WithMessage(ChatMessage.Create(MessageRole.Assistant, "two"));
+
+        try
+        {
+            await storage.SaveSessionAsync(session);
+            var entries = await storage.ListSessionsAsync();
+
+            Assert.Equal(2, entries.Single(entry => entry.Id == session.Id).MessageCount);
         }
         finally
         {

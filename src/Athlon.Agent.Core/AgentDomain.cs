@@ -111,4 +111,17 @@ public sealed record AgentSession(
     };
 }
 public sealed record ContextSummary(string Id, string SessionId, string Content, int OriginalMessageCount, DateTimeOffset CreatedAt);
-public sealed record SessionIndexEntry(string Id, string Title, string Path, DateTimeOffset UpdatedAt);
+public sealed record SessionIndexEntry(
+    string Id,
+    string Title,
+    string Path,
+    DateTimeOffset UpdatedAt,
+    int? MessageCount = null);
+
+public sealed record ConversationDisplayCursor(
+    long ByteOffset,
+    IReadOnlyList<string> SeenMessageIds);
+
+public sealed record ConversationDisplayPage(
+    IReadOnlyList<ChatMessage> Messages,
+    ConversationDisplayCursor? OlderCursor);

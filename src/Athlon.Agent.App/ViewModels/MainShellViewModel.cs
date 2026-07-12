@@ -57,6 +57,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private int _sessionLoadGeneration;
     private int _composerCaretIndex;
     private Controls.WebChatView? _savedChatView;
+    private ConversationDisplayCursor? _olderDisplayCursor;
+    private bool _olderHistoryLoadInProgress;
 
     public MainShellViewModel(
         IFileStorageService storage,
@@ -494,10 +496,17 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     /// <summary>将 WebChatView 绑定到当前活跃 UI 控制器，用于消息的增量渲染。</summary>
     public void AttachChatView(Controls.WebChatView chatView)
     {
+        if (_savedChatView is not null)
+        {
+            _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
+        }
+
         _savedChatView = chatView;
+        chatView.OlderMessagesRequested += OnOlderMessagesRequested;
         _uiCache.AttachChatViewToAll(chatView);
         _activeUi.ChatView = chatView;
         _ = chatView.LoadMessagesAsync(_activeUi.Messages, _activeUi.ShowToolCalls);
+        _ = chatView.SetOlderMessagesAvailableAsync(_olderDisplayCursor is not null);
     }
 
     private void NotifyContextSidebarLayoutChanged()
@@ -526,6 +535,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         IsLoadingSession = false;
         var previousSession = _session;
         _session = AgentSession.Create("New Chat");
+        _olderDisplayCursor = null;
         SwitchDisplayedSession(_session);
         CurrentSessionTitle = _session.Title;
         ComposerText = string.Empty;
@@ -557,6 +567,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         _session = _session.WithMessages(Array.Empty<ChatMessage>());
+        _olderDisplayCursor = null;
         _activeUi.Messages.Clear();
         await _storage.ClearConversationDisplayAsync(_session.Id);
         PendingImageAttachments.Clear();
@@ -773,6 +784,53 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private void RequestScrollToBottom() => _chatScroll.ScrollToBottom();
 
     private void RequestScrollToBottomImmediate() => _chatScroll.ScrollToBottomImmediate();
+
+    private async void OnOlderMessagesRequested(object? sender, EventArgs e)
+    {
+        if (_olderHistoryLoadInProgress
+            || _olderDisplayCursor is not { } cursor
+            || _savedChatView is not { } chatView)
+        {
+            return;
+        }
+
+        _olderHistoryLoadInProgress = true;
+        var sessionId = _displayedSessionId;
+        var loadGeneration = Volatile.Read(ref _sessionLoadGeneration);
+        try
+        {
+            var page = await _sessionNavigation.LoadOlderDisplayPageAsync(
+                sessionId,
+                cursor,
+                cancellationToken: CancellationToken.None).ConfigureAwait(true);
+            if (!string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal)
+                || !IsSessionLoadCurrent(loadGeneration))
+            {
+                return;
+            }
+
+            _olderDisplayCursor = page.OlderCursor;
+            var viewModels = await Task.Run(() =>
+                ChatTimelineHydrator.BuildDisplayMessages(
+                    page.Messages,
+                    viewModelCache: null,
+                    showToolCalls: _activeUi.ShowToolCalls,
+                    synthesizeInterruptedToolResults: false)).ConfigureAwait(true);
+            await chatView.PrependMessagesAsync(
+                viewModels,
+                _activeUi.ShowToolCalls,
+                _olderDisplayCursor is not null).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Loading older chat history failed: {ex.Message}");
+            await chatView.SetOlderMessagesAvailableAsync(_olderDisplayCursor is not null).ConfigureAwait(true);
+        }
+        finally
+        {
+            _olderHistoryLoadInProgress = false;
+        }
+    }
 
     private void WireSessionUsageUi(SessionTurnUiController ui)
     {
@@ -1250,6 +1308,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
 
             SwitchDisplayedSession(snapshot.Session, renderExistingMessages: false);
+            _olderDisplayCursor = snapshot.OlderDisplayCursor;
             CurrentSessionTitle = _session.Title;
             KnowledgePageVm.SetSession(_displayedSessionId);
             ComposerText = string.Empty;
@@ -1262,11 +1321,20 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
             if (snapshot.DisplayMessages.Count > 0)
             {
-                await _activeUi.HydrateDisplayAsync(_session, snapshot.DisplayMessages).ConfigureAwait(true);
+                await _activeUi.HydrateDisplayAsync(
+                    _session,
+                    snapshot.DisplayMessages,
+                    synthesizeInterruptedToolResults: false).ConfigureAwait(true);
             }
             else
             {
                 await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
+            }
+
+            if (_savedChatView is not null)
+            {
+                await _savedChatView.SetOlderMessagesAvailableAsync(
+                    _olderDisplayCursor is not null).ConfigureAwait(true);
             }
 
             if (!IsSessionLoadCurrent(loadGeneration))
@@ -1336,6 +1404,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;
         _taskListChangedNotifier.TaskListChanged -= OnTaskListChanged;
         _composer.AtCompletionSourcesUpdated -= OnAtCompletionSourcesUpdated;
+        if (_savedChatView is not null)
+        {
+            _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
+        }
+
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         UnwireModifiedFilesUi(_activeUi);
         _copyNoticeCts?.Cancel();

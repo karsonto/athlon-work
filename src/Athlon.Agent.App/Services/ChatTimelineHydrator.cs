@@ -10,10 +10,12 @@ internal static class ChatTimelineHydrator
     public static List<ChatMessageViewModel> BuildDisplayMessages(
         IReadOnlyList<ChatMessage> displayMessages,
         Dictionary<string, ChatMessageViewModel>? viewModelCache = null,
-        bool showToolCalls = false)
+        bool showToolCalls = false,
+        bool synthesizeInterruptedToolResults = true)
     {
         var result = new List<ChatMessageViewModel>();
         var answeredToolCallIds = BuildAnsweredToolCallIds(displayMessages);
+        var displayedMessageIds = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var message in ChatTimelineOrder.OrderForDisplay(displayMessages))
         {
@@ -25,7 +27,8 @@ internal static class ChatTimelineHydrator
             // Reuse cached ViewModel if available to avoid full FlowDocument rebuild
             if (viewModelCache?.TryGetValue(message.Id, out var cached) == true)
             {
-                if (ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls, cached))
+                if (ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls, cached)
+                    && displayedMessageIds.Add(cached.MessageId))
                 {
                     result.Add(cached);
                 }
@@ -33,7 +36,13 @@ internal static class ChatTimelineHydrator
                 continue;
             }
 
-            AddMessageToDisplay(result, message, answeredToolCallIds, showToolCalls);
+            AddMessageToDisplay(
+                result,
+                message,
+                answeredToolCallIds,
+                displayedMessageIds,
+                showToolCalls,
+                synthesizeInterruptedToolResults);
         }
 
         return result;
@@ -66,9 +75,11 @@ internal static class ChatTimelineHydrator
         List<ChatMessageViewModel> messages,
         ChatMessage message,
         HashSet<string> answeredToolCallIds,
-        bool showToolCalls)
+        HashSet<string> displayedMessageIds,
+        bool showToolCalls,
+        bool synthesizeInterruptedToolResults)
     {
-        if (ShouldHideMessageFromChat(message) || ContainsMessageId(messages, message.Id))
+        if (ShouldHideMessageFromChat(message) || !displayedMessageIds.Add(message.Id))
         {
             return;
         }
@@ -80,7 +91,7 @@ internal static class ChatTimelineHydrator
 
         messages.Add(new ChatMessageViewModel(message));
 
-        if (message.Role != MessageRole.Assistant || !showToolCalls)
+        if (message.Role != MessageRole.Assistant || !showToolCalls || !synthesizeInterruptedToolResults)
         {
             return;
         }
@@ -104,7 +115,7 @@ internal static class ChatTimelineHydrator
                     "工具未完成",
                     "上次对话在工具执行时被中断，或 MCP 超时后子进程未返回。请重启应用并在侧边栏刷新 MCP 后重试。"));
             var orphanMessage = ChatMessage.Create(MessageRole.Tool, orphanResult, message.ParentId);
-            if (ContainsMessageId(messages, orphanMessage.Id))
+            if (!displayedMessageIds.Add(orphanMessage.Id))
             {
                 continue;
             }
@@ -113,10 +124,6 @@ internal static class ChatTimelineHydrator
             answeredToolCallIds.Add(toolCall.Id);
         }
     }
-
-    private static bool ContainsMessageId(IReadOnlyList<ChatMessageViewModel> messages, string messageId) =>
-        !string.IsNullOrWhiteSpace(messageId)
-        && messages.Any(message => string.Equals(message.MessageId, messageId, StringComparison.Ordinal));
 
     public static bool ShouldHideMessageFromChat(ChatMessage message) =>
         message.Role == MessageRole.User && SummaryMessageBuilder.IsSummaryMessage(message)

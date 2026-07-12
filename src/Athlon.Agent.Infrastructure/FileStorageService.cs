@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
@@ -186,6 +187,137 @@ public sealed class FileStorageService(
             }
 
             return ChatMessageMemorySanitizer.SanitizeMessages(messages);
+        }
+    }
+
+    public async Task<ConversationDisplayPage> LoadConversationDisplayPageAsync(
+        string sessionId,
+        ConversationDisplayCursor? cursor = null,
+        int pageSize = 100,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return new ConversationDisplayPage(Array.Empty<ChatMessage>(), null);
+        }
+
+        ArgumentOutOfRangeException.ThrowIfLessThan(pageSize, 1);
+
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            var path = GetConversationDisplayPath(sessionId);
+            if (!File.Exists(path))
+            {
+                return new ConversationDisplayPage(Array.Empty<ChatMessage>(), null);
+            }
+
+            await using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                bufferSize: 16 * 1024,
+                FileOptions.Asynchronous | FileOptions.RandomAccess);
+
+            var endOffset = cursor is null
+                ? stream.Length
+                : Math.Clamp(cursor.ByteOffset, 0, stream.Length);
+            var seen = new HashSet<string>(
+                cursor?.SeenMessageIds ?? Array.Empty<string>(),
+                StringComparer.Ordinal);
+            var page = new List<ChatMessage>(pageSize);
+            var reversedLine = new List<byte>();
+            var buffer = new byte[16 * 1024];
+            var position = endOffset;
+            long? olderOffset = null;
+
+            while (position > 0 && page.Count < pageSize)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var readStart = Math.Max(0, position - buffer.Length);
+                var readLength = checked((int)(position - readStart));
+                stream.Position = readStart;
+                await stream.ReadExactlyAsync(buffer.AsMemory(0, readLength), cancellationToken)
+                    .ConfigureAwait(false);
+
+                for (var i = readLength - 1; i >= 0; i--)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (buffer[i] != (byte)'\n')
+                    {
+                        reversedLine.Add(buffer[i]);
+                        continue;
+                    }
+
+                    AddReverseLine(reversedLine, page, seen);
+                    reversedLine.Clear();
+                    if (page.Count == pageSize)
+                    {
+                        olderOffset = readStart + i;
+                        break;
+                    }
+                }
+
+                position = readStart;
+            }
+
+            if (position == 0 && page.Count < pageSize && reversedLine.Count > 0)
+            {
+                AddReverseLine(reversedLine, page, seen);
+                reversedLine.Clear();
+            }
+
+            page.Reverse();
+            EnsureChronologicalOrder(page);
+            for (var i = 0; i < page.Count; i++)
+            {
+                page[i] = StripToolContentForDisplay(page[i]);
+            }
+
+            var sanitized = ChatMessageMemorySanitizer.SanitizeMessages(page);
+            var nextCursor = olderOffset is > 0
+                ? new ConversationDisplayCursor(olderOffset.Value, seen.ToArray())
+                : null;
+            return new ConversationDisplayPage(sanitized, nextCursor);
+        }
+    }
+
+    private static void AddReverseLine(
+        List<byte> reversedLine,
+        List<ChatMessage> messages,
+        HashSet<string> seen)
+    {
+        if (reversedLine.Count == 0)
+        {
+            return;
+        }
+
+        reversedLine.Reverse();
+        var count = reversedLine.Count;
+        if (count > 0 && reversedLine[count - 1] == (byte)'\r')
+        {
+            count--;
+        }
+
+        var line = Encoding.UTF8.GetString(CollectionsMarshal.AsSpan(reversedLine)[..count]);
+        var message = ConversationDisplayLog.TryParseLine(line);
+        if (message is not null && seen.Add(message.Id))
+        {
+            messages.Add(message);
+        }
+    }
+
+    private static void EnsureChronologicalOrder(List<ChatMessage> messages)
+    {
+        for (var i = 1; i < messages.Count; i++)
+        {
+            if (messages[i].CreatedAt >= messages[i - 1].CreatedAt)
+            {
+                continue;
+            }
+
+            messages.Sort((a, b) => a.CreatedAt.CompareTo(b.CreatedAt));
+            return;
         }
     }
 

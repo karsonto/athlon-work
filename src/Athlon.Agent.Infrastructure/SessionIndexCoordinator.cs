@@ -32,7 +32,12 @@ internal sealed class SessionIndexCoordinator
         }
 
         var sessionDir = _runContextAccessor.ResolveSessionDirectory(_paths.SessionsPath, session.Id);
-        var entry = new SessionIndexEntry(session.Id, session.Title, sessionDir, session.UpdatedAt);
+        var entry = new SessionIndexEntry(
+            session.Id,
+            session.Title,
+            sessionDir,
+            session.UpdatedAt,
+            session.Messages.Count);
         ScheduleUpdate(entry);
     }
 

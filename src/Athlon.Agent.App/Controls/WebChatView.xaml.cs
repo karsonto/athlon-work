@@ -41,19 +41,15 @@ public partial class WebChatView : UserControl
         Unloaded += OnUnloaded;
         IsVisibleChanged += OnIsVisibleChanged;
         SizeChanged += OnSizeChanged;
-        LayoutUpdated += OnLayoutUpdated;
     }
 
     public event EventHandler<string>? InitializationFailed;
+    public event EventHandler? OlderMessagesRequested;
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         AppThemeManager.ThemeChanged -= OnAppThemeChanged;
         AppCultureManager.CultureChanged -= OnAppCultureChanged;
-        if (ChatWebView.CoreWebView2 is not null)
-        {
-            ChatWebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
-        }
     }
 
     private void OnAppThemeChanged(object? sender, EventArgs e)
@@ -161,20 +157,12 @@ public partial class WebChatView : UserControl
         }
     }
 
-    private void OnLayoutUpdated(object? sender, EventArgs e)
-    {
-        if (_needsRender && CanRender())
-        {
-            _ = RunRenderPipelineSafeAsync(_renderGeneration);
-        }
-    }
-
     private bool CanRender() =>
         IsVisible && ActualWidth >= 1 && ActualHeight >= 1;
 
     public async Task LoadMessagesAsync(IReadOnlyList<ChatMessageViewModel> messages, bool showToolCalls = false)
     {
-        _pendingMessages = messages;
+        _pendingMessages = messages.ToArray();
         _pendingShowToolCalls = showToolCalls;
         _needsRender = true;
         var generation = Interlocked.Increment(ref _renderGeneration);
@@ -260,16 +248,25 @@ public partial class WebChatView : UserControl
         _renderInProgress = true;
         try
         {
-            var navigated = await NavigateHtmlAsync(
-                _htmlBuilder.BuildDocumentHtml(_pendingMessages, _pendingShowToolCalls, ResolveSsoDisplayName()),
-                expectedGeneration).ConfigureAwait(true);
-            if (!navigated || expectedGeneration != _renderGeneration)
+            if (!await WaitForDocumentReadyAsync().ConfigureAwait(true)
+                || expectedGeneration != _renderGeneration)
             {
                 return;
             }
 
+            var messages = _pendingMessages;
+            var showToolCalls = _pendingShowToolCalls;
+            var replayJson = await Task.Run(
+                () => ChatEventSerializer.SerializeReplayCommand(messages, showToolCalls))
+                .ConfigureAwait(true);
+            if (expectedGeneration != _renderGeneration)
+            {
+                return;
+            }
+
+            ChatWebView.CoreWebView2.PostWebMessageAsJson(replayJson);
             _needsRender = false;
-            App.StartupTrace($"WebChatView rendered {_pendingMessages.Count} messages");
+            App.StartupTrace($"WebChatView replayed {_pendingMessages.Count} messages");
         }
         finally
         {
@@ -327,6 +324,7 @@ public partial class WebChatView : UserControl
             }
 
             ApplyThemeBackground();
+            await NavigateShellAsync().ConfigureAwait(true);
             _initialized = true;
             App.StartupTrace("WebChatView initialization completed");
         }
@@ -367,18 +365,26 @@ public partial class WebChatView : UserControl
             using (document)
             {
                 var root = document.RootElement;
-                if (!root.TryGetProperty("type", out var type)
-                    || !string.Equals(type.GetString(), "copy", StringComparison.Ordinal))
+                if (!root.TryGetProperty("type", out var type))
                 {
                     return;
                 }
 
-                var text = root.TryGetProperty("text", out var textElement)
-                    ? textElement.GetString()
-                    : null;
-                if (!string.IsNullOrEmpty(text))
+                switch (type.GetString())
                 {
-                    Clipboard.SetText(text);
+                    case "copy":
+                        var text = root.TryGetProperty("text", out var textElement)
+                            ? textElement.GetString()
+                            : null;
+                        if (!string.IsNullOrEmpty(text))
+                        {
+                            Clipboard.SetText(text);
+                        }
+
+                        break;
+                    case "loadOlder":
+                        OlderMessagesRequested?.Invoke(this, EventArgs.Empty);
+                        break;
                 }
             }
         }
@@ -442,20 +448,8 @@ public partial class WebChatView : UserControl
         return _documentReady;
     }
 
-    private async Task<bool> NavigateHtmlAsync(string html, int expectedGeneration)
+    private async Task NavigateShellAsync()
     {
-        await EnsureReadyAsync().ConfigureAwait(true);
-        if (!CanRender())
-        {
-            _needsRender = true;
-            return false;
-        }
-
-        if (expectedGeneration != _renderGeneration)
-        {
-            return false;
-        }
-
         var generation = ++_navigationGeneration;
         _documentReady = false;
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -478,19 +472,73 @@ public partial class WebChatView : UserControl
         try
         {
             ChatWebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
-            ChatWebView.NavigateToString(html);
+            ChatWebView.NavigateToString(_htmlBuilder.BuildShellHtml(ResolveSsoDisplayName()));
             var success = await tcs.Task.ConfigureAwait(true);
-            return success && generation == _navigationGeneration && expectedGeneration == _renderGeneration;
+            if (!success || generation != _navigationGeneration)
+            {
+                throw new InvalidOperationException("WebChatView shell navigation failed.");
+            }
         }
         catch (Exception ex)
         {
-            App.StartupTrace($"WebChatView NavigateToString failed: {ex}");
-            return false;
+            ChatWebView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+            App.StartupTrace($"WebChatView shell navigation failed: {ex}");
+            throw;
         }
     }
 
     public Task ScrollToBottomAsync() =>
-        ExecuteScriptWhenReadyAsync("scrollToBottom();");
+        ExecuteScriptWhenReadyAsync("scrollToBottom(true);");
+
+    public async Task PrependMessagesAsync(
+        IReadOnlyList<ChatMessageViewModel> messages,
+        bool showToolCalls,
+        bool hasOlderMessages)
+    {
+        if (messages.Count == 0)
+        {
+            await SetOlderMessagesAvailableAsync(hasOlderMessages).ConfigureAwait(true);
+            return;
+        }
+
+        try
+        {
+            await EnsureReadyAsync().ConfigureAwait(true);
+            if (!await WaitForDocumentReadyAsync().ConfigureAwait(true))
+            {
+                return;
+            }
+
+            var snapshot = messages.ToArray();
+            var json = await Task.Run(
+                () => ChatEventSerializer.SerializePrependCommand(snapshot, showToolCalls, hasOlderMessages))
+                .ConfigureAwait(true);
+            ChatWebView.CoreWebView2.PostWebMessageAsJson(json);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"WebChatView prepend history failed: {ex.Message}");
+        }
+    }
+
+    public async Task SetOlderMessagesAvailableAsync(bool hasOlderMessages)
+    {
+        try
+        {
+            await EnsureReadyAsync().ConfigureAwait(true);
+            if (!await WaitForDocumentReadyAsync().ConfigureAwait(true))
+            {
+                return;
+            }
+
+            ChatWebView.CoreWebView2.PostWebMessageAsJson(
+                ChatEventSerializer.SerializeHistoryAvailabilityCommand(hasOlderMessages));
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"WebChatView history availability failed: {ex.Message}");
+        }
+    }
 
     private static string? ResolveSsoDisplayName()
     {

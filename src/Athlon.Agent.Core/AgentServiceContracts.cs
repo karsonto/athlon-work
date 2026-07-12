@@ -59,6 +59,15 @@ public interface IFileStorageService
     Task<string> SaveEvictedToolResultAsync(string sessionId, string toolCallId, string content, CancellationToken cancellationToken = default);
     Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ChatMessage>> LoadConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default);
+    async Task<ConversationDisplayPage> LoadConversationDisplayPageAsync(
+        string sessionId,
+        ConversationDisplayCursor? cursor = null,
+        int pageSize = 100,
+        CancellationToken cancellationToken = default)
+    {
+        var messages = await LoadConversationDisplayAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        return new ConversationDisplayPage(messages.TakeLast(pageSize).ToArray(), null);
+    }
     Task ReplaceConversationDisplayAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default);
     Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default);
     Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default);

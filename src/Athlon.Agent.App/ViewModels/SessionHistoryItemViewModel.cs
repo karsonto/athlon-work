@@ -22,7 +22,7 @@ public sealed partial class SessionHistoryItemViewModel : ObservableObject
         IsActive = isActive;
         IsRunning = isRunning;
         _stopSession = stopSession;
-        _messageCount = SessionMetaReader.TryReadMessageCount(entry.Path);
+        _messageCount = entry.MessageCount ?? SessionMetaReader.TryReadMessageCount(entry.Path);
     }
 
     public string Id { get; }

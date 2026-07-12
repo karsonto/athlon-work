@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
@@ -14,10 +15,16 @@ public partial class FileEditorView : UserControl
     private FileEditorViewModel? _editor;
     private EditorDocumentViewModel? _loadedDocument;
     private bool _suppressEditorChange;
+    private readonly DispatcherTimer _markdownPreviewTimer;
 
     public FileEditorView()
     {
         InitializeComponent();
+        _markdownPreviewTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        {
+            Interval = TimeSpan.FromMilliseconds(120)
+        };
+        _markdownPreviewTimer.Tick += OnMarkdownPreviewTimerTick;
         ApplyEditorChrome();
         CodeEditor.TextChanged += OnCodeEditorTextChanged;
         DataContextChanged += (_, _) => AttachEditor(DataContext as FileEditorViewModel);
@@ -27,7 +34,11 @@ public partial class FileEditorView : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e) => AppThemeManager.ThemeChanged += OnThemeChanged;
 
-    private void OnUnloaded(object sender, RoutedEventArgs e) => AppThemeManager.ThemeChanged -= OnThemeChanged;
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        AppThemeManager.ThemeChanged -= OnThemeChanged;
+        _markdownPreviewTimer.Stop();
+    }
 
     private void OnThemeChanged(object? sender, EventArgs e)
     {
@@ -177,11 +188,23 @@ public partial class FileEditorView : UserControl
     {
         if (_loadedDocument is null || !_loadedDocument.PreferMarkdownPreview)
         {
+            _markdownPreviewTimer.Stop();
             MarkdownPreview.Markdown = string.Empty;
             return;
         }
 
-        MarkdownPreview.Markdown = _loadedDocument.Content;
+        _markdownPreviewTimer.Stop();
+        _markdownPreviewTimer.Start();
+    }
+
+    private void OnMarkdownPreviewTimerTick(object? sender, EventArgs e)
+    {
+        _markdownPreviewTimer.Stop();
+        if (_loadedDocument is { PreferMarkdownPreview: true } document
+            && !string.Equals(MarkdownPreview.Markdown, document.Content, StringComparison.Ordinal))
+        {
+            MarkdownPreview.Markdown = document.Content;
+        }
     }
 
     private void OnCodeEditorTextChanged(object? sender, EventArgs e)

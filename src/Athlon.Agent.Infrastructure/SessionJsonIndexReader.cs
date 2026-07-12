@@ -31,9 +31,16 @@ internal static class SessionJsonIndexReader
                 : TryGetDateTimeOffset(root, "createdAt", out var parsedCreated)
                     ? parsedCreated
                     : File.GetLastWriteTimeUtc(sessionJsonPath);
+            int? messageCount = root.TryGetProperty("messageCount", out var countElement)
+                && countElement.TryGetInt32(out var indexedCount)
+                    ? indexedCount
+                    : root.TryGetProperty("messages", out var messagesElement)
+                        && messagesElement.ValueKind == JsonValueKind.Array
+                            ? messagesElement.GetArrayLength()
+                            : null;
 
             var sessionDir = Path.GetDirectoryName(sessionJsonPath)!;
-            return new SessionIndexEntry(id, title, sessionDir, updatedAt);
+            return new SessionIndexEntry(id, title, sessionDir, updatedAt, messageCount);
         }
         catch (JsonException)
         {

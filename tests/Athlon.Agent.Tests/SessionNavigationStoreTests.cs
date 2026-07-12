@@ -64,6 +64,39 @@ public sealed class SessionNavigationStoreTests
         Assert.Equal(2, storage.LoadDisplayCount);
     }
 
+    [Fact]
+    public async Task Cache_EvictsLeastRecentlyUsedSession()
+    {
+        var storage = new CapturingStorage();
+        var store = new SessionNavigationStore(storage, capacity: 2);
+
+        foreach (var id in new[] { "one", "two", "one", "three", "two" })
+        {
+            storage.SessionToLoad = AgentSession.Create(id);
+            await store.LoadSnapshotAsync(id);
+        }
+
+        Assert.Equal(4, storage.LoadSessionCount);
+        Assert.Equal(4, storage.LoadDisplayCount);
+    }
+
+    [Fact]
+    public async Task LoadSnapshotAsync_LoadsSessionAndDisplayInParallel()
+    {
+        var storage = new CapturingStorage
+        {
+            SessionToLoad = AgentSession.Create("parallel"),
+            EnableParallelProbe = true
+        };
+        var store = new SessionNavigationStore(storage);
+
+        var snapshot = await store.LoadSnapshotAsync("parallel").WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.NotNull(snapshot);
+        Assert.True(storage.SessionLoadStarted.Task.IsCompletedSuccessfully);
+        Assert.True(storage.DisplayLoadStarted.Task.IsCompletedSuccessfully);
+    }
+
     private sealed class CapturingStorage : IFileStorageService
     {
         public string RootPath => "/tmp";
@@ -72,6 +105,11 @@ public sealed class SessionNavigationStoreTests
         public AgentSession? SavedSession { get; private set; }
         public int LoadSessionCount { get; private set; }
         public int LoadDisplayCount { get; private set; }
+        public bool EnableParallelProbe { get; init; }
+        public TaskCompletionSource<bool> SessionLoadStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<bool> DisplayLoadStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default)
         {
@@ -80,10 +118,16 @@ public sealed class SessionNavigationStoreTests
             return Task.CompletedTask;
         }
 
-        public Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default)
+        public async Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default)
         {
             LoadSessionCount++;
-            return Task.FromResult(SessionToLoad);
+            if (EnableParallelProbe)
+            {
+                SessionLoadStarted.TrySetResult(true);
+                await DisplayLoadStarted.Task.WaitAsync(cancellationToken);
+            }
+
+            return SessionToLoad;
         }
 
         public Task<IReadOnlyList<ChatMessage>> LoadConversationDisplayAsync(
@@ -92,6 +136,24 @@ public sealed class SessionNavigationStoreTests
         {
             LoadDisplayCount++;
             return Task.FromResult(DisplayMessagesToLoad);
+        }
+
+        public async Task<ConversationDisplayPage> LoadConversationDisplayPageAsync(
+            string sessionId,
+            ConversationDisplayCursor? cursor = null,
+            int pageSize = 100,
+            CancellationToken cancellationToken = default)
+        {
+            LoadDisplayCount++;
+            if (EnableParallelProbe)
+            {
+                DisplayLoadStarted.TrySetResult(true);
+                await SessionLoadStarted.Task.WaitAsync(cancellationToken);
+            }
+
+            return new ConversationDisplayPage(
+                DisplayMessagesToLoad.TakeLast(pageSize).ToArray(),
+                null);
         }
 
         public Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;

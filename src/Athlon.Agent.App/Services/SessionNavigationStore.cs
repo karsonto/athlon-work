@@ -3,66 +3,94 @@ using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.App.Services;
 
-/// <summary>
-/// Caches session metadata and display logs for navigation between conversation history entries.
-/// </summary>
-public sealed class SessionNavigationStore(IFileStorageService storage)
+/// <summary>Caches session metadata and first display pages for history navigation.</summary>
+public sealed class SessionNavigationStore
 {
+    private readonly IFileStorageService _storage;
+    private readonly int _capacity;
     private readonly object _cacheLock = new();
-    private readonly Dictionary<string, AgentSession> _sessionCache = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, IReadOnlyList<ChatMessage>> _displayCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CacheEntry> _cache = new(StringComparer.Ordinal);
+    private readonly LinkedList<string> _lru = new();
 
-    public async Task<SessionNavigationSnapshot?> LoadSnapshotAsync(string sessionId)
+    public SessionNavigationStore(IFileStorageService storage, int capacity = 8)
     {
-        var session = await LoadSessionAsync(sessionId).ConfigureAwait(true);
+        ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
+        _storage = storage;
+        _capacity = capacity;
+    }
+
+    public async Task<SessionNavigationSnapshot?> LoadSnapshotAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        var sessionTask = LoadSessionAsync(sessionId, cancellationToken);
+        var displayTask = LoadFirstDisplayPageAsync(sessionId, cancellationToken);
+        await Task.WhenAll(sessionTask, displayTask).ConfigureAwait(true);
+
+        var session = await sessionTask.ConfigureAwait(true);
         if (session is null)
         {
             return null;
         }
 
-        var displayMessages = await LoadDisplayMessagesAsync(sessionId).ConfigureAwait(true);
-        return new SessionNavigationSnapshot(session, displayMessages);
+        var displayPage = await displayTask.ConfigureAwait(true);
+        return new SessionNavigationSnapshot(session, displayPage.Messages, displayPage.OlderCursor);
     }
 
-    private async Task<AgentSession?> LoadSessionAsync(string sessionId)
+    public Task<ConversationDisplayPage> LoadOlderDisplayPageAsync(
+        string sessionId,
+        ConversationDisplayCursor cursor,
+        int pageSize = 100,
+        CancellationToken cancellationToken = default) =>
+        _storage.LoadConversationDisplayPageAsync(sessionId, cursor, pageSize, cancellationToken);
+
+    private async Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken)
     {
         lock (_cacheLock)
         {
-            if (_sessionCache.TryGetValue(sessionId, out var cached))
+            if (_cache.TryGetValue(sessionId, out var cached) && cached.Session is not null)
             {
-                return cached;
+                Touch(cached);
+                return cached.Session;
             }
         }
 
-        var loaded = await storage.LoadSessionAsync(sessionId).ConfigureAwait(true);
+        var loaded = await _storage.LoadSessionAsync(sessionId, cancellationToken).ConfigureAwait(true);
         if (loaded is not null)
         {
             lock (_cacheLock)
             {
-                _sessionCache[sessionId] = loaded;
+                GetOrCreateEntry(sessionId).Session = loaded;
             }
         }
 
         return loaded;
     }
 
-    private async Task<IReadOnlyList<ChatMessage>> LoadDisplayMessagesAsync(string sessionId)
+    private async Task<ConversationDisplayPage> LoadFirstDisplayPageAsync(
+        string sessionId,
+        CancellationToken cancellationToken)
     {
         lock (_cacheLock)
         {
-            if (_displayCache.TryGetValue(sessionId, out var cached))
+            if (_cache.TryGetValue(sessionId, out var cached) && cached.DisplayPage is not null)
             {
-                return cached;
+                Touch(cached);
+                return cached.DisplayPage;
             }
         }
 
-        var messages = await storage.LoadConversationDisplayAsync(sessionId).ConfigureAwait(true);
+        var page = await _storage.LoadConversationDisplayPageAsync(
+            sessionId,
+            cursor: null,
+            pageSize: 100,
+            cancellationToken: cancellationToken).ConfigureAwait(true);
         lock (_cacheLock)
         {
-            _displayCache[sessionId] = messages;
+            GetOrCreateEntry(sessionId).DisplayPage = page;
         }
 
-        return messages;
+        return page;
     }
 
     public async Task<AgentSession?> SaveIfNotEmptyAsync(AgentSession session)
@@ -73,7 +101,7 @@ public sealed class SessionNavigationStore(IFileStorageService storage)
         }
 
         var toSave = SessionHistoryCoordinator.DeriveSessionTitle(session);
-        await storage.SaveSessionAsync(toSave).ConfigureAwait(true);
+        await _storage.SaveSessionAsync(toSave).ConfigureAwait(true);
         Invalidate(toSave.Id);
         return toSave;
     }
@@ -82,12 +110,49 @@ public sealed class SessionNavigationStore(IFileStorageService storage)
     {
         lock (_cacheLock)
         {
-            _sessionCache.Remove(sessionId);
-            _displayCache.Remove(sessionId);
+            if (_cache.Remove(sessionId, out var entry))
+            {
+                _lru.Remove(entry.Node);
+            }
         }
+    }
+
+    private CacheEntry GetOrCreateEntry(string sessionId)
+    {
+        if (_cache.TryGetValue(sessionId, out var entry))
+        {
+            Touch(entry);
+            return entry;
+        }
+
+        var node = _lru.AddFirst(sessionId);
+        entry = new CacheEntry(node);
+        _cache[sessionId] = entry;
+        while (_cache.Count > _capacity)
+        {
+            var oldest = _lru.Last!;
+            _lru.RemoveLast();
+            _cache.Remove(oldest.Value);
+        }
+
+        return entry;
+    }
+
+    private void Touch(CacheEntry entry)
+    {
+        _lru.Remove(entry.Node);
+        _lru.AddFirst(entry.Node);
+    }
+
+    private sealed class CacheEntry(LinkedListNode<string> node)
+    {
+        public LinkedListNode<string> Node { get; } = node;
+        public AgentSession? Session { get; set; }
+        public ConversationDisplayPage? DisplayPage { get; set; }
     }
 }
 
 public sealed record SessionNavigationSnapshot(
     AgentSession Session,
-    IReadOnlyList<ChatMessage> DisplayMessages);
+    IReadOnlyList<ChatMessage> DisplayMessages,
+    ConversationDisplayCursor? OlderDisplayCursor);

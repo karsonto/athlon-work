@@ -321,18 +321,26 @@ public sealed class SessionTurnUiController
     }
 
     public void HydrateFromSession(AgentSession session) =>
-        RunOnUiSync(() => RebuildDisplayFromMessages(session.Messages));
+        RunOnUiSync(() => RebuildDisplayFromMessages(session.Messages, synthesizeInterruptedToolResults: true));
 
-    public void HydrateDisplay(AgentSession session, IReadOnlyList<ChatMessage> displayMessages) =>
-        RunOnUiSync(() => RebuildDisplayFromMessages(displayMessages));
+    public void HydrateDisplay(
+        AgentSession session,
+        IReadOnlyList<ChatMessage> displayMessages,
+        bool synthesizeInterruptedToolResults = true) =>
+        RunOnUiSync(() => RebuildDisplayFromMessages(displayMessages, synthesizeInterruptedToolResults));
 
     public Task HydrateFromSessionAsync(AgentSession session) =>
-        RunOnUiAsync(() => RebuildDisplayFromMessages(session.Messages));
+        RunOnUiAsync(() => RebuildDisplayFromMessages(session.Messages, synthesizeInterruptedToolResults: true));
 
-    public Task HydrateDisplayAsync(AgentSession session, IReadOnlyList<ChatMessage> displayMessages) =>
-        RunOnUiAsync(() => RebuildDisplayFromMessages(displayMessages));
+    public Task HydrateDisplayAsync(
+        AgentSession session,
+        IReadOnlyList<ChatMessage> displayMessages,
+        bool synthesizeInterruptedToolResults = true) =>
+        RunOnUiAsync(() => RebuildDisplayFromMessages(displayMessages, synthesizeInterruptedToolResults));
 
-    private void RebuildDisplayFromMessages(IReadOnlyList<ChatMessage> displayMessages)
+    private void RebuildDisplayFromMessages(
+        IReadOnlyList<ChatMessage> displayMessages,
+        bool synthesizeInterruptedToolResults)
     {
         _bulkChatViewSyncDepth++;
         Messages.Clear();
@@ -348,7 +356,11 @@ public sealed class SessionTurnUiController
         }
 
         const int batchSize = 50;
-        var viewModels = ChatTimelineHydrator.BuildDisplayMessages(displayMessages, _viewModelCache, _showToolCalls());
+        var viewModels = ChatTimelineHydrator.BuildDisplayMessages(
+            displayMessages,
+            _viewModelCache,
+            _showToolCalls(),
+            synthesizeInterruptedToolResults);
         if (viewModels.Count <= batchSize)
         {
             foreach (var viewModel in viewModels)

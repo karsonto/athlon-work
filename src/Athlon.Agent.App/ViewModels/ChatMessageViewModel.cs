@@ -1,5 +1,4 @@
 using System.Text;
-using System.Windows.Threading;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
@@ -15,14 +14,13 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public const string PendingManualCompactionMessageId = "pending-manual-compaction";
 
     public const int MaxToolDetailDisplayChars = 16_384;
-    public const int DeferredMarkdownThresholdChars = 8_192;
     private const int ToolDetailPreviewChars = 4_096;
-    private static readonly TimeSpan DeferredMarkdownIdleDelay = TimeSpan.FromSeconds(2);
 
     private string _toolDetailFull = string.Empty;
     private StringBuilder? _streamingContentBuilder;
     private StringBuilder? _streamingReasoningBuilder;
-    private DispatcherTimer? _deferredMarkdownTimer;
+    private int _publishedStreamingContentLength;
+    private int _publishedStreamingReasoningLength;
 
     private readonly bool _isFoldedHistoryPlaceholder;
 
@@ -91,7 +89,6 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             ToolArgumentsText = string.Empty;
             ToolCallStatus = ToolCallDisplayStatus.None;
             IsToolRunning = false;
-            ApplyDeferredMarkdownPolicy();
         }
     }
 
@@ -175,12 +172,6 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isStreaming;
-
-    [ObservableProperty]
-    private bool _isMarkdownDeferred;
-
-    [ObservableProperty]
-    private bool _isMarkdownRenderingEnabled = true;
 
     public bool IsUser { get; }
     public bool IsTool { get; }
@@ -403,7 +394,12 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             return;
         }
 
-        _streamingContentBuilder ??= new StringBuilder(Content);
+        if (_streamingContentBuilder is null)
+        {
+            _streamingContentBuilder = new StringBuilder(Content);
+            _publishedStreamingContentLength = Content.Length;
+        }
+
         _streamingContentBuilder.Append(token);
     }
 
@@ -415,27 +411,37 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         }
 
         IsReasoningStreaming = true;
-        _streamingReasoningBuilder ??= new StringBuilder(ReasoningContent);
+        if (_streamingReasoningBuilder is null)
+        {
+            _streamingReasoningBuilder = new StringBuilder(ReasoningContent);
+            _publishedStreamingReasoningLength = ReasoningContent.Length;
+        }
+
         _streamingReasoningBuilder.Append(token);
     }
 
     public void FlushStreamingContent()
     {
-        if (_streamingContentBuilder is { Length: > 0 })
+        if (_streamingContentBuilder is { } contentBuilder
+            && contentBuilder.Length != _publishedStreamingContentLength)
         {
-            Content = _streamingContentBuilder.ToString();
-            _streamingContentBuilder = null;
+            Content = contentBuilder.ToString();
+            _publishedStreamingContentLength = contentBuilder.Length;
         }
 
-        if (_streamingReasoningBuilder is { Length: > 0 })
+        if (_streamingReasoningBuilder is { } reasoningBuilder
+            && reasoningBuilder.Length != _publishedStreamingReasoningLength)
         {
-            ReasoningContent = _streamingReasoningBuilder.ToString();
-            _streamingReasoningBuilder = null;
+            ReasoningContent = reasoningBuilder.ToString();
+            _publishedStreamingReasoningLength = reasoningBuilder.Length;
         }
     }
 
     public bool HasBufferedStreamingContent() =>
-        _streamingContentBuilder is { Length: > 0 } || _streamingReasoningBuilder is { Length: > 0 };
+        _streamingContentBuilder is { } contentBuilder
+            && contentBuilder.Length != _publishedStreamingContentLength
+        || _streamingReasoningBuilder is { } reasoningBuilder
+            && reasoningBuilder.Length != _publishedStreamingReasoningLength;
 
     public void CompleteStreamingAssistant(ChatMessage message)
     {
@@ -447,7 +453,6 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         CreatedAt = AppTimeZone.ToChina(message.CreatedAt).ToString("HH:mm:ss");
         IsStreaming = false;
         IsReasoningStreaming = false;
-        ApplyDeferredMarkdownPolicy();
     }
 
     public void SealStreamingDisplay()
@@ -457,14 +462,6 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         _streamingReasoningBuilder = null;
         IsStreaming = false;
         IsReasoningStreaming = false;
-        ApplyDeferredMarkdownPolicy();
-    }
-
-    [RelayCommand]
-    private void EnableMarkdownRendering()
-    {
-        CancelDeferredMarkdownTimer();
-        IsMarkdownRenderingEnabled = true;
     }
 
     public void MarkStreamingCancelled()
@@ -483,60 +480,6 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         {
             Content = Strings.Get("Chat_ToolStoppedContent");
         }
-    }
-
-    private void ApplyDeferredMarkdownPolicy()
-    {
-        CancelDeferredMarkdownTimer();
-        if (IsUser || IsTool || IsCompaction || IsStreaming)
-        {
-            IsMarkdownDeferred = false;
-            IsMarkdownRenderingEnabled = true;
-            return;
-        }
-
-        if (Content.Length > DeferredMarkdownThresholdChars)
-        {
-            IsMarkdownDeferred = true;
-            IsMarkdownRenderingEnabled = false;
-            ScheduleDeferredMarkdownRendering();
-            return;
-        }
-
-        IsMarkdownDeferred = false;
-        IsMarkdownRenderingEnabled = true;
-    }
-
-    private void ScheduleDeferredMarkdownRendering()
-    {
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher is null)
-        {
-            IsMarkdownRenderingEnabled = true;
-            return;
-        }
-
-        _deferredMarkdownTimer = new DispatcherTimer(DispatcherPriority.Background, dispatcher)
-        {
-            Interval = DeferredMarkdownIdleDelay
-        };
-        _deferredMarkdownTimer.Tick += (_, _) =>
-        {
-            CancelDeferredMarkdownTimer();
-            IsMarkdownRenderingEnabled = true;
-        };
-        _deferredMarkdownTimer.Start();
-    }
-
-    private void CancelDeferredMarkdownTimer()
-    {
-        if (_deferredMarkdownTimer is null)
-        {
-            return;
-        }
-
-        _deferredMarkdownTimer.Stop();
-        _deferredMarkdownTimer = null;
     }
 
     public void ApplyCompletedTool(ChatMessage message)

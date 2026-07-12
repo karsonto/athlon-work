@@ -135,6 +135,66 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("state.trackReasoningDuration = false", html, StringComparison.Ordinal);
         Assert.Contains("state.trackReasoningDuration = true", html, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void BuildShellHtml_receives_replay_commands_and_batches_dom_updates()
+    {
+        var html = _builder.BuildShellHtml();
+
+        Assert.Contains("window.chrome.webview.addEventListener('message'", html, StringComparison.Ordinal);
+        Assert.Contains("command.command === 'replay'", html, StringComparison.Ordinal);
+        Assert.Contains("function beginBatch()", html, StringComparison.Ordinal);
+        Assert.Contains("function endBatch(forceScroll)", html, StringComparison.Ordinal);
+        Assert.Contains("html.replaying .message-row", html, StringComparison.Ordinal);
+        Assert.Contains("endBatch(true)", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildShellHtml_uses_gated_coalesced_scrolling()
+    {
+        var html = _builder.BuildShellHtml();
+
+        Assert.Contains("function isNearBottom()", html, StringComparison.Ordinal);
+        Assert.Contains("requestAnimationFrame", html, StringComparison.Ordinal);
+        Assert.Contains("state.autoScrollEnabled", html, StringComparison.Ordinal);
+        Assert.Contains("selectionchange", html, StringComparison.Ordinal);
+        Assert.Contains("hasActiveSelection()", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildShellHtml_lazily_highlights_new_code_blocks()
+    {
+        var html = _builder.BuildShellHtml();
+
+        Assert.Contains("new IntersectionObserver", html, StringComparison.Ordinal);
+        Assert.Contains("codeObserver.observe(code)", html, StringComparison.Ordinal);
+        Assert.Contains("if (pre.closest('.code-block')) return", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildShellHtml_supports_loading_older_messages_with_scroll_anchor()
+    {
+        var html = _builder.BuildShellHtml();
+
+        Assert.Contains("id=\"load-older\"", html, StringComparison.Ordinal);
+        Assert.Contains("post({ type: 'loadOlder' })", html, StringComparison.Ordinal);
+        Assert.Contains("command.command === 'prepend'", html, StringComparison.Ordinal);
+        Assert.Contains("function prependEvents(events, hasOlderMessages)", html, StringComparison.Ordinal);
+        Assert.Contains("scroller.scrollHeight - previousHeight", html, StringComparison.Ordinal);
+        Assert.Contains("content-visibility: auto", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildShellHtml_does_not_parse_final_markdown_in_javascript()
+    {
+        var html = _builder.BuildShellHtml();
+
+        Assert.DoesNotContain("marked.min.js", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("marked.parse", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("finalizeAssistantMarkdown", html, StringComparison.Ordinal);
+        Assert.Contains("case 'TEXT_MESSAGE_END':", html, StringComparison.Ordinal);
+        Assert.Contains("resolveEventHtml(event)", html, StringComparison.Ordinal);
+    }
 }
 
 public sealed class SignedInUserSectionTests

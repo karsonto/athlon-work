@@ -38,6 +38,7 @@ public partial class MarkdownMessageView : UserControl
     private bool _documentHooked;
     private TextSelection? _textSelection;
     private IReadOnlyList<FencedBlockInfo> _fencedBlocks = Array.Empty<FencedBlockInfo>();
+    private string? _lastRenderedMarkdown;
 
     public static readonly DependencyProperty MarkdownProperty =
         DependencyProperty.Register(
@@ -177,6 +178,11 @@ public partial class MarkdownMessageView : UserControl
     private void RefreshDisplayMarkdown(bool forceRebuild = false)
     {
         var source = Markdown ?? string.Empty;
+        if (!forceRebuild && string.Equals(source, _lastRenderedMarkdown, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         _fencedBlocks = MarkdownDisplayNormalizer.ExtractFencedBlocks(source);
         var display = MarkdownDisplayNormalizer.NormalizeForDisplay(source);
 
@@ -186,6 +192,7 @@ public partial class MarkdownMessageView : UserControl
         }
 
         MarkdownViewer.Markdown = display;
+        _lastRenderedMarkdown = source;
     }
 
     private void ApplyScrollLayout()
@@ -248,6 +255,7 @@ public partial class MarkdownMessageView : UserControl
         DetachSelectionHandler();
         MarkdownViewer.Markdown = string.Empty;
         MarkdownViewer.Document = null;
+        _lastRenderedMarkdown = null;
     }
 
     private void AttachMarkdownContextMenu()

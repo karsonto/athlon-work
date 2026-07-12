@@ -22,8 +22,8 @@ public sealed class ChatHtmlBuilder
             "<style id=\"chat-code-syntax\">" + GetCodeSyntaxOverrideStyles() + "</style>" +
             "<style id=\"chat-shell-styles\">" + GetStaticShellStyles() + "</style>" +
             "</head><body><div id=\"chat-scroll\">" + BuildEmptyStateHtml(ssoDisplayName) +
+            "<button id=\"load-older\" type=\"button\" hidden></button>" +
             "<div id=\"messages\"></div></div>" +
-            $"<script src=\"{assets}marked.min.js\"></script>" +
             $"<script src=\"{assets}highlight.min.js\"></script>" +
             "<script>" + BuildI18nBootstrapScript() + "</script>" +
             "<script>" + GetTimelineScript() + "</script>" +
@@ -103,6 +103,7 @@ public sealed class ChatHtmlBuilder
             ["welcomeTitle"] = Strings.Get("Chat_WelcomeTitle"),
             ["welcomeTitleWithName"] = Strings.Get("Chat_WelcomeTitleWithName"),
             ["welcomeDescription"] = Strings.Get("Chat_WelcomeDescription"),
+            ["loadOlder"] = Strings.Get("RecordGroup_Earlier") + "…",
         };
 
     private static string BuildEmptyStateHtml(string? ssoDisplayName)
@@ -251,6 +252,21 @@ public sealed class ChatHtmlBuilder
           gap: 20px;
           max-width: 100%;
         }
+        #load-older {
+          display: block;
+          margin: 0 auto 16px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 6px 12px;
+          background: var(--panel);
+          color: var(--subtle-text);
+          cursor: pointer;
+        }
+        #load-older[hidden] { display: none; }
+        .message-row {
+          content-visibility: auto;
+          contain-intrinsic-size: auto 96px;
+        }
         .empty-state {
           position: absolute;
           inset: 0;
@@ -290,6 +306,7 @@ public sealed class ChatHtmlBuilder
           align-items: flex-start;
           animation: fadeIn 0.25s ease;
         }
+        html.replaying .message-row { animation: none; }
         .message-row.user { justify-content: flex-end; }
         .message-row.assistant { justify-content: flex-start; }
         .bubble {
@@ -580,7 +597,13 @@ public sealed class ChatHtmlBuilder
           toolCalls: new Map(),
           trackReasoningDuration: true,
           reasoningStartAt: {},
-          reasoningFinalizedMs: {}
+          reasoningFinalizedMs: {},
+          batching: false,
+          pendingEnhancementRoots: [],
+          scrollFrame: 0,
+          scrollForcePending: false,
+          autoScrollEnabled: true,
+          batchTarget: null
         };
 
         function t(key) {
@@ -595,6 +618,8 @@ public sealed class ChatHtmlBuilder
             if (title && !title.dataset.userTitle) title.textContent = t('welcomeTitle');
             if (desc) desc.textContent = t('welcomeDescription');
           }
+          const loadOlder = document.getElementById('load-older');
+          if (loadOlder) loadOlder.textContent = t('loadOlder');
           document.querySelectorAll('.code-btn').forEach(function (btn) {
             if (!btn.classList.contains('copied')) btn.textContent = t('copy');
           });
@@ -635,32 +660,10 @@ public sealed class ChatHtmlBuilder
           return (event && event.html) || '';
         }
 
-        function renderMarkdownText(text) {
-          const source = text == null ? '' : String(text);
-          if (!source.trim()) return '';
-          if (typeof marked !== 'undefined') {
-            try {
-              if (typeof marked.setOptions === 'function') {
-                marked.setOptions({ gfm: true, breaks: true });
-              }
-              if (typeof marked.parse === 'function') {
-                return marked.parse(source, { async: false });
-              }
-              if (typeof marked === 'function') {
-                return marked(source);
-              }
-            } catch (e) {
-              console.warn('marked.parse failed', e);
-            }
-          }
-          return '<pre>' + escapeHtml(source) + '</pre>';
-        }
-
         function resolveRenderedHtml(event, fallbackText) {
           const html = resolveEventHtml(event);
           if (html) return html;
-          const markdown = resolveEventMarkdown(event) || fallbackText || '';
-          return renderMarkdownText(markdown);
+          return '<pre>' + escapeHtml(resolveEventMarkdown(event) || fallbackText || '') + '</pre>';
         }
 
         function escapeHtml(text) {
@@ -679,13 +682,37 @@ public sealed class ChatHtmlBuilder
           return document.getElementById('chat-scroll');
         }
 
-        function scrollToBottom() {
+        function getMessageRoot() {
+          return state.batchTarget || document.getElementById('messages');
+        }
+
+        function isNearBottom() {
           const scroller = getChatScroller();
-          if (!scroller) return;
-          scroller.scrollTop = scroller.scrollHeight;
+          return !scroller || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 80;
+        }
+
+        function hasActiveSelection() {
+          const selection = window.getSelection && window.getSelection();
+          return !!selection && !selection.isCollapsed && String(selection).length > 0;
+        }
+
+        function scrollToBottom(force) {
+          if (state.batching || (!force && (!state.autoScrollEnabled || hasActiveSelection()))) return;
+          if (force) state.scrollForcePending = true;
+          if (state.scrollFrame) return;
+          state.scrollFrame = requestAnimationFrame(function () {
+            state.scrollFrame = 0;
+            const shouldForce = state.scrollForcePending;
+            state.scrollForcePending = false;
+            const scroller = getChatScroller();
+            if (state.batching || !scroller
+                || (!shouldForce && (!state.autoScrollEnabled || hasActiveSelection()))) return;
+            scroller.scrollTop = scroller.scrollHeight;
+          });
         }
 
         function updateEmptyStateVisibility() {
+          if (state.batching) return;
           const emptyState = document.getElementById('empty-state');
           const root = document.getElementById('messages');
           if (!emptyState || !root) return;
@@ -707,14 +734,18 @@ public sealed class ChatHtmlBuilder
           if (!node) return;
           node.classList.add('md-root');
           node.innerHTML = html || '';
-          enhanceCodeBlocks(node);
+          if (state.batching) {
+            state.pendingEnhancementRoots.push(node);
+          } else {
+            enhanceCodeBlocks(node);
+          }
         }
 
         function applyAssistantHtml(messageId, html, createIfMissing) {
           let row = findAssistantBubbleRow(messageId);
           if (!row && createIfMissing) {
             row = createAssistantRow(messageId);
-            document.getElementById('messages').appendChild(row);
+            getMessageRoot().appendChild(row);
             state.assistantStarted[messageId] = true;
             state.currentAssistantEl = row;
           }
@@ -723,14 +754,21 @@ public sealed class ChatHtmlBuilder
           scrollToBottom();
         }
 
-        function finalizeAssistantMarkdown(messageId) {
-          const node = findAssistantContentNode(messageId);
-          if (!node) return;
-          const raw = node.textContent || '';
-          if (!raw.trim()) return;
-          applyMarkdownHtml(node, renderMarkdownText(raw));
-          scrollToBottom();
-        }
+        const codeObserver = typeof IntersectionObserver === 'function'
+          ? new IntersectionObserver(function (entries, observer) {
+              entries.forEach(function (entry) {
+                if (!entry.isIntersecting) return;
+                const code = entry.target;
+                observer.unobserve(code);
+                if (typeof hljs !== 'undefined' && !code.dataset.hljsDone) {
+                  try {
+                    hljs.highlightElement(code);
+                    code.dataset.hljsDone = '1';
+                  } catch (e) {}
+                }
+              });
+            }, { root: document.getElementById('chat-scroll'), rootMargin: '200px 0px' })
+          : null;
 
         function enhanceCodeBlocks(root) {
           const scope = root || document;
@@ -738,13 +776,6 @@ public sealed class ChatHtmlBuilder
             if (pre.closest('.code-block')) return;
             const code = pre.querySelector('code');
             if (!code) return;
-
-            if (typeof hljs !== 'undefined' && !code.dataset.hljsDone) {
-              try {
-                hljs.highlightElement(code);
-                code.dataset.hljsDone = '1';
-              } catch (e) {}
-            }
 
             const raw = code.textContent || '';
             const className = code.className || '';
@@ -784,11 +815,20 @@ public sealed class ChatHtmlBuilder
             pre.parentNode.insertBefore(wrapper, pre);
             wrapper.appendChild(header);
             wrapper.appendChild(pre);
+            if (codeObserver) {
+              codeObserver.observe(code);
+            } else if (typeof hljs !== 'undefined' && !code.dataset.hljsDone) {
+              try {
+                hljs.highlightElement(code);
+                code.dataset.hljsDone = '1';
+              } catch (e) {}
+            }
           });
         }
 
         function resetTimeline() {
           const root = document.getElementById('messages');
+          if (codeObserver) codeObserver.disconnect();
           root.innerHTML = '';
           state.currentAssistantEl = null;
           state.currentReasoningEl = null;
@@ -797,6 +837,25 @@ public sealed class ChatHtmlBuilder
           state.reasoningStartAt = {};
           state.reasoningFinalizedMs = {};
           state.toolCalls.clear();
+        }
+
+        function beginBatch() {
+          state.batching = true;
+          if (state.scrollFrame) cancelAnimationFrame(state.scrollFrame);
+          state.scrollFrame = 0;
+          state.scrollForcePending = false;
+          state.pendingEnhancementRoots = [];
+          document.documentElement.classList.add('replaying');
+        }
+
+        function endBatch(forceScroll) {
+          state.batching = false;
+          document.documentElement.classList.remove('replaying');
+          const roots = state.pendingEnhancementRoots;
+          state.pendingEnhancementRoots = [];
+          roots.forEach(function (root) { enhanceCodeBlocks(root); });
+          updateEmptyStateVisibility();
+          scrollToBottom(!!forceScroll);
         }
 
         function formatReasoningSeconds(ms) {
@@ -904,16 +963,16 @@ public sealed class ChatHtmlBuilder
           }
 
           if (role === 'user') {
-            document.getElementById('messages').appendChild(createUserRow(content));
+            getMessageRoot().appendChild(createUserRow(content));
           } else if (role === 'assistant') {
             const row = createAssistantRow('');
             row.querySelector('.message-content').textContent = content;
-            document.getElementById('messages').appendChild(row);
+            getMessageRoot().appendChild(row);
             state.currentAssistantEl = row;
           } else if (role === 'reasoning') {
             const row = createReasoningRow('');
             row.querySelector('.reasoning-content').textContent = content;
-            document.getElementById('messages').appendChild(row);
+            getMessageRoot().appendChild(row);
             state.currentReasoningEl = row;
           }
           updateEmptyStateVisibility();
@@ -923,7 +982,7 @@ public sealed class ChatHtmlBuilder
         function ensureAssistantBubble(messageId) {
           if (state.currentAssistantEl && state.assistantStarted[messageId]) return;
           const row = createAssistantRow(messageId);
-          document.getElementById('messages').appendChild(row);
+          getMessageRoot().appendChild(row);
           state.currentAssistantEl = row;
           state.assistantStarted[messageId] = true;
           updateEmptyStateVisibility();
@@ -932,7 +991,7 @@ public sealed class ChatHtmlBuilder
         function ensureReasoningBubble(messageId) {
           if (state.currentReasoningEl && state.reasoningStarted[messageId]) return;
           const row = createReasoningRow(messageId);
-          document.getElementById('messages').appendChild(row);
+          getMessageRoot().appendChild(row);
           state.currentReasoningEl = row;
           state.reasoningStarted[messageId] = true;
           updateEmptyStateVisibility();
@@ -957,7 +1016,7 @@ public sealed class ChatHtmlBuilder
             '<div class="tool-result-html md-root"></div>' +
             '</div></div>';
           row.appendChild(details);
-          document.getElementById('messages').appendChild(row);
+          getMessageRoot().appendChild(row);
           state.toolCalls.set(toolCallId, details);
           updateEmptyStateVisibility();
           scrollToBottom();
@@ -1038,7 +1097,6 @@ public sealed class ChatHtmlBuilder
               appendMessage('assistant', event.delta || '', true);
               break;
             case 'TEXT_MESSAGE_END':
-              finalizeAssistantMarkdown(event.messageId);
               state.currentAssistantEl = null;
               break;
             case 'STATIC_ASSISTANT_HTML':
@@ -1153,6 +1211,7 @@ public sealed class ChatHtmlBuilder
         }
 
         function replayEvents(events) {
+          beginBatch();
           state.trackReasoningDuration = false;
           resetTimeline();
           for (const raw of events) {
@@ -1161,9 +1220,84 @@ public sealed class ChatHtmlBuilder
               handleEvent(event);
             } catch (e) { console.warn('replayEvents parse failed', e); }
           }
-          updateEmptyStateVisibility();
-          scrollToBottom();
           state.trackReasoningDuration = true;
+          endBatch(true);
         }
+
+        function setOlderMessagesAvailable(available) {
+          const button = document.getElementById('load-older');
+          if (!button) return;
+          button.hidden = !available;
+          button.disabled = false;
+          button.textContent = t('loadOlder');
+        }
+
+        function prependEvents(events, hasOlderMessages) {
+          const scroller = getChatScroller();
+          const root = document.getElementById('messages');
+          if (!scroller || !root) return;
+          const previousHeight = scroller.scrollHeight;
+          const previousTop = scroller.scrollTop;
+          const fragment = document.createDocumentFragment();
+          beginBatch();
+          state.batchTarget = fragment;
+          for (const raw of events) {
+            try {
+              const event = typeof raw === 'string' ? JSON.parse(raw) : raw;
+              handleEvent(event);
+            } catch (e) { console.warn('prependEvents parse failed', e); }
+          }
+          state.batchTarget = null;
+          root.insertBefore(fragment, root.firstChild);
+          endBatch(false);
+          setOlderMessagesAvailable(!!hasOlderMessages);
+          scroller.scrollTop = previousTop + (scroller.scrollHeight - previousHeight);
+          state.currentAssistantEl = null;
+          state.currentReasoningEl = null;
+        }
+
+        function handleWebMessage(message) {
+          const command = typeof message === 'string' ? JSON.parse(message) : message;
+          if (!command || !command.command) return;
+          if (command.command === 'replay') {
+            replayEvents(Array.isArray(command.events) ? command.events : []);
+          } else if (command.command === 'prepend') {
+            prependEvents(
+              Array.isArray(command.events) ? command.events : [],
+              !!command.hasOlderMessages);
+          } else if (command.command === 'historyAvailability') {
+            setOlderMessagesAvailable(!!command.hasOlderMessages);
+          } else if (command.command === 'reset') {
+            beginBatch();
+            resetTimeline();
+            endBatch(false);
+          }
+        }
+
+        if (window.chrome && window.chrome.webview) {
+          window.chrome.webview.addEventListener('message', function (event) {
+            try { handleWebMessage(event.data); }
+            catch (e) { console.warn('chat web message failed', e); }
+          });
+        }
+
+        const chatScroller = getChatScroller();
+        if (chatScroller) {
+          chatScroller.addEventListener('scroll', function () {
+            state.autoScrollEnabled = isNearBottom();
+          }, { passive: true });
+        }
+        const loadOlderButton = document.getElementById('load-older');
+        if (loadOlderButton) {
+          loadOlderButton.textContent = t('loadOlder');
+          loadOlderButton.addEventListener('click', function () {
+            loadOlderButton.disabled = true;
+            post({ type: 'loadOlder' });
+          });
+        }
+        document.addEventListener('selectionchange', function () {
+          if (hasActiveSelection()) state.autoScrollEnabled = false;
+          else if (isNearBottom()) state.autoScrollEnabled = true;
+        });
         """;
 }

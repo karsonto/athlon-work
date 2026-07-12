@@ -13,6 +13,23 @@ public static class ChatTimelineOrder
             return messages;
         }
 
+        var alreadyOrdered = true;
+        for (var i = 1; i < messages.Count; i++)
+        {
+            if (messages[i].CreatedAt >= messages[i - 1].CreatedAt)
+            {
+                continue;
+            }
+
+            alreadyOrdered = false;
+            break;
+        }
+
+        if (alreadyOrdered)
+        {
+            return messages;
+        }
+
         return messages
             .Select((message, index) => (message, index))
             .OrderBy(pair => pair.message.CreatedAt)

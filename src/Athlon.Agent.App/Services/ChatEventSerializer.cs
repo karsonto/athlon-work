@@ -62,8 +62,8 @@ internal static class ChatEventSerializer
         SerializeAgui("STATIC_ASSISTANT_HTML", new
         {
             messageId = message.MessageId,
-            markdownB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(message.Content)),
-            htmlB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(MarkdownHtmlRenderer.ToHtmlFragment(message.Content))),
+            markdown = message.Content,
+            html = MarkdownHtmlRenderer.ToHtmlFragment(message.Content),
             createIfMissing = true
         });
 
@@ -88,8 +88,8 @@ internal static class ChatEventSerializer
             header = message.ToolHeader,
             summary = message.ToolSummary,
             status = SerializeToolStatus(message.ToolCallStatus),
-            markdownB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(detail)),
-            htmlB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(RenderToolResultHtml(message, detail)))
+            markdown = detail,
+            html = RenderToolResultHtml(message, detail)
         });
     }
 
@@ -121,11 +121,41 @@ internal static class ChatEventSerializer
         return Encoding.UTF8.GetString(buffer.ToArray());
     }
 
+    public static string SerializeReplayCommand(
+        IReadOnlyList<ChatMessageViewModel> messages,
+        bool showToolCalls = false) =>
+        SerializeWebMessageCommand("replay", BuildReplayEvents(messages, showToolCalls));
+
+    public static string SerializeResetCommand() =>
+        SerializeWebMessageCommand("reset", Array.Empty<string>());
+
+    public static string SerializePrependCommand(
+        IReadOnlyList<ChatMessageViewModel> messages,
+        bool showToolCalls,
+        bool hasOlderMessages) =>
+        SerializeWebMessageCommand(
+            "prepend",
+            BuildReplayEvents(messages, showToolCalls, includeReset: false),
+            hasOlderMessages);
+
+    public static string SerializeHistoryAvailabilityCommand(bool hasOlderMessages) =>
+        JsonSerializer.Serialize(new
+        {
+            command = "historyAvailability",
+            hasOlderMessages
+        }, JsonOptions);
+
     public static IReadOnlyList<string> BuildReplayEvents(
         IReadOnlyList<ChatMessageViewModel> messages,
-        bool showToolCalls = false)
+        bool showToolCalls = false,
+        bool includeReset = true)
     {
-        var events = new List<string> { SerializeResetTimeline() };
+        var events = new List<string>();
+        if (includeReset)
+        {
+            events.Add(SerializeResetTimeline());
+        }
+
         foreach (var message in messages)
         {
             if (message.IsHiddenPlaceholder)
@@ -174,8 +204,8 @@ internal static class ChatEventSerializer
             yield return SerializeAgui("STATIC_ASSISTANT_HTML", new
             {
                 messageId = message.MessageId,
-                markdownB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(message.Content)),
-                htmlB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(MarkdownHtmlRenderer.ToHtmlFragment(message.Content))),
+                markdown = message.Content,
+                html = MarkdownHtmlRenderer.ToHtmlFragment(message.Content),
                 createIfMissing = true
             });
         }
@@ -217,8 +247,8 @@ internal static class ChatEventSerializer
                 header = message.ToolHeader,
                 summary = message.ToolSummary,
                 status = SerializeToolStatus(message.ToolCallStatus),
-                markdownB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(detail)),
-                htmlB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(RenderToolResultHtml(message, detail)))
+                markdown = detail,
+                html = RenderToolResultHtml(message, detail)
             });
         }
     }
@@ -264,5 +294,35 @@ internal static class ChatEventSerializer
         }
 
         return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    private static string SerializeWebMessageCommand(
+        string command,
+        IReadOnlyList<string> events,
+        bool? hasOlderMessages = null)
+    {
+        var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("command", command);
+            writer.WritePropertyName("events");
+            writer.WriteStartArray();
+            foreach (var eventJson in events)
+            {
+                using var document = JsonDocument.Parse(eventJson);
+                document.RootElement.WriteTo(writer);
+            }
+
+            writer.WriteEndArray();
+            if (hasOlderMessages is not null)
+            {
+                writer.WriteBoolean("hasOlderMessages", hasOlderMessages.Value);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.ToArray());
     }
 }

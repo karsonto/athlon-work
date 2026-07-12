@@ -3,6 +3,7 @@ using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Streaming;
+using System.Text.Json;
 
 namespace Athlon.Agent.Tests;
 
@@ -84,6 +85,27 @@ public sealed class ChatDisplayPolicyTests
     }
 
     [Fact]
+    public void PagedHydration_does_not_synthesize_orphan_tool_at_page_boundary()
+    {
+        var assistant = ChatMessage.Create(
+            MessageRole.Assistant,
+            "working",
+            toolCalls: [new AgentToolCall("cross-page-call", "read_file", new Dictionary<string, string>())]);
+
+        var full = ChatTimelineHydrator.BuildDisplayMessages(
+            [assistant],
+            showToolCalls: true,
+            synthesizeInterruptedToolResults: true);
+        var paged = ChatTimelineHydrator.BuildDisplayMessages(
+            [assistant],
+            showToolCalls: true,
+            synthesizeInterruptedToolResults: false);
+
+        Assert.Contains(full, message => message.IsTool);
+        Assert.DoesNotContain(paged, message => message.IsTool);
+    }
+
+    [Fact]
     public void BuildReplayEvents_includes_running_pending_manual_compaction()
     {
         var pending = ChatMessageViewModel.CreatePendingManualCompaction();
@@ -120,6 +142,53 @@ public sealed class ChatDisplayPolicyTests
         var json = ChatEventSerializer.Serialize(streamEvent);
 
         Assert.Contains("\"status\":\"failed\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SerializeReplayCommand_embeds_events_as_json_and_prerenders_assistant_markdown()
+    {
+        var assistant = new ChatMessageViewModel(
+            ChatMessage.Create(MessageRole.Assistant, "**bold**"));
+
+        var json = ChatEventSerializer.SerializeReplayCommand([assistant]);
+
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        Assert.Equal("replay", root.GetProperty("command").GetString());
+        var events = root.GetProperty("events");
+        Assert.Equal(JsonValueKind.Array, events.ValueKind);
+        Assert.Equal("RESET_TIMELINE", events[0].GetProperty("type").GetString());
+        var assistantEvent = Assert.Single(
+            events.EnumerateArray(),
+            item => item.GetProperty("type").GetString() == "STATIC_ASSISTANT_HTML");
+        var html = assistantEvent.GetProperty("html").GetString()!;
+        Assert.Contains("<strong>bold</strong>", html, StringComparison.Ordinal);
+        Assert.False(assistantEvent.TryGetProperty("htmlB64", out _));
+    }
+
+    [Fact]
+    public void SerializeResetCommand_is_a_valid_empty_reset_command()
+    {
+        using var document = JsonDocument.Parse(ChatEventSerializer.SerializeResetCommand());
+
+        Assert.Equal("reset", document.RootElement.GetProperty("command").GetString());
+        Assert.Empty(document.RootElement.GetProperty("events").EnumerateArray());
+    }
+
+    [Fact]
+    public void SerializePrependCommand_omits_reset_and_carries_history_availability()
+    {
+        var user = new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "older"));
+
+        using var document = JsonDocument.Parse(
+            ChatEventSerializer.SerializePrependCommand([user], showToolCalls: false, hasOlderMessages: true));
+
+        var root = document.RootElement;
+        Assert.Equal("prepend", root.GetProperty("command").GetString());
+        Assert.True(root.GetProperty("hasOlderMessages").GetBoolean());
+        Assert.DoesNotContain(
+            root.GetProperty("events").EnumerateArray(),
+            item => item.GetProperty("type").GetString() == "RESET_TIMELINE");
     }
 
     [Fact]

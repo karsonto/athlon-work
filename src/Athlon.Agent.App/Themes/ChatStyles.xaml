@@ -209,47 +209,6 @@
         </Style.Triggers>
     </Style>
 
-    <Style x:Key="MessageAvatarAssistantImageStyle" TargetType="Image">
-        <Setter Property="Width" Value="36" />
-        <Setter Property="Height" Value="36" />
-        <Setter Property="Source" Value="/Assets/app-icon-48.png" />
-        <Setter Property="Margin" Value="0,0,12,0" />
-        <Setter Property="VerticalAlignment" Value="Top" />
-        <Setter Property="RenderOptions.BitmapScalingMode" Value="HighQuality" />
-    </Style>
-
-    <Style x:Key="MessageAvatarUserStyle" TargetType="Border">
-        <Setter Property="Width" Value="36" />
-        <Setter Property="Height" Value="36" />
-        <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
-        <Setter Property="Margin" Value="12,0,0,0" />
-        <Setter Property="VerticalAlignment" Value="Top" />
-    </Style>
-
-    <Style x:Key="MessageBubbleAssistantStyle" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource Brush.AssistantBubble}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
-        <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="12" />
-        <Setter Property="Padding" Value="16,14" />
-        <Setter Property="MaxWidth" Value="640" />
-    </Style>
-
-    <Style x:Key="MessageBubbleUserStyle" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource Brush.UserBubble}" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="12" />
-        <Setter Property="Padding" Value="16,14" />
-        <Setter Property="MaxWidth" Value="520" />
-    </Style>
-
-    <Style x:Key="MessageMetaTextStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="11" />
-        <Setter Property="Foreground" Value="{DynamicResource Brush.DisabledText}" />
-        <Setter Property="Margin" Value="4,8,4,0" />
-    </Style>
-
     <Style x:Key="ToolCardBorderStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.Chrome}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
