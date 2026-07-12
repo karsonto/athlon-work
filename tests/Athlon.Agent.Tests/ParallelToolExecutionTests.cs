@@ -182,10 +182,12 @@ public sealed class ParallelToolExecutionTests
     public async Task SendAsync_AskToolWithoutApprovalCallback_RemainsPending()
     {
         var router = new ApprovalTrackingToolRouter();
+        var settings = new AppSettings();
+        settings.ToolPermissions.ApprovalEnabled = true;
         var runtime = CreateRuntime(
             new NoOpStorage(),
             router,
-            new AppSettings(),
+            settings,
             new ScriptedModelClient(
                 new AgentModelResponse(
                     string.Empty,
@@ -202,14 +204,49 @@ public sealed class ParallelToolExecutionTests
     }
 
     [Fact]
+    public async Task SendAsync_ApprovalDisabledByDefault_ExecutesWithoutPrompt()
+    {
+        var router = new ApprovalTrackingToolRouter();
+        var runtime = CreateRuntime(
+            new NoOpStorage(),
+            router,
+            new AppSettings(),
+            new ScriptedModelClient(
+                new AgentModelResponse(
+                    string.Empty,
+                    [new AgentToolCall("ask-1", "file_write", new Dictionary<string, string> { ["path"] = "a.txt" })]),
+                new AgentModelResponse("done", Array.Empty<AgentToolCall>())));
+        var approvalRequests = 0;
+        var callbacks = new AgentTurnCallbacks
+        {
+            OnToolApprovalRequested = (_, _) =>
+            {
+                approvalRequests++;
+                return Task.FromResult(ToolApprovalDecision.Denied);
+            }
+        };
+
+        await runtime.SendAsync(
+            AgentSession.Create("approval-disabled"),
+            "write",
+            callbacks: callbacks);
+
+        Assert.False(new AppSettings().ToolPermissions.ApprovalEnabled);
+        Assert.Equal(0, approvalRequests);
+        Assert.Equal(1, router.InvokeCount);
+    }
+
+    [Fact]
     public async Task SendAsync_InvalidArguments_AreRejectedBeforeApprovalOrExecution()
     {
         var router = new ApprovalTrackingToolRouter();
         var storage = new NoOpStorage();
+        var settings = new AppSettings();
+        settings.ToolPermissions.ApprovalEnabled = true;
         var runtime = CreateRuntime(
             storage,
             router,
-            new AppSettings(),
+            settings,
             new ScriptedModelClient(
                 new AgentModelResponse(
                     string.Empty,
@@ -246,10 +283,12 @@ public sealed class ParallelToolExecutionTests
     public async Task SendAsync_AskToolExecutesAfterApprovalCallbackApproves()
     {
         var router = new ApprovalTrackingToolRouter();
+        var settings = new AppSettings();
+        settings.ToolPermissions.ApprovalEnabled = true;
         var runtime = CreateRuntime(
             new NoOpStorage(),
             router,
-            new AppSettings(),
+            settings,
             new ScriptedModelClient(
                 new AgentModelResponse(
                     string.Empty,

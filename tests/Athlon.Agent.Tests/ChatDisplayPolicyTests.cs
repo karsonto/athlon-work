@@ -31,10 +31,42 @@ public sealed class ChatDisplayPolicyTests
                 CompactionMessageContent.CreateConversationCompact(1000, 500, 3, null, "summary")));
         var toolVm = new ChatMessageViewModel(
             ChatMessage.Create(MessageRole.Tool, "ToolCallId: x\nTool `read_file` succeeded."));
+        var pendingApprovalVm = ChatMessageViewModel.CreatePendingTool(
+            new AgentToolCall("call-approval", "file_write", new Dictionary<string, string>()));
+        pendingApprovalVm.MarkAwaitingApproval("""{"path":"a.txt"}""");
 
         Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, compactionVm));
         Assert.False(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, toolVm));
+        Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, pendingApprovalVm));
         Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: true, toolVm));
+    }
+
+    [Fact]
+    public void BuildReplayEvents_includes_pending_tool_approval_when_tools_hidden()
+    {
+        var pending = ChatMessageViewModel.CreatePendingTool(
+            new AgentToolCall("call-approval", "file_write", new Dictionary<string, string>()));
+        pending.MarkAwaitingApproval("""{"path":"approval-test.txt","content":"hello"}""");
+
+        var events = ChatEventSerializer.BuildReplayEvents([pending], showToolCalls: false);
+
+        Assert.Contains(events, json => json.Contains("TOOL_APPROVAL_REQUEST", StringComparison.Ordinal));
+        Assert.Contains(events, json => json.Contains("approval-test.txt", StringComparison.Ordinal));
+        Assert.Contains(events, json => json.Contains("\"status\":\"awaiting_approval\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BuildReplayEvents_includes_resolved_tool_approval()
+    {
+        var pending = ChatMessageViewModel.CreatePendingTool(
+            new AgentToolCall("call-denied", "file_write", new Dictionary<string, string>()));
+        pending.MarkAwaitingApproval("""{"path":"deny.txt"}""");
+        pending.ApplyToolApprovalDecision(ToolApprovalDecision.Denied);
+
+        var events = ChatEventSerializer.BuildReplayEvents([pending], showToolCalls: true);
+        var resolved = Assert.Single(events, json => json.Contains("TOOL_APPROVAL_RESOLVED", StringComparison.Ordinal));
+
+        Assert.Contains("\"approved\":false", resolved, StringComparison.Ordinal);
     }
 
     [Fact]

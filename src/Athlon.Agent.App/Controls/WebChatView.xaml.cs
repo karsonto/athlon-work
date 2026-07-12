@@ -9,6 +9,7 @@ using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
+using Athlon.Agent.Core;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Core.Streaming;
 using Microsoft.Extensions.DependencyInjection;
@@ -45,6 +46,7 @@ public partial class WebChatView : UserControl
 
     public event EventHandler<string>? InitializationFailed;
     public event EventHandler? OlderMessagesRequested;
+    public event EventHandler<ToolApprovalDecisionEventArgs>? ToolApprovalDecisionReceived;
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
@@ -185,6 +187,14 @@ public partial class WebChatView : UserControl
 
     public Task DispatchEventAsync(AgentStreamEvent streamEvent) =>
         ExecuteScriptWhenReadyAsync(_htmlBuilder.BuildDispatchScript(streamEvent));
+
+    public Task ShowToolApprovalAsync(PendingToolApproval approval, string arguments) =>
+        ExecuteScriptWhenReadyAsync(
+            $"handleEvent({ChatEventSerializer.SerializeToolApprovalRequest(approval, arguments)});");
+
+    public Task ResolveToolApprovalAsync(string toolCallId, ToolApprovalDecision decision) =>
+        ExecuteScriptWhenReadyAsync(
+            $"handleEvent({ChatEventSerializer.SerializeToolApprovalResolved(toolCallId, decision)});");
 
     private void ScheduleRenderRetry()
     {
@@ -385,6 +395,23 @@ public partial class WebChatView : UserControl
                     case "loadOlder":
                         OlderMessagesRequested?.Invoke(this, EventArgs.Empty);
                         break;
+                    case "toolApproval":
+                        var toolCallId = root.TryGetProperty("toolCallId", out var toolCallIdElement)
+                            ? toolCallIdElement.GetString()
+                            : null;
+                        var approved = root.TryGetProperty("approved", out var approvedElement)
+                            && approvedElement.ValueKind is JsonValueKind.True or JsonValueKind.False
+                            && approvedElement.GetBoolean();
+                        if (!string.IsNullOrWhiteSpace(toolCallId))
+                        {
+                            ToolApprovalDecisionReceived?.Invoke(
+                                this,
+                                new ToolApprovalDecisionEventArgs(
+                                    toolCallId,
+                                    approved ? ToolApprovalDecision.Approved : ToolApprovalDecision.Denied));
+                        }
+
+                        break;
                 }
             }
         }
@@ -550,3 +577,7 @@ public partial class WebChatView : UserControl
         return services.GetService<ICurrentSsoUserContext>()?.DisplayName;
     }
 }
+
+public sealed record ToolApprovalDecisionEventArgs(
+    string ToolCallId,
+    ToolApprovalDecision Decision);

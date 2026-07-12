@@ -456,6 +456,31 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel>
+                                <TextBlock Text="{loc:Localize Key=Settings_ToolApprovalTitle}"
+                                           FontSize="16"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Settings_ToolApprovalDescription}"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           TextWrapping="Wrap"
+                                           FontSize="12"
+                                           Margin="0,6,0,0" />
+                            </StackPanel>
+                            <CheckBox Grid.Column="1"
+                                      Style="{StaticResource McpToggleSwitchStyle}"
+                                      IsChecked="{Binding Settings.ToolPermissions.ApprovalEnabled, UpdateSourceTrigger=PropertyChanged}"
+                                      ToolTip="{loc:Localize Key=Settings_ToolApprovalTooltip}"
+                                      VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
                                 <TextBlock Text="{loc:Localize Key=Settings_TrainingDataTitle}"
                                            FontSize="16"
                                            FontWeight="SemiBold"

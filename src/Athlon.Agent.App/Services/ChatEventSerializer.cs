@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.ViewModels;
+using Athlon.Agent.Core;
 using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.App.Services;
@@ -87,11 +88,30 @@ internal static class ChatEventSerializer
             messageId = message.MessageId,
             header = message.ToolHeader,
             summary = message.ToolSummary,
-            status = SerializeToolStatus(message.ToolCallStatus),
+            status = SerializeToolStatus(message.ToolCallStatus, message.ToolApprovalState),
             markdown = detail,
             html = RenderToolResultHtml(message, detail)
         });
     }
+
+    public static string SerializeToolApprovalRequest(
+        PendingToolApproval approval,
+        string arguments) =>
+        SerializeAgui("TOOL_APPROVAL_REQUEST", new
+        {
+            toolCallId = approval.ToolCallId,
+            toolName = approval.ToolName,
+            arguments
+        });
+
+    public static string SerializeToolApprovalResolved(
+        string toolCallId,
+        ToolApprovalDecision decision) =>
+        SerializeAgui("TOOL_APPROVAL_RESOLVED", new
+        {
+            toolCallId,
+            approved = decision == ToolApprovalDecision.Approved
+        });
 
     private static string RenderToolResultHtml(ChatMessageViewModel message, string detail) =>
         message.IsCompaction && message.IsToolRunning
@@ -225,9 +245,40 @@ internal static class ChatEventSerializer
             yield return SerializeAgui("TOOL_CALL_ARGS", new { toolCallId, delta = message.ToolArgumentsText });
         }
 
-        yield return SerializeAgui("TOOL_CALL_END", new { toolCallId, status = "running" });
+        yield return SerializeAgui("TOOL_CALL_END", new
+        {
+            toolCallId,
+            status = SerializeToolStatus(message.ToolCallStatus, message.ToolApprovalState)
+        });
+
+        if (message.ToolApprovalState == ToolApprovalState.Pending)
+        {
+            yield return SerializeToolApprovalRequest(
+                new PendingToolApproval(
+                    toolCallId,
+                    toolName,
+                    ToolCallArguments.Empty,
+                    ToolInvocationPolicy.Ask,
+                    DateTimeOffset.UtcNow),
+                message.ToolApprovalArgumentsPreview);
+            yield break;
+        }
+
+        if (message.ToolApprovalState is ToolApprovalState.Approved or ToolApprovalState.Denied)
+        {
+            yield return SerializeToolApprovalResolved(
+                toolCallId,
+                message.ToolApprovalState == ToolApprovalState.Approved
+                    ? ToolApprovalDecision.Approved
+                    : ToolApprovalDecision.Denied);
+        }
 
         if (message.IsCompaction && message.IsToolRunning)
+        {
+            yield break;
+        }
+
+        if (message.ToolApprovalState == ToolApprovalState.Denied)
         {
             yield break;
         }
@@ -246,21 +297,28 @@ internal static class ChatEventSerializer
                 messageId = message.MessageId,
                 header = message.ToolHeader,
                 summary = message.ToolSummary,
-                status = SerializeToolStatus(message.ToolCallStatus),
+                status = SerializeToolStatus(message.ToolCallStatus, message.ToolApprovalState),
                 markdown = detail,
                 html = RenderToolResultHtml(message, detail)
             });
         }
     }
 
-    private static string SerializeToolStatus(ToolCallDisplayStatus status) =>
-        status switch
+    private static string SerializeToolStatus(ToolCallDisplayStatus status, ToolApprovalState approvalState = ToolApprovalState.None) =>
+        approvalState switch
         {
-            ToolCallDisplayStatus.Running => "running",
-            ToolCallDisplayStatus.Failed => "failed",
-            ToolCallDisplayStatus.Cancelled => "cancelled",
-            ToolCallDisplayStatus.Preparing => "preparing",
-            _ => "succeeded"
+            ToolApprovalState.Pending => "awaiting_approval",
+            ToolApprovalState.Denied => "approval_denied",
+            _ => status switch
+            {
+                ToolCallDisplayStatus.Running => "running",
+                ToolCallDisplayStatus.Failed => "failed",
+                ToolCallDisplayStatus.Cancelled => "cancelled",
+                ToolCallDisplayStatus.Preparing => "preparing",
+                ToolCallDisplayStatus.AwaitingApproval => "awaiting_approval",
+                ToolCallDisplayStatus.ApprovalDenied => "approval_denied",
+                _ => "succeeded"
+            }
         };
 
     private static string ParseToolStatusFromContent(string content)

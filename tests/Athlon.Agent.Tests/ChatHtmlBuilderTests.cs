@@ -185,6 +185,22 @@ public sealed class ChatHtmlBuilderTests
     }
 
     [Fact]
+    public void BuildShellHtml_supports_inline_tool_approval_actions()
+    {
+        var html = _builder.BuildShellHtml();
+
+        Assert.Contains("case 'TOOL_APPROVAL_REQUEST':", html, StringComparison.Ordinal);
+        Assert.Contains("case 'TOOL_APPROVAL_RESOLVED':", html, StringComparison.Ordinal);
+        Assert.Contains("post({ type: 'toolApproval'", html, StringComparison.Ordinal);
+        Assert.Contains("tool-approval-button approve", html, StringComparison.Ordinal);
+        Assert.Contains("ensureToolApprovalPanel", html, StringComparison.Ordinal);
+        Assert.Contains("awaiting_approval", html, StringComparison.Ordinal);
+        Assert.Contains(".tool-approval {\r\n          margin-top: 12px;\r\n          padding: 12px;\r\n          border: 1px solid var(--border);\r\n          border-radius: 12px;\r\n          background: var(--panel);", html, StringComparison.Ordinal);
+        Assert.Contains(Strings.Get("Chat_ToolApprovalApprove"), html, StringComparison.Ordinal);
+        Assert.Contains(Strings.Get("Chat_ToolApprovalDeny"), html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildShellHtml_does_not_parse_final_markdown_in_javascript()
     {
         var html = _builder.BuildShellHtml();

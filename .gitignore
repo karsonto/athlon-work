@@ -44,6 +44,10 @@ Desktop.ini
 # Node (icon generation, etc.)
 **/node_modules/
 
+# Build temp directories
+.build-tmp/
+.obj-tmp/
+
 # License signing private key (never commit)
 tools/license/keys/private.pem
 tools/license/.venv/

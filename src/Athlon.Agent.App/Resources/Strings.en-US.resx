@@ -178,6 +178,33 @@
   <data name="Chat_ToolStatusSucceeded" xml:space="preserve">
     <value>Succeeded</value>
   </data>
+  <data name="Chat_ToolApprovalTitle" xml:space="preserve">
+    <value>Approval required</value>
+  </data>
+  <data name="Chat_ToolApprovalDescription" xml:space="preserve">
+    <value>Review the tool and arguments, then choose whether to allow this execution.</value>
+  </data>
+  <data name="Chat_ToolApprovalPending" xml:space="preserve">
+    <value>Awaiting approval</value>
+  </data>
+  <data name="Chat_ToolApprovalApprove" xml:space="preserve">
+    <value>Allow</value>
+  </data>
+  <data name="Chat_ToolApprovalDeny" xml:space="preserve">
+    <value>Deny</value>
+  </data>
+  <data name="Chat_ToolApprovalAllowedStatus" xml:space="preserve">
+    <value>Allowed</value>
+  </data>
+  <data name="Chat_ToolApprovalDeniedStatus" xml:space="preserve">
+    <value>Denied</value>
+  </data>
+  <data name="Chat_ToolApprovalApproved" xml:space="preserve">
+    <value>Allowed. This tool will continue.</value>
+  </data>
+  <data name="Chat_ToolApprovalDenied" xml:space="preserve">
+    <value>Denied. This tool will not run.</value>
+  </data>
   <data name="Chat_ToolStopped" xml:space="preserve">
     <value>Stopped</value>
   </data>
@@ -246,16 +273,6 @@
   </data>
   <data name="Common_Prompt" xml:space="preserve">
     <value>Notice</value>
-  </data>
-  <data name="ToolApproval_Title" xml:space="preserve">
-    <value>Confirm tool execution</value>
-  </data>
-  <data name="ToolApproval_Message" xml:space="preserve">
-    <value>Tool "{0}" requests permission to execute:
-
-{1}
-
-Allow this execution?</value>
   </data>
   <data name="Common_Refresh" xml:space="preserve">
     <value>Refresh</value>
@@ -1011,6 +1028,15 @@ Save anyway?</value>
   </data>
   <data name="Settings_ToolStorm" xml:space="preserve">
     <value>Tool storm suppression</value>
+  </data>
+  <data name="Settings_ToolApprovalTitle" xml:space="preserve">
+    <value>Tool execution approval</value>
+  </data>
+  <data name="Settings_ToolApprovalDescription" xml:space="preserve">
+    <value>When enabled, sensitive tools such as file writes, edits, patches, and command execution ask for confirmation before running. Off by default.</value>
+  </data>
+  <data name="Settings_ToolApprovalTooltip" xml:space="preserve">
+    <value>Require explicit approval before sensitive tools run</value>
   </data>
   <data name="Settings_TopK" xml:space="preserve">
     <value>TopK</value>

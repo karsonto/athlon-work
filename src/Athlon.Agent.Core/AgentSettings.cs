@@ -133,6 +133,12 @@ public sealed class LoggingSettings
 }
 public sealed class ToolPermissionSettings
 {
+    /// <summary>
+    /// When enabled, tools marked as requiring approval must receive an explicit
+    /// user decision before execution. Disabled by default.
+    /// </summary>
+    public bool ApprovalEnabled { get; set; } = false;
+
     public bool AskBeforeEveryCommand { get; set; } = true;
     public string FileScopePolicy { get; set; } = "AskOutsideWorkspace";
     public List<string> CommandAllowList { get; set; } = new() { "git", "dotnet", "python", "node", "npm" };

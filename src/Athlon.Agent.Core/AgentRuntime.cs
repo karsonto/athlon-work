@@ -34,6 +34,7 @@ public sealed class AgentRuntime(
         toolResultEvictor,
         () => runContextAccessor.Current?.ToolRouter ?? toolRouter,
         runContextAccessor,
+        () => settings.ToolPermissions.ApprovalEnabled,
         logger);
     private TrainingData.ITrainingDataCollector? _trainingDataCollector;
     private AgentTurnCoordinator? _turnCoordinator;

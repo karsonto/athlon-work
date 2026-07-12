@@ -215,6 +215,12 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     private ToolCallDisplayStatus _toolCallStatus;
 
     [ObservableProperty]
+    private ToolApprovalState _toolApprovalState;
+
+    [ObservableProperty]
+    private string _toolApprovalArgumentsPreview = string.Empty;
+
+    [ObservableProperty]
     private bool _isExpanded;
 
     [ObservableProperty]
@@ -251,16 +257,32 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowToolArgumentsPanel));
     }
 
-    public bool ShowToolStatusLabel => ToolCallStatus != ToolCallDisplayStatus.None;
-
-    public string ToolStatusLabel => ToolCallStatus switch
+    partial void OnToolApprovalStateChanged(ToolApprovalState value)
     {
-        ToolCallDisplayStatus.Preparing => Strings.Get("Chat_ToolStatusPreparing"),
-        ToolCallDisplayStatus.Running => Strings.Get("Chat_ToolStatusRunning"),
-        ToolCallDisplayStatus.Succeeded => Strings.Get("Chat_ToolStatusSucceeded"),
-        ToolCallDisplayStatus.Failed => Strings.Get("Chat_ToolStatusFailed"),
-        ToolCallDisplayStatus.Cancelled => Strings.Get("Chat_ToolStatusCancelled"),
-        _ => string.Empty
+        OnPropertyChanged(nameof(ToolStatusLabel));
+        OnPropertyChanged(nameof(ShowToolStatusLabel));
+    }
+
+    public bool ShowToolStatusLabel =>
+        ToolCallStatus != ToolCallDisplayStatus.None
+        || ToolApprovalState != ToolApprovalState.None;
+
+    public string ToolStatusLabel => ToolApprovalState switch
+    {
+        ToolApprovalState.Pending => Strings.Get("Chat_ToolApprovalPending"),
+        ToolApprovalState.Approved => Strings.Get("Chat_ToolApprovalAllowedStatus"),
+        ToolApprovalState.Denied => Strings.Get("Chat_ToolApprovalDeniedStatus"),
+        _ => ToolCallStatus switch
+        {
+            ToolCallDisplayStatus.Preparing => Strings.Get("Chat_ToolStatusPreparing"),
+            ToolCallDisplayStatus.Running => Strings.Get("Chat_ToolStatusRunning"),
+            ToolCallDisplayStatus.AwaitingApproval => Strings.Get("Chat_ToolApprovalPending"),
+            ToolCallDisplayStatus.ApprovalDenied => Strings.Get("Chat_ToolApprovalDeniedStatus"),
+            ToolCallDisplayStatus.Succeeded => Strings.Get("Chat_ToolStatusSucceeded"),
+            ToolCallDisplayStatus.Failed => Strings.Get("Chat_ToolStatusFailed"),
+            ToolCallDisplayStatus.Cancelled => Strings.Get("Chat_ToolStatusCancelled"),
+            _ => string.Empty
+        }
     };
 
     partial void OnReasoningContentChanged(string value)
@@ -385,6 +407,47 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsToolArgumentsStreaming = false;
         ToolCallStatus = ToolCallDisplayStatus.Cancelled;
         ToolSummary = Strings.Get("Chat_ToolStopped");
+    }
+
+    public void MarkAwaitingApproval(string argumentsPreview)
+    {
+        if (!IsTool)
+        {
+            return;
+        }
+
+        ToolApprovalState = ToolApprovalState.Pending;
+        ToolApprovalArgumentsPreview = argumentsPreview;
+        if (!string.IsNullOrWhiteSpace(argumentsPreview))
+        {
+            ToolArgumentsText = argumentsPreview;
+        }
+
+        ToolCallStatus = ToolCallDisplayStatus.AwaitingApproval;
+        IsToolRunning = true;
+        IsExpanded = true;
+        IsToolArgumentsStreaming = false;
+    }
+
+    public void ApplyToolApprovalDecision(ToolApprovalDecision decision)
+    {
+        if (ToolApprovalState != ToolApprovalState.Pending)
+        {
+            return;
+        }
+
+        if (decision == ToolApprovalDecision.Approved)
+        {
+            ToolApprovalState = ToolApprovalState.Approved;
+            ToolCallStatus = ToolCallDisplayStatus.Running;
+            IsToolRunning = true;
+            return;
+        }
+
+        ToolApprovalState = ToolApprovalState.Denied;
+        ToolCallStatus = ToolCallDisplayStatus.ApprovalDenied;
+        IsToolRunning = false;
+        ToolSummary = Strings.Get("Chat_ToolApprovalDenied");
     }
 
     public void AppendStreamingToken(string token)

@@ -104,6 +104,15 @@ public sealed class ChatHtmlBuilder
             ["welcomeTitleWithName"] = Strings.Get("Chat_WelcomeTitleWithName"),
             ["welcomeDescription"] = Strings.Get("Chat_WelcomeDescription"),
             ["loadOlder"] = Strings.Get("RecordGroup_Earlier") + "…",
+            ["approvalTitle"] = Strings.Get("Chat_ToolApprovalTitle"),
+            ["approvalDescription"] = Strings.Get("Chat_ToolApprovalDescription"),
+            ["approvalPending"] = Strings.Get("Chat_ToolApprovalPending"),
+            ["approve"] = Strings.Get("Chat_ToolApprovalApprove"),
+            ["deny"] = Strings.Get("Chat_ToolApprovalDeny"),
+            ["allowedStatus"] = Strings.Get("Chat_ToolApprovalAllowedStatus"),
+            ["deniedStatus"] = Strings.Get("Chat_ToolApprovalDeniedStatus"),
+            ["approved"] = Strings.Get("Chat_ToolApprovalApproved"),
+            ["denied"] = Strings.Get("Chat_ToolApprovalDenied"),
         };
 
     private static string BuildEmptyStateHtml(string? ssoDisplayName)
@@ -582,6 +591,66 @@ public sealed class ChatHtmlBuilder
           letter-spacing: 0.05em;
         }
         .tool-result { margin-top: 8px; }
+        .tool-approval {
+          margin-top: 12px;
+          padding: 12px;
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          background: var(--panel);
+        }
+        .tool-approval-title {
+          font-size: 13px;
+          font-weight: 600;
+          color: var(--assistant-text);
+        }
+        .tool-approval-description {
+          margin-top: 4px;
+          font-size: 12px;
+          color: var(--subtle-text);
+        }
+        .tool-approval-arguments {
+          max-height: 180px;
+          margin-top: 10px;
+          overflow: auto;
+          white-space: pre-wrap;
+          overflow-wrap: anywhere;
+        }
+        .tool-approval-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          margin-top: 12px;
+        }
+        .tool-approval-button {
+          min-width: 72px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          padding: 6px 14px;
+          cursor: pointer;
+          font: inherit;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .tool-approval-button.deny {
+          color: var(--assistant-text);
+          background: var(--panel);
+        }
+        .tool-approval-button.approve {
+          border-color: var(--tool-success-text);
+          color: #FFFFFF;
+          background: var(--tool-success-text);
+        }
+        .tool-approval-button:disabled {
+          cursor: default;
+          opacity: 0.55;
+        }
+        .tool-approval-result {
+          margin-top: 10px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .tool-approval-result.approved { color: var(--tool-success-text); }
+        .tool-approval-result.denied { color: var(--tool-failure-text); }
         """;
 
     private static string GetThemeStyles() =>
@@ -622,6 +691,9 @@ public sealed class ChatHtmlBuilder
           if (loadOlder) loadOlder.textContent = t('loadOlder');
           document.querySelectorAll('.code-btn').forEach(function (btn) {
             if (!btn.classList.contains('copied')) btn.textContent = t('copy');
+          });
+          document.querySelectorAll('[data-i18n]').forEach(function (element) {
+            element.textContent = t(element.dataset.i18n);
           });
           document.querySelectorAll('.reasoning-label').forEach(function (label) {
             const row = label.closest('.reasoning-row');
@@ -1029,6 +1101,16 @@ public sealed class ChatHtmlBuilder
         function applyToolStatusBadge(badge, status) {
           if (!badge) return;
           const normalized = (status || 'succeeded').toLowerCase();
+          if (normalized === 'awaiting_approval') {
+            badge.textContent = t('approvalPending');
+            badge.className = 'tool-status running';
+            return;
+          }
+          if (normalized === 'approval_denied') {
+            badge.textContent = t('deniedStatus');
+            badge.className = 'tool-status failed';
+            return;
+          }
           const cssClass = normalized === 'succeeded' || normalized === 'success'
             ? 'success'
             : normalized === 'failed' || normalized === 'failure'
@@ -1051,6 +1133,108 @@ public sealed class ChatHtmlBuilder
                   : normalized;
           badge.textContent = label;
           badge.className = 'tool-status ' + cssClass;
+        }
+
+        function ensureToolApprovalPanel(card, event) {
+          const body = card.querySelector('.tool-body');
+          if (!body) return null;
+
+          let panel = body.querySelector('.tool-approval');
+          if (panel) return panel;
+
+          panel = document.createElement('div');
+          panel.className = 'tool-approval';
+          body.prepend(panel);
+
+          const title = document.createElement('div');
+          title.className = 'tool-approval-title';
+          title.dataset.i18n = 'approvalTitle';
+          title.textContent = t('approvalTitle');
+          panel.appendChild(title);
+
+          const description = document.createElement('div');
+          description.className = 'tool-approval-description';
+          description.dataset.i18n = 'approvalDescription';
+          description.textContent = t('approvalDescription');
+          panel.appendChild(description);
+
+          const argumentsPre = document.createElement('pre');
+          argumentsPre.className = 'tool-pre tool-approval-arguments';
+          panel.appendChild(argumentsPre);
+
+          const actions = document.createElement('div');
+          actions.className = 'tool-approval-actions';
+          const deny = document.createElement('button');
+          deny.type = 'button';
+          deny.className = 'tool-approval-button deny';
+          deny.dataset.i18n = 'deny';
+          deny.textContent = t('deny');
+          const approve = document.createElement('button');
+          approve.type = 'button';
+          approve.className = 'tool-approval-button approve';
+          approve.dataset.i18n = 'approve';
+          approve.textContent = t('approve');
+
+          function submit(approved) {
+            deny.disabled = true;
+            approve.disabled = true;
+            post({ type: 'toolApproval', toolCallId: event.toolCallId, approved: approved });
+          }
+          deny.addEventListener('click', function () { submit(false); });
+          approve.addEventListener('click', function () { submit(true); });
+          actions.appendChild(deny);
+          actions.appendChild(approve);
+          panel.appendChild(actions);
+          return panel;
+        }
+
+        function showToolApproval(event) {
+          let card = getToolCard(event.toolCallId);
+          if (!card) {
+            createToolCard(event.toolCallId, event.toolName);
+            card = getToolCard(event.toolCallId);
+          }
+          if (!card) return;
+
+          card.open = true;
+          card.dataset.awaitingApproval = 'true';
+          const badge = card.querySelector('.tool-status');
+          if (badge) {
+            badge.textContent = t('approvalPending');
+            badge.className = 'tool-status running';
+          }
+
+          const panel = ensureToolApprovalPanel(card, event);
+          const argumentsPre = panel && panel.querySelector('.tool-approval-arguments');
+          if (argumentsPre) argumentsPre.textContent = event.arguments || '';
+          const argsPre = card.querySelector('.tool-args');
+          if (argsPre && event.arguments) argsPre.textContent = event.arguments;
+          scrollToBottom(true);
+        }
+
+        function resolveToolApproval(event) {
+          const card = getToolCard(event.toolCallId);
+          const panel = card && card.querySelector('.tool-approval');
+          if (!card || !panel) return;
+
+          delete card.dataset.awaitingApproval;
+          const badge = card.querySelector('.tool-status');
+          if (badge) {
+            badge.textContent = t(event.approved ? 'allowedStatus' : 'deniedStatus');
+            badge.className = 'tool-status ' + (event.approved ? 'success' : 'failed');
+          }
+          const actions = panel.querySelector('.tool-approval-actions');
+          if (actions) actions.remove();
+          let result = panel.querySelector('.tool-approval-result');
+          if (!result) {
+            result = document.createElement('div');
+            result.className = 'tool-approval-result';
+            panel.appendChild(result);
+          }
+          const decisionKey = event.approved ? 'approved' : 'denied';
+          result.dataset.i18n = decisionKey;
+          result.textContent = t(decisionKey);
+          result.className = 'tool-approval-result ' + decisionKey;
         }
 
         function handleEvent(event) {
@@ -1119,11 +1303,28 @@ public sealed class ChatHtmlBuilder
             }
             case 'TOOL_CALL_END': {
               const card = getToolCard(event.toolCallId);
-              if (card) {
+              if (!card) break;
+              const normalized = (event.status || 'running').toLowerCase();
+              if (normalized === 'awaiting_approval' || normalized === 'approval_denied') {
+                applyToolStatusBadge(card.querySelector('.tool-status'), normalized);
+                if (normalized === 'awaiting_approval') {
+                  card.dataset.awaitingApproval = 'true';
+                }
+                break;
+              }
+              const panel = card.querySelector('.tool-approval');
+              const hasPendingApproval = panel && panel.querySelector('.tool-approval-actions');
+              if (card.dataset.awaitingApproval !== 'true' && !hasPendingApproval) {
                 applyToolStatusBadge(card.querySelector('.tool-status'), event.status || 'running');
               }
               break;
             }
+            case 'TOOL_APPROVAL_REQUEST':
+              showToolApproval(event);
+              break;
+            case 'TOOL_APPROVAL_RESOLVED':
+              resolveToolApproval(event);
+              break;
             case 'TOOL_CALL_OUTPUT': {
               const card = getToolCard(event.toolCallId);
               const result = card && card.querySelector('.tool-result');

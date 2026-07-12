@@ -14,6 +14,7 @@ internal sealed class ToolInvocationPipeline(
     IToolResultEvictor toolResultEvictor,
     Func<IToolRouter> resolveToolRouter,
     IAgentRunContextAccessor runContextAccessor,
+    Func<bool> isApprovalEnabled,
     IAppLogger logger)
 {
     private readonly IAppLogger _logger = logger.ForContext("ToolInvocationPipeline");
@@ -130,33 +131,40 @@ internal sealed class ToolInvocationPipeline(
         if (ToolInvocationPolicyEnforcer.RequiresApproval(definition)
             && definition.InvocationPolicy != ToolInvocationPolicy.Deny)
         {
-            pendingApproval = ToolInvocationPolicyEnforcer.TryCreatePendingApproval(toolCall, definition);
-            if (callbacks?.OnToolApprovalRequested is null)
+            if (!isApprovalEnabled())
             {
-                approvalDecision = ToolApprovalDecision.Pending;
+                approvalDecision = ToolApprovalDecision.Approved;
             }
             else
             {
-                try
+                pendingApproval = ToolInvocationPolicyEnforcer.TryCreatePendingApproval(toolCall, definition);
+                if (callbacks?.OnToolApprovalRequested is null)
                 {
-                    approvalDecision = await callbacks.OnToolApprovalRequested(
-                        pendingApproval!,
-                        cancellationToken).ConfigureAwait(false);
+                    approvalDecision = ToolApprovalDecision.Pending;
                 }
-                catch (OperationCanceledException)
+                else
                 {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    return ToolInvocationErrors.Failure(
-                        "Tool approval unavailable",
-                        new ToolInvocationError(
-                            "policy.approval_callback_failed",
-                            "$",
-                            "an explicit approval decision",
-                            ex.GetType().Name,
-                            "Retry after the approval UI is available; do not execute the tool implicitly."));
+                    try
+                    {
+                        approvalDecision = await callbacks.OnToolApprovalRequested(
+                            pendingApproval!,
+                            cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        return ToolInvocationErrors.Failure(
+                            "Tool approval unavailable",
+                            new ToolInvocationError(
+                                "policy.approval_callback_failed",
+                                "$",
+                                "an explicit approval decision",
+                                ex.GetType().Name,
+                                "Retry after the approval UI is available; do not execute the tool implicitly."));
+                    }
                 }
             }
         }

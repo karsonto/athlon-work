@@ -505,7 +505,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         chatView.OlderMessagesRequested += OnOlderMessagesRequested;
         _uiCache.AttachChatViewToAll(chatView);
         _activeUi.ChatView = chatView;
-        _ = chatView.LoadMessagesAsync(_activeUi.Messages, _activeUi.ShowToolCalls);
+        _ = _activeUi.ReloadChatViewAsync();
         _ = chatView.SetOlderMessagesAvailableAsync(_olderDisplayCursor is not null);
     }
 
@@ -857,7 +857,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         if (renderExistingMessages && _savedChatView is not null)
         {
-            _ = _savedChatView.LoadMessagesAsync(_activeUi.Messages, _activeUi.ShowToolCalls);
+            _ = _activeUi.ReloadChatViewAsync();
         }
 
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;

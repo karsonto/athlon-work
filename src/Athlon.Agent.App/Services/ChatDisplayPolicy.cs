@@ -12,7 +12,10 @@ internal static class ChatDisplayPolicy
         message.Role != MessageRole.Tool || showToolCalls;
 
     public static bool ShouldIncludeToolViewModel(bool showToolCalls, ChatMessageViewModel vm) =>
-        !vm.IsTool || vm.IsCompaction || showToolCalls;
+        !vm.IsTool
+        || vm.IsCompaction
+        || showToolCalls
+        || vm.ToolApprovalState == ToolApprovalState.Pending;
 
     public static bool IsToolStreamEvent(AgentStreamEvent streamEvent) =>
         streamEvent is AgentStreamEvent.ToolCallStart

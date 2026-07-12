@@ -1,10 +1,10 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
 using System.Windows.Threading;
 using Athlon.Agent.App.Controls;
-using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services.Streaming;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -39,8 +39,9 @@ public sealed class SessionTurnUiController
     private readonly SessionStreamingUiContext _streaming = new();
     private readonly SessionModifiedFilesTracker _modifiedFilesTracker = new();
     private readonly ToolCallArgsDisplayCoordinator _displayCoordinator = new();
-    private readonly IUserNotifier? _notifier;
     private readonly StreamingTokenBuffer _tokenBuffer;
+    private readonly ConcurrentDictionary<string, PendingUiApproval> _pendingApprovals =
+        new(StringComparer.Ordinal);
     // Cache ViewModels by message ID so switching back to a previously-viewed
     // session reuses MarkdownMessageView / FlowDocument instead of rebuilding everything.
     private readonly Dictionary<string, ChatMessageViewModel> _viewModelCache = new(StringComparer.Ordinal);
@@ -54,11 +55,9 @@ public sealed class SessionTurnUiController
     public SessionTurnUiController(
         Dispatcher dispatcher,
         Action? requestScroll = null,
-        Action? requestScrollImmediate = null,
-        IUserNotifier? notifier = null)
+        Action? requestScrollImmediate = null)
     {
         _dispatcher = dispatcher;
-        _notifier = notifier;
         _tokenBuffer = new StreamingTokenBuffer(dispatcher, _streaming);
         _tokenBuffer.FlushTimerTick += (_, _) =>
             FlushStreamingTokens();
@@ -103,8 +102,35 @@ public sealed class SessionTurnUiController
         }
     }
 
+    private WebChatView? _chatView;
+
     /// <summary>WebChatView 实例（由 MainWindow 在初始化后注入），用于增量渲染消息。</summary>
-    public WebChatView? ChatView { get; set; }
+    public WebChatView? ChatView
+    {
+        get => _chatView;
+        set
+        {
+            if (ReferenceEquals(_chatView, value))
+            {
+                return;
+            }
+
+            if (_chatView is not null)
+            {
+                _chatView.ToolApprovalDecisionReceived -= OnToolApprovalDecisionReceived;
+            }
+
+            _chatView = value;
+            if (_chatView is not null)
+            {
+                _chatView.ToolApprovalDecisionReceived += OnToolApprovalDecisionReceived;
+                if (IsDisplayed)
+                {
+                    ShowPendingApprovals();
+                }
+            }
+        }
+    }
 
     public bool IsDisplayed { get; private set; }
 
@@ -121,6 +147,7 @@ public sealed class SessionTurnUiController
             if (displayed)
             {
                 FlushBufferedStreamingToUi();
+                ShowPendingApprovals();
             }
             else
             {
@@ -147,7 +174,7 @@ public sealed class SessionTurnUiController
             OnUsageRecorded?.Invoke(snapshot);
             return Task.CompletedTask;
         },
-        OnToolApprovalRequested = _notifier is null ? null : RequestToolApprovalAsync,
+        OnToolApprovalRequested = RequestToolApprovalAsync,
         OnStreamEvent = streamEvent =>
         {
             if (streamEvent is AgentStreamEvent.UsageRecorded(var snapshot))
@@ -202,27 +229,133 @@ public sealed class SessionTurnUiController
             arguments = arguments[..1200] + "…";
         }
 
-        bool approved;
-        if (_dispatcher.CheckAccess())
+        var completion = new TaskCompletionSource<ToolApprovalDecision>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        var pending = new PendingUiApproval(approval, arguments, completion);
+        if (!_pendingApprovals.TryAdd(approval.ToolCallId, pending))
         {
-            approved = _notifier!.ConfirmYesNo(
-                "ToolApproval_Title",
-                "ToolApproval_Message",
-                approval.ToolName,
-                arguments);
-        }
-        else
-        {
-            approved = await _dispatcher.InvokeAsync(() => _notifier!.ConfirmYesNo(
-                "ToolApproval_Title",
-                "ToolApproval_Message",
-                approval.ToolName,
-                arguments));
+            throw new InvalidOperationException(
+                $"Tool approval '{approval.ToolCallId}' is already pending.");
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        return approved ? ToolApprovalDecision.Approved : ToolApprovalDecision.Denied;
+        try
+        {
+            await RunOnUiAsync(() => EnsureToolApprovalBubble(pending)).ConfigureAwait(false);
+
+            if (IsDisplayed)
+            {
+                await ShowToolApprovalAsync(pending).ConfigureAwait(false);
+            }
+
+            var decision = await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            await RunOnUiAsync(() => ApplyToolApprovalDecisionToViewModel(approval.ToolCallId, decision))
+                .ConfigureAwait(false);
+
+            if (IsDisplayed)
+            {
+                await ResolveToolApprovalAsync(approval.ToolCallId, decision).ConfigureAwait(false);
+            }
+
+            return decision;
+        }
+        finally
+        {
+            _pendingApprovals.TryRemove(approval.ToolCallId, out _);
+        }
     }
+
+    internal int PendingApprovalCount => _pendingApprovals.Count;
+
+    private void EnsureToolApprovalBubble(PendingUiApproval pending)
+    {
+        var existing = FindToolMessage(pending.Approval.ToolCallId);
+        if (existing is not null)
+        {
+            existing.MarkAwaitingApproval(pending.Arguments);
+            DispatchApprovalToolCardIfNeeded(existing, pending, createdNew: false);
+            RequestScrollImmediate();
+            return;
+        }
+
+        var toolCall = new AgentToolCall(
+            pending.Approval.ToolCallId,
+            pending.Approval.ToolName,
+            pending.Approval.Arguments);
+        var bubble = ChatMessageViewModel.CreatePendingTool(toolCall);
+        bubble.MarkAwaitingApproval(pending.Arguments);
+        Messages.Add(bubble);
+        TrimMessagesIfNeeded();
+        DispatchApprovalToolCardIfNeeded(bubble, pending, createdNew: true);
+        RequestScrollImmediate();
+    }
+
+    private void ApplyToolApprovalDecisionToViewModel(string toolCallId, ToolApprovalDecision decision)
+    {
+        FindToolMessage(toolCallId)?.ApplyToolApprovalDecision(decision);
+    }
+
+    private void DispatchApprovalToolCardIfNeeded(
+        ChatMessageViewModel bubble,
+        PendingUiApproval pending,
+        bool createdNew)
+    {
+        if (!createdNew || !IsDisplayed || ChatView is null)
+        {
+            return;
+        }
+
+        var toolCallId = bubble.ToolCallId ?? pending.Approval.ToolCallId;
+        _ = ChatView.DispatchEventAsync(new AgentStreamEvent.ToolCallStart(toolCallId, pending.Approval.ToolName, null));
+        if (!string.IsNullOrWhiteSpace(pending.Arguments))
+        {
+            _ = ChatView.DispatchEventAsync(new AgentStreamEvent.ToolCallArgs(toolCallId, pending.Arguments));
+        }
+
+        _ = ChatView.DispatchEventAsync(new AgentStreamEvent.ToolCallEnd(toolCallId));
+    }
+
+    internal bool TryResolveToolApproval(string toolCallId, ToolApprovalDecision decision) =>
+        _pendingApprovals.TryGetValue(toolCallId, out var pending)
+        && pending.Completion.TrySetResult(decision);
+
+    private void OnToolApprovalDecisionReceived(object? sender, ToolApprovalDecisionEventArgs e) =>
+        TryResolveToolApproval(e.ToolCallId, e.Decision);
+
+    private void ShowPendingApprovals()
+    {
+        _ = RestorePendingToolApprovalsAsync();
+    }
+
+    public async Task ReloadChatViewAsync()
+    {
+        var chatView = ChatView;
+        if (chatView is null)
+        {
+            return;
+        }
+
+        await chatView.LoadMessagesAsync(Messages, _showToolCalls()).ConfigureAwait(true);
+        if (ReferenceEquals(ChatView, chatView) && IsDisplayed)
+        {
+            await RestorePendingToolApprovalsAsync().ConfigureAwait(true);
+        }
+    }
+
+    public async Task RestorePendingToolApprovalsAsync()
+    {
+        foreach (var pending in _pendingApprovals.Values)
+        {
+            await ShowToolApprovalAsync(pending).ConfigureAwait(true);
+        }
+    }
+
+    private Task ShowToolApprovalAsync(PendingUiApproval pending) =>
+        RunOnUiTaskAsync(() => ChatView?.ShowToolApprovalAsync(pending.Approval, pending.Arguments)
+            ?? Task.CompletedTask);
+
+    private Task ResolveToolApprovalAsync(string toolCallId, ToolApprovalDecision decision) =>
+        RunOnUiTaskAsync(() => ChatView?.ResolveToolApprovalAsync(toolCallId, decision)
+            ?? Task.CompletedTask);
 
     public void AddUserMessage(string input, IReadOnlyList<ImageAttachment> imageAttachments)
     {
@@ -248,6 +381,12 @@ public sealed class SessionTurnUiController
 
     public void Release()
     {
+        foreach (var pending in _pendingApprovals.Values)
+        {
+            pending.Completion.TrySetCanceled();
+        }
+
+        _pendingApprovals.Clear();
         RunOnUiSync(() =>
         {
             ResetForTurn();
@@ -265,6 +404,21 @@ public sealed class SessionTurnUiController
             }
         });
     }
+
+    private Task RunOnUiTaskAsync(Func<Task> action)
+    {
+        if (_dispatcher.CheckAccess())
+        {
+            return action();
+        }
+
+        return _dispatcher.InvokeAsync(action).Task.Unwrap();
+    }
+
+    private sealed record PendingUiApproval(
+        PendingToolApproval Approval,
+        string Arguments,
+        TaskCompletionSource<ToolApprovalDecision> Completion);
 
     public SessionTurnEndSnapshot CaptureEndSnapshot(
         AgentSession session,
@@ -534,7 +688,7 @@ public sealed class SessionTurnUiController
         if (immediate)
         {
             Interlocked.Increment(ref _syncChatViewGeneration);
-            _ = ChatView.LoadMessagesAsync(Messages, _showToolCalls());
+            _ = ReloadChatViewAsync();
             return;
         }
 
@@ -546,7 +700,7 @@ public sealed class SessionTurnUiController
                 return;
             }
 
-            _ = ChatView.LoadMessagesAsync(Messages, _showToolCalls());
+            _ = ReloadChatViewAsync();
         });
     }
 
