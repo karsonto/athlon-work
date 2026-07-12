@@ -1,6 +1,7 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Infrastructure.Compaction;
+using System.Diagnostics;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -125,15 +126,31 @@ public sealed class ConversationCompactor(
         var mustPreserve = request.Plan?.MustPreserveAppendix;
         var promptBody = BuildSummaryPrompt(cfg.SummaryPrompt, formatted, mustPreserve);
         string summary;
+        var summaryAttemptId = Guid.NewGuid().ToString("N");
+        var summaryRequest = new AgentModelRequest(
+            new[] { new AgentModelMessage("user", promptBody) },
+            Array.Empty<ToolDefinition>(),
+            AllowToolCalls: false,
+            MaxTokens: cfg.SummaryMaxTokens);
+        var summaryStopwatch = Stopwatch.StartNew();
         try
         {
             var summaryResponse = await modelClient.CompleteAsync(
-                new AgentModelRequest(
-                    new[] { new AgentModelMessage("user", promptBody) },
-                    Array.Empty<ToolDefinition>(),
-                    AllowToolCalls: false,
-                    MaxTokens: cfg.SummaryMaxTokens),
+                summaryRequest,
                 cancellationToken: cancellationToken);
+            var usage = ModelUsageAccounting.Resolve(summaryRequest, summaryResponse);
+            summaryStopwatch.Stop();
+            sessionUsageAccumulator.RecordCall(
+                session.Id, summaryAttemptId, ModelCallPurpose.Summary, usage);
+            await storage.AppendAttemptEventAsync(
+                session.Id,
+                new AgentAttemptEvent(
+                    DateTimeOffset.UtcNow, summaryAttemptId, session.Id, session.Id,
+                    AgentAttemptKind.Model, ModelCallPurpose.Summary, null,
+                    ToolCatalogFingerprint.Compute(summaryRequest.Tools), session.ModelName,
+                    usage.PromptTokens ?? 0, usage.CompletionTokens ?? 0, "success", null,
+                    summaryStopwatch.ElapsedMilliseconds),
+                cancellationToken).ConfigureAwait(false);
 
             summary = summaryResponse.Content.Trim();
             if (string.IsNullOrWhiteSpace(summary))
@@ -147,6 +164,22 @@ public sealed class ConversationCompactor(
         }
         catch (Exception ex)
         {
+            summaryStopwatch.Stop();
+            var promptTokens = ContextTokenEstimator.EstimateModelRequest(summaryRequest);
+            sessionUsageAccumulator.RecordCall(
+                session.Id,
+                summaryAttemptId,
+                ModelCallPurpose.Summary,
+                new ModelUsage(promptTokens, 0, promptTokens));
+            await storage.AppendAttemptEventAsync(
+                session.Id,
+                new AgentAttemptEvent(
+                    DateTimeOffset.UtcNow, summaryAttemptId, session.Id, session.Id,
+                    AgentAttemptKind.Model, ModelCallPurpose.Summary, null,
+                    ToolCatalogFingerprint.Compute(summaryRequest.Tools), session.ModelName,
+                    promptTokens, 0, "failure",
+                    ex.GetType().Name, summaryStopwatch.ElapsedMilliseconds),
+                CancellationToken.None).ConfigureAwait(false);
             _logger.Error(ex, "Summarization LLM call failed for session {SessionId}", session.Id);
             summary = "(Conversation summarization was temporarily unavailable)";
         }

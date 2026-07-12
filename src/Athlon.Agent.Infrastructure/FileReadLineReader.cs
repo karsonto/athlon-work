@@ -8,37 +8,28 @@ internal static class FileReadLineReader
     internal const string LineTruncatedSuffix = "... [line truncated]";
     internal const string MetaHeader = "--- file_read meta ---";
 
-    internal sealed record Selection(int Offset, int LineLimit);
+    internal sealed record Selection(int StartLine, int EndLine);
 
     internal sealed record ReadResult(
         string Body,
         int TotalLines,
         int LinesReturned,
-        int Offset,
+        int StartLine,
         bool Truncated,
-        int? NextOffset);
+        int? NextStartLine);
 
     internal static Selection ResolveSelection(ToolInvocation invocation, FileReadSettings settings)
     {
-        var offset = ToolArguments.GetInt32(invocation, "offset", 0);
-        var limit = ToolArguments.GetInt32(invocation, "limit", 0);
-        var startLine = ToolArguments.GetInt32(invocation, "start_line", 0);
+        var startLine = ToolArguments.GetInt32(invocation, "start_line", 1);
         var endLine = ToolArguments.GetInt32(invocation, "end_line", 0);
-
-        if (startLine > 0)
+        startLine = Math.Max(1, startLine);
+        if (endLine < startLine)
         {
-            offset = Math.Max(0, startLine - 1);
-            limit = endLine >= startLine ? endLine - startLine + 1 : 0;
+            endLine = startLine + settings.DefaultLineLimit - 1;
         }
 
-        if (limit <= 0)
-        {
-            limit = settings.DefaultLineLimit;
-        }
-
-        limit = Math.Min(limit, settings.MaxLinesPerCall);
-        offset = Math.Max(0, offset);
-        return new Selection(offset, limit);
+        endLine = Math.Min(endLine, startLine + settings.MaxLinesPerCall - 1);
+        return new Selection(startLine, endLine);
     }
 
     internal static async Task<ReadResult> ReadAsync(
@@ -51,7 +42,7 @@ internal static class FileReadLineReader
         var totalLines = 0;
         var linesReturned = 0;
         var truncated = false;
-        int? nextOffset = null;
+        int? nextStartLine = null;
         var stopCollecting = false;
 
         await using var stream = new FileStream(
@@ -79,8 +70,8 @@ internal static class FileReadLineReader
             }
 
             if (!stopCollecting
-                && lineIndex >= selection.Offset
-                && linesReturned < selection.LineLimit)
+                && lineIndex + 1 >= selection.StartLine
+                && lineIndex + 1 <= selection.EndLine)
             {
                 var formatted = FormatLine(lineIndex + 1, line, settings.MaxLineChars);
                 var prefix = linesReturned == 0 ? string.Empty : Environment.NewLine;
@@ -88,7 +79,7 @@ internal static class FileReadLineReader
                 if (content.Length + addition.Length > settings.MaxResponseChars)
                 {
                     truncated = true;
-                    nextOffset = lineIndex;
+                    nextStartLine = lineIndex + 1;
                     stopCollecting = true;
                 }
                 else
@@ -99,14 +90,14 @@ internal static class FileReadLineReader
             }
 
             if (!settings.CountTotalLines
-                && lineIndex >= selection.Offset + selection.LineLimit - 1
-                && linesReturned >= selection.LineLimit)
+                && lineIndex + 1 >= selection.EndLine
+                && linesReturned >= selection.EndLine - selection.StartLine + 1)
             {
                 totalLines = lineIndex + 1;
                 if (await reader.ReadLineAsync(cancellationToken) is not null)
                 {
                     truncated = true;
-                    nextOffset = selection.Offset + linesReturned;
+                    nextStartLine = selection.StartLine + linesReturned;
                 }
 
                 break;
@@ -117,11 +108,11 @@ internal static class FileReadLineReader
 
         if (settings.CountTotalLines
             && !truncated
-            && linesReturned >= selection.LineLimit
-            && totalLines > selection.Offset + linesReturned)
+            && linesReturned >= selection.EndLine - selection.StartLine + 1
+            && totalLines >= selection.StartLine + linesReturned)
         {
             truncated = true;
-            nextOffset = selection.Offset + linesReturned;
+            nextStartLine = selection.StartLine + linesReturned;
         }
 
         if (!settings.CountTotalLines && totalLines == 0)
@@ -130,12 +121,12 @@ internal static class FileReadLineReader
         }
 
         var body = content.ToString();
-        if (linesReturned > 0 || truncated || selection.Offset > 0)
+        if (linesReturned > 0 || truncated || selection.StartLine > 1)
         {
-            body = AppendMetaFooter(body, totalLines, linesReturned, selection.Offset, truncated, nextOffset);
+            body = AppendMetaFooter(body, totalLines, linesReturned, selection.StartLine, truncated, nextStartLine);
         }
 
-        return new ReadResult(body, totalLines, linesReturned, selection.Offset, truncated, nextOffset);
+        return new ReadResult(body, totalLines, linesReturned, selection.StartLine, truncated, nextStartLine);
     }
 
     internal static string FormatLine(int lineNumber, string line, int maxLineChars)
@@ -152,9 +143,9 @@ internal static class FileReadLineReader
         string body,
         int totalLines,
         int linesReturned,
-        int offset,
+        int startLine,
         bool truncated,
-        int? nextOffset)
+        int? nextStartLine)
     {
         var builder = new StringBuilder();
         if (body.Length > 0)
@@ -166,11 +157,12 @@ internal static class FileReadLineReader
         builder.AppendLine(MetaHeader);
         builder.AppendLine($"total_lines: {totalLines}");
         builder.AppendLine($"lines_returned: {linesReturned}");
-        builder.AppendLine($"offset: {offset}");
+        builder.AppendLine($"start_line: {startLine}");
+        builder.AppendLine($"end_line: {Math.Max(startLine - 1, startLine + linesReturned - 1)}");
         builder.AppendLine($"truncated: {truncated.ToString().ToLowerInvariant()}");
-        if (truncated && nextOffset is not null)
+        if (truncated && nextStartLine is not null)
         {
-            builder.AppendLine($"next_offset: {nextOffset.Value}");
+            builder.AppendLine($"next_start_line: {nextStartLine.Value}");
         }
 
         return body + builder.ToString().TrimEnd();
@@ -179,9 +171,9 @@ internal static class FileReadLineReader
     internal static string BuildSummary(string fileName, ReadResult result)
     {
         var summary = $"Read {result.LinesReturned} of {result.TotalLines} lines from {fileName}";
-        if (result.Truncated && result.NextOffset is not null)
+        if (result.Truncated && result.NextStartLine is not null)
         {
-            summary += $"; truncated — continue with offset={result.NextOffset.Value}";
+            summary += $"; truncated — continue with start_line={result.NextStartLine.Value}";
         }
 
         return summary;

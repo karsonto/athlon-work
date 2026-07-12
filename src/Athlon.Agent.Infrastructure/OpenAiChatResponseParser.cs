@@ -331,8 +331,12 @@ internal static class OpenAiChatResponseParser
                 var function = call.GetProperty("function");
                 var id = call.GetProperty("id").GetString() ?? Guid.NewGuid().ToString("N");
                 var name = function.GetProperty("name").GetString() ?? string.Empty;
-                var argumentsJson = function.TryGetProperty("arguments", out var argumentsElement) && argumentsElement.ValueKind == JsonValueKind.String
-                    ? argumentsElement.GetString() ?? "{}"
+                var argumentsJson = function.TryGetProperty("arguments", out var argumentsElement)
+                    ? argumentsElement.ValueKind == JsonValueKind.String
+                        ? argumentsElement.GetString() ?? "{}"
+                        : argumentsElement.ValueKind == JsonValueKind.Object
+                            ? argumentsElement.GetRawText()
+                            : "{}"
                     : "{}";
                 toolCalls.Add(new AgentToolCall(id, name, ParseArguments(argumentsJson)));
             }
@@ -424,34 +428,6 @@ internal static class OpenAiChatResponseParser
         }
     }
 
-    private static IReadOnlyDictionary<string, string> ParseArguments(string argumentsJson)
-    {
-        if (string.IsNullOrWhiteSpace(argumentsJson))
-        {
-            return new Dictionary<string, string>();
-        }
-
-        try
-        {
-            using var json = JsonDocument.Parse(argumentsJson);
-            if (json.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                return new Dictionary<string, string>();
-            }
-
-            var arguments = json.RootElement.EnumerateObject()
-                .GroupBy(p => p.Name, StringComparer.Ordinal)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.Last().Value.ValueKind == JsonValueKind.String
-                        ? g.Last().Value.GetString() ?? string.Empty
-                        : g.Last().Value.GetRawText(),
-                    StringComparer.Ordinal);
-            return ToolPathNormalizer.NormalizePathArguments(arguments);
-        }
-        catch (JsonException)
-        {
-            return new Dictionary<string, string>();
-        }
-    }
+    private static ToolCallArguments ParseArguments(string argumentsJson) =>
+        ToolPathNormalizer.NormalizePathArguments(ToolCallArgumentsParser.ParseJson(argumentsJson));
 }

@@ -119,32 +119,30 @@ public static class ToolPathNormalizer
         return path;
     }
 
-    public static IReadOnlyDictionary<string, string> NormalizePathArguments(IReadOnlyDictionary<string, string> arguments)
+    public static ToolCallArguments NormalizePathArguments(ToolCallArguments arguments)
     {
-        Dictionary<string, string>? copy = null;
+        var normalized = arguments;
 
         if (TryNormalizeArgument(arguments, PathArgumentName, out var normalizedPath))
         {
-            copy ??= new Dictionary<string, string>(arguments, StringComparer.OrdinalIgnoreCase);
-            copy[PathArgumentName] = normalizedPath;
+            normalized = normalized.WithString(PathArgumentName, normalizedPath);
         }
 
         if (TryNormalizeArgument(arguments, CwdArgumentName, out var normalizedCwd))
         {
-            copy ??= new Dictionary<string, string>(arguments, StringComparer.OrdinalIgnoreCase);
-            copy[CwdArgumentName] = normalizedCwd;
+            normalized = normalized.WithString(CwdArgumentName, normalizedCwd);
         }
 
-        return copy ?? arguments;
+        return normalized;
     }
 
     private static bool TryNormalizeArgument(
-        IReadOnlyDictionary<string, string> arguments,
+        ToolCallArguments arguments,
         string name,
         out string normalized)
     {
         normalized = string.Empty;
-        if (!arguments.TryGetValue(name, out var raw) || string.IsNullOrWhiteSpace(raw))
+        if (!arguments.TryGetString(name, out var raw) || string.IsNullOrWhiteSpace(raw))
         {
             return false;
         }

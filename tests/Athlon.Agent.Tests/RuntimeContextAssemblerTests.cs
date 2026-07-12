@@ -32,6 +32,20 @@ public sealed class RuntimeContextAssemblerTests
         Assert.Null(assembler.Build(CreateContext()));
     }
 
+    [Fact]
+    public void BuildSnapshot_fingerprint_is_content_based()
+    {
+        var first = new RuntimeContextAssembler([new StubContributor(10, "same")]).BuildSnapshot(CreateContext());
+        var second = new RuntimeContextAssembler([new StubContributor(10, "same")]).BuildSnapshot(CreateContext());
+        var changed = new RuntimeContextAssembler([new StubContributor(10, "changed")]).BuildSnapshot(CreateContext());
+
+        Assert.NotNull(first);
+        Assert.NotNull(second);
+        Assert.NotNull(changed);
+        Assert.Equal(first.Fingerprint, second.Fingerprint);
+        Assert.NotEqual(first.Fingerprint, changed.Fingerprint);
+    }
+
     private static EnvironmentPromptContext CreateContext() =>
         new()
         {

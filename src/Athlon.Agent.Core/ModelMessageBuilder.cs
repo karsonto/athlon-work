@@ -271,8 +271,9 @@ internal static class ModelMessageBuilder
             : $"{content}{Environment.NewLine}{Environment.NewLine}{timestamp}";
     }
 
-    private static string FormatArguments(IReadOnlyDictionary<string, string> arguments) =>
+    private static string FormatArguments(ToolCallArguments arguments) =>
         arguments.Count == 0
             ? "(none)"
-            : string.Join(Environment.NewLine, arguments.Select(argument => $"{argument.Key}={argument.Value}"));
+            : string.Join(Environment.NewLine, arguments.Select(
+                argument => $"{argument.Key}={argument.Value.GetRawText()}"));
 }

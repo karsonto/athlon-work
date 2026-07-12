@@ -21,9 +21,9 @@ public sealed class ExecuteCommandTool(
             + "Console I/O uses UTF-8 (chcp 65001). "
         + $"Default timeout {DefaultTimeoutSeconds}s (max {MaxTimeoutSeconds}s); timeout ends only this tool, not the agent turn.",
         ToolSchema.Object()
-            .String("command", "Command line (quote paths that contain spaces or non-ASCII characters)", required: true)
+            .String("command", "Command line (quote paths that contain spaces or non-ASCII characters)", required: true, minLength: 1)
             .String("cwd", ToolPathDescriptions.OptionalWorkspaceRelativeCwd)
-            .Integer("timeout", $"Timeout in seconds (default {DefaultTimeoutSeconds}, max {MaxTimeoutSeconds})")
+            .Integer("timeout", $"Timeout in seconds (default {DefaultTimeoutSeconds}, max {MaxTimeoutSeconds})", defaultValue: DefaultTimeoutSeconds, minimum: 1, maximum: MaxTimeoutSeconds)
             .Build(),
         RequiresApproval: true,
         Group: ToolGroup.Builtin,

@@ -12,8 +12,8 @@ public sealed class SessionsHistoryTool(
         Name: "sessions_history",
         Description: "Read recent transcript lines from a sub-agent session.",
         ParametersSchema: ToolSchema.Object()
-            .String("session_key", "Session key from sessions_spawn or sessions_list.", required: true)
-            .Integer("limit", "Max messages to return (default 20).")
+            .String("session_key", "Session key from sessions_spawn or sessions_list.", required: true, minLength: 1)
+            .Integer("limit", "Max messages to return (default 20).", defaultValue: 20, minimum: 1, maximum: 200)
             .Build(),
         Group: ToolGroup.SubAgent);
 
@@ -30,14 +30,13 @@ public sealed class SessionsHistoryTool(
             return ToolResult.Failure("No parent session", "sessions_history requires an active parent agent session.");
         }
 
-        if (!invocation.Arguments.TryGetValue("session_key", out var sessionKey) || string.IsNullOrWhiteSpace(sessionKey))
+        if (!invocation.Arguments.TryGetString("session_key", out var sessionKey) || string.IsNullOrWhiteSpace(sessionKey))
         {
             return ToolResult.Failure("Missing session_key", "Required parameter: session_key");
         }
 
         var limit = 20;
-        if (invocation.Arguments.TryGetValue("limit", out var limitText)
-            && int.TryParse(limitText.Trim(), out var parsed))
+        if (invocation.Arguments.TryGetInt32("limit", out var parsed))
         {
             limit = parsed;
         }

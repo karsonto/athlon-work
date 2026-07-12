@@ -50,19 +50,28 @@ public sealed class SessionDiskLogTests
                     DateTimeOffset.UtcNow,
                     "call-1",
                     "file_list",
-                    new Dictionary<string, string>(),
+                    ToolCallArguments.Empty,
                     true,
                     "listed",
                     "ok",
                     null,
                     12));
             await storage.FlushPendingToolCallLogsAsync();
+            var attempt = new AgentAttemptEvent(
+                DateTimeOffset.UtcNow, "attempt-1", session.Id, "turn-1", AgentAttemptKind.Tool,
+                ModelCallPurpose.Chat, "file_list", "schema-1", "model-1", 10, 2,
+                "success", null, 12);
+            await storage.AppendAttemptEventAsync(session.Id, attempt);
             await storage.SaveSessionAsync(session);
 
             var sessionDir = Path.Combine(paths.SessionsPath, session.Id);
             Assert.True(File.Exists(Path.Combine(sessionDir, "session.json")));
             Assert.True(File.Exists(Path.Combine(sessionDir, "conversation.jsonl")));
             Assert.True(File.Exists(Path.Combine(sessionDir, "tool-calls", "calls.jsonl")));
+            Assert.True(File.Exists(Path.Combine(sessionDir, "attempts.jsonl")));
+            var attempts = await storage.LoadAttemptEventsAsync(session.Id);
+            Assert.Single(attempts);
+            Assert.Equal("turn-1", attempts[0].TurnId);
 
             var conversationLine = await File.ReadAllTextAsync(Path.Combine(sessionDir, "conversation.jsonl"));
             Assert.Contains("你好", conversationLine);

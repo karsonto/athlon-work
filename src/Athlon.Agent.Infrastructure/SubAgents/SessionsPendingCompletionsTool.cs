@@ -14,7 +14,7 @@ public sealed class SessionsPendingCompletionsTool(
             "Drain completed sub-agent background tasks and async runs. "
             + "Call at the start of a turn when you used timeout_seconds=0.",
         ParametersSchema: ToolSchema.Object()
-            .Integer("limit", "Max completions to drain (default 5).")
+            .Integer("limit", "Max completions to drain (default 5).", defaultValue: 5, minimum: 1, maximum: 100)
             .Build(),
         Group: ToolGroup.SubAgent);
 
@@ -32,8 +32,7 @@ public sealed class SessionsPendingCompletionsTool(
         }
 
         var limit = 5;
-        if (invocation.Arguments.TryGetValue("limit", out var limitText)
-            && int.TryParse(limitText.Trim(), out var parsed))
+        if (invocation.Arguments.TryGetInt32("limit", out var parsed))
         {
             limit = parsed;
         }

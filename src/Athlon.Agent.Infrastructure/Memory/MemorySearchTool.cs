@@ -12,12 +12,12 @@ public sealed class MemorySearchTool(ILongTermMemory longTermMemory, IAppLogger 
         Name: "memory_search",
         Description: "Search through long-term memory files (MEMORY.md and memory/*.md) for relevant information. Use before answering questions about prior work, decisions, dates, people, preferences, or todos.",
         ToolSchema.Object()
-            .String("query", "Keywords to search for in memory files", required: true)
+            .String("query", "Keywords to search for in memory files", required: true, minLength: 1)
             .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!invocation.Arguments.TryGetValue("query", out var query) || string.IsNullOrWhiteSpace(query))
+        if (!invocation.Arguments.TryGetString("query", out var query) || string.IsNullOrWhiteSpace(query))
             return ToolResult.Failure("No query provided", "query parameter is required");
 
         try

@@ -35,14 +35,14 @@ internal static class FileWriteToolArgumentsDisplay
         return Strings.Get("Tool_NoArgs");
     }
 
-    public static string FormatArgumentsForPersistedDisplay(IReadOnlyDictionary<string, string> arguments)
+    public static string FormatArgumentsForPersistedDisplay(ToolCallArguments arguments)
     {
-        if (!arguments.TryGetValue(ToolPathNormalizer.PathArgumentName, out var path) || string.IsNullOrWhiteSpace(path))
+        if (!arguments.TryGetString(ToolPathNormalizer.PathArgumentName, out var path) || string.IsNullOrWhiteSpace(path))
         {
             return Strings.Get("Tool_NoArgs");
         }
 
-        arguments.TryGetValue("content", out var content);
+        arguments.TryGetString("content", out var content);
         return FormatFinal(path, content?.Length ?? 0);
     }
 }

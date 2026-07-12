@@ -14,7 +14,20 @@ public sealed record ToolDefinition(
     ToolGroup Group = ToolGroup.Builtin,
     int? MaxOutputChars = null,
     ToolInvocationPolicy InvocationPolicy = ToolInvocationPolicy.Allow);
-public sealed record ToolInvocation(string ToolName, IReadOnlyDictionary<string, string> Arguments, string? Explanation = null);
+public sealed record ToolInvocation(
+    string ToolName,
+    ToolCallArguments Arguments,
+    string? Explanation = null,
+    ToolApprovalDecision ApprovalDecision = ToolApprovalDecision.None)
+{
+    public ToolInvocation(
+        string toolName,
+        IReadOnlyDictionary<string, string> arguments,
+        string? explanation = null)
+        : this(toolName, ToolCallArguments.FromStrings(arguments), explanation, ToolApprovalDecision.None)
+    {
+    }
+}
 public sealed record ToolResult(bool Succeeded, string Summary, string? Content = null, string? Error = null, TimeSpan? Duration = null)
 {
     public static ToolResult Success(string summary, string? content = null, TimeSpan? duration = null) => new(true, summary, content, null, duration);
@@ -43,7 +56,15 @@ public sealed class ToolRouter(IEnumerable<IAgentTool> tools) : IToolRouter
             return Task.FromResult(ToolResult.Failure("Tool not found", $"No tool named '{invocation.ToolName}' is registered."));
         }
 
-        var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(tool.Definition);
+        var validationError = ToolInvocationValidator.Validate(tool.Definition.ParametersSchema, invocation.Arguments);
+        if (validationError is not null)
+        {
+            return Task.FromResult(ToolInvocationErrors.Failure("Invalid tool arguments", validationError));
+        }
+
+        var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(
+            tool.Definition,
+            invocation.ApprovalDecision);
         if (blocked is not null)
         {
             return Task.FromResult(blocked);

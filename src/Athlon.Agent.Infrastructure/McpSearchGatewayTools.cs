@@ -19,34 +19,43 @@ internal static class McpSearchGatewayTools
                 SearchToolName,
                 "Search connected MCP tools by natural-language intent. In search mode, always call this before mcp_call when the target MCP tool is not already known.",
                 ToolSchema.Object()
-                    .String("query", "The user intent or task to find MCP tools for.", required: true)
-                    .Integer("topK", "Maximum number of matching tools to return.")
+                    .String("query", "The user intent or task to find MCP tools for.", required: true, minLength: 1)
+                    .Integer("topK", "Maximum number of matching tools to return.", minimum: 1, maximum: searchSettings.TopKMax)
                     .String("serverName", "MCP server name to search within.")
                     .Build(),
                 async invocation =>
                 {
-                    var query = invocation.Arguments.GetValueOrDefault("query") ?? string.Empty;
+                    var query = invocation.Arguments.GetString("query") ?? string.Empty;
                     if (string.IsNullOrWhiteSpace(query))
                     {
                         return ToolResult.Failure("Missing query", "query is required");
                     }
 
-                    var topK = ParseTopK(invocation.Arguments.GetValueOrDefault("topK"), searchSettings);
-                    var serverName = invocation.Arguments.GetValueOrDefault("serverName");
+                    var topK = ParseTopK(invocation.Arguments, searchSettings);
+                    var serverName = invocation.Arguments.GetString("serverName");
                     var results = registry.SearchCatalog(query, topK, searchSettings.MinScore, serverName);
                     var catalog = string.IsNullOrWhiteSpace(serverName)
                         ? registry.ListCatalogEntries()
                         : registry.ListCatalogEntries()
                             .Where(entry => string.Equals(entry.ServerName, serverName, StringComparison.OrdinalIgnoreCase))
                             .ToArray();
-                    var payload = results.Select(result => new
+                    var payload = results.Select(result =>
                     {
-                        toolId = result.Entry.EncodedName,
-                        serverName = result.Entry.ServerName,
-                        toolName = result.Entry.ToolName,
-                        description = result.Entry.Description,
-                        score = Math.Round(result.Score, 3),
-                        matchedKeywords = result.MatchedKeywords
+                        var schema = McpSchemaPresenter.Present(result.Entry.InputSchemaJson);
+                        return new
+                        {
+                            toolId = result.Entry.EncodedName,
+                            serverName = result.Entry.ServerName,
+                            toolName = result.Entry.ToolName,
+                            description = result.Entry.Description,
+                            score = Math.Round(result.Score, 3),
+                            matchedKeywords = result.MatchedKeywords,
+                            inputSchema = schema.InputSchema,
+                            schemaFingerprint = schema.Fingerprint,
+                            requiresDescribe = schema.RequiresDescribe,
+                            schemaTruncated = schema.Truncated,
+                            guidance = schema.Guidance
+                        };
                     }).ToArray();
 
                     return ToolResult.Success(
@@ -63,11 +72,11 @@ internal static class McpSearchGatewayTools
                 DescribeToolName,
                 "Return the full schema and metadata for a connected MCP tool found by mcp_search.",
                 ToolSchema.Object()
-                    .String("toolId", "Encoded MCP tool id from mcp_search.", required: true)
+                    .String("toolId", "Encoded MCP tool id from mcp_search.", required: true, minLength: 1)
                     .Build(),
                 async invocation =>
                 {
-                    var toolId = invocation.Arguments.GetValueOrDefault("toolId") ?? string.Empty;
+                    var toolId = invocation.Arguments.GetString("toolId") ?? string.Empty;
                     var entry = registry.ListCatalogEntries()
                         .FirstOrDefault(item => string.Equals(item.EncodedName, toolId, StringComparison.OrdinalIgnoreCase));
                     if (entry is null)
@@ -77,35 +86,36 @@ internal static class McpSearchGatewayTools
 
                     return ToolResult.Success(
                         $"Described MCP tool {entry.EncodedName}.",
-                        JsonSerializer.Serialize(new
-                        {
-                            toolId = entry.EncodedName,
-                            serverName = entry.ServerName,
-                            toolName = entry.ToolName,
-                            description = entry.Description,
-                            inputSchemaJson = entry.InputSchemaJson
-                        }));
+                        BuildDescribePayload(entry));
                 }),
             new GatewayTool(
                 CallToolName,
-                "Call a connected MCP tool by encoded tool id with JSON arguments.",
+                "Call a connected MCP tool by encoded tool id with native structured arguments.",
                 ToolSchema.Object()
-                    .String("toolId", "Encoded MCP tool id from mcp_search.", required: true)
-                    .String("argumentsJson", "JSON arguments matching the MCP tool input schema.", required: true)
+                    .String("toolId", "Encoded MCP tool id from mcp_search.", required: true, minLength: 1)
+                    .Object(
+                        "arguments",
+                        "Native JSON object matching the MCP tool input schema.",
+                        ToolSchema.Object(additionalProperties: true).Build(),
+                        required: true)
                     .Build(),
                 async invocation =>
                 {
-                    var toolId = invocation.Arguments.GetValueOrDefault("toolId") ?? string.Empty;
+                    var toolId = invocation.Arguments.GetString("toolId") ?? string.Empty;
                     if (!McpToolNameCodec.TryDecode(toolId, out var serverName, out var toolName))
                     {
                         return ToolResult.Failure("Invalid tool id", $"unknown MCP tool: {toolId}");
                     }
 
-                    var argumentsJson = invocation.Arguments.GetValueOrDefault("argumentsJson") ?? "{}";
+                    if (!invocation.Arguments.TryGetObject("arguments", out var arguments))
+                    {
+                        return ToolResult.Failure("Invalid arguments", "mcp_call requires a native `arguments` object.");
+                    }
+
                     return await registry.InvokeAsync(
                         serverName,
                         toolName,
-                        new Dictionary<string, string> { ["argumentsJson"] = argumentsJson });
+                        ToolCallArguments.FromJsonElement(arguments));
                 }),
             new GatewayTool(
                 RefreshCatalogToolName,
@@ -126,14 +136,32 @@ internal static class McpSearchGatewayTools
         ];
     }
 
-    private static int ParseTopK(string? raw, McpSearchSettings settings)
+    private static int ParseTopK(ToolCallArguments arguments, McpSearchSettings settings)
     {
-        if (!int.TryParse(raw, out var topK) || topK <= 0)
+        if (!arguments.TryGetInt32("topK", out var topK) || topK <= 0)
         {
             return settings.TopKDefault;
         }
 
         return Math.Min(topK, settings.TopKMax);
+    }
+
+    private static string BuildDescribePayload(McpCatalogEntry entry)
+    {
+        var presentation = McpSchemaPresenter.Present(entry.InputSchemaJson);
+        using var document = JsonDocument.Parse(
+            string.IsNullOrWhiteSpace(entry.InputSchemaJson) ? "{}" : entry.InputSchemaJson);
+        return JsonSerializer.Serialize(new
+        {
+            toolId = entry.EncodedName,
+            serverName = entry.ServerName,
+            toolName = entry.ToolName,
+            description = entry.Description,
+            inputSchema = document.RootElement,
+            schemaFingerprint = presentation.Fingerprint,
+            schemaComplete = true,
+            guidance = "Use mcp_call with native `arguments`; do not JSON-stringify the object."
+        });
     }
 
     private sealed class GatewayTool(

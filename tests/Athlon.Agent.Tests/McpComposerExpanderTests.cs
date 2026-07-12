@@ -15,6 +15,8 @@ public sealed class McpComposerExpanderTests
 
         Assert.Contains("[MCP reference:", expanded, StringComparison.Ordinal);
         Assert.Contains($"mcp_call(toolId=\"{encoded}\"", expanded, StringComparison.Ordinal);
+        Assert.Contains("arguments={}", expanded, StringComparison.Ordinal);
+        Assert.DoesNotContain("argumentsJson", expanded, StringComparison.Ordinal);
         Assert.Contains($"//mcp:{encoded}", expanded, StringComparison.Ordinal);
     }
 

@@ -20,7 +20,7 @@ public sealed class ToolInvocationPolicyTests
     }
 
     [Fact]
-    public void TryBlockInvocation_AllowsAskPolicy()
+    public void TryBlockInvocation_RequiresExplicitApprovalForAskPolicy()
     {
         var definition = new ToolDefinition(
             "execute_command",
@@ -28,7 +28,14 @@ public sealed class ToolInvocationPolicyTests
             ToolSchema.Object().Build(),
             InvocationPolicy: ToolInvocationPolicy.Ask);
 
-        Assert.Null(ToolInvocationPolicyEnforcer.TryBlockInvocation(definition));
+        var pending = ToolInvocationPolicyEnforcer.TryBlockInvocation(definition);
+        var approved = ToolInvocationPolicyEnforcer.TryBlockInvocation(
+            definition,
+            ToolApprovalDecision.Approved);
+
+        Assert.NotNull(pending);
+        Assert.Contains("policy.approval_required", pending!.Error, StringComparison.Ordinal);
+        Assert.Null(approved);
     }
 
     [Fact]

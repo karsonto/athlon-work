@@ -106,7 +106,7 @@ internal static class ComposerTestFactory
         public Task<ToolResult> InvokeAsync(
             string serverName,
             string toolName,
-            IReadOnlyDictionary<string, string> args,
+            ToolCallArguments args,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
     }

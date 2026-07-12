@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Cryptography;
 
 namespace Athlon.Agent.Core.Prompt;
 
@@ -7,7 +8,9 @@ public sealed class RuntimeContextAssembler(IEnumerable<IRuntimeContextContribut
     private readonly IReadOnlyList<IRuntimeContextContributor> _contributors =
         contributors.OrderBy(contributor => contributor.Priority).ToArray();
 
-    public string? Build(EnvironmentPromptContext context)
+    public string? Build(EnvironmentPromptContext context) => BuildSnapshot(context)?.Content;
+
+    public RuntimeContextSnapshot? BuildSnapshot(EnvironmentPromptContext context)
     {
         var content = new StringBuilder();
         foreach (var contributor in _contributors)
@@ -27,6 +30,16 @@ public sealed class RuntimeContextAssembler(IEnumerable<IRuntimeContextContribut
         builder.AppendLine("<runtime_context>");
         builder.AppendLine(runtimeContext);
         builder.AppendLine("</runtime_context>");
-        return builder.ToString().TrimEnd();
+        var wrapped = builder.ToString().TrimEnd();
+        return new RuntimeContextSnapshot(wrapped, RuntimeContextSnapshot.ComputeFingerprint(wrapped));
+    }
+}
+
+public sealed record RuntimeContextSnapshot(string Content, string Fingerprint)
+{
+    public static string ComputeFingerprint(string? content)
+    {
+        var bytes = Encoding.UTF8.GetBytes(content ?? string.Empty);
+        return Convert.ToHexStringLower(SHA256.HashData(bytes))[..16];
     }
 }

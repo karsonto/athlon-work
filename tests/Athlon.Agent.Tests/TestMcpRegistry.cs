@@ -8,6 +8,11 @@ internal sealed class TestMcpRegistry(IReadOnlyList<McpCatalogEntry>? catalog = 
 {
     private readonly IReadOnlyList<McpCatalogEntry> _catalog = catalog ?? Array.Empty<McpCatalogEntry>();
 
+    public int InvocationCount { get; private set; }
+    public string? LastServerName { get; private set; }
+    public string? LastToolName { get; private set; }
+    public ToolCallArguments? LastArguments { get; private set; }
+
     public int CatalogVersion => 0;
 
     public int CatalogCount => _catalog.Count;
@@ -44,7 +49,13 @@ internal sealed class TestMcpRegistry(IReadOnlyList<McpCatalogEntry>? catalog = 
     public Task<ToolResult> InvokeAsync(
         string serverName,
         string toolName,
-        IReadOnlyDictionary<string, string> args,
-        CancellationToken cancellationToken = default) =>
-        Task.FromResult(ToolResult.Success("ok"));
+        ToolCallArguments args,
+        CancellationToken cancellationToken = default)
+    {
+        InvocationCount++;
+        LastServerName = serverName;
+        LastToolName = toolName;
+        LastArguments = args;
+        return Task.FromResult(ToolResult.Success("ok"));
+    }
 }

@@ -10,7 +10,19 @@ public static partial class RequestHistoryHygiene
     private const int MaxLineChars = 280;
     private const int LongArgumentPreviewChars = 160;
 
-    private static readonly Regex SignalLineRe = SignalLinePattern();
+    private static readonly Regex ContinuitySignalLineRe = ContinuitySignalLinePattern();
+    private static readonly HashSet<string> ContinuityArgumentNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "path",
+        "cwd",
+        "start_line",
+        "end_line",
+        "next_offset",
+        "next_start_line",
+        "truncated",
+        "code",
+        "remediation"
+    };
     private static readonly Regex Base64KeyRe = Base64KeyPattern();
     private static readonly Regex DataUrlRe = DataUrlPattern();
 
@@ -26,9 +38,9 @@ public static partial class RequestHistoryHygiene
         }
 
         var beforeChars = text.Length;
-        var beforeTokens = EstimateTokens(text);
+        var beforeTokens = ContextTokenEstimator.EstimateTextTokens(text);
         var compacted = CompactToolPayload(text, settings);
-        var afterTokens = EstimateTokens(compacted);
+        var afterTokens = ContextTokenEstimator.EstimateTextTokens(compacted);
         return new SummaryCompactResult(
             compacted,
             beforeChars,
@@ -136,17 +148,24 @@ public static partial class RequestHistoryHygiene
         return changed ? output : toolCalls;
     }
 
-    private static IReadOnlyDictionary<string, string> CompactArguments(
+    private static ToolCallArguments CompactArguments(
         string toolName,
-        IReadOnlyDictionary<string, string> arguments,
+        ToolCallArguments arguments,
         RequestHistoryHygieneSettings settings)
     {
         var changed = false;
-        var output = new Dictionary<string, string>(StringComparer.Ordinal);
+        var output = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var (key, value) in arguments)
         {
-            var bytes = Encoding.UTF8.GetByteCount(value);
-            var tokens = EstimateTokens(value);
+            if (ContinuityArgumentNames.Contains(key) || value.ValueKind != JsonValueKind.String)
+            {
+                output[key] = value;
+                continue;
+            }
+
+            var text = value.GetString() ?? string.Empty;
+            var bytes = Encoding.UTF8.GetByteCount(text);
+            var tokens = ContextTokenEstimator.EstimateTextTokens(text);
             if (bytes <= settings.MaxToolArgumentStringBytes && tokens <= settings.MaxToolArgumentStringTokens)
             {
                 output[key] = value;
@@ -154,14 +173,14 @@ public static partial class RequestHistoryHygiene
             }
 
             changed = true;
-            var preview = value.Length <= LongArgumentPreviewChars
-                ? value
-                : value[..LongArgumentPreviewChars].Replace("\n", " ", StringComparison.Ordinal).Trim();
-            output[key] =
-                $"[cache hygiene: omitted completed {toolName}.{key} argument, {FormatBytes(bytes)}, approx {tokens} token(s); see following tool result] preview={JsonEscape(preview)}";
+            var preview = text.Length <= LongArgumentPreviewChars
+                ? text
+                : text[..LongArgumentPreviewChars].Replace("\n", " ", StringComparison.Ordinal).Trim();
+            output[key] = JsonSerializer.SerializeToElement(
+                $"[cache hygiene: omitted completed {toolName}.{key} argument, {FormatBytes(bytes)}, approx {tokens} token(s); see following tool result] preview={JsonEscape(preview)}");
         }
 
-        return changed ? output : arguments;
+        return changed ? new ToolCallArguments(output) : arguments;
     }
 
     private static string CompactToolPayload(string text, RequestHistoryHygieneSettings settings)
@@ -179,7 +198,7 @@ public static partial class RequestHistoryHygiene
 
         var originalBytes = Encoding.UTF8.GetByteCount(text);
         var originalLines = CountLines(text);
-        var originalTokens = EstimateTokens(text);
+        var originalTokens = ContextTokenEstimator.EstimateTextTokens(text);
         if (originalBytes <= settings.MaxToolResultBytes
             && originalLines <= settings.MaxToolResultLines
             && originalTokens <= settings.MaxToolResultTokens)
@@ -195,7 +214,7 @@ public static partial class RequestHistoryHygiene
         var fitted = FitLinesToBudget(
             selected.Select(CompactLine).ToList(),
             settings.MaxToolResultBytes - Encoding.UTF8.GetByteCount(marker) - 1,
-            settings.MaxToolResultTokens - EstimateTokens(marker) - 1);
+            settings.MaxToolResultTokens - ContextTokenEstimator.EstimateTextTokens(marker) - 1);
         return string.Join('\n', fitted.Append(marker));
     }
 
@@ -226,36 +245,33 @@ public static partial class RequestHistoryHygiene
             return lines.ToList();
         }
 
-        var indexes = new HashSet<int>();
+        var mandatoryIndexes = new List<int>();
+        for (var index = 0; index < lines.Length && mandatoryIndexes.Count < MaxSignalLines; index++)
+        {
+            if (ContinuitySignalLineRe.IsMatch(lines[index]))
+            {
+                mandatoryIndexes.Add(index);
+            }
+        }
+
+        var indexes = mandatoryIndexes.ToHashSet();
         var headCount = Math.Min(80, Math.Max(1, (int)Math.Floor(maxLines * 0.25)));
         var tailCount = Math.Min(120, Math.Max(1, (int)Math.Floor(maxLines * 0.35)));
-        for (var index = 0; index < Math.Min(headCount, lines.Length); index++)
+        for (var index = 0; index < Math.Min(headCount, lines.Length) && indexes.Count < maxLines; index++)
         {
             indexes.Add(index);
         }
 
-        for (var index = Math.Max(0, lines.Length - tailCount); index < lines.Length; index++)
+        for (var index = Math.Max(0, lines.Length - tailCount); index < lines.Length && indexes.Count < maxLines; index++)
         {
             indexes.Add(index);
         }
 
-        var signalCount = 0;
-        for (var index = 0; index < lines.Length && indexes.Count < maxLines; index++)
-        {
-            if (!SignalLineRe.IsMatch(lines[index]))
-            {
-                continue;
-            }
-
-            indexes.Add(index);
-            signalCount++;
-            if (signalCount >= MaxSignalLines)
-            {
-                break;
-            }
-        }
-
-        return indexes.OrderBy(index => index).Take(maxLines).Select(index => lines[index]).ToList();
+        return mandatoryIndexes
+            .Concat(indexes.Except(mandatoryIndexes).OrderBy(index => index))
+            .Take(maxLines)
+            .Select(index => lines[index])
+            .ToList();
     }
 
     private static List<string> FitLinesToBudget(List<string> lines, int maxBytes, int maxTokens)
@@ -266,7 +282,7 @@ public static partial class RequestHistoryHygiene
         foreach (var line in lines)
         {
             var lineBytes = Encoding.UTF8.GetByteCount(line) + (output.Count > 0 ? 1 : 0);
-            var lineTokens = EstimateTokens(line) + (output.Count > 0 ? 1 : 0);
+            var lineTokens = ContextTokenEstimator.EstimateTextTokens(line) + (output.Count > 0 ? 1 : 0);
             if (bytes + lineBytes > maxBytes || tokens + lineTokens > maxTokens)
             {
                 break;
@@ -352,32 +368,22 @@ public static partial class RequestHistoryHygiene
         var total = 0;
         foreach (var message in messages)
         {
-            total += EstimateTokens(GetTextContent(message.Content));
+            total += ContextTokenEstimator.EstimateTextTokens(GetTextContent(message.Content));
             if (message.ToolCalls is { Count: > 0 })
             {
                 foreach (var call in message.ToolCalls)
                 {
-                    total += EstimateTokens(call.Name);
+                    total += ContextTokenEstimator.EstimateTextTokens(call.Name);
                     foreach (var argument in call.Arguments)
                     {
-                        total += EstimateTokens(argument.Key);
-                        total += EstimateTokens(argument.Value);
+                        total += ContextTokenEstimator.EstimateTextTokens(argument.Key);
+                        total += ContextTokenEstimator.EstimateTextTokens(argument.Value.GetRawText());
                     }
                 }
             }
         }
 
         return total;
-    }
-
-    private static int EstimateTokens(string text)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return 0;
-        }
-
-        return Math.Max(1, (int)Math.Ceiling(text.Length / 4.0));
     }
 
     private static int CountLines(string text) => string.IsNullOrEmpty(text) ? 0 : text.Split('\n').Length;
@@ -394,8 +400,8 @@ public static partial class RequestHistoryHygiene
 
     private static string JsonEscape(string value) => JsonSerializer.Serialize(value);
 
-    [GeneratedRegex(@"\b(error|failed?|fatal|panic|exception|traceback|warning|warn|denied|timeout|timed out|not found|cannot|invalid)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex SignalLinePattern();
+    [GeneratedRegex(@"(?:[""']?(?:path|cwd|start_line|end_line|next_offset|next_start_line|truncated|code|remediation)[""']?\s*[:=])|\b(error|failed?|fatal|panic|exception|traceback|warning|warn|denied|timeout|timed out|not found|cannot|invalid)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex ContinuitySignalLinePattern();
 
     [GeneratedRegex(@"(?:^|_)(?:data_)?base64$", RegexOptions.IgnoreCase)]
     private static partial Regex Base64KeyPattern();

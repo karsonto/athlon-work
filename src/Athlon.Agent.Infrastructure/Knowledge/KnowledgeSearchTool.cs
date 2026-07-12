@@ -16,19 +16,19 @@ public sealed class KnowledgeSearchTool(
         Name: "knowledge_search",
         Description: "Search the global knowledge base modules explicitly enabled for the current session. Use for questions that may need uploaded reference documents. If no modules are enabled, the tool returns no results.",
         ToolSchema.Object()
-            .String("query", "Natural-language search query.", required: true)
-            .Integer("topK", "Max number of chunks to return.")
+            .String("query", "Natural-language search query.", required: true, minLength: 1)
+            .Integer("topK", "Max number of chunks to return.", minimum: 1, maximum: 100)
             .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!invocation.Arguments.TryGetValue("query", out var query) || string.IsNullOrWhiteSpace(query))
+        if (!invocation.Arguments.TryGetString("query", out var query) || string.IsNullOrWhiteSpace(query))
         {
             return ToolResult.Failure("Missing query", "query parameter is required");
         }
 
         int? topK = null;
-        if (invocation.Arguments.TryGetValue("topK", out var rawTopK) && int.TryParse(rawTopK, out var parsedTopK))
+        if (invocation.Arguments.TryGetInt32("topK", out var parsedTopK))
         {
             topK = parsedTopK;
         }

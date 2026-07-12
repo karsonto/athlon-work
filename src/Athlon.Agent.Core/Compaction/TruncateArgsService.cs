@@ -121,8 +121,8 @@ public sealed class TruncateArgsService
             : toolCallsJson;
     }
 
-    private static IReadOnlyDictionary<string, string> TruncateArguments(
-        IReadOnlyDictionary<string, string> arguments,
+    private static ToolCallArguments TruncateArguments(
+        ToolCallArguments arguments,
         int maxArgLength,
         string truncationText)
     {
@@ -132,12 +132,12 @@ public sealed class TruncateArgsService
         }
 
         var changed = false;
-        var updated = new Dictionary<string, string>(StringComparer.Ordinal);
+        var updated = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
 
         foreach (var argument in arguments)
         {
             var truncated = TruncateArgumentValue(argument.Value, maxArgLength, truncationText);
-            if (!string.Equals(truncated, argument.Value, StringComparison.Ordinal))
+            if (!string.Equals(truncated.GetRawText(), argument.Value.GetRawText(), StringComparison.Ordinal))
             {
                 changed = true;
             }
@@ -145,24 +145,28 @@ public sealed class TruncateArgsService
             updated[argument.Key] = truncated;
         }
 
-        return changed ? updated : arguments;
+        return changed ? new ToolCallArguments(updated) : arguments;
     }
 
-    private static string TruncateArgumentValue(string value, int maxArgLength, string truncationText)
+    private static JsonElement TruncateArgumentValue(
+        JsonElement value,
+        int maxArgLength,
+        string truncationText)
     {
-        if (value.Length <= maxArgLength)
+        if (value.ValueKind == JsonValueKind.String)
         {
-            return value;
+            var text = value.GetString() ?? string.Empty;
+            return JsonSerializer.SerializeToElement(TruncateStringArg(text, maxArgLength, truncationText));
         }
 
-        if (value.TrimStart().StartsWith('{') || value.TrimStart().StartsWith('['))
+        if (value.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
         {
             try
             {
-                var node = JsonNode.Parse(value);
-                if (node is JsonObject obj && TruncateJsonObject(obj, maxArgLength, truncationText))
+                var node = JsonNode.Parse(value.GetRawText());
+                if (node is not null && TruncateJsonNode(node, maxArgLength, truncationText))
                 {
-                    return obj.ToJsonString();
+                    return JsonSerializer.SerializeToElement(node);
                 }
             }
             catch (JsonException)
@@ -170,28 +174,50 @@ public sealed class TruncateArgsService
             }
         }
 
-        return TruncateStringArg(value, maxArgLength, truncationText);
+        return value.Clone();
     }
 
-    private static bool TruncateJsonObject(JsonObject obj, int maxArgLength, string truncationText)
+    private static bool TruncateJsonNode(JsonNode node, int maxArgLength, string truncationText)
     {
         var changed = false;
-
-        foreach (var key in obj.Select(property => property.Key).ToList())
+        if (node is JsonObject obj)
         {
-            var value = obj[key];
-            if (value is JsonValue jsonValue && jsonValue.TryGetValue<string>(out var text))
+            foreach (var key in obj.Select(property => property.Key).ToList())
             {
-                var truncated = TruncateStringArg(text, maxArgLength, truncationText);
-                if (!string.Equals(truncated, text, StringComparison.Ordinal))
+                var child = obj[key];
+                if (child is JsonValue jsonValue && jsonValue.TryGetValue<string>(out var text))
                 {
-                    obj[key] = truncated;
+                    var truncated = TruncateStringArg(text, maxArgLength, truncationText);
+                    if (!string.Equals(truncated, text, StringComparison.Ordinal))
+                    {
+                        obj[key] = truncated;
+                        changed = true;
+                    }
+                }
+                else if (child is not null && TruncateJsonNode(child, maxArgLength, truncationText))
+                {
                     changed = true;
                 }
             }
-            else if (value is JsonObject nested && TruncateJsonObject(nested, maxArgLength, truncationText))
+        }
+        else if (node is JsonArray array)
+        {
+            for (var index = 0; index < array.Count; index++)
             {
-                changed = true;
+                var child = array[index];
+                if (child is JsonValue jsonValue && jsonValue.TryGetValue<string>(out var text))
+                {
+                    var truncated = TruncateStringArg(text, maxArgLength, truncationText);
+                    if (!string.Equals(truncated, text, StringComparison.Ordinal))
+                    {
+                        array[index] = truncated;
+                        changed = true;
+                    }
+                }
+                else if (child is not null && TruncateJsonNode(child, maxArgLength, truncationText))
+                {
+                    changed = true;
+                }
             }
         }
 
@@ -210,8 +236,8 @@ public sealed class TruncateArgsService
     }
 
     private static bool ArgumentsEqual(
-        IReadOnlyDictionary<string, string> left,
-        IReadOnlyDictionary<string, string> right)
+        ToolCallArguments left,
+        ToolCallArguments right)
     {
         if (left.Count != right.Count)
         {
@@ -221,7 +247,7 @@ public sealed class TruncateArgsService
         foreach (var pair in left)
         {
             if (!right.TryGetValue(pair.Key, out var value)
-                || !string.Equals(value, pair.Value, StringComparison.Ordinal))
+                || !string.Equals(value.GetRawText(), pair.Value.GetRawText(), StringComparison.Ordinal))
             {
                 return false;
             }

@@ -25,6 +25,10 @@ internal static class SessionUsageFormatter
         {
             parts.Add($"cache read {FormatCompact(snapshot.CacheHitTokens)}");
         }
+        if (snapshot.CacheReadTokens > 0 || snapshot.CacheCreationTokens > 0)
+        {
+            parts.Add($"cache io {FormatCompact(snapshot.CacheReadTokens)} read / {FormatCompact(snapshot.CacheCreationTokens)} create");
+        }
 
         if (snapshot.HygieneSavingsTokens > 0)
         {

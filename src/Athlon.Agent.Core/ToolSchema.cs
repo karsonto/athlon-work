@@ -10,23 +10,49 @@ public sealed class ToolSchemaBuilder
 
     internal ToolSchemaBuilder(bool additionalProperties) => _additionalProperties = additionalProperties;
 
-    public ToolSchemaBuilder String(string name, string description, bool required = false)
+    public ToolSchemaBuilder String(
+        string name,
+        string description,
+        bool required = false,
+        string? defaultValue = null,
+        IReadOnlyList<string>? enumValues = null,
+        string? pattern = null,
+        int? minLength = null,
+        int? maxLength = null)
     {
-        AddProperty(name, new Dictionary<string, object?>
+        var schema = new Dictionary<string, object?>
         {
             ["type"] = "string",
             ["description"] = description
-        }, required);
+        };
+        AddConstraint(schema, "default", defaultValue);
+        AddConstraint(schema, "enum", enumValues?.ToArray());
+        AddConstraint(schema, "pattern", pattern);
+        AddConstraint(schema, "minLength", minLength);
+        AddConstraint(schema, "maxLength", maxLength);
+        AddProperty(name, schema, required);
         return this;
     }
 
-    public ToolSchemaBuilder Integer(string name, string description, bool required = false)
+    public ToolSchemaBuilder Integer(
+        string name,
+        string description,
+        bool required = false,
+        int? defaultValue = null,
+        int? minimum = null,
+        int? maximum = null,
+        IReadOnlyList<int>? enumValues = null)
     {
-        AddProperty(name, new Dictionary<string, object?>
+        var schema = new Dictionary<string, object?>
         {
             ["type"] = "integer",
             ["description"] = description
-        }, required);
+        };
+        AddConstraint(schema, "default", defaultValue);
+        AddConstraint(schema, "minimum", minimum);
+        AddConstraint(schema, "maximum", maximum);
+        AddConstraint(schema, "enum", enumValues?.ToArray());
+        AddProperty(name, schema, required);
         return this;
     }
 
@@ -42,6 +68,40 @@ public sealed class ToolSchemaBuilder
             schema["default"] = defaultValue.Value;
         }
 
+        AddProperty(name, schema, required);
+        return this;
+    }
+
+    public ToolSchemaBuilder Object(
+        string name,
+        string description,
+        ToolJsonSchema schema,
+        bool required = false)
+    {
+        var property = new Dictionary<string, object?>(schema.ToOpenAiParameters(), StringComparer.Ordinal)
+        {
+            ["description"] = description
+        };
+        AddProperty(name, property, required);
+        return this;
+    }
+
+    public ToolSchemaBuilder Array(
+        string name,
+        string description,
+        bool required = false,
+        ToolJsonSchema? items = null,
+        int? minItems = null,
+        int? maxItems = null)
+    {
+        var schema = new Dictionary<string, object?>
+        {
+            ["type"] = "array",
+            ["description"] = description
+        };
+        AddConstraint(schema, "items", items?.ToOpenAiParameters());
+        AddConstraint(schema, "minItems", minItems);
+        AddConstraint(schema, "maxItems", maxItems);
         AddProperty(name, schema, required);
         return this;
     }
@@ -63,6 +123,14 @@ public sealed class ToolSchemaBuilder
             _required.Add(name);
         }
     }
+
+    private static void AddConstraint(Dictionary<string, object?> schema, string name, object? value)
+    {
+        if (value is not null)
+        {
+            schema[name] = value;
+        }
+    }
 }
 
 public static class ToolSchema
@@ -80,8 +148,9 @@ public static class ToolSchema
         using var document = JsonDocument.Parse(inputSchemaJson);
         var root = document.RootElement;
         if (root.ValueKind == JsonValueKind.Object
-            && root.TryGetProperty("type", out var typeElement)
-            && string.Equals(typeElement.GetString(), "object", StringComparison.OrdinalIgnoreCase))
+            && ((!root.TryGetProperty("type", out var typeElement)
+                 && root.TryGetProperty("properties", out _))
+                || string.Equals(typeElement.GetString(), "object", StringComparison.OrdinalIgnoreCase)))
         {
             return FromMcpObject(root);
         }

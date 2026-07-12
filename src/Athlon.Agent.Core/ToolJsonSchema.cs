@@ -31,4 +31,6 @@ public sealed class ToolJsonSchema
     public IReadOnlyDictionary<string, object?> ToOpenAiParameters() => _parametersObject;
 
     public string ToCanonicalJson() => JsonSerializer.Serialize(_parametersObject, CanonicalJsonOptions);
+
+    public JsonElement ToJsonElement() => JsonSerializer.SerializeToElement(_parametersObject, CanonicalJsonOptions);
 }

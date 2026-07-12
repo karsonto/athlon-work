@@ -63,7 +63,7 @@ public sealed class ToolCallLogWriteQueueTests
             DateTimeOffset.UtcNow,
             toolCallId,
             "file_list",
-            new Dictionary<string, string>(),
+            ToolCallArguments.Empty,
             true,
             "ok",
             "content",

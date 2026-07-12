@@ -37,8 +37,12 @@ public sealed class FileToolsPolicySectionTests
         new FileToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, mode: SessionAgentMode.Ask));
 
         var text = builder.ToString();
-        Assert.Contains("read-only", text, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("character-for-character", text, StringComparison.Ordinal);
+        Assert.Contains("start_line", text, StringComparison.Ordinal);
+        Assert.Contains("end_line", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("read-only", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("character-for-character", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Editing:", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("file_edit", text, StringComparison.Ordinal);
         Assert.DoesNotContain("N| prefixes", text, StringComparison.Ordinal);
     }
 

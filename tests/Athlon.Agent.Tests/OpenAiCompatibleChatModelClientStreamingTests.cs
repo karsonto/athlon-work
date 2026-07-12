@@ -48,7 +48,7 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
         Assert.Equal("{\"path\":\"a", deltas[0].ArgumentsJson);
         Assert.Equal("{\"path\":\"a.txt\"}", deltas[1].ArgumentsJson);
         Assert.Single(result.ToolCalls);
-        Assert.Equal("a.txt", result.ToolCalls[0].Arguments["path"]);
+        Assert.Equal("a.txt", result.ToolCalls[0].Arguments.GetString("path"));
     }
 
     [Fact]
@@ -91,7 +91,40 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
         Assert.Single(result.ToolCalls);
         Assert.Equal("call_1", result.ToolCalls[0].Id);
         Assert.Equal("file_read", result.ToolCalls[0].Name);
-        Assert.Equal("a.txt", result.ToolCalls[0].Arguments["path"]);
+        Assert.Equal("a.txt", result.ToolCalls[0].Arguments.GetString("path"));
+    }
+
+    [Fact]
+    public async Task CompleteAsync_StreamResponse_PreservesNativeToolArgumentTypes()
+    {
+        var response = string.Join(
+            "\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-typed\",\"function\":{\"name\":\"demo\",\"arguments\":\"{\\\"text\\\":\\\"value\\\",\\\"count\\\":42,\"}}]}}]}",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"enabled\\\":true,\\\"options\\\":{\\\"mode\\\":\\\"fast\\\"},\\\"items\\\":[1,2],\\\"nothing\\\":null}\"}}]}}]}",
+            "data: [DONE]",
+            string.Empty);
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            var http = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(response, Encoding.UTF8)
+            };
+            http.Content.Headers.ContentType = new MediaTypeHeaderValue("text/event-stream");
+            return http;
+        });
+
+        var result = await CreateClient(handler, enableStreaming: true).CompleteAsync(
+            new AgentModelRequest(
+                [new AgentModelMessage("user", "hi")],
+                Array.Empty<ToolDefinition>()));
+        var arguments = Assert.Single(result.ToolCalls).Arguments;
+
+        Assert.Equal(JsonValueKind.String, arguments["text"].ValueKind);
+        Assert.Equal(JsonValueKind.Number, arguments["count"].ValueKind);
+        Assert.Equal(JsonValueKind.True, arguments["enabled"].ValueKind);
+        Assert.Equal(JsonValueKind.Object, arguments["options"].ValueKind);
+        Assert.Equal(JsonValueKind.Array, arguments["items"].ValueKind);
+        Assert.Equal(JsonValueKind.Null, arguments["nothing"].ValueKind);
     }
 
     [Fact]

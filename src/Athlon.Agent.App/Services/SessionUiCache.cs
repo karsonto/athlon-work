@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Windows.Threading;
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.Core;
 
 namespace Athlon.Agent.App.Services;
@@ -13,11 +14,13 @@ public sealed class SessionUiCache
     private readonly object _lruLock = new();
     private readonly Dispatcher _dispatcher;
     private readonly AppSettings _settings;
+    private readonly IUserNotifier? _notifier;
 
-    public SessionUiCache(Dispatcher dispatcher, AppSettings settings)
+    public SessionUiCache(Dispatcher dispatcher, AppSettings settings, IUserNotifier? notifier = null)
     {
         _dispatcher = dispatcher;
         _settings = settings;
+        _notifier = notifier;
     }
 
     public void AttachChatViewToAll(Controls.WebChatView? chatView)
@@ -40,7 +43,7 @@ public sealed class SessionUiCache
     {
         var controller = _controllers.GetOrAdd(
             sessionId,
-            id => new SessionTurnUiController(_dispatcher, requestScroll, requestScrollImmediate));
+            id => new SessionTurnUiController(_dispatcher, requestScroll, requestScrollImmediate, _notifier));
         controller.SetShowToolCalls(_settings.Ui.ShowToolCalls);
         if (requestScroll is not null)
         {

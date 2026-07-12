@@ -41,4 +41,42 @@ public sealed class SessionUsageAccumulatorTests
         Assert.Equal(6_000, snapshot.CompactionSavingsTokens);
         Assert.Equal(6_000, snapshot.ContextSavingsTokens);
     }
+
+    [Fact]
+    public void RecordCall_tracks_purpose_cache_tokens_and_deduplicates_call_id()
+    {
+        var accumulator = new SessionUsageAccumulator();
+        var usage = new ModelUsage(
+            PromptTokens: 100,
+            CompletionTokens: 20,
+            TotalTokens: 120,
+            CacheReadTokens: 70,
+            CacheCreationTokens: 15);
+
+        accumulator.RecordCall("s1", "call-1", ModelCallPurpose.Summary, usage);
+        var duplicate = accumulator.RecordCall("s1", "call-1", ModelCallPurpose.Summary, usage);
+        var snapshot = accumulator.RecordCall("s1", "call-2", ModelCallPurpose.Memory, usage);
+
+        Assert.Equal(120, duplicate.TotalTokens);
+        Assert.Equal(240, snapshot.TotalTokens);
+        Assert.Equal(140, snapshot.CacheReadTokens);
+        Assert.Equal(30, snapshot.CacheCreationTokens);
+        Assert.Equal(1, snapshot.ByPurpose[ModelCallPurpose.Summary].Calls);
+        Assert.Equal(1, snapshot.ByPurpose[ModelCallPurpose.Memory].Calls);
+    }
+
+    [Fact]
+    public void ModelUsageAccounting_fills_missing_tokens_with_shared_estimator()
+    {
+        var request = new AgentModelRequest(
+            [new AgentModelMessage("user", "hello world")],
+            Array.Empty<ToolDefinition>());
+        var response = new AgentModelResponse("answer", Array.Empty<AgentToolCall>());
+
+        var usage = ModelUsageAccounting.Resolve(request, response);
+
+        Assert.Equal(Athlon.Agent.Core.Compaction.ContextTokenEstimator.EstimateModelRequest(request), usage.PromptTokens);
+        Assert.Equal(Athlon.Agent.Core.Compaction.ContextTokenEstimator.EstimateModelResponse(response), usage.CompletionTokens);
+        Assert.Equal(usage.PromptTokens + usage.CompletionTokens, usage.TotalTokens);
+    }
 }

@@ -71,6 +71,10 @@ public interface IFileStorageService
     Task ReplaceConversationDisplayAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default);
     Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default);
     Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default);
+    Task AppendAttemptEventAsync(string sessionId, AgentAttemptEvent entry, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+    Task<IReadOnlyList<AgentAttemptEvent>> LoadAttemptEventsAsync(string sessionId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<AgentAttemptEvent>>(Array.Empty<AgentAttemptEvent>());
     Task FlushPendingToolCallLogsAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default);
     Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default);

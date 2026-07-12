@@ -346,6 +346,49 @@ public sealed class FileStorageService(
     public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) =>
         ToolCallLogQueue.EnqueueAsync(sessionId, entry, cancellationToken);
 
+    public async Task AppendAttemptEventAsync(
+        string sessionId,
+        AgentAttemptEvent entry,
+        CancellationToken cancellationToken = default)
+    {
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            EnsureSessionLogDirectories(sessionId);
+            await jsonFileStore.AppendJsonLineAsync(
+                Path.Combine(GetSessionDirectory(sessionId), "attempts.jsonl"),
+                entry,
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    public async Task<IReadOnlyList<AgentAttemptEvent>> LoadAttemptEventsAsync(
+        string sessionId,
+        CancellationToken cancellationToken = default)
+    {
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            var path = Path.Combine(GetSessionDirectory(sessionId), "attempts.jsonl");
+            if (!File.Exists(path))
+            {
+                return Array.Empty<AgentAttemptEvent>();
+            }
+
+            var events = new List<AgentAttemptEvent>();
+            foreach (var line in await File.ReadAllLinesAsync(path, cancellationToken).ConfigureAwait(false))
+            {
+                if (!string.IsNullOrWhiteSpace(line))
+                {
+                    var item = JsonSerializer.Deserialize<AgentAttemptEvent>(line, JsonFileStore.JsonLineOptions);
+                    if (item is not null)
+                    {
+                        events.Add(item);
+                    }
+                }
+            }
+            return events;
+        }
+    }
+
     public Task FlushPendingToolCallLogsAsync(CancellationToken cancellationToken = default) =>
         ToolCallLogQueue.FlushAsync(cancellationToken);
 

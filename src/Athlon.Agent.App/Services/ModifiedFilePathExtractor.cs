@@ -33,7 +33,7 @@ internal static class ModifiedFilePathExtractor
         if (trimmed.StartsWith('{') && trimmed.EndsWith('}'))
         {
             var args = ToolCallArgumentsParser.ParseJson(argumentsJsonOrText);
-            if (args.TryGetValue(ToolPathNormalizer.PathArgumentName, out var jsonPath) && !string.IsNullOrWhiteSpace(jsonPath))
+            if (args.TryGetString(ToolPathNormalizer.PathArgumentName, out var jsonPath) && !string.IsNullOrWhiteSpace(jsonPath))
             {
                 return ToolPathNormalizer.ForModel(jsonPath);
             }

@@ -1,5 +1,6 @@
 using System.Text;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
@@ -92,7 +93,9 @@ public sealed class MemoryPromptContributor(
 
     private string ResolveInlineContent(string memoryContent, MemoryInlinePromptMode mode)
     {
-        var maxFullChars = Math.Max(256, settings.Memory.MaxMemoryTokens * 4);
+        var maxFullChars = Math.Max(
+            256,
+            ContextTokenEstimator.EstimateCharacterBudget(settings.Memory.MaxMemoryTokens));
         return ResolveInlineContent(memoryContent, mode, settings.Memory.MaxInlineMemoryChars, maxFullChars);
     }
 

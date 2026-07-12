@@ -26,8 +26,12 @@ public static class SkillXmlPromptRenderer
         builder.AppendLine();
         builder.AppendLine("<available_skills>");
 
+        var uniqueSkills = skills
+            .GroupBy(skill => skill.SkillId, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(skill => skill.SkillId, StringComparer.OrdinalIgnoreCase);
         var hasFilesRoot = false;
-        foreach (var skill in skills)
+        foreach (var skill in uniqueSkills)
         {
             if (AppendSkill(builder, skill))
             {

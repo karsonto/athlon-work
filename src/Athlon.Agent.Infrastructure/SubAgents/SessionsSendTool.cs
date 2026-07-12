@@ -16,8 +16,8 @@ public sealed class SessionsSendTool(
         ParametersSchema: ToolSchema.Object()
             .String("session_key", "Stable key from sessions_spawn (sub:parent:child).")
             .String("label", "Alternative lookup when you used a label at spawn time.")
-            .String("message", "Task message for this turn.", required: true)
-            .Integer("timeout_seconds", "Sync wait in seconds. 0 = async background task.")
+            .String("message", "Task message for this turn.", required: true, minLength: 1)
+            .Integer("timeout_seconds", "Sync wait in seconds. 0 = async background task.", minimum: 0, maximum: 3600)
             .Build(),
         Group: ToolGroup.SubAgent);
 
@@ -34,9 +34,9 @@ public sealed class SessionsSendTool(
             return ToolResult.Failure("No parent session", "sessions_send requires an active parent agent session.");
         }
 
-        invocation.Arguments.TryGetValue("session_key", out var sessionKey);
-        invocation.Arguments.TryGetValue("label", out var label);
-        invocation.Arguments.TryGetValue("message", out var message);
+        invocation.Arguments.TryGetString("session_key", out var sessionKey);
+        invocation.Arguments.TryGetString("label", out var label);
+        invocation.Arguments.TryGetString("message", out var message);
         var timeout = ParseTimeout(invocation.Arguments);
 
         if (string.IsNullOrWhiteSpace(sessionKey) && string.IsNullOrWhiteSpace(label))
@@ -66,13 +66,8 @@ public sealed class SessionsSendTool(
         return ToolResult.Success("sessions_send completed", content);
     }
 
-    private static int? ParseTimeout(IReadOnlyDictionary<string, string> arguments)
+    private static int? ParseTimeout(ToolCallArguments arguments)
     {
-        if (!arguments.TryGetValue("timeout_seconds", out var text) || string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        return int.TryParse(text.Trim(), out var value) ? value : null;
+        return arguments.TryGetInt32("timeout_seconds", out var value) ? value : null;
     }
 }

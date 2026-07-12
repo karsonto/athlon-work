@@ -39,7 +39,7 @@ public static partial class McpComposerExpander
             {
                 blocks.Add(
                     $"[MCP reference: {toolId}]{Environment.NewLine}"
-                    + $"Use mcp_call(toolId=\"{toolId}\", argumentsJson=\"{{}}\") "
+                    + $"Use mcp_call(toolId=\"{toolId}\", arguments={{}}) "
                     + "to invoke this MCP tool when needed.");
             }
             else

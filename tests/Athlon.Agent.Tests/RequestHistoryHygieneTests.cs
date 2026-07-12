@@ -51,4 +51,33 @@ public sealed class RequestHistoryHygieneTests
 
         Assert.Contains("fatal: something failed", text);
     }
+
+    [Fact]
+    public void ApplyToModelMessages_preserves_tool_continuity_signals()
+    {
+        var signals = new[]
+        {
+            "path: src/Feature.cs",
+            "start_line: 101",
+            "end_line: 200",
+            "next_offset: 200",
+            "next_start_line: 201",
+            "truncated: true",
+            "\"code\": \"invalid_arguments\"",
+            "\"remediation\": \"read the next range\""
+        };
+        var body = string.Join('\n',
+            Enumerable.Range(1, 400).Select(index => $"noise {index}")
+                .Concat(signals)
+                .Concat(Enumerable.Range(401, 400).Select(index => $"noise {index}")));
+        var messages = new List<AgentModelMessage> { new("tool", body, "call-3") };
+
+        var text = Assert.IsType<string>(
+            RequestHistoryHygiene.ApplyToModelMessages(messages, new RequestHistoryHygieneSettings()).Messages[0].Content);
+
+        foreach (var signal in signals)
+        {
+            Assert.Contains(signal, text, StringComparison.Ordinal);
+        }
+    }
 }

@@ -100,10 +100,14 @@ internal sealed class McpDelegatingToolRouter(
 
         if (IsSearchGatewayTool(invocation.ToolName))
         {
-            var gateway = _searchGatewayTools.Value.FirstOrDefault(
-                tool => string.Equals(tool.Definition.Name, invocation.ToolName, StringComparison.OrdinalIgnoreCase));
-            return gateway?.InvokeAsync(invocation, cancellationToken)
-                ?? Task.FromResult(ToolResult.Failure("Tool not found", $"No gateway tool named '{invocation.ToolName}'."));
+            if (!ShouldUseMcpSearch())
+            {
+                return Task.FromResult(ToolResult.Failure(
+                    "MCP gateway not advertised",
+                    $"Tool {invocation.ToolName} is available only when MCP search mode is active."));
+            }
+
+            return new ToolRouter(_searchGatewayTools.Value).InvokeAsync(invocation, cancellationToken);
         }
 
         if (McpToolNameCodec.TryDecode(invocation.ToolName, out var serverName, out var toolName))
@@ -119,7 +123,15 @@ internal sealed class McpDelegatingToolRouter(
                 .FirstOrDefault(tool => string.Equals(tool.Name, invocation.ToolName, StringComparison.OrdinalIgnoreCase));
             if (mcpDefinition is not null)
             {
-                var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(mcpDefinition);
+                var validationError = ToolInvocationValidator.Validate(mcpDefinition.ParametersSchema, invocation.Arguments);
+                if (validationError is not null)
+                {
+                    return Task.FromResult(ToolInvocationErrors.Failure("Invalid tool arguments", validationError));
+                }
+
+                var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(
+                    mcpDefinition,
+                    invocation.ApprovalDecision);
                 if (blocked is not null)
                 {
                     return Task.FromResult(blocked);
@@ -134,7 +146,15 @@ internal sealed class McpDelegatingToolRouter(
             .FirstOrDefault(tool => string.Equals(tool.Name, invocation.ToolName, StringComparison.OrdinalIgnoreCase));
         if (localDefinition is not null)
         {
-            var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(localDefinition);
+            var validationError = ToolInvocationValidator.Validate(localDefinition.ParametersSchema, invocation.Arguments);
+            if (validationError is not null)
+            {
+                return Task.FromResult(ToolInvocationErrors.Failure("Invalid tool arguments", validationError));
+            }
+
+            var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(
+                localDefinition,
+                invocation.ApprovalDecision);
             if (blocked is not null)
             {
                 return Task.FromResult(blocked);

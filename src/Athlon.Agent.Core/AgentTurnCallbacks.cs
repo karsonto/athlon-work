@@ -12,5 +12,11 @@ public sealed class AgentTurnCallbacks
 
     public Func<SessionUsageSnapshot, Task>? OnUsageRecorded { get; init; }
 
+    /// <summary>
+    /// Requests an explicit decision for an Ask/approval-required tool. When absent,
+    /// the invocation remains pending and is never executed.
+    /// </summary>
+    public Func<PendingToolApproval, CancellationToken, Task<ToolApprovalDecision>>? OnToolApprovalRequested { get; init; }
+
     public IAgentRunEventSink? EventSink { get; init; }
 }

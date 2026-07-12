@@ -33,8 +33,8 @@ public sealed class TruncateArgsServiceTests
 
         var updatedCalls = AssistantToolCallsCodec.Deserialize(result.Messages[0].ToolCallsJson);
         Assert.NotNull(updatedCalls);
-        Assert.Contains("...(argument truncated)", updatedCalls![0].Arguments["command"], StringComparison.Ordinal);
-        Assert.DoesNotContain(longArg, updatedCalls[0].Arguments["command"], StringComparison.Ordinal);
+        Assert.Contains("...(argument truncated)", updatedCalls![0].Arguments.GetString("command"), StringComparison.Ordinal);
+        Assert.DoesNotContain(longArg, updatedCalls[0].Arguments.GetString("command"), StringComparison.Ordinal);
         Assert.Equal("recent", result.Messages[1].Content);
     }
 
@@ -66,6 +66,6 @@ public sealed class TruncateArgsServiceTests
 
         var updatedCalls = AssistantToolCallsCodec.Deserialize(result.Messages[1].ToolCallsJson);
         Assert.NotNull(updatedCalls);
-        Assert.Equal(longArg, updatedCalls![0].Arguments["command"]);
+        Assert.Equal(longArg, updatedCalls![0].Arguments.GetString("command"));
     }
 }

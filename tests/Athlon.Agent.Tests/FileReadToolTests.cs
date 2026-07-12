@@ -6,6 +6,18 @@ namespace Athlon.Agent.Tests;
 public sealed class FileReadToolTests
 {
     [Fact]
+    public async Task Definition_UsesOnlyOneBasedLineRange()
+    {
+        await using var env = await FileReadTestEnvironment.CreateAsync();
+        var schema = env.Tool.Definition.ParametersSchema.ToCanonicalJson();
+
+        Assert.Contains("\"start_line\"", schema, StringComparison.Ordinal);
+        Assert.Contains("\"end_line\"", schema, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"offset\"", schema, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"limit\"", schema, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task InvokeAsync_ReadsSmallFileWithLinePrefixes()
     {
         await using var env = await FileReadTestEnvironment.CreateAsync();
@@ -35,7 +47,7 @@ public sealed class FileReadToolTests
     }
 
     [Fact]
-    public async Task InvokeAsync_DefaultLimitIs500Lines()
+    public async Task InvokeAsync_DefaultRangeIs500Lines()
     {
         await using var env = await FileReadTestEnvironment.CreateAsync();
         var lines = string.Join('\n', Enumerable.Range(1, 600).Select(n => $"line-{n}"));
@@ -47,24 +59,26 @@ public sealed class FileReadToolTests
         Assert.True(result.Succeeded, result.Error);
         Assert.Contains("lines_returned: 500", result.Content, StringComparison.Ordinal);
         Assert.Contains("truncated: true", result.Content, StringComparison.Ordinal);
-        Assert.Contains("next_offset: 500", result.Content, StringComparison.Ordinal);
+        Assert.Contains("next_start_line: 501", result.Content, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task InvokeAsync_RespectsExplicitLimitCap()
+    public async Task InvokeAsync_CapsExplicitLineRange()
     {
         await using var env = await FileReadTestEnvironment.CreateAsync();
-        await File.WriteAllTextAsync(env.FilePath, string.Join('\n', Enumerable.Range(1, 100).Select(n => $"x-{n}")));
+        await File.WriteAllTextAsync(env.FilePath, string.Join('\n', Enumerable.Range(1, 3000).Select(n => $"x-{n}")));
 
         var result = await env.Tool.InvokeAsync(
             new ToolInvocation("file_read", new Dictionary<string, string>
             {
                 ["path"] = "demo.txt",
-                ["limit"] = "3000"
+                ["start_line"] = "1",
+                ["end_line"] = "3000"
             }));
 
         Assert.True(result.Succeeded, result.Error);
-        Assert.Contains("lines_returned: 100", result.Content, StringComparison.Ordinal);
+        Assert.Contains("lines_returned: 2000", result.Content, StringComparison.Ordinal);
+        Assert.Contains("next_start_line: 2001", result.Content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -118,6 +132,24 @@ public sealed class FileReadToolTests
         Assert.Contains("3|c", result.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("1|a", result.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("4|d", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_RejectsReversedLineRange()
+    {
+        await using var env = await FileReadTestEnvironment.CreateAsync();
+
+        var result = await env.Tool.InvokeAsync(
+            new ToolInvocation("file_read", new Dictionary<string, string>
+            {
+                ["path"] = "demo.txt",
+                ["start_line"] = "3",
+                ["end_line"] = "2"
+            }));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("file_read.invalid_range", result.Error, StringComparison.Ordinal);
+        Assert.Contains("$.end_line", result.Error, StringComparison.Ordinal);
     }
 
     [Fact]

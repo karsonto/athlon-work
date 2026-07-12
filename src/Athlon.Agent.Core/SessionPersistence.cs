@@ -4,7 +4,7 @@ public sealed record SessionToolCallLogEntry(
     DateTimeOffset Timestamp,
     string ToolCallId,
     string ToolName,
-    IReadOnlyDictionary<string, string> Arguments,
+    ToolCallArguments Arguments,
     bool Succeeded,
     string? Summary,
     string? Content,

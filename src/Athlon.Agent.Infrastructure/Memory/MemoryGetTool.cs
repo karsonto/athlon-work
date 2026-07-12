@@ -12,22 +12,20 @@ public sealed class MemoryGetTool(ILongTermMemory longTermMemory, IAppLogger log
         Name: "memory_get",
         Description: "Read specific lines from a memory file. Use after memory_search to pull full context around matched lines. Path is relative to memory directory (e.g., MEMORY.md or 2026-04-01.md).",
         ToolSchema.Object()
-            .String("path", "Relative path to the memory file (e.g., MEMORY.md or 2026-04-01.md)", required: true)
-            .Integer("start_line", "Start line number (1-based, inclusive)", required: true)
-            .Integer("end_line", "End line number (1-based, inclusive)", required: true)
+            .String("path", "Relative path to the memory file (e.g., MEMORY.md or 2026-04-01.md)", required: true, minLength: 1)
+            .Integer("start_line", "Start line number (1-based, inclusive)", required: true, minimum: 1)
+            .Integer("end_line", "End line number (1-based, inclusive)", required: true, minimum: 1)
             .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!invocation.Arguments.TryGetValue("path", out var path) || string.IsNullOrWhiteSpace(path))
+        if (!invocation.Arguments.TryGetString("path", out var path) || string.IsNullOrWhiteSpace(path))
             return ToolResult.Failure("Missing path", "path parameter is required");
 
-        if (!invocation.Arguments.TryGetValue("start_line", out var startStr) ||
-            !int.TryParse(startStr, out var startLine))
+        if (!invocation.Arguments.TryGetInt32("start_line", out var startLine))
             return ToolResult.Failure("Missing or invalid start_line", "start_line must be an integer");
 
-        if (!invocation.Arguments.TryGetValue("end_line", out var endStr) ||
-            !int.TryParse(endStr, out var endLine))
+        if (!invocation.Arguments.TryGetInt32("end_line", out var endLine))
             return ToolResult.Failure("Missing or invalid end_line", "end_line must be an integer");
 
         try

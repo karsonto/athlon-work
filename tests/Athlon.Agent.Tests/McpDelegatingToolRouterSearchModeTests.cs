@@ -5,17 +5,42 @@ namespace Athlon.Agent.Tests;
 
 public sealed class McpDelegatingToolRouterSearchModeTests
 {
+    [Theory]
+    [InlineData("direct", 20, false)]
+    [InlineData("search", 1, true)]
+    [InlineData("auto", 1, false)]
+    [InlineData("auto", 20, true)]
+    public void ListTools_RespectsDirectSearchAndAutoModes(
+        string mode,
+        int toolCount,
+        bool expectsSearchGateway)
+    {
+        var registry = new TestMcpRegistry(CreateCatalog(toolCount));
+        var settings = new AppSettings
+        {
+            McpSearch = new McpSearchSettings
+            {
+                Enabled = true,
+                Mode = mode,
+                AutoThresholdToolCount = 12,
+                AutoThresholdSchemaChars = int.MaxValue
+            }
+        };
+
+        var tools = CreateRouter(registry, settings).ListTools();
+
+        Assert.Equal(
+            expectsSearchGateway,
+            tools.Any(tool => tool.Name == McpSearchGatewayTools.SearchToolName));
+        Assert.Equal(
+            !expectsSearchGateway,
+            tools.Any(tool => tool.Name.StartsWith("mcp_server__", StringComparison.Ordinal)));
+    }
+
     [Fact]
     public void ListTools_uses_gateway_tools_when_threshold_exceeded()
     {
-        var catalog = Enumerable.Range(0, 15)
-            .Select(index => new McpCatalogEntry(
-                "server",
-                $"tool_{index}",
-                McpToolNameCodec.Encode("server", $"tool_{index}"),
-                $"tool {index}",
-                "{}"))
-            .ToArray();
+        var catalog = CreateCatalog(15);
 
         var registry = new TestMcpRegistry(catalog);
         var settings = new AppSettings
@@ -23,7 +48,42 @@ public sealed class McpDelegatingToolRouterSearchModeTests
             McpSearch = new McpSearchSettings { Enabled = true, Mode = "auto", AutoThresholdToolCount = 12 }
         };
 
-        var router = new McpDelegatingToolRouter(
+        var router = CreateRouter(registry, settings);
+
+        var tools = router.ListTools();
+
+        Assert.Contains(tools, tool => tool.Name == McpSearchGatewayTools.SearchToolName);
+        Assert.DoesNotContain(tools, tool => tool.Name.StartsWith("mcp_server__tool_", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("direct", false)]
+    [InlineData("search", true)]
+    public async Task InvokeAsync_GatewayAvailabilityMatchesMode(string mode, bool expectedSuccess)
+    {
+        var registry = new TestMcpRegistry(CreateCatalog(1));
+        var settings = new AppSettings
+        {
+            McpSearch = new McpSearchSettings
+            {
+                Enabled = true,
+                Mode = mode,
+                MinScore = 0.01
+            }
+        };
+        var router = CreateRouter(registry, settings);
+
+        var result = await router.InvokeAsync(new ToolInvocation(
+            McpSearchGatewayTools.SearchToolName,
+            ToolCallArgumentsParser.ParseJson("""{"query":"tool"}""")));
+
+        Assert.Equal(expectedSuccess, result.Succeeded);
+    }
+
+    private static McpDelegatingToolRouter CreateRouter(
+        IMcpRegistry registry,
+        AppSettings settings) =>
+        new(
             static tools => tools,
             Array.Empty<IAgentTool>(),
             registry,
@@ -34,10 +94,13 @@ public sealed class McpDelegatingToolRouterSearchModeTests
             new AgentRunContextAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard());
 
-        var tools = router.ListTools();
-
-        Assert.Contains(tools, tool => tool.Name == McpSearchGatewayTools.SearchToolName);
-        Assert.DoesNotContain(tools, tool => tool.Name.StartsWith("mcp_server__tool_", StringComparison.Ordinal));
-    }
-
+    private static McpCatalogEntry[] CreateCatalog(int count) =>
+        Enumerable.Range(0, count)
+            .Select(index => new McpCatalogEntry(
+                "server",
+                $"tool_{index}",
+                McpToolNameCodec.Encode("server", $"tool_{index}"),
+                $"tool {index}",
+                """{"type":"object","properties":{}}"""))
+            .ToArray();
 }

@@ -33,6 +33,7 @@ public sealed class AgentRuntime(
         storage,
         toolResultEvictor,
         () => runContextAccessor.Current?.ToolRouter ?? toolRouter,
+        runContextAccessor,
         logger);
     private TrainingData.ITrainingDataCollector? _trainingDataCollector;
     private AgentTurnCoordinator? _turnCoordinator;
@@ -53,6 +54,7 @@ public sealed class AgentRuntime(
         tokenEstimatorCalibrator,
         sessionUsageAccumulator,
         promptPressureStore,
+        storage,
         settings,
         runContextAccessor,
         RunForceCompactPreCompletionAsync,
@@ -132,6 +134,7 @@ public sealed class AgentRuntime(
             var modelToolRound = 0;
             var maxModelToolRounds = runContext.LoopOptions?.MaxModelToolRounds;
             var modelMessageCache = new ModelMessageCache();
+            var runtimeContextState = new RuntimeContextInjectionState();
             var streamAdapter = new AgentStreamAdapter(session.Id, runContext.RunId);
             var turnInvocation = new AgentTurnInvocation
             {
@@ -178,7 +181,9 @@ public sealed class AgentRuntime(
                     environmentPrompt,
                     session.Messages,
                     settings.ContextCompaction,
-                    runtimeContext);
+                    turnInvocation.RuntimeContext,
+                    runtimeContextState);
+                var runtimeContextForRequest = runtimeContextState.LastSelectedContext;
 
                 var assistantMessageId = Guid.NewGuid().ToString("N");
                 var (updatedSession, response) = await TurnCoordinator.CompleteWithOverflowRetryAsync(
@@ -192,7 +197,7 @@ public sealed class AgentRuntime(
                     environmentPrompt,
                     modelMessageCache,
                     hygieneResult.EstimatedSavingsTokens,
-                    runtimeContext,
+                    runtimeContextForRequest,
                     cancellationToken).ConfigureAwait(false);
                 session = updatedSession;
 

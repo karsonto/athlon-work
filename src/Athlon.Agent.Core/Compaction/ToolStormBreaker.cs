@@ -71,11 +71,12 @@ public sealed class ToolStormBreaker
         }
     }
 
-    private static string StableStringify(IReadOnlyDictionary<string, string> arguments)
+    private static string StableStringify(ToolCallArguments arguments)
     {
         try
         {
-            return JsonSerializer.Serialize(arguments.OrderBy(pair => pair.Key).ToDictionary(pair => pair.Key, pair => pair.Value));
+            return JsonSerializer.Serialize(
+                arguments.OrderBy(pair => pair.Key).ToDictionary(pair => pair.Key, pair => pair.Value));
         }
         catch
         {

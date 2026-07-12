@@ -247,6 +247,16 @@
   <data name="Common_Prompt" xml:space="preserve">
     <value>提示</value>
   </data>
+  <data name="ToolApproval_Title" xml:space="preserve">
+    <value>确认工具执行</value>
+  </data>
+  <data name="ToolApproval_Message" xml:space="preserve">
+    <value>工具“{0}”请求执行以下操作：
+
+{1}
+
+是否允许本次执行？</value>
+  </data>
   <data name="Common_Refresh" xml:space="preserve">
     <value>刷新</value>
   </data>

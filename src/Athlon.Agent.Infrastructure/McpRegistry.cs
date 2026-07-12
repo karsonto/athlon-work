@@ -20,7 +20,7 @@ public interface IMcpRegistry
         double minScore,
         string? serverName = null);
     Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default);
-    Task<ToolResult> InvokeAsync(string serverName, string toolName, IReadOnlyDictionary<string, string> args, CancellationToken cancellationToken = default);
+    Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments args, CancellationToken cancellationToken = default);
 }
 
 public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext workspaceContext) : IMcpRegistry, IAsyncDisposable
@@ -199,8 +199,29 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         }
     }
 
-    public async Task<ToolResult> InvokeAsync(string serverName, string toolName, IReadOnlyDictionary<string, string> args, CancellationToken cancellationToken = default)
+    public async Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments args, CancellationToken cancellationToken = default)
     {
+        var catalogTool = _tools.TryGetValue(serverName, out var serverTools)
+            ? serverTools.FirstOrDefault(tool => string.Equals(tool.Name, toolName, StringComparison.OrdinalIgnoreCase))
+            : null;
+        if (catalogTool is null)
+        {
+            return ToolInvocationErrors.Failure(
+                "MCP tool schema unavailable",
+                new ToolInvocationError(
+                    "mcp.schema_not_found",
+                    "$",
+                    "a tool present in the current MCP catalog",
+                    $"{serverName}/{toolName}",
+                    "Refresh the MCP catalog and search for the tool again before calling it."));
+        }
+
+        var schemaFailure = ValidateArgumentsAgainstSchema(catalogTool.InputSchemaJson, args);
+        if (schemaFailure is not null)
+        {
+            return schemaFailure;
+        }
+
         if (!_clients.TryGetValue(serverName, out var client))
         {
             return ToolResult.Failure("MCP server not available", $"Server '{serverName}' is not enabled or not connected.");
@@ -208,10 +229,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
 
         try
         {
-            // Prefer explicit argumentsJson if provided; otherwise serialize the argument dictionary.
-            var argumentsJson = args.TryGetValue("argumentsJson", out var explicitJson) && !string.IsNullOrWhiteSpace(explicitJson)
-                ? explicitJson
-                : JsonSerializer.Serialize(args);
+            var argumentsJson = args.ToJsonString();
             argumentsJson = NormalizeMcpArgumentsJson(serverName, toolName, argumentsJson, workspaceContext.RootPath);
 
             using var timeoutCts = new CancellationTokenSource(
@@ -261,6 +279,32 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         McpTransportKinds.IsStreamableHttp(server.TransportType)
             ? !string.IsNullOrWhiteSpace(server.Url)
             : !string.IsNullOrWhiteSpace(server.Command);
+
+    internal static ToolResult? ValidateArgumentsAgainstSchema(
+        string inputSchemaJson,
+        ToolCallArguments arguments)
+    {
+        try
+        {
+            var validationError = ToolInvocationValidator.Validate(
+                ToolSchema.FromMcp(inputSchemaJson),
+                arguments);
+            return validationError is null
+                ? null
+                : ToolInvocationErrors.Failure("Invalid MCP tool arguments", validationError);
+        }
+        catch (JsonException ex)
+        {
+            return ToolInvocationErrors.Failure(
+                "MCP tool schema invalid",
+                new ToolInvocationError(
+                    "mcp.schema_invalid",
+                    "$",
+                    "valid JSON Schema from the MCP catalog",
+                    ex.Message,
+                    "Refresh or fix the MCP server schema before retrying the call."));
+        }
+    }
 
     private static bool IsSupportedTransport(string? transportType) =>
         McpTransportKinds.IsStdio(transportType) || McpTransportKinds.IsStreamableHttp(transportType);

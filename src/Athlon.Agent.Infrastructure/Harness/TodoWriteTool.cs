@@ -17,12 +17,25 @@ public sealed class TodoWriteTool(
         Name: "todo_write",
         Description:
             "Create or update the session task list for multi-step work. "
-            + "Pass todos as a JSON array of objects with id, content, and status "
+            + "Pass todos as an array of objects with id, content, and status "
             + "(pending, in_progress, completed, cancelled). "
             + "Set merge=true to update existing items by id; merge=false to replace the full list. "
             + "Do not use for trivial single-step requests or pure Q&A.",
         ParametersSchema: ToolSchema.Object()
-            .String("todos", "JSON array string, e.g. [{\"id\":\"1\",\"content\":\"...\",\"status\":\"pending\"}]", required: true)
+            .Array(
+                "todos",
+                "Items with id, content, and status.",
+                required: true,
+                items: ToolSchema.Object()
+                    .String("id", "Stable todo id.", required: true, minLength: 1)
+                    .String("content", "Todo description.", required: true, minLength: 1)
+                    .String(
+                        "status",
+                        "Todo state.",
+                        required: true,
+                        enumValues: ["pending", "in_progress", "completed", "cancelled"])
+                    .Build(),
+                minItems: 1)
             .Boolean("merge", "Merge by id when true; replace entire list when false", defaultValue: true)
             .Build());
 
@@ -34,15 +47,17 @@ public sealed class TodoWriteTool(
             return ToolResult.Failure("No session", "todo_write requires an active agent session.");
         }
 
-        if (!invocation.Arguments.TryGetValue("todos", out var todosJson) || string.IsNullOrWhiteSpace(todosJson))
+        var todosJson = invocation.Arguments.TryGetArray("todos", out var todos)
+            ? todos.GetRawText()
+            : invocation.Arguments.GetString("todos");
+        if (string.IsNullOrWhiteSpace(todosJson))
         {
             return ToolResult.Failure("Missing todos", "Required parameter: todos (JSON array)");
         }
 
         var merge = true;
-        if (invocation.Arguments.TryGetValue("merge", out var mergeText)
-            && !string.IsNullOrWhiteSpace(mergeText)
-            && !bool.TryParse(mergeText.Trim(), out merge))
+        if (invocation.Arguments.ContainsKey("merge")
+            && !invocation.Arguments.TryGetBoolean("merge", out merge))
         {
             return ToolResult.Failure("Invalid merge", "merge must be true or false");
         }

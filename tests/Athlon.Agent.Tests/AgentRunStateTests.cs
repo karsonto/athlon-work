@@ -27,7 +27,7 @@ public sealed class AgentRunStateTests
         invocation.State.PendingApproval = new PendingToolApproval(
             "c1",
             "execute_command",
-            new Dictionary<string, string>(),
+            ToolCallArguments.Empty,
             ToolInvocationPolicy.Ask,
             DateTimeOffset.UtcNow);
 

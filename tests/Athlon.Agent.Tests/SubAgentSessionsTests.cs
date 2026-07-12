@@ -139,7 +139,7 @@ public sealed class SubAgentSessionsTests
             Array.Empty<McpSearchIndex.SearchResult>();
         public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
-        public Task<ToolResult> InvokeAsync(string serverName, string toolName, IReadOnlyDictionary<string, string> arguments, CancellationToken cancellationToken = default) =>
+        public Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments arguments, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Failure("none", "none"));
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

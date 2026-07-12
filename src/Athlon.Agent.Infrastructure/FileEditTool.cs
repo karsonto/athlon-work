@@ -13,10 +13,10 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
             + "If matching fails, use apply_patch with a unified diff instead. "
             + $"For files larger than {MaxFileEditBytes / 1024} KiB, use apply_patch.",
         ToolSchema.Object()
-            .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true)
-            .String("old_text", "Exact substring from the file (no line-number prefixes)", required: true)
+            .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true, minLength: 1)
+            .String("old_text", "Exact substring from the file (no line-number prefixes)", required: true, minLength: 1)
             .String("new_text", "Replacement (empty string deletes matched text)", required: true)
-            .Boolean("replace_all", "Replace all occurrences")
+            .Boolean("replace_all", "Replace all occurrences", defaultValue: false)
             .Build(),
         RequiresApproval: true);
 
@@ -46,7 +46,7 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         var fileInfo = new FileInfo(fullPath);
         if (fileInfo.Length > MaxFileEditBytes)
         {
-            var displayPath = ToolPathNormalizer.ForModel(invocation.Arguments.GetValueOrDefault(ToolPathNormalizer.PathArgumentName) ?? fullPath);
+            var displayPath = ToolPathNormalizer.ForModel(invocation.Arguments.GetString(ToolPathNormalizer.PathArgumentName) ?? fullPath);
             return ToolResult.Failure(
                 "File too large for file_edit",
                 $"File '{displayPath}' is {fileInfo.Length:N0} bytes, exceeding the {MaxFileEditBytes / 1024} KiB file_edit threshold. "
@@ -60,10 +60,10 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return ToolResult.Failure("Read failed", $"Could not read '{ToolPathNormalizer.ForModel(invocation.Arguments.GetValueOrDefault(ToolPathNormalizer.PathArgumentName) ?? fullPath)}': {ex.Message}");
+            return ToolResult.Failure("Read failed", $"Could not read '{ToolPathNormalizer.ForModel(invocation.Arguments.GetString(ToolPathNormalizer.PathArgumentName) ?? fullPath)}': {ex.Message}");
         }
 
-        var replaceAll = invocation.Arguments.TryGetValue("replace_all", out var value) && bool.TryParse(value, out var parsed) && parsed;
+        var replaceAll = invocation.Arguments.GetBoolean("replace_all");
 
         var match = FileEditMatcher.TryMatch(content, oldText, replaceAll);
         switch (match.Status)
@@ -85,7 +85,7 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            var modelPath = ToolPathNormalizer.ForModel(invocation.Arguments.GetValueOrDefault(ToolPathNormalizer.PathArgumentName) ?? fullPath);
+            var modelPath = ToolPathNormalizer.ForModel(invocation.Arguments.GetString(ToolPathNormalizer.PathArgumentName) ?? fullPath);
             return ToolResult.Failure("Write failed", $"Failed to write '{modelPath}': {ex.Message}");
         }
 
@@ -116,7 +116,7 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
 
     private static bool TryGetNewText(ToolInvocation invocation, out string newText, out ToolResult error)
     {
-        if (!invocation.Arguments.TryGetValue("new_text", out newText!))
+        if (!invocation.Arguments.TryGetString("new_text", out newText!))
         {
             newText = string.Empty;
             error = ToolResult.Failure(

@@ -64,7 +64,8 @@ public partial class App : Application
             StartupTrace("Infrastructure registered");
             services.AddSingleton(sp => new SessionUiCache(
                 System.Windows.Threading.Dispatcher.CurrentDispatcher,
-                sp.GetRequiredService<AppSettings>()));
+                sp.GetRequiredService<AppSettings>(),
+                sp.GetRequiredService<IUserNotifier>()));
             services.AddSingleton<SessionTurnHost>();
             services.AddSingleton<QueuedTurnPresenter>();
             services.AddSingleton<ComposerAtCompletionService>();

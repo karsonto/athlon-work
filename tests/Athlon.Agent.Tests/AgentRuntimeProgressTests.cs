@@ -181,7 +181,7 @@ public sealed class AgentRuntimeProgressTests
         var modelClient = new ScriptedModelClient(
             new AgentModelResponse(string.Empty, new[]
             {
-                new AgentToolCall("call-1", "mcp_demo__echo", new Dictionary<string, string> { ["argumentsJson"] = "{\"x\":1}" })
+                new AgentToolCall("call-1", "mcp_demo__echo", ToolCallArgumentsParser.ParseJson("""{"x":1}"""))
             }),
             new AgentModelResponse("done", Array.Empty<AgentToolCall>()));
 
@@ -294,10 +294,10 @@ public sealed class AgentRuntimeProgressTests
         public IReadOnlyList<Athlon.Agent.Mcp.McpServerStatus> GetStatuses() => Array.Empty<Athlon.Agent.Mcp.McpServerStatus>();
 
         public IReadOnlyList<ToolDefinition> ListToolDefinitions() =>
-            new[] { new ToolDefinition("mcp_demo__echo", "echo", ToolSchema.FromMcp("""{"type":"object","properties":{"argumentsJson":{"type":"string"}},"required":["argumentsJson"]}"""), Source: "mcp") };
+            new[] { new ToolDefinition("mcp_demo__echo", "echo", ToolSchema.FromMcp("""{"type":"object","properties":{"x":{"type":"integer"}},"required":["x"]}"""), Source: "mcp") };
 
         public IReadOnlyList<McpCatalogEntry> ListCatalogEntries() =>
-            [new McpCatalogEntry("demo", "echo", "mcp_demo__echo", "echo", "{}")];
+            [new McpCatalogEntry("demo", "echo", "mcp_demo__echo", "echo", """{"type":"object","properties":{"x":{"type":"integer"}},"required":["x"]}""")];
 
         public int CatalogVersion => 0;
         public int CatalogCount => ListCatalogEntries().Count;
@@ -307,7 +307,7 @@ public sealed class AgentRuntimeProgressTests
 
         public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task<ToolResult> InvokeAsync(string serverName, string toolName, IReadOnlyDictionary<string, string> args, CancellationToken cancellationToken = default)
+        public Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments args, CancellationToken cancellationToken = default)
         {
             LastInvocation = (serverName, toolName);
             return Task.FromResult(ToolResult.Success("ok", "{\"ok\":true}"));

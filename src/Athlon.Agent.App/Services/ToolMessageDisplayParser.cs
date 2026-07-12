@@ -88,7 +88,7 @@ internal static class ToolMessageDisplayParser
         return ToolCallDisplayStatus.Succeeded;
     }
 
-    public static string FormatArgumentsFull(IReadOnlyDictionary<string, string> arguments, string? toolName = null) =>
+    public static string FormatArgumentsFull(ToolCallArguments arguments, string? toolName = null) =>
         FileWriteToolArgumentsDisplay.IsFileWrite(toolName) && arguments.ContainsKey("content")
             ? FileWriteToolArgumentsDisplay.FormatArgumentsForPersistedDisplay(arguments)
             : arguments.Count == 0
@@ -97,9 +97,13 @@ internal static class ToolMessageDisplayParser
                     Environment.NewLine,
                     arguments.Select(argument =>
                     {
-                        var value = string.Equals(argument.Key, ToolPathNormalizer.PathArgumentName, StringComparison.OrdinalIgnoreCase)
-                            ? ToolPathNormalizer.ForModel(argument.Value)
-                            : argument.Value;
+                        var value = argument.Value.ValueKind == System.Text.Json.JsonValueKind.String
+                            ? argument.Value.GetString() ?? string.Empty
+                            : argument.Value.GetRawText();
+                        if (string.Equals(argument.Key, ToolPathNormalizer.PathArgumentName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            value = ToolPathNormalizer.ForModel(value);
+                        }
                         return $"{argument.Key} = {value}";
                     }));
 

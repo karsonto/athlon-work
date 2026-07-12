@@ -31,15 +31,16 @@ public sealed class AgentModeSectionTests
     }
 
     [Fact]
-    public void Append_AskMode_MentionsBlockedTools()
+    public void Append_AskMode_DelegatesToolRulesToSingleDecisionTree()
     {
         var builder = new StringBuilder();
         new AgentModeSection().Append(builder, CreateContext(SessionAgentMode.Ask));
 
         var text = builder.ToString();
-        Assert.Contains("file_write", text, StringComparison.Ordinal);
-        Assert.Contains("execute_command", text, StringComparison.Ordinal);
-        Assert.Contains("sessions_", text, StringComparison.Ordinal);
+        Assert.Contains("tool decision tree", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("file_write", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("execute_command", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("sessions_", text, StringComparison.Ordinal);
     }
 
     private static EnvironmentPromptContext CreateContext(SessionAgentMode mode, bool hasWorkspace = true) =>

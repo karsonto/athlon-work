@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Diagnostics;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Streaming;
@@ -11,6 +12,7 @@ internal sealed class AgentTurnCoordinator(
     ITokenEstimatorCalibrator tokenEstimatorCalibrator,
     ISessionUsageAccumulator sessionUsageAccumulator,
     IPromptPressureStore promptPressureStore,
+    IFileStorageService storage,
     AppSettings settings,
     IAgentRunContextAccessor runContextAccessor,
     Func<AgentSession, AgentTurnCallbacks?, PreCompletionOptions, string, string?, IReadOnlyList<ToolDefinition>, ContextPressureLevel, CancellationToken, Task<AgentSession>> runPreCompletionPipelineAsync,
@@ -32,16 +34,14 @@ internal sealed class AgentTurnCoordinator(
         string? runtimeContext,
         CancellationToken cancellationToken)
     {
+        var initialAttemptId = Guid.NewGuid().ToString("N");
         try
         {
             var allowToolCalls = ScheduleTurnScope.Current?.AllowToolCalls ?? true;
-            var response = await modelClient.CompleteAsync(
-                new AgentModelRequest(modelMessages, tools, AllowToolCalls: allowToolCalls),
-                token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnTextDelta(assistantMessageId, token)),
-                token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
-                delta => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
-                cancellationToken).ConfigureAwait(false);
-            await RecordModelUsageAsync(session, callbacks, environmentPrompt, runtimeContext, tools, response, contextSavingsTokens).ConfigureAwait(false);
+            var request = new AgentModelRequest(modelMessages, tools, AllowToolCalls: allowToolCalls);
+            var response = await CompleteRecordedAsync(
+                session, callbacks, streamAdapter, assistantMessageId, request, environmentPrompt,
+                runtimeContext, contextSavingsTokens, initialAttemptId, null, cancellationToken).ConfigureAwait(false);
             return (session, response);
         }
         catch (HttpRequestException ex) when (AgentRuntime.IsContextLengthError(ex))
@@ -66,14 +66,68 @@ internal sealed class AgentTurnCoordinator(
                 settings.ContextCompaction,
                 runtimeContext);
             var allowToolCalls = ScheduleTurnScope.Current?.AllowToolCalls ?? true;
+            var request = new AgentModelRequest(retryResult.Messages, tools, AllowToolCalls: allowToolCalls);
+            var response = await CompleteRecordedAsync(
+                session, callbacks, streamAdapter, assistantMessageId, request, environmentPrompt,
+                runtimeContext, retryResult.EstimatedSavingsTokens, Guid.NewGuid().ToString("N"),
+                ParentAttemptId: initialAttemptId, cancellationToken).ConfigureAwait(false);
+            return (session, response);
+        }
+    }
+
+    private async Task<AgentModelResponse> CompleteRecordedAsync(
+        AgentSession session,
+        AgentTurnCallbacks? callbacks,
+        AgentStreamAdapter streamAdapter,
+        string assistantMessageId,
+        AgentModelRequest request,
+        string environmentPrompt,
+        string? runtimeContext,
+        int contextSavingsTokens,
+        string attemptId,
+        string? ParentAttemptId,
+        CancellationToken cancellationToken)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
             var response = await modelClient.CompleteAsync(
-                new AgentModelRequest(retryResult.Messages, tools, AllowToolCalls: allowToolCalls),
+                request,
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnTextDelta(assistantMessageId, token)),
                 token => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnReasoningDelta(assistantMessageId, token)),
                 delta => AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolCallDelta(assistantMessageId, delta)),
                 cancellationToken).ConfigureAwait(false);
-            await RecordModelUsageAsync(session, callbacks, environmentPrompt, runtimeContext, tools, response, retryResult.EstimatedSavingsTokens).ConfigureAwait(false);
-            return (session, response);
+            response = response with { Usage = ModelUsageAccounting.Resolve(request, response) };
+            sw.Stop();
+            await RecordModelUsageAsync(
+                session, callbacks, environmentPrompt, runtimeContext, request.Tools, response,
+                contextSavingsTokens, attemptId, ParentAttemptId, sw.ElapsedMilliseconds).ConfigureAwait(false);
+            return response;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            sw.Stop();
+            var context = runContextAccessor.Current;
+            var purpose = context?.ParentSessionId is null ? ModelCallPurpose.Chat : ModelCallPurpose.SubAgent;
+            var promptTokens = ContextTokenEstimator.EstimateModelRequest(request);
+            var failedUsage = new ModelUsage(promptTokens, 0, promptTokens);
+            sessionUsageAccumulator.RecordCall(session.Id, attemptId, purpose, failedUsage);
+            if (context?.ParentSessionId is { } parentSessionId)
+            {
+                sessionUsageAccumulator.RecordCall(
+                    parentSessionId, attemptId, ModelCallPurpose.SubAgent, failedUsage, subAgentRollup: true);
+            }
+            await storage.AppendAttemptEventAsync(
+                session.Id,
+                new AgentAttemptEvent(
+                    DateTimeOffset.UtcNow, attemptId, session.Id, context?.RunId ?? session.Id,
+                    AgentAttemptKind.Model,
+                    purpose,
+                    null, ToolCatalogFingerprint.Compute(request.Tools), session.ModelName,
+                    promptTokens, 0, "failure",
+                    ex.GetType().Name, sw.ElapsedMilliseconds, ParentAttemptId),
+                CancellationToken.None).ConfigureAwait(false);
+            throw;
         }
     }
 
@@ -84,7 +138,10 @@ internal sealed class AgentTurnCoordinator(
         string? runtimeContext,
         IReadOnlyList<ToolDefinition> tools,
         AgentModelResponse response,
-        int contextSavingsTokens)
+        int contextSavingsTokens,
+        string attemptId,
+        string? parentAttemptId,
+        long latencyMs)
     {
         if (response.Usage?.PromptTokens is not > 0)
         {
@@ -104,13 +161,26 @@ internal sealed class AgentTurnCoordinator(
         tokenEstimatorCalibrator.Observe(session.Id, estimatedPromptTokens, response.Usage.PromptTokens);
         promptPressureStore.Record(session.Id, response.Usage.PromptTokens.Value);
 
-        var snapshot = sessionUsageAccumulator.Record(session.Id, response.Usage, contextSavingsTokens);
-        var parentSessionId = runContextAccessor.Current?.ParentSessionId;
+        var context = runContextAccessor.Current;
+        var purpose = context?.ParentSessionId is null ? ModelCallPurpose.Chat : ModelCallPurpose.SubAgent;
+        var snapshot = sessionUsageAccumulator.RecordCall(
+            session.Id, attemptId, purpose, response.Usage, contextSavingsTokens);
+        var parentSessionId = context?.ParentSessionId;
         if (parentSessionId is not null)
         {
-            sessionUsageAccumulator.RecordRollup(parentSessionId, response.Usage, contextSavingsTokens);
+            sessionUsageAccumulator.RecordCall(
+                parentSessionId, attemptId, ModelCallPurpose.SubAgent, response.Usage,
+                contextSavingsTokens, subAgentRollup: true);
             snapshot = sessionUsageAccumulator.Get(parentSessionId);
         }
+
+        await storage.AppendAttemptEventAsync(
+            session.Id,
+            new AgentAttemptEvent(
+                DateTimeOffset.UtcNow, attemptId, session.Id, context?.RunId ?? session.Id,
+                AgentAttemptKind.Model, purpose, null, ToolCatalogFingerprint.Compute(tools),
+                session.ModelName, response.Usage.PromptTokens ?? 0, response.Usage.CompletionTokens ?? 0,
+                "success", null, latencyMs, parentAttemptId)).ConfigureAwait(false);
 
         if (callbacks?.OnUsageRecorded is { } onUsage)
         {

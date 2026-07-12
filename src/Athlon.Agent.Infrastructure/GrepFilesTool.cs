@@ -13,10 +13,10 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, A
         "grep_files",
         "Search file contents for a text pattern (literal by default; set regex to true for .NET regular expressions).",
         ToolSchema.Object()
-            .String("pattern", "Text pattern (literal or regex). Regex example with regex true: class\\s+\\w+", required: true)
+            .String("pattern", "Text pattern (literal or regex). Regex example with regex true: class\\s+\\w+", required: true, minLength: 1)
             .String("path", ToolPathDescriptions.OptionalWorkspaceRelativeDirectory)
-            .String("glob", "File glob filter, e.g. *.cs")
-            .Boolean("regex", "Treat pattern as .NET regular expression (default: false, literal case-insensitive)")
+            .String("glob", "File glob filter, e.g. *.cs", defaultValue: "*", minLength: 1)
+            .Boolean("regex", "Treat pattern as .NET regular expression (default: false, literal case-insensitive)", defaultValue: false)
             .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
@@ -24,15 +24,13 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, A
         if (!ToolArguments.TryGetRequired(invocation, "pattern", out var pattern, out var error)) return error;
         if (!WorkspaceToolHelper.TryResolveOptionalNormalizedPath(invocation, guard, out var fullPath, out error)) return error;
 
-        var useRegex = invocation.Arguments.TryGetValue("regex", out var regexValue)
-            && bool.TryParse(regexValue, out var parsedRegex)
-            && parsedRegex;
+        var useRegex = invocation.Arguments.GetBoolean("regex");
         if (!GrepLineMatcher.TryCreate(pattern, useRegex, out var matcher, out var regexError))
         {
             return ToolResult.Failure("Invalid regex", regexError ?? "Invalid pattern.");
         }
 
-        var glob = invocation.Arguments.GetValueOrDefault("glob") ?? "*";
+        var glob = invocation.Arguments.GetString("glob") ?? "*";
         var ignorePatterns = guard.GetIgnorePatterns();
         var baseRoot = guard.Normalize(".");
         var allFiles = File.Exists(fullPath)

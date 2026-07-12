@@ -29,9 +29,13 @@ import re
 import sys
 import time
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import PeftModel
+try:
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from peft import PeftModel
+except ImportError:
+    torch = None
+    AutoModelForCausalLM = AutoTokenizer = PeftModel = None
 
 # ==================== 配置 ====================
 _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -51,7 +55,7 @@ LEAK_SIMILARITY_THRESHOLD = 0.92
 MAX_NEW_TOKENS = 512
 TEMPERATURE = 0.01  # 低温度保证可复现
 TOP_P = 0.9
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda" if torch is not None and torch.cuda.is_available() else "cpu"
 
 # ==================== 基准测试集 ====================
 
@@ -774,6 +778,93 @@ def print_report(name, results, total, passed):
     return categories
 
 
+def evaluate_runtime_attempts(path):
+    """从真实 AgentRuntime attempts.jsonl 计算能力与 token/tool 指标。"""
+    events = []
+    with open(path, encoding="utf-8-sig") as stream:
+        for line in stream:
+            if line.strip():
+                events.append(json.loads(line))
+
+    def is_tool(event):
+        kind = event.get("kind")
+        return kind == 1 or str(kind).lower() == "tool"
+
+    def is_model(event):
+        kind = event.get("kind")
+        return kind == 0 or str(kind).lower() == "model"
+
+    tool_events = [event for event in events if is_tool(event)]
+    turns = {}
+    for event in tool_events:
+        key = (event.get("sessionId", event.get("session")),
+               event.get("turnId", event.get("turn")))
+        turns.setdefault(key, []).append(event)
+    for values in turns.values():
+        values.sort(key=lambda item: item.get("timestamp", ""))
+
+    first_successes = sum(
+        1 for values in turns.values()
+        if values and str(values[0].get("result", "")).lower() == "success"
+    )
+    repeats = 0
+    for values in turns.values():
+        seen = set()
+        for event in values:
+            signature = (event.get("tool"), event.get("inputFingerprint"))
+            if signature in seen:
+                repeats += 1
+            seen.add(signature)
+
+    token_samples = []
+    for key, values in turns.items():
+        successes = [
+            event for event in values
+            if str(event.get("result", "")).lower() == "success"
+        ]
+        if not successes:
+            continue
+        success_time = successes[0].get("timestamp", "")
+        token_samples.append(sum(
+            int(event.get("prompt", 0) or 0) + int(event.get("completion", 0) or 0)
+            for event in events
+            if is_model(event)
+            and (event.get("sessionId", event.get("session")),
+                 event.get("turnId", event.get("turn"))) == key
+            and event.get("timestamp", "") <= success_time
+        ))
+
+    first_rate = first_successes / len(turns) if turns else 0.0
+    repeat_rate = repeats / len(tool_events) if tool_events else 0.0
+    tokens_to_success = sum(token_samples) / len(token_samples) if token_samples else 0.0
+    total_prompt = sum(int(event.get("prompt", 0) or 0) for event in events if is_model(event))
+    total_completion = sum(int(event.get("completion", 0) or 0) for event in events if is_model(event))
+    return {
+        "capabilityScore": round(first_rate * 100, 2),
+        "firstToolSuccessRate": round(first_rate, 6),
+        "repeatCallRate": round(repeat_rate, 6),
+        "tokensToSuccess": round(tokens_to_success, 2),
+        "promptTokens": total_prompt,
+        "completionTokens": total_completion,
+        "totalTokens": total_prompt + total_completion,
+        "toolAttempts": len(tool_events),
+        "turnsWithTools": len(turns),
+    }
+
+
+def enforce_runtime_gates(metrics, args):
+    failures = []
+    if metrics["capabilityScore"] < args.min_capability_score:
+        failures.append("capabilityScore")
+    if metrics["firstToolSuccessRate"] < args.min_first_tool_success:
+        failures.append("firstToolSuccessRate")
+    if metrics["repeatCallRate"] > args.max_repeat_call_rate:
+        failures.append("repeatCallRate")
+    if args.max_tokens_to_success >= 0 and metrics["tokensToSuccess"] > args.max_tokens_to_success:
+        failures.append("tokensToSuccess")
+    return failures
+
+
 def main():
     global MAX_NEW_TOKENS
 
@@ -800,8 +891,27 @@ def main():
                                 "execute_command（执行命令）、file_edit（编辑文件）、file_write（写文件）。"
                                 "请选最合适的工具。",
                         help="系统提示词")
+    parser.add_argument("--runtime-attempts", default=None,
+                        help="读取真实 AgentRuntime attempts.jsonl，仅计算 ROI 指标并执行回归门槛")
+    parser.add_argument("--min-capability-score", type=float, default=0.0)
+    parser.add_argument("--min-first-tool-success", type=float, default=0.0)
+    parser.add_argument("--max-repeat-call-rate", type=float, default=1.0)
+    parser.add_argument("--max-tokens-to-success", type=float, default=-1.0)
     args = parser.parse_args()
     MAX_NEW_TOKENS = args.max_new_tokens
+
+    if args.runtime_attempts:
+        metrics = evaluate_runtime_attempts(args.runtime_attempts)
+        failures = enforce_runtime_gates(metrics, args)
+        report = {"capability": metrics["capabilityScore"], "metrics": metrics, "gateFailures": failures}
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        if args.output:
+            with open(args.output, "w", encoding="utf-8") as stream:
+                json.dump(report, stream, ensure_ascii=False, indent=2)
+        return 1 if failures else 0
+
+    if torch is None:
+        parser.error("torch/transformers/peft are required unless --runtime-attempts is used")
 
     system_prompt = args.system_prompt
     benchmarks = list(BENCHMARKS)
@@ -1029,4 +1139,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

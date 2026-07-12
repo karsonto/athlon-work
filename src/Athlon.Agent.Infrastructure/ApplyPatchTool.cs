@@ -9,7 +9,7 @@ public sealed class ApplyPatchTool(WorkspaceGuard guard, AuditLogService audit) 
         "Apply a unified diff patch to workspace files. Use when file_edit fails due to exact-match errors. "
             + "Patch must use standard --- / +++ / @@ headers.",
         ToolSchema.Object()
-            .String("patch", "Unified diff text (--- / +++ / @@ hunks)", required: true)
+            .String("patch", "Unified diff text (--- / +++ / @@ hunks)", required: true, pattern: @"(?s)^.*(?:--- |\*\*\* Begin Patch).*")
             .String("path", "Workspace-relative path; when set, only hunks for this file are applied")
             .Build(),
         RequiresApproval: true);
@@ -24,7 +24,7 @@ public sealed class ApplyPatchTool(WorkspaceGuard guard, AuditLogService audit) 
         }
 
         string? pathFilter = null;
-        if (invocation.Arguments.TryGetValue(ToolPathNormalizer.PathArgumentName, out var rawPath)
+        if (invocation.Arguments.TryGetString(ToolPathNormalizer.PathArgumentName, out var rawPath)
             && !string.IsNullOrWhiteSpace(rawPath))
         {
             if (!ToolPathNormalizer.TryNormalizeForFileOperation(rawPath, out pathFilter, out var pathMessage))

@@ -6,7 +6,7 @@ public static class ToolArguments
 {
     public static bool TryGetRequired(ToolInvocation invocation, string name, out string value, out ToolResult error)
     {
-        if (invocation.Arguments.TryGetValue(name, out value!) && !string.IsNullOrWhiteSpace(value))
+        if (invocation.Arguments.TryGetString(name, out value!) && !string.IsNullOrWhiteSpace(value))
         {
             error = ToolResult.Success("OK");
             return true;
@@ -17,7 +17,7 @@ public static class ToolArguments
     }
 
     public static int GetInt32(ToolInvocation invocation, string name, int defaultValue) =>
-        invocation.Arguments.TryGetValue(name, out var value) && int.TryParse(value, out var parsed) ? parsed : defaultValue;
+        invocation.Arguments.GetInt32(name, defaultValue);
 
     public static bool TryGetNormalizedPath(ToolInvocation invocation, out string path, out ToolResult error)
     {
@@ -44,7 +44,7 @@ public static class ToolArguments
         out ToolResult error,
         string defaultPath = ".")
     {
-        if (!invocation.Arguments.TryGetValue(ToolPathNormalizer.PathArgumentName, out var raw)
+        if (!invocation.Arguments.TryGetString(ToolPathNormalizer.PathArgumentName, out var raw)
             || string.IsNullOrWhiteSpace(raw))
         {
             path = ToolPathNormalizer.ForModel(defaultPath);
@@ -74,7 +74,7 @@ public static class ToolArguments
         {
             try
             {
-                if (!invocation.Arguments.TryGetValue(ToolPathNormalizer.CwdArgumentName, out var raw)
+                if (!invocation.Arguments.TryGetString(ToolPathNormalizer.CwdArgumentName, out var raw)
                     || string.IsNullOrWhiteSpace(raw))
                 {
                     fullPath = guard.Normalize(".");
@@ -117,7 +117,7 @@ public static class ToolArguments
             }
         }
 
-        var cwd = invocation.Arguments.GetValueOrDefault(ToolPathNormalizer.CwdArgumentName);
+        var cwd = invocation.Arguments.GetString(ToolPathNormalizer.CwdArgumentName);
         if (string.IsNullOrWhiteSpace(cwd))
         {
             fullPath = Environment.CurrentDirectory;

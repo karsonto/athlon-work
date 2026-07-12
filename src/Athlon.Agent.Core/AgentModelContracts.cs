@@ -11,10 +11,20 @@ public sealed record AgentModelMessage(
     string? ToolCallId = null,
     IReadOnlyList<AgentToolCall>? ToolCalls = null,
     string? ReasoningContent = null);
+[method: JsonConstructor]
 public sealed record AgentToolCall(
     string Id,
     string Name,
-    IReadOnlyDictionary<string, string> Arguments);
+    ToolCallArguments Arguments)
+{
+    public AgentToolCall(
+        string id,
+        string name,
+        IReadOnlyDictionary<string, string> arguments)
+        : this(id, name, ToolCallArguments.FromStrings(arguments))
+    {
+    }
+}
 public sealed record AgentModelRequest(
     IReadOnlyList<AgentModelMessage> Messages,
     IReadOnlyList<ToolDefinition> Tools,
@@ -44,6 +54,22 @@ public sealed record AgentModelResponse(
     IReadOnlyList<AgentToolCall> ToolCalls,
     string? ReasoningContent = null,
     ModelUsage? Usage = null);
+
+public static class ModelUsageAccounting
+{
+    public static ModelUsage Resolve(AgentModelRequest request, AgentModelResponse response)
+    {
+        var source = response.Usage ?? new ModelUsage();
+        var prompt = source.PromptTokens ?? ContextTokenEstimator.EstimateModelRequest(request);
+        var completion = source.CompletionTokens ?? ContextTokenEstimator.EstimateModelResponse(response);
+        return source with
+        {
+            PromptTokens = prompt,
+            CompletionTokens = completion,
+            TotalTokens = source.TotalTokens ?? prompt + completion
+        };
+    }
+}
 
 public sealed record StreamingToolCallDelta(
     int Index,

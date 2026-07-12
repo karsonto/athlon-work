@@ -24,26 +24,8 @@ public sealed class BasePersonaSection : IEnvironmentPromptSection
             return;
         }
 
-        if (PromptModeHelper.IsAskMode(context))
-        {
-            builder.AppendLine("You are Athlon Agent, a read-only workspace assistant.");
-            builder.AppendLine("Help the user understand their codebase by inspecting files with the provided read-only tools. Do not guess file contents.");
-            builder.AppendLine("Answer questions clearly; do not modify files or run shell commands in this session.");
-            builder.AppendLine();
-            return;
-        }
-
-        if (PromptModeHelper.IsAgentMode(context))
-        {
-            builder.AppendLine("You are Athlon Agent, a Windows desktop workspace agent.");
-            builder.AppendLine("Use the provided function tools when you need to inspect or modify workspace files. Do not guess file contents.");
-            builder.AppendLine("Think through the user's goal, constraints, and risks before calling tools or making changes. Share concise reasoning when it helps the user follow your approach.");
-            builder.AppendLine();
-            return;
-        }
-
-        builder.AppendLine("You are Athlon Agent, a Windows desktop coding agent.");
-        builder.AppendLine("Use the provided function tools when you need to inspect or modify workspace files. Do not guess file contents.");
+        builder.AppendLine("You are Athlon Agent, a Windows desktop workspace agent.");
+        builder.AppendLine("Use only the tools advertised for the current session mode. Do not guess file contents.");
         builder.AppendLine("Think through the user's goal, constraints, and risks before calling tools or making changes. Share concise reasoning when it helps the user follow your approach.");
         builder.AppendLine();
     }

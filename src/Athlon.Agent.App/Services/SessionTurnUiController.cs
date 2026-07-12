@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Windows.Threading;
 using Athlon.Agent.App.Controls;
+using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services.Streaming;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -38,6 +39,7 @@ public sealed class SessionTurnUiController
     private readonly SessionStreamingUiContext _streaming = new();
     private readonly SessionModifiedFilesTracker _modifiedFilesTracker = new();
     private readonly ToolCallArgsDisplayCoordinator _displayCoordinator = new();
+    private readonly IUserNotifier? _notifier;
     private readonly StreamingTokenBuffer _tokenBuffer;
     // Cache ViewModels by message ID so switching back to a previously-viewed
     // session reuses MarkdownMessageView / FlowDocument instead of rebuilding everything.
@@ -49,9 +51,14 @@ public sealed class SessionTurnUiController
     private Action _requestScroll = NoOpScroll;
     private Action _requestScrollImmediate = NoOpScroll;
 
-    public SessionTurnUiController(Dispatcher dispatcher, Action? requestScroll = null, Action? requestScrollImmediate = null)
+    public SessionTurnUiController(
+        Dispatcher dispatcher,
+        Action? requestScroll = null,
+        Action? requestScrollImmediate = null,
+        IUserNotifier? notifier = null)
     {
         _dispatcher = dispatcher;
+        _notifier = notifier;
         _tokenBuffer = new StreamingTokenBuffer(dispatcher, _streaming);
         _tokenBuffer.FlushTimerTick += (_, _) =>
             FlushStreamingTokens();
@@ -140,6 +147,7 @@ public sealed class SessionTurnUiController
             OnUsageRecorded?.Invoke(snapshot);
             return Task.CompletedTask;
         },
+        OnToolApprovalRequested = _notifier is null ? null : RequestToolApprovalAsync,
         OnStreamEvent = streamEvent =>
         {
             if (streamEvent is AgentStreamEvent.UsageRecorded(var snapshot))
@@ -182,6 +190,39 @@ public sealed class SessionTurnUiController
             }
         }
     };
+
+    private async Task<ToolApprovalDecision> RequestToolApprovalAsync(
+        PendingToolApproval approval,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var arguments = ToolMessageDisplayParser.FormatArgumentsFull(approval.Arguments, approval.ToolName);
+        if (arguments.Length > 1200)
+        {
+            arguments = arguments[..1200] + "…";
+        }
+
+        bool approved;
+        if (_dispatcher.CheckAccess())
+        {
+            approved = _notifier!.ConfirmYesNo(
+                "ToolApproval_Title",
+                "ToolApproval_Message",
+                approval.ToolName,
+                arguments);
+        }
+        else
+        {
+            approved = await _dispatcher.InvokeAsync(() => _notifier!.ConfirmYesNo(
+                "ToolApproval_Title",
+                "ToolApproval_Message",
+                approval.ToolName,
+                arguments));
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return approved ? ToolApprovalDecision.Approved : ToolApprovalDecision.Denied;
+    }
 
     public void AddUserMessage(string input, IReadOnlyList<ImageAttachment> imageAttachments)
     {

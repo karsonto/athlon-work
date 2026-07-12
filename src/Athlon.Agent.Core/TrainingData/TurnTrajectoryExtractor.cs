@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Athlon.Agent.Core.Compaction;
 
 namespace Athlon.Agent.Core.TrainingData;
 
@@ -355,16 +356,7 @@ public static class TurnTrajectoryExtractor
 
     private static int EstimateMessagesTokens(List<ChatMessage> messages)
     {
-        var total = 0;
-        foreach (var msg in messages)
-        {
-            if (!string.IsNullOrWhiteSpace(msg.Content))
-                total += msg.Content.Length / 4; // 粗略估算：4 chars ≈ 1 token
-
-            if (!string.IsNullOrWhiteSpace(msg.ToolCallsJson))
-                total += msg.ToolCallsJson.Length / 4;
-        }
-        return total;
+        return ContextTokenEstimator.Estimate(messages, includeReasoningInModelContext: true);
     }
 
     private static string Truncate(string? value, int maxChars)

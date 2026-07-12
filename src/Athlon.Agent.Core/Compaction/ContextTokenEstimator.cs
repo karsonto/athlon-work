@@ -11,7 +11,7 @@ public static class ContextTokenEstimator
     private const int ToolCallOverhead = 10;
     private const int ToolResultOverhead = 8;
 
-    private static int EstimateTextTokens(string? text)
+    private static int EstimateRawTextTokens(string? text)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -22,12 +22,56 @@ public static class ContextTokenEstimator
     }
 
     /// <summary>Public helper for budget overhead estimation.</summary>
-    public static int EstimateTextTokens(string? text, double calibrationMultiplier)
+    public static int EstimateTextTokens(string? text, double calibrationMultiplier = 1.0)
     {
-        var tokens = EstimateTextTokens(text);
+        var tokens = EstimateRawTextTokens(text);
         return calibrationMultiplier <= 0 || Math.Abs(calibrationMultiplier - 1.0) < 0.001
             ? tokens
             : (int)Math.Ceiling(tokens * calibrationMultiplier);
+    }
+
+    public static int EstimateCharacterBudget(int tokens) =>
+        tokens <= 0 ? 0 : (int)Math.Floor(tokens * CharsPerToken);
+
+    public static int EstimateModelRequest(AgentModelRequest request)
+    {
+        var total = request.Messages.Sum(EstimateModelMessage);
+        foreach (var tool in request.Tools)
+        {
+            total += ToolCallOverhead;
+            total += EstimateRawTextTokens(tool.Name);
+            total += EstimateRawTextTokens(tool.Description);
+            total += EstimateRawTextTokens(tool.ParametersSchema.ToCanonicalJson());
+        }
+        return total;
+    }
+
+    public static int EstimateModelResponse(AgentModelResponse response)
+    {
+        var total = EstimateRawTextTokens(response.Content) + EstimateRawTextTokens(response.ReasoningContent);
+        foreach (var call in response.ToolCalls)
+        {
+            total += ToolCallOverhead + EstimateRawTextTokens(call.Name) + EstimateRawTextTokens(call.Id);
+            total += EstimateRawTextTokens(call.Arguments.ToJsonString());
+        }
+        return total;
+    }
+
+    public static int EstimateModelMessage(AgentModelMessage message)
+    {
+        var total = MessageOverhead
+            + EstimateRawTextTokens(message.Role)
+            + EstimateRawTextTokens(message.Content?.ToString())
+            + EstimateRawTextTokens(message.ReasoningContent);
+        if (message.ToolCalls is { Count: > 0 })
+        {
+            foreach (var call in message.ToolCalls)
+            {
+                total += ToolCallOverhead + EstimateRawTextTokens(call.Name) + EstimateRawTextTokens(call.Id);
+                total += EstimateRawTextTokens(call.Arguments.ToJsonString());
+            }
+        }
+        return total;
     }
 
     public static int ResolveEffectiveEstimate(
@@ -78,7 +122,7 @@ public static class ContextTokenEstimator
         }
 
         var tokens = MessageOverhead;
-        tokens += EstimateTextTokens(message.Role.ToString());
+        tokens += EstimateRawTextTokens(message.Role.ToString());
 
         switch (message.Role)
         {
@@ -86,20 +130,20 @@ public static class ContextTokenEstimator
             case MessageRole.Assistant:
             case MessageRole.System:
             case MessageRole.Summary:
-                tokens += EstimateTextTokens(message.Content);
+                tokens += EstimateRawTextTokens(message.Content);
                 if (includeReasoningInModelContext)
                 {
-                    tokens += EstimateTextTokens(message.ReasoningContent);
+                    tokens += EstimateRawTextTokens(message.ReasoningContent);
                 }
 
                 tokens += EstimateToolCallsTokens(message.ToolCallsJson);
                 break;
             case MessageRole.Tool:
                 tokens += ToolResultOverhead;
-                tokens += EstimateTextTokens(message.Content);
+                tokens += EstimateRawTextTokens(message.Content);
                 break;
             default:
-                tokens += EstimateTextTokens(message.Content);
+                tokens += EstimateRawTextTokens(message.Content);
                 break;
         }
 
@@ -137,12 +181,12 @@ public static class ContextTokenEstimator
         foreach (var call in calls)
         {
             tokens += ToolCallOverhead;
-            tokens += EstimateTextTokens(call.Name);
-            tokens += EstimateTextTokens(call.Id);
+            tokens += EstimateRawTextTokens(call.Name);
+            tokens += EstimateRawTextTokens(call.Id);
             foreach (var argument in call.Arguments)
             {
-                tokens += EstimateTextTokens(argument.Key);
-                tokens += EstimateTextTokens(argument.Value);
+                tokens += EstimateRawTextTokens(argument.Key);
+                tokens += EstimateRawTextTokens(argument.Value.GetRawText());
             }
         }
 

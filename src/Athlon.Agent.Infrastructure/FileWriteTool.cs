@@ -8,7 +8,7 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
         "file_write",
         "Create or overwrite a file. Use empty string for content to create a zero-byte file.",
         ToolSchema.Object()
-            .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true)
+            .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true, minLength: 1)
             .String("content", "New content (empty string allowed)", required: true)
             .Build(),
         RequiresApproval: true);
@@ -25,7 +25,7 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
             return error;
         }
 
-        var modelPath = invocation.Arguments.GetValueOrDefault(ToolPathNormalizer.PathArgumentName) ?? fullPath;
+        var modelPath = invocation.Arguments.GetString(ToolPathNormalizer.PathArgumentName) ?? fullPath;
 
         try
         {
@@ -71,7 +71,7 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
 
     private static bool TryGetContent(ToolInvocation invocation, out string content, out ToolResult error)
     {
-        if (!invocation.Arguments.TryGetValue("content", out content!))
+        if (!invocation.Arguments.TryGetString("content", out content!))
         {
             content = string.Empty;
             error = ToolResult.Failure(
@@ -92,7 +92,7 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
             return error;
         }
 
-        var modelPath = invocation.Arguments.GetValueOrDefault(ToolPathNormalizer.PathArgumentName);
+        var modelPath = invocation.Arguments.GetString(ToolPathNormalizer.PathArgumentName);
         return error.Summary switch
         {
             "Outside workspace" =>

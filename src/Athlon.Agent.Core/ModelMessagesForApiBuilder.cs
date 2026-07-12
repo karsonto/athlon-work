@@ -1,4 +1,5 @@
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Core;
 
@@ -9,7 +10,8 @@ public static class ModelMessagesForApiBuilder
         string environmentPrompt,
         IReadOnlyList<ChatMessage> history,
         ContextCompactionSettings compaction,
-        string? runtimeContext = null)
+        string? runtimeContext = null,
+        RuntimeContextInjectionState? runtimeContextState = null)
     {
         RequestHistoryHygiene.ApplyResult result;
         if (cache is not null)
@@ -23,13 +25,33 @@ public static class ModelMessagesForApiBuilder
             result = RequestHistoryHygiene.ApplyToModelMessages(messages, compaction.RequestHistoryHygiene);
         }
 
-        if (string.IsNullOrWhiteSpace(runtimeContext))
+        var contextToInject = runtimeContextState is null
+            ? runtimeContext
+            : runtimeContextState.SelectForInjection(runtimeContext);
+        if (string.IsNullOrWhiteSpace(contextToInject))
         {
             return result;
         }
 
         var messagesWithRuntimeContext = result.Messages.ToList();
-        messagesWithRuntimeContext.Add(new AgentModelMessage("user", runtimeContext));
+        messagesWithRuntimeContext.Add(new AgentModelMessage("user", contextToInject));
         return new RequestHistoryHygiene.ApplyResult(messagesWithRuntimeContext, result.EstimatedSavingsTokens);
+    }
+}
+
+public sealed class RuntimeContextInjectionState
+{
+    private string? _lastFingerprint;
+
+    public string? LastSelectedContext { get; private set; }
+    public bool FingerprintChanged { get; private set; }
+
+    public string? SelectForInjection(string? runtimeContext)
+    {
+        var fingerprint = RuntimeContextSnapshot.ComputeFingerprint(runtimeContext);
+        FingerprintChanged = !string.Equals(_lastFingerprint, fingerprint, StringComparison.Ordinal);
+        _lastFingerprint = fingerprint;
+        LastSelectedContext = string.IsNullOrWhiteSpace(runtimeContext) ? null : runtimeContext;
+        return LastSelectedContext;
     }
 }

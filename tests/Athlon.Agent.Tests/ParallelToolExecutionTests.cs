@@ -179,6 +179,99 @@ public sealed class ParallelToolExecutionTests
     }
 
     [Fact]
+    public async Task SendAsync_AskToolWithoutApprovalCallback_RemainsPending()
+    {
+        var router = new ApprovalTrackingToolRouter();
+        var runtime = CreateRuntime(
+            new NoOpStorage(),
+            router,
+            new AppSettings(),
+            new ScriptedModelClient(
+                new AgentModelResponse(
+                    string.Empty,
+                    [new AgentToolCall("ask-1", "file_write", new Dictionary<string, string> { ["path"] = "a.txt" })]),
+                new AgentModelResponse("done", Array.Empty<AgentToolCall>())));
+
+        var session = await runtime.SendAsync(AgentSession.Create("approval-pending"), "write");
+
+        Assert.Equal(0, router.InvokeCount);
+        Assert.Contains(
+            "policy.approval_required",
+            session.Messages.Single(message => message.Role == MessageRole.Tool).Content,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SendAsync_InvalidArguments_AreRejectedBeforeApprovalOrExecution()
+    {
+        var router = new ApprovalTrackingToolRouter();
+        var storage = new NoOpStorage();
+        var runtime = CreateRuntime(
+            storage,
+            router,
+            new AppSettings(),
+            new ScriptedModelClient(
+                new AgentModelResponse(
+                    string.Empty,
+                    [new AgentToolCall("invalid-1", "file_write", ToolCallArgumentsParser.ParseJson("""{"path":42}"""))]),
+                new AgentModelResponse("done", Array.Empty<AgentToolCall>())));
+        var approvalRequests = 0;
+        var callbacks = new AgentTurnCallbacks
+        {
+            OnToolApprovalRequested = (_, _) =>
+            {
+                approvalRequests++;
+                return Task.FromResult(ToolApprovalDecision.Approved);
+            }
+        };
+
+        var session = await runtime.SendAsync(
+            AgentSession.Create("invalid-before-approval"),
+            "write",
+            callbacks: callbacks);
+
+        Assert.Equal(0, approvalRequests);
+        Assert.Equal(0, router.InvokeCount);
+        Assert.Contains(
+            "schema.type_mismatch",
+            session.Messages.Single(message => message.Role == MessageRole.Tool).Content,
+            StringComparison.Ordinal);
+        var rejection = Assert.Single(storage.Attempts, item => item.Kind == AgentAttemptKind.Tool);
+        Assert.Equal("schema.type_mismatch", rejection.ErrorCode);
+        Assert.Equal("failure", rejection.Result);
+        Assert.NotNull(rejection.SchemaFingerprint);
+    }
+
+    [Fact]
+    public async Task SendAsync_AskToolExecutesAfterApprovalCallbackApproves()
+    {
+        var router = new ApprovalTrackingToolRouter();
+        var runtime = CreateRuntime(
+            new NoOpStorage(),
+            router,
+            new AppSettings(),
+            new ScriptedModelClient(
+                new AgentModelResponse(
+                    string.Empty,
+                    [new AgentToolCall("ask-1", "file_write", new Dictionary<string, string> { ["path"] = "a.txt" })]),
+                new AgentModelResponse("done", Array.Empty<AgentToolCall>())));
+        PendingToolApproval? requested = null;
+        var callbacks = new AgentTurnCallbacks
+        {
+            OnToolApprovalRequested = (pending, _) =>
+            {
+                requested = pending;
+                return Task.FromResult(ToolApprovalDecision.Approved);
+            }
+        };
+
+        await runtime.SendAsync(AgentSession.Create("approval-approved"), "write", callbacks: callbacks);
+
+        Assert.Equal(1, router.InvokeCount);
+        Assert.Equal("ask-1", requested?.ToolCallId);
+    }
+
+    [Fact]
     public void SubAgentSettings_DefaultMaxConcurrentSubAgents_IsTen() =>
         Assert.Equal(10, new SubAgentSettings().MaxConcurrentSubAgents);
 
@@ -261,9 +354,9 @@ public sealed class ParallelToolExecutionTests
 
         public IReadOnlyList<ToolDefinition> ListTools() =>
         [
-            new ToolDefinition("file_read", "read", ToolSchema.Object().Build()),
-            new ToolDefinition("grep_files", "grep", ToolSchema.Object().Build()),
-            new ToolDefinition("file_write", "write", ToolSchema.Object().Build())
+            new ToolDefinition("file_read", "read", ToolSchema.Object().AllowAdditionalProperties().Build()),
+            new ToolDefinition("grep_files", "grep", ToolSchema.Object().AllowAdditionalProperties().Build()),
+            new ToolDefinition("file_write", "write", ToolSchema.Object().AllowAdditionalProperties().Build())
         ];
 
         public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
@@ -292,6 +385,28 @@ public sealed class ParallelToolExecutionTests
                     break;
                 }
             }
+        }
+    }
+
+    private sealed class ApprovalTrackingToolRouter : IToolRouter
+    {
+        public int InvokeCount { get; private set; }
+
+        public IReadOnlyList<ToolDefinition> ListTools() =>
+        [
+            new ToolDefinition(
+                "file_write",
+                "approval test",
+                ToolSchema.Object().String("path", "path", required: true).Build(),
+                InvocationPolicy: ToolInvocationPolicy.Ask)
+        ];
+
+        public Task<ToolResult> InvokeAsync(
+            ToolInvocation invocation,
+            CancellationToken cancellationToken = default)
+        {
+            InvokeCount++;
+            return Task.FromResult(ToolResult.Success("executed"));
         }
     }
 
@@ -354,6 +469,7 @@ public sealed class ParallelToolExecutionTests
 
     private sealed class NoOpStorage : IFileStorageService
     {
+        public List<AgentAttemptEvent> Attempts { get; } = [];
         public string RootPath => "/tmp";
         public Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.FromResult<AgentSession?>(null);
@@ -367,6 +483,11 @@ public sealed class ParallelToolExecutionTests
         public Task ReplaceConversationDisplayAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task AppendAttemptEventAsync(string sessionId, AgentAttemptEvent entry, CancellationToken cancellationToken = default)
+        {
+            Attempts.Add(entry);
+            return Task.CompletedTask;
+        }
         public Task FlushPendingToolCallLogsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<SessionIndexEntry>>(Array.Empty<SessionIndexEntry>());

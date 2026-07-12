@@ -48,10 +48,10 @@ public static class ConversationSummaryFormatter
         return $"Tool: [tool_result] {Truncate(message.Content, MaxToolResultChars)}";
     }
 
-    private static string FormatArguments(IReadOnlyDictionary<string, string> arguments) =>
+    private static string FormatArguments(ToolCallArguments arguments) =>
         arguments.Count == 0
             ? string.Empty
-            : string.Join(", ", arguments.Select(argument => $"{argument.Key}={argument.Value}"));
+            : string.Join(", ", arguments.Select(argument => $"{argument.Key}={argument.Value.GetRawText()}"));
 
     private static string Truncate(string? value, int maxChars)
     {

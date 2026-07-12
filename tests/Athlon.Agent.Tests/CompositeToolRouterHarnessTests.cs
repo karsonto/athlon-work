@@ -147,7 +147,12 @@ public sealed class CompositeToolRouterHarnessTests
 
     private sealed class StubMemoryTool(string name) : IAgentTool, ILongTermMemoryTool
     {
-        public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
+        public ToolDefinition Definition => new(
+            name,
+            name,
+            name == "memory_search"
+                ? ToolSchema.Object().String("query", "query", required: true).Build()
+                : ToolSchema.Object().AllowAdditionalProperties().Build());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
     }
@@ -195,7 +200,7 @@ public sealed class CompositeToolRouterHarnessTests
         public Task<ToolResult> InvokeAsync(
             string serverName,
             string toolName,
-            IReadOnlyDictionary<string, string> arguments,
+            ToolCallArguments arguments,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok"));
 

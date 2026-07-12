@@ -12,7 +12,7 @@ public sealed class SubAgentTaskOutputTool(
         Name: "task_output",
         Description: "Retrieve the result of an async sub-agent task (status accepted + task_id).",
         ParametersSchema: ToolSchema.Object()
-            .String("task_id", "Task id from sessions_spawn or sessions_send.", required: true)
+            .String("task_id", "Task id from sessions_spawn or sessions_send.", required: true, minLength: 1)
             .Build(),
         Group: ToolGroup.SubAgent);
 
@@ -29,7 +29,7 @@ public sealed class SubAgentTaskOutputTool(
             return ToolResult.Failure("No parent session", "task_output requires an active parent session.");
         }
 
-        if (!invocation.Arguments.TryGetValue("task_id", out var taskId) || string.IsNullOrWhiteSpace(taskId))
+        if (!invocation.Arguments.TryGetString("task_id", out var taskId) || string.IsNullOrWhiteSpace(taskId))
         {
             return ToolResult.Failure("Missing task_id", "Required parameter: task_id");
         }

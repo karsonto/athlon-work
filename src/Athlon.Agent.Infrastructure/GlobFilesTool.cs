@@ -19,7 +19,7 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
         "glob_files",
         "Find files matching a glob pattern.",
         ToolSchema.Object()
-            .String("pattern", "Glob pattern (supports ** and {a,b} extensions), e.g. **/*.cs or **/*.{png,jpg}", required: true)
+            .String("pattern", "Glob pattern (supports ** and {a,b} extensions), e.g. **/*.cs or **/*.{png,jpg}", required: true, minLength: 1)
             .String("path", ToolPathDescriptions.OptionalWorkspaceRelativeDirectory)
             .Build());
 

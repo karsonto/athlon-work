@@ -133,7 +133,7 @@ public sealed class ChildAgentToolRouterTests
         public Task<ToolResult> InvokeAsync(
             string serverName,
             string toolName,
-            IReadOnlyDictionary<string, string> arguments,
+            ToolCallArguments arguments,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Success("ok", $"mcp:{toolName}"));
 

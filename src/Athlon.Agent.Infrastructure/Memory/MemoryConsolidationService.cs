@@ -1,6 +1,8 @@
 using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Memory;
+using Athlon.Agent.Core.Compaction;
+using System.Diagnostics;
 
 namespace Athlon.Agent.Infrastructure.Memory;
 
@@ -11,6 +13,9 @@ namespace Athlon.Agent.Infrastructure.Memory;
 public sealed class MemoryConsolidationService(
     ILongTermMemory longTermMemory,
     IAgentModelClient modelClient,
+    ISessionUsageAccumulator sessionUsageAccumulator,
+    IFileStorageService storage,
+    IActiveAgentSessionContext activeSessionContext,
     AppSettings settings,
     IAppLogger logger)
 {
@@ -53,7 +58,7 @@ Output the COMPLETE new MEMORY.md content (not just a diff). Use markdown.
         var currentMemory = await longTermMemory.ReadCuratedAsync(cancellationToken);
         var dailyEntries = await ReadDailyEntriesAsync(dailyFiles, cancellationToken);
 
-        var maxChars = _cfg.MaxMemoryTokens * 4;
+        var maxChars = ContextTokenEstimator.EstimateCharacterBudget(_cfg.MaxMemoryTokens);
         var systemPrompt = string.Format(ConsolidationPrompt, _cfg.MaxMemoryTokens, maxChars);
 
         var userContent = new StringBuilder();
@@ -73,15 +78,41 @@ Output the COMPLETE new MEMORY.md content (not just a diff). Use markdown.
             },
             Array.Empty<ToolDefinition>(),
             AllowToolCalls: false,
-            MaxTokens: _cfg.SummaryMaxTokens * 4);
+            MaxTokens: _cfg.SummaryMaxTokens);
 
         AgentModelResponse response;
+        var sessionId = activeSessionContext.SessionId ?? "memory-consolidation";
+        var attemptId = Guid.NewGuid().ToString("N");
+        var stopwatch = Stopwatch.StartNew();
         try
         {
             response = await modelClient.CompleteAsync(request, cancellationToken: cancellationToken);
+            var usage = ModelUsageAccounting.Resolve(request, response);
+            stopwatch.Stop();
+            sessionUsageAccumulator.RecordCall(sessionId, attemptId, ModelCallPurpose.Memory, usage);
+            await storage.AppendAttemptEventAsync(
+                sessionId,
+                new AgentAttemptEvent(
+                    DateTimeOffset.UtcNow, attemptId, sessionId, sessionId, AgentAttemptKind.Model,
+                    ModelCallPurpose.Memory, null, ToolCatalogFingerprint.Compute(request.Tools),
+                    settings.Model.ModelName, usage.PromptTokens ?? 0, usage.CompletionTokens ?? 0,
+                    "success", null, stopwatch.ElapsedMilliseconds),
+                cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
+            var promptTokens = ContextTokenEstimator.EstimateModelRequest(request);
+            sessionUsageAccumulator.RecordCall(
+                sessionId, attemptId, ModelCallPurpose.Memory, new ModelUsage(promptTokens, 0, promptTokens));
+            await storage.AppendAttemptEventAsync(
+                sessionId,
+                new AgentAttemptEvent(
+                    DateTimeOffset.UtcNow, attemptId, sessionId, sessionId, AgentAttemptKind.Model,
+                    ModelCallPurpose.Memory, null, ToolCatalogFingerprint.Compute(request.Tools),
+                    settings.Model.ModelName, promptTokens, 0,
+                    "failure", ex.GetType().Name, stopwatch.ElapsedMilliseconds),
+                CancellationToken.None).ConfigureAwait(false);
             _logger.Warning("Memory consolidation LLM call failed: {Error}", ex.Message);
             return;
         }

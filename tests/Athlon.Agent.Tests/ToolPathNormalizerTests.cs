@@ -20,10 +20,10 @@ public sealed class ToolPathNormalizerTests
             ["content"] = "line1\r\nline2"
         };
 
-        var normalized = ToolPathNormalizer.NormalizePathArguments(arguments);
+        var normalized = ToolPathNormalizer.NormalizePathArguments(ToolCallArguments.FromStrings(arguments));
 
-        Assert.Equal("a/b.txt", normalized["path"]);
-        Assert.Equal("line1\r\nline2", normalized["content"]);
+        Assert.Equal("a/b.txt", normalized.GetString("path"));
+        Assert.Equal("line1\r\nline2", normalized.GetString("content"));
     }
 
     [Fact]
@@ -34,9 +34,9 @@ public sealed class ToolPathNormalizerTests
             ["cwd"] = @"docs\中文"
         };
 
-        var normalized = ToolPathNormalizer.NormalizePathArguments(arguments);
+        var normalized = ToolPathNormalizer.NormalizePathArguments(ToolCallArguments.FromStrings(arguments));
 
-        Assert.Equal("docs/中文", normalized["cwd"]);
+        Assert.Equal("docs/中文", normalized.GetString("cwd"));
     }
 
     [Theory]

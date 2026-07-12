@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Knowledge;
 
 namespace Athlon.Agent.Infrastructure.Knowledge;
@@ -43,7 +44,7 @@ public sealed class KnowledgeChunker(AppSettings settings)
                 ChunkIndex = chunkIndex++,
                 TitlePath = title,
                 Content = content,
-                TokenCount = Math.Max(1, content.Length / 4),
+                TokenCount = Math.Max(1, ContextTokenEstimator.EstimateTextTokens(content)),
                 CreatedAt = DateTimeOffset.UtcNow
             });
 

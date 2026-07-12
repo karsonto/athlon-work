@@ -54,7 +54,8 @@ public sealed class FileWriteToolArgumentsDisplayTests
             ["content"] = new string('x', 500)
         };
 
-        var text = FileWriteToolArgumentsDisplay.FormatArgumentsForPersistedDisplay(arguments);
+        var text = FileWriteToolArgumentsDisplay.FormatArgumentsForPersistedDisplay(
+            ToolCallArguments.FromStrings(arguments));
 
         Assert.Contains("path = src/App.tsx", text, StringComparison.Ordinal);
         Assert.Contains("content = (500 chars)", text, StringComparison.Ordinal);

@@ -72,4 +72,23 @@ public sealed class SkillXmlPromptRendererTests
         SkillXmlPromptRenderer.AppendSkillPrompt(builder, Array.Empty<AgentSkill>());
         Assert.Equal(string.Empty, builder.ToString());
     }
+
+    [Fact]
+    public void AppendSkillPrompt_DeduplicatesCatalogBySkillId()
+    {
+        var skill = new AgentSkill(
+            new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["name"] = "demo_skill",
+                ["description"] = "Demo"
+            },
+            "Body");
+        var builder = new StringBuilder();
+
+        SkillXmlPromptRenderer.AppendSkillPrompt(builder, [skill, skill]);
+
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(
+            builder.ToString(),
+            "<skill-id>demo_skill</skill-id>").Cast<System.Text.RegularExpressions.Match>());
+    }
 }
