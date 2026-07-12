@@ -21,10 +21,8 @@ public sealed class WindowsCmdEncodingTests
 
         Assert.Equal("utf-8", startInfo.Environment["PYTHONIOENCODING"]);
         Assert.Equal("1", startInfo.Environment["PYTHONUTF8"]);
-        Assert.NotNull(startInfo.StandardOutputEncoding);
-        Assert.NotNull(startInfo.StandardErrorEncoding);
-        Assert.Equal("utf-8", startInfo.StandardOutputEncoding!.WebName);
-        Assert.Equal("utf-8", startInfo.StandardErrorEncoding!.WebName);
+        Assert.Null(startInfo.StandardOutputEncoding);
+        Assert.Null(startInfo.StandardErrorEncoding);
     }
 
     [Fact]

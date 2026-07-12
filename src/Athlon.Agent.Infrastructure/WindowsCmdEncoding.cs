@@ -23,13 +23,7 @@ internal static class WindowsCmdEncoding
         startInfo.Environment["PYTHONUTF8"] = "1";
         SsoEenoEnvironment.TryApply(startInfo);
 
-        // StandardInputEncoding 只能在 RedirectStandardInput=true 时设置；
-        // execute_command 当前不读 stdin，所以避免触发 .NET 异常。
-        if (startInfo.RedirectStandardInput)
-        {
-            startInfo.StandardInputEncoding = Encoding.UTF8;
-        }
-        startInfo.StandardOutputEncoding = Encoding.UTF8;
-        startInfo.StandardErrorEncoding = Encoding.UTF8;
+        // stdout/stderr are read as raw bytes and decoded in ProcessConsoleStreamReader
+        // so we can fall back to the system ANSI code page for cmd.exe messages.
     }
 }

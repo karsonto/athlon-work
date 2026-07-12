@@ -178,6 +178,25 @@ public sealed class ExecuteCommandToolTests
         }
     }
 
+    [Fact]
+    public async Task InvokeAsync_UnknownCommand_ReturnsReadableErrorWithoutReplacementCharacters()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var tool = CreateTool();
+        var unknownCommand = $"athlon-missing-cmd-{Guid.NewGuid():N}";
+        var result = await tool.InvokeAsync(new ToolInvocation(
+            "execute_command",
+            new Dictionary<string, string> { ["command"] = unknownCommand }));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(unknownCommand, result.Content, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\uFFFD", result.Content);
+    }
+
     private static ExecuteCommandTool CreateTool(string? workspaceRoot = null)
     {
         var root = Path.Combine(Path.GetTempPath(), $".athlon-agent-exec-{Guid.NewGuid():N}");

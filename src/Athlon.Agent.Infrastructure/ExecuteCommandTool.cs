@@ -18,7 +18,7 @@ public sealed class ExecuteCommandTool(
         "execute_command",
         "Execute a shell command (user approval required). On Windows use cmd.exe semantics, not PowerShell. "
             + "After code changes, verify with project-appropriate checks (e.g. mvn -q -pl <module> compile, npx eslint <path>, pytest <test file>) on only the files you changed. "
-            + "Console I/O uses UTF-8 (chcp 65001). "
+            + "Console I/O prefers UTF-8 (chcp 65001) and normalizes captured output to UTF-8. "
         + $"Default timeout {DefaultTimeoutSeconds}s (max {MaxTimeoutSeconds}s); timeout ends only this tool, not the agent turn.",
         ToolSchema.Object()
             .String("command", "Command line (quote paths that contain spaces or non-ASCII characters)", required: true, minLength: 1)
@@ -147,53 +147,33 @@ public sealed class ExecuteCommandTool(
         return new ProcessRunResult(stdoutAccum.ToString(), stderrAccum.ToString(), TimedOut: false);
     }
 
-    /// <summary>Reads stdout line by line, accumulating and pushing each line through the ambient output stream.</summary>
-    private static async Task ReadStdoutLinesAsync(
+    private static Task ReadStdoutLinesAsync(
         Process process,
         BoundedOutputBuffer accumulator,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            string? line;
-            while ((line = await process.StandardOutput.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
-            {
-                var captured = accumulator.AppendLine(line);
-                if (captured)
-                {
-                    AmbientToolOutputStream.CurrentStream?.WriteLine(line);
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected when user cancels or timeout fires — stop reading.
-        }
-    }
+        CancellationToken cancellationToken) =>
+        ReadProcessStreamLinesAsync(process.StandardOutput.BaseStream, accumulator, cancellationToken);
 
-    /// <summary>Reads stderr line by line, same streaming pattern as stdout.</summary>
-    private static async Task ReadStderrLinesAsync(
+    private static Task ReadStderrLinesAsync(
         Process process,
         BoundedOutputBuffer accumulator,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            string? line;
-            while ((line = await process.StandardError.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
+        CancellationToken cancellationToken) =>
+        ReadProcessStreamLinesAsync(process.StandardError.BaseStream, accumulator, cancellationToken);
+
+    private static Task ReadProcessStreamLinesAsync(
+        Stream stream,
+        BoundedOutputBuffer accumulator,
+        CancellationToken cancellationToken) =>
+        ProcessConsoleStreamReader.ReadLinesAsync(
+            stream,
+            line =>
             {
                 var captured = accumulator.AppendLine(line);
                 if (captured)
                 {
                     AmbientToolOutputStream.CurrentStream?.WriteLine(line);
                 }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Expected when user cancels or timeout fires — stop reading.
-        }
-    }
+            },
+            cancellationToken);
 
     private static string FormatOutput(string? stdout, string? stderr) =>
         string.IsNullOrWhiteSpace(stderr)
