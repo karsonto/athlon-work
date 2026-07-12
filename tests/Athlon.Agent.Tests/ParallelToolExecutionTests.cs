@@ -219,7 +219,7 @@ public sealed class ParallelToolExecutionTests
         new FileReadTool(RouterTestDependencies.CreateWorkspaceGuard(), CreateAudit(), new AppSettings()).Definition.Name;
 
     private static string GrepFilesToolName() =>
-        new GrepFilesTool(RouterTestDependencies.CreateWorkspaceGuard(), CreateAudit()).Definition.Name;
+        new GrepFilesTool(RouterTestDependencies.CreateWorkspaceGuard(), CreateAudit(), new AppSettings()).Definition.Name;
 
     private static string GlobFilesToolName() =>
         new GlobFilesTool(RouterTestDependencies.CreateWorkspaceGuard(), CreateAudit()).Definition.Name;

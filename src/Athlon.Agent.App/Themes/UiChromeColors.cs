@@ -61,6 +61,12 @@ public sealed class UiChromeColors
     public required Color AtCompletionFileBadgeBg { get; init; }
     public required Color AtCompletionFileBadgeBorder { get; init; }
     public required Color AtCompletionFileBadgeText { get; init; }
+    public required Color AtCompletionMcpBadgeBg { get; init; }
+    public required Color AtCompletionMcpBadgeBorder { get; init; }
+    public required Color AtCompletionMcpBadgeText { get; init; }
+    public required Color AtCompletionCommandBadgeBg { get; init; }
+    public required Color AtCompletionCommandBadgeBorder { get; init; }
+    public required Color AtCompletionCommandBadgeText { get; init; }
     public required Color CodeBackground { get; init; }
     public required Color CodeBackgroundAlt { get; init; }
     public required Color CodeForeground { get; init; }

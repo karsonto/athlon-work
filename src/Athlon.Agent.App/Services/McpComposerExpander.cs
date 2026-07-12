@@ -1,28 +1,29 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Athlon.Agent.Infrastructure;
 
-namespace Athlon.Agent.Core;
+namespace Athlon.Agent.App.Services;
 
 /// <summary>
-/// Expands //skill:skillId references in user composer text before sending to the agent.
+/// Expands //mcp:encodedName references in user composer text before sending to the agent.
 /// </summary>
-public static partial class SkillComposerExpander
+public static partial class McpComposerExpander
 {
-    [GeneratedRegex(@"//skill:([^\s]+)", RegexOptions.None)]
-    private static partial Regex SkillReferencePattern();
+    [GeneratedRegex(@"//mcp:([^\s]+)", RegexOptions.None)]
+    private static partial Regex McpReferencePattern();
 
-    public static string Expand(string userInput, IReadOnlyList<AvailableSkillInfo> availableSkills)
+    public static string Expand(string userInput, IMcpRegistry registry)
     {
         if (string.IsNullOrWhiteSpace(userInput))
         {
             return userInput;
         }
 
-        var knownIds = availableSkills
-            .Select(skill => skill.SkillId)
+        var knownToolIds = registry.ListCatalogEntries()
+            .Select(entry => entry.EncodedName)
             .ToHashSet(StringComparer.Ordinal);
 
-        var matches = SkillReferencePattern().Matches(userInput);
+        var matches = McpReferencePattern().Matches(userInput);
         if (matches.Count == 0)
         {
             return userInput;
@@ -33,17 +34,17 @@ public static partial class SkillComposerExpander
 
         foreach (Match match in matches)
         {
-            var skillId = match.Groups[1].Value;
-            if (knownIds.Contains(skillId))
+            var toolId = match.Groups[1].Value;
+            if (knownToolIds.Contains(toolId))
             {
                 blocks.Add(
-                    $"[Skill reference: {skillId}]{Environment.NewLine}"
-                    + $"Use load_skill_through_path(skillId=\"{skillId}\", path=\"SKILL.md\") "
-                    + "to load full instructions before proceeding.");
+                    $"[MCP reference: {toolId}]{Environment.NewLine}"
+                    + $"Use mcp_call(toolId=\"{toolId}\", argumentsJson=\"{{}}\") "
+                    + "to invoke this MCP tool when needed.");
             }
             else
             {
-                warnings.Add($"Unknown skill '{skillId}' in //skill reference; install or enable the skill first.");
+                warnings.Add($"Unknown MCP tool '{toolId}' in //mcp reference; connect the MCP server first.");
             }
         }
 

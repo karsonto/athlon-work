@@ -74,6 +74,14 @@
                                                     <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionSkillBadgeBg}" />
                                                     <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionSkillBadgeBorder}" />
                                                 </DataTrigger>
+                                                <DataTrigger Binding="{Binding Type}" Value="MCP">
+                                                    <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionMcpBadgeBg}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionMcpBadgeBorder}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Type}" Value="命令">
+                                                    <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionCommandBadgeBg}" />
+                                                    <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionCommandBadgeBorder}" />
+                                                </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
@@ -84,6 +92,12 @@
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding Type}" Value="技能">
                                                         <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionSkillBadgeText}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Type}" Value="MCP">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionMcpBadgeText}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Type}" Value="命令">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.AtCompletionCommandBadgeText}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -25,6 +26,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
     private Action<bool>? _setIsBusy;
     private Func<IReadOnlyList<string>>? _getIgnorePatterns;
     private Func<bool>? _tryCancelCompaction;
+    private Func<ComposerSlashCommandContext>? _createSlashCommandContext;
 
     public ChatPageViewModel(
         ComposerCoordinator composer,
@@ -47,7 +49,8 @@ public sealed partial class ChatPageViewModel : ObservableObject
         Action syncWorkspaceContext,
         Action<bool> setIsBusy,
         Func<IReadOnlyList<string>> getIgnorePatterns,
-        Func<bool> tryCancelCompaction)
+        Func<bool> tryCancelCompaction,
+        Func<ComposerSlashCommandContext> createSlashCommandContext)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
@@ -58,6 +61,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         _setIsBusy = setIsBusy;
         _getIgnorePatterns = getIgnorePatterns;
         _tryCancelCompaction = tryCancelCompaction;
+        _createSlashCommandContext = createSlashCommandContext;
     }
 
     [ObservableProperty]
@@ -115,6 +119,11 @@ public sealed partial class ChatPageViewModel : ObservableObject
         CloseAtCompletion();
 
         if (string.IsNullOrWhiteSpace(ComposerText) && PendingImageAttachments.Count == 0)
+        {
+            return;
+        }
+
+        if (await TryExecuteSlashCommandAsync().ConfigureAwait(true))
         {
             return;
         }
@@ -210,7 +219,22 @@ public sealed partial class ChatPageViewModel : ObservableObject
             AtCompletionItems,
             text => ComposerText = text,
             CloseAtCompletion,
+            _createSlashCommandContext?.Invoke(),
             out newCaretIndex);
+
+    public async Task<bool> TryExecuteSlashCommandAsync()
+    {
+        var context = _createSlashCommandContext?.Invoke();
+        if (context is null || string.IsNullOrWhiteSpace(ComposerText))
+        {
+            return false;
+        }
+
+        return await _composer.TryExecuteSlashCommandAsync(
+            ComposerText,
+            context,
+            text => ComposerText = text).ConfigureAwait(true);
+    }
 
     public void CloseAtCompletion() =>
         _composer.CloseAtCompletion(

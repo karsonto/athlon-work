@@ -91,6 +91,12 @@ public static class DarkAppThemePalette
         AtCompletionFileBadgeBg = C("#262628"),
         AtCompletionFileBadgeBorder = C("#323236"),
         AtCompletionFileBadgeText = C("#9CA3AF"),
+        AtCompletionMcpBadgeBg = C("#14231F"),
+        AtCompletionMcpBadgeBorder = C("#065F46"),
+        AtCompletionMcpBadgeText = C("#6EE7B7"),
+        AtCompletionCommandBadgeBg = Ca(0x26, "#F59E0B"),
+        AtCompletionCommandBadgeBorder = C("#92400E"),
+        AtCompletionCommandBadgeText = C("#FCD34D"),
 
         // Code blocks
         CodeBackground = C("#18181B"),

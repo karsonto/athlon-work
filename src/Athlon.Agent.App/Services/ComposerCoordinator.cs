@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
@@ -10,6 +11,8 @@ namespace Athlon.Agent.App.Services;
 public sealed class ComposerCoordinator
 {
     private readonly ComposerAtCompletionService _atCompletion;
+    private readonly IComposerSlashCommandRegistry _slashRegistry;
+    private readonly ComposerSlashCommandExecutor _slashExecutor;
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly AppSettings _settings;
     private readonly IImageAttachmentStore _imageAttachmentStore;
@@ -17,12 +20,16 @@ public sealed class ComposerCoordinator
 
     public ComposerCoordinator(
         ComposerAtCompletionService atCompletion,
+        IComposerSlashCommandRegistry slashRegistry,
+        ComposerSlashCommandExecutor slashExecutor,
         IAgentSkillCatalog skillCatalog,
         AppSettings settings,
         IImageAttachmentStore imageAttachmentStore,
         IAppPathProvider paths)
     {
         _atCompletion = atCompletion;
+        _slashRegistry = slashRegistry;
+        _slashExecutor = slashExecutor;
         _skillCatalog = skillCatalog;
         _settings = settings;
         _imageAttachmentStore = imageAttachmentStore;
@@ -53,14 +60,27 @@ public sealed class ComposerCoordinator
         Action<int> setSelectedIndex,
         int selectedIndex)
     {
-        if (!ComposerAtCompletionService.TryGetQuery(composerText, caretIndex, out var query))
+        if (!ComposerAtCompletionService.TryGetQuery(
+                composerText,
+                caretIndex,
+                _slashRegistry,
+                out var trigger,
+                out var query))
         {
             CloseAtCompletion(items, setIsOpen, setSelectedIndex);
             return;
         }
 
-        EnsureFileIndexBuilt(activeWorkspace, ignorePatterns);
-        var sorted = _atCompletion.FilterMatches(query);
+        if (trigger == ComposerCompletionTrigger.At)
+        {
+            EnsureFileIndexBuilt(activeWorkspace, ignorePatterns);
+        }
+        else
+        {
+            _atCompletion.EnsureSlashSourcesBuilt(_skillCatalog, _settings, activeWorkspace, ignorePatterns);
+        }
+
+        var sorted = _atCompletion.FilterMatches(trigger, query);
         items.Clear();
         foreach (var item in sorted)
         {
@@ -113,22 +133,91 @@ public sealed class ComposerCoordinator
         IReadOnlyList<AtCompletionItemViewModel> items,
         Action<string> setComposerText,
         Action closeCompletion,
+        ComposerSlashCommandContext? slashContext,
         out int newCaretIndex)
     {
         newCaretIndex = caretIndex;
         if (!isOpen
             || selectedIndex < 0
             || selectedIndex >= items.Count
-            || !ComposerCompletionQuery.TryGetAtQuerySpan(composerText, caretIndex, out var atStart, out var atEndExclusive))
+            || !ComposerCompletionQuery.TryGetActiveQuery(
+                composerText,
+                caretIndex,
+                _slashRegistry,
+                out _,
+                out var triggerStart,
+                out var queryEndExclusive,
+                out _))
         {
             return false;
         }
 
-        var replacement = ComposerAtCompletionService.FormatReplacement(items[selectedIndex]);
-        setComposerText(composerText[..atStart] + replacement + composerText[atEndExclusive..]);
-        newCaretIndex = atStart + replacement.Length;
+        var selected = items[selectedIndex];
+        if (selected.Kind == ComposerCompletionItemKind.SlashCommand)
+        {
+            if (slashContext is null
+                || string.IsNullOrWhiteSpace(selected.SlashCommandName)
+                || !_slashRegistry.TryGetExact(selected.SlashCommandName, out var command)
+                || command is null)
+            {
+                return false;
+            }
+
+            var result = _slashExecutor.ExecuteAsync(command, slashContext).AsTask().GetAwaiter().GetResult();
+            if (result.StatusMessage is not null)
+            {
+                slashContext.SetStatus(result.StatusMessage);
+            }
+
+            if (result.Handled)
+            {
+                setComposerText(string.Empty);
+                slashContext.NotifyCommandStatesChanged();
+            }
+
+            closeCompletion();
+            newCaretIndex = 0;
+            return result.Handled;
+        }
+
+        var replacement = ComposerAtCompletionService.FormatReplacement(selected);
+        setComposerText(composerText[..triggerStart] + replacement + composerText[queryEndExclusive..]);
+        newCaretIndex = triggerStart + replacement.Length;
         closeCompletion();
         return true;
+    }
+
+    public async Task<bool> TryExecuteSlashCommandAsync(
+        string composerText,
+        ComposerSlashCommandContext slashContext,
+        Action<string> setComposerText,
+        CancellationToken cancellationToken = default)
+    {
+        if (_slashExecutor.TryParseExactCommand(composerText, out var command) && command is not null)
+        {
+            var result = await _slashExecutor.ExecuteAsync(command, slashContext, cancellationToken).ConfigureAwait(true);
+            if (result.StatusMessage is not null)
+            {
+                slashContext.SetStatus(result.StatusMessage);
+            }
+
+            if (result.Handled)
+            {
+                setComposerText(string.Empty);
+                slashContext.NotifyCommandStatesChanged();
+            }
+
+            return result.Handled;
+        }
+
+        if (_slashExecutor.LooksLikeUnregisteredExactCommand(composerText))
+        {
+            slashContext.SetStatus($"Unknown slash command: {composerText.Trim()}");
+            setComposerText(string.Empty);
+            return true;
+        }
+
+        return false;
     }
 
     public void CloseAtCompletion(

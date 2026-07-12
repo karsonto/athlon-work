@@ -13,19 +13,22 @@ public sealed class SessionTurnCoordinator
     private readonly SessionUiCache _uiCache;
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly ISkillRuntime _skillRuntime;
+    private readonly IMcpRegistry _mcpRegistry;
 
     public SessionTurnCoordinator(
         SessionTurnHost turnHost,
         QueuedTurnPresenter queuedTurnPresenter,
         SessionUiCache uiCache,
         IAgentSkillCatalog skillCatalog,
-        ISkillRuntime skillRuntime)
+        ISkillRuntime skillRuntime,
+        IMcpRegistry mcpRegistry)
     {
         _turnHost = turnHost;
         _queuedTurnPresenter = queuedTurnPresenter;
         _uiCache = uiCache;
         _skillCatalog = skillCatalog;
         _skillRuntime = skillRuntime;
+        _mcpRegistry = mcpRegistry;
     }
 
     public SessionTurnHost TurnHost => _turnHost;
@@ -69,8 +72,11 @@ public sealed class SessionTurnCoordinator
         _queuedTurnPresenter.Enqueue(sessionId, queueId, input, imageAttachments, ui);
     }
 
-    public string ExpandComposerInput(string composerText) =>
-        SkillComposerExpander.Expand(composerText, _skillRuntime.GetSkills());
+    public string ExpandComposerInput(string composerText)
+    {
+        var expanded = McpComposerExpander.Expand(composerText, _mcpRegistry);
+        return SkillComposerExpander.Expand(expanded, _skillRuntime.GetSkills());
+    }
 
     public void ReloadSkills() => _skillCatalog.Reload();
 

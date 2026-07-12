@@ -4,6 +4,7 @@ using Athlon.Agent.App.Licensing;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -67,6 +68,9 @@ public partial class App : Application
             services.AddSingleton<SessionTurnHost>();
             services.AddSingleton<QueuedTurnPresenter>();
             services.AddSingleton<ComposerAtCompletionService>();
+            services.AddSingleton<IComposerSlashCommandRegistry>(sp =>
+                new ComposerSlashCommandRegistry(sp.GetServices<IComposerSlashCommand>()));
+            services.AddSingleton<ComposerSlashCommandExecutor>();
             services.AddSingleton<SchedulerService>();
             services.AddSingleton<ApplicationShutdownService>();
             services.AddSingleton<AppUpdateService>();

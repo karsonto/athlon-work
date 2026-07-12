@@ -313,7 +313,7 @@ public sealed class GrepFilesToolTests
         context.SetWorkspace(workspaceRoot);
         var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
         var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
-        return new GrepFilesTool(guard, audit);
+        return new GrepFilesTool(guard, audit, new AppSettings());
     }
 
     private sealed class NoOpLogger : IAppLogger

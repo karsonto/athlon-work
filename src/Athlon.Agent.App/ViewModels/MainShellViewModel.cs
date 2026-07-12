@@ -10,6 +10,7 @@ using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -135,7 +136,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             SyncWorkspaceContext,
             busy => IsBusy = busy,
             () => _workspaceContext.IgnorePatterns,
-            TryCancelCompaction);
+            TryCancelCompaction,
+            CreateSlashCommandContext);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Settings.SettingsSaved += async (_, _) => await OnSettingsSavedAsync();
@@ -1346,6 +1348,19 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private void RefreshAtCompletionSources(bool reloadSkills = false) =>
         _composer.RefreshSources(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns, reloadSkills);
 
+    private ComposerSlashCommandContext CreateSlashCommandContext() =>
+        new()
+        {
+            Session = _session,
+            IsBusy = IsBusy,
+            IsCompacting = IsCompacting,
+            MessageCount = Messages.Count,
+            CompactAsync = cancellationToken => _compactionService.CompactAsync(_session, cancellationToken),
+            ClearContextAsync = ClearContextAsync,
+            SetStatus = status => Settings.SettingsStatus = status,
+            NotifyCommandStatesChanged = NotifyCommandStatesChanged
+        };
+
     public void ShowCopyNotice(string message)
     {
         CopyNotice = message;
@@ -1376,7 +1391,9 @@ public sealed record AtCompletionItemViewModel(
     string PrimaryText,
     string SecondaryText,
     string InsertText,
-    string MatchText);
+    string MatchText,
+    ComposerCompletionItemKind Kind = ComposerCompletionItemKind.File,
+    string? SlashCommandName = null);
 
 public sealed class PendingImageAttachmentViewModel
 {

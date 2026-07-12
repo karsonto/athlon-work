@@ -119,7 +119,7 @@ public sealed class WorkspaceToolBoundaryTests
             outsideRoot,
             new FileReadTool(guard, audit, settings),
             new FileWriteTool(guard, audit),
-            new GrepFilesTool(guard, audit));
+            new GrepFilesTool(guard, audit, settings));
     }
 
     private sealed record TestEnvironment(

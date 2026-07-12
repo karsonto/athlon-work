@@ -1,5 +1,6 @@
 using Athlon.Agent.App;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
@@ -46,6 +47,9 @@ public sealed class AppStartupIntegrationTest
         services.AddSingleton<SessionTurnHost>();
         services.AddSingleton<QueuedTurnPresenter>();
         services.AddSingleton<ComposerAtCompletionService>();
+        services.AddSingleton<IComposerSlashCommandRegistry>(sp =>
+            new ComposerSlashCommandRegistry(sp.GetServices<IComposerSlashCommand>()));
+        services.AddSingleton<ComposerSlashCommandExecutor>();
         services.AddSingleton<SchedulerService>();
         services.AddSingleton<ApplicationShutdownService>();
         services.AddSingleton<ClipboardImageAttachmentReader>();

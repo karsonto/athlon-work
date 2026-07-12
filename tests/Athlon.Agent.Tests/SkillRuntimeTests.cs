@@ -213,19 +213,19 @@ public sealed class SkillRuntimeTests
     public void SkillComposerExpander_ExpandsKnownSkillReference()
     {
         var expanded = SkillComposerExpander.Expand(
-            "Please use @skill:demo_skill for this task.",
+            "Please use //skill:demo_skill for this task.",
             [new AvailableSkillInfo("demo_skill", "Demo", "demo_skill")]);
 
         Assert.Contains("[Skill reference: demo_skill]", expanded, StringComparison.Ordinal);
         Assert.Contains("load_skill_through_path(skillId=\"demo_skill\"", expanded, StringComparison.Ordinal);
-        Assert.Contains("@skill:demo_skill", expanded, StringComparison.Ordinal);
+        Assert.Contains("//skill:demo_skill", expanded, StringComparison.Ordinal);
     }
 
     [Fact]
     public void SkillComposerExpander_AppendsWarningForUnknownSkill()
     {
         var expanded = SkillComposerExpander.Expand(
-            "@skill:missing_skill",
+            "//skill:missing_skill",
             Array.Empty<AvailableSkillInfo>());
 
         Assert.Contains("Unknown skill 'missing_skill'", expanded, StringComparison.Ordinal);

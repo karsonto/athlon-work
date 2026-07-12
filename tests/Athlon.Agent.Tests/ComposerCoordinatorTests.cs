@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
@@ -15,16 +16,12 @@ public sealed class ComposerCoordinatorTests
     {
         var skillRoot = Path.Combine(Path.GetTempPath(), "composer-coord-skills-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(skillRoot);
-        var coordinator = new ComposerCoordinator(
-            new ComposerAtCompletionService(),
-            new AgentSkillCatalog(new FileSystemSkillRepository(skillRoot)),
-            new AppSettings(),
-            new StubImageAttachmentStore(),
-            new AppPathProvider());
+        var coordinator = ComposerTestFactory.CreateCoordinator(
+            new AgentSkillCatalog(new FileSystemSkillRepository(skillRoot)));
 
         var items = new ObservableCollection<AtCompletionItemViewModel>
         {
-            new("文件", "readme.md", "/docs/readme.md", "readme.md", "readme.md")
+            new("文件", "readme.md", "/docs/readme.md", "@readme.md", "readme.md")
         };
 
         var composerText = "see @rea";
@@ -36,6 +33,7 @@ public sealed class ComposerCoordinatorTests
             items,
             text => composerText = text,
             () => { },
+            slashContext: null,
             out var newCaret);
 
         Assert.True(accepted);
@@ -46,18 +44,10 @@ public sealed class ComposerCoordinatorTests
     [Fact]
     public void CloseAtCompletion_ClearsItemsAndResetsSelection()
     {
-        var skillRoot = Path.Combine(Path.GetTempPath(), "composer-coord-skills-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(skillRoot);
-        var coordinator = new ComposerCoordinator(
-            new ComposerAtCompletionService(),
-            new AgentSkillCatalog(new FileSystemSkillRepository(skillRoot)),
-            new AppSettings(),
-            new StubImageAttachmentStore(),
-            new AppPathProvider());
-
+        var coordinator = ComposerTestFactory.CreateCoordinator();
         var items = new ObservableCollection<AtCompletionItemViewModel>
         {
-            new("文件", "a.txt", "a.txt", "a.txt", "a.txt")
+            new("文件", "a.txt", "a.txt", "@a.txt", "a.txt")
         };
         var isOpen = true;
         var selected = 0;
@@ -70,7 +60,7 @@ public sealed class ComposerCoordinatorTests
     }
 
     [Fact]
-    public void UpdateAtCompletion_OnlyShowsEnabledSkills()
+    public void UpdateAtCompletion_Slash_OnlyShowsEnabledSkills()
     {
         var settings = new AppSettings
         {
@@ -80,23 +70,20 @@ public sealed class ComposerCoordinatorTests
                 new SkillSettings { Name = "disabled-skill", Enabled = false }
             ]
         };
-        var coordinator = new ComposerCoordinator(
-            new ComposerAtCompletionService(),
-            new StubSkillCatalog(
+        var coordinator = ComposerTestFactory.CreateCoordinator(
+            new ComposerTestFactory.StubSkillCatalog(
             [
                 CreateSkill("enabled-skill"),
                 CreateSkill("disabled-skill")
             ]),
-            settings,
-            new StubImageAttachmentStore(),
-            new AppPathProvider());
+            settings);
 
         var items = new ObservableCollection<AtCompletionItemViewModel>();
         var isOpen = false;
         var selected = -1;
 
         coordinator.UpdateAtCompletion(
-            "@",
+            "/",
             caretIndex: 1,
             activeWorkspace: null,
             ignorePatterns: [],
@@ -112,10 +99,66 @@ public sealed class ComposerCoordinatorTests
     }
 
     [Fact]
+    public void UpdateAtCompletion_At_DoesNotShowSkills()
+    {
+        var settings = new AppSettings
+        {
+            Skills = [new SkillSettings { Name = "enabled-skill", Enabled = true }]
+        };
+        var coordinator = ComposerTestFactory.CreateCoordinator(
+            new ComposerTestFactory.StubSkillCatalog([CreateSkill("enabled-skill")]),
+            settings);
+
+        var items = new ObservableCollection<AtCompletionItemViewModel>();
+        var isOpen = false;
+
+        coordinator.UpdateAtCompletion(
+            "@",
+            caretIndex: 1,
+            activeWorkspace: null,
+            ignorePatterns: [],
+            items,
+            open => isOpen = open,
+            _ => { },
+            -1);
+
+        Assert.False(isOpen);
+        Assert.Empty(items);
+    }
+
+    [Fact]
+    public void UpdateAtCompletion_Slash_ShowsConnectedMcpTools()
+    {
+        var settings = new AppSettings
+        {
+            McpServers = [new McpServerSettings { Name = "demo-server", Enabled = true }]
+        };
+        var coordinator = ComposerTestFactory.CreateCoordinator(
+            settings: settings,
+            mcpRegistry: new ComposerTestFactory.ConnectedMcpRegistry("demo-server", "browser_navigate"));
+
+        var items = new ObservableCollection<AtCompletionItemViewModel>();
+        var isOpen = false;
+
+        coordinator.UpdateAtCompletion(
+            "/",
+            caretIndex: 1,
+            activeWorkspace: null,
+            ignorePatterns: [],
+            items,
+            open => isOpen = open,
+            _ => { },
+            -1);
+
+        Assert.True(isOpen);
+        Assert.Contains(items, item => item.Type == "MCP" && item.PrimaryText == "browser_navigate");
+    }
+
+    [Fact]
     public void EnsureFileIndexBuilt_NoSkills_DoesNotRefreshAgainAfterInitialization()
     {
-        var service = new ComposerAtCompletionService();
-        var catalog = new StubSkillCatalog([]);
+        var service = ComposerTestFactory.CreateCompletionService();
+        var catalog = new ComposerTestFactory.StubSkillCatalog([]);
         var settings = new AppSettings();
         var updateCount = 0;
         var reentered = false;
@@ -142,8 +185,8 @@ public sealed class ComposerCoordinatorTests
         Directory.CreateDirectory(workspace);
         try
         {
-            var service = new ComposerAtCompletionService();
-            var catalog = new StubSkillCatalog([CreateSkill("test-skill")]);
+            var service = ComposerTestFactory.CreateCompletionService();
+            var catalog = new ComposerTestFactory.StubSkillCatalog([CreateSkill("test-skill")]);
             var indexCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var updateCount = 0;
             service.SourcesUpdated += () =>
@@ -176,24 +219,4 @@ public sealed class ComposerCoordinatorTests
                 ["description"] = $"{name} description"
             },
             $"# {name}");
-
-    private sealed class StubImageAttachmentStore : IImageAttachmentStore
-    {
-        public ImageAttachment SaveFromFile(string sessionId, string sourcePath) =>
-            new(Path.GetFileName(sourcePath), "image/png", LocalPath: sourcePath);
-    }
-
-    private sealed class StubSkillCatalog(IReadOnlyList<AgentSkill> skills) : IAgentSkillCatalog
-    {
-        public IReadOnlyList<AgentSkill> Skills { get; } = skills;
-
-        public AgentSkill? GetSkill(string name) =>
-            Skills.FirstOrDefault(skill => string.Equals(skill.Name, name, StringComparison.Ordinal));
-
-        public AgentSkill? GetSkillById(string skillId) => GetSkill(skillId);
-
-        public void Reload()
-        {
-        }
-    }
 }
