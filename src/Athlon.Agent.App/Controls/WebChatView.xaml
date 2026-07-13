@@ -8,7 +8,6 @@
              ClipToBounds="True">
     <Grid>
         <wv2:WebView2 x:Name="ChatWebView"
-                       Source="about:blank"
                        DefaultBackgroundColor="Transparent" />
     </Grid>
 </UserControl>

@@ -8,6 +8,11 @@ internal static class WebView2Initializer
         WebView2 webView,
         CancellationToken cancellationToken = default)
     {
+        if (webView.CoreWebView2 is not null)
+        {
+            return;
+        }
+
         var provider = WebView2ServiceAccess.TryResolve();
         var bundledEnvironment = provider is null
             ? null
