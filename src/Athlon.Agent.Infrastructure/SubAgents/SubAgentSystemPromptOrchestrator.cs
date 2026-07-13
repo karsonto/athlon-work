@@ -19,7 +19,8 @@ public sealed class SubAgentSystemPromptOrchestrator(
     [
         typeof(BasePersonaSection),
         typeof(ProductGuidanceSection),
-        typeof(SubAgentDelegationSection)
+        typeof(SubAgentDelegationSection),
+        typeof(WorkspaceFilesSection),
     ];
 
     private readonly IReadOnlyList<IEnvironmentPromptSection> _staticSections =
