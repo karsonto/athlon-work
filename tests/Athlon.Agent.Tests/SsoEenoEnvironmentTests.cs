@@ -139,6 +139,79 @@ public sealed class SsoEenoEnvironmentTests
     }
 
     [Fact]
+    public void TryApply_SetsMcpRefreshTokenOnEnvironmentDictionary()
+    {
+        const string token = "dGVzdC1kaWN0LXRva2Vu";
+        var store = new FakeSsoSessionStore(CreateValidSession(withToken: true, mcpRefreshToken: token));
+        var settings = new AppSettings { Sso = { Enabled = true } };
+
+        SsoEenoEnvironment.TestOverride = () => SsoEenoEnvironment.TryGetStoredEncryptedValue(settings, store);
+        try
+        {
+            var env = new Dictionary<string, string>(StringComparer.Ordinal);
+            SsoEenoEnvironment.TryApply(env);
+
+            Assert.Equal(token, env[SsoEenoEnvironment.EnvVarName]);
+        }
+        finally
+        {
+            SsoEenoEnvironment.TestOverride = null;
+        }
+    }
+
+    [Fact]
+    public void WithStdioSsoEnvironment_InjectsTokenForStdioServers()
+    {
+        const string token = "dGVzdC1tY3Atc3RkaW8=";
+        SsoEenoEnvironment.TestOverride = () => token;
+        try
+        {
+            var server = new McpServerSettings
+            {
+                Name = "demo",
+                TransportType = "stdio",
+                Command = "npx",
+                Env = { ["EXISTING"] = "1" }
+            };
+
+            var enriched = McpRegistry.WithStdioSsoEnvironment(server);
+
+            Assert.NotSame(server, enriched);
+            Assert.Equal("1", enriched.Env["EXISTING"]);
+            Assert.Equal(token, enriched.Env[SsoEenoEnvironment.EnvVarName]);
+            Assert.False(server.Env.ContainsKey(SsoEenoEnvironment.EnvVarName));
+        }
+        finally
+        {
+            SsoEenoEnvironment.TestOverride = null;
+        }
+    }
+
+    [Fact]
+    public void WithStdioSsoEnvironment_SkipsHttpServers()
+    {
+        SsoEenoEnvironment.TestOverride = () => "should-not-apply";
+        try
+        {
+            var server = new McpServerSettings
+            {
+                Name = "remote",
+                TransportType = "http",
+                Url = "https://example.com/mcp"
+            };
+
+            var enriched = McpRegistry.WithStdioSsoEnvironment(server);
+
+            Assert.Same(server, enriched);
+            Assert.False(enriched.Env.ContainsKey(SsoEenoEnvironment.EnvVarName));
+        }
+        finally
+        {
+            SsoEenoEnvironment.TestOverride = null;
+        }
+    }
+
+    [Fact]
     public void EnrichSessionWithMcpToken_PersistsThroughSessionStore()
     {
         using var keys = CreateKeyPair();

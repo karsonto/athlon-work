@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Infrastructure.BehaviorReport;
+using Athlon.Agent.Infrastructure.Sso;
 using Athlon.Agent.Mcp;
 
 namespace Athlon.Agent.Infrastructure;
@@ -161,7 +162,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 {
                     client = await McpSdkClientFactory.ConnectAsync(
                         name,
-                        server,
+                        WithStdioSsoEnvironment(server),
                         workspaceContext.RootPath,
                         clientName: "Athlon.Agent",
                         cancellationToken);
@@ -339,6 +340,39 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
 
     private static string CreateConfigFingerprint(McpServerSettings server) =>
         JsonSerializer.Serialize(server, JsonFileStore.Options);
+
+    /// <summary>
+    /// Inject SSO <c>MCP_REFRESH_TOKEN</c> into stdio MCP process env (same as <see cref="WindowsCmdEncoding"/>).
+    /// Fingerprint stays on the original settings so token rotation alone does not force reconnect.
+    /// </summary>
+    internal static McpServerSettings WithStdioSsoEnvironment(McpServerSettings server)
+    {
+        if (McpTransportKinds.IsStreamableHttp(server.TransportType))
+        {
+            return server;
+        }
+
+        var env = new Dictionary<string, string>(server.Env, StringComparer.Ordinal);
+        SsoEenoEnvironment.TryApply(env);
+        if (!env.ContainsKey(SsoEenoEnvironment.EnvVarName))
+        {
+            return server;
+        }
+
+        return new McpServerSettings
+        {
+            Name = server.Name,
+            Enabled = server.Enabled,
+            TransportType = server.TransportType,
+            Url = server.Url,
+            Command = server.Command,
+            Args = server.Args.ToList(),
+            Env = env,
+            Headers = new Dictionary<string, string>(server.Headers),
+            WorkingDirectory = server.WorkingDirectory,
+            ToolCallTimeoutSeconds = server.ToolCallTimeoutSeconds
+        };
+    }
 
     private static string NormalizeMcpArgumentsJson(string serverName, string toolName, string argumentsJson, string? workspaceRoot)
     {

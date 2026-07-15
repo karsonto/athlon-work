@@ -18,12 +18,22 @@ internal static class SsoEenoEnvironment
 
     internal static Func<string?>? TestOverride { get; set; }
 
-    internal static void TryApply(ProcessStartInfo startInfo)
+    internal static void TryApply(ProcessStartInfo startInfo) =>
+        TryApplyCore(value => startInfo.Environment[EnvVarName] = value);
+
+    /// <summary>
+    /// Inject <see cref="EnvVarName"/> into a process environment dictionary
+    /// (e.g. MCP stdio <c>StdioClientTransport</c> environment).
+    /// </summary>
+    internal static void TryApply(IDictionary<string, string> environment) =>
+        TryApplyCore(value => environment[EnvVarName] = value);
+
+    private static void TryApplyCore(Action<string> setEnvironmentValue)
     {
         var encrypted = TestOverride?.Invoke() ?? TryGetStoredEncryptedValueDefault();
         if (!string.IsNullOrEmpty(encrypted))
         {
-            startInfo.Environment[EnvVarName] = encrypted;
+            setEnvironmentValue(encrypted);
         }
     }
 
