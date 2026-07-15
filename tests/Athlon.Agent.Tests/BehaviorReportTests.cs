@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Infrastructure;
@@ -134,6 +135,70 @@ public sealed class BehaviorReportTests : IDisposable
     }
 
     [Fact]
+    public void BuildRequestBody_UsesEventsArrayAndEventTime()
+    {
+        var device = new ClientDeviceSnapshot
+        {
+            UserId = "000000001",
+            ClientIp = "192.168.1.100",
+            MacAddress = "00:1A:2B:3C:4D:5E",
+            OsVersion = "Windows 10",
+            AppName = "Athlon Agent",
+            AppVersion = "1.0.0",
+            ScreenResolution = "1920x1080"
+        };
+        var timestamp = new DateTimeOffset(2026, 7, 14, 10, 30, 0, 0, TimeSpan.Zero);
+        var events = new[]
+        {
+            new BehaviorEvent
+            {
+                EventId = BehaviorEventIds.UserLogin,
+                EventType = BehaviorEventTypes.Event,
+                MessageContent = "User logged in",
+                Parameters = new Dictionary<string, object?> { ["action"] = "login" },
+                Timestamp = timestamp
+            },
+            new BehaviorEvent
+            {
+                EventId = BehaviorEventIds.McpTool,
+                EventType = BehaviorEventTypes.Action,
+                MessageContent = "User queried financial data",
+                Parameters = new Dictionary<string, object?>
+                {
+                    ["action"] = "query",
+                    ["target"] = "finance"
+                },
+                Timestamp = timestamp.AddSeconds(5)
+            }
+        };
+
+        var body = BehaviorReportUploader.BuildRequestBody(device, events);
+        var json = JsonSerializer.Serialize(body);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        Assert.Equal("000000001", root.GetProperty("user_id").GetString());
+        Assert.Equal("192.168.1.100", root.GetProperty("client_ip").GetString());
+        Assert.True(root.TryGetProperty("events", out var eventsEl));
+        Assert.Equal(JsonValueKind.Array, eventsEl.ValueKind);
+        Assert.Equal(2, eventsEl.GetArrayLength());
+
+        var first = eventsEl[0];
+        Assert.Equal(BehaviorEventIds.UserLogin, first.GetProperty("event_type").GetString());
+        Assert.Equal("User logged in", first.GetProperty("message_content").GetString());
+        Assert.Equal("event", first.GetProperty("event_params").GetProperty("event_kind").GetString());
+        Assert.Equal("login", first.GetProperty("event_params").GetProperty("action").GetString());
+        Assert.Equal(
+            BehaviorReportUploader.FormatEventTime(timestamp),
+            first.GetProperty("event_time").GetString());
+
+        var second = eventsEl[1];
+        Assert.Equal(BehaviorEventIds.McpTool, second.GetProperty("event_type").GetString());
+        Assert.Equal("action", second.GetProperty("event_params").GetProperty("event_kind").GetString());
+        Assert.False(root.TryGetProperty("event_type", out _));
+    }
+
+    [Fact]
     public async Task Uploader_Success_RemovesPendingEvents()
     {
         var paths = new TestPaths(_root);
@@ -145,6 +210,12 @@ public sealed class BehaviorReportTests : IDisposable
             EventType = BehaviorEventTypes.Event,
             MessageContent = BehaviorEventIds.AppStart
         });
+        await store.AppendAsync(new BehaviorEvent
+        {
+            EventId = BehaviorEventIds.UserLogin,
+            EventType = BehaviorEventTypes.Event,
+            MessageContent = BehaviorEventIds.UserLogin
+        });
 
         var settings = new AppSettings
         {
@@ -154,17 +225,22 @@ public sealed class BehaviorReportTests : IDisposable
                 BaseUrl = "https://example.com"
             }
         };
+        var capturing = new CapturingHandler();
         var device = new ClientDeviceInfo(appName: "Athlon Agent", appVersion: "1.0.0");
         var uploader = new BehaviorReportUploader(
-            new HttpClient(new SuccessHandler()),
+            new HttpClient(capturing),
             settings,
             store,
             device,
             new NoOpLogger());
 
         var uploaded = await uploader.UploadPendingAsync();
-        Assert.Equal(1, uploaded);
+        Assert.Equal(2, uploaded);
         Assert.False(File.Exists(store.PendingPath));
+        Assert.Equal(1, capturing.RequestCount);
+        Assert.Contains("/agent/report", capturing.LastRequestUri, StringComparison.Ordinal);
+        Assert.Contains("\"events\":", capturing.LastRequestBody, StringComparison.Ordinal);
+        Assert.Contains("\"event_time\":", capturing.LastRequestBody, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -222,13 +298,26 @@ public sealed class BehaviorReportTests : IDisposable
         public string ResolveSkillPath(string path) => path;
     }
 
-    private sealed class SuccessHandler : HttpMessageHandler
+    private sealed class CapturingHandler : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        public int RequestCount { get; private set; }
+        public string LastRequestUri { get; private set; } = "";
+        public string LastRequestBody { get; private set; } = "";
+
+        protected override async Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            RequestCount++;
+            LastRequestUri = request.RequestUri?.ToString() ?? "";
+            LastRequestBody = request.Content is null
+                ? ""
+                : await request.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("{}", Encoding.UTF8, "application/json")
-            });
+            };
+        }
     }
 
     private sealed class FailHandler : HttpMessageHandler

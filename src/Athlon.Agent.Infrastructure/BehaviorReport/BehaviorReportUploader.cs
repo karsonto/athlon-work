@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
@@ -28,51 +29,44 @@ public sealed class BehaviorReportUploader(
         }
 
         var device = deviceInfo.GetSnapshot();
-        var uploaded = new List<string>();
         var endpoint = report.BaseUrl.TrimEnd('/') + "/agent/report";
+        var body = BuildRequestBody(device, pending);
 
-        foreach (var evt in pending)
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            try
+            using var response = await httpClient.PostAsJsonAsync(endpoint, body, cancellationToken)
+                .ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
             {
-                var body = BuildRequestBody(device, evt);
-                using var response = await httpClient.PostAsJsonAsync(endpoint, body, cancellationToken)
-                    .ConfigureAwait(false);
-                if (response.IsSuccessStatusCode)
-                {
-                    uploaded.Add(evt.Id);
-                }
-                else
-                {
-                    _logger.Warning(
-                        "Behavior report upload failed for {EventId}: HTTP {StatusCode}",
-                        evt.EventId,
-                        (int)response.StatusCode);
-                    // Keep failed events; retry next cycle. Stop batch so order is preserved.
-                    break;
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning("Behavior report upload error for {EventId}: {Error}", evt.EventId, ex.Message);
-                break;
+                _logger.Warning(
+                    "Behavior report batch upload failed ({Count} events): HTTP {StatusCode}",
+                    pending.Count,
+                    (int)response.StatusCode);
+                return 0;
             }
         }
-
-        if (uploaded.Count > 0)
+        catch (OperationCanceledException)
         {
-            await store.RemoveUploadedAsync(uploaded, cancellationToken).ConfigureAwait(false);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning(
+                "Behavior report batch upload error ({Count} events): {Error}",
+                pending.Count,
+                ex.Message);
+            return 0;
         }
 
-        return uploaded.Count;
+        var uploadedIds = pending.Select(e => e.Id).ToList();
+        await store.RemoveUploadedAsync(uploadedIds, cancellationToken).ConfigureAwait(false);
+        return uploadedIds.Count;
     }
 
-    internal static object BuildRequestBody(ClientDeviceSnapshot device, BehaviorEvent evt) =>
+    /// <summary>
+    /// Builds POST /agent/report body: device fields + batched <c>events</c>.
+    /// </summary>
+    internal static object BuildRequestBody(ClientDeviceSnapshot device, IReadOnlyList<BehaviorEvent> events) =>
         new
         {
             user_id = device.UserId,
@@ -82,10 +76,29 @@ public sealed class BehaviorReportUploader(
             app_name = device.AppName,
             app_version = device.AppVersion,
             screen_resolution = device.ScreenResolution,
-            event_type = evt.EventType,
-            event_params = evt.Parameters.Count == 0
-                ? new Dictionary<string, object?>(StringComparer.Ordinal)
-                : evt.Parameters,
-            message_content = string.IsNullOrWhiteSpace(evt.MessageContent) ? evt.EventId : evt.MessageContent
+            events = events.Select(BuildEventItem).ToArray()
         };
+
+    internal static object BuildEventItem(BehaviorEvent evt)
+    {
+        // Server event_type is the business event id (e.g. user_login / mcp_tool).
+        // Internal action/event category is kept in event_params as "event_kind".
+        var parameters = new Dictionary<string, object?>(evt.Parameters, StringComparer.Ordinal);
+        if (!parameters.ContainsKey("event_kind") && !string.IsNullOrWhiteSpace(evt.EventType))
+        {
+            parameters["event_kind"] = evt.EventType;
+        }
+
+        return new
+        {
+            event_type = string.IsNullOrWhiteSpace(evt.EventId) ? evt.EventType : evt.EventId,
+            event_params = parameters,
+            message_content = string.IsNullOrWhiteSpace(evt.MessageContent) ? evt.EventId : evt.MessageContent,
+            event_time = FormatEventTime(evt.Timestamp)
+        };
+    }
+
+    /// <summary>Formats as local wall-clock time: yyyy-MM-dd HH:mm:ss.fff</summary>
+    internal static string FormatEventTime(DateTimeOffset timestamp) =>
+        timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
 }

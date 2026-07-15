@@ -1,12 +1,14 @@
 # Behavior Report 事件采集清单
 
-已实现：`BehaviorEventManager` 单例采集 → 本地 `~/.athlon-agent/behavior/pending.jsonl` → 每 N 分钟 `POST {BaseUrl}/agent/report`。
+已实现：`BehaviorEventManager` 单例采集 → 本地 `~/.athlon-agent/behavior/pending.jsonl` → 每 N 分钟批量 `POST {BaseUrl}/agent/report`。
 
 配置：`AppSettings.BehaviorReport`（默认 `enabled: false`）。
 
 ---
 
-## 公共设备字段（每条上报必带）
+## 上报体（设备字段 + events 数组）
+
+一次请求上送当前 pending 中的全部事件（成功则整批删除，失败整批保留重试）：
 
 | 字段 | 说明 |
 |------|------|
@@ -17,8 +19,16 @@
 | `app_name` | Athlon Agent |
 | `app_version` | 应用版本号 |
 | `screen_resolution` | 主屏分辨率 |
+| `events` | 事件数组 |
 
-上报体另含：`event_type`（`action` / `event`）、`message_content`（通常等于 event_id）、`event_params`。
+每个 `events[]` 元素：
+
+| 字段 | 说明 |
+|------|------|
+| `event_type` | 业务事件 ID（如 `user_login`、`mcp_tool`） |
+| `event_params` | 业务参数；另注入 `event_kind`（`action` / `event`） |
+| `message_content` | 描述（多数等于 event_id） |
+| `event_time` | 本地时间 `yyyy-MM-dd HH:mm:ss.fff` |
 
 ---
 
@@ -66,4 +76,4 @@
 |------|------|
 | `~/.athlon-agent/behavior/pending.jsonl` | 待上报事件（JSONL） |
 
-上报成功后删除已成功行；失败保留下次重试。关机时 `FlushAsync`（最多约 5 秒）。
+批量上报成功后删除全部已上送行；失败保留下次重试。关机时 `FlushAsync`（最多约 5 秒）。
