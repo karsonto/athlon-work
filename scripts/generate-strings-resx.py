@@ -537,6 +537,7 @@ ENTRIES: dict[str, tuple[str, str]] = {
     "Tool_EvictedHeader": ("① 工具结果归档 · {0}", "① Tool result archived · {0}"),
     "Tool_NoArgs": ("(无参数)", "(no arguments)"),
     "FileWrite_StreamingContent": ("content = 传输中…", "content = streaming…"),
+    "FileWrite_ArgumentsJsonInvalid": ("参数 JSON 无效或不完整", "arguments JSON invalid or incomplete"),
     "Chat_SelectImages": ("选择图片", "Select images"),
     "Chat_QueuedStatus": ("已加入排队", "Added to queue"),
 }

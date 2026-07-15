@@ -31,7 +31,9 @@ public sealed class ToolCallArgsDisplayCoordinatorTests
         Assert.IsType<AgentStreamEvent.ToolCallArgs>(uiEvents[0]);
         Assert.Contains("src/App.tsx", ((AgentStreamEvent.ToolCallArgs)uiEvents[0]).Delta, StringComparison.Ordinal);
         Assert.Contains(FileWriteToolArgumentsDisplay.StreamingContentLabel, ((AgentStreamEvent.ToolCallArgs)uiEvents[0]).Delta, StringComparison.Ordinal);
-        Assert.Contains("(3 chars)", ((AgentStreamEvent.ToolCallArgs)uiEvents[1]).Delta, StringComparison.Ordinal);
+        Assert.Equal(
+            Athlon.Agent.App.Resources.Strings.Get("FileWrite_ArgumentsJsonInvalid"),
+            ((AgentStreamEvent.ToolCallArgs)uiEvents[1]).Delta);
         Assert.IsType<AgentStreamEvent.ToolCallEnd>(uiEvents[2]);
     }
 

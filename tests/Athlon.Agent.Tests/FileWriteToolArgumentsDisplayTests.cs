@@ -1,3 +1,4 @@
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 
@@ -35,14 +36,16 @@ public sealed class FileWriteToolArgumentsDisplayTests
     }
 
     [Fact]
-    public void FormatFinalFromRawJson_estimates_length_from_partial_json()
+    public void FormatFinalFromRawJson_invalid_json_does_not_fake_path_or_zero_content()
     {
         const string partial = """{"path":"a.ts","content":"abc""";
 
         var text = FileWriteToolArgumentsDisplay.FormatFinalFromRawJson(partial);
 
-        Assert.Contains("path = a.ts", text, StringComparison.Ordinal);
-        Assert.Contains("content = (3 chars)", text, StringComparison.Ordinal);
+        Assert.Equal(Strings.Get("FileWrite_ArgumentsJsonInvalid"), text);
+        Assert.DoesNotContain("path = a.ts", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("content = (0 chars)", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("content = (3 chars)", text, StringComparison.Ordinal);
     }
 
     [Fact]

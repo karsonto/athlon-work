@@ -33,21 +33,40 @@ public sealed class ToolCallArguments : IReadOnlyDictionary<string, JsonElement>
 
     public static ToolCallArguments Parse(string? json)
     {
+        TryParse(json, out var arguments, out _);
+        return arguments;
+    }
+
+    /// <summary>
+    /// Parses tool-call arguments JSON. Empty/whitespace succeeds as <see cref="Empty"/>.
+    /// Non-object roots and invalid JSON return false with an error description.
+    /// </summary>
+    public static bool TryParse(string? json, out ToolCallArguments arguments, out string? error)
+    {
+        arguments = Empty;
+        error = null;
+
         if (string.IsNullOrWhiteSpace(json))
         {
-            return Empty;
+            return true;
         }
 
         try
         {
             using var document = JsonDocument.Parse(json);
-            return document.RootElement.ValueKind == JsonValueKind.Object
-                ? FromJsonElement(document.RootElement)
-                : Empty;
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                error = $"Root value must be a JSON object, got {document.RootElement.ValueKind}.";
+                return false;
+            }
+
+            arguments = FromJsonElement(document.RootElement);
+            return true;
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return Empty;
+            error = ex.Message;
+            return false;
         }
     }
 

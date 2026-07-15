@@ -17,6 +17,14 @@ public sealed record AgentToolCall(
     string Name,
     ToolCallArguments Arguments)
 {
+    /// <summary>Raw model arguments JSON before parse (not persisted in ToolCallsJson).</summary>
+    [JsonIgnore]
+    public string? RawArgumentsJson { get; init; }
+
+    /// <summary>Set when <see cref="RawArgumentsJson"/> could not be parsed as a JSON object.</summary>
+    [JsonIgnore]
+    public string? ArgumentsParseError { get; init; }
+
     public AgentToolCall(
         string id,
         string name,

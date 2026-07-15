@@ -113,6 +113,20 @@ internal sealed class ToolInvocationPipeline(
         AgentTurnCallbacks? callbacks,
         CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(toolCall.ArgumentsParseError))
+        {
+            return ToolInvocationErrors.Failure(
+                "Invalid tool arguments",
+                new ToolInvocationError(
+                    "arguments.json_invalid",
+                    "$",
+                    "JSON object with tool parameters",
+                    DescribeInvalidArgumentsActual(toolCall),
+                    "Regenerate the tool call with complete, valid JSON arguments. "
+                    + "Put `path` before `content` for file_write; keep content small or use file_edit/apply_patch "
+                    + "for large files; ensure the arguments object closes with `}`."));
+        }
+
         var router = resolveToolRouter();
         var definition = router.ListTools().FirstOrDefault(
             tool => string.Equals(tool.Name, toolCall.Name, StringComparison.OrdinalIgnoreCase));
@@ -255,5 +269,39 @@ internal sealed class ToolInvocationPipeline(
             callbacks,
             persistMessageAsync,
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string DescribeInvalidArgumentsActual(AgentToolCall toolCall)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(toolCall.ArgumentsParseError))
+        {
+            parts.Add(toolCall.ArgumentsParseError!);
+        }
+
+        var preview = PreviewJson(toolCall.RawArgumentsJson);
+        if (!string.IsNullOrEmpty(preview))
+        {
+            parts.Add($"raw={preview}");
+        }
+
+        return parts.Count == 0 ? "invalid or incomplete JSON" : string.Join("; ", parts);
+    }
+
+    private static string PreviewJson(string? rawJson)
+    {
+        if (string.IsNullOrWhiteSpace(rawJson))
+        {
+            return string.Empty;
+        }
+
+        const int head = 120;
+        const int tail = 120;
+        if (rawJson.Length <= head + tail + 3)
+        {
+            return rawJson;
+        }
+
+        return rawJson[..head] + "..." + rawJson[^tail..];
     }
 }

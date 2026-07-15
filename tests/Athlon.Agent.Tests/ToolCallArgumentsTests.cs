@@ -62,4 +62,46 @@ public sealed class ToolCallArgumentsTests
         Assert.Equal(JsonValueKind.Null, call.Arguments["nothing"].ValueKind);
         Assert.Equal("src/file.cs", call.Arguments.GetString("path"));
     }
+
+    [Fact]
+    public void TryParse_SucceedsForEmptyAndValidObject()
+    {
+        Assert.True(ToolCallArguments.TryParse(null, out var empty, out var error));
+        Assert.Empty(empty);
+        Assert.Null(error);
+
+        Assert.True(ToolCallArguments.TryParse("""{"path":"a.txt"}""", out var args, out error));
+        Assert.Equal("a.txt", args.GetString("path"));
+        Assert.Null(error);
+    }
+
+    [Fact]
+    public void TryParse_FailsForInvalidOrNonObjectJson()
+    {
+        Assert.False(ToolCallArguments.TryParse("{\"path\":\"a.txt\"", out var args, out var error));
+        Assert.Empty(args);
+        Assert.False(string.IsNullOrWhiteSpace(error));
+
+        Assert.False(ToolCallArguments.TryParse("""["not","object"]""", out args, out error));
+        Assert.Empty(args);
+        Assert.Contains("object", error, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void FormatToolResult_ShowsInvalidJsonWhenParseErrorPresent()
+    {
+        var call = new AgentToolCall("call-1", "file_write", ToolCallArguments.Empty)
+        {
+            RawArgumentsJson = """{"content":"hi","path":"a.html""",
+            ArgumentsParseError = "Incomplete JSON."
+        };
+
+        var text = ModelMessageBuilder.FormatToolResult(
+            call,
+            ToolResult.Failure("Invalid tool arguments", "error"));
+
+        Assert.Contains("(invalid JSON)", text, StringComparison.Ordinal);
+        Assert.Contains("Incomplete JSON.", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Arguments: (none)", text, StringComparison.Ordinal);
+    }
 }

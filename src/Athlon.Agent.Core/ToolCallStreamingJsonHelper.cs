@@ -46,6 +46,12 @@ public static class ToolCallStreamingJsonHelper
         var startIndex = partialJson.IndexOf(marker, StringComparison.Ordinal);
         if (startIndex < 0)
         {
+            marker = $"\"{propertyName}\": \"";
+            startIndex = partialJson.IndexOf(marker, StringComparison.Ordinal);
+        }
+
+        if (startIndex < 0)
+        {
             marker = $"\"{propertyName}\" : \"";
             startIndex = partialJson.IndexOf(marker, StringComparison.Ordinal);
         }

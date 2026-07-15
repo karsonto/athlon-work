@@ -88,6 +88,7 @@ internal static class OpenAiChatResponseParser
         var toolCalls = new Dictionary<int, StreamingToolCallState>();
         ModelUsage? usage = null;
         var sawSseData = false;
+        var idleTimedOut = false;
         var idleTimeoutSeconds = Math.Max(1, settings.Model.StreamingIdleTimeoutSeconds);
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -103,6 +104,7 @@ internal static class OpenAiChatResponseParser
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
+                idleTimedOut = true;
                 logger.Information(
                     "Streaming read idle timeout reached ({IdleTimeoutSeconds}s), finishing with partial content.",
                     idleTimeoutSeconds);
@@ -237,10 +239,24 @@ internal static class OpenAiChatResponseParser
             {
                 var state = item.Value;
                 var args = state.Arguments.Length == 0 ? "{}" : state.Arguments.ToString();
-                return new AgentToolCall(
+                var call = CreateToolCall(
                     string.IsNullOrWhiteSpace(state.Id) ? Guid.NewGuid().ToString("N") : state.Id,
                     state.Name ?? string.Empty,
-                    ParseArguments(args));
+                    args,
+                    idleTimedOut);
+                if (idleTimedOut && call.ArgumentsParseError is not null)
+                {
+                    logger.Warning(
+                        "Tool call {ToolName} arguments incomplete after streaming idle timeout "
+                        + "(argsLength={ArgsLength}, startsWithBrace={StartsWithBrace}, endsWithBrace={EndsWithBrace}): {Error}",
+                        call.Name,
+                        args.Length,
+                        args.StartsWith('{'),
+                        args.EndsWith('}'),
+                        call.ArgumentsParseError);
+                }
+
+                return call;
             })
             .ToArray();
 
@@ -338,7 +354,7 @@ internal static class OpenAiChatResponseParser
                             ? argumentsElement.GetRawText()
                             : "{}"
                     : "{}";
-                toolCalls.Add(new AgentToolCall(id, name, ParseArguments(argumentsJson)));
+                toolCalls.Add(CreateToolCall(id, name, argumentsJson, idleTimedOut: false));
             }
         }
 
@@ -428,6 +444,30 @@ internal static class OpenAiChatResponseParser
         }
     }
 
-    private static ToolCallArguments ParseArguments(string argumentsJson) =>
-        ToolPathNormalizer.NormalizePathArguments(ToolCallArgumentsParser.ParseJson(argumentsJson));
+    private static AgentToolCall CreateToolCall(
+        string id,
+        string name,
+        string argumentsJson,
+        bool idleTimedOut)
+    {
+        if (!ToolCallArguments.TryParse(argumentsJson, out var parsed, out var parseError))
+        {
+            var error = parseError ?? "Invalid tool arguments JSON.";
+            if (idleTimedOut)
+            {
+                error = "Incomplete tool arguments JSON after streaming idle timeout. " + error;
+            }
+
+            return new AgentToolCall(id, name, ToolCallArguments.Empty)
+            {
+                RawArgumentsJson = argumentsJson,
+                ArgumentsParseError = error
+            };
+        }
+
+        return new AgentToolCall(id, name, ToolPathNormalizer.NormalizePathArguments(parsed))
+        {
+            RawArgumentsJson = argumentsJson
+        };
+    }
 }

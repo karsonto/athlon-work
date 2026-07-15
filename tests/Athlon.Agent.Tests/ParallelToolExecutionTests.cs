@@ -280,6 +280,53 @@ public sealed class ParallelToolExecutionTests
     }
 
     [Fact]
+    public async Task SendAsync_InvalidArgumentsJson_ReturnsJsonInvalidNotMissingPath()
+    {
+        var router = new ApprovalTrackingToolRouter();
+        var storage = new NoOpStorage();
+        var settings = new AppSettings();
+        settings.ToolPermissions.ApprovalEnabled = true;
+        var runtime = CreateRuntime(
+            storage,
+            router,
+            settings,
+            new ScriptedModelClient(
+                new AgentModelResponse(
+                    string.Empty,
+                    [
+                        new AgentToolCall("invalid-json", "file_write", ToolCallArguments.Empty)
+                        {
+                            RawArgumentsJson = """{"content":"<html>…","path":"a.html""",
+                            ArgumentsParseError = "Expected end of string, but instead reached end of data."
+                        }
+                    ]),
+                new AgentModelResponse("done", Array.Empty<AgentToolCall>())));
+        var approvalRequests = 0;
+        var callbacks = new AgentTurnCallbacks
+        {
+            OnToolApprovalRequested = (_, _) =>
+            {
+                approvalRequests++;
+                return Task.FromResult(ToolApprovalDecision.Approved);
+            }
+        };
+
+        var session = await runtime.SendAsync(
+            AgentSession.Create("invalid-json-args"),
+            "write",
+            callbacks: callbacks);
+
+        var toolContent = session.Messages.Single(message => message.Role == MessageRole.Tool).Content;
+        Assert.Equal(0, approvalRequests);
+        Assert.Equal(0, router.InvokeCount);
+        Assert.Contains("arguments.json_invalid", toolContent, StringComparison.Ordinal);
+        Assert.DoesNotContain("schema.required", toolContent, StringComparison.Ordinal);
+        Assert.Contains("(invalid JSON)", toolContent, StringComparison.Ordinal);
+        var rejection = Assert.Single(storage.Attempts, item => item.Kind == AgentAttemptKind.Tool);
+        Assert.Equal("arguments.json_invalid", rejection.ErrorCode);
+    }
+
+    [Fact]
     public async Task SendAsync_AskToolExecutesAfterApprovalCallbackApproves()
     {
         var router = new ApprovalTrackingToolRouter();

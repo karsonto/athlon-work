@@ -24,12 +24,10 @@ internal static class FileWriteToolArgumentsDisplay
             return FormatFinal(path, content.Length);
         }
 
-        if (ToolCallStreamingJsonHelper.TryExtractStringProperty(rawJson, ToolPathNormalizer.PathArgumentName, out path))
+        if (!string.IsNullOrWhiteSpace(rawJson))
         {
-            var length = ToolCallStreamingJsonHelper.TryEstimateStringPropertyLength(rawJson, "content", out var estimated)
-                ? estimated
-                : 0;
-            return FormatFinal(path, length);
+            // Incomplete/invalid JSON: do not surface a regex-extracted path with content=(0 chars).
+            return Strings.Get("FileWrite_ArgumentsJsonInvalid");
         }
 
         return Strings.Get("Tool_NoArgs");

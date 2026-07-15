@@ -32,6 +32,15 @@ public sealed class ToolCallStreamingJsonHelperTests
     }
 
     [Fact]
+    public void TryEstimateStringPropertyLength_accepts_space_after_colon()
+    {
+        const string partial = """{"path":"a.ts","content": "hel""";
+
+        Assert.True(ToolCallStreamingJsonHelper.TryEstimateStringPropertyLength(partial, "content", out var length));
+        Assert.Equal(3, length);
+    }
+
+    [Fact]
     public void TryParseCompleteFileWriteArgs_returns_exact_content_length()
     {
         const string json = """{"path":"src/App.tsx","content":"hello\nworld"}""";

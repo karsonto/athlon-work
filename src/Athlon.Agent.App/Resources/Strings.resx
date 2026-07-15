@@ -352,6 +352,9 @@
   <data name="FileWrite_StreamingContent" xml:space="preserve">
     <value>content = 传输中…</value>
   </data>
+  <data name="FileWrite_ArgumentsJsonInvalid" xml:space="preserve">
+    <value>参数 JSON 无效或不完整</value>
+  </data>
   <data name="FlowDoc_CopyNotice" xml:space="preserve">
     <value>已复制</value>
   </data>

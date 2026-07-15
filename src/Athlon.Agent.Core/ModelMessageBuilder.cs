@@ -91,7 +91,7 @@ internal static class ModelMessageBuilder
             $"ToolCallId: {call.Id}",
             $"Tool `{call.Name}` {status}.",
             "",
-            $"Arguments: {FormatArguments(call.Arguments)}",
+            $"Arguments: {FormatArguments(call)}",
             $"Summary: {result.Summary}",
             "",
             result.Content ?? result.Error ?? string.Empty
@@ -271,9 +271,36 @@ internal static class ModelMessageBuilder
             : $"{content}{Environment.NewLine}{Environment.NewLine}{timestamp}";
     }
 
-    private static string FormatArguments(ToolCallArguments arguments) =>
-        arguments.Count == 0
+    private static string FormatArguments(AgentToolCall call)
+    {
+        if (!string.IsNullOrWhiteSpace(call.ArgumentsParseError))
+        {
+            var preview = FormatInvalidArgumentsPreview(call.RawArgumentsJson);
+            return string.IsNullOrEmpty(preview)
+                ? $"(invalid JSON) {call.ArgumentsParseError}"
+                : $"(invalid JSON) {call.ArgumentsParseError}{Environment.NewLine}{preview}";
+        }
+
+        return call.Arguments.Count == 0
             ? "(none)"
-            : string.Join(Environment.NewLine, arguments.Select(
+            : string.Join(Environment.NewLine, call.Arguments.Select(
                 argument => $"{argument.Key}={argument.Value.GetRawText()}"));
+    }
+
+    private static string FormatInvalidArgumentsPreview(string? rawJson)
+    {
+        if (string.IsNullOrWhiteSpace(rawJson))
+        {
+            return string.Empty;
+        }
+
+        const int head = 120;
+        const int tail = 120;
+        if (rawJson.Length <= head + tail + 3)
+        {
+            return rawJson;
+        }
+
+        return rawJson[..head] + "..." + rawJson[^tail..];
+    }
 }

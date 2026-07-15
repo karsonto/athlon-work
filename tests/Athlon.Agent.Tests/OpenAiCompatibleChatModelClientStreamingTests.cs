@@ -128,6 +128,38 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
     }
 
     [Fact]
+    public async Task CompleteAsync_StreamResponse_IncompleteToolArgs_SetsParseError()
+    {
+        // content string closed but object never closed with }
+        var response = string.Join(
+            "\n",
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_fw\",\"function\":{\"name\":\"file_write\",\"arguments\":\"{\\\"content\\\": \\\"<html></html>\\\"\"}}]}}]}",
+            "data: [DONE]",
+            string.Empty);
+
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            var http = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(response, Encoding.UTF8)
+            };
+            http.Content.Headers.ContentType = new MediaTypeHeaderValue("text/event-stream");
+            return http;
+        });
+
+        var result = await CreateClient(handler, enableStreaming: true).CompleteAsync(
+            new AgentModelRequest(
+                [new AgentModelMessage("user", "hi")],
+                Array.Empty<ToolDefinition>()));
+
+        var call = Assert.Single(result.ToolCalls);
+        Assert.Equal("file_write", call.Name);
+        Assert.Empty(call.Arguments);
+        Assert.False(string.IsNullOrWhiteSpace(call.ArgumentsParseError));
+        Assert.Contains("content", call.RawArgumentsJson, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task CompleteAsync_StreamResponse_EmitsReasoningDeltas()
     {
         var response = string.Join(
