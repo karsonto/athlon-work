@@ -126,6 +126,8 @@ public sealed class ChatHtmlBuilder
             ["exploredFilesMany"] = Strings.Get("Chat_ExploredFilesMany"),
             ["searchesOne"] = Strings.Get("Chat_SearchesOne"),
             ["searchesMany"] = Strings.Get("Chat_SearchesMany"),
+            ["commandsOne"] = Strings.Get("Chat_CommandsOne"),
+            ["commandsMany"] = Strings.Get("Chat_CommandsMany"),
             ["thoughtsOne"] = Strings.Get("Chat_ThoughtsOne"),
             ["thoughtsMany"] = Strings.Get("Chat_ThoughtsMany"),
             ["unmodifiedLines"] = Strings.Get("Chat_UnmodifiedLines"),
@@ -1626,11 +1628,14 @@ public sealed class ChatHtmlBuilder
           var parts = [];
           var explored = event.exploredFileCount || 0;
           var searches = event.searchCount || 0;
+          var commands = event.commandCount || 0;
           var thoughts = event.thoughtCount || 0;
           if (explored === 1) parts.push(t('exploredFilesOne') || 'explored 1 file');
           else if (explored > 1) parts.push((t('exploredFilesMany') || 'explored {0} files').replace('{0}', String(explored)));
           if (searches === 1) parts.push(t('searchesOne') || '1 search');
           else if (searches > 1) parts.push((t('searchesMany') || '{0} searches').replace('{0}', String(searches)));
+          if (commands === 1) parts.push(t('commandsOne') || 'ran 1 command');
+          else if (commands > 1) parts.push((t('commandsMany') || 'ran {0} commands').replace('{0}', String(commands)));
           if (parts.length === 0 && thoughts > 0) {
             if (thoughts === 1) return t('thoughtsOne') || t('thought') || 'Thought';
             return (t('thoughtsMany') || '{0} thoughts').replace('{0}', String(thoughts));
@@ -1731,7 +1736,7 @@ public sealed class ChatHtmlBuilder
           state.currentAssistantEl = null;
           state.currentReasoningEl = null;
           var items = event.items || [];
-          if (!items.length && !(event.exploredFileCount || event.searchCount || event.thoughtCount)) return;
+          if (!items.length && !(event.exploredFileCount || event.searchCount || event.commandCount || event.thoughtCount)) return;
 
           // Live cards always upsert the current open segment; sealing (upsert=false) finalizes that card.
           var existing = document.querySelector('.turn-activity[data-live="1"]');

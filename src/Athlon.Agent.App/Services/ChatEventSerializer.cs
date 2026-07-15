@@ -111,6 +111,7 @@ internal static class ChatEventSerializer
             editedFileCount = summary.EditedFileCount,
             exploredFileCount = summary.ExploredFileCount,
             searchCount = summary.SearchCount,
+            commandCount = summary.CommandCount,
             thoughtCount = summary.ThoughtCount,
             totalAdded = summary.TotalAdded,
             totalRemoved = summary.TotalRemoved,
@@ -124,6 +125,7 @@ internal static class ChatEventSerializer
         TurnActivityKind.Read => Strings.Get("Chat_ActivityVerbRead"),
         TurnActivityKind.Searched => Strings.Get("Chat_ActivityVerbSearched"),
         TurnActivityKind.Explored => Strings.Get("Chat_ActivityVerbExplored"),
+        TurnActivityKind.Command => Strings.Get("Chat_ActivityVerbCommand"),
         TurnActivityKind.Thought => Strings.Get("Chat_ActivityVerbThought"),
         _ => kind.ToString()
     };

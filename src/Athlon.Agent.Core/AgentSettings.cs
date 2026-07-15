@@ -211,6 +211,9 @@ public sealed class UiSettings
     public double NavigationSidebarWidth { get; set; } = 220;
     public double EditorPaneWidth { get; set; } = 480;
     public double ComposerHeight { get; set; } = 168;
-    /// <summary>When false (default), tool-call cards are hidden in chat UI.</summary>
-    public bool ShowToolCalls { get; set; } = false;
+    /// <summary>
+    /// Legacy setting retained for settings.json compatibility. Tool cards are always shown;
+    /// workspace activity tools still fold into the turn-activity summary.
+    /// </summary>
+    public bool ShowToolCalls { get; set; } = true;
 }

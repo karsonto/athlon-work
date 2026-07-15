@@ -15,7 +15,8 @@ internal static class TurnActivityClassifier
         "file_read",
         "grep_files",
         "glob_files",
-        "file_list"
+        "file_list",
+        "execute_command"
     };
 
     public static bool IsActivityTool(string? toolName) =>

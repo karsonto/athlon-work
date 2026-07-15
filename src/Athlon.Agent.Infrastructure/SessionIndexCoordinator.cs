@@ -37,7 +37,8 @@ internal sealed class SessionIndexCoordinator
             session.Title,
             sessionDir,
             session.UpdatedAt,
-            session.Messages.Count);
+            session.Messages.Count,
+            session.ActiveWorkspace);
         ScheduleUpdate(entry);
     }
 
@@ -92,7 +93,8 @@ internal sealed class SessionIndexCoordinator
                     var merged = MergePendingEntries(cached);
                     if (IsSessionIndexFresh(indexPath, merged))
                     {
-                        return OrderMenuSessions(merged);
+                        // Legacy index.json may omit activeWorkspace; enrich from session.json.
+                        return OrderMenuSessions(EnrichActiveWorkspace(merged));
                     }
                 }
             }
@@ -302,5 +304,38 @@ internal sealed class SessionIndexCoordinator
             .OrderByDescending(item => item.UpdatedAt)
             .ThenBy(item => item.Id)
             .ToArray();
+    }
+
+    private static IReadOnlyList<SessionIndexEntry> EnrichActiveWorkspace(IReadOnlyList<SessionIndexEntry> entries)
+    {
+        var enriched = new List<SessionIndexEntry>(entries.Count);
+        var changed = false;
+        foreach (var entry in entries)
+        {
+            var sessionJson = Path.Combine(entry.Path, "session.json");
+            var fromDisk = SessionJsonIndexReader.TryRead(sessionJson);
+            if (fromDisk is null)
+            {
+                enriched.Add(entry);
+                continue;
+            }
+
+            if (!string.Equals(entry.ActiveWorkspace, fromDisk.ActiveWorkspace, StringComparison.OrdinalIgnoreCase)
+                || entry.MessageCount != fromDisk.MessageCount)
+            {
+                changed = true;
+                enriched.Add(entry with
+                {
+                    ActiveWorkspace = fromDisk.ActiveWorkspace,
+                    MessageCount = entry.MessageCount ?? fromDisk.MessageCount
+                });
+            }
+            else
+            {
+                enriched.Add(entry);
+            }
+        }
+
+        return changed ? enriched : entries;
     }
 }

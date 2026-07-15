@@ -47,12 +47,18 @@ public sealed class SessionHistoryCoordinator : IDisposable
         _stopSession = stopSession;
 
         var entries = await _storage.ListSessionsAsync();
+        var previouslyExpanded = AgentRecordGroups
+            .Where(group => group.IsExpanded)
+            .Select(group => group.Key)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         AgentRecordGroups.Clear();
         foreach (var group in AgentRecordGrouping.Build(
                      entries,
                      currentSessionId,
                      isSessionRunning,
-                     stopSession))
+                     stopSession,
+                     previouslyExpanded.Count > 0 ? previouslyExpanded : null))
         {
             if (group.Items.Count > 0)
             {

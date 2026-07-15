@@ -136,8 +136,17 @@
   <data name="Chat_ActivityVerbExplored" xml:space="preserve">
     <value>Explored</value>
   </data>
+  <data name="Chat_ActivityVerbCommand" xml:space="preserve">
+    <value>Ran</value>
+  </data>
   <data name="Chat_ActivityVerbThought" xml:space="preserve">
     <value>Thought</value>
+  </data>
+  <data name="Chat_CommandsOne" xml:space="preserve">
+    <value>ran 1 command</value>
+  </data>
+  <data name="Chat_CommandsMany" xml:space="preserve">
+    <value>ran {0} commands</value>
   </data>
   <data name="Chat_ThoughtsOne" xml:space="preserve">
     <value>1 thought</value>
@@ -749,11 +758,17 @@ Error: {1}</value>
   <data name="Preview_MermaidTitle" xml:space="preserve">
     <value>Mermaid diagram preview</value>
   </data>
+  <data name="Nav_Repositories" xml:space="preserve">
+    <value>Repositories</value>
+  </data>
   <data name="RecordGroup_Earlier" xml:space="preserve">
     <value>Earlier</value>
   </data>
   <data name="RecordGroup_Last7Days" xml:space="preserve">
     <value>Last 7 days</value>
+  </data>
+  <data name="RecordGroup_NoWorkspace" xml:space="preserve">
+    <value>No workspace</value>
   </data>
   <data name="RecordGroup_Today" xml:space="preserve">
     <value>Today</value>

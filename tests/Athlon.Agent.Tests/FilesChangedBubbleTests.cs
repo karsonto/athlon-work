@@ -147,6 +147,42 @@ public sealed class FilesChangedBubbleTests
     }
 
     [Fact]
+    public void BuildReplayEvents_merges_tool_activity_across_empty_assistant_frames()
+    {
+        var user = ChatMessage.Create(MessageRole.User, "explore");
+        static ChatMessage Read(string id, string path) => ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                $"ToolCallId: {id}",
+                "Tool `file_read` succeeded.",
+                "",
+                $"Arguments: path = {path}",
+                $"Summary: Read {path}",
+                ""));
+
+        var empty = ChatMessage.Create(MessageRole.Assistant, "   ");
+        var finalText = ChatMessage.Create(MessageRole.Assistant, "汇总完成");
+        var source = new List<ChatMessage>
+        {
+            user,
+            Read("c1", "a.ts"),
+            empty,
+            Read("c2", "b.ts"),
+            Read("c3", "c.ts"),
+            finalText
+        };
+        var display = source.Select(message => new ChatMessageViewModel(message)).ToList();
+        var events = ChatEventSerializer.BuildReplayEvents(display, showToolCalls: false, activitySourceMessages: source)
+            .ToList();
+
+        var activities = events.Where(json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal)).ToList();
+        Assert.Single(activities);
+        using var doc = JsonDocument.Parse(activities[0]);
+        Assert.Equal(3, doc.RootElement.GetProperty("exploredFileCount").GetInt32());
+    }
+
+    [Fact]
     public void TurnActivitySummaryBuilder_excludes_edits_from_activity()
     {
         var summary = TurnActivitySummaryBuilder.Build(
@@ -203,6 +239,7 @@ public sealed class FilesChangedBubbleTests
             EditedFileCount = 0,
             ExploredFileCount = 1,
             SearchCount = 0,
+            CommandCount = 0,
             ThoughtCount = 0,
             TotalAdded = 0,
             TotalRemoved = 0,
@@ -253,6 +290,46 @@ public sealed class FilesChangedBubbleTests
         Assert.Equal(1, summary!.ExploredFileCount);
         Assert.Contains(summary.Items, item => item.Kind == TurnActivityKind.Read && item.Status == "failed");
         Assert.Contains(summary.Items, item => item.Kind == TurnActivityKind.Explored && item.Status == "succeeded");
+    }
+
+    [Fact]
+    public void TurnActivitySummaryBuilder_folds_execute_command_with_status()
+    {
+        Assert.True(TurnActivityClassifier.IsActivityTool("execute_command"));
+
+        var summary = TurnActivitySummaryBuilder.Build(
+        [
+            new ChatMessageViewModel(ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    "ToolCallId: c1",
+                    "Tool `execute_command` failed.",
+                    "",
+                    "Arguments: command = Get-Content missing.txt",
+                    "Summary: Command failed",
+                    ""))),
+            new ChatMessageViewModel(ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    "ToolCallId: c2",
+                    "Tool `execute_command` succeeded.",
+                    "",
+                    "Arguments: command = Get-Content present.txt",
+                    "Summary: Command succeeded",
+                    "")))
+        ]);
+
+        Assert.NotNull(summary);
+        Assert.Equal(2, summary!.CommandCount);
+        Assert.Equal(2, summary.Items.Count(item => item.Kind == TurnActivityKind.Command));
+        Assert.Contains(
+            summary.Items,
+            item => item.Status == "failed" && item.Detail.Contains("missing.txt", StringComparison.Ordinal));
+        Assert.Contains(
+            summary.Items,
+            item => item.Status == "succeeded" && item.Detail.Contains("present.txt", StringComparison.Ordinal));
     }
 
     [Fact]

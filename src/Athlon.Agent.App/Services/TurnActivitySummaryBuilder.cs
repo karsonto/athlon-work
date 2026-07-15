@@ -9,6 +9,7 @@ public enum TurnActivityKind
     Read,
     Searched,
     Explored,
+    Command,
     Thought
 }
 
@@ -30,6 +31,7 @@ public sealed class TurnActivitySummary
     public required int EditedFileCount { get; init; }
     public required int ExploredFileCount { get; init; }
     public required int SearchCount { get; init; }
+    public required int CommandCount { get; init; }
     public required int ThoughtCount { get; init; }
     public required int TotalAdded { get; init; }
     public required int TotalRemoved { get; init; }
@@ -40,6 +42,7 @@ public sealed class TurnActivitySummary
         || EditedFileCount > 0
         || ExploredFileCount > 0
         || SearchCount > 0
+        || CommandCount > 0
         || ThoughtCount > 0;
 }
 
@@ -67,6 +70,11 @@ public static class TurnActivitySummaryBuilder
     {
         "glob_files",
         "file_list"
+    };
+
+    internal static readonly HashSet<string> CommandTools = new(StringComparer.Ordinal)
+    {
+        "execute_command"
     };
 
     public static IReadOnlyList<TurnActivitySummary> BuildTurnSummariesFromChatMessages(
@@ -117,6 +125,7 @@ public static class TurnActivitySummaryBuilder
         var items = new List<TurnActivityItem>();
         var exploredPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var searchCount = 0;
+        var commandCount = 0;
         var thoughtCount = 0;
 
         foreach (var message in turnMessages)
@@ -198,6 +207,25 @@ public static class TurnActivitySummaryBuilder
                 }
 
                 items.Add(new TurnActivityItem(TurnActivityKind.Explored, "Explored", detail, path, Status: statusKey));
+                continue;
+            }
+
+            if (CommandTools.Contains(toolName))
+            {
+                commandCount++;
+                var command = ExtractNamedArg(args, "command")
+                    ?? FirstNonEmptyLine(args)
+                    ?? "execute_command";
+                var detail = Truncate(FlattenWhitespace(command), 72);
+                var body = string.IsNullOrWhiteSpace(message.ToolDetail)
+                    ? command
+                    : message.ToolDetail;
+                items.Add(new TurnActivityItem(
+                    TurnActivityKind.Command,
+                    "Ran",
+                    detail,
+                    Body: body,
+                    Status: statusKey));
             }
         }
 
@@ -211,6 +239,7 @@ public static class TurnActivitySummaryBuilder
             EditedFileCount = 0,
             ExploredFileCount = exploredPaths.Count,
             SearchCount = searchCount,
+            CommandCount = commandCount,
             ThoughtCount = thoughtCount,
             TotalAdded = 0,
             TotalRemoved = 0,
@@ -246,6 +275,28 @@ public static class TurnActivitySummaryBuilder
         var newline = text.IndexOfAny(['\r', '\n']);
         return newline < 0 ? text : text[..newline].Trim();
     }
+
+    private static string? FirstNonEmptyLine(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        foreach (var line in text.Replace("\r\n", "\n").Split('\n'))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length > 0)
+            {
+                return trimmed;
+            }
+        }
+
+        return null;
+    }
+
+    private static string FlattenWhitespace(string value) =>
+        string.Join(' ', value.Replace("\r\n", "\n").Split(['\n', '\t', ' '], StringSplitOptions.RemoveEmptyEntries));
 
     private static (int Start, int End)? ExtractLineRange(string? args)
     {

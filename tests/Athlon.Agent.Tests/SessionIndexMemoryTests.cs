@@ -75,7 +75,7 @@ public sealed class SessionIndexMemoryTests
                 DateTimeOffset.Parse("2026-01-01T00:00:00Z"));
             var item = new SessionHistoryItemViewModel(entry, false, false, null);
 
-            Assert.Contains("2 条消息", item.MetaText, StringComparison.Ordinal);
+            Assert.Contains("2 条消息", item.StatusText, StringComparison.Ordinal);
         }
         finally
         {

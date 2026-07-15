@@ -34,7 +34,7 @@
                     <TextBlock Text="{loc:Localize Key=Nav_NoAgentRecords}"
                                FontSize="12"
                                Foreground="{DynamicResource Brush.SubtleText}"
-                               Margin="12,8">
+                               Margin="4,8">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Visibility" Value="Collapsed" />
@@ -46,6 +46,24 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
+
+                    <TextBlock Text="{loc:Localize Key=Nav_Repositories}"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.DisabledText}"
+                               Margin="4,4,4,8">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasAgentRecords}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
                     <ItemsControl ItemsSource="{Binding AgentRecordGroups}">
                         <ItemsControl.Style>
                             <Style TargetType="ItemsControl">
@@ -59,34 +77,32 @@
                         </ItemsControl.Style>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:AgentRecordGroupViewModel}">
-                                <StackPanel>
+                                <StackPanel Margin="0,0,0,4">
                                     <Button Command="{Binding ToggleExpandedCommand}"
-                                            Style="{StaticResource AgentRecordGroupHeaderStyle}">
+                                            Style="{StaticResource AgentRecordGroupHeaderStyle}"
+                                            ToolTip="{Binding WorkspacePath}">
                                         <Grid Width="{Binding RelativeSource={RelativeSource AncestorType=ScrollViewer}, Path=ActualWidth}">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0"
-                                                       Text="{Binding ExpandGlyph}"
-                                                       FontSize="10"
-                                                       Margin="0,0,6,0"
+                                                       Text="{Binding FolderGlyph}"
+                                                       FontFamily="Segoe Fluent Icons"
+                                                       FontSize="13"
+                                                       Margin="0,0,8,0"
+                                                       Foreground="{DynamicResource Brush.SubtleText}"
                                                        VerticalAlignment="Center" />
                                             <TextBlock Grid.Column="1"
                                                        Text="{Binding Title}"
-                                                       FontSize="11"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource Brush.DisabledText}"
-                                                       VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="2"
-                                                       Text="{Binding Items.Count}"
-                                                       FontSize="10"
-                                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                                       FontSize="12"
+                                                       FontWeight="Medium"
+                                                       Foreground="{DynamicResource Brush.Text}"
+                                                       TextTrimming="CharacterEllipsis"
                                                        VerticalAlignment="Center" />
                                         </Grid>
                                     </Button>
-                                    <ItemsControl ItemsSource="{Binding Items}">
+                                    <ItemsControl ItemsSource="{Binding Items}" Margin="4,0,0,4">
                                         <ItemsControl.Style>
                                             <Style TargetType="ItemsControl">
                                                 <Setter Property="Visibility" Value="Visible" />
@@ -102,44 +118,39 @@
                                                 <Border>
                                                     <Border.Style>
                                                         <Style TargetType="Border" BasedOn="{StaticResource SessionItemBorderStyle}">
+                                                            <Setter Property="Padding" Value="10,8" />
+                                                            <Setter Property="Margin" Value="0,0,0,2" />
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                                                    <Setter Property="BorderThickness" Value="3,1,1,1" />
+                                                                    <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
+                                                                    <Setter Property="BorderBrush" Value="Transparent" />
+                                                                    <Setter Property="BorderThickness" Value="1" />
                                                                 </DataTrigger>
                                                             </Style.Triggers>
                                                         </Style>
                                                     </Border.Style>
                                                     <Grid>
                                                         <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
                                                             <ColumnDefinition Width="*" />
                                                             <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="Auto" />
                                                         </Grid.ColumnDefinitions>
-                                                        <Ellipse Width="8"
-                                                                 Height="8"
-                                                                 Margin="0,0,10,0"
-                                                                 VerticalAlignment="Center"
-                                                                 Fill="{DynamicResource Brush.SubtleText}">
-                                                            <Ellipse.Style>
-                                                                <Style TargetType="Ellipse">
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding IsRunning}" Value="True">
-                                                                            <Setter Property="Fill" Value="{DynamicResource Brush.Success}" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Ellipse.Style>
-                                                        </Ellipse>
-                                                        <Button Grid.Column="1"
+                                                        <Button Grid.Column="0"
                                                                 Command="{Binding DataContext.LoadSessionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}"
                                                                 Style="{StaticResource SessionHistoryButtonStyle}"
-                                                                Padding="0,0,8,0">
-                                                            <StackPanel HorizontalAlignment="Stretch">
-                                                                <TextBlock Text="{Binding Title}" Style="{StaticResource SessionNameTextStyle}" />
-                                                                <TextBlock Text="{Binding MetaText}" Style="{StaticResource SessionMetaTextStyle}" />
-                                                            </StackPanel>
+                                                                Padding="0,0,8,0"
+                                                                HorizontalContentAlignment="Stretch">
+                                                            <TextBlock Text="{Binding Title}"
+                                                                       Style="{StaticResource SessionNameTextStyle}"
+                                                                       ToolTip="{Binding StatusText}" />
                                                         </Button>
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{Binding MetaText}"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                                                   VerticalAlignment="Center"
+                                                                   Margin="0,0,4,0" />
                                                         <StackPanel Grid.Column="2"
                                                                     Orientation="Horizontal"
                                                                     VerticalAlignment="Center">

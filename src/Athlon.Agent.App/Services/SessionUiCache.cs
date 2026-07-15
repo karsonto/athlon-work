@@ -41,7 +41,9 @@ public sealed class SessionUiCache
         var controller = _controllers.GetOrAdd(
             sessionId,
             id => new SessionTurnUiController(_dispatcher, requestScroll, requestScrollImmediate));
-        controller.SetShowToolCalls(_settings.Ui.ShowToolCalls);
+        controller.SetShowToolCalls(true);
+        // Always-on: migrate legacy false values when controllers are created.
+        _settings.Ui.ShowToolCalls = true;
         if (requestScroll is not null)
         {
             controller.RequestScroll = requestScroll;
@@ -56,11 +58,11 @@ public sealed class SessionUiCache
         return controller;
     }
 
-    public void ApplyShowToolCalls(bool value)
+    public void ApplyShowToolCalls(bool value = true)
     {
         foreach (var controller in _controllers.Values)
         {
-            controller.SetShowToolCalls(value);
+            controller.SetShowToolCalls(true);
         }
     }
 

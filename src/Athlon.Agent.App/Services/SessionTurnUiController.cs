@@ -49,7 +49,12 @@ public sealed class SessionTurnUiController
     private readonly Dictionary<string, ChatMessageViewModel> _viewModelCache = new(StringComparer.Ordinal);
     private int _bulkChatViewSyncDepth;
     private int _syncChatViewGeneration;
-    private Func<bool> _showToolCalls = () => false;
+    private Func<bool> _showToolCalls = () => true;
+    /// <summary>
+    /// Whether the live activity segment has already been sealed above the current assistant text.
+    /// Empty TextMessageStart/End between tool rounds must not seal (keeps one summary bubble).
+    /// </summary>
+    private bool _activitySealedForCurrentText;
 
     private Action _requestScroll = NoOpScroll;
     private Action _requestScrollImmediate = NoOpScroll;
@@ -365,6 +370,7 @@ public sealed class SessionTurnUiController
         {
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
+            _activitySealedForCurrentText = false;
             var vm = new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments));
             Messages.Add(vm);
             TrimMessagesIfNeeded();
@@ -378,6 +384,7 @@ public sealed class SessionTurnUiController
         {
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
+            _activitySealedForCurrentText = false;
             _tokenBuffer.ClearBuffers();
             _tokenBuffer.StopFlushTimer();
             _streaming.Reset();
@@ -554,6 +561,21 @@ public sealed class SessionTurnUiController
         _turnActivityTracker.BeginSegment();
     }
 
+    /// <summary>
+    /// Seal once before the first non-empty assistant text of this message so the activity
+    /// card sits above the bubble; empty TextMessageStart/End must not create new cards.
+    /// </summary>
+    private void SealActivityAboveAssistantTextIfNeeded()
+    {
+        if (_activitySealedForCurrentText)
+        {
+            return;
+        }
+
+        SealCurrentSegment();
+        _activitySealedForCurrentText = true;
+    }
+
     private void PublishTurnActivity(bool upsert = true)
     {
         if (ChatView is null)
@@ -590,10 +612,11 @@ public sealed class SessionTurnUiController
 
     private void ProcessUiStreamEvents(AgentStreamEvent streamEvent, bool notifyTracker)
     {
-        // Seal tools/thoughts accumulated so far above this model text output.
+        // Do not seal on TextMessageStart: models often emit empty text frames between tool
+        // rounds. Sealing is deferred until real assistant content arrives.
         if (streamEvent is AgentStreamEvent.TextMessageStart)
         {
-            SealCurrentSegment();
+            _activitySealedForCurrentText = false;
         }
 
         if (notifyTracker)
@@ -986,6 +1009,7 @@ public sealed class SessionTurnUiController
                 string.Equals(message.MessageId, endMessageId, StringComparison.Ordinal));
             if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
             {
+                SealActivityAboveAssistantTextIfNeeded();
                 _ = ChatView.ApplyAssistantMarkdownAsync(assistant);
             }
 
@@ -1027,6 +1051,7 @@ public sealed class SessionTurnUiController
             var assistant = FindAssistantMessage(textMessageId);
             if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
             {
+                SealActivityAboveAssistantTextIfNeeded();
                 _ = ChatView.ApplyAssistantMarkdownAsync(assistant, streaming: true);
             }
         }

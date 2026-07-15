@@ -20,24 +20,19 @@ public sealed class WorkspaceSessionBridge : IDisposable
         AppSettings appSettings,
         IActiveWorkspaceContext workspaceContext)
     {
-        if (!string.IsNullOrWhiteSpace(session.ActiveWorkspace))
-        {
-            var activeRoot = Path.GetFullPath(session.ActiveWorkspace);
-            var match = appSettings.Workspaces.FirstOrDefault(workspace =>
-                !string.IsNullOrWhiteSpace(workspace.RootPath)
-                && string.Equals(Path.GetFullPath(workspace.RootPath), activeRoot, StringComparison.OrdinalIgnoreCase));
-            workspaceContext.SetWorkspace(activeRoot, match?.Name, ResolveIgnorePatterns(match, appSettings));
-            return;
-        }
-
-        var configured = appSettings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath));
-        if (configured is null)
+        // New Agent / sessions without an explicit workspace stay unbound — do not fall back
+        // to the first configured AppSettings workspace.
+        if (string.IsNullOrWhiteSpace(session.ActiveWorkspace))
         {
             workspaceContext.SetWorkspace(null);
             return;
         }
 
-        workspaceContext.SetWorkspace(configured.RootPath, configured.Name, ResolveIgnorePatterns(configured, appSettings));
+        var activeRoot = Path.GetFullPath(session.ActiveWorkspace);
+        var match = appSettings.Workspaces.FirstOrDefault(workspace =>
+            !string.IsNullOrWhiteSpace(workspace.RootPath)
+            && string.Equals(Path.GetFullPath(workspace.RootPath), activeRoot, StringComparison.OrdinalIgnoreCase));
+        workspaceContext.SetWorkspace(activeRoot, match?.Name, ResolveIgnorePatterns(match, appSettings));
     }
 
     public void ConfigureWatcher(

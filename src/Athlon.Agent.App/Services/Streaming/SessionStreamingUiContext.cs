@@ -19,7 +19,7 @@ public sealed class SessionStreamingUiContext
 
     public Action RequestScrollImmediate { get; set; } = () => { };
 
-    public Func<bool> ShowToolCalls { get; set; } = () => false;
+    public Func<bool> ShowToolCalls { get; set; } = () => true;
 
     public ChatMessageViewModel? ActiveAssistantBubble =>
         _assistantBubbles.Values.LastOrDefault();

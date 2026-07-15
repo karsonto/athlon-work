@@ -136,8 +136,17 @@
   <data name="Chat_ActivityVerbExplored" xml:space="preserve">
     <value>浏览</value>
   </data>
+  <data name="Chat_ActivityVerbCommand" xml:space="preserve">
+    <value>运行</value>
+  </data>
   <data name="Chat_ActivityVerbThought" xml:space="preserve">
     <value>思考</value>
+  </data>
+  <data name="Chat_CommandsOne" xml:space="preserve">
+    <value>运行了 1 条命令</value>
+  </data>
+  <data name="Chat_CommandsMany" xml:space="preserve">
+    <value>运行了 {0} 条命令</value>
   </data>
   <data name="Chat_ThoughtsOne" xml:space="preserve">
     <value>思考了 1 次</value>
@@ -758,11 +767,17 @@
   <data name="Preview_MermaidTitle" xml:space="preserve">
     <value>Mermaid 图表预览</value>
   </data>
+  <data name="Nav_Repositories" xml:space="preserve">
+    <value>Repositories</value>
+  </data>
   <data name="RecordGroup_Earlier" xml:space="preserve">
     <value>更早</value>
   </data>
   <data name="RecordGroup_Last7Days" xml:space="preserve">
     <value>过去 7 天</value>
+  </data>
+  <data name="RecordGroup_NoWorkspace" xml:space="preserve">
+    <value>无工作区</value>
   </data>
   <data name="RecordGroup_Today" xml:space="preserve">
     <value>今天</value>

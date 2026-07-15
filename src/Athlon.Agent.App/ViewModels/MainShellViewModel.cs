@@ -996,7 +996,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private async Task OnSettingsSavedAsync()
     {
-        _uiCache.ApplyShowToolCalls(Settings.Settings.Ui.ShowToolCalls);
+        _uiCache.ApplyShowToolCalls();
         await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
         await RefreshMcpRuntimeAsync().ConfigureAwait(true);
         ApplySessionWorkspace();

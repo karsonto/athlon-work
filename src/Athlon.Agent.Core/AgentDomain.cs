@@ -116,7 +116,8 @@ public sealed record SessionIndexEntry(
     string Title,
     string Path,
     DateTimeOffset UpdatedAt,
-    int? MessageCount = null);
+    int? MessageCount = null,
+    string? ActiveWorkspace = null);
 
 public sealed record ConversationDisplayCursor(
     long ByteOffset,
