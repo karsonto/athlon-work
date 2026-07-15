@@ -1,5 +1,7 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Infrastructure.Compaction;
 using System.Diagnostics;
 
@@ -237,6 +239,25 @@ public sealed class ConversationCompactor(
 
         session = session.WithMessages(compactMessages);
         sessionUsageAccumulator.RecordCompaction(session.Id, tokensBefore, tokensAfterPreview);
+        try
+        {
+            EventManager.Instance.Record(
+                BehaviorEventIds.Context,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.Context,
+                new Dictionary<string, object?>
+                {
+                    ["action"] = "compaction",
+                    ["session_id"] = session.Id,
+                    ["tokens_before"] = tokensBefore,
+                    ["tokens_after"] = tokensAfterPreview,
+                    ["savings"] = Math.Max(0, tokensBefore - tokensAfterPreview)
+                });
+        }
+        catch
+        {
+            // ignore
+        }
 
         _logger.Information(
             "Compacted session {SessionId} from {OriginalCount} to {ResultCount} messages (kind {Kind}, force {Force})",

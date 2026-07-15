@@ -1,4 +1,6 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Athlon.Agent.App.ViewModels;
@@ -56,6 +58,23 @@ public sealed partial class SkillItemViewModel : ObservableObject
 
             Settings.Enabled = value;
             OnPropertyChanged();
+            try
+            {
+                EventManager.Instance.Record(
+                    BehaviorEventIds.SkillToggle,
+                    BehaviorEventTypes.Event,
+                    BehaviorEventIds.SkillToggle,
+                    new Dictionary<string, object?>
+                    {
+                        ["skill_id"] = Settings.Name,
+                        ["enabled"] = value
+                    });
+            }
+            catch
+            {
+                // ignore
+            }
+
             _onEnabledChanged?.Invoke();
         }
     }

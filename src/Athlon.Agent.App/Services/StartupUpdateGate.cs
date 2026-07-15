@@ -1,6 +1,8 @@
 using System.Windows;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 
 namespace Athlon.Agent.App.Services;
 
@@ -20,6 +22,7 @@ internal static class StartupUpdateGate
         {
             if (!AppUpdateCoordinator.TryResolveUpdateBaseUrl(settings, out var baseUrl, out _))
             {
+                RecordUpdateCheck(hasUpdate: false, version: null);
                 return;
             }
 
@@ -29,10 +32,12 @@ internal static class StartupUpdateGate
                 .GetResult();
             if (updateInfo is null)
             {
+                RecordUpdateCheck(hasUpdate: false, version: null);
                 return;
             }
 
             var version = updateInfo.TargetFullRelease.Version;
+            RecordUpdateCheck(hasUpdate: true, version: version.ToString());
             var result = MessageBox.Show(
                 Strings.Format("Update_AvailableMessage", version),
                 Strings.Get("Update_AvailableTitle"),
@@ -50,6 +55,26 @@ internal static class StartupUpdateGate
         catch (Exception ex)
         {
             App.StartupTrace($"Update check before startup gates failed: {ex}");
+        }
+    }
+
+    private static void RecordUpdateCheck(bool hasUpdate, string? version)
+    {
+        try
+        {
+            EventManager.Instance.Record(
+                BehaviorEventIds.AppUpdateCheck,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.AppUpdateCheck,
+                new Dictionary<string, object?>
+                {
+                    ["has_update"] = hasUpdate,
+                    ["version"] = version
+                });
+        }
+        catch
+        {
+            // ignore
         }
     }
 }

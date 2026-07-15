@@ -1,5 +1,6 @@
 using System.Net.Http;
 using System.Diagnostics;
+using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Streaming;
@@ -16,9 +17,11 @@ internal sealed class AgentTurnCoordinator(
     AppSettings settings,
     IAgentRunContextAccessor runContextAccessor,
     Func<AgentSession, AgentTurnCallbacks?, PreCompletionOptions, string, string?, IReadOnlyList<ToolDefinition>, ContextPressureLevel, CancellationToken, Task<AgentSession>> runPreCompletionPipelineAsync,
-    IAppLogger logger)
+    IAppLogger logger,
+    IEventManager? eventManager = null)
 {
     private readonly IAppLogger _logger = logger.ForContext("AgentTurnCoordinator");
+    private readonly IEventManager _eventManager = eventManager ?? NullEventManager.Instance;
 
     public async Task<(AgentSession Session, AgentModelResponse Response)> CompleteWithOverflowRetryAsync(
         AgentSession session,
@@ -47,6 +50,15 @@ internal sealed class AgentTurnCoordinator(
         catch (HttpRequestException ex) when (AgentRuntime.IsContextLengthError(ex))
         {
             _logger.Warning("Context length exceeded for session {SessionId}; forcing compact and retrying once", session.Id);
+            _eventManager.Record(
+                BehaviorEventIds.Context,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.Context,
+                new Dictionary<string, object?>
+                {
+                    ["action"] = "overflow_retry",
+                    ["session_id"] = session.Id
+                });
 
             session = await runPreCompletionPipelineAsync(
                 session,
@@ -191,6 +203,16 @@ internal sealed class AgentTurnCoordinator(
         if (contextSavingsTokens > 0)
         {
             events.Add(new AgentStreamEvent.ContextHygieneApplied(contextSavingsTokens));
+            _eventManager.Record(
+                BehaviorEventIds.Context,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.Context,
+                new Dictionary<string, object?>
+                {
+                    ["action"] = "hygiene",
+                    ["session_id"] = session.Id,
+                    ["estimated_savings_tokens"] = contextSavingsTokens
+                });
         }
 
         await AgentRuntime.PublishStreamEventsAsync(callbacks, events).ConfigureAwait(false);

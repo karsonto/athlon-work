@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Mcp;
 
 namespace Athlon.Agent.Infrastructure;
@@ -133,6 +135,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                     _toolCallTimeoutSeconds.TryRemove(existing, out _);
                     _statuses[existing] = new McpServerStatus(existing, McpConnectionState.Disabled, "stdio", Array.Empty<McpTool>());
                     try { await removed.DisposeAsync(); } catch { /* ignore */ }
+                    RecordMcpServer(existing, "disconnected");
                 }
             }
 
@@ -173,6 +176,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                         ResolveTransportLabel(server),
                         Array.Empty<McpTool>(),
                         LastError: ex.Message);
+                    RecordMcpServer(name, "disconnected", errorType: ex.GetType().Name);
                     continue;
                 }
 
@@ -183,12 +187,14 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                     var tools = await client.ListToolsAsync(cancellationToken);
                     _tools[name] = tools;
                     _statuses[name] = client.Status with { Tools = tools.ToArray() };
+                    RecordMcpServer(name, "connected", toolCount: tools.Count);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     _logger.Warning("MCP refresh failed for {Server}: {Message}", name, ex.Message);
                     _tools[name] = Array.Empty<McpTool>();
                     _statuses[name] = client.Status with { State = McpConnectionState.Error, Tools = Array.Empty<McpTool>(), LastError = ex.Message };
+                    RecordMcpServer(name, "disconnected", errorType: ex.GetType().Name);
                 }
             }
         }
@@ -196,6 +202,28 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         {
             InvalidateCatalogCache();
             _refreshLock.Release();
+        }
+    }
+
+    private static void RecordMcpServer(string serverName, string action, int? toolCount = null, string? errorType = null)
+    {
+        try
+        {
+            EventManager.Instance.Record(
+                BehaviorEventIds.McpServer,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.McpServer,
+                new Dictionary<string, object?>
+                {
+                    ["server_name"] = serverName,
+                    ["action"] = action,
+                    ["tool_count"] = toolCount,
+                    ["error_type"] = errorType
+                });
+        }
+        catch
+        {
+            // ignore
         }
     }
 

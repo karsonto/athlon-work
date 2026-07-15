@@ -4,8 +4,10 @@ using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Threading;
 using Athlon.Agent.App.Resources;
+using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Infrastructure.Sso;
 
 namespace Athlon.Agent.App.Licensing;
@@ -34,7 +36,28 @@ public static class ImpSsoStartupGate
         if (cached is not null && !store.IsExpired(cached))
         {
             EnsureMcpRefreshToken(store, cached, paths);
+            RecordBehavior(
+                BehaviorEventIds.UserLogin,
+                BehaviorEventTypes.Event,
+                new Dictionary<string, object?>
+                {
+                    ["logged_in_at"] = cached.LoggedInAt.ToString("O"),
+                    ["expires_at"] = cached.ExpiresAt.ToString("O"),
+                    ["source"] = "cached"
+                });
             return true;
+        }
+
+        if (cached is not null)
+        {
+            RecordBehavior(
+                BehaviorEventIds.UserSession,
+                BehaviorEventTypes.Event,
+                new Dictionary<string, object?>
+                {
+                    ["action"] = "expired",
+                    ["expires_at"] = cached.ExpiresAt.ToString("O")
+                });
         }
 
         store.Clear();
@@ -51,6 +74,14 @@ public static class ImpSsoStartupGate
         }
         catch (Exception ex)
         {
+            RecordBehavior(
+                BehaviorEventIds.UserLoginFailed,
+                BehaviorEventTypes.Event,
+                new Dictionary<string, object?>
+                {
+                    ["status"] = "Missing",
+                    ["error_type"] = ex.GetType().Name
+                });
             ShowStartupMessage(
                 Strings.Format("Sso_LoginFailedWithMessage", ex.Message),
                 Strings.Get("Common_ProductName"),
@@ -148,6 +179,15 @@ public static class ImpSsoStartupGate
             {
                 var session = SsoEenoEnvironment.EnrichSessionWithMcpToken(result.Session, paths);
                 store.SaveSession(session);
+                RecordBehavior(
+                    BehaviorEventIds.UserLogin,
+                    BehaviorEventTypes.Event,
+                    new Dictionary<string, object?>
+                    {
+                        ["logged_in_at"] = session.LoggedInAt.ToString("O"),
+                        ["expires_at"] = session.ExpiresAt.ToString("O"),
+                        ["source"] = "new"
+                    });
                 return true;
             }
 
@@ -166,6 +206,14 @@ public static class ImpSsoStartupGate
 
     private static bool HandleFailure(SsoSettings settings, ImpSsoCheckResult result)
     {
+        RecordBehavior(
+            BehaviorEventIds.UserLoginFailed,
+            BehaviorEventTypes.Event,
+            new Dictionary<string, object?>
+            {
+                ["status"] = result.Status.ToString()
+            });
+
         if (result.Status == ImpSsoCheckStatus.NoRole)
         {
             ShowStartupMessage(
@@ -183,6 +231,21 @@ public static class ImpSsoStartupGate
             MessageBoxButton.OK,
             MessageBoxImage.Error);
         return false;
+    }
+
+    private static void RecordBehavior(
+        string eventId,
+        string eventType,
+        IReadOnlyDictionary<string, object?>? parameters = null)
+    {
+        try
+        {
+            EventManager.Instance.Record(eventId, eventType, eventId, parameters);
+        }
+        catch
+        {
+            // never block SSO
+        }
     }
 
     private static void ShowStartupMessage(

@@ -14,8 +14,10 @@ using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Licensing;
 using Athlon.Agent.Core.Middleware;
 using Athlon.Agent.Core.SubAgents;
+using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Infrastructure.Knowledge;
 using Athlon.Agent.Infrastructure.Licensing;
 using Athlon.Agent.Infrastructure.Prompt;
@@ -56,6 +58,20 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IImpSsoAuthService, ImpSsoAuthService>(
             static client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddSingleton<IAppLogger>(logger);
+        services.AddHttpClient("BehaviorReport", static client => client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddSingleton<IEventManager>(sp =>
+        {
+            var httpFactory = sp.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpFactory.CreateClient("BehaviorReport");
+            var sessionStore = sp.GetService<IImpSsoSessionStore>();
+            EventManager.Instance.Configure(
+                sp.GetRequiredService<AppSettings>(),
+                sp.GetRequiredService<IAppPathProvider>(),
+                httpClient,
+                sp.GetRequiredService<IAppLogger>(),
+                sessionStore);
+            return EventManager.Instance;
+        });
         services.AddSingleton<IFileStorageService, FileStorageService>();
         services.AddHttpClient<IAgentModelClient, OpenAiCompatibleChatModelClient>(
             static client => client.Timeout = Timeout.InfiniteTimeSpan);

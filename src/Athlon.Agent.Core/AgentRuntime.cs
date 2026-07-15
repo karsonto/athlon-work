@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
@@ -26,16 +27,19 @@ public sealed class AgentRuntime(
     CompactionTurnMiddleware compactionMiddleware,
     AppSettings settings,
     IAppLogger logger,
-    IPostTurnMemoryProcessor memoryProcessor) : IAgentRuntime
+    IPostTurnMemoryProcessor memoryProcessor,
+    IEventManager? eventManager = null) : IAgentRuntime
 {
     private readonly IAppLogger _logger = logger.ForContext("AgentRuntime");
+    private readonly IEventManager _eventManager = eventManager ?? NullEventManager.Instance;
     private readonly ToolInvocationPipeline _toolPipeline = new(
         storage,
         toolResultEvictor,
         () => runContextAccessor.Current?.ToolRouter ?? toolRouter,
         runContextAccessor,
         () => settings.ToolPermissions.ApprovalEnabled,
-        logger);
+        logger,
+        eventManager);
     private TrainingData.ITrainingDataCollector? _trainingDataCollector;
     private AgentTurnCoordinator? _turnCoordinator;
 
@@ -59,7 +63,8 @@ public sealed class AgentRuntime(
         settings,
         runContextAccessor,
         RunForceCompactPreCompletionAsync,
-        logger);
+        logger,
+        _eventManager);
 
     public async Task<AgentSession> SendAsync(
         AgentSession session,
@@ -577,13 +582,27 @@ public sealed class AgentRuntime(
         }
     }
 
-    private static async Task PublishTurnFinishedAsync(
+    private async Task PublishTurnFinishedAsync(
         AgentTurnCallbacks? callbacks,
         AgentRunContext runContext,
         AgentSession session,
         TurnOutcomeKind outcome,
         CancellationToken cancellationToken)
     {
+        if (outcome == TurnOutcomeKind.MaxToolRoundsReached)
+        {
+            _eventManager.Record(
+                BehaviorEventIds.Turn,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.Turn,
+                new Dictionary<string, object?>
+                {
+                    ["session_id"] = session.Id,
+                    ["run_id"] = runContext.RunId,
+                    ["outcome"] = "max_tool_rounds"
+                });
+        }
+
         if (callbacks?.EventSink is null)
         {
             return;

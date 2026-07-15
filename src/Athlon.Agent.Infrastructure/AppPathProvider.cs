@@ -10,6 +10,8 @@ public interface IAppPathProvider
     string CredentialsPath { get; }
     string SkillsPath { get; }
 
+    string BehaviorPath => Path.Combine(RootPath, "behavior");
+
     void EnsureCreated();
 
     string ResolveSkillPath(string path);
@@ -27,6 +29,7 @@ public sealed class AppPathProvider : IAppPathProvider
     public string LogsPath => Path.Combine(RootPath, "logs");
     public string CredentialsPath => Path.Combine(RootPath, "credentials");
     public string SkillsPath => Path.Combine(RootPath, SkillsFolderName);
+    public string BehaviorPath => Path.Combine(RootPath, "behavior");
 
     public void EnsureCreated()
     {
@@ -37,6 +40,7 @@ public sealed class AppPathProvider : IAppPathProvider
         Directory.CreateDirectory(LogsPath);
         Directory.CreateDirectory(CredentialsPath);
         Directory.CreateDirectory(SkillsPath);
+        Directory.CreateDirectory(BehaviorPath);
     }
 
     public string ResolveSkillPath(string path)

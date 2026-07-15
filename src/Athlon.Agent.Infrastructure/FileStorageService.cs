@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -358,6 +359,15 @@ public sealed class FileStorageService(
                 Path.Combine(GetSessionDirectory(sessionId), "attempts.jsonl"),
                 entry,
                 cancellationToken).ConfigureAwait(false);
+        }
+
+        try
+        {
+            EventManager.Instance.RecordAttempt(entry);
+        }
+        catch
+        {
+            // Behavior reporting must never affect persistence.
         }
     }
 

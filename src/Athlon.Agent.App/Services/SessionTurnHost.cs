@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 
 namespace Athlon.Agent.App.Services;
 
@@ -76,8 +78,62 @@ public sealed class SessionTurnHost
             var runner = new SessionTurnRunner(this, request, timeout, timeoutMinutes);
             _runners[request.SessionId] = runner;
             TurnStateChanged?.Invoke(this, request.SessionId);
+            RecordTurnLifecycle(request, "started");
+            if (!request.IsAutoContinue)
+            {
+                RecordUserMessageSent(request);
+            }
+
             runner.Start();
             return true;
+        }
+    }
+
+    private static void RecordUserMessageSent(SessionTurnRequest request)
+    {
+        try
+        {
+            EventManager.Instance.Record(
+                BehaviorEventIds.UserMessageSent,
+                BehaviorEventTypes.Action,
+                BehaviorEventIds.UserMessageSent,
+                new Dictionary<string, object?>
+                {
+                    ["session_id"] = request.SessionId,
+                    ["has_image"] = request.ImageAttachments.Count > 0,
+                    ["message_length"] = request.UserInput?.Length ?? 0
+                });
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private static void RecordTurnLifecycle(SessionTurnRequest request, string outcome, Exception? error = null)
+    {
+        try
+        {
+            var parameters = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["session_id"] = request.SessionId,
+                ["run_id"] = request.SessionId,
+                ["outcome"] = outcome
+            };
+            if (error is not null)
+            {
+                parameters["error_type"] = error.GetType().Name;
+            }
+
+            EventManager.Instance.Record(
+                BehaviorEventIds.Turn,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.Turn,
+                parameters);
+        }
+        catch
+        {
+            // ignore
         }
     }
 
@@ -242,6 +298,32 @@ public sealed class SessionTurnHost
     {
         _runners.TryRemove(runner.SessionId, out _);
         TurnStateChanged?.Invoke(this, runner.SessionId);
+
+        var outcome = error is not null
+            ? "failed"
+            : cancelled || timedOut
+                ? "cancelled"
+                : "completed";
+        try
+        {
+            EventManager.Instance.Record(
+                BehaviorEventIds.Turn,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.Turn,
+                new Dictionary<string, object?>
+                {
+                    ["session_id"] = runner.SessionId,
+                    ["run_id"] = runner.SessionId,
+                    ["outcome"] = outcome,
+                    ["timed_out"] = timedOut,
+                    ["error_type"] = error?.GetType().Name
+                });
+        }
+        catch
+        {
+            // ignore
+        }
+
         TurnCompleted?.Invoke(
             this,
             new SessionTurnCompletedEventArgs(

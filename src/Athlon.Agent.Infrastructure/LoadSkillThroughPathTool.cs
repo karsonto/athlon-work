@@ -1,4 +1,6 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -33,11 +35,34 @@ public sealed class LoadSkillThroughPathTool(ISkillRuntime skillRuntime) : IAgen
         try
         {
             var content = skillRuntime.LoadResource(skillId.Trim(), path.Trim());
+            RecordSkillLoad(skillId.Trim(), path.Trim(), success: true);
             return Task.FromResult(ToolResult.Success($"Loaded skill resource from {skillId}", content));
         }
         catch (ArgumentException ex)
         {
+            RecordSkillLoad(skillId.Trim(), path.Trim(), success: false);
             return Task.FromResult(ToolResult.Failure("Skill load failed", ex.Message));
+        }
+    }
+
+    private static void RecordSkillLoad(string skillId, string path, bool success)
+    {
+        try
+        {
+            EventManager.Instance.Record(
+                BehaviorEventIds.SkillLoad,
+                BehaviorEventTypes.Action,
+                BehaviorEventIds.SkillLoad,
+                new Dictionary<string, object?>
+                {
+                    ["skill_id"] = skillId,
+                    ["path"] = path,
+                    ["success"] = success
+                });
+        }
+        catch
+        {
+            // ignore
         }
     }
 }

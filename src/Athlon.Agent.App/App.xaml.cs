@@ -8,7 +8,10 @@ using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Infrastructure.Sso;
 using Athlon.Agent.Infrastructure.SubAgents;
 using Athlon.Agent.Mcp;
@@ -97,6 +100,8 @@ public partial class App : Application
             MainWindow.Show();
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             StartupTrace("MainWindow shown");
+
+            StartBehaviorReporting(_services);
         }
         catch (Exception exception)
         {
@@ -149,6 +154,53 @@ public partial class App : Application
         var paths = new AppPathProvider();
         paths.EnsureCreated();
         File.AppendAllText(Path.Combine(paths.LogsPath, "startup.log"), $"{AppTimeZone.Now:O} {message}{Environment.NewLine}");
+    }
+
+    private static void StartBehaviorReporting(ServiceProvider services)
+    {
+        try
+        {
+            var settings = services.GetRequiredService<AppSettings>();
+            var httpFactory = services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
+            var httpClient = httpFactory.CreateClient("BehaviorReport");
+            EventManager.Instance.Configure(
+                settings,
+                services.GetRequiredService<IAppPathProvider>(),
+                httpClient,
+                services.GetRequiredService<IAppLogger>(),
+                services.GetService<IImpSsoSessionStore>(),
+                static () =>
+                {
+                    var w = SystemParameters.PrimaryScreenWidth;
+                    var h = SystemParameters.PrimaryScreenHeight;
+                    return $"{(int)w}x{(int)h}";
+                },
+                AppVersionInfo.ProductName,
+                AppVersionInfo.VersionDisplay);
+
+            var eventManager = services.GetRequiredService<IEventManager>();
+            eventManager.Start();
+            eventManager.Record(
+                BehaviorEventIds.AppStart,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.AppStart,
+                new Dictionary<string, object?>
+                {
+                    ["sso_skipped"] =
+#if DEBUG
+                        string.Equals(
+                            Environment.GetEnvironmentVariable("ATHLON_SKIP_SSO"),
+                            "1",
+                            StringComparison.Ordinal)
+#else
+                        false
+#endif
+                });
+        }
+        catch (Exception ex)
+        {
+            StartupTrace($"Behavior reporting start failed: {ex.Message}");
+        }
     }
 }
 

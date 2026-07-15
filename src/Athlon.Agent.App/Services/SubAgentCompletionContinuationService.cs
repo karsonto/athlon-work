@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
 using System.Windows;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 
 namespace Athlon.Agent.App.Services;
 
@@ -104,6 +106,23 @@ public sealed class SubAgentCompletionContinuationService : ISubAgentCompletionN
 
         if (_sessionTurns.TurnHost.TryStart(request, out _))
         {
+            try
+            {
+                EventManager.Instance.Record(
+                    BehaviorEventIds.Subagent,
+                    BehaviorEventTypes.Event,
+                    BehaviorEventIds.Subagent,
+                    new Dictionary<string, object?>
+                    {
+                        ["action"] = "auto_continue",
+                        ["session_id"] = parentSessionId
+                    });
+            }
+            catch
+            {
+                // ignore
+            }
+
             _pendingAfterTurn.TryRemove(parentSessionId, out _);
             return;
         }

@@ -4,7 +4,9 @@ using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -70,6 +72,23 @@ public sealed partial class McpServerItemViewModel : ObservableObject
             OnPropertyChanged(nameof(ShowStatusDot));
             OnPropertyChanged(nameof(IsStatusHealthy));
             OnPropertyChanged(nameof(IsStatusError));
+            try
+            {
+                EventManager.Instance.Record(
+                    BehaviorEventIds.McpServer,
+                    BehaviorEventTypes.Event,
+                    BehaviorEventIds.McpServer,
+                    new Dictionary<string, object?>
+                    {
+                        ["server_name"] = Settings.Name,
+                        ["action"] = value ? "enabled" : "disabled"
+                    });
+            }
+            catch
+            {
+                // ignore
+            }
+
             _onEnabledChanged?.Invoke();
         }
     }

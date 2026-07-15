@@ -1,5 +1,8 @@
+using System.Diagnostics;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.SubAgents;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Athlon.Agent.Infrastructure.SubAgents;
@@ -65,6 +68,8 @@ public sealed class SubAgentRunExecutor(
             subSessionId,
             bundle.Session.Messages.Count > 0);
 
+        RecordSubagent("started", role, parentSessionId, subSessionId);
+        var sw = Stopwatch.StartNew();
         try
         {
             var orchestrator = serviceProvider.GetRequiredService<IAgentOrchestrator>();
@@ -74,6 +79,8 @@ public sealed class SubAgentRunExecutor(
 
             var responseText = SubAgentResultFormatter.ExtractLastAssistantText(session)
                 ?? "(Sub-agent finished without assistant text.)";
+            sw.Stop();
+            RecordSubagent("completed", role, parentSessionId, subSessionId, sw.ElapsedMilliseconds, "ok");
             return SubAgentRunOutcome.Ok(responseText, session);
         }
         catch (OperationCanceledException)
@@ -83,8 +90,42 @@ public sealed class SubAgentRunExecutor(
         }
         catch (Exception ex)
         {
+            sw.Stop();
             _logger.Error(ex, "Sub-agent run failed parent={ParentId} sub={SubId}", parentSessionId, subSessionId);
+            RecordSubagent("failed", role, parentSessionId, subSessionId, sw.ElapsedMilliseconds, errorType: ex.GetType().Name);
             return SubAgentRunOutcome.Fail(ex.Message);
+        }
+    }
+
+    private static void RecordSubagent(
+        string action,
+        string role,
+        string parentSessionId,
+        string sessionId,
+        long? latencyMs = null,
+        string? outcome = null,
+        string? errorType = null)
+    {
+        try
+        {
+            EventManager.Instance.Record(
+                BehaviorEventIds.Subagent,
+                action is "started" ? BehaviorEventTypes.Action : BehaviorEventTypes.Event,
+                BehaviorEventIds.Subagent,
+                new Dictionary<string, object?>
+                {
+                    ["action"] = action,
+                    ["role"] = role,
+                    ["parent_session_id"] = parentSessionId,
+                    ["session_id"] = sessionId,
+                    ["latency_ms"] = latencyMs,
+                    ["outcome"] = outcome,
+                    ["error_type"] = errorType
+                });
+        }
+        catch
+        {
+            // ignore
         }
     }
 

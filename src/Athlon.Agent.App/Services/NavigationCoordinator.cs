@@ -1,8 +1,10 @@
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 
 namespace Athlon.Agent.App.Services;
 
@@ -69,5 +71,25 @@ public sealed class NavigationCoordinator
         return _notifier.ConfirmYesNo("Sso_LogoutTitle", "Sso_LogoutConfirm");
     }
 
-    public void ClearSsoSession() => _ssoSessionStore?.Clear();
+    public void ClearSsoSession()
+    {
+        try
+        {
+            EventManager.Instance.Record(
+                BehaviorEventIds.UserSession,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.UserSession,
+                new Dictionary<string, object?>
+                {
+                    ["action"] = "logout",
+                    ["reason"] = "manual"
+                });
+        }
+        catch
+        {
+            // ignore
+        }
+
+        _ssoSessionStore?.Clear();
+    }
 }

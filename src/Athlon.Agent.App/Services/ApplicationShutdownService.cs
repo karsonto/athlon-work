@@ -1,7 +1,9 @@
 using System.Windows;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Mcp;
 using Serilog;
 
@@ -14,7 +16,8 @@ public sealed class ApplicationShutdownService(
     IMcpRegistry mcpRegistry,
     IFileStorageService storage,
     AppSettings appSettings,
-    IAppLogger logger)
+    IAppLogger logger,
+    IEventManager eventManager)
 {
     public static readonly TimeSpan DefaultTurnWaitTimeout = TimeSpan.FromSeconds(15);
 
@@ -28,6 +31,26 @@ public sealed class ApplicationShutdownService(
         if (ApplicationShutdownState.IsCompleted)
         {
             return;
+        }
+
+        try
+        {
+            var uptimeMs = (long)(DateTimeOffset.UtcNow - EventManager.Instance.StartedAt).TotalMilliseconds;
+            eventManager.Record(
+                BehaviorEventIds.AppShutdown,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.AppShutdown,
+                new Dictionary<string, object?>
+                {
+                    ["reason"] = "shutdown",
+                    ["uptime_ms"] = uptimeMs
+                });
+            await eventManager.FlushAsync(cancellationToken).ConfigureAwait(false);
+            eventManager.Stop();
+        }
+        catch
+        {
+            // Behavior reporting must never block shutdown.
         }
 
         CloseSecondaryWindows();

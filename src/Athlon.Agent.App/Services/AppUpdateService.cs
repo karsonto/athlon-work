@@ -1,6 +1,8 @@
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Infrastructure.BehaviorReport;
 using Velopack;
 
 namespace Athlon.Agent.App.Services;
@@ -20,6 +22,7 @@ public sealed class AppUpdateService
     {
         if (!AppUpdateCoordinator.TryResolveUpdateBaseUrl(_settings, out var baseUrl, out var skipReason))
         {
+            RecordUpdateCheck(hasUpdate: false, version: null);
             return AppUpdateCheckResult.Skipped(skipReason);
         }
 
@@ -28,10 +31,12 @@ public sealed class AppUpdateService
             var updateInfo = await AppUpdateCoordinator.CheckForUpdatesAsync(baseUrl).ConfigureAwait(false);
             if (updateInfo is null)
             {
+                RecordUpdateCheck(hasUpdate: false, version: null);
                 return AppUpdateCheckResult.UpToDate();
             }
 
             var version = updateInfo.TargetFullRelease.Version.ToString();
+            RecordUpdateCheck(hasUpdate: true, version: version);
             if (!_notifier.ConfirmYesNo("Update_AvailableTitle", "Update_AvailableMessage", version))
             {
                 return AppUpdateCheckResult.UpdateAvailableNotApplied(version);
@@ -43,6 +48,26 @@ public sealed class AppUpdateService
         catch (Exception ex)
         {
             return AppUpdateCheckResult.Failed(ex.Message);
+        }
+    }
+
+    private static void RecordUpdateCheck(bool hasUpdate, string? version)
+    {
+        try
+        {
+            EventManager.Instance.Record(
+                BehaviorEventIds.AppUpdateCheck,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.AppUpdateCheck,
+                new Dictionary<string, object?>
+                {
+                    ["has_update"] = hasUpdate,
+                    ["version"] = version
+                });
+        }
+        catch
+        {
+            // ignore
         }
     }
 }

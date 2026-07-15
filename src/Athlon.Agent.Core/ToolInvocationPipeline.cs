@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Streaming;
 
@@ -15,9 +16,11 @@ internal sealed class ToolInvocationPipeline(
     Func<IToolRouter> resolveToolRouter,
     IAgentRunContextAccessor runContextAccessor,
     Func<bool> isApprovalEnabled,
-    IAppLogger logger)
+    IAppLogger logger,
+    IEventManager? eventManager = null)
 {
     private readonly IAppLogger _logger = logger.ForContext("ToolInvocationPipeline");
+    private readonly IEventManager _eventManager = eventManager ?? NullEventManager.Instance;
 
     public async Task<ToolInvocationOutcome> InvokeCoreAsync(
         string sessionId,
@@ -146,9 +149,29 @@ internal sealed class ToolInvocationPipeline(
                 {
                     try
                     {
+                        _eventManager.Record(
+                            BehaviorEventIds.ToolApproval,
+                            BehaviorEventTypes.Event,
+                            BehaviorEventIds.ToolApproval,
+                            new Dictionary<string, object?>
+                            {
+                                ["tool_name"] = toolCall.Name,
+                                ["action"] = "requested"
+                            });
                         approvalDecision = await callbacks.OnToolApprovalRequested(
                             pendingApproval!,
                             cancellationToken).ConfigureAwait(false);
+                        _eventManager.Record(
+                            BehaviorEventIds.ToolApproval,
+                            BehaviorEventTypes.Action,
+                            BehaviorEventIds.ToolApproval,
+                            new Dictionary<string, object?>
+                            {
+                                ["tool_name"] = toolCall.Name,
+                                ["action"] = approvalDecision == ToolApprovalDecision.Approved
+                                    ? "granted"
+                                    : "denied"
+                            });
                     }
                     catch (OperationCanceledException)
                     {
