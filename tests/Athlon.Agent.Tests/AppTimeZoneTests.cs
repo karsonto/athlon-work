@@ -22,4 +22,11 @@ public sealed class AppTimeZoneTests
 
         Assert.Equal(new DateTime(2026, 6, 5), AppTimeZone.ToChinaDate(utc));
     }
+
+    [Fact]
+    public void Now_UsesUtcPlusEightOffset()
+    {
+        Assert.Equal(TimeSpan.FromHours(8), AppTimeZone.Offset);
+        Assert.Equal(TimeSpan.FromHours(8), AppTimeZone.Now.Offset);
+    }
 }

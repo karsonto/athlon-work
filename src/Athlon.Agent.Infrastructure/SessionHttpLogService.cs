@@ -48,7 +48,7 @@ public sealed class SessionHttpLogService(
 
         var record = new
         {
-            time = entry.Timestamp,
+            time = AppTimeZone.ToChina(entry.Timestamp),
             endpoint = entry.Endpoint,
             purpose = entry.Purpose,
             statusCode = entry.StatusCode,

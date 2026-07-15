@@ -32,6 +32,7 @@ public sealed class SessionHttpLogServiceTests
             var line = await File.ReadAllTextAsync(path);
             Assert.Contains("chat-completion", line, StringComparison.Ordinal);
             Assert.Contains("400", line, StringComparison.Ordinal);
+            Assert.Contains("+08:00", line, StringComparison.Ordinal);
             Assert.DoesNotContain("Bearer sk-", line, StringComparison.Ordinal);
         }
         finally

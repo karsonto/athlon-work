@@ -124,7 +124,7 @@ IMPORTANT:
             return MemoryFlushResult.Skipped;
         }
 
-        var dailyEntry = $"\n## Memory Flush — {DateTime.UtcNow:O}\n{extracted}\n";
+        var dailyEntry = $"\n## Memory Flush — {AppTimeZone.Now:O}\n{extracted}\n";
         await longTermMemory.AppendDailyAsync(dailyEntry, cancellationToken);
         _logger.Information("Flushed {Length} chars to daily memory ledger", extracted.Length);
         return MemoryFlushResult.Success(extracted);

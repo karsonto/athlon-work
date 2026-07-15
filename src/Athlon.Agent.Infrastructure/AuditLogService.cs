@@ -19,8 +19,9 @@ public sealed class AuditLogService(IAppLogger logger, IAppPathProvider paths, I
 
     public async Task WriteAsync(string action, object payload, CancellationToken cancellationToken = default)
     {
-        var path = Path.Combine(paths.AuditPath, $"audit-{DateTimeOffset.Now:yyyy-MM-dd}.jsonl");
-        await jsonFileStore.AppendJsonLineAsync(path, new { time = DateTimeOffset.UtcNow, action, payload }, cancellationToken);
+        var now = AppTimeZone.Now;
+        var path = Path.Combine(paths.AuditPath, $"audit-{now:yyyy-MM-dd}.jsonl");
+        await jsonFileStore.AppendJsonLineAsync(path, new { time = now, action, payload }, cancellationToken);
         _logger.Information("Audit entry written for {Action}", action);
     }
 }

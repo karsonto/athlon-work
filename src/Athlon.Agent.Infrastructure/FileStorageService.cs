@@ -357,7 +357,7 @@ public sealed class FileStorageService(
             EnsureSessionLogDirectories(sessionId);
             await jsonFileStore.AppendJsonLineAsync(
                 Path.Combine(GetSessionDirectory(sessionId), "attempts.jsonl"),
-                entry,
+                entry with { Timestamp = AppTimeZone.ToChina(entry.Timestamp) },
                 cancellationToken).ConfigureAwait(false);
         }
 
@@ -415,7 +415,7 @@ public sealed class FileStorageService(
                 path,
                 new
                 {
-                    time = entry.Timestamp,
+                    time = AppTimeZone.ToChina(entry.Timestamp),
                     toolCallId = entry.ToolCallId,
                     toolName = entry.ToolName,
                     arguments = entry.Arguments,

@@ -28,7 +28,7 @@
 | `event_type` | 业务事件 ID（如 `user_login`、`mcp_tool`） |
 | `event_params` | 业务参数；另注入 `event_kind`（`action` / `event`） |
 | `message_content` | 描述（多数等于 event_id） |
-| `event_time` | 本地时间 `yyyy-MM-dd HH:mm:ss.fff` |
+| `event_time` | 中国标准时间 UTC+8：`yyyy-MM-dd HH:mm:ss.fff` |
 
 ---
 

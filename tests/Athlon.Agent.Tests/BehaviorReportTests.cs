@@ -188,6 +188,8 @@ public sealed class BehaviorReportTests : IDisposable
         Assert.Equal("User logged in", first.GetProperty("message_content").GetString());
         Assert.Equal("event", first.GetProperty("event_params").GetProperty("event_kind").GetString());
         Assert.Equal("login", first.GetProperty("event_params").GetProperty("action").GetString());
+        // UTC 10:30 → China 18:30
+        Assert.Equal("2026-07-14 18:30:00.000", first.GetProperty("event_time").GetString());
         Assert.Equal(
             BehaviorReportUploader.FormatEventTime(timestamp),
             first.GetProperty("event_time").GetString());

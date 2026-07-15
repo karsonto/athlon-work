@@ -1,11 +1,13 @@
 namespace Athlon.Agent.Core;
 
-/// <summary>Application-wide China Standard Time (UTC+8) for prompts and UI timestamps.</summary>
+/// <summary>Application-wide China Standard Time (UTC+8) for prompts, UI, and on-disk logs.</summary>
 public static class AppTimeZone
 {
     public const string PromptLabel = "UTC+8";
 
     private static readonly TimeZoneInfo ChinaStandard = ResolveChinaStandardTimeZone();
+
+    public static TimeSpan Offset => ChinaStandard.BaseUtcOffset;
 
     public static DateTimeOffset Now => TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, ChinaStandard);
 

@@ -98,7 +98,7 @@ public sealed class BehaviorReportUploader(
         };
     }
 
-    /// <summary>Formats as local wall-clock time: yyyy-MM-dd HH:mm:ss.fff</summary>
+    /// <summary>Formats as China Standard Time (UTC+8): yyyy-MM-dd HH:mm:ss.fff</summary>
     internal static string FormatEventTime(DateTimeOffset timestamp) =>
-        timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
+        AppTimeZone.ToChina(timestamp).ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture);
 }

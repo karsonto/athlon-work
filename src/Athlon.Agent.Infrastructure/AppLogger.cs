@@ -1,12 +1,4 @@
-using System.Diagnostics;
-using System.Net.Http.Json;
-using System.Runtime.Versioning;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Compaction;
-using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
@@ -15,6 +7,11 @@ namespace Athlon.Agent.Infrastructure;
 
 public sealed class AppLogger : IAppLogger, IDisposable
 {
+    internal const string ChinaTimestampPropertyName = "ChinaTimestamp";
+
+    private const string FileOutputTemplate =
+        "{" + ChinaTimestampPropertyName + ":yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
+
     private readonly ILogger _logger;
     private readonly Logger? _rootLogger;
 
@@ -35,13 +32,15 @@ public sealed class AppLogger : IAppLogger, IDisposable
         var logger = new LoggerConfiguration()
             .MinimumLevel.Is(level)
             .Enrich.FromLogContext()
+            .Enrich.With<ChinaTimestampEnricher>()
             .WriteTo.File(
                 Path.Combine(logDirectory, "app-.log"),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: settings.RetainedDays,
                 fileSizeLimitBytes: settings.MaxFileSizeBytes,
                 rollOnFileSizeLimit: true,
-                shared: true)
+                shared: true,
+                outputTemplate: FileOutputTemplate)
             .CreateLogger();
 
         return new AppLogger(logger, logger);
@@ -53,4 +52,14 @@ public sealed class AppLogger : IAppLogger, IDisposable
     public void Error(Exception exception, string messageTemplate, params object[] values) => _logger.Error(exception, SensitiveText.Redact(messageTemplate), values);
     public IAppLogger ForContext(string sourceContext) => new AppLogger(_logger.ForContext("SourceContext", sourceContext));
     public void Dispose() => _rootLogger?.Dispose();
+}
+
+/// <summary>Forces Serilog file timestamps into China Standard Time (UTC+8).</summary>
+internal sealed class ChinaTimestampEnricher : ILogEventEnricher
+{
+    public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
+    {
+        var china = AppTimeZone.ToChina(logEvent.Timestamp);
+        logEvent.AddOrUpdateProperty(propertyFactory.CreateProperty(AppLogger.ChinaTimestampPropertyName, china));
+    }
 }

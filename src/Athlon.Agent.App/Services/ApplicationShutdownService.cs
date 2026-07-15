@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Threading;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
@@ -20,6 +21,7 @@ public sealed class ApplicationShutdownService(
     IEventManager eventManager)
 {
     public static readonly TimeSpan DefaultTurnWaitTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan UiMarshalTimeout = TimeSpan.FromSeconds(2);
 
     private bool _mcpDisposed;
 
@@ -32,6 +34,9 @@ public sealed class ApplicationShutdownService(
         {
             return;
         }
+
+        // Must run before any ConfigureAwait(false) continuation leaves the UI thread.
+        CloseSecondaryWindows();
 
         try
         {
@@ -52,8 +57,6 @@ public sealed class ApplicationShutdownService(
         {
             // Behavior reporting must never block shutdown.
         }
-
-        CloseSecondaryWindows();
 
         progress?.Report(Strings.Get("Shutdown_StoppingScheduler"));
         scheduler.Stop();
@@ -90,15 +93,45 @@ public sealed class ApplicationShutdownService(
 
     private static void CloseSecondaryWindows()
     {
-        if (Application.Current is null)
+        var app = Application.Current;
+        if (app?.Dispatcher is null)
         {
             return;
         }
 
-        var main = Application.Current.MainWindow;
-        foreach (Window window in Application.Current.Windows)
+        if (app.Dispatcher.CheckAccess())
         {
-            if (window is not null && window != main)
+            CloseSecondaryWindowsCore(app);
+            return;
+        }
+
+        // OnExit may block the UI thread on GetResult(); use a timeout to avoid deadlock.
+        try
+        {
+            app.Dispatcher.Invoke(
+                () =>
+                {
+                    if (Application.Current is { } current)
+                    {
+                        CloseSecondaryWindowsCore(current);
+                    }
+                },
+                DispatcherPriority.Send,
+                CancellationToken.None,
+                UiMarshalTimeout);
+        }
+        catch
+        {
+            // Best effort: dispatcher may already be shutting down or timed out.
+        }
+    }
+
+    private static void CloseSecondaryWindowsCore(Application app)
+    {
+        var main = app.MainWindow;
+        foreach (Window window in app.Windows)
+        {
+            if (window is not null && !ReferenceEquals(window, main))
             {
                 try
                 {
