@@ -35,7 +35,7 @@ public sealed class ApplicationShutdownService(
 
         try
         {
-            var uptimeMs = (long)(DateTimeOffset.UtcNow - EventManager.Instance.StartedAt).TotalMilliseconds;
+            var uptimeMs = (long)(DateTimeOffset.UtcNow - BehaviorEventManager.Instance.StartedAt).TotalMilliseconds;
             eventManager.Record(
                 BehaviorEventIds.AppShutdown,
                 BehaviorEventTypes.Event,

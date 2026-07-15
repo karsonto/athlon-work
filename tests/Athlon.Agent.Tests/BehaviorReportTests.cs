@@ -15,14 +15,14 @@ public sealed class BehaviorReportTests : IDisposable
 
     public BehaviorReportTests()
     {
-        EventManager.ResetForTests();
+        BehaviorEventManager.ResetForTests();
         _root = Path.Combine(Path.GetTempPath(), "athlon-behavior-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(_root);
     }
 
     public void Dispose()
     {
-        EventManager.ResetForTests();
+        BehaviorEventManager.ResetForTests();
         try
         {
             if (Directory.Exists(_root))
@@ -86,7 +86,7 @@ public sealed class BehaviorReportTests : IDisposable
             BehaviorReport = new BehaviorReportSettings { Enabled = false, BaseUrl = "https://example.com" }
         };
 
-        var em = EventManager.Instance;
+        var em = BehaviorEventManager.Instance;
         em.Configure(settings, paths, new HttpClient(), new NoOpLogger());
         em.Start();
         em.Record(BehaviorEventIds.AppStart, BehaviorEventTypes.Event, BehaviorEventIds.AppStart);
@@ -112,7 +112,7 @@ public sealed class BehaviorReportTests : IDisposable
             }
         };
 
-        var em = EventManager.Instance;
+        var em = BehaviorEventManager.Instance;
         em.Configure(settings, paths, new HttpClient(new FailHandler()), new NoOpLogger());
         em.Start();
         em.Record(

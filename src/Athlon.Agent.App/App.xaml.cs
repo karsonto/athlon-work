@@ -163,7 +163,7 @@ public partial class App : Application
             var settings = services.GetRequiredService<AppSettings>();
             var httpFactory = services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
             var httpClient = httpFactory.CreateClient("BehaviorReport");
-            EventManager.Instance.Configure(
+            BehaviorEventManager.Instance.Configure(
                 settings,
                 services.GetRequiredService<IAppPathProvider>(),
                 httpClient,

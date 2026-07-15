@@ -240,7 +240,7 @@ public static class ImpSsoStartupGate
     {
         try
         {
-            EventManager.Instance.Record(eventId, eventType, eventId, parameters);
+            BehaviorEventManager.Instance.Record(eventId, eventType, eventId, parameters);
         }
         catch
         {

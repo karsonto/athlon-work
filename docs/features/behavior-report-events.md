@@ -1,6 +1,6 @@
 # Behavior Report 事件采集清单
 
-已实现：`EventManager` 单例采集 → 本地 `~/.athlon-agent/behavior/pending.jsonl` → 每 N 分钟 `POST {BaseUrl}/agent/report`。
+已实现：`BehaviorEventManager` 单例采集 → 本地 `~/.athlon-agent/behavior/pending.jsonl` → 每 N 分钟 `POST {BaseUrl}/agent/report`。
 
 配置：`AppSettings.BehaviorReport`（默认 `enabled: false`）。
 
@@ -33,7 +33,7 @@
 | 5 | 身份与应用 | `user_session` | event | `action`(expired/logout), `reason?`, `expires_at?` | Gate 过期 / `NavigationCoordinator.ClearSsoSession` |
 | 6 | 身份与应用 | `app_update_check` | event | `has_update`, `version` | `StartupUpdateGate` / `AppUpdateService` |
 | 7 | 大模型 | `model_call` | action | `purpose`(Chat/Summary/Memory/SubAgent/Embedding), tokens, `latency_ms`, `result`, `session_id`… | `AppendAttemptEvent` / Embedding Client |
-| 8 | 大模型 | `model_usage_summary` | event | `window_minutes`, 各 purpose 的 calls/tokens | EventManager 上送周期内聚合 |
+| 8 | 大模型 | `model_usage_summary` | event | `window_minutes`, 各 purpose 的 calls/tokens | BehaviorEventManager 上送周期内聚合 |
 | 9 | MCP | `mcp_tool` | action | `server_name`/`tool_name`/`gateway`, `mode`(direct/search), `success`, `latency_ms` | Attempt 分流（MCP 工具名） |
 | 10 | MCP | `mcp_server` | event | `server_name`, `action`(connected/disconnected/enabled/disabled), `tool_count?` | `McpRegistry` / `McpServerItemViewModel` |
 | 11 | Skill | `skill_load` | action | `skill_id`, `path`, `success` | `LoadSkillThroughPathTool` |
@@ -49,7 +49,7 @@
 
 ## Attempt 分流规则
 
-写入 `attempts.jsonl` 后旁路到 EventManager：
+写入 `attempts.jsonl` 后旁路到 BehaviorEventManager：
 
 | AgentAttempt 条件 | event_id |
 |-------------------|----------|

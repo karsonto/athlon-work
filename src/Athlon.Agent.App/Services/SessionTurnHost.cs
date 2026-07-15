@@ -93,7 +93,7 @@ public sealed class SessionTurnHost
     {
         try
         {
-            EventManager.Instance.Record(
+            BehaviorEventManager.Instance.Record(
                 BehaviorEventIds.UserMessageSent,
                 BehaviorEventTypes.Action,
                 BehaviorEventIds.UserMessageSent,
@@ -125,7 +125,7 @@ public sealed class SessionTurnHost
                 parameters["error_type"] = error.GetType().Name;
             }
 
-            EventManager.Instance.Record(
+            BehaviorEventManager.Instance.Record(
                 BehaviorEventIds.Turn,
                 BehaviorEventTypes.Event,
                 BehaviorEventIds.Turn,
@@ -306,7 +306,7 @@ public sealed class SessionTurnHost
                 : "completed";
         try
         {
-            EventManager.Instance.Record(
+            BehaviorEventManager.Instance.Record(
                 BehaviorEventIds.Turn,
                 BehaviorEventTypes.Event,
                 BehaviorEventIds.Turn,

@@ -49,7 +49,7 @@ public sealed class LoadSkillThroughPathTool(ISkillRuntime skillRuntime) : IAgen
     {
         try
         {
-            EventManager.Instance.Record(
+            BehaviorEventManager.Instance.Record(
                 BehaviorEventIds.SkillLoad,
                 BehaviorEventTypes.Action,
                 BehaviorEventIds.SkillLoad,

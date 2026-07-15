@@ -74,7 +74,7 @@ public sealed partial class McpServerItemViewModel : ObservableObject
             OnPropertyChanged(nameof(IsStatusError));
             try
             {
-                EventManager.Instance.Record(
+                BehaviorEventManager.Instance.Record(
                     BehaviorEventIds.McpServer,
                     BehaviorEventTypes.Event,
                     BehaviorEventIds.McpServer,

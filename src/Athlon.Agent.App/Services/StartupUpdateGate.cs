@@ -62,7 +62,7 @@ internal static class StartupUpdateGate
     {
         try
         {
-            EventManager.Instance.Record(
+            BehaviorEventManager.Instance.Record(
                 BehaviorEventIds.AppUpdateCheck,
                 BehaviorEventTypes.Event,
                 BehaviorEventIds.AppUpdateCheck,

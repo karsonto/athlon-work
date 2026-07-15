@@ -60,7 +60,7 @@ public sealed partial class SkillItemViewModel : ObservableObject
             OnPropertyChanged();
             try
             {
-                EventManager.Instance.Record(
+                BehaviorEventManager.Instance.Record(
                     BehaviorEventIds.SkillToggle,
                     BehaviorEventTypes.Event,
                     BehaviorEventIds.SkillToggle,

@@ -98,7 +98,7 @@ public sealed class OpenAiCompatibleEmbeddingClient(
     {
         try
         {
-            EventManager.Instance.Record(
+            BehaviorEventManager.Instance.Record(
                 BehaviorEventIds.ModelCall,
                 BehaviorEventTypes.Action,
                 BehaviorEventIds.ModelCall,

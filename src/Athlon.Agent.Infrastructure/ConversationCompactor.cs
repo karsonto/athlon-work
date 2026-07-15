@@ -241,7 +241,7 @@ public sealed class ConversationCompactor(
         sessionUsageAccumulator.RecordCompaction(session.Id, tokensBefore, tokensAfterPreview);
         try
         {
-            EventManager.Instance.Record(
+            BehaviorEventManager.Instance.Record(
                 BehaviorEventIds.Context,
                 BehaviorEventTypes.Event,
                 BehaviorEventIds.Context,

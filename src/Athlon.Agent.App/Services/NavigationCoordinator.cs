@@ -75,7 +75,7 @@ public sealed class NavigationCoordinator
     {
         try
         {
-            EventManager.Instance.Record(
+            BehaviorEventManager.Instance.Record(
                 BehaviorEventIds.UserSession,
                 BehaviorEventTypes.Event,
                 BehaviorEventIds.UserSession,

@@ -108,7 +108,7 @@ public sealed class SubAgentCompletionContinuationService : ISubAgentCompletionN
         {
             try
             {
-                EventManager.Instance.Record(
+                BehaviorEventManager.Instance.Record(
                     BehaviorEventIds.Subagent,
                     BehaviorEventTypes.Event,
                     BehaviorEventIds.Subagent,

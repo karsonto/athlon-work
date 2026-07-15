@@ -6,12 +6,12 @@ using Athlon.Agent.Core.Sso;
 
 namespace Athlon.Agent.Infrastructure.BehaviorReport;
 
-public sealed class EventManager : IEventManager, IDisposable
+public sealed class BehaviorEventManager : IEventManager, IDisposable
 {
     private static readonly object InstanceLock = new();
-    private static EventManager? _instance;
+    private static BehaviorEventManager? _instance;
 
-    public static EventManager Instance
+    public static BehaviorEventManager Instance
     {
         get
         {
@@ -22,7 +22,7 @@ public sealed class EventManager : IEventManager, IDisposable
 
             lock (InstanceLock)
             {
-                return _instance ??= new EventManager();
+                return _instance ??= new BehaviorEventManager();
             }
         }
     }
@@ -44,7 +44,7 @@ public sealed class EventManager : IEventManager, IDisposable
     private int _started;
     private DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
 
-    private EventManager()
+    private BehaviorEventManager()
     {
     }
 
@@ -68,7 +68,7 @@ public sealed class EventManager : IEventManager, IDisposable
         {
             // Allow refreshing device providers after App binds screen / version info.
             _settings = settings;
-            _logger = logger.ForContext("EventManager");
+            _logger = logger.ForContext("BehaviorEventManager");
             _deviceInfo = new ClientDeviceInfo(sessionStore, screenResolutionProvider, appName, appVersion);
             if (_store is not null)
             {
@@ -79,7 +79,7 @@ public sealed class EventManager : IEventManager, IDisposable
         }
 
         _settings = settings;
-        _logger = logger.ForContext("EventManager");
+        _logger = logger.ForContext("BehaviorEventManager");
         _store = new BehaviorEventLocalStore(paths);
         _deviceInfo = new ClientDeviceInfo(sessionStore, screenResolutionProvider, appName, appVersion);
         _uploader = new BehaviorReportUploader(httpClient, settings, _store, _deviceInfo, logger);
@@ -137,7 +137,7 @@ public sealed class EventManager : IEventManager, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Warning("EventManager.Start failed: {Error}", ex.Message);
+            _logger.Warning("BehaviorEventManager.Start failed: {Error}", ex.Message);
         }
     }
 
@@ -169,7 +169,7 @@ public sealed class EventManager : IEventManager, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Warning("EventManager.Stop failed: {Error}", ex.Message);
+            _logger.Warning("BehaviorEventManager.Stop failed: {Error}", ex.Message);
         }
     }
 
@@ -223,7 +223,7 @@ public sealed class EventManager : IEventManager, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Warning("EventManager.Record failed: {Error}", ex.Message);
+            _logger.Warning("BehaviorEventManager.Record failed: {Error}", ex.Message);
         }
     }
 
@@ -247,7 +247,7 @@ public sealed class EventManager : IEventManager, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Warning("EventManager.RecordAttempt failed: {Error}", ex.Message);
+            _logger.Warning("BehaviorEventManager.RecordAttempt failed: {Error}", ex.Message);
         }
     }
 
@@ -289,7 +289,7 @@ public sealed class EventManager : IEventManager, IDisposable
         }
         catch (Exception ex)
         {
-            _logger.Warning("EventManager.FlushAsync failed: {Error}", ex.Message);
+            _logger.Warning("BehaviorEventManager.FlushAsync failed: {Error}", ex.Message);
         }
     }
 

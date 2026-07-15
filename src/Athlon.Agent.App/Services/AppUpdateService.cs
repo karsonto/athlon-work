@@ -55,7 +55,7 @@ public sealed class AppUpdateService
     {
         try
         {
-            EventManager.Instance.Record(
+            BehaviorEventManager.Instance.Record(
                 BehaviorEventIds.AppUpdateCheck,
                 BehaviorEventTypes.Event,
                 BehaviorEventIds.AppUpdateCheck,

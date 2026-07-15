@@ -209,7 +209,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
     {
         try
         {
-            EventManager.Instance.Record(
+            BehaviorEventManager.Instance.Record(
                 BehaviorEventIds.McpServer,
                 BehaviorEventTypes.Event,
                 BehaviorEventIds.McpServer,

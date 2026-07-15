@@ -108,7 +108,7 @@ public sealed class SubAgentRunExecutor(
     {
         try
         {
-            EventManager.Instance.Record(
+            BehaviorEventManager.Instance.Record(
                 BehaviorEventIds.Subagent,
                 action is "started" ? BehaviorEventTypes.Action : BehaviorEventTypes.Event,
                 BehaviorEventIds.Subagent,

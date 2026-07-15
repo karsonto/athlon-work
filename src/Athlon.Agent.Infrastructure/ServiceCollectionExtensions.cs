@@ -64,13 +64,13 @@ public static class ServiceCollectionExtensions
             var httpFactory = sp.GetRequiredService<IHttpClientFactory>();
             var httpClient = httpFactory.CreateClient("BehaviorReport");
             var sessionStore = sp.GetService<IImpSsoSessionStore>();
-            EventManager.Instance.Configure(
+            BehaviorEventManager.Instance.Configure(
                 sp.GetRequiredService<AppSettings>(),
                 sp.GetRequiredService<IAppPathProvider>(),
                 httpClient,
                 sp.GetRequiredService<IAppLogger>(),
                 sessionStore);
-            return EventManager.Instance;
+            return BehaviorEventManager.Instance;
         });
         services.AddSingleton<IFileStorageService, FileStorageService>();
         services.AddHttpClient<IAgentModelClient, OpenAiCompatibleChatModelClient>(

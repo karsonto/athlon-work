@@ -363,7 +363,7 @@ public sealed class FileStorageService(
 
         try
         {
-            EventManager.Instance.RecordAttempt(entry);
+            BehaviorEventManager.Instance.RecordAttempt(entry);
         }
         catch
         {
