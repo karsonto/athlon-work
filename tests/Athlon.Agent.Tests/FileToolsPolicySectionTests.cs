@@ -17,6 +17,7 @@ public sealed class FileToolsPolicySectionTests
         Assert.Contains("File tools:", text, StringComparison.Ordinal);
         Assert.Contains("grep_files", text, StringComparison.Ordinal);
         Assert.Contains("N| prefixes", text, StringComparison.Ordinal);
+        Assert.Contains("file_write requires non-empty", text, StringComparison.Ordinal);
         Assert.Contains("character-for-character", text, StringComparison.Ordinal);
         Assert.Contains("CJK characters", text, StringComparison.Ordinal);
     }

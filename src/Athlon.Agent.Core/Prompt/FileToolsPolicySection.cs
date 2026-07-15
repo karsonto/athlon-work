@@ -24,6 +24,7 @@ public sealed class FileToolsPolicySection : IEnvironmentPromptSection
         {
             builder.AppendLine("- file_read line output uses N| prefixes for display only; file_edit old_text must match disk content without those prefixes.");
             builder.AppendLine("- Editing: if file_edit fails, re-read the file and retry once; after two failures switch to apply_patch or file_write (small files only). Never retry the same old_text a third time.");
+            builder.AppendLine("- file_write requires non-empty `content` as a JSON string with the full file body; do not omit it or pass null/empty.");
         }
         builder.AppendLine(PromptModeHelper.IsAskMode(context)
             ? "- Paths from file_list, glob_files, or grep_files are exact on-disk names. Copy them character-for-character into available file tools."

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 
@@ -6,7 +7,7 @@ namespace Athlon.Agent.Tests;
 public sealed class FileWriteToolTests
 {
     [Fact]
-    public async Task CreatesEmptyFile_WhenContentIsEmpty()
+    public async Task FailsWithStructuredError_WhenContentIsEmpty()
     {
         var env = await CreateEnvironmentAsync();
 
@@ -19,12 +20,14 @@ public sealed class FileWriteToolTests
                     ["content"] = string.Empty
                 }));
 
-            Assert.True(result.Succeeded, result.Error);
-            Assert.Contains("empty file", result.Summary, StringComparison.OrdinalIgnoreCase);
-
-            var fullPath = Path.Combine(env.WorkspaceRoot, "empty.txt");
-            Assert.True(File.Exists(fullPath));
-            Assert.Equal(0, new FileInfo(fullPath).Length);
+            Assert.False(result.Succeeded);
+            Assert.Equal("Invalid tool arguments", result.Summary);
+            var error = DeserializeError(result);
+            Assert.Equal("file_write.content.empty", error.Code);
+            Assert.Equal("$.content", error.Path);
+            Assert.Contains("non-empty", error.Expected, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("empty", error.Actual, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(Path.Combine(env.WorkspaceRoot, "empty.txt")));
         }
         finally
         {
@@ -33,7 +36,7 @@ public sealed class FileWriteToolTests
     }
 
     [Fact]
-    public async Task FailsWithHelpfulMessage_WhenContentMissing()
+    public async Task FailsWithStructuredError_WhenContentMissing()
     {
         var env = await CreateEnvironmentAsync();
 
@@ -46,8 +49,64 @@ public sealed class FileWriteToolTests
                 }));
 
             Assert.False(result.Succeeded);
-            Assert.Equal("Missing argument", result.Summary);
-            Assert.Contains("empty string", result.Error, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("Invalid tool arguments", result.Summary);
+            var error = DeserializeError(result);
+            Assert.Equal("file_write.content.missing", error.Code);
+            Assert.Equal("$.content", error.Path);
+            Assert.Contains("missing", error.Actual, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("content", error.Remediation, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task FailsWithStructuredError_WhenContentIsNull()
+    {
+        var env = await CreateEnvironmentAsync();
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(
+                new ToolInvocation(
+                    "file_write",
+                    ToolCallArgumentsParser.ParseJson("""{"path":"null-content.txt","content":null}""")));
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("Invalid tool arguments", result.Summary);
+            var error = DeserializeError(result);
+            Assert.Equal("file_write.content.null", error.Code);
+            Assert.Equal("$.content", error.Path);
+            Assert.Equal("null", error.Actual);
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task FailsWithStructuredError_WhenContentIsNotString()
+    {
+        var env = await CreateEnvironmentAsync();
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(
+                new ToolInvocation(
+                    "file_write",
+                    ToolCallArgumentsParser.ParseJson("""{"path":"bad-type.txt","content":42}""")));
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("Invalid tool arguments", result.Summary);
+            var error = DeserializeError(result);
+            Assert.Equal("file_write.content.type_mismatch", error.Code);
+            Assert.Equal("$.content", error.Path);
+            Assert.Equal("JSON string", error.Expected);
+            Assert.Contains("number", error.Actual, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("truncated", error.Remediation, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {
@@ -150,6 +209,16 @@ public sealed class FileWriteToolTests
         {
             env.Dispose();
         }
+    }
+
+    private static ToolInvocationError DeserializeError(ToolResult result)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(result.Error));
+        var error = JsonSerializer.Deserialize<ToolInvocationError>(
+            result.Error!,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(error);
+        return error!;
     }
 
     private static Task<TestEnvironment> CreateEnvironmentAsync()
