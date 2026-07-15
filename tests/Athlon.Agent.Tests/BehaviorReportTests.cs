@@ -131,7 +131,30 @@ public sealed class BehaviorReportTests : IDisposable
         Assert.True(File.Exists(pending));
         var text = await File.ReadAllTextAsync(pending);
         Assert.Contains("model_call", text, StringComparison.Ordinal);
+        Assert.Contains("+08:00", text, StringComparison.Ordinal);
         em.Stop();
+    }
+
+    [Fact]
+    public async Task LocalStore_PersistsTimestampWithChinaOffset()
+    {
+        var paths = new TestPaths(_root);
+        paths.EnsureCreated();
+        var store = new BehaviorEventLocalStore(paths);
+        await store.AppendAsync(new BehaviorEvent
+        {
+            EventId = BehaviorEventIds.AppStart,
+            EventType = BehaviorEventTypes.Event,
+            MessageContent = BehaviorEventIds.AppStart,
+            Timestamp = AppTimeZone.Now
+        });
+
+        var line = await File.ReadAllTextAsync(store.PendingPath);
+        Assert.Contains("+08:00", line, StringComparison.Ordinal);
+
+        var loaded = await store.ReadAllAsync();
+        Assert.Single(loaded);
+        Assert.Equal(AppTimeZone.Offset, loaded[0].Timestamp.Offset);
     }
 
     [Fact]

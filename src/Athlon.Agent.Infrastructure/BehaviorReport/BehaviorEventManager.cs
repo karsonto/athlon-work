@@ -195,7 +195,7 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
                 Parameters = parameters is null
                     ? new Dictionary<string, object?>(StringComparer.Ordinal)
                     : new Dictionary<string, object?>(parameters, StringComparer.Ordinal),
-                Timestamp = DateTimeOffset.UtcNow
+                Timestamp = AppTimeZone.Now
             };
 
             if (string.Equals(eventId, BehaviorEventIds.ModelCall, StringComparison.Ordinal))
@@ -457,7 +457,7 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
                 EventType = BehaviorEventTypes.Event,
                 MessageContent = BehaviorEventIds.ModelUsageSummary,
                 Parameters = parameters,
-                Timestamp = DateTimeOffset.UtcNow
+                Timestamp = AppTimeZone.Now
             };
 
             if (_channel is null)

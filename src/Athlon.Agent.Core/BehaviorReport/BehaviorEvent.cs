@@ -4,7 +4,7 @@ public sealed class BehaviorEvent
 {
     public string Id { get; init; } = Guid.NewGuid().ToString("N");
 
-    public DateTimeOffset Timestamp { get; init; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset Timestamp { get; init; } = AppTimeZone.Now;
 
     /// <summary>Stable event identifier (e.g. model_call, mcp_tool).</summary>
     public string EventId { get; init; } = "";
