@@ -60,6 +60,12 @@ public sealed class SessionStreamingUiContext
                 ReleaseAssistantBubble(messageId, messages);
                 break;
             case AgentStreamEvent.ToolCallStart(var toolCallId, var toolName, var index):
+                if (TurnActivityClassifier.IsActivityTool(toolName))
+                {
+                    _activityOnlyToolCallIds.Add(toolCallId);
+                    break;
+                }
+
                 if (!ShowToolCalls())
                 {
                     break;
@@ -82,7 +88,7 @@ public sealed class SessionStreamingUiContext
 
                 break;
             case AgentStreamEvent.ToolCallArgs(var toolCallId, var argsJson):
-                if (!ShowToolCalls())
+                if (!ShowToolCalls() || IsTrackedActivityOnly(toolCallId))
                 {
                     break;
                 }
@@ -101,7 +107,7 @@ public sealed class SessionStreamingUiContext
                 RequestScroll();
                 break;
             case AgentStreamEvent.ToolCallEnd(var toolCallId):
-                if (!ShowToolCalls())
+                if (!ShowToolCalls() || IsTrackedActivityOnly(toolCallId))
                 {
                     break;
                 }
@@ -119,7 +125,7 @@ public sealed class SessionStreamingUiContext
 
                 break;
             case AgentStreamEvent.ToolCallResult(var toolCallId, var content, var messageId):
-                if (!ShowToolCalls())
+                if (!ShowToolCalls() || IsActivityToolResult(toolCallId, content))
                 {
                     break;
                 }
@@ -127,7 +133,7 @@ public sealed class SessionStreamingUiContext
                 HandleToolCallResult(toolCallId, content, messageId, messages);
                 break;
             case AgentStreamEvent.ToolCallOutput(var toolCallId, var delta):
-                if (!ShowToolCalls())
+                if (!ShowToolCalls() || IsTrackedActivityOnly(toolCallId))
                 {
                     break;
                 }
@@ -152,6 +158,45 @@ public sealed class SessionStreamingUiContext
         _toolCallIdToIndex.Clear();
         _pendingToolCallArgs.Clear();
         _outputToolBubbles.Clear();
+        _activityOnlyToolCallIds.Clear();
+    }
+
+    private readonly HashSet<string> _activityOnlyToolCallIds = new(StringComparer.Ordinal);
+
+    private bool IsTrackedActivityOnly(string toolCallId) =>
+        _activityOnlyToolCallIds.Contains(toolCallId);
+
+    private bool IsActivityToolResult(string toolCallId, string content)
+    {
+        if (_activityOnlyToolCallIds.Contains(toolCallId))
+        {
+            return true;
+        }
+
+        ToolMessageDisplayParser.ParseToolContent(
+            content,
+            out _,
+            out var toolName,
+            out _,
+            out _,
+            out _,
+            out _,
+            out _);
+        return TurnActivityClassifier.IsActivityTool(toolName);
+    }
+
+    private static bool IsActivityToolContent(string content)
+    {
+        ToolMessageDisplayParser.ParseToolContent(
+            content,
+            out _,
+            out var toolName,
+            out _,
+            out _,
+            out _,
+            out _,
+            out _);
+        return TurnActivityClassifier.IsActivityTool(toolName);
     }
 
     private void HandleChatMessageAppended(ChatMessage message, ObservableCollection<ChatMessageViewModel> messages)
@@ -183,7 +228,7 @@ public sealed class SessionStreamingUiContext
 
         if (message.Role == MessageRole.Tool)
         {
-            if (!ShowToolCalls())
+            if (!ShowToolCalls() || IsActivityToolContent(message.Content))
             {
                 return;
             }

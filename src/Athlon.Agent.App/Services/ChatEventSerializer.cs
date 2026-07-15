@@ -48,24 +48,140 @@ internal static class ChatEventSerializer
 
     public static string SerializeUserMessage(ChatMessageViewModel message)
     {
+        var images = message.ImageAttachments
+            .Select(image =>
+            {
+                var url = ImageAttachmentDataUrlResolver.ResolveDataUrl(image);
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    return null;
+                }
+
+                return new
+                {
+                    fileName = image.FileName,
+                    mimeType = image.MimeType,
+                    url
+                };
+            })
+            .Where(image => image is not null)
+            .ToList();
+
+        // Prefer rendering real thumbnails; omit the "N image(s) attached" text fallback.
         var content = message.Content;
-        if (!string.IsNullOrWhiteSpace(message.UserAttachmentSummary))
+        if (images.Count == 0 && !string.IsNullOrWhiteSpace(message.UserAttachmentSummary))
         {
             content = string.IsNullOrWhiteSpace(content)
                 ? message.UserAttachmentSummary
                 : $"{content}\n{message.UserAttachmentSummary}";
         }
 
-        return SerializeAgui("USER_MESSAGE", new { messageId = message.MessageId, content });
+        return SerializeAgui("USER_MESSAGE", new
+        {
+            messageId = message.MessageId,
+            content,
+            images
+        });
     }
 
-    public static string SerializeStaticAssistantHtml(ChatMessageViewModel message) =>
+    public static string SerializeTurnActivity(TurnActivitySummary summary, bool upsert = false)
+    {
+        var items = summary.Items.Select(item => new
+        {
+            kind = item.Kind.ToString().ToLowerInvariant(),
+            verb = LocalizeActivityVerb(item.Kind),
+            detail = item.Detail,
+            path = item.Path,
+            added = item.Added,
+            removed = item.Removed,
+            body = item.Body,
+            status = item.Status,
+            statusLabel = item.Status is null ? null : LocalizeActivityStatus(item.Status),
+            lines = item.DiffLines?.Select(line => new
+            {
+                kind = line.Kind,
+                text = line.Text,
+                count = line.Count
+            })
+        }).ToList();
+
+        return SerializeAgui("TURN_ACTIVITY", new
+        {
+            upsert,
+            editedFileCount = summary.EditedFileCount,
+            exploredFileCount = summary.ExploredFileCount,
+            searchCount = summary.SearchCount,
+            thoughtCount = summary.ThoughtCount,
+            totalAdded = summary.TotalAdded,
+            totalRemoved = summary.TotalRemoved,
+            items
+        });
+    }
+
+    private static string LocalizeActivityVerb(TurnActivityKind kind) => kind switch
+    {
+        TurnActivityKind.Edited => Strings.Get("Chat_ActivityVerbEdited"),
+        TurnActivityKind.Read => Strings.Get("Chat_ActivityVerbRead"),
+        TurnActivityKind.Searched => Strings.Get("Chat_ActivityVerbSearched"),
+        TurnActivityKind.Explored => Strings.Get("Chat_ActivityVerbExplored"),
+        TurnActivityKind.Thought => Strings.Get("Chat_ActivityVerbThought"),
+        _ => kind.ToString()
+    };
+
+    private static string LocalizeActivityStatus(string status) => status switch
+    {
+        "preparing" => Strings.Get("Chat_ToolStatusPreparing"),
+        "running" => Strings.Get("Chat_ToolStatusRunning"),
+        "awaiting_approval" => Strings.Get("Chat_ToolApprovalPending"),
+        "approval_denied" => Strings.Get("Chat_ToolApprovalDeniedStatus"),
+        "failed" => Strings.Get("Chat_ToolStatusFailed"),
+        "cancelled" => Strings.Get("Chat_ToolStatusCancelled"),
+        "succeeded" => Strings.Get("Chat_ToolStatusSucceeded"),
+        _ => status
+    };
+
+    public static string SerializeFilesChanged(IReadOnlyList<ModifiedFileViewModel> files, bool upsert = false)
+    {
+        if (files.Count == 0)
+        {
+            return SerializeAgui("FILES_CHANGED", new { upsert, files = Array.Empty<object>() });
+        }
+
+        var payload = files.Select(file => new
+        {
+            path = file.RelativePath,
+            displayName = file.DisplayName,
+            added = file.AddedCount,
+            removed = file.RemovedCount,
+            lines = UnifiedDiffDisplayParser.Parse(file.UnifiedDiffText, foldContext: true)
+                .Select(line => new
+                {
+                    kind = line.Kind switch
+                    {
+                        DiffLineKind.Added => "added",
+                        DiffLineKind.Removed => "removed",
+                        DiffLineKind.Context => "context",
+                        DiffLineKind.HunkHeader => "hunkHeader",
+                        DiffLineKind.Header => "header",
+                        DiffLineKind.Collapsed => "collapsed",
+                        _ => "context"
+                    },
+                    text = line.Text,
+                    count = line.CollapsedCount
+                })
+        }).ToList();
+
+        return SerializeAgui("FILES_CHANGED", new { upsert, files = payload });
+    }
+
+    public static string SerializeStaticAssistantHtml(ChatMessageViewModel message, bool streaming = false) =>
         SerializeAgui("STATIC_ASSISTANT_HTML", new
         {
             messageId = message.MessageId,
             markdown = message.Content,
             html = MarkdownHtmlRenderer.ToHtmlFragment(message.Content),
-            createIfMissing = true
+            createIfMissing = true,
+            streaming
         });
 
     public static string SerializeToolResultMarkdown(ChatMessageViewModel message)
@@ -143,8 +259,11 @@ internal static class ChatEventSerializer
 
     public static string SerializeReplayCommand(
         IReadOnlyList<ChatMessageViewModel> messages,
-        bool showToolCalls = false) =>
-        SerializeWebMessageCommand("replay", BuildReplayEvents(messages, showToolCalls));
+        bool showToolCalls = false,
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null) =>
+        SerializeWebMessageCommand(
+            "replay",
+            BuildReplayEvents(messages, showToolCalls, activitySourceMessages: activitySourceMessages));
 
     public static string SerializeResetCommand() =>
         SerializeWebMessageCommand("reset", Array.Empty<string>());
@@ -152,10 +271,15 @@ internal static class ChatEventSerializer
     public static string SerializePrependCommand(
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls,
-        bool hasOlderMessages) =>
+        bool hasOlderMessages,
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null) =>
         SerializeWebMessageCommand(
             "prepend",
-            BuildReplayEvents(messages, showToolCalls, includeReset: false),
+            BuildReplayEvents(
+                messages,
+                showToolCalls,
+                includeReset: false,
+                activitySourceMessages: activitySourceMessages),
             hasOlderMessages);
 
     public static string SerializeHistoryAvailabilityCommand(bool hasOlderMessages) =>
@@ -168,7 +292,8 @@ internal static class ChatEventSerializer
     public static IReadOnlyList<string> BuildReplayEvents(
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls = false,
-        bool includeReset = true)
+        bool includeReset = true,
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null)
     {
         var events = new List<string>();
         if (includeReset)
@@ -176,21 +301,90 @@ internal static class ChatEventSerializer
             events.Add(SerializeResetTimeline());
         }
 
-        foreach (var message in messages)
+        var timeline = activitySourceMessages is { Count: > 0 }
+            ? activitySourceMessages
+                .Where(message => message.Role is MessageRole.User or MessageRole.Tool or MessageRole.Assistant)
+                .Select(message => new ChatMessageViewModel(message))
+                .ToList()
+            : messages.ToList();
+
+        var segment = new List<ChatMessageViewModel>();
+
+        void EmitSegmentBubbles()
+        {
+            if (segment.Count == 0)
+            {
+                return;
+            }
+
+            var activity = TurnActivitySummaryBuilder.Build(segment);
+            if (activity is { HasContent: true })
+            {
+                events.Add(SerializeTurnActivity(activity));
+            }
+
+            var files = SessionModifiedFilesTracker.BuildTurnFileGroups(segment);
+            if (files is { Count: > 0 } && files[0].Count > 0)
+            {
+                events.Add(SerializeFilesChanged(files[0]));
+            }
+
+            segment.Clear();
+        }
+
+        foreach (var message in timeline)
         {
             if (message.IsHiddenPlaceholder)
             {
                 continue;
             }
 
-            if (!ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls, message))
+            if (message.IsUser)
             {
+                EmitSegmentBubbles();
+                events.AddRange(BuildReplayEventsForMessage(message));
                 continue;
             }
 
-            events.AddRange(BuildReplayEventsForMessage(message));
+            if (message.IsTool || message.IsCompaction)
+            {
+                if (TurnActivityClassifier.IsActivityTool(message.ToolName))
+                {
+                    segment.Add(message);
+                    continue;
+                }
+
+                if (ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls, message))
+                {
+                    events.AddRange(BuildReplayEventsForMessage(message));
+                }
+
+                continue;
+            }
+
+            // Assistant: fold reasoning into the bubble that sits above this text output.
+            if (message.HasReasoning)
+            {
+                segment.Add(new ChatMessageViewModel(
+                    ChatMessage.Create(
+                        MessageRole.Assistant,
+                        string.Empty,
+                        reasoningContent: message.ReasoningContent)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(message.Content))
+            {
+                EmitSegmentBubbles();
+                events.AddRange(BuildReplayEventsForMessage(
+                    new ChatMessageViewModel(
+                        ChatMessage.CreateWithId(
+                            message.MessageId,
+                            MessageRole.Assistant,
+                            message.Content))));
+            }
         }
 
+        EmitSegmentBubbles();
         return events;
     }
 
@@ -212,12 +406,7 @@ internal static class ChatEventSerializer
             yield break;
         }
 
-        if (!string.IsNullOrWhiteSpace(message.ReasoningContent))
-        {
-            yield return SerializeAgui("REASONING_MESSAGE_START", new { messageId = message.MessageId, role = "assistant" });
-            yield return SerializeAgui("REASONING_MESSAGE_CONTENT", new { messageId = message.MessageId, delta = message.ReasoningContent });
-            yield return SerializeAgui("REASONING_MESSAGE_END", new { messageId = message.MessageId });
-        }
+        // Reasoning is folded into TURN_ACTIVITY; do not emit standalone reasoning bubbles.
 
         if (!string.IsNullOrWhiteSpace(message.Content))
         {

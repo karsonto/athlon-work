@@ -40,6 +40,9 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         UserAttachmentSummary = message.ImageAttachments is { Count: > 0 }
             ? Strings.Format("Chat_ImageAttachmentCount", message.ImageAttachments.Count)
             : string.Empty;
+        ImageAttachments = message.ImageAttachments is { Count: > 0 }
+            ? message.ImageAttachments
+            : Array.Empty<ImageAttachment>();
         IsHiddenPlaceholder = isFoldedHistoryPlaceholder
             ? false
             : IsUser && (CompactionMessageContent.IsSummaryPlaceholder(message.Content)
@@ -112,6 +115,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         Content = string.Empty;
         ReasoningContent = string.Empty;
         UserAttachmentSummary = string.Empty;
+        ImageAttachments = Array.Empty<ImageAttachment>();
         CreatedAt = AppTimeZone.Now.ToString("HH:mm:ss");
         IsToolRunning = true;
         ToolCallStatus = ToolCallDisplayStatus.Running;
@@ -142,6 +146,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         Content = string.Empty;
         ReasoningContent = string.Empty;
         UserAttachmentSummary = string.Empty;
+        ImageAttachments = Array.Empty<ImageAttachment>();
         IsExpanded = false;
         IsStreaming = false;
         IsReasoningStreaming = false;
@@ -177,6 +182,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public bool IsTool { get; }
     public bool IsCompaction { get; }
     public string UserAttachmentSummary { get; }
+    public IReadOnlyList<ImageAttachment> ImageAttachments { get; }
     public bool IsCollapsibleCard => IsTool || IsCompaction || _isFoldedHistoryPlaceholder;
     public bool IsHiddenPlaceholder { get; }
     public bool AssistantTone => !IsUser;
@@ -332,6 +338,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         Content = string.Empty;
         ReasoningContent = string.Empty;
         UserAttachmentSummary = string.Empty;
+        ImageAttachments = Array.Empty<ImageAttachment>();
         IsExpanded = false;
         IsStreaming = false;
         IsReasoningStreaming = false;

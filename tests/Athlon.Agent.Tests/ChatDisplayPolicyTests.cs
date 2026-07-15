@@ -199,6 +199,35 @@ public sealed class ChatDisplayPolicyTests
     }
 
     [Fact]
+    public void SerializeStaticAssistantHtml_streaming_true_prerenders_markdown_with_flag()
+    {
+        var assistant = new ChatMessageViewModel(
+            ChatMessage.Create(MessageRole.Assistant, "## Title\n**bold**"));
+
+        using var document = JsonDocument.Parse(
+            ChatEventSerializer.SerializeStaticAssistantHtml(assistant, streaming: true));
+
+        var root = document.RootElement;
+        Assert.Equal("STATIC_ASSISTANT_HTML", root.GetProperty("type").GetString());
+        Assert.True(root.GetProperty("streaming").GetBoolean());
+        Assert.Contains("<h2", root.GetProperty("html").GetString()!, StringComparison.Ordinal);
+        Assert.Contains("<strong>bold</strong>", root.GetProperty("html").GetString()!, StringComparison.Ordinal);
+        Assert.Equal(assistant.Content, root.GetProperty("markdown").GetString());
+    }
+
+    [Fact]
+    public void SerializeStaticAssistantHtml_default_is_not_streaming()
+    {
+        var assistant = new ChatMessageViewModel(
+            ChatMessage.Create(MessageRole.Assistant, "done"));
+
+        using var document = JsonDocument.Parse(
+            ChatEventSerializer.SerializeStaticAssistantHtml(assistant));
+
+        Assert.False(document.RootElement.GetProperty("streaming").GetBoolean());
+    }
+
+    [Fact]
     public void SerializeResetCommand_is_a_valid_empty_reset_command()
     {
         using var document = JsonDocument.Parse(ChatEventSerializer.SerializeResetCommand());

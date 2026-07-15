@@ -100,6 +100,57 @@
   <data name="Chat_Copy" xml:space="preserve">
     <value>复制</value>
   </data>
+  <data name="Chat_FilesChangedOne" xml:space="preserve">
+    <value>1 个文件已修改</value>
+  </data>
+  <data name="Chat_FilesChangedMany" xml:space="preserve">
+    <value>{0} 个文件已修改</value>
+  </data>
+  <data name="Chat_EditedFilesOne" xml:space="preserve">
+    <value>编辑了 1 个文件</value>
+  </data>
+  <data name="Chat_EditedFilesMany" xml:space="preserve">
+    <value>编辑了 {0} 个文件</value>
+  </data>
+  <data name="Chat_ExploredFilesOne" xml:space="preserve">
+    <value>查看了 1 个文件</value>
+  </data>
+  <data name="Chat_ExploredFilesMany" xml:space="preserve">
+    <value>查看了 {0} 个文件</value>
+  </data>
+  <data name="Chat_SearchesOne" xml:space="preserve">
+    <value>1 次搜索</value>
+  </data>
+  <data name="Chat_SearchesMany" xml:space="preserve">
+    <value>{0} 次搜索</value>
+  </data>
+  <data name="Chat_ActivityVerbEdited" xml:space="preserve">
+    <value>编辑</value>
+  </data>
+  <data name="Chat_ActivityVerbRead" xml:space="preserve">
+    <value>读取</value>
+  </data>
+  <data name="Chat_ActivityVerbSearched" xml:space="preserve">
+    <value>搜索</value>
+  </data>
+  <data name="Chat_ActivityVerbExplored" xml:space="preserve">
+    <value>浏览</value>
+  </data>
+  <data name="Chat_ActivityVerbThought" xml:space="preserve">
+    <value>思考</value>
+  </data>
+  <data name="Chat_ThoughtsOne" xml:space="preserve">
+    <value>思考了 1 次</value>
+  </data>
+  <data name="Chat_ThoughtsMany" xml:space="preserve">
+    <value>思考了 {0} 次</value>
+  </data>
+  <data name="Chat_UnmodifiedLines" xml:space="preserve">
+    <value>{0} 行未修改</value>
+  </data>
+  <data name="Chat_NoDiffAvailable" xml:space="preserve">
+    <value>暂无可用 diff</value>
+  </data>
   <data name="Chat_ImageAttachmentCount" xml:space="preserve">
     <value>已附图片 {0} 张</value>
   </data>

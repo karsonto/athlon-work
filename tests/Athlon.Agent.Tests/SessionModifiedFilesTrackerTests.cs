@@ -24,6 +24,13 @@ public sealed class SessionModifiedFilesTrackerTests
     public void FileEditToolCallResult_updates_status_to_succeeded()
     {
         var tracker = new SessionModifiedFilesTracker();
+        var diff = string.Join(
+            Environment.NewLine,
+            "--- a/server.ts",
+            "+++ b/server.ts",
+            "@@ -1,1 +1,1 @@",
+            "-a",
+            "+b");
         var result = string.Join(
             Environment.NewLine,
             "ToolCallId: call-1",
@@ -31,7 +38,8 @@ public sealed class SessionModifiedFilesTrackerTests
             "",
             "Arguments: path=server.ts",
             "Summary: Edited server.ts (1 replacement(s))",
-            "");
+            "",
+            diff);
 
         tracker.Process(new AgentStreamEvent.ToolCallStart("call-1", "file_edit", 0));
         tracker.Process(new AgentStreamEvent.ToolCallArgs("call-1", """{"path":"server.ts","old_text":"a","new_text":"b"}"""));
@@ -41,6 +49,35 @@ public sealed class SessionModifiedFilesTrackerTests
         Assert.Single(tracker.ModifiedFiles);
         Assert.Equal("server.ts", tracker.ModifiedFiles[0].RelativePath);
         Assert.Equal(ModifiedFileStatus.Succeeded, tracker.ModifiedFiles[0].Status);
+        Assert.True(tracker.ModifiedFiles[0].HasDiff);
+        Assert.Equal(1, tracker.ModifiedFiles[0].AddedCount);
+        Assert.Equal(1, tracker.ModifiedFiles[0].RemovedCount);
+    }
+
+    [Fact]
+    public void TakeCurrentTurnSucceededFiles_returns_only_this_turn()
+    {
+        var tracker = new SessionModifiedFilesTracker();
+        tracker.BeginTurn();
+        tracker.Process(new AgentStreamEvent.ToolCallStart("call-1", "file_write", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("call-1", """{"path":"a.ts","content":"hello"}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallResult(
+            "call-1",
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-1",
+                "Tool `file_write` succeeded.",
+                "",
+                "Arguments: path=a.ts",
+                "Summary: Wrote 5 chars to a.ts",
+                ""),
+            "msg-1"));
+
+        Assert.Single(tracker.TakeCurrentTurnSucceededFiles());
+
+        tracker.BeginTurn();
+        Assert.Empty(tracker.TakeCurrentTurnSucceededFiles());
+        Assert.Single(tracker.ModifiedFiles);
     }
 
     [Fact]

@@ -24,6 +24,11 @@ public sealed class ChatHtmlBuilder
             "</head><body><div id=\"chat-scroll\">" + BuildEmptyStateHtml(ssoDisplayName) +
             "<button id=\"load-older\" type=\"button\" hidden></button>" +
             "<div id=\"messages\"></div></div>" +
+            "<div id=\"image-lightbox\" class=\"image-lightbox\" hidden>" +
+            "<button type=\"button\" class=\"image-lightbox-backdrop\" aria-label=\"Close\"></button>" +
+            "<img class=\"image-lightbox-img\" alt=\"\"/>" +
+            "<button type=\"button\" class=\"image-lightbox-close\" aria-label=\"Close\">×</button>" +
+            "</div>" +
             $"<script src=\"{assets}highlight.min.js\"></script>" +
             "<script>" + BuildI18nBootstrapScript() + "</script>" +
             "<script>" + GetTimelineScript() + "</script>" +
@@ -113,6 +118,18 @@ public sealed class ChatHtmlBuilder
             ["deniedStatus"] = Strings.Get("Chat_ToolApprovalDeniedStatus"),
             ["approved"] = Strings.Get("Chat_ToolApprovalApproved"),
             ["denied"] = Strings.Get("Chat_ToolApprovalDenied"),
+            ["filesChangedOne"] = Strings.Get("Chat_FilesChangedOne"),
+            ["filesChangedMany"] = Strings.Get("Chat_FilesChangedMany"),
+            ["editedFilesOne"] = Strings.Get("Chat_EditedFilesOne"),
+            ["editedFilesMany"] = Strings.Get("Chat_EditedFilesMany"),
+            ["exploredFilesOne"] = Strings.Get("Chat_ExploredFilesOne"),
+            ["exploredFilesMany"] = Strings.Get("Chat_ExploredFilesMany"),
+            ["searchesOne"] = Strings.Get("Chat_SearchesOne"),
+            ["searchesMany"] = Strings.Get("Chat_SearchesMany"),
+            ["thoughtsOne"] = Strings.Get("Chat_ThoughtsOne"),
+            ["thoughtsMany"] = Strings.Get("Chat_ThoughtsMany"),
+            ["unmodifiedLines"] = Strings.Get("Chat_UnmodifiedLines"),
+            ["noDiffAvailable"] = Strings.Get("Chat_NoDiffAvailable"),
         };
 
     private static string BuildEmptyStateHtml(string? ssoDisplayName)
@@ -157,6 +174,10 @@ public sealed class ChatHtmlBuilder
               --tool-success-text: {{AppThemeColor.ToHex(chrome.ToolSuccessText)}};
               --tool-failure-bg: {{AppThemeColor.ToHex(chrome.ToolFailureBg)}};
               --tool-failure-text: {{AppThemeColor.ToHex(chrome.ToolFailureText)}};
+              --diff-add-bg: {{AppThemeColor.ToRgba(chrome.Success, 0.12)}};
+              --diff-del-bg: {{AppThemeColor.ToRgba(chrome.Danger, 0.12)}};
+              --diff-add-text: {{AppThemeColor.ToHex(chrome.Success)}};
+              --diff-del-text: {{AppThemeColor.ToHex(chrome.Danger)}};
               --md-link: {{md.LinkColor}};
               --md-inline-code-bg: {{md.InlineCodeBackground}};
               --md-text: {{md.TextColor}};
@@ -341,6 +362,67 @@ public sealed class ChatHtmlBuilder
           line-height: 1.75;
           color: var(--user-bubble-text);
         }
+        .user-images {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+        .user-images:last-child { margin-bottom: 0; }
+        .user-image-thumb {
+          width: 96px;
+          height: 96px;
+          object-fit: cover;
+          border-radius: 10px;
+          cursor: zoom-in;
+          border: 1px solid var(--border);
+          background: var(--chat-bg);
+          display: block;
+        }
+        .image-lightbox {
+          position: fixed;
+          inset: 0;
+          z-index: 10000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .image-lightbox[hidden] { display: none !important; }
+        .image-lightbox-backdrop {
+          position: absolute;
+          inset: 0;
+          border: 0;
+          padding: 0;
+          margin: 0;
+          background: rgba(0, 0, 0, 0.72);
+          cursor: zoom-out;
+        }
+        .image-lightbox-img {
+          position: relative;
+          z-index: 1;
+          max-width: min(92vw, 1200px);
+          max-height: 90vh;
+          border-radius: 10px;
+          box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+          object-fit: contain;
+          background: #111;
+        }
+        .image-lightbox-close {
+          position: absolute;
+          top: 16px;
+          right: 18px;
+          z-index: 2;
+          width: 36px;
+          height: 36px;
+          border: 0;
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.16);
+          color: #fff;
+          font-size: 22px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        .image-lightbox-close:hover { background: rgba(255, 255, 255, 0.28); }
         .reasoning-block {
           max-width: 85%;
           overflow: hidden;
@@ -572,6 +654,220 @@ public sealed class ChatHtmlBuilder
         .tool-status.success { background: var(--tool-success-bg); color: var(--tool-success-text); }
         .tool-status.failed { background: var(--tool-failure-bg); color: var(--tool-failure-text); }
         .tool-status.cancelled { background: var(--panel); color: var(--subtle-text); }
+        .files-changed-card {
+          max-width: 92%;
+          margin: 8px 0;
+          padding: 10px 12px;
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          background: var(--panel);
+          color: var(--assistant-text);
+        }
+        .files-changed-title {
+          font-size: 13px;
+          font-weight: 600;
+          margin-bottom: 6px;
+          color: var(--assistant-text);
+        }
+        .files-changed-list { display: flex; flex-direction: column; gap: 2px; }
+        .files-changed-item { border-radius: 8px; }
+        .files-changed-item.open { background: rgba(127,127,127,0.08); }
+        .files-changed-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+          padding: 6px 8px;
+          border: 0;
+          background: transparent;
+          color: inherit;
+          font: inherit;
+          cursor: pointer;
+          text-align: left;
+          border-radius: 8px;
+        }
+        .files-changed-row:hover { background: rgba(127,127,127,0.12); }
+        .files-changed-name {
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          font-size: 12px;
+        }
+        .files-changed-counts {
+          display: inline-flex;
+          gap: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+          flex-shrink: 0;
+        }
+        .files-changed-diff {
+          display: none;
+          margin: 0 8px 8px;
+          max-height: 280px;
+          overflow: auto;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: var(--chat-bg);
+        }
+        .files-changed-item.open .files-changed-diff { display: block; }
+        .turn-activity {
+          max-width: 92%;
+          margin: 2px 0 6px;
+          color: var(--subtle-text);
+          font-size: 12px;
+          line-height: 1.5;
+        }
+        .turn-activity > summary {
+          list-style: none;
+          cursor: pointer;
+          display: flex;
+          align-items: baseline;
+          flex-wrap: wrap;
+          gap: 6px;
+          user-select: none;
+          padding: 2px 0;
+        }
+        .turn-activity > summary::-webkit-details-marker { display: none; }
+        .turn-activity-summary-text {
+          color: var(--subtle-text);
+        }
+        .turn-activity-counts {
+          display: inline-flex;
+          gap: 6px;
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+        }
+        .turn-activity-add { color: var(--diff-add-text); }
+        .turn-activity-del { color: var(--diff-del-text); }
+        .turn-activity-chevron {
+          display: inline-block;
+          margin-left: 2px;
+          transition: transform 0.15s ease;
+          opacity: 0.7;
+        }
+        .turn-activity[open] .turn-activity-chevron { transform: rotate(90deg); }
+        .turn-activity-body {
+          margin: 4px 0 2px 2px;
+          padding-left: 10px;
+          border-left: 1px solid var(--border);
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .turn-activity-item {
+          border-radius: 6px;
+        }
+        .turn-activity-row {
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
+          width: 100%;
+          border: 0;
+          background: transparent;
+          text-align: left;
+          color: var(--subtle-text);
+          font: inherit;
+          padding: 3px 4px;
+          border-radius: 6px;
+          cursor: default;
+        }
+        .turn-activity-item.has-diff .turn-activity-row { cursor: pointer; }
+        .turn-activity-item.has-diff .turn-activity-row:hover {
+          background: rgba(127,127,127,0.08);
+          color: var(--assistant-text);
+        }
+        .turn-activity-verb {
+          flex-shrink: 0;
+          color: var(--assistant-text);
+          opacity: 0.72;
+          min-width: 58px;
+        }
+        .turn-activity-detail {
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .turn-activity-status {
+          margin-left: auto;
+          flex-shrink: 0;
+        }
+        .turn-activity-item-counts {
+          display: inline-flex;
+          gap: 6px;
+          flex-shrink: 0;
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+        }
+        .turn-activity-diff {
+          display: none;
+          margin: 2px 0 6px 58px;
+          max-height: 280px;
+          overflow: auto;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: var(--chat-bg);
+        }
+        .turn-activity-item.open .turn-activity-diff { display: block; }
+        .turn-activity-thought {
+          display: none;
+          margin: 2px 0 6px 58px;
+          max-height: 320px;
+          overflow: auto;
+          padding: 8px 10px;
+          border: 1px solid var(--reasoning-border);
+          border-radius: 8px;
+          background: var(--reasoning-bg);
+          color: var(--reasoning-text);
+          font-size: 12px;
+          line-height: 1.55;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .turn-activity-item.open .turn-activity-thought { display: block; }
+        .turn-activity-item.has-thought .turn-activity-row { cursor: pointer; }
+        .turn-activity-item.has-thought .turn-activity-row:hover {
+          color: var(--assistant-text);
+        }
+        .diff-line {
+          display: flex;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+          font-size: 11px;
+          line-height: 1.55;
+          white-space: pre-wrap;
+          word-break: break-word;
+        }
+        .diff-line-prefix {
+          width: 16px;
+          flex-shrink: 0;
+          text-align: center;
+          opacity: 0.7;
+          user-select: none;
+        }
+        .diff-line-text { flex: 1; min-width: 0; padding-right: 8px; }
+        .diff-line.add { background: var(--diff-add-bg); }
+        .diff-line.del { background: var(--diff-del-bg); }
+        .diff-line.header, .diff-line.hunk {
+          color: var(--subtle-text);
+          background: transparent;
+        }
+        .diff-line.collapsed {
+          color: var(--subtle-text);
+          justify-content: center;
+          padding: 4px 8px;
+          font-size: 11px;
+          border-top: 1px dashed var(--border);
+          border-bottom: 1px dashed var(--border);
+        }
+        .diff-empty {
+          padding: 10px 14px;
+          font-size: 12px;
+          color: var(--subtle-text);
+        }
         .tool-body {
           padding: 10px 14px 14px;
           border-top: 1px solid var(--border);
@@ -802,10 +1098,11 @@ public sealed class ChatHtmlBuilder
           return document.querySelector('.message-row.assistant-row[data-message-id="' + cssEscape(messageId) + '"]');
         }
 
-        function applyMarkdownHtml(node, html) {
+        function applyMarkdownHtml(node, html, enhance) {
           if (!node) return;
           node.classList.add('md-root');
           node.innerHTML = html || '';
+          if (enhance === false) return;
           if (state.batching) {
             state.pendingEnhancementRoots.push(node);
           } else {
@@ -813,7 +1110,7 @@ public sealed class ChatHtmlBuilder
           }
         }
 
-        function applyAssistantHtml(messageId, html, createIfMissing) {
+        function applyAssistantHtml(messageId, html, createIfMissing, streaming) {
           let row = findAssistantBubbleRow(messageId);
           if (!row && createIfMissing) {
             row = createAssistantRow(messageId);
@@ -821,7 +1118,7 @@ public sealed class ChatHtmlBuilder
             state.assistantStarted[messageId] = true;
             state.currentAssistantEl = row;
           }
-          applyMarkdownHtml(findAssistantContentNode(messageId), html);
+          applyMarkdownHtml(findAssistantContentNode(messageId), html, streaming !== true);
           updateEmptyStateVisibility();
           scrollToBottom();
         }
@@ -987,13 +1284,64 @@ public sealed class ChatHtmlBuilder
           delete state.reasoningStartAt[messageId];
         }
 
-        function createUserRow(content) {
+        function openImagePreview(url, fileName) {
+          var lightbox = document.getElementById('image-lightbox');
+          if (!lightbox || !url) return;
+          var img = lightbox.querySelector('.image-lightbox-img');
+          if (img) {
+            img.src = url;
+            img.alt = fileName || '';
+          }
+          lightbox.hidden = false;
+          document.body.style.overflow = 'hidden';
+        }
+
+        function closeImagePreview() {
+          var lightbox = document.getElementById('image-lightbox');
+          if (!lightbox) return;
+          lightbox.hidden = true;
+          var img = lightbox.querySelector('.image-lightbox-img');
+          if (img) {
+            img.removeAttribute('src');
+            img.alt = '';
+          }
+          document.body.style.overflow = '';
+        }
+
+        function createUserRow(content, images) {
           const row = document.createElement('div');
           row.className = 'message-row user';
-          row.innerHTML =
-            '<div class="bubble">' +
-              '<div class="message-content user-text">' + escapeHtml(content) + '</div>' +
-            '</div>';
+          const bubble = document.createElement('div');
+          bubble.className = 'bubble';
+
+          if (images && images.length) {
+            const gallery = document.createElement('div');
+            gallery.className = 'user-images';
+            images.forEach(function (image) {
+              if (!image || !image.url) return;
+              const thumb = document.createElement('img');
+              thumb.className = 'user-image-thumb';
+              thumb.src = image.url;
+              thumb.alt = image.fileName || '';
+              thumb.title = image.fileName || '';
+              thumb.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                openImagePreview(image.url, image.fileName);
+              });
+              gallery.appendChild(thumb);
+            });
+            if (gallery.childNodes.length) bubble.appendChild(gallery);
+          }
+
+          if (content) {
+            const text = document.createElement('div');
+            text.className = 'message-content user-text';
+            text.textContent = content;
+            bubble.appendChild(text);
+          }
+
+          row.appendChild(bubble);
           return row;
         }
 
@@ -1020,7 +1368,7 @@ public sealed class ChatHtmlBuilder
           return row;
         }
 
-        function appendMessage(role, content, append) {
+        function appendMessage(role, content, append, images) {
           if (append && role === 'assistant' && state.currentAssistantEl) {
             const el = state.currentAssistantEl.querySelector('.message-content');
             el.textContent += content;
@@ -1035,7 +1383,7 @@ public sealed class ChatHtmlBuilder
           }
 
           if (role === 'user') {
-            getMessageRoot().appendChild(createUserRow(content));
+            getMessageRoot().appendChild(createUserRow(content, images));
           } else if (role === 'assistant') {
             const row = createAssistantRow('');
             row.querySelector('.message-content').textContent = content;
@@ -1237,6 +1585,257 @@ public sealed class ChatHtmlBuilder
           result.className = 'tool-approval-result ' + decisionKey;
         }
 
+        function renderDiffLines(lines) {
+          if (!lines || !lines.length) {
+            return '<div class="diff-empty">' + escapeHtml(t('noDiffAvailable')) + '</div>';
+          }
+          return lines.map(function (line) {
+            var kind = (line.kind || '').toLowerCase();
+            if (kind === 'collapsed') {
+              var label = (t('unmodifiedLines') || '{0} unmodified lines').replace('{0}', String(line.count || 0));
+              return '<div class="diff-line collapsed">' + escapeHtml(label) + '</div>';
+            }
+            var css = kind === 'added' ? 'add'
+              : kind === 'removed' ? 'del'
+              : kind === 'hunkheader' ? 'hunk'
+              : kind === 'header' ? 'header'
+              : 'ctx';
+            var prefix = kind === 'added' ? '+'
+              : kind === 'removed' ? '-'
+              : kind === 'hunkheader' || kind === 'header' ? ''
+              : ' ';
+            return '<div class="diff-line ' + css + '">' +
+              '<span class="diff-line-prefix">' + escapeHtml(prefix) + '</span>' +
+              '<span class="diff-line-text">' + escapeHtml(line.text || '') + '</span></div>';
+          }).join('');
+        }
+
+        function filesChangedTitle(count) {
+          if (count === 1) return t('filesChangedOne') || '1 File Changed';
+          return (t('filesChangedMany') || '{0} Files Changed').replace('{0}', String(count));
+        }
+
+        function joinSummaryParts(parts) {
+          if (!parts.length) return '';
+          if (parts.length === 1) return parts[0];
+          if (parts.length === 2) return parts[0] + ', ' + parts[1];
+          return parts.slice(0, -1).join(', ') + ', ' + parts[parts.length - 1];
+        }
+
+        function turnActivitySummaryText(event) {
+          var parts = [];
+          var explored = event.exploredFileCount || 0;
+          var searches = event.searchCount || 0;
+          var thoughts = event.thoughtCount || 0;
+          if (explored === 1) parts.push(t('exploredFilesOne') || 'explored 1 file');
+          else if (explored > 1) parts.push((t('exploredFilesMany') || 'explored {0} files').replace('{0}', String(explored)));
+          if (searches === 1) parts.push(t('searchesOne') || '1 search');
+          else if (searches > 1) parts.push((t('searchesMany') || '{0} searches').replace('{0}', String(searches)));
+          if (parts.length === 0 && thoughts > 0) {
+            if (thoughts === 1) return t('thoughtsOne') || t('thought') || 'Thought';
+            return (t('thoughtsMany') || '{0} thoughts').replace('{0}', String(thoughts));
+          }
+          return joinSummaryParts(parts) || (t('thought') || 'Activity');
+        }
+
+        function appendFilesChangedCard(event) {
+          state.currentAssistantEl = null;
+          state.currentReasoningEl = null;
+          var files = event.files || [];
+          if (!files.length) return;
+
+          var existing = document.querySelector('.files-changed-card[data-live="1"]');
+          var card = existing;
+          var openPaths = {};
+          if (existing) {
+            existing.querySelectorAll('.files-changed-item.open').forEach(function (item) {
+              var path = item.getAttribute('data-path') || '';
+              if (path) openPaths[path] = true;
+            });
+            card.innerHTML = '';
+          } else {
+            var row = document.createElement('div');
+            row.className = 'message-row assistant';
+            card = document.createElement('div');
+            card.className = 'files-changed-card';
+            if (event.upsert) card.setAttribute('data-live', '1');
+            row.appendChild(card);
+            getMessageRoot().appendChild(row);
+          }
+
+          var title = document.createElement('div');
+          title.className = 'files-changed-title';
+          title.textContent = filesChangedTitle(files.length);
+          card.appendChild(title);
+
+          var list = document.createElement('div');
+          list.className = 'files-changed-list';
+
+          files.forEach(function (file) {
+            var item = document.createElement('div');
+            item.className = 'files-changed-item';
+            item.setAttribute('data-path', file.path || '');
+            if (openPaths[file.path || '']) item.classList.add('open');
+
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'files-changed-row';
+            button.title = file.path || file.displayName || '';
+
+            var name = document.createElement('span');
+            name.className = 'files-changed-name';
+            name.textContent = file.displayName || file.path || '';
+            button.appendChild(name);
+
+            var counts = document.createElement('span');
+            counts.className = 'files-changed-counts';
+            if ((file.added || 0) > 0) {
+              var a = document.createElement('span');
+              a.className = 'turn-activity-add';
+              a.textContent = '+' + file.added;
+              counts.appendChild(a);
+            }
+            if ((file.removed || 0) > 0) {
+              var d = document.createElement('span');
+              d.className = 'turn-activity-del';
+              d.textContent = '-' + file.removed;
+              counts.appendChild(d);
+            }
+            button.appendChild(counts);
+            item.appendChild(button);
+
+            var diff = document.createElement('div');
+            diff.className = 'files-changed-diff';
+            diff.innerHTML = renderDiffLines(file.lines || []);
+            button.addEventListener('click', function (e) {
+              e.preventDefault();
+              e.stopPropagation();
+              item.classList.toggle('open');
+              scrollToBottom();
+            });
+            item.appendChild(diff);
+            list.appendChild(item);
+          });
+
+          card.appendChild(list);
+          if (event.upsert) {
+            card.setAttribute('data-live', '1');
+          } else {
+            card.removeAttribute('data-live');
+          }
+          updateEmptyStateVisibility();
+          scrollToBottom();
+        }
+
+        function appendTurnActivityCard(event) {
+          state.currentAssistantEl = null;
+          state.currentReasoningEl = null;
+          var items = event.items || [];
+          if (!items.length && !(event.exploredFileCount || event.searchCount || event.thoughtCount)) return;
+
+          // Live cards always upsert the current open segment; sealing (upsert=false) finalizes that card.
+          var existing = document.querySelector('.turn-activity[data-live="1"]');
+          var details = existing;
+          var wasOpen = existing ? existing.open : false;
+          if (!details) {
+            var row = document.createElement('div');
+            row.className = 'message-row assistant';
+            details = document.createElement('details');
+            details.className = 'turn-activity';
+            if (event.upsert) details.setAttribute('data-live', '1');
+            row.appendChild(details);
+            getMessageRoot().appendChild(row);
+          } else {
+            details.innerHTML = '';
+          }
+
+          var summary = document.createElement('summary');
+          var summaryText = document.createElement('span');
+          summaryText.className = 'turn-activity-summary-text';
+          summaryText.textContent = turnActivitySummaryText(event);
+          summary.appendChild(summaryText);
+
+          var chevron = document.createElement('span');
+          chevron.className = 'turn-activity-chevron';
+          chevron.textContent = '›';
+          summary.appendChild(chevron);
+          details.appendChild(summary);
+
+          var body = document.createElement('div');
+          body.className = 'turn-activity-body';
+
+          items.forEach(function (item) {
+            var hasDiff = item.lines && item.lines.length;
+            var hasThought = item.kind === 'thought' && item.body;
+            var entry = document.createElement('div');
+            entry.className = 'turn-activity-item'
+              + (hasDiff ? ' has-diff' : '')
+              + (hasThought ? ' has-thought' : '');
+
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'turn-activity-row';
+            button.title = item.path || item.detail || '';
+
+            var verb = document.createElement('span');
+            verb.className = 'turn-activity-verb';
+            verb.textContent = item.verb || '';
+
+            var detail = document.createElement('span');
+            detail.className = 'turn-activity-detail';
+            detail.textContent = item.detail || item.path || '';
+
+            button.appendChild(verb);
+            button.appendChild(detail);
+
+            if (item.status) {
+              var status = document.createElement('span');
+              status.className = 'turn-activity-status tool-status';
+              applyToolStatusBadge(status, item.status);
+              if (item.statusLabel) status.textContent = item.statusLabel;
+              button.appendChild(status);
+            }
+
+            entry.appendChild(button);
+
+            if (hasDiff) {
+              var diff = document.createElement('div');
+              diff.className = 'turn-activity-diff';
+              diff.innerHTML = renderDiffLines(item.lines);
+              button.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                entry.classList.toggle('open');
+                scrollToBottom();
+              });
+              entry.appendChild(diff);
+            } else if (hasThought) {
+              var thought = document.createElement('div');
+              thought.className = 'turn-activity-thought';
+              thought.textContent = item.body || '';
+              button.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                entry.classList.toggle('open');
+                scrollToBottom();
+              });
+              entry.appendChild(thought);
+            }
+
+            body.appendChild(entry);
+          });
+
+          details.appendChild(body);
+          if (wasOpen) details.open = true;
+          if (event.upsert) {
+            details.setAttribute('data-live', '1');
+          } else {
+            details.removeAttribute('data-live');
+          }
+          updateEmptyStateVisibility();
+          scrollToBottom();
+        }
+
         function handleEvent(event) {
           if (!event || !event.type) return;
           switch (event.type) {
@@ -1245,40 +1844,37 @@ public sealed class ChatHtmlBuilder
               updateEmptyStateVisibility();
               break;
             case 'USER_MESSAGE':
-              appendMessage('user', event.content || '');
+              (function () {
+                var liveActivity = document.querySelector('.turn-activity[data-live="1"]');
+                if (liveActivity) liveActivity.removeAttribute('data-live');
+                var liveFiles = document.querySelector('.files-changed-card[data-live="1"]');
+                if (liveFiles) liveFiles.removeAttribute('data-live');
+              })();
+              appendMessage('user', event.content || '', false, event.images || []);
+              break;
+            case 'FILES_CHANGED':
+              appendFilesChangedCard(event);
+              break;
+            case 'TURN_ACTIVITY':
+              appendTurnActivityCard(event);
               break;
             case 'RUN_STARTED':
               state.currentAssistantEl = null;
               state.currentReasoningEl = null;
               break;
             case 'REASONING_MESSAGE_START':
-              state.currentReasoningEl = null;
-              state.reasoningStarted[event.messageId] = false;
-              delete state.reasoningFinalizedMs[event.messageId];
-              if (state.trackReasoningDuration) {
-                state.reasoningStartAt[event.messageId] = performance.now();
-              }
-              break;
             case 'REASONING_MESSAGE_CONTENT':
-              if (!state.reasoningStarted[event.messageId]) ensureReasoningBubble(event.messageId);
-              if (state.trackReasoningDuration && !state.reasoningStartAt[event.messageId]) {
-                state.reasoningStartAt[event.messageId] = performance.now();
-              }
-              appendMessage('reasoning', event.delta || '', true);
-              updateReasoningThinkingLabel(event.messageId);
-              break;
             case 'REASONING_MESSAGE_END':
-              finalizeReasoningLabel(event.messageId);
-              state.currentReasoningEl = null;
+              // Reasoning is folded into TURN_ACTIVITY; ignore standalone thought bubbles.
               break;
             case 'TEXT_MESSAGE_START':
               state.currentAssistantEl = null;
               state.assistantStarted[event.messageId] = false;
               break;
             case 'TEXT_MESSAGE_CONTENT':
+              // Plain-text deltas are unused for display; live Markdown arrives via STATIC_ASSISTANT_HTML.
               finalizeReasoningLabel(event.messageId);
               if (!state.assistantStarted[event.messageId]) ensureAssistantBubble(event.messageId);
-              appendMessage('assistant', event.delta || '', true);
               break;
             case 'TEXT_MESSAGE_END':
               state.currentAssistantEl = null;
@@ -1287,8 +1883,9 @@ public sealed class ChatHtmlBuilder
               applyAssistantHtml(
                 event.messageId,
                 resolveRenderedHtml(event),
-                event.createIfMissing !== false);
-              state.currentAssistantEl = null;
+                event.createIfMissing !== false,
+                event.streaming === true);
+              if (!event.streaming) state.currentAssistantEl = null;
               break;
             case 'TOOL_CALL_START':
               createToolCard(event.toolCallId, event.toolCallName);
@@ -1500,5 +2097,17 @@ public sealed class ChatHtmlBuilder
           if (hasActiveSelection()) state.autoScrollEnabled = false;
           else if (isNearBottom()) state.autoScrollEnabled = true;
         });
+
+        (function bindImageLightbox() {
+          var lightbox = document.getElementById('image-lightbox');
+          if (!lightbox) return;
+          var backdrop = lightbox.querySelector('.image-lightbox-backdrop');
+          var closeBtn = lightbox.querySelector('.image-lightbox-close');
+          if (backdrop) backdrop.addEventListener('click', closeImagePreview);
+          if (closeBtn) closeBtn.addEventListener('click', closeImagePreview);
+          document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !lightbox.hidden) closeImagePreview();
+          });
+        })();
         """;
 }

@@ -100,6 +100,57 @@
   <data name="Chat_Copy" xml:space="preserve">
     <value>Copy</value>
   </data>
+  <data name="Chat_FilesChangedOne" xml:space="preserve">
+    <value>1 File Changed</value>
+  </data>
+  <data name="Chat_FilesChangedMany" xml:space="preserve">
+    <value>{0} Files Changed</value>
+  </data>
+  <data name="Chat_EditedFilesOne" xml:space="preserve">
+    <value>Edited 1 file</value>
+  </data>
+  <data name="Chat_EditedFilesMany" xml:space="preserve">
+    <value>Edited {0} files</value>
+  </data>
+  <data name="Chat_ExploredFilesOne" xml:space="preserve">
+    <value>explored 1 file</value>
+  </data>
+  <data name="Chat_ExploredFilesMany" xml:space="preserve">
+    <value>explored {0} files</value>
+  </data>
+  <data name="Chat_SearchesOne" xml:space="preserve">
+    <value>1 search</value>
+  </data>
+  <data name="Chat_SearchesMany" xml:space="preserve">
+    <value>{0} searches</value>
+  </data>
+  <data name="Chat_ActivityVerbEdited" xml:space="preserve">
+    <value>Edited</value>
+  </data>
+  <data name="Chat_ActivityVerbRead" xml:space="preserve">
+    <value>Read</value>
+  </data>
+  <data name="Chat_ActivityVerbSearched" xml:space="preserve">
+    <value>Searched</value>
+  </data>
+  <data name="Chat_ActivityVerbExplored" xml:space="preserve">
+    <value>Explored</value>
+  </data>
+  <data name="Chat_ActivityVerbThought" xml:space="preserve">
+    <value>Thought</value>
+  </data>
+  <data name="Chat_ThoughtsOne" xml:space="preserve">
+    <value>1 thought</value>
+  </data>
+  <data name="Chat_ThoughtsMany" xml:space="preserve">
+    <value>{0} thoughts</value>
+  </data>
+  <data name="Chat_UnmodifiedLines" xml:space="preserve">
+    <value>{0} unmodified lines</value>
+  </data>
+  <data name="Chat_NoDiffAvailable" xml:space="preserve">
+    <value>No diff available</value>
+  </data>
   <data name="Chat_ImageAttachmentCount" xml:space="preserve">
     <value>{0} image(s) attached</value>
   </data>

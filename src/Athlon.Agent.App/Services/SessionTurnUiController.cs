@@ -38,6 +38,8 @@ public sealed class SessionTurnUiController
     private readonly Dispatcher _dispatcher;
     private readonly SessionStreamingUiContext _streaming = new();
     private readonly SessionModifiedFilesTracker _modifiedFilesTracker = new();
+    private readonly SessionTurnActivityTracker _turnActivityTracker = new();
+    private IReadOnlyList<ChatMessage>? _activitySourceMessages;
     private readonly ToolCallArgsDisplayCoordinator _displayCoordinator = new();
     private readonly StreamingTokenBuffer _tokenBuffer;
     private readonly ConcurrentDictionary<string, PendingUiApproval> _pendingApprovals =
@@ -334,7 +336,7 @@ public sealed class SessionTurnUiController
             return;
         }
 
-        await chatView.LoadMessagesAsync(Messages, _showToolCalls()).ConfigureAwait(true);
+        await chatView.LoadMessagesAsync(Messages, _showToolCalls(), _activitySourceMessages).ConfigureAwait(true);
         if (ReferenceEquals(ChatView, chatView) && IsDisplayed)
         {
             await RestorePendingToolApprovalsAsync().ConfigureAwait(true);
@@ -361,6 +363,8 @@ public sealed class SessionTurnUiController
     {
         RunOnUiSync(() =>
         {
+            _modifiedFilesTracker.BeginTurn();
+            _turnActivityTracker.BeginTurn();
             var vm = new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments));
             Messages.Add(vm);
             TrimMessagesIfNeeded();
@@ -372,6 +376,8 @@ public sealed class SessionTurnUiController
     {
         RunOnUiSync(() =>
         {
+            _modifiedFilesTracker.BeginTurn();
+            _turnActivityTracker.BeginTurn();
             _tokenBuffer.ClearBuffers();
             _tokenBuffer.StopFlushTimer();
             _streaming.Reset();
@@ -396,6 +402,8 @@ public sealed class SessionTurnUiController
                 Messages.Clear();
                 _viewModelCache.Clear();
                 _modifiedFilesTracker.Clear();
+                _turnActivityTracker.Clear();
+                _activitySourceMessages = null;
             }
             finally
             {
@@ -510,9 +518,107 @@ public sealed class SessionTurnUiController
             {
                 _bulkChatViewSyncDepth--;
                 FinalizeStreamingDisplay();
+                DispatchCurrentTurnActivity();
                 RequestScrollImmediate();
             }
         });
+    }
+
+    private void DispatchCurrentTurnActivity() => SealCurrentSegment();
+
+    /// <summary>
+    /// Finalizes the live activity / files bubbles above the next model text output,
+    /// then starts a fresh segment accumulator.
+    /// </summary>
+    private void SealCurrentSegment()
+    {
+        if (ChatView is null)
+        {
+            _turnActivityTracker.BeginSegment();
+            return;
+        }
+
+        _turnActivityTracker.FinishPendingThought();
+        var summary = _turnActivityTracker.Snapshot();
+        if (summary is { HasContent: true })
+        {
+            _ = ChatView.DispatchTurnActivityAsync(summary, upsert: false);
+        }
+
+        var files = _modifiedFilesTracker.TakeAndClearSegmentSucceededFiles();
+        if (files.Count > 0)
+        {
+            _ = ChatView.DispatchFilesChangedAsync(files, upsert: false);
+        }
+
+        _turnActivityTracker.BeginSegment();
+    }
+
+    private void PublishTurnActivity(bool upsert = true)
+    {
+        if (ChatView is null)
+        {
+            return;
+        }
+
+        var summary = _turnActivityTracker.Snapshot();
+        if (summary is null || !summary.HasContent)
+        {
+            return;
+        }
+
+        _ = ChatView.DispatchTurnActivityAsync(summary, upsert: upsert);
+    }
+
+    private void PublishFilesChanged(bool upsert = true)
+    {
+        if (ChatView is null)
+        {
+            return;
+        }
+
+        var files = upsert
+            ? _modifiedFilesTracker.TakeCurrentTurnSucceededFiles()
+            : _modifiedFilesTracker.TakeAndClearSegmentSucceededFiles();
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        _ = ChatView.DispatchFilesChangedAsync(files, upsert: upsert);
+    }
+
+    private void ProcessUiStreamEvents(AgentStreamEvent streamEvent, bool notifyTracker)
+    {
+        // Seal tools/thoughts accumulated so far above this model text output.
+        if (streamEvent is AgentStreamEvent.TextMessageStart)
+        {
+            SealCurrentSegment();
+        }
+
+        if (notifyTracker)
+        {
+            _modifiedFilesTracker.Process(streamEvent);
+            _turnActivityTracker.Process(streamEvent);
+        }
+
+        foreach (var uiEvent in _displayCoordinator.MapForUi(streamEvent))
+        {
+            DispatchToChatView(uiEvent);
+            _streaming.Process(uiEvent, Messages);
+            NotifyChatViewAfterStreamEvent(uiEvent);
+        }
+
+        if (streamEvent is AgentStreamEvent.ToolCallResult
+            or AgentStreamEvent.ReasoningMessageContent
+            or AgentStreamEvent.ReasoningMessageEnd)
+        {
+            PublishTurnActivity(upsert: true);
+            if (streamEvent is AgentStreamEvent.ToolCallResult)
+            {
+                PublishFilesChanged(upsert: true);
+            }
+        }
     }
 
     public void HydrateFromSession(AgentSession session) =>
@@ -541,6 +647,7 @@ public sealed class SessionTurnUiController
         Messages.Clear();
         _streaming.Reset();
         _displayCoordinator.Reset();
+        _activitySourceMessages = displayMessages;
 
         // Prune cache: remove entries that belong to old sessions (not in the new display list)
         var currentIds = new HashSet<string>(displayMessages.Select(m => m.Id), StringComparer.Ordinal);
@@ -866,21 +973,6 @@ public sealed class SessionTurnUiController
         FlushStreamingTokens();
     }
 
-    private void ProcessUiStreamEvents(AgentStreamEvent streamEvent, bool notifyTracker)
-    {
-        if (notifyTracker)
-        {
-            _modifiedFilesTracker.Process(streamEvent);
-        }
-
-        foreach (var uiEvent in _displayCoordinator.MapForUi(streamEvent))
-        {
-            DispatchToChatView(uiEvent);
-            _streaming.Process(uiEvent, Messages);
-            NotifyChatViewAfterStreamEvent(uiEvent);
-        }
-    }
-
     private void NotifyChatViewAfterStreamEvent(AgentStreamEvent streamEvent)
     {
         if (!IsDisplayed || ChatView is null)
@@ -921,16 +1013,30 @@ public sealed class SessionTurnUiController
             return;
         }
 
+        // Reasoning is folded into TURN_ACTIVITY; do not emit standalone purple thought bubbles.
         if (pendingReasoning.Length > 0 && reasoningMessageId is not null)
         {
-            _ = ChatView.DispatchEventAsync(new AgentStreamEvent.ReasoningMessageContent(reasoningMessageId, pendingReasoning));
+            _turnActivityTracker.Process(
+                new AgentStreamEvent.ReasoningMessageContent(reasoningMessageId, pendingReasoning));
+            PublishTurnActivity();
         }
 
         if (pendingTokens.Length > 0 && textMessageId is not null)
         {
-            _ = ChatView.DispatchEventAsync(new AgentStreamEvent.TextMessageContent(textMessageId, pendingTokens));
+            // Live-render Markdown from the accumulated assistant content (C# Markdig → HTML).
+            var assistant = FindAssistantMessage(textMessageId);
+            if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
+            {
+                _ = ChatView.ApplyAssistantMarkdownAsync(assistant, streaming: true);
+            }
         }
     }
+
+    private ChatMessageViewModel? FindAssistantMessage(string messageId) =>
+        Messages.LastOrDefault(message =>
+            !message.IsUser
+            && !message.IsTool
+            && string.Equals(message.MessageId, messageId, StringComparison.Ordinal));
 
     private void DispatchToChatView(AgentStreamEvent streamEvent)
     {
@@ -957,6 +1063,10 @@ public sealed class SessionTurnUiController
             and not AgentStreamEvent.ContextHygieneApplied
             and not AgentStreamEvent.ChatMessageAppended
             and not AgentStreamEvent.ClearEmptyAssistantPlaceholder
+            and not AgentStreamEvent.ReasoningMessageStart
+            and not AgentStreamEvent.ReasoningMessageContent
+            and not AgentStreamEvent.ReasoningMessageEnd
+        && !TurnActivityClassifier.IsActivityToolStreamEvent(streamEvent, _turnActivityTracker.ResolveToolName)
         && (_showToolCalls() || !ChatDisplayPolicy.IsToolStreamEvent(streamEvent));
 
     private ChatMessageViewModel? FindToolMessage(string? toolCallId)

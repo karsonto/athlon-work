@@ -28,6 +28,7 @@ public partial class WebChatView : UserControl
     private int _renderGeneration;
     private IReadOnlyList<ChatMessageViewModel> _pendingMessages = Array.Empty<ChatMessageViewModel>();
     private bool _pendingShowToolCalls;
+    private IReadOnlyList<ChatMessage>? _pendingActivitySourceMessages;
     private bool _needsRender;
     private bool _renderRetryScheduled;
     private bool _renderInProgress;
@@ -162,10 +163,14 @@ public partial class WebChatView : UserControl
     private bool CanRender() =>
         IsVisible && ActualWidth >= 1 && ActualHeight >= 1;
 
-    public async Task LoadMessagesAsync(IReadOnlyList<ChatMessageViewModel> messages, bool showToolCalls = false)
+    public async Task LoadMessagesAsync(
+        IReadOnlyList<ChatMessageViewModel> messages,
+        bool showToolCalls = false,
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null)
     {
         _pendingMessages = messages.ToArray();
         _pendingShowToolCalls = showToolCalls;
+        _pendingActivitySourceMessages = activitySourceMessages;
         _needsRender = true;
         var generation = Interlocked.Increment(ref _renderGeneration);
         await RunRenderPipelineSafeAsync(generation).ConfigureAwait(true);
@@ -176,14 +181,37 @@ public partial class WebChatView : UserControl
         }
     }
 
-    public Task ApplyAssistantMarkdownAsync(ChatMessageViewModel message) =>
-        ExecuteScriptWhenReadyAsync($"handleEvent({ChatEventSerializer.SerializeStaticAssistantHtml(message)});");
+    public Task ApplyAssistantMarkdownAsync(ChatMessageViewModel message, bool streaming = false) =>
+        ExecuteScriptWhenReadyAsync(
+            $"handleEvent({ChatEventSerializer.SerializeStaticAssistantHtml(message, streaming)});");
 
     public Task ApplyToolResultMarkdownAsync(ChatMessageViewModel message) =>
         ExecuteScriptWhenReadyAsync($"handleEvent({ChatEventSerializer.SerializeToolResultMarkdown(message)});");
 
     public Task DispatchUserMessageAsync(ChatMessageViewModel message) =>
         ExecuteScriptWhenReadyAsync($"handleEvent({ChatEventSerializer.SerializeUserMessage(message)});");
+
+    public Task DispatchFilesChangedAsync(IReadOnlyList<ModifiedFileViewModel> files, bool upsert = true)
+    {
+        if (files.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        return ExecuteScriptWhenReadyAsync(
+            $"handleEvent({ChatEventSerializer.SerializeFilesChanged(files, upsert)});");
+    }
+
+    public Task DispatchTurnActivityAsync(TurnActivitySummary summary, bool upsert = true)
+    {
+        if (!summary.HasContent)
+        {
+            return Task.CompletedTask;
+        }
+
+        return ExecuteScriptWhenReadyAsync(
+            $"handleEvent({ChatEventSerializer.SerializeTurnActivity(summary, upsert)});");
+    }
 
     public Task DispatchEventAsync(AgentStreamEvent streamEvent) =>
         ExecuteScriptWhenReadyAsync(_htmlBuilder.BuildDispatchScript(streamEvent));
@@ -266,8 +294,9 @@ public partial class WebChatView : UserControl
 
             var messages = _pendingMessages;
             var showToolCalls = _pendingShowToolCalls;
+            var activitySource = _pendingActivitySourceMessages;
             var replayJson = await Task.Run(
-                () => ChatEventSerializer.SerializeReplayCommand(messages, showToolCalls))
+                () => ChatEventSerializer.SerializeReplayCommand(messages, showToolCalls, activitySource))
                 .ConfigureAwait(true);
             if (expectedGeneration != _renderGeneration)
             {

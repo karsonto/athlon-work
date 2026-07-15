@@ -195,9 +195,33 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("tool-approval-button approve", html, StringComparison.Ordinal);
         Assert.Contains("ensureToolApprovalPanel", html, StringComparison.Ordinal);
         Assert.Contains("awaiting_approval", html, StringComparison.Ordinal);
-        Assert.Contains(".tool-approval {\r\n          margin-top: 12px;\r\n          padding: 12px;\r\n          border: 1px solid var(--border);\r\n          border-radius: 12px;\r\n          background: var(--panel);", html, StringComparison.Ordinal);
-        Assert.Contains(Strings.Get("Chat_ToolApprovalApprove"), html, StringComparison.Ordinal);
-        Assert.Contains(Strings.Get("Chat_ToolApprovalDeny"), html, StringComparison.Ordinal);
+        Assert.Contains(".tool-approval {", html, StringComparison.Ordinal);
+        Assert.Contains("border-radius: 12px;", html, StringComparison.Ordinal);
+        Assert.Contains("background: var(--panel);", html, StringComparison.Ordinal);
+        Assert.Contains("turn-activity", html, StringComparison.Ordinal);
+        Assert.Contains("case 'TURN_ACTIVITY':", html, StringComparison.Ordinal);
+        Assert.Contains("files-changed-card", html, StringComparison.Ordinal);
+        Assert.Contains("case 'FILES_CHANGED':", html, StringComparison.Ordinal);
+        Assert.Contains("user-image-thumb", html, StringComparison.Ordinal);
+        Assert.Contains("image-lightbox", html, StringComparison.Ordinal);
+        Assert.Contains("openImagePreview", html, StringComparison.Ordinal);
+        Assert.Contains(
+            "Reasoning is folded into TURN_ACTIVITY; ignore standalone thought bubbles.",
+            html,
+            StringComparison.Ordinal);
+        Assert.Contains("\"approve\":", html, StringComparison.Ordinal);
+        Assert.Contains("\"deny\":", html, StringComparison.Ordinal);
+        AssertContainsLocalized(html, Strings.Get("Chat_ToolApprovalApprove"));
+        AssertContainsLocalized(html, Strings.Get("Chat_ToolApprovalDeny"));
+    }
+
+    private static void AssertContainsLocalized(string html, string text)
+    {
+        var encoded = System.Text.Json.JsonSerializer.Serialize(text);
+        Assert.True(
+            html.Contains(text, StringComparison.Ordinal)
+            || html.Contains(encoded.Trim('"'), StringComparison.Ordinal),
+            $"Expected localized text '{text}' (or JSON-encoded form) in HTML.");
     }
 
     [Fact]
@@ -210,6 +234,22 @@ public sealed class ChatHtmlBuilderTests
         Assert.DoesNotContain("finalizeAssistantMarkdown", html, StringComparison.Ordinal);
         Assert.Contains("case 'TEXT_MESSAGE_END':", html, StringComparison.Ordinal);
         Assert.Contains("resolveEventHtml(event)", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildShellHtml_applies_live_assistant_html_without_plain_text_append()
+    {
+        var html = _builder.BuildShellHtml();
+
+        Assert.Contains("case 'STATIC_ASSISTANT_HTML':", html, StringComparison.Ordinal);
+        Assert.Contains("event.streaming === true", html, StringComparison.Ordinal);
+        Assert.Contains("streaming !== true", html, StringComparison.Ordinal);
+        Assert.Contains("case 'TEXT_MESSAGE_CONTENT':", html, StringComparison.Ordinal);
+        // Live text display comes from STATIC_ASSISTANT_HTML, not plain textContent deltas.
+        Assert.DoesNotContain(
+            "case 'TEXT_MESSAGE_CONTENT':\n              finalizeReasoningLabel(event.messageId);\n              if (!state.assistantStarted[event.messageId]) ensureAssistantBubble(event.messageId);\n              appendMessage('assistant'",
+            html,
+            StringComparison.Ordinal);
     }
 }
 

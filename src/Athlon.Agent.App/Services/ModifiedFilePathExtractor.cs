@@ -41,12 +41,25 @@ internal static class ModifiedFilePathExtractor
 
         foreach (var line in argumentsJsonOrText.Replace("\r\n", "\n").Split('\n'))
         {
-            const string prefix = "path = ";
             var lineTrimmed = line.Trim();
-            if (lineTrimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            if (!lineTrimmed.StartsWith("path", StringComparison.OrdinalIgnoreCase))
             {
-                return ToolPathNormalizer.ForModel(lineTrimmed[prefix.Length..].Trim());
+                continue;
             }
+
+            var separator = lineTrimmed.IndexOf('=');
+            if (separator <= 0)
+            {
+                continue;
+            }
+
+            var key = lineTrimmed[..separator].Trim();
+            if (!string.Equals(key, "path", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return ToolPathNormalizer.ForModel(lineTrimmed[(separator + 1)..].Trim());
         }
 
         return null;
