@@ -266,7 +266,20 @@
                                     <Button Command="{Binding SelectImagesCommand}"
                                             Style="{StaticResource ComposerToolButtonStyle}"
                                             ToolTip="{loc:Localize Key=Chat_UploadImageTooltip}">
-                                        <TextBlock Text="+" FontSize="18" FontWeight="SemiBold" Margin="0,-2,0,0" />
+                                        <Grid Width="12" Height="12">
+                                            <Rectangle Width="12"
+                                                       Height="1.5"
+                                                       RadiusX="0.75"
+                                                       RadiusY="0.75"
+                                                       VerticalAlignment="Center"
+                                                       Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
+                                            <Rectangle Width="1.5"
+                                                       Height="12"
+                                                       RadiusX="0.75"
+                                                       RadiusY="0.75"
+                                                       HorizontalAlignment="Center"
+                                                       Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
+                                        </Grid>
                                     </Button>
                                     <Button x:Name="KnowledgePickerButton"
                                             Command="{Binding ComposerKnowledge.ToggleKnowledgePickerCommand}"
