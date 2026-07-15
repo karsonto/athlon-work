@@ -233,18 +233,18 @@
     <Style x:Key="ComposerOuterBorderStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.ChatBackground}" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="0,16,0,20" />
+        <Setter Property="Padding" Value="0,8,0,16" />
     </Style>
 
     <Style x:Key="ComposerInputWrapperStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.Composer}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="12" />
-        <Setter Property="Padding" Value="12" />
+        <Setter Property="CornerRadius" Value="22" />
+        <Setter Property="Padding" Value="10,8" />
         <Style.Triggers>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderHover}" />
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -254,12 +254,14 @@
         <Setter Property="CaretBrush" Value="{DynamicResource Brush.Text}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="4" />
+        <Setter Property="Padding" Value="8,6" />
         <Setter Property="FontSize" Value="14" />
-        <Setter Property="MinHeight" Value="56" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="MaxHeight" Value="200" />
         <Setter Property="AcceptsReturn" Value="True" />
         <Setter Property="TextWrapping" Value="Wrap" />
-        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
 
     <Style x:Key="ComposerToolButtonStyle" TargetType="Button">
@@ -317,7 +319,7 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Root"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="8"
+                            CornerRadius="16"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>

@@ -101,9 +101,10 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             return;
         }
 
-        elements.ComposerRow.MinHeight = UiLayoutConstraints.ComposerMinHeight;
+        // Content-driven height: grow with typed text instead of a fixed drag size.
+        elements.ComposerRow.MinHeight = 0;
         elements.ComposerRow.MaxHeight = UiLayoutConstraints.ComposerMaxHeight;
-        elements.ComposerRow.Height = new GridLength(viewModel.ComposerHeight);
+        elements.ComposerRow.Height = GridLength.Auto;
     }
 
     public void OnComposerDragCompleted()

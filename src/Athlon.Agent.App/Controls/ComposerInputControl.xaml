@@ -16,7 +16,8 @@
         <TextBlock x:Name="PlaceholderText"
                    Text="{loc:Localize Key=Chat_ComposerPlaceholder}"
                    Foreground="{DynamicResource Brush.SubtleText}"
-                   Margin="12,12,0,0"
+                   Margin="8,6,0,0"
+                   VerticalAlignment="Center"
                    IsHitTestVisible="False"
                    FontSize="14"
                    Visibility="Visible" />

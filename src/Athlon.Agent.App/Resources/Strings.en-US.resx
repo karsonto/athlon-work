@@ -358,6 +358,18 @@
   <data name="ComposerKnowledge_PickerLabel" xml:space="preserve">
     <value>Knowledge · {0}</value>
   </data>
+  <data name="ComposerPlus_Modes" xml:space="preserve">
+    <value>Agent mode</value>
+  </data>
+  <data name="ComposerPlus_Image" xml:space="preserve">
+    <value>Image</value>
+  </data>
+  <data name="ComposerPlus_Knowledge" xml:space="preserve">
+    <value>Knowledge</value>
+  </data>
+  <data name="ComposerPlus_MenuTooltip" xml:space="preserve">
+    <value>Add mode, image, and knowledge</value>
+  </data>
   <data name="ComposerKnowledge_PickerSelect" xml:space="preserve">
     <value>Select knowledge spaces</value>
   </data>

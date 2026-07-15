@@ -44,10 +44,10 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderRowHeight}" />
                     <RowDefinition Height="*" />
-                    <RowDefinition Height="12" />
+                    <RowDefinition Height="0" />
                     <RowDefinition x:Name="ComposerRow"
-                                   Height="168"
-                                   MinHeight="120"
+                                   Height="Auto"
+                                   MinHeight="0"
                                    MaxHeight="420" />
                 </Grid.RowDefinitions>
 
@@ -166,6 +166,8 @@
                               Style="{StaticResource LayoutRowSplitterStyle}"
                               ResizeDirection="Rows"
                               ResizeBehavior="PreviousAndNext"
+                              Visibility="Collapsed"
+                              IsEnabled="False"
                               Panel.ZIndex="2">
                     <i:Interaction.Behaviors>
                         <behaviors:GridSplitterLayoutBehavior Kind="Composer" />
@@ -184,344 +186,310 @@
                                           MaxWidth="{x:Static app:AppLayoutMetrics.ComposerMaxContentWidth}" />
                         <ColumnDefinition Width="0.75*" MinWidth="12" />
                     </Grid.ColumnDefinitions>
-                <Border Grid.Column="1"
-                        x:Name="ComposerInputWrapper"
-                        Style="{StaticResource ComposerInputWrapperStyle}"
-                        HorizontalAlignment="Stretch">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" MinHeight="56" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <ScrollViewer Grid.Row="0"
-                                      HorizontalScrollBarVisibility="Auto"
-                                      VerticalScrollBarVisibility="Disabled"
-                                      Margin="0,0,0,6">
-                            <ScrollViewer.Style>
-                                <Style TargetType="ScrollViewer">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding HasPendingImages}" Value="True">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </ScrollViewer.Style>
-                            <ItemsControl ItemsSource="{Binding PendingImageAttachments}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="{DynamicResource Brush.PanelAlt}"
-                                                BorderBrush="{DynamicResource Brush.Border}"
-                                                BorderThickness="1"
-                                                CornerRadius="8"
-                                                Margin="0,0,8,0"
-                                                Padding="6,4">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <Border Grid.Column="0"
-                                                        Width="40"
-                                                        Height="40"
-                                                        CornerRadius="8"
-                                                        BorderBrush="{DynamicResource Brush.Border}"
-                                                        BorderThickness="1"
-                                                        Background="{DynamicResource Brush.Panel}"
-                                                        Margin="0,0,8,0">
-                                                    <Image Source="{Binding Thumbnail}"
-                                                           Stretch="UniformToFill"
-                                                           Margin="2" />
-                                                </Border>
-                                                <TextBlock Grid.Column="1"
-                                                           Text="{Binding FileName}"
-                                                           FontSize="12"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           MaxWidth="180"
-                                                           VerticalAlignment="Center" />
-                                                <Button Grid.Column="2"
-                                                        Content="×"
-                                                        Command="{Binding DataContext.RemovePendingImageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                        CommandParameter="{Binding}"
-                                                        Style="{StaticResource SessionDeleteButtonStyle}" />
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                        <controls:ComposerInputControl x:Name="ComposerInput"
-                                                       Grid.Row="1" />
-                        <Grid Grid.Row="2" Margin="0,8,0,0">
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
-                                    <Button Command="{Binding SelectImagesCommand}"
-                                            Style="{StaticResource ComposerToolButtonStyle}"
-                                            ToolTip="{loc:Localize Key=Chat_UploadImageTooltip}">
-                                        <Grid Width="12" Height="12">
-                                            <Rectangle Width="12"
-                                                       Height="1.5"
-                                                       RadiusX="0.75"
-                                                       RadiusY="0.75"
-                                                       VerticalAlignment="Center"
-                                                       Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
-                                            <Rectangle Width="1.5"
-                                                       Height="12"
-                                                       RadiusX="0.75"
-                                                       RadiusY="0.75"
-                                                       HorizontalAlignment="Center"
-                                                       Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
-                                        </Grid>
-                                    </Button>
-                                    <Button x:Name="KnowledgePickerButton"
-                                            Command="{Binding ComposerKnowledge.ToggleKnowledgePickerCommand}"
-                                            Margin="8,0,0,0"
-                                            Padding="10,5"
-                                            VerticalAlignment="Center"
-                                            IsEnabled="{Binding ComposerKnowledge.IsKnowledgeButtonEnabled}"
-                                            ToolTip="{Binding ComposerKnowledge.KnowledgeButtonToolTip}">
-                                        <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding ComposerKnowledge.IsKnowledgeActive}" Value="True">
-                                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-                                                        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
-                                                    </DataTrigger>
-                                                    <Trigger Property="IsEnabled" Value="False">
-                                                        <Setter Property="Opacity" Value="0.45" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                        <StackPanel Orientation="Horizontal">
-                                            <Path Data="M5,5 L19,5 A1,1 0 0 1 20,6 L20,18 A1,1 0 0 1 19,19 L5,19 A1,1 0 0 1 4,18 L4,6 A1,1 0 0 1 5,5 Z M6,6 L6,18 L18,18 L18,6 Z M8,9 L16,9 M8,12 L16,12 M8,15 L13,15"
-                                                  Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
-                                                  StrokeThickness="1.3"
-                                                  StrokeLineJoin="Round"
-                                                  Fill="Transparent"
-                                                  Width="15"
-                                                  Height="15"
-                                                  Margin="0,0,6,0"
-                                                  VerticalAlignment="Center" />
-                                            <TextBlock Text="{Binding ComposerKnowledge.KnowledgePickerLabel}"
-                                                       FontSize="12"
-                                                       VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </Button>
-                                    <Button x:Name="HarnessModePickerButton"
-                                            Command="{Binding ComposerHarness.ToggleModePickerCommand}"
-                                            Margin="8,0,0,0"
-                                            Padding="10,5"
-                                            VerticalAlignment="Center"
-                                            ToolTip="{Binding ComposerHarness.HarnessButtonToolTip}">
-                                        <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding ComposerHarness.IsHarnessActive}" Value="True">
-                                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
-                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-                                                        <Setter Property="Background" Value="{DynamicResource Brush.SurfaceHover}" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                        <StackPanel Orientation="Horizontal">
-                                            <Path Data="M4,6 L20,6 M4,12 L20,12 M4,18 L14,18"
-                                                  Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
-                                                  StrokeThickness="1.4"
-                                                  StrokeStartLineCap="Round"
-                                                  StrokeEndLineCap="Round"
-                                                  Width="16"
-                                                  Height="16"
-                                                  Margin="0,0,6,0"
-                                                  VerticalAlignment="Center" />
-                                            <TextBlock Text="{Binding ComposerHarness.HarnessPickerLabel}"
-                                                       FontSize="12"
-                                                       VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </Button>
-                                </StackPanel>
-                                <Popup PlacementTarget="{Binding ElementName=HarnessModePickerButton}"
-                                       Placement="Top"
-                                       IsOpen="{Binding ComposerHarness.IsModePickerOpen, Mode=TwoWay}"
-                                       StaysOpen="False"
-                                       AllowsTransparency="True">
-                                    <Border Background="{DynamicResource Brush.Panel}"
-                                            BorderBrush="{DynamicResource Brush.Border}"
-                                            BorderThickness="1"
-                                            CornerRadius="10"
-                                            Padding="8"
-                                            MinWidth="200">
-                                        <StackPanel>
-                                            <TextBlock Text="{loc:Localize Key=Harness_Picker_SelectMode}"
-                                                       FontWeight="SemiBold"
-                                                       Margin="0,0,0,8" />
-                                            <Button Command="{Binding ComposerHarness.SelectModeCommand}"
-                                                    CommandParameter="{x:Static harness:SessionAgentMode.Agent}"
-                                                    HorizontalContentAlignment="Left"
-                                                    Padding="10,8"
-                                                    Margin="0,0,0,4"
-                                                    Style="{StaticResource GhostButtonStyle}">
-                                                <Grid Width="160">
-                                                    <TextBlock Text="{loc:Localize Key=Harness_Mode_Agent}" />
-                                                    <TextBlock Text="✓" HorizontalAlignment="Right" Visibility="Collapsed">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
+                <Grid Grid.Column="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Border x:Name="ComposerInputWrapper"
+                            Style="{StaticResource ComposerInputWrapperStyle}"
+                            HorizontalAlignment="Stretch">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <ScrollViewer Grid.Row="0"
+                                                                  HorizontalScrollBarVisibility="Auto"
+                                                                  VerticalScrollBarVisibility="Disabled"
+                                                                  Margin="0,0,0,6">
+                                                        <ScrollViewer.Style>
+                                                            <Style TargetType="ScrollViewer">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
                                                                 <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}" Value="{x:Static harness:SessionAgentMode.Agent}">
+                                                                    <DataTrigger Binding="{Binding HasPendingImages}" Value="True">
                                                                         <Setter Property="Visibility" Value="Visible" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </Grid>
-                                            </Button>
-                                            <Button Command="{Binding ComposerHarness.SelectModeCommand}"
-                                                    CommandParameter="{x:Static harness:SessionAgentMode.Coding}"
-                                                    HorizontalContentAlignment="Left"
-                                                    Padding="10,8"
-                                                    Margin="0,0,0,4"
-                                                    Style="{StaticResource GhostButtonStyle}">
-                                                <Grid Width="160">
-                                                    <TextBlock Text="{loc:Localize Key=Harness_Mode_Coding}" />
-                                                    <TextBlock Text="✓" HorizontalAlignment="Right" Visibility="Collapsed">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}" Value="{x:Static harness:SessionAgentMode.Coding}">
-                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </Grid>
-                                            </Button>
-                                            <Button Command="{Binding ComposerHarness.SelectModeCommand}"
-                                                    CommandParameter="{x:Static harness:SessionAgentMode.Ask}"
-                                                    HorizontalContentAlignment="Left"
-                                                    Padding="10,8"
-                                                    Style="{StaticResource GhostButtonStyle}">
-                                                <Grid Width="160">
-                                                    <TextBlock Text="{loc:Localize Key=Harness_Mode_Ask}" />
-                                                    <TextBlock Text="✓" HorizontalAlignment="Right" Visibility="Collapsed">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}" Value="{x:Static harness:SessionAgentMode.Ask}">
-                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-                                                </Grid>
-                                            </Button>
-                                        </StackPanel>
-                                    </Border>
-                                </Popup>
-                                <Popup PlacementTarget="{Binding ElementName=KnowledgePickerButton}"
-                                       Placement="Top"
-                                       IsOpen="{Binding ComposerKnowledge.IsKnowledgePickerOpen, Mode=TwoWay}"
-                                       StaysOpen="False"
-                                       AllowsTransparency="True">
-                                    <Border Background="{DynamicResource Brush.Panel}"
-                                            BorderBrush="{DynamicResource Brush.Border}"
-                                            BorderThickness="1"
-                                            CornerRadius="10"
-                                            Padding="8"
-                                            MinWidth="300"
-                                            MaxWidth="420"
-                                            MaxHeight="360">
-                                        <StackPanel>
-                                            <TextBlock Text="{loc:Localize Key=Chat_SelectKnowledgeModule}"
-                                                       FontWeight="SemiBold"
-                                                       Margin="0,0,0,8" />
-                                            <TextBox x:Name="KnowledgeSearchBox"
-                                                     Text="{Binding ComposerKnowledge.ModuleSearchText, UpdateSourceTrigger=PropertyChanged}"
-                                                     Margin="0,0,0,8"
-                                                     Padding="8,6"
-                                                     FontSize="12">
-                                                <TextBox.Style>
-                                                    <Style TargetType="TextBox">
-                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                                                        <Setter Property="Background" Value="{DynamicResource Brush.Chrome}" />
-                                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
-                                                        <Setter Property="BorderThickness" Value="1" />
-                                                        <Setter Property="Template">
-                                                            <Setter.Value>
-                                                                <ControlTemplate TargetType="TextBox">
-                                                                    <Border Background="{TemplateBinding Background}"
-                                                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                                                            BorderThickness="{TemplateBinding BorderThickness}"
-                                                                            CornerRadius="6">
+                                                        </ScrollViewer.Style>
+                                                        <ItemsControl ItemsSource="{Binding PendingImageAttachments}">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <StackPanel Orientation="Horizontal" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Background="{DynamicResource Brush.PanelAlt}"
+                                                                            BorderBrush="{DynamicResource Brush.Border}"
+                                                                            BorderThickness="1"
+                                                                            CornerRadius="8"
+                                                                            Margin="0,0,8,0"
+                                                                            Padding="6,4">
                                                                         <Grid>
-                                                                            <ScrollViewer x:Name="PART_ContentHost" Padding="{TemplateBinding Padding}" />
-                                                                            <TextBlock Text="{loc:Localize Key=Chat_SearchKnowledgePlaceholder}"
-                                                                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="Auto" />
+                                                                                <ColumnDefinition Width="Auto" />
+                                                                                <ColumnDefinition Width="Auto" />
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <Border Grid.Column="0"
+                                                                                    Width="40"
+                                                                                    Height="40"
+                                                                                    CornerRadius="8"
+                                                                                    BorderBrush="{DynamicResource Brush.Border}"
+                                                                                    BorderThickness="1"
+                                                                                    Background="{DynamicResource Brush.Panel}"
+                                                                                    Margin="0,0,8,0">
+                                                                                <Image Source="{Binding Thumbnail}"
+                                                                                       Stretch="UniformToFill"
+                                                                                       Margin="2" />
+                                                                            </Border>
+                                                                            <TextBlock Grid.Column="1"
+                                                                                       Text="{Binding FileName}"
                                                                                        FontSize="12"
-                                                                                       IsHitTestVisible="False"
-                                                                                       Padding="8,6"
-                                                                                       Visibility="Collapsed">
-                                                                                <TextBlock.Style>
-                                                                                    <Style TargetType="TextBlock">
-                                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                                        <Style.Triggers>
-                                                                                            <DataTrigger Binding="{Binding Text.Length, RelativeSource={RelativeSource AncestorType=TextBox}}" Value="0">
-                                                                                                <Setter Property="Visibility" Value="Visible" />
-                                                                                            </DataTrigger>
-                                                                                        </Style.Triggers>
-                                                                                    </Style>
-                                                                                </TextBlock.Style>
-                                                                            </TextBlock>
+                                                                                       TextTrimming="CharacterEllipsis"
+                                                                                       MaxWidth="180"
+                                                                                       VerticalAlignment="Center" />
+                                                                            <Button Grid.Column="2"
+                                                                                    Content="×"
+                                                                                    Command="{Binding DataContext.RemovePendingImageCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                    CommandParameter="{Binding}"
+                                                                                    Style="{StaticResource SessionDeleteButtonStyle}" />
                                                                         </Grid>
                                                                     </Border>
-                                                                    <ControlTemplate.Triggers>
-                                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
-                                                                        </Trigger>
-                                                                        <Trigger Property="IsFocused" Value="True">
-                                                                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
-                                                                        </Trigger>
-                                                                    </ControlTemplate.Triggers>
-                                                                </ControlTemplate>
-                                                            </Setter.Value>
-                                                        </Setter>
-                                                    </Style>
-                                                </TextBox.Style>
-                                            </TextBox>
-                                            <ListBox ItemsSource="{Binding ComposerKnowledge.FilteredModulesView}"
-                                                     BorderThickness="0"
-                                                     Background="Transparent"
-                                                     ScrollViewer.VerticalScrollBarVisibility="Auto">
-                                                <ListBox.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
-                                                                  Margin="0,4">
-                                                            <StackPanel>
-                                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                                                <TextBlock Text="{Binding MetaText}"
-                                                                           FontSize="11"
-                                                                           Foreground="{DynamicResource Brush.SubtleText}" />
-                                                            </StackPanel>
-                                                        </CheckBox>
-                                                    </DataTemplate>
-                                                </ListBox.ItemTemplate>
-                                            </ListBox>
-                                        </StackPanel>
-                                    </Border>
-                                </Popup>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </ScrollViewer>
+
+                            <!-- Cursor-style pill row: + | growing text | mode | send -->
+                            <Grid Grid.Row="1" MinHeight="32">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="PlusMenuButton"
+                                        Grid.Column="0"
+                                        Command="{Binding TogglePlusMenuCommand}"
+                                        Style="{StaticResource ComposerToolButtonStyle}"
+                                        VerticalAlignment="Bottom"
+                                        Margin="0,0,6,0"
+                                        ToolTip="{loc:Localize Key=ComposerPlus_MenuTooltip}">
+                                    <Grid Width="12" Height="12">
+                                        <Rectangle Width="12"
+                                                   Height="1.5"
+                                                   RadiusX="0.75"
+                                                   RadiusY="0.75"
+                                                   VerticalAlignment="Center"
+                                                   Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
+                                        <Rectangle Width="1.5"
+                                                   Height="12"
+                                                   RadiusX="0.75"
+                                                   RadiusY="0.75"
+                                                   HorizontalAlignment="Center"
+                                                   Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
+                                    </Grid>
+                                </Button>
+                                <Popup PlacementTarget="{Binding ElementName=PlusMenuButton}"
+                                                                       Placement="Top"
+                                                                       IsOpen="{Binding IsPlusMenuOpen, Mode=TwoWay}"
+                                                                       StaysOpen="False"
+                                                                       AllowsTransparency="True">
+                                                                    <Border Background="{DynamicResource Brush.Panel}"
+                                                                            BorderBrush="{DynamicResource Brush.Border}"
+                                                                            BorderThickness="1"
+                                                                            CornerRadius="10"
+                                                                            Padding="8"
+                                                                            MinWidth="280"
+                                                                            MaxWidth="420"
+                                                                            MaxHeight="480">
+                                                                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                                                            <StackPanel>
+                                                                                <TextBlock Text="{loc:Localize Key=ComposerPlus_Modes}"
+                                                                                           FontWeight="SemiBold"
+                                                                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                                                                           FontSize="11"
+                                                                                           Margin="4,0,0,6" />
+                                                                                <Button Command="{Binding ComposerHarness.SelectModeCommand}"
+                                                                                        CommandParameter="{x:Static harness:SessionAgentMode.Agent}"
+                                                                                        HorizontalContentAlignment="Left"
+                                                                                        Padding="10,8"
+                                                                                        Margin="0,0,0,2"
+                                                                                        Style="{StaticResource GhostButtonStyle}">
+                                                                                    <Grid>
+                                                                                        <TextBlock Text="{loc:Localize Key=Harness_Mode_Agent}" />
+                                                                                        <TextBlock Text="✓" HorizontalAlignment="Right" Visibility="Collapsed">
+                                                                                            <TextBlock.Style>
+                                                                                                <Style TargetType="TextBlock">
+                                                                                                    <Style.Triggers>
+                                                                                                        <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}" Value="{x:Static harness:SessionAgentMode.Agent}">
+                                                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                                                        </DataTrigger>
+                                                                                                    </Style.Triggers>
+                                                                                                </Style>
+                                                                                            </TextBlock.Style>
+                                                                                        </TextBlock>
+                                                                                    </Grid>
+                                                                                </Button>
+                                                                                <Button Command="{Binding ComposerHarness.SelectModeCommand}"
+                                                                                        CommandParameter="{x:Static harness:SessionAgentMode.Coding}"
+                                                                                        HorizontalContentAlignment="Left"
+                                                                                        Padding="10,8"
+                                                                                        Margin="0,0,0,2"
+                                                                                        Style="{StaticResource GhostButtonStyle}">
+                                                                                    <Grid>
+                                                                                        <TextBlock Text="{loc:Localize Key=Harness_Mode_Coding}" />
+                                                                                        <TextBlock Text="✓" HorizontalAlignment="Right" Visibility="Collapsed">
+                                                                                            <TextBlock.Style>
+                                                                                                <Style TargetType="TextBlock">
+                                                                                                    <Style.Triggers>
+                                                                                                        <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}" Value="{x:Static harness:SessionAgentMode.Coding}">
+                                                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                                                        </DataTrigger>
+                                                                                                    </Style.Triggers>
+                                                                                                </Style>
+                                                                                            </TextBlock.Style>
+                                                                                        </TextBlock>
+                                                                                    </Grid>
+                                                                                </Button>
+                                                                                <Button Command="{Binding ComposerHarness.SelectModeCommand}"
+                                                                                        CommandParameter="{x:Static harness:SessionAgentMode.Ask}"
+                                                                                        HorizontalContentAlignment="Left"
+                                                                                        Padding="10,8"
+                                                                                        Margin="0,0,0,4"
+                                                                                        Style="{StaticResource GhostButtonStyle}">
+                                                                                    <Grid>
+                                                                                        <TextBlock Text="{loc:Localize Key=Harness_Mode_Ask}" />
+                                                                                        <TextBlock Text="✓" HorizontalAlignment="Right" Visibility="Collapsed">
+                                                                                            <TextBlock.Style>
+                                                                                                <Style TargetType="TextBlock">
+                                                                                                    <Style.Triggers>
+                                                                                                        <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}" Value="{x:Static harness:SessionAgentMode.Ask}">
+                                                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                                                        </DataTrigger>
+                                                                                                    </Style.Triggers>
+                                                                                                </Style>
+                                                                                            </TextBlock.Style>
+                                                                                        </TextBlock>
+                                                                                    </Grid>
+                                                                                </Button>
+
+                                                                                <Border Height="1"
+                                                                                        Background="{DynamicResource Brush.Border}"
+                                                                                        Margin="4,6,4,8" />
+
+                                                                                <Button Command="{Binding PlusSelectImagesCommand}"
+                                                                                        HorizontalContentAlignment="Left"
+                                                                                        Padding="10,8"
+                                                                                        Margin="0,0,0,2"
+                                                                                        Style="{StaticResource GhostButtonStyle}"
+                                                                                        ToolTip="{loc:Localize Key=Chat_UploadImageTooltip}">
+                                                                                    <TextBlock Text="{loc:Localize Key=ComposerPlus_Image}" />
+                                                                                </Button>
+
+                                                                                <TextBlock Text="{loc:Localize Key=ComposerPlus_Knowledge}"
+                                                                                           FontWeight="SemiBold"
+                                                                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                                                                           FontSize="11"
+                                                                                           Margin="4,10,0,6"
+                                                                                           IsEnabled="{Binding ComposerKnowledge.IsKnowledgeButtonEnabled}" />
+                                                                                <StackPanel IsEnabled="{Binding ComposerKnowledge.IsKnowledgeButtonEnabled}">
+                                                                                    <StackPanel.Style>
+                                                                                        <Style TargetType="StackPanel">
+                                                                                            <Setter Property="Opacity" Value="1" />
+                                                                                            <Style.Triggers>
+                                                                                                <Trigger Property="IsEnabled" Value="False">
+                                                                                                    <Setter Property="Opacity" Value="0.45" />
+                                                                                                </Trigger>
+                                                                                            </Style.Triggers>
+                                                                                        </Style>
+                                                                                    </StackPanel.Style>
+                                                                                    <TextBox Text="{Binding ComposerKnowledge.ModuleSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                                                                             Margin="0,0,0,8"
+                                                                                             Padding="8,6"
+                                                                                             FontSize="12"
+                                                                                             ToolTip="{Binding ComposerKnowledge.KnowledgeButtonToolTip}">
+                                                                                        <TextBox.Style>
+                                                                                            <Style TargetType="TextBox">
+                                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                                                                                <Setter Property="Background" Value="{DynamicResource Brush.Chrome}" />
+                                                                                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+                                                                                                <Setter Property="BorderThickness" Value="1" />
+                                                                                                <Setter Property="Template">
+                                                                                                    <Setter.Value>
+                                                                                                        <ControlTemplate TargetType="TextBox">
+                                                                                                            <Border Background="{TemplateBinding Background}"
+                                                                                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                                                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                                                                                    CornerRadius="6">
+                                                                                                                <Grid>
+                                                                                                                    <ScrollViewer x:Name="PART_ContentHost" Padding="{TemplateBinding Padding}" />
+                                                                                                                    <TextBlock Text="{loc:Localize Key=Chat_SearchKnowledgePlaceholder}"
+                                                                                                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                                                                                                               FontSize="12"
+                                                                                                                               IsHitTestVisible="False"
+                                                                                                                               Padding="8,6">
+                                                                                                                        <TextBlock.Style>
+                                                                                                                            <Style TargetType="TextBlock">
+                                                                                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                                                                                <Style.Triggers>
+                                                                                                                                    <DataTrigger Binding="{Binding Text.Length, RelativeSource={RelativeSource AncestorType=TextBox}}" Value="0">
+                                                                                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                                                                                    </DataTrigger>
+                                                                                                                                </Style.Triggers>
+                                                                                                                            </Style>
+                                                                                                                        </TextBlock.Style>
+                                                                                                                    </TextBlock>
+                                                                                                                </Grid>
+                                                                                                            </Border>
+                                                                                                        </ControlTemplate>
+                                                                                                    </Setter.Value>
+                                                                                                </Setter>
+                                                                                            </Style>
+                                                                                        </TextBox.Style>
+                                                                                    </TextBox>
+                                                                                    <ListBox ItemsSource="{Binding ComposerKnowledge.FilteredModulesView}"
+                                                                                             BorderThickness="0"
+                                                                                             Background="Transparent"
+                                                                                             MaxHeight="200"
+                                                                                             ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                                                                        <ListBox.ItemTemplate>
+                                                                                            <DataTemplate>
+                                                                                                <CheckBox IsChecked="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}"
+                                                                                                          Margin="0,4">
+                                                                                                    <StackPanel>
+                                                                                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                                                                                        <TextBlock Text="{Binding MetaText}"
+                                                                                                                   FontSize="11"
+                                                                                                                   Foreground="{DynamicResource Brush.SubtleText}" />
+                                                                                                    </StackPanel>
+                                                                                                </CheckBox>
+                                                                                            </DataTemplate>
+                                                                                        </ListBox.ItemTemplate>
+                                                                                    </ListBox>
+                                                                                </StackPanel>
+                                                                            </StackPanel>
+                                                                        </ScrollViewer>
+                                                                    </Border>
+                                                                </Popup>
+
+                                <controls:ComposerInputControl x:Name="ComposerInput"
+                                                               Grid.Column="1"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,8,0" />
+
+                                <StackPanel Grid.Column="2"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Bottom">
+                                    <TextBlock Text="{Binding ComposerHarness.HarnessPickerLabel}"
+                                               FontSize="12"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               Margin="0,0,10,0"
+                                               VerticalAlignment="Center"
+                                               ToolTip="{Binding ComposerHarness.HarnessButtonToolTip}" />
                                     <Button Command="{Binding StopCommand}"
                                             ToolTip="{loc:Localize Key=Chat_PauseReplyTooltip}"
                                             Margin="0,0,8,0">
@@ -552,60 +520,60 @@
                                         <TextBlock Text="➤" FontSize="12" />
                                     </Button>
                                 </StackPanel>
-                        </Grid>
-                        <!-- Knowledge chips row -->
-                        <StackPanel Grid.Row="3"
-                                    Orientation="Horizontal"
-                                    Margin="4,0,4,4"
-                                    x:Name="KnowledgeChipsPanel">
-                            <StackPanel.Style>
-                                <Style TargetType="StackPanel">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding ComposerKnowledge.ShowKnowledgeChips}" Value="True">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </StackPanel.Style>
-                            <ItemsControl ItemsSource="{Binding ComposerKnowledge.SelectedModules}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="{DynamicResource Brush.AccentSubtle}"
-                                                BorderBrush="{DynamicResource Brush.Accent}"
-                                                BorderThickness="1"
-                                                CornerRadius="12"
-                                                Padding="10,4"
-                                                Margin="0,0,6,0">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="📚"
-                                                           FontSize="11"
-                                                           Margin="0,0,6,0"
-                                                           VerticalAlignment="Center" />
-                                                <TextBlock Text="{Binding Name}"
-                                                           FontSize="12"
-                                                           Foreground="{DynamicResource Brush.Accent}"
-                                                           FontWeight="Medium"
-                                                           VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
+                            </Grid>
 
-                        <TextBlock Grid.Row="4"
-                                   Text="{loc:Localize Key=Chat_ComposerHint}"
-                                   Foreground="{DynamicResource Brush.DisabledText}"
-                                   FontSize="11"
-                                   Margin="4,8,0,0" />
-                    </Grid>
-                </Border>
+                            <StackPanel Grid.Row="2"
+                                        Orientation="Horizontal"
+                                        Margin="4,6,4,0"
+                                        x:Name="KnowledgeChipsPanel">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ComposerKnowledge.ShowKnowledgeChips}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <ItemsControl ItemsSource="{Binding ComposerKnowledge.SelectedModules}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{DynamicResource Brush.AccentSubtle}"
+                                                    BorderBrush="{DynamicResource Brush.Accent}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="12"
+                                                    Padding="10,4"
+                                                    Margin="0,0,6,0">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="📚"
+                                                               FontSize="11"
+                                                               Margin="0,0,6,0"
+                                                               VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Name}"
+                                                               FontSize="12"
+                                                               Foreground="{DynamicResource Brush.Accent}"
+                                                               FontWeight="Medium"
+                                                               VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <TextBlock Grid.Row="1"
+                               Text="{loc:Localize Key=Chat_ComposerHint}"
+                               Foreground="{DynamicResource Brush.DisabledText}"
+                               FontSize="11"
+                               Margin="12,8,0,0" />
+                </Grid>
                 </Grid>
             </Border>
 

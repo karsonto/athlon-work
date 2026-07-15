@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
@@ -9,10 +11,14 @@ namespace Athlon.Agent.App.Controls;
 
 public partial class ComposerInputControl : UserControl
 {
+    private const double MinComposerTextHeight = 28;
+    private const double MaxComposerTextHeight = 200;
+
     private readonly ExecutedRoutedEventHandler _pasteHandler;
     private MainShellViewModel? _viewModel;
     private bool _isReplayingPaste;
     private bool _isHandlingPaste;
+    private bool _isAdjustingHeight;
 
     public ComposerInputControl()
     {
@@ -20,6 +26,7 @@ public partial class ComposerInputControl : UserControl
         _pasteHandler = ComposerTextBox_OnPastePreviewExecuted;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        SizeChanged += (_, _) => AdjustComposerTextHeight();
         DataContextChanged += (_, _) =>
         {
             _viewModel = DataContext as MainShellViewModel;
@@ -39,6 +46,7 @@ public partial class ComposerInputControl : UserControl
             _pasteHandler,
             handledEventsToo: true);
         UpdatePlaceholderVisibility();
+        AdjustComposerTextHeight();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -186,6 +194,7 @@ public partial class ComposerInputControl : UserControl
     private void ComposerTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
     {
         UpdatePlaceholderVisibility();
+        AdjustComposerTextHeight();
 
         if (_viewModel is null || sender is not TextBox textBox)
         {
@@ -197,6 +206,87 @@ public partial class ComposerInputControl : UserControl
         {
             Dispatcher.BeginInvoke(SyncActiveCompletionListSelection, DispatcherPriority.Loaded);
         }
+    }
+
+    private void AdjustComposerTextHeight()
+    {
+        if (_isAdjustingHeight || ComposerTextBox is null)
+        {
+            return;
+        }
+
+        _isAdjustingHeight = true;
+        try
+        {
+            var width = ComposerTextBox.ActualWidth;
+            if (width <= 1)
+            {
+                width = Math.Max(0, ActualWidth);
+            }
+
+            if (width <= 1)
+            {
+                return;
+            }
+
+            var desired = MeasureComposerTextHeight(width);
+            var height = Math.Clamp(desired, MinComposerTextHeight, MaxComposerTextHeight);
+            ComposerTextBox.Height = height;
+            ComposerTextBox.VerticalScrollBarVisibility =
+                desired > MaxComposerTextHeight + 0.5
+                    ? ScrollBarVisibility.Auto
+                    : ScrollBarVisibility.Disabled;
+            ComposerTextBox.VerticalContentAlignment =
+                height > MinComposerTextHeight + 4
+                    ? VerticalAlignment.Top
+                    : VerticalAlignment.Center;
+        }
+        finally
+        {
+            _isAdjustingHeight = false;
+        }
+    }
+
+    private double MeasureComposerTextHeight(double availableWidth)
+    {
+        var text = ComposerTextBox.Text ?? string.Empty;
+        if (string.IsNullOrEmpty(text))
+        {
+            return MinComposerTextHeight;
+        }
+
+        // Trailing newline does not advance FormattedText height by itself.
+        var measureText = text.EndsWith('\n') || text.EndsWith('\r')
+            ? text + " "
+            : text;
+
+        var contentWidth = Math.Max(
+            availableWidth - ComposerTextBox.Padding.Left - ComposerTextBox.Padding.Right,
+            1);
+
+        var formatted = new FormattedText(
+            measureText,
+            CultureInfo.CurrentUICulture,
+            FlowDirection.LeftToRight,
+            new Typeface(
+                ComposerTextBox.FontFamily,
+                ComposerTextBox.FontStyle,
+                ComposerTextBox.FontWeight,
+                ComposerTextBox.FontStretch),
+            ComposerTextBox.FontSize,
+            Brushes.Black,
+            VisualTreeHelper.GetDpi(ComposerTextBox).PixelsPerDip)
+        {
+            MaxTextWidth = contentWidth,
+            Trimming = TextTrimming.None
+        };
+
+        var chrome = ComposerTextBox.Padding.Top
+            + ComposerTextBox.Padding.Bottom
+            + ComposerTextBox.BorderThickness.Top
+            + ComposerTextBox.BorderThickness.Bottom;
+
+        return formatted.Height + chrome + 2;
     }
 
     private void UpdatePlaceholderVisibility()

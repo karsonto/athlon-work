@@ -129,6 +129,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _composer.AtCompletionSourcesUpdated += OnAtCompletionSourcesUpdated;
         ComposerKnowledge = composerKnowledge;
         ComposerHarness = composerHarness;
+        ComposerHarness.OnModeSelected = () => IsPlusMenuOpen = false;
         ChatPage = chatPage;
         ChatPage.Configure(
             () => _displayedSessionId,
@@ -335,6 +336,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [ObservableProperty]
     private bool isSsoUserVisible;
 
+    [ObservableProperty]
+    private bool isPlusMenuOpen;
+
     public string WorkspacePanelActionLabel =>
         HasSessionWorkspace ? _loc["Context_RemoveWorkspace"] : _loc["Common_Configure"];
 
@@ -385,6 +389,26 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public IRelayCommand RemovePendingImageCommand => ChatPage.RemovePendingImageCommand;
 
     public IRelayCommand RemoveQueuedTurnCommand => ChatPage.RemoveQueuedTurnCommand;
+
+    [RelayCommand]
+    private void TogglePlusMenu()
+    {
+        IsPlusMenuOpen = !IsPlusMenuOpen;
+        if (IsPlusMenuOpen)
+        {
+            ComposerHarness.IsModePickerOpen = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task PlusSelectImagesAsync()
+    {
+        IsPlusMenuOpen = false;
+        if (SelectImagesCommand.CanExecute(null))
+        {
+            await SelectImagesCommand.ExecuteAsync(null).ConfigureAwait(true);
+        }
+    }
 
     public string SettingsStatus
     {

@@ -358,6 +358,18 @@
   <data name="ComposerKnowledge_PickerLabel" xml:space="preserve">
     <value>知识库 · {0}</value>
   </data>
+  <data name="ComposerPlus_Modes" xml:space="preserve">
+    <value>Agent 模式</value>
+  </data>
+  <data name="ComposerPlus_Image" xml:space="preserve">
+    <value>图片</value>
+  </data>
+  <data name="ComposerPlus_Knowledge" xml:space="preserve">
+    <value>知识空间</value>
+  </data>
+  <data name="ComposerPlus_MenuTooltip" xml:space="preserve">
+    <value>添加模式、图片与知识空间</value>
+  </data>
   <data name="ComposerKnowledge_PickerSelect" xml:space="preserve">
     <value>选择知识空间</value>
   </data>
