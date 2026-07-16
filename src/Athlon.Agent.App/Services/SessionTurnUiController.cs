@@ -932,6 +932,25 @@ public sealed class SessionTurnUiController
         });
     }
 
+    public void CompleteManualCompactionBubble(
+        ChatMessage auditMessage,
+        IReadOnlyList<ChatMessage> compactedSessionMessages)
+    {
+        RunOnUiSync(() =>
+        {
+            var pending = FindPendingManualCompactionBubble();
+            if (pending is null || auditMessage.Role != MessageRole.Compaction)
+            {
+                return;
+            }
+
+            pending.ApplyCompletedCompaction(auditMessage);
+            _activitySourceMessages = compactedSessionMessages;
+            DispatchPendingCompactionBubbleUpdate(pending);
+            RequestScrollImmediate();
+        });
+    }
+
     private void DispatchPendingCompactionBubbleStart(ChatMessageViewModel bubble)
     {
         if (!IsDisplayed || ChatView is null)

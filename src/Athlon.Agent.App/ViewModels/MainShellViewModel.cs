@@ -592,7 +592,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         _session = _session.WithMessages(Array.Empty<ChatMessage>());
         _olderDisplayCursor = null;
-        _activeUi.Messages.Clear();
         await _storage.ClearConversationDisplayAsync(_session.Id);
         PendingImageAttachments.Clear();
         await ComposerHarness.ClearTaskPlanAsync();
@@ -600,6 +599,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         await _storage.SaveSessionAsync(_session);
         _sessionNavigation.Invalidate(_session.Id);
+        await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
         Settings.SettingsStatus = _loc["Shell_ClearContextDone"];
         NotifyCommandStatesChanged();
     }
@@ -652,7 +652,16 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _session = result.Session;
             await _storage.ReplaceConversationDisplayAsync(_session.Id, _session.Messages).ConfigureAwait(true);
             _sessionNavigation.Invalidate(_session.Id);
-            await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
+            var audit = _session.Messages.LastOrDefault(message => message.Role == MessageRole.Compaction);
+            if (audit is null)
+            {
+                _activeUi.DismissManualCompactionBubble();
+            }
+            else
+            {
+                _activeUi.CompleteManualCompactionBubble(audit, _session.Messages);
+            }
+
             SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
             Settings.SettingsStatus = _loc["Shell_CompactContextDone"];
         }
