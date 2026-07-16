@@ -21,7 +21,11 @@
         Background="{DynamicResource Brush.AppBackground}"
         WindowStyle="None"
         ResizeMode="CanResize"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
     <Window.InputBindings>
         <KeyBinding Key="B" Modifiers="Control+Alt" Command="{Binding ToggleContextSidebarCommand}" />
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveActiveEditorCommand}" />

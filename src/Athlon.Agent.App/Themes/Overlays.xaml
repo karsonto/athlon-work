@@ -118,7 +118,9 @@
         </Setter>
     </Style>
 
-    <Style x:Key="PreviewWindowStyle" TargetType="Window">
+    <Style x:Key="PreviewWindowStyle"
+           TargetType="Window"
+           BasedOn="{StaticResource {x:Type Window}}">
         <Setter Property="Background" Value="{DynamicResource Brush.AppBackground}" />
         <Setter Property="WindowStyle" Value="None" />
         <Setter Property="ResizeMode" Value="CanResize" />

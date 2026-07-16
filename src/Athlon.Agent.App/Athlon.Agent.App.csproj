@@ -26,6 +26,7 @@
     <UseWPF>true</UseWPF>
     <NeutralResourcesLanguage>zh-CN</NeutralResourcesLanguage>
     <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <StartupObject>Athlon.Agent.App.Program</StartupObject>
     <Version>1.0.0</Version>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
