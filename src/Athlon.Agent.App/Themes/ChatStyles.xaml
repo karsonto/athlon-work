@@ -470,7 +470,7 @@
 
     <Style x:Key="PanelHeaderBorderStyle" TargetType="Border">
         <Setter Property="Height" Value="56" />
-        <Setter Property="Background" Value="{DynamicResource Brush.Chrome}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.AppBackground}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
         <Setter Property="BorderThickness" Value="0,0,0,1" />
         <Setter Property="Padding" Value="20,0" />

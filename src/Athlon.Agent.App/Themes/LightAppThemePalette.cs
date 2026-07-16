@@ -15,14 +15,14 @@ public static class LightAppThemePalette
 
     private static UiChromeColors CreateChrome() => new()
     {
-        // App.tsx: bg-slate-100; body index.css #f1f5f9
-        AppBackground = C(ReportHtmlLightColors.Slate100),
-        // AppHeader: bg-white border-sky-100
-        Chrome = C(ReportHtmlLightColors.White),
-        // Assistant bubble / panels: bg-white
+        // Sidebars + shell: cool grey (Cursor right pane)
+        AppBackground = C(ReportHtmlLightColors.Sidebar),
+        // Pane headers match their parent surface; chat uses ChatBackground via XAML
+        Chrome = C(ReportHtmlLightColors.Workspace),
+        // Elevated cards / bubbles
         Panel = C(ReportHtmlLightColors.White),
         PanelAlt = C(ReportHtmlLightColors.Slate50),
-        // Composer: bg-white/95 border-slate-200
+        // Composer card
         Composer = C(ReportHtmlLightColors.White),
         ComposerBorder = C(ReportHtmlLightColors.Slate200),
         Border = C(ReportHtmlLightColors.Slate200),
@@ -95,9 +95,9 @@ public static class LightAppThemePalette
         PreviewContentBackground = Colors.White,
         ScrollThumb = C(ReportHtmlLightColors.ScrollThumb),
         ScrollThumbOpacity = ReportHtmlLightColors.ScrollThumbOpacity,
-        // ChatPane gradient: #f4f8ff → #e8edf4
-        ChatBackgroundTop = C(ReportHtmlLightColors.ChatGradientTop),
-        ChatBackgroundBottom = C(ReportHtmlLightColors.ChatGradientBottom),
+        // Main workspace: flat off-white (top = bottom)
+        ChatBackgroundTop = C(ReportHtmlLightColors.Workspace),
+        ChatBackgroundBottom = C(ReportHtmlLightColors.Workspace),
     };
 
     private static EditorThemeColors CreateEditor() => new()

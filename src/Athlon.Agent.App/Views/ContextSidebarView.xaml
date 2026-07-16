@@ -13,7 +13,11 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}">
+                <Border Grid.Row="0"
+                        Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}"
+                        Background="{DynamicResource Brush.ChatBackground}"
+                        BorderThickness="0"
+                        Padding="20,0">
                     <Grid>
                         <TextBlock Text="{loc:Localize Key=Context_Title}"
                                    FontSize="12"

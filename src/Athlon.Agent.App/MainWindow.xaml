@@ -60,7 +60,7 @@
         <!-- Window chrome (minimize / maximize / close only) -->
         <Border Grid.Row="0"
                 Grid.ColumnSpan="3"
-                Background="{DynamicResource Brush.Chrome}"
+                Background="{DynamicResource Brush.AppBackground}"
                 BorderBrush="{DynamicResource Brush.Border}"
                 BorderThickness="0,0,0,1">
             <i:Interaction.Behaviors>
@@ -118,9 +118,10 @@
             </Grid>
         </Border>
 
-        <!-- Left sidebar — session list -->
+        <!-- Left sidebar — session list (full height under caption) -->
         <views:NavigationSidebarView x:Name="NavigationSidebarPanel"
                                      Grid.Row="1"
+                                     Grid.RowSpan="2"
                                      Grid.Column="0" />
 
         <!-- Main column: chat / settings + composer + footer -->
@@ -130,43 +131,67 @@
                           Grid.Column="1"
                           Content="{Binding CurrentPageView}" />
 
-        <!-- Context panel -->
+        <!-- Context panel (full height under caption) -->
         <Border x:Name="ContextSidebarPanel"
                 Grid.Row="1"
+                Grid.RowSpan="2"
                 Grid.Column="2"
                 ClipToBounds="True"
-                Background="{DynamicResource Brush.AppBackground}"
+                Background="{DynamicResource Brush.ChatBackground}"
                 BorderThickness="0">
             <views:ContextSidebarView />
         </Border>
 
-        <!-- 底部状态栏（主区域 + 右侧栏贯通） -->
+        <!-- 底部状态栏：仅主列，与聊天区同色贯通 -->
         <Border Grid.Row="2"
                 Grid.Column="1"
-                Grid.ColumnSpan="2"
-                Background="{DynamicResource Brush.Chrome}"
+                Background="{DynamicResource Brush.ChatBackground}"
                 BorderBrush="{DynamicResource Brush.Border}"
-                BorderThickness="0,1,0,0"
-                Padding="24,10">
-            <Grid>
-                <TextBlock Text="{Binding Sidebar.LocalModelStatus, StringFormat=● {0}}"
+                BorderThickness="0"
+                Padding="24,8"
+                MinHeight="36">
+            <Grid VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="{Binding Sidebar.LocalModelStatus, StringFormat=● {0}}"
                            Foreground="{DynamicResource Brush.Success}"
                            VerticalAlignment="Center"
                            FontSize="12" />
-                <StackPanel HorizontalAlignment="Center"
+                <StackPanel Grid.Column="1"
+                            HorizontalAlignment="Center"
                             VerticalAlignment="Center">
                     <TextBlock Text="{Binding Settings.Settings.Model.ModelName, StringFormat=模型: {0}}"
                                Foreground="{DynamicResource Brush.SubtleText}"
                                HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
                                FontSize="12" />
                     <TextBlock Text="{Binding SessionUsageLine}"
                                Foreground="{DynamicResource Brush.SubtleText}"
                                HorizontalAlignment="Center"
                                Margin="0,2,0,0"
                                FontSize="11"
-                               TextTrimming="CharacterEllipsis" />
+                               TextTrimming="CharacterEllipsis">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding SessionUsageLine}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding SessionUsageLine}" Value="{x:Null}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </StackPanel>
-                <TextBlock Text="{Binding LogsPath, StringFormat=Logs: {0}}"
+                <TextBlock Grid.Column="2"
+                           Text="{Binding LogsPath, StringFormat=Logs: {0}}"
                            Foreground="{DynamicResource Brush.SubtleText}"
                            HorizontalAlignment="Right"
                            VerticalAlignment="Center"
@@ -179,6 +204,7 @@
         <!-- Collapsed left affordance: Cursor-style floating icon (no chrome rail) -->
         <Button x:Name="NavigationSidebarCollapsedRail"
                 Grid.Row="1"
+                Grid.RowSpan="2"
                 Grid.Column="1"
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top"
@@ -192,31 +218,28 @@
                                             IsPanelOpen="{Binding IsNavigationSidebarVisible}" />
         </Button>
 
-        <!-- Collapsed rail (Cursor-style edge affordance) -->
-        <Border x:Name="ContextSidebarCollapsedRail"
+        <!-- Collapsed right affordance: same floating toggle as left (no chrome rail) -->
+        <Button x:Name="ContextSidebarCollapsedRail"
                 Grid.Row="1"
+                Grid.RowSpan="2"
                 Grid.Column="1"
-                Width="28"
                 HorizontalAlignment="Right"
-                Background="{DynamicResource Brush.Chrome}"
-                BorderThickness="0"
-                Panel.ZIndex="2"
-                Visibility="Collapsed"
-                ToolTip="{Binding ContextSidebarToggleToolTip}">
-            <Button Command="{Binding ToggleContextSidebarCommand}"
-                    Style="{StaticResource RightSidebarToggleButtonStyle}"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Top"
-                    Margin="0,10,0,0"
-                    ToolTip="{Binding ContextSidebarToggleToolTip}">
-                <controls:RightSidebarToggleIcon IsPanelOpen="{Binding IsContextSidebarVisible}" />
-            </Button>
-        </Border>
+                VerticalAlignment="Top"
+                Margin="0,12,10,0"
+                Panel.ZIndex="5"
+                Style="{StaticResource RightSidebarToggleButtonStyle}"
+                Command="{Binding ToggleContextSidebarCommand}"
+                ToolTip="{Binding ContextSidebarToggleToolTip}"
+                Visibility="Collapsed">
+            <controls:RightSidebarToggleIcon Foreground="{DynamicResource Brush.SubtleText}"
+                                             IsPanelOpen="{Binding IsContextSidebarVisible}" />
+        </Button>
 
         <!-- Context panel -->
 
         <GridSplitter x:Name="NavigationSidebarSplitter"
                       Grid.Row="1"
+                      Grid.RowSpan="2"
                       Grid.Column="0"
                       Style="{StaticResource LayoutColumnSplitterStyle}"
                       ResizeDirection="Columns"
@@ -229,6 +252,7 @@
 
         <GridSplitter x:Name="ContextSidebarSplitter"
                       Grid.Row="1"
+                      Grid.RowSpan="2"
                       Grid.Column="1"
                       Style="{StaticResource LayoutColumnSplitterStyle}"
                       ResizeDirection="Columns"

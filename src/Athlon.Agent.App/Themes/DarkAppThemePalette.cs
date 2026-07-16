@@ -121,9 +121,9 @@ public static class DarkAppThemePalette
         ScrollThumb = C("#8888A0"),
         ScrollThumbOpacity = 0.50,
 
-        // Chat gradient — Calm Intelligence deep tone
+        // Chat — same flat surface as Chrome (no vertical gradient strip)
         ChatBackgroundTop = C("#121214"),
-        ChatBackgroundBottom = C("#0A0A0C"),
+        ChatBackgroundBottom = C("#121214"),
     };
 
     private static EditorThemeColors CreateEditor() => new()

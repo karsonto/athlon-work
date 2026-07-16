@@ -33,6 +33,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         App.StartupTrace("MainWindow constructor entered");
         InitializeComponent();
         App.StartupTrace("MainWindow InitializeComponent completed");
+        Behaviors.MaximizedWindowWorkArea.Attach(this);
         _viewModel = viewModel;
         _clipboardImageReader = clipboardImageReader;
         _updateService = updateService;

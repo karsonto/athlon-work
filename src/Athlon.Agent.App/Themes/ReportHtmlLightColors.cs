@@ -6,9 +6,15 @@ namespace Athlon.Agent.App.Themes;
 /// </summary>
 internal static class ReportHtmlLightColors
 {
-    // Chat gradients (ChatPane / EmptyConversation)
-    public const string ChatGradientTop = "#F4F8FF";
-    public const string ChatGradientBottom = "#E8EDF4";
+    // Workspace surfaces (Cursor-style flat panes)
+    /// <summary>Main chat / editor canvas — slightly lighter than sidebars.</summary>
+    public const string Workspace = "#F8FAFC";
+    /// <summary>Left/right sidebars — cool grey, slightly deeper than workspace.</summary>
+    public const string Sidebar = "#F1F5F9";
+
+    // Legacy chat gradient tokens (kept flat for pane unity)
+    public const string ChatGradientTop = Workspace;
+    public const string ChatGradientBottom = Workspace;
 
     // Slate
     public const string Slate50 = "#F8FAFC";

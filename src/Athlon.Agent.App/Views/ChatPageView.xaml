@@ -51,26 +51,16 @@
                                    MaxHeight="420" />
                 </Grid.RowDefinitions>
 
-                <!-- Chat header：侧栏折叠且无消息时改为透明顶栏（仅右侧工具），贴近图1 -->
+                <!-- Chat header：无底边线；空对话不显示会话标题 -->
                 <Border Grid.Row="0"
                         Grid.ColumnSpan="2"
-                        Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}">
+                        Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}"
+                        Background="{DynamicResource Brush.ChatBackground}"
+                        BorderThickness="0">
                     <Border.Style>
                         <Style TargetType="Border">
-                            <Setter Property="Background" Value="{DynamicResource Brush.Chrome}" />
-                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
-                            <Setter Property="BorderThickness" Value="0,0,0,1" />
                             <Setter Property="Padding" Value="24,0" />
                             <Style.Triggers>
-                                <MultiDataTrigger>
-                                    <MultiDataTrigger.Conditions>
-                                        <Condition Binding="{Binding IsNavigationSidebarVisible}" Value="False" />
-                                        <Condition Binding="{Binding HasChatMessages}" Value="False" />
-                                    </MultiDataTrigger.Conditions>
-                                    <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="BorderThickness" Value="0" />
-                                    <Setter Property="Padding" Value="48,0,16,0" />
-                                </MultiDataTrigger>
                                 <DataTrigger Binding="{Binding IsNavigationSidebarVisible}" Value="False">
                                     <Setter Property="Padding" Value="48,0,24,0" />
                                 </DataTrigger>
@@ -93,13 +83,9 @@
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Visibility" Value="Visible" />
                                     <Style.Triggers>
-                                        <MultiDataTrigger>
-                                            <MultiDataTrigger.Conditions>
-                                                <Condition Binding="{Binding IsNavigationSidebarVisible}" Value="False" />
-                                                <Condition Binding="{Binding HasChatMessages}" Value="False" />
-                                            </MultiDataTrigger.Conditions>
+                                        <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
                                             <Setter Property="Visibility" Value="Collapsed" />
-                                        </MultiDataTrigger>
+                                        </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </TextBlock.Style>
@@ -110,28 +96,18 @@
                             <Button Command="{Binding ToggleThemeCommand}"
                                     ToolTip="{Binding ThemeToggleToolTip}"
                                     Style="{StaticResource HeaderIconButtonStyle}"
+                                    Foreground="#FF2563EB"
+                                    VerticalAlignment="Center"
                                     AutomationProperties.Name="{Binding ThemeToggleToolTip}">
-                                <Button.Resources>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsLightTheme}" Value="False">
-                                                <Setter Property="Foreground" Value="#FFFFFFFF" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Resources>
-                                <TextBlock Text="{Binding ThemeToggleGlyph}"
-                                           FontFamily="Segoe UI Symbol"
-                                           FontSize="16"
-                                           FontWeight="SemiBold" />
+                                <controls:ThemeToggleIcon Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                          IsLightTheme="{Binding IsLightTheme}" />
                             </Button>
                             <Button Command="{Binding ToggleContextSidebarCommand}"
-                                    Style="{StaticResource HeaderIconButtonStyle}"
-                                    Foreground="#FF2563EB"
-                                    Margin="4,0,0,0"
+                                    Style="{StaticResource RightSidebarToggleButtonStyle}"
+                                    Margin="6,0,0,0"
+                                    VerticalAlignment="Center"
                                     ToolTip="{Binding ContextSidebarToggleToolTip}">
-                                <controls:RightSidebarToggleIcon Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                <controls:RightSidebarToggleIcon Foreground="{DynamicResource Brush.SubtleText}"
                                                                  IsPanelOpen="{Binding IsContextSidebarVisible}" />
                             </Button>
                         </StackPanel>
@@ -250,7 +226,6 @@
                         </Style>
                     </Grid.Style>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
@@ -690,9 +665,6 @@
                             </StackPanel>
                         </Grid>
                     </Border>
-                    <TextBlock Grid.Row="2"
-                               Text="{loc:Localize Key=Chat_ComposerHint}"
-                               Style="{StaticResource ComposerHintStyle}" />
                 </Grid>
                 </Grid>
             </Border>

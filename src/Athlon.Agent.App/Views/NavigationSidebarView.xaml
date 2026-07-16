@@ -19,6 +19,7 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
             <StackPanel Grid.Row="0" Margin="12,10,12,8">
@@ -205,7 +206,7 @@
                 </StackPanel>
             </ScrollViewer>
 
-            <StackPanel Grid.Row="2" Margin="12,0,12,12">
+            <StackPanel Grid.Row="2" Margin="12,0,12,0">
                 <Border Background="{DynamicResource Brush.PanelAlt}"
                         BorderBrush="{DynamicResource Brush.Border}"
                         BorderThickness="1"
@@ -357,8 +358,7 @@
                 <Button Command="{Binding NavigateCommand}"
                         CommandParameter="Schedule"
                         Style="{StaticResource NavBottomButtonStyle}"
-                        ToolTip="{loc:Localize Key=Nav_Schedule}"
-                        Margin="0,0,0,8">
+                        ToolTip="{loc:Localize Key=Nav_Schedule}">
                     <StackPanel Orientation="Horizontal">
                         <ContentControl Style="{StaticResource ScheduleNavIconStyle}"
                                         Margin="0,0,10,0"
@@ -366,9 +366,12 @@
                         <TextBlock Text="{loc:Localize Key=Nav_Schedule}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
+            </StackPanel>
 
-                <!-- Account + Settings (Cursor-style bottom bar) -->
-                <Border Style="{StaticResource SidebarAccountBarStyle}">
+            <!-- Account pinned at bottom so maximize / short heights keep login visible -->
+            <Border Grid.Row="3"
+                    Style="{StaticResource SidebarAccountBarStyle}"
+                    Margin="12,0,12,12">
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -436,8 +439,7 @@
                                        VerticalAlignment="Center" />
                         </Button>
                     </Grid>
-                </Border>
-            </StackPanel>
+            </Border>
         </Grid>
     </Border>
 </UserControl>

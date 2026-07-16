@@ -203,8 +203,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public bool IsLightTheme => AppThemeManager.CurrentKind == AppThemeKind.Light;
 
-    public string ThemeToggleGlyph => IsLightTheme ? "☾" : "☀";
-
     public string ThemeToggleToolTip =>
         IsLightTheme ? _loc["Shell_SwitchToDark"] : _loc["Shell_SwitchToLight"];
 
@@ -546,7 +544,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private void NotifyThemeToggleStateChanged()
     {
         OnPropertyChanged(nameof(IsLightTheme));
-        OnPropertyChanged(nameof(ThemeToggleGlyph));
         OnPropertyChanged(nameof(ThemeToggleToolTip));
     }
 
