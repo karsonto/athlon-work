@@ -39,6 +39,23 @@ public sealed class LayoutCoordinator
         onLayoutChanged();
     }
 
+    public void SetNavigationSidebarVisible(bool visible, Action onLayoutChanged)
+    {
+        var ui = _appSettings.Ui;
+        if (ui.NavigationSidebarVisible == visible)
+        {
+            return;
+        }
+
+        ui.NavigationSidebarVisible = visible;
+        if (visible && ui.NavigationSidebarWidth < UiLayoutConstraints.NavigationSidebarMinWidth)
+        {
+            ui.NavigationSidebarWidth = UiLayoutConstraints.NavigationSidebarDefaultWidth;
+        }
+
+        onLayoutChanged();
+    }
+
     public void UpdateContextSidebarWidth(double width)
     {
         if (!_appSettings.Ui.ContextSidebarVisible)
@@ -54,13 +71,20 @@ public sealed class LayoutCoordinator
             value => _appSettings.Ui.ContextSidebarWidth = value);
     }
 
-    public void UpdateNavigationSidebarWidth(double width) =>
+    public void UpdateNavigationSidebarWidth(double width)
+    {
+        if (!_appSettings.Ui.NavigationSidebarVisible)
+        {
+            return;
+        }
+
         _uiLayout.TryUpdateDimension(
             _appSettings.Ui.NavigationSidebarWidth,
             width,
             UiLayoutConstraints.NavigationSidebarMinWidth,
             UiLayoutConstraints.NavigationSidebarMaxWidth,
             value => _appSettings.Ui.NavigationSidebarWidth = value);
+    }
 
     public void UpdateEditorPaneWidth(double width) =>
         _uiLayout.TryUpdateDimension(

@@ -782,6 +782,12 @@
   <data name="Nav_Repositories" xml:space="preserve">
     <value>Repositories</value>
   </data>
+  <data name="Nav_Account" xml:space="preserve">
+    <value>账户</value>
+  </data>
+  <data name="Nav_AccountGuest" xml:space="preserve">
+    <value>未登录</value>
+  </data>
   <data name="RecordGroup_Earlier" xml:space="preserve">
     <value>更早</value>
   </data>
@@ -1195,6 +1201,12 @@
   <data name="Shell_ContextSidebarOpen" xml:space="preserve">
     <value>打开右侧栏 (Ctrl+Alt+B)</value>
   </data>
+  <data name="Shell_NavigationSidebarClose" xml:space="preserve">
+    <value>折叠左侧栏 (Ctrl+B)</value>
+  </data>
+  <data name="Shell_NavigationSidebarOpen" xml:space="preserve">
+    <value>展开左侧栏 (Ctrl+B)</value>
+  </data>
   <data name="Shell_DeleteConversationDone" xml:space="preserve">
     <value>对话已删除。</value>
   </data>
@@ -1326,6 +1338,9 @@
   </data>
   <data name="Sso_LogoutTooltip" xml:space="preserve">
     <value>点击退出登录</value>
+  </data>
+  <data name="Sso_SignedIn" xml:space="preserve">
+    <value>已登录</value>
   </data>
   <data name="Sso_WaitingMessage" xml:space="preserve">
     <value>请在浏览器中完成登录，成功后自动继续。</value>

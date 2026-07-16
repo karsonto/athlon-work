@@ -41,6 +41,12 @@ public static class AppLayoutMetrics
     /// <summary>Max content width for the chat composer (used with 85% column layout).</summary>
     public const double ComposerMaxContentWidth = 1120;
 
+    /// <summary>Composer width for the empty-state centered hero (DeepSeek-like card).</summary>
+    public const double ComposerEmptyMaxContentWidth = 880;
+
+    /// <summary>Minimum text-area height inside the empty-state composer card.</summary>
+    public const double ComposerEmptyTextMinHeight = 64;
+
     /// <summary>Inset of the visible splitter line inside the hit target.</summary>
     public const double SplitterLineInset = 0;
 }

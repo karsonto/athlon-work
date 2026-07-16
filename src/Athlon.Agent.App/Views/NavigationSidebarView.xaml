@@ -16,18 +16,36 @@
             BorderThickness="0">
         <Grid>
             <Grid.RowDefinitions>
-                <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderRowHeight}" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Style="{StaticResource PanelHeaderBorderStyle}" Padding="12,0">
+            <StackPanel Grid.Row="0" Margin="12,10,12,8">
+                <Button Command="{Binding ToggleNavigationSidebarCommand}"
+                        Style="{StaticResource RightSidebarToggleButtonStyle}"
+                        HorizontalAlignment="Left"
+                        Margin="0,0,0,10"
+                        ToolTip="{Binding NavigationSidebarToggleToolTip}">
+                    <controls:LeftSidebarToggleIcon Foreground="{DynamicResource Brush.SubtleText}"
+                                                    IsPanelOpen="{Binding IsNavigationSidebarVisible}" />
+                </Button>
                 <Button Command="{Binding NewSessionCommand}"
-                        VerticalAlignment="Center"
                         ToolTip="{loc:Localize Key=Nav_NewSessionTooltip}"
-                        Content="{loc:Localize Key=Nav_NewAgent}"
-                        Style="{StaticResource NewSessionButtonStyle}" />
-            </Border>
+                        Style="{StaticResource NewSessionButtonStyle}">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                        <TextBlock Text="&#xE710;"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0" />
+                        <TextBlock Text="{loc:Localize Key=Nav_NewAgent}"
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
 
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="12,8">
                 <StackPanel>
@@ -339,7 +357,8 @@
                 <Button Command="{Binding NavigateCommand}"
                         CommandParameter="Schedule"
                         Style="{StaticResource NavBottomButtonStyle}"
-                        ToolTip="{loc:Localize Key=Nav_Schedule}">
+                        ToolTip="{loc:Localize Key=Nav_Schedule}"
+                        Margin="0,0,0,8">
                     <StackPanel Orientation="Horizontal">
                         <ContentControl Style="{StaticResource ScheduleNavIconStyle}"
                                         Margin="0,0,10,0"
@@ -347,6 +366,77 @@
                         <TextBlock Text="{loc:Localize Key=Nav_Schedule}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
+
+                <!-- Account + Settings (Cursor-style bottom bar) -->
+                <Border Style="{StaticResource SidebarAccountBarStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Button Grid.Column="0"
+                                Command="{Binding SsoLogoutCommand}"
+                                HorizontalContentAlignment="Left"
+                                ToolTip="{loc:Localize Key=Sso_LogoutTooltip}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SidebarAccountIdentityButtonStyle}">
+                                    <Setter Property="IsEnabled" Value="False" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSsoUserVisible}" Value="True">
+                                            <Setter Property="IsEnabled" Value="True" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0"
+                                        Width="28"
+                                        Height="28"
+                                        CornerRadius="14"
+                                        Background="{DynamicResource Brush.Accent}"
+                                        Margin="0,0,10,0"
+                                        VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding SsoAvatarInitial}"
+                                               Foreground="White"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding SidebarAccountTitle}"
+                                               FontSize="13"
+                                               FontWeight="SemiBold"
+                                               Foreground="{DynamicResource Brush.Text}"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding SidebarAccountSubtitle}"
+                                               FontSize="11"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               Margin="0,2,0,0"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Grid>
+                        </Button>
+
+                        <Button Grid.Column="1"
+                                Command="{Binding NavigateCommand}"
+                                CommandParameter="Settings"
+                                Style="{StaticResource SidebarAccountSettingsButtonStyle}"
+                                ToolTip="{loc:Localize Key=Chat_SettingsTooltip}"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="&#xE713;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="14"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Button>
+                    </Grid>
+                </Border>
             </StackPanel>
         </Grid>
     </Border>

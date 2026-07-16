@@ -207,6 +207,7 @@ public sealed class UiSettings
     public string Theme { get; set; } = "Dark";
     public double FontSize { get; set; } = 14;
     public bool ContextSidebarVisible { get; set; } = true;
+    public bool NavigationSidebarVisible { get; set; } = true;
     public double ContextSidebarWidth { get; set; } = 300;
     public double NavigationSidebarWidth { get; set; } = 220;
     public double EditorPaneWidth { get; set; } = 480;

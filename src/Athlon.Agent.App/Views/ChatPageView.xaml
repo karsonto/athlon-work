@@ -51,14 +51,32 @@
                                    MaxHeight="420" />
                 </Grid.RowDefinitions>
 
-                <!-- Chat header -->
+                <!-- Chat header：侧栏折叠且无消息时改为透明顶栏（仅右侧工具），贴近图1 -->
                 <Border Grid.Row="0"
                         Grid.ColumnSpan="2"
-                        Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}"
-                        Background="{DynamicResource Brush.Chrome}"
-                        BorderBrush="{DynamicResource Brush.Border}"
-                        BorderThickness="0,0,0,1"
-                        Padding="24,0">
+                        Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}">
+                    <Border.Style>
+                        <Style TargetType="Border">
+                            <Setter Property="Background" Value="{DynamicResource Brush.Chrome}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+                            <Setter Property="BorderThickness" Value="0,0,0,1" />
+                            <Setter Property="Padding" Value="24,0" />
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding IsNavigationSidebarVisible}" Value="False" />
+                                        <Condition Binding="{Binding HasChatMessages}" Value="False" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="Padding" Value="48,0,16,0" />
+                                </MultiDataTrigger>
+                                <DataTrigger Binding="{Binding IsNavigationSidebarVisible}" Value="False">
+                                    <Setter Property="Padding" Value="48,0,24,0" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
                     <Grid VerticalAlignment="Center">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -70,7 +88,22 @@
                                    Foreground="{DynamicResource Brush.TextSecondary}"
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
-                                   Margin="0,0,12,0" />
+                                   Margin="0,0,12,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <MultiDataTrigger>
+                                            <MultiDataTrigger.Conditions>
+                                                <Condition Binding="{Binding IsNavigationSidebarVisible}" Value="False" />
+                                                <Condition Binding="{Binding HasChatMessages}" Value="False" />
+                                            </MultiDataTrigger.Conditions>
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </MultiDataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <StackPanel Grid.Column="1"
                                     Orientation="Horizontal"
                                     VerticalAlignment="Center">
@@ -93,25 +126,6 @@
                                            FontSize="16"
                                            FontWeight="SemiBold" />
                             </Button>
-                            <Button Command="{Binding NavigateCommand}"
-                                    CommandParameter="Settings"
-                                    ToolTip="{loc:Localize Key=Chat_SettingsTooltip}"
-                                    Style="{StaticResource HeaderIconButtonStyle}"
-                                    Margin="4,0,0,0">
-                                <Button.Resources>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsLightTheme}" Value="False">
-                                                <Setter Property="Foreground" Value="#FFFFFFFF" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Resources>
-                                <TextBlock Text="&#xE713;"
-                                           FontFamily="Segoe MDL2 Assets"
-                                           FontSize="15" />
-                            </Button>
                             <Button Command="{Binding ToggleContextSidebarCommand}"
                                     Style="{StaticResource HeaderIconButtonStyle}"
                                     Foreground="#FF2563EB"
@@ -127,12 +141,29 @@
                 <Grid Grid.Row="1"
                       Grid.Column="0"
                       ClipToBounds="True">
-                <!-- WebView2 聊天渲染器：始终保持可见，避免 Collapsed 导致 WebView2 无法渲染 -->
+                <!-- WebView2：空会话时缩到角落，避免 HWND airspace 盖住居中 Composer；勿 Collapsed -->
                 <controls:WebChatView x:Name="ChatWebView"
                                       Margin="0"
-                                      ClipToBounds="True"
-                                      HorizontalAlignment="Stretch"
-                                      VerticalAlignment="Stretch" />
+                                      ClipToBounds="True">
+                    <controls:WebChatView.Style>
+                        <Style TargetType="controls:WebChatView">
+                            <Setter Property="HorizontalAlignment" Value="Stretch" />
+                            <Setter Property="VerticalAlignment" Value="Stretch" />
+                            <Setter Property="Opacity" Value="1" />
+                            <Setter Property="IsHitTestVisible" Value="True" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
+                                    <Setter Property="HorizontalAlignment" Value="Left" />
+                                    <Setter Property="VerticalAlignment" Value="Top" />
+                                    <Setter Property="Width" Value="2" />
+                                    <Setter Property="Height" Value="2" />
+                                    <Setter Property="Opacity" Value="0" />
+                                    <Setter Property="IsHitTestVisible" Value="False" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </controls:WebChatView.Style>
+                </controls:WebChatView>
 
                 <!-- Loading indicator -->
                 <StackPanel HorizontalAlignment="Center"
@@ -174,11 +205,23 @@
                     </i:Interaction.Behaviors>
                 </GridSplitter>
 
-            <!-- Composer -->
-            <Border Grid.Row="3"
-                    Panel.ZIndex="20"
-                    Style="{StaticResource ComposerOuterBorderStyle}"
+            <!-- Composer：无消息时居中（产品空状态），有消息时贴底 -->
+            <Border Panel.ZIndex="20"
                     ClipToBounds="True">
+                <Border.Style>
+                    <Style TargetType="Border" BasedOn="{StaticResource ComposerOuterBorderStyle}">
+                        <Setter Property="Grid.Row" Value="3" />
+                        <Setter Property="VerticalAlignment" Value="Stretch" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
+                                <Setter Property="Grid.Row" Value="1" />
+                                <Setter Property="VerticalAlignment" Value="Center" />
+                                <Setter Property="Padding" Value="0,0,0,24" />
+                                <Setter Property="Margin" Value="0,-56,0,0" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="0.75*" MinWidth="12" />
@@ -186,12 +229,42 @@
                                           MaxWidth="{x:Static app:AppLayoutMetrics.ComposerMaxContentWidth}" />
                         <ColumnDefinition Width="0.75*" MinWidth="12" />
                     </Grid.ColumnDefinitions>
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
+                                    <Setter Property="Margin" Value="40,0" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
                 <Grid Grid.Column="1">
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
+                                    <Setter Property="MaxWidth" Value="{x:Static app:AppLayoutMetrics.ComposerEmptyMaxContentWidth}" />
+                                    <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0"
+                                Style="{StaticResource ComposerEmptyHeroStyle}">
+                        <TextBlock Text="{Binding ChatWelcomeTitle}"
+                                   Style="{StaticResource ComposerWelcomeTitleStyle}" />
+                        <TextBlock Text="{Binding ChatWelcomeDescription}"
+                                   Style="{StaticResource ComposerWelcomeDescriptionStyle}" />
+                    </StackPanel>
+
                     <Border x:Name="ComposerInputWrapper"
+                            Grid.Row="1"
                             Style="{StaticResource ComposerInputWrapperStyle}"
                             HorizontalAlignment="Stretch">
                         <Grid>
@@ -264,34 +337,56 @@
                                                         </ItemsControl>
                                                     </ScrollViewer>
 
-                            <!-- Cursor-style pill row: + | growing text | mode | send -->
-                            <Grid Grid.Row="1" MinHeight="32">
+                            <!-- Docked: + | text | actions；空状态：上文本、下工具栏（图2比例） -->
+                            <Grid Grid.Row="1" Style="{StaticResource ComposerBodyGridStyle}">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <Button x:Name="PlusMenuButton"
-                                        Grid.Column="0"
                                         Command="{Binding TogglePlusMenuCommand}"
-                                        Style="{StaticResource ComposerToolButtonStyle}"
-                                        VerticalAlignment="Bottom"
-                                        Margin="0,0,6,0"
                                         ToolTip="{loc:Localize Key=ComposerPlus_MenuTooltip}">
-                                    <Grid Width="12" Height="12">
-                                        <Rectangle Width="12"
-                                                   Height="1.5"
-                                                   RadiusX="0.75"
-                                                   RadiusY="0.75"
-                                                   VerticalAlignment="Center"
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource ComposerToolButtonStyle}">
+                                            <Setter Property="Grid.Row" Value="0" />
+                                            <Setter Property="Grid.Column" Value="0" />
+                                            <Setter Property="VerticalAlignment" Value="Bottom" />
+                                            <Setter Property="Margin" Value="0,0,6,0" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
+                                                    <Setter Property="Grid.Row" Value="1" />
+                                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                                    <Setter Property="Margin" Value="0,10,0,0" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                    <Canvas Width="10"
+                                            Height="10"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            SnapsToDevicePixels="True"
+                                            UseLayoutRounding="True">
+                                        <Rectangle Canvas.Left="0"
+                                                   Canvas.Top="4"
+                                                   Width="10"
+                                                   Height="2"
+                                                   RadiusX="1"
+                                                   RadiusY="1"
                                                    Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
-                                        <Rectangle Width="1.5"
-                                                   Height="12"
-                                                   RadiusX="0.75"
-                                                   RadiusY="0.75"
-                                                   HorizontalAlignment="Center"
+                                        <Rectangle Canvas.Left="4"
+                                                   Canvas.Top="0"
+                                                   Width="2"
+                                                   Height="10"
+                                                   RadiusX="1"
+                                                   RadiusY="1"
                                                    Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
-                                    </Grid>
+                                    </Canvas>
                                 </Button>
                                 <Popup PlacementTarget="{Binding ElementName=PlusMenuButton}"
                                                                        Placement="Top"
@@ -476,14 +571,41 @@
                                                                     </Border>
                                                                 </Popup>
 
-                                <controls:ComposerInputControl x:Name="ComposerInput"
-                                                               Grid.Column="1"
-                                                               VerticalAlignment="Center"
-                                                               Margin="0,0,8,0" />
+                                <controls:ComposerInputControl x:Name="ComposerInput">
+                                    <controls:ComposerInputControl.Style>
+                                        <Style TargetType="controls:ComposerInputControl">
+                                            <Setter Property="Grid.Row" Value="0" />
+                                            <Setter Property="Grid.Column" Value="1" />
+                                            <Setter Property="VerticalAlignment" Value="Center" />
+                                            <Setter Property="Margin" Value="0,0,8,0" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
+                                                    <Setter Property="Grid.Column" Value="0" />
+                                                    <Setter Property="Grid.ColumnSpan" Value="3" />
+                                                    <Setter Property="VerticalAlignment" Value="Stretch" />
+                                                    <Setter Property="Margin" Value="0,0,0,4" />
+                                                    <Setter Property="MinHeight" Value="{x:Static app:AppLayoutMetrics.ComposerEmptyTextMinHeight}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </controls:ComposerInputControl.Style>
+                                </controls:ComposerInputControl>
 
-                                <StackPanel Grid.Column="2"
-                                            Orientation="Horizontal"
-                                            VerticalAlignment="Bottom">
+                                <StackPanel Orientation="Horizontal">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Grid.Row" Value="0" />
+                                            <Setter Property="Grid.Column" Value="2" />
+                                            <Setter Property="VerticalAlignment" Value="Bottom" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
+                                                    <Setter Property="Grid.Row" Value="1" />
+                                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                                    <Setter Property="Margin" Value="0,10,0,0" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
                                     <TextBlock Text="{Binding ComposerHarness.HarnessPickerLabel}"
                                                FontSize="12"
                                                Foreground="{DynamicResource Brush.SubtleText}"
@@ -568,11 +690,9 @@
                             </StackPanel>
                         </Grid>
                     </Border>
-                    <TextBlock Grid.Row="1"
+                    <TextBlock Grid.Row="2"
                                Text="{loc:Localize Key=Chat_ComposerHint}"
-                               Foreground="{DynamicResource Brush.DisabledText}"
-                               FontSize="11"
-                               Margin="12,8,0,0" />
+                               Style="{StaticResource ComposerHintStyle}" />
                 </Grid>
                 </Grid>
             </Border>

@@ -37,9 +37,48 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             return;
         }
 
-        elements.NavigationSidebarColumn.MinWidth = UiLayoutConstraints.NavigationSidebarMinWidth;
-        elements.NavigationSidebarColumn.MaxWidth = UiLayoutConstraints.NavigationSidebarMaxWidth;
-        elements.NavigationSidebarColumn.Width = new GridLength(viewModel.NavigationSidebarWidth);
+        if (viewModel.IsNavigationSidebarVisible)
+        {
+            elements.NavigationSidebarColumn.MinWidth = UiLayoutConstraints.NavigationSidebarMinWidth;
+            elements.NavigationSidebarColumn.MaxWidth = UiLayoutConstraints.NavigationSidebarMaxWidth;
+            elements.NavigationSidebarColumn.Width = new GridLength(viewModel.NavigationSidebarWidth);
+            if (elements.NavigationSidebarPanel is not null)
+            {
+                elements.NavigationSidebarPanel.Visibility = Visibility.Visible;
+            }
+
+            if (elements.NavigationSidebarSplitter is not null)
+            {
+                elements.NavigationSidebarSplitter.Visibility = Visibility.Visible;
+                elements.NavigationSidebarSplitter.IsEnabled = true;
+            }
+
+            if (elements.NavigationSidebarCollapsedRail is not null)
+            {
+                elements.NavigationSidebarCollapsedRail.Visibility = Visibility.Collapsed;
+            }
+        }
+        else
+        {
+            elements.NavigationSidebarColumn.MinWidth = 0;
+            elements.NavigationSidebarColumn.MaxWidth = double.PositiveInfinity;
+            elements.NavigationSidebarColumn.Width = new GridLength(0);
+            if (elements.NavigationSidebarPanel is not null)
+            {
+                elements.NavigationSidebarPanel.Visibility = Visibility.Collapsed;
+            }
+
+            if (elements.NavigationSidebarSplitter is not null)
+            {
+                elements.NavigationSidebarSplitter.Visibility = Visibility.Collapsed;
+                elements.NavigationSidebarSplitter.IsEnabled = false;
+            }
+
+            if (elements.NavigationSidebarCollapsedRail is not null)
+            {
+                elements.NavigationSidebarCollapsedRail.Visibility = Visibility.Visible;
+            }
+        }
     }
 
     public void OnNavigationSidebarDragCompleted()
@@ -370,6 +409,9 @@ public sealed class MainWindowLayoutElements
     public RowDefinition? ComposerRow { get; set; }
     public FrameworkElement? EditorPaneHost { get; set; }
     public FrameworkElement? EditorChatSplitter { get; set; }
+    public FrameworkElement? NavigationSidebarPanel { get; init; }
+    public FrameworkElement? NavigationSidebarSplitter { get; init; }
+    public FrameworkElement? NavigationSidebarCollapsedRail { get; init; }
     public FrameworkElement? ContextSidebarPanel { get; init; }
     public FrameworkElement? ContextSidebarSplitter { get; init; }
     public FrameworkElement? ContextSidebarCollapsedRail { get; init; }

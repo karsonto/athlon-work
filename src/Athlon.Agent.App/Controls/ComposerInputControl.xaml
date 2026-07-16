@@ -16,11 +16,22 @@
         <TextBlock x:Name="PlaceholderText"
                    Text="{loc:Localize Key=Chat_ComposerPlaceholder}"
                    Foreground="{DynamicResource Brush.SubtleText}"
-                   Margin="8,6,0,0"
-                   VerticalAlignment="Center"
                    IsHitTestVisible="False"
                    FontSize="14"
-                   Visibility="Visible" />
+                   Visibility="Visible">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Margin" Value="8,6,0,0" />
+                    <Setter Property="VerticalAlignment" Value="Center" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
+                            <Setter Property="Margin" Value="2,4,0,0" />
+                            <Setter Property="VerticalAlignment" Value="Top" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
         <Popup IsOpen="{Binding IsAtCompletionOpen, Mode=OneWay}"
                PlacementTarget="{Binding ElementName=ComposerTextBox}"
                Placement="Top"

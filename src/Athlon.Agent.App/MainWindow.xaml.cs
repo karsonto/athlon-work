@@ -41,6 +41,9 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         _layoutBinder = new MainWindowLayoutBinder(_viewModel, new MainWindowLayoutElements
         {
             NavigationSidebarColumn = NavigationSidebarColumn,
+            NavigationSidebarPanel = NavigationSidebarPanel,
+            NavigationSidebarSplitter = NavigationSidebarSplitter,
+            NavigationSidebarCollapsedRail = NavigationSidebarCollapsedRail,
             ContextSidebarColumn = ContextSidebarColumn,
             ContextSidebarPanel = ContextSidebarPanel,
             ContextSidebarSplitter = ContextSidebarSplitter,
@@ -175,6 +178,12 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         if (e.PropertyName == nameof(MainShellViewModel.HasChatMessages))
         {
             ExecuteOnUiThread(() => _layoutBinder.ApplyContextSidebarImmediate());
+        }
+
+        if (e.PropertyName == nameof(MainShellViewModel.IsNavigationSidebarVisible)
+            || e.PropertyName == nameof(MainShellViewModel.NavigationSidebarWidth))
+        {
+            ExecuteOnUiThread(_layoutBinder.ApplyNavigationSidebar);
         }
 
         if (e.PropertyName == nameof(MainShellViewModel.HasOpenEditorTabs))

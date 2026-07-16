@@ -24,13 +24,15 @@ public sealed class ChatHtmlBuilderTests
 
         Assert.Contains("id=\"chat-scroll\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"empty-state\"", html, StringComparison.Ordinal);
-        Assert.Contains(Strings.Get("Chat_WelcomeTitle"), html, StringComparison.Ordinal);
-        Assert.Contains(Strings.Get("Chat_WelcomeDescription")[..20], html, StringComparison.Ordinal);
         Assert.Contains("updateEmptyStateVisibility", html, StringComparison.Ordinal);
         Assert.Contains("scroller.scrollTop", html, StringComparison.Ordinal);
         Assert.DoesNotContain("avatar-user", html, StringComparison.Ordinal);
         Assert.DoesNotContain("Athlon 助手", html, StringComparison.Ordinal);
         Assert.DoesNotContain(">您<", html, StringComparison.Ordinal);
+        // Welcome copy is rendered by the WPF centered composer hero.
+        Assert.DoesNotContain("empty-state-title", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("empty-state-description", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(Strings.Get("Chat_WelcomeDescription")[..20], html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -56,11 +58,12 @@ public sealed class ChatHtmlBuilderTests
     }
 
     [Fact]
-    public void BuildShellHtml_with_sso_user_shows_personalized_welcome_title()
+    public void BuildShellHtml_with_sso_user_keeps_empty_state_hook_without_inline_welcome()
     {
         var html = _builder.BuildShellHtml("Zhang San");
 
-        Assert.Contains(Strings.Format("Chat_WelcomeTitleWithName", "Zhang San"), html, StringComparison.Ordinal);
+        Assert.Contains("id=\"empty-state\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(Strings.Format("Chat_WelcomeTitleWithName", "Zhang San"), html, StringComparison.Ordinal);
         Assert.DoesNotContain(Strings.Get("Chat_WelcomeTitle"), html, StringComparison.Ordinal);
     }
 
@@ -68,10 +71,8 @@ public sealed class ChatHtmlBuilderTests
     public void BuildShellHtml_encodes_sso_display_name()
     {
         var html = _builder.BuildShellHtml("<script>alert(1)</script>");
-        var encodedTitle = System.Net.WebUtility.HtmlEncode(
-            Strings.Format("Chat_WelcomeTitleWithName", "<script>alert(1)</script>"));
 
-        Assert.Contains(encodedTitle, html, StringComparison.Ordinal);
+        Assert.Contains("id=\"empty-state\"", html, StringComparison.Ordinal);
         Assert.DoesNotContain("<script>alert(1)</script>", html, StringComparison.Ordinal);
     }
 
@@ -80,7 +81,8 @@ public sealed class ChatHtmlBuilderTests
     {
         var html = _builder.BuildDocumentHtml([], showToolCalls: false, ssoDisplayName: "Li Si");
 
-        Assert.Contains(Strings.Format("Chat_WelcomeTitleWithName", "Li Si"), html, StringComparison.Ordinal);
+        Assert.Contains("id=\"empty-state\"", html, StringComparison.Ordinal);
+        Assert.DoesNotContain(Strings.Format("Chat_WelcomeTitleWithName", "Li Si"), html, StringComparison.Ordinal);
         Assert.Contains("replayEvents", html, StringComparison.Ordinal);
         Assert.Contains("updateEmptyStateVisibility", html, StringComparison.Ordinal);
     }

@@ -210,6 +210,35 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public bool HasChatMessages => Messages.Count > 0;
 
+    public string ChatWelcomeTitle =>
+        string.IsNullOrWhiteSpace(SsoDisplayName)
+            ? _loc["Chat_WelcomeTitle"]
+            : _loc.Format("Chat_WelcomeTitleWithName", SsoDisplayName.Trim());
+
+    public string ChatWelcomeDescription => _loc["Chat_WelcomeDescription"];
+
+    public string SsoAvatarInitial
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(SsoDisplayName))
+            {
+                return "A";
+            }
+
+            var trimmed = SsoDisplayName.Trim();
+            return trimmed[..1].ToUpperInvariant();
+        }
+    }
+
+    public string SidebarAccountTitle =>
+        IsSsoUserVisible && !string.IsNullOrWhiteSpace(SsoDisplayName)
+            ? SsoDisplayName.Trim()
+            : _loc["Nav_Account"];
+
+    public string SidebarAccountSubtitle =>
+        IsSsoUserVisible ? _loc["Sso_SignedIn"] : _loc["Nav_AccountGuest"];
+
     private async Task RefreshMcpRuntimeAsync()
     {
         await _mcpRegistry.RefreshAsync(Settings.Settings.McpServers);
@@ -279,6 +308,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public bool IsContextSidebarVisible => _appSettings.Ui.ContextSidebarVisible;
 
+    public bool IsNavigationSidebarVisible => _appSettings.Ui.NavigationSidebarVisible;
+
     public GridLength ContextSidebarEdgeGutterWidth =>
         new GridLength(_contextSidebarEdgeGutterWidth);
 
@@ -287,6 +318,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public string ContextSidebarToggleToolTip =>
         IsContextSidebarVisible ? _loc["Shell_ContextSidebarClose"] : _loc["Shell_ContextSidebarOpen"];
+
+    public string NavigationSidebarToggleToolTip =>
+        IsNavigationSidebarVisible ? _loc["Shell_NavigationSidebarClose"] : _loc["Shell_NavigationSidebarOpen"];
 
     public const double ContextSidebarCollapseDragThreshold = UiLayoutConstraints.ContextSidebarCollapseDragThreshold;
 
@@ -461,6 +495,13 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         await _layout.PersistNowAsync();
     }
 
+    [RelayCommand]
+    private async Task ToggleNavigationSidebarAsync()
+    {
+        SetNavigationSidebarVisible(!_appSettings.Ui.NavigationSidebarVisible);
+        await _layout.PersistNowAsync();
+    }
+
     private void OnCultureChanged(object? sender, EventArgs e) => RefreshLocalizedStrings();
 
     private void RefreshLocalizedStrings()
@@ -469,6 +510,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         OnPropertyChanged(nameof(ThemeToggleToolTip));
         OnPropertyChanged(nameof(ModifiedFilesHeader));
         OnPropertyChanged(nameof(ContextSidebarToggleToolTip));
+        OnPropertyChanged(nameof(NavigationSidebarToggleToolTip));
         if (string.IsNullOrWhiteSpace(_session.ActiveWorkspace))
         {
             ActiveWorkspaceName = _loc["Shell_NoWorkspace"];
@@ -476,6 +518,26 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         OnPropertyChanged(nameof(HasSessionWorkspace));
         OnPropertyChanged(nameof(WorkspacePanelActionLabel));
+        OnPropertyChanged(nameof(ChatWelcomeTitle));
+        OnPropertyChanged(nameof(ChatWelcomeDescription));
+        OnPropertyChanged(nameof(SidebarAccountTitle));
+        OnPropertyChanged(nameof(SidebarAccountSubtitle));
+        OnPropertyChanged(nameof(SsoAvatarInitial));
+    }
+
+    partial void OnSsoDisplayNameChanged(string value)
+    {
+        OnPropertyChanged(nameof(ChatWelcomeTitle));
+        OnPropertyChanged(nameof(SsoAvatarInitial));
+        OnPropertyChanged(nameof(SidebarAccountTitle));
+        OnPropertyChanged(nameof(SidebarAccountSubtitle));
+    }
+
+    partial void OnIsSsoUserVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SidebarAccountTitle));
+        OnPropertyChanged(nameof(SidebarAccountSubtitle));
+        OnPropertyChanged(nameof(SsoAvatarInitial));
     }
 
     private void OnAppThemeChanged(object? sender, EventArgs e) =>
@@ -492,6 +554,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         _contextSidebarLayoutAnimate = animate;
         _layout.SetContextSidebarVisible(visible, NotifyContextSidebarLayoutChanged);
+    }
+
+    public void SetNavigationSidebarVisible(bool visible)
+    {
+        _layout.SetNavigationSidebarVisible(visible, NotifyNavigationSidebarLayoutChanged);
     }
 
     internal void SetContextSidebarEdgeGutterWidth(double width)
@@ -548,6 +615,13 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ContextSidebarLayoutChanged?.Invoke(
             this,
             new ContextSidebarLayoutChangedEventArgs { Animate = animate });
+    }
+
+    private void NotifyNavigationSidebarLayoutChanged()
+    {
+        OnPropertyChanged(nameof(IsNavigationSidebarVisible));
+        OnPropertyChanged(nameof(NavigationSidebarWidth));
+        OnPropertyChanged(nameof(NavigationSidebarToggleToolTip));
     }
 
     public Task PersistUiLayoutForSidebarAsync() => _layout.PersistNowAsync();

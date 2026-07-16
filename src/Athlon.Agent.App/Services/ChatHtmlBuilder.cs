@@ -136,16 +136,9 @@ public sealed class ChatHtmlBuilder
 
     private static string BuildEmptyStateHtml(string? ssoDisplayName)
     {
-        var title = string.IsNullOrWhiteSpace(ssoDisplayName)
-            ? Strings.Get("Chat_WelcomeTitle")
-            : Strings.Format("Chat_WelcomeTitleWithName", ssoDisplayName.Trim());
-        var description = Strings.Get("Chat_WelcomeDescription");
-        return
-            "<div id=\"empty-state\" class=\"empty-state\">" +
-            "<div class=\"empty-state-icon\">💬</div>" +
-            $"<h2 class=\"empty-state-title\">{WebUtility.HtmlEncode(title)}</h2>" +
-            $"<p class=\"empty-state-description\">{WebUtility.HtmlEncode(description)}</p>" +
-            "</div>";
+        // Welcome copy lives in the WPF centered composer hero; keep a hook for JS visibility updates.
+        _ = ssoDisplayName;
+        return "<div id=\"empty-state\" class=\"empty-state\" aria-hidden=\"true\"></div>";
     }
 
     private static string GetThemeTokenStyles()
@@ -300,34 +293,7 @@ public sealed class ChatHtmlBuilder
           contain-intrinsic-size: auto 96px;
         }
         .empty-state {
-          position: absolute;
-          inset: 0;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          padding: 24px;
-          text-align: center;
-          pointer-events: none;
-          z-index: 1;
-        }
-        .empty-state-icon {
-          font-size: 48px;
-          line-height: 1;
-          opacity: 0.5;
-          margin-bottom: 24px;
-        }
-        .empty-state-title {
-          font-size: 24px;
-          font-weight: 600;
-          color: var(--assistant-text);
-          margin-bottom: 12px;
-        }
-        .empty-state-description {
-          font-size: 14px;
-          color: var(--subtle-text);
-          max-width: 400px;
-          line-height: 1.6;
+          display: none !important;
         }
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(8px); }
@@ -978,13 +944,6 @@ public sealed class ChatHtmlBuilder
         }
 
         function applyChatI18n() {
-          const empty = document.getElementById('empty-state');
-          if (empty) {
-            const title = empty.querySelector('.empty-state-title');
-            const desc = empty.querySelector('.empty-state-description');
-            if (title && !title.dataset.userTitle) title.textContent = t('welcomeTitle');
-            if (desc) desc.textContent = t('welcomeDescription');
-          }
           const loadOlder = document.getElementById('load-older');
           if (loadOlder) loadOlder.textContent = t('loadOlder');
           document.querySelectorAll('.code-btn').forEach(function (btn) {

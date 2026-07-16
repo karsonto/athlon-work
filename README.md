@@ -28,8 +28,8 @@ Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is
 | **Native Windows** | Real WPF shell with WebView2 chat rendering — fast, polished desktop UI |
 | **Bring your own model** | OpenAI-compatible APIs (OpenAI, DeepSeek, Ollama, LM Studio, …) |
 | **Agent loop built-in** | Multi-step tool calling with filesystem, grep, glob, shell |
-| **Token-smart** | Optional dynamic context compaction, hygiene, and MCP tool search |
-| **Extensible** | Skills (AgentScope-style), MCP servers, sub-agents |
+| **Token-smart** | Dynamic context compaction pipeline, hygiene, eviction, and MCP tool search |
+| **Extensible** | Skills (YAML + Handlebars), MCP servers, sub-agent delegation |
 | **Private by default** | Settings, sessions, and API keys stay under your user profile (DPAPI) |
 
 ---
@@ -41,22 +41,35 @@ Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is
 - Multi-workspace support with file tree, in-app editor (AvalonEdit), and workspace guard
 - Native Markdown rendering (MdXaml) with code-block copy, Mermaid offline preview
 - Light / dark themes with consistent Indigo accent ([theme conventions](docs/development/theme-and-ui-conventions.md))
+- **Composer** with `@`-mention file/symbol completion, slash commands, and image paste
+- **Full localization**: zh-CN (default) and en-US via `.resx` resources
 
 ### Agent Runtime
 - Shared `AgentRuntime`: prompt building, streaming, tool dispatch, multi-round loops
-- Built-in tools: `file_list`, `file_read`, `file_write`, `file_edit`, `grep_files`, `glob_files`, `execute_command`
-- Sub-agent delegation (`sessions_spawn` / `sessions_send`) with configurable nesting depth
-- Long-term memory hooks and context compaction pipeline
+- **Middleware pipeline**: compaction, post-turn memory, and tool-storm detection plug into every agent turn
+- Built-in tools: `file_list`, `file_read`, `file_write`, `file_edit`, `apply_patch`, `grep_files`, `glob_files`, `execute_command`
+- **Sub-agent delegation** (`sessions_spawn` / `sessions_send` / `sessions_list` / `sessions_history` / `sessions_pending_completions` / `task_output`) with configurable nesting depth and background execution
+- **Long-term memory**: search, get, and consolidating memory via `ILongTermMemory` with periodic flush
+- **Knowledge RAG**: SQLite vector store with OpenAI-compatible embeddings, document ingestion (PDF, text, Markdown), and turn-scoped knowledge search
+
+### Context Management
+- **Dynamic compaction**: budget-aware multi-level compaction (normal → elevated → high → critical → overflow)
+- **3-level pass**: truncate args → conversation compact + summarize → tool result eviction
+- **Send-boundary hygiene**: compact oversized tool payloads in every outbound request
+- **Tool storm breaker**: detects runaway tool loops and halts the agent to prevent infinite cycles
+- **Semantic cutoff planner**: intelligently chooses compaction boundaries based on message score
 
 ### Automation & Integration
-- **Scheduled tasks** — daily, interval, one-shot, or manual; per-task workspace & prompt
-- **Skills** — YAML + Handlebars templates in `~/.athlon-agent/skills/`
-- **MCP** — server configuration UI and stdio client foundation
-- **Velopack** packaging — Setup.exe, portable zip, intranet auto-update feed
+- **Scheduled tasks** — daily, interval, one-shot, or manual; per-task workspace & prompt; keep-awake support
+- **Skills** — YAML + Handlebars templates in `~/.athlon-agent/skills/`; XML prompt rendering
+- **MCP** — full Model Context Protocol support: server configuration UI, stdio & streamable HTTP transports, automatic tool search (direct/search/auto modes with configurable thresholds)
+- **Behavior Reporting** — opt-in event telemetry (disabled by default); batched HTTP upload for usage analytics
 
 ### Safety & Ops
 - API keys encrypted with Windows DPAPI (not plain JSON)
+- Tool approval system: configurable allow/deny lists for commands, file-scope policies
 - JSONL audit logs for tool calls and HTTP interactions
+- **Training Data Flywheel** — auto-extracts SFT/DPO training samples from real agent interactions (`CorrectionDetector` → `TurnTrajectoryExtractor` → `TrainingSampleStore`)
 - GitHub Actions CI + tag-based releases
 
 ---
@@ -129,45 +142,72 @@ flowchart TB
 
     subgraph Core["Athlon.Agent.Core"]
         RT[AgentRuntime]
-        CMP[Context Compaction]
-        MEM[Memory]
+        CMP[Context Compaction Pipeline]
+        MEM[Long-Term Memory]
+        MID[Turn Middleware Pipeline]
+        TRAIN[Training Data Flywheel]
     end
 
     subgraph Infra["Athlon.Agent.Infrastructure"]
         LLM[OpenAI-compatible client]
-        TOOLS[Filesystem tools]
+        TOOLS[Filesystem & agent tools]
         STORE[File storage + DPAPI]
+        KNOW[Knowledge RAG + Embeddings]
+        SUB[Sub-Agent Engine]
+        BEH[Behavior Report]
     end
 
     subgraph Ext["Extensions"]
-        SK[Skills]
-        MCP[MCP client]
+        SK[Skills (YAML + Handlebars)]
+        MCP[MCP Client + Tool Search]
     end
 
     MW --> ShellVm
     ShellVm --> Pages
     Pages --> RT
     SCH --> RT
+    RT --> MID
+    MID --> CMP
+    MID --> MEM
+    RT --> SUB
+    RT --> TRAIN
     RT --> LLM
     RT --> TOOLS
     RT --> SK
     RT --> MCP
-    RT --> CMP
+    RT --> KNOW
     ShellVm --> STORE
 ```
 
 `MainWindow.xaml` is a thin shell (~300 lines): navigation sidebar, lazy-loaded page host (`PageViewFactory`), context sidebar, and status chrome. Page markup lives in `Views/*PageView.xaml`; composer/chat logic is in `ChatPageViewModel`, settings credentials in `SettingsViewModel`. Startup milestones are traced via `App.StartupTrace` (written to `startup.log` under the app logs folder).
 
-```text
+```
 src/
   Athlon.Agent.App/             WPF UI, view models, scheduler, themes
-  Athlon.Agent.Core/            Agent runtime, settings, compaction, memory
-  Athlon.Agent.Infrastructure/  LLM client, tools, storage, licensing
-  Athlon.Agent.Mcp/             MCP client foundation
+  Athlon.Agent.Core/            Agent runtime, compaction, memory, middleware, training data
+  Athlon.Agent.Infrastructure/  LLM client, tools, knowledge RAG, licensing, SSO, sub-agents
+  Athlon.Agent.Mcp/             MCP client foundation (ModelContextProtocol.Core)
   Athlon.Agent.Skills/          Skill loading and Handlebars rendering
 tests/
-  Athlon.Agent.Tests/           xUnit tests
+  Athlon.Agent.Tests/           xUnit tests (140+ test files)
 ```
+
+### Key Dependencies
+
+| Package | Version |
+|---------|---------|
+| .NET SDK | 10.0 |
+| CommunityToolkit.Mvvm | 8.4.2 |
+| AvalonEdit | 6.3.0.90 |
+| MdXaml | 1.27.0 |
+| Markdig | 0.40.0 |
+| Microsoft.Web.WebView2 | 1.0.2903.40 |
+| ModelContextProtocol.Core | 1.3.0 |
+| Microsoft.Data.Sqlite | 10.0.9 |
+| Serilog | 4.3.1 |
+| Velopack | 0.0.1298 |
+| UglyToad.PdfPig | 1.7.0-custom-5 |
+| YamlDotNet | 18.0.0 |
 
 ---
 
@@ -202,12 +242,13 @@ Runtime data lives under `%USERPROFILE%\.athlon-agent\`:
 ```text
 .athlon-agent/
   config/        settings.json, license.lic
-  sessions/      conversation history (JSONL + Markdown)
+  sessions/      conversation history (JSONL + Markdown + transcripts)
   skills/        SKILL.md folders
-  logs/          Serilog logs
+  logs/          Serilog logs + startup.log
   credentials/   DPAPI-encrypted API keys
   audit/         tool-call audit JSONL
   training-data/ SFT + DPO training data (JSONL, opt-in)
+  behavior/      Behavior report pending events (JSONL, opt-in)
 ```
 
 ### Model settings (in-app or `config/settings.json`)
@@ -219,16 +260,22 @@ Runtime data lives under `%USERPROFILE%\.athlon-agent\`:
 | API key | Stored with DPAPI locally |
 | Max tokens | Optional; empty = API default |
 
-### Built-in tools (summary)
+### Built-in tools
 
 | Tool | Purpose |
 |------|---------|
 | `file_list` / `glob_files` / `grep_files` | Discover and search workspace |
 | `file_read` | Stream-read with line limits and offset |
-| `file_write` / `file_edit` | Create or patch files (with backup) |
-| `execute_command` | Shell via `cmd.exe /c` (deny-list + user stop) |
+| `file_write` / `file_edit` / `apply_patch` | Create or patch files (with backup) |
+| `execute_command` | Shell via `cmd.exe /c` (allow/deny lists + approval) |
+| `memory_search` / `memory_get` | Long-term memory retrieval |
+| `knowledge_search` | RAG search across ingested documents |
+| `load_skill_through_path` | Load skill instructions at runtime |
+| `sessions_spawn` / `sessions_send` / … | Sub-agent delegation (when enabled) |
+| `todo_write` | Task plan management |
+| MCP tools | Dynamic tool discovery via configured MCP servers |
 
-Details: workspace guard, timeouts, and compaction → [Context compaction](docs/features/context-compaction.md).
+Details: workspace guard, timeouts, compaction, and tool permission policies → [Context compaction](docs/features/context-compaction.md).
 
 ### Agent turn timeout
 
@@ -275,8 +322,10 @@ git push origin v1.0.0
 |-----|-------------|
 | [Theme & UI conventions](docs/development/theme-and-ui-conventions.md) | Color tokens, theme switch rules (for contributors & AI) |
 | [Context compaction](docs/features/context-compaction.md) | Dynamic compaction, hygiene, eviction |
-| [License tooling](tools/license/README.md) | RSA license generation for enterprise deployments |
 | [Training data flywheel](docs/development/training-data-flywheel.md) | Auto-extracting SFT/DPO training data from agent interactions |
+| [Behavior report events](docs/features/behavior-report-events.md) | Event collection and upload specification |
+| [Localization conventions](docs/development/localization-conventions.md) | Adding new languages, string keys, UI patterns |
+| [License tooling](tools/license/README.md) | RSA license generation for enterprise deployments |
 
 ---
 
@@ -310,7 +359,7 @@ Quick summary:
 - `.pen` design files → Pencil MCP tools only
 - **Training data collection** — every tool call, error, and user correction flows through `CorrectionDetector` and produces SFT/DPO samples automatically. When extending the agent loop:
   - Add new `CorrectionDetector.Detect*()` methods for new trajectory types
-  - Wire extraction into `TurnTrajectoryExtractor.Extract*Samples()` 
+  - Wire extraction into `TurnTrajectoryExtractor.Extract*Samples()`
   - Register in `TrainingSampleStore.RecordTurnAsync()` (see [training data flywheel](docs/development/training-data-flywheel.md))
 
 ---
@@ -335,8 +384,8 @@ This is offline signature validation for internal compliance — not DRM. The **
 
 ## 🗺 Roadmap
 
-- [ ] Full MCP server lifecycle (connect, list tools, call, reconnect)
-- [ ] Command execution confirmation UI
+- [ ] Full MCP server lifecycle UI (connect, list tools, call, reconnect, status indicators)
+- [ ] Command execution confirmation dialog
 - [ ] Session branching
 - [ ] Richer code-block actions (diff, run)
 - [ ] Optional code signing in release pipeline
@@ -351,5 +400,5 @@ If you find Athlon Agent useful, **star the repo** to support the project and he
 ---
 
 <p align="center">
-  <sub>Built with .NET 10 · WPF · CommunityToolkit.Mvvm · Serilog · MdXaml · Velopack</sub>
+  <sub>Built with .NET 10 · WPF · CommunityToolkit.Mvvm · Serilog · MdXaml · Velopack · SQLite</sub>
 </p>
