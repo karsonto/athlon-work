@@ -309,15 +309,20 @@
                                                                                        MaxWidth="180"
                                                                                        VerticalAlignment="Center"
                                                                                        Margin="0,0,8,0" />
-                                                                            <TextBlock Grid.Column="1"
-                                                                                       FontSize="11"
-                                                                                       Foreground="{DynamicResource Brush.SubtleText}"
-                                                                                       VerticalAlignment="Center"
-                                                                                       Margin="0,0,6,0">
-                                                                                <Run Text="{Binding SizeLabel}" />
-                                                                                <Run Text=" · " />
-                                                                                <Run Text="{loc:Localize Key=Chat_PendingParse}" />
-                                                                            </TextBlock>
+                                                                            <StackPanel Grid.Column="1"
+                                                                                        Orientation="Horizontal"
+                                                                                        VerticalAlignment="Center"
+                                                                                        Margin="0,0,6,0">
+                                                                                <TextBlock Text="{Binding SizeLabel}"
+                                                                                           FontSize="11"
+                                                                                           Foreground="{DynamicResource Brush.SubtleText}" />
+                                                                                <TextBlock Text=" · "
+                                                                                           FontSize="11"
+                                                                                           Foreground="{DynamicResource Brush.SubtleText}" />
+                                                                                <TextBlock Text="{loc:Localize Key=Chat_PendingParse}"
+                                                                                           FontSize="11"
+                                                                                           Foreground="{DynamicResource Brush.SubtleText}" />
+                                                                            </StackPanel>
                                                                             <Button Grid.Column="2"
                                                                                     Content="×"
                                                                                     Command="{Binding DataContext.RemovePendingDocumentCommand, RelativeSource={RelativeSource AncestorType=Window}}"
