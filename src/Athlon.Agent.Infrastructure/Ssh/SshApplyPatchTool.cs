@@ -73,7 +73,8 @@ public sealed class SshApplyPatchTool(
             }
             else
             {
-                if (!await client.FileExistsAsync(fullPath, cancellationToken).ConfigureAwait(false))
+                var existing = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
+                if (existing is null)
                 {
                     return ToolResult.Failure("File not found", $"Cannot patch missing file: {relativePath}");
                 }

@@ -34,18 +34,37 @@ public sealed class SshGlobFilesTool(
 
         try
         {
-            if (!await client.FileExistsAsync(fullPath, cancellationToken).ConfigureAwait(false))
-            {
-                return ToolResult.Failure("Directory not found", fullPath);
-            }
-
-            var info = await client.GetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
-            if (!info.IsDirectory)
+            var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
+            if (info is null || !info.IsDirectory)
             {
                 return ToolResult.Failure("Directory not found", fullPath);
             }
 
             var ignorePatterns = guard.GetIgnorePatterns();
+
+            var remoteMatches = await SshRemoteSearch.TryGlobAsync(
+                    client,
+                    fullPath,
+                    pattern,
+                    MaxFiles,
+                    ignorePatterns,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (remoteMatches is not null)
+            {
+                await WorkspaceToolHelper.AuditAsync(
+                    audit,
+                    "glob_files",
+                    new { path = fullPath, pattern, count = remoteMatches.Count, remote = true, via = "shell" },
+                    cancellationToken).ConfigureAwait(false);
+
+                return remoteMatches.Count == 0
+                    ? ToolResult.Success("No matching files found", "No matching files found")
+                    : ToolResult.Success(
+                        $"Found {remoteMatches.Count} matching entries",
+                        string.Join(Environment.NewLine, remoteMatches));
+            }
+
             var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
             matcher.AddInclude(pattern.Replace('\\', '/'));
             var matches = new List<string>();
@@ -97,7 +116,7 @@ public sealed class SshGlobFilesTool(
             await WorkspaceToolHelper.AuditAsync(
                 audit,
                 "glob_files",
-                new { path = fullPath, pattern, count = matches.Count, remote = true },
+                new { path = fullPath, pattern, count = matches.Count, remote = true, via = "sftp" },
                 cancellationToken).ConfigureAwait(false);
 
             return matches.Count == 0

@@ -38,13 +38,6 @@ internal static class FileReadLineReader
         FileReadSettings settings,
         CancellationToken cancellationToken)
     {
-        var content = new StringBuilder();
-        var totalLines = 0;
-        var linesReturned = 0;
-        var truncated = false;
-        int? nextStartLine = null;
-        var stopCollecting = false;
-
         await using var stream = new FileStream(
             fullPath,
             FileMode.Open,
@@ -52,13 +45,29 @@ internal static class FileReadLineReader
             FileShare.ReadWrite,
             bufferSize: 4096,
             useAsync: true);
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return await ReadFromStreamAsync(stream, selection, settings, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal static async Task<ReadResult> ReadFromStreamAsync(
+        Stream stream,
+        Selection selection,
+        FileReadSettings settings,
+        CancellationToken cancellationToken)
+    {
+        var content = new StringBuilder();
+        var totalLines = 0;
+        var linesReturned = 0;
+        var truncated = false;
+        int? nextStartLine = null;
+        var stopCollecting = false;
+
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096, leaveOpen: true);
 
         var lineIndex = 0;
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var line = await reader.ReadLineAsync(cancellationToken);
+            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             if (line is null)
             {
                 break;
@@ -81,6 +90,10 @@ internal static class FileReadLineReader
                     truncated = true;
                     nextStartLine = lineIndex + 1;
                     stopCollecting = true;
+                    if (!settings.CountTotalLines)
+                    {
+                        break;
+                    }
                 }
                 else
                 {
@@ -94,12 +107,21 @@ internal static class FileReadLineReader
                 && linesReturned >= selection.EndLine - selection.StartLine + 1)
             {
                 totalLines = lineIndex + 1;
-                if (await reader.ReadLineAsync(cancellationToken) is not null)
+                if (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is not null)
                 {
                     truncated = true;
                     nextStartLine = selection.StartLine + linesReturned;
                 }
 
+                break;
+            }
+
+            // When counting totals is off and we already passed the window, stop early.
+            if (!settings.CountTotalLines
+                && stopCollecting
+                && lineIndex + 1 >= selection.EndLine)
+            {
+                totalLines = lineIndex + 1;
                 break;
             }
 

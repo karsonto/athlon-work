@@ -35,13 +35,10 @@ public sealed class SshFileWriteTool(
 
         try
         {
-            if (await client.FileExistsAsync(fullPath, cancellationToken).ConfigureAwait(false))
+            var existing = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
+            if (existing is { IsDirectory: true })
             {
-                var info = await client.GetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
-                if (info.IsDirectory)
-                {
-                    return ToolResult.Failure("Path is a directory", fullPath);
-                }
+                return ToolResult.Failure("Path is a directory", fullPath);
             }
 
             await client.WriteTextAsync(fullPath, content, cancellationToken).ConfigureAwait(false);

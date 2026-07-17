@@ -38,12 +38,12 @@ public sealed class SshFileEditTool(
         var newText = invocation.Arguments.GetString("new_text") ?? string.Empty;
         try
         {
-            if (!await client.FileExistsAsync(fullPath, cancellationToken).ConfigureAwait(false))
+            var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
+            if (info is null)
             {
                 return ToolResult.Failure("File not found", fullPath);
             }
 
-            var info = await client.GetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
             if (info.IsDirectory)
             {
                 return ToolResult.Failure("Path is a directory", fullPath);

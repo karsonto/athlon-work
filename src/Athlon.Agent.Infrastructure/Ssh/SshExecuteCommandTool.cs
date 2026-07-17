@@ -52,13 +52,13 @@ public sealed class SshExecuteCommandTool(
 
         try
         {
-            if (!await client.FileExistsAsync(cwd, cancellationToken).ConfigureAwait(false))
+            var cwdInfo = await client.TryGetFileInfoAsync(cwd, cancellationToken).ConfigureAwait(false);
+            if (cwdInfo is null)
             {
                 return ToolResult.Failure("Invalid working directory", $"Working directory does not exist: {cwd}");
             }
 
-            var info = await client.GetFileInfoAsync(cwd, cancellationToken).ConfigureAwait(false);
-            if (!info.IsDirectory)
+            if (!cwdInfo.IsDirectory)
             {
                 return ToolResult.Failure("Invalid working directory", $"Working directory is not a directory: {cwd}");
             }

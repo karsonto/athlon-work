@@ -28,12 +28,12 @@ public sealed class SshFileReadTool(
 
         try
         {
-            if (!await client.FileExistsAsync(fullPath, cancellationToken).ConfigureAwait(false))
+            var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
+            if (info is null)
             {
                 return ToolResult.Failure("File not found", fullPath);
             }
 
-            var info = await client.GetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
             if (info.IsDirectory)
             {
                 return ToolResult.Failure("Path is a directory", fullPath);
@@ -62,8 +62,14 @@ public sealed class SshFileReadTool(
             }
 
             var selection = FileReadLineReader.ResolveSelection(invocation, fileRead);
-            var text = await client.ReadTextAsync(fullPath, cancellationToken).ConfigureAwait(false);
-            var read = FileReadLineReader.ReadFromText(text, selection, fileRead);
+            // Stream line-by-line over SFTP so we do not materialize the whole remote file in memory
+            // when only a window is needed (and can stop early when CountTotalLines is false).
+            var read = await client.ReadViaStreamAsync(
+                    fullPath,
+                    (stream, ct) => FileReadLineReader.ReadFromStreamAsync(stream, selection, fileRead, ct),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
             await WorkspaceToolHelper.AuditAsync(
                 audit,
                 "file_read",

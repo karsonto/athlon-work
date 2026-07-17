@@ -24,12 +24,12 @@ public sealed class SshFileListTool(
 
         try
         {
-            if (!await client.FileExistsAsync(fullPath, cancellationToken).ConfigureAwait(false))
+            var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
+            if (info is null)
             {
                 return ToolResult.Failure("Directory not found", fullPath);
             }
 
-            var info = await client.GetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
             if (!info.IsDirectory)
             {
                 return ToolResult.Failure("Not a directory", fullPath);

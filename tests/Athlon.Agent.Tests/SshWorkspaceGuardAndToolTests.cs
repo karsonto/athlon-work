@@ -94,7 +94,14 @@ public sealed class SshWorkspaceGuardAndToolTests
         public Task<bool> FileExistsAsync(string remotePath, CancellationToken cancellationToken = default) => Task.FromResult(false);
         public Task<SshFileInfo> GetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("SSH not connected");
+        public Task<SshFileInfo?> TryGetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SshFileInfo?>(null);
         public Task<string> ReadTextAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("SSH not connected");
+        public Task<T> ReadViaStreamAsync<T>(
+            string remotePath,
+            Func<Stream, CancellationToken, Task<T>> reader,
+            CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("SSH not connected");
         public Task WriteTextAsync(string remotePath, string content, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("SSH not connected");
@@ -114,6 +121,9 @@ public sealed class SshWorkspaceGuardAndToolTests
             TimeSpan timeout,
             CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("SSH not connected");
+
+        public Task<bool> HasCommandAsync(string commandName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
     }
 
     private sealed class MarkerLocalTool : IAgentTool, ILocalWorkspaceTool

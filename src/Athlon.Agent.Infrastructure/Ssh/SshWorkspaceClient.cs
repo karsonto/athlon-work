@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Athlon.Agent.Core;
 using Renci.SshNet;
+using Renci.SshNet.Common;
 using Renci.SshNet.Sftp;
 
 namespace Athlon.Agent.Infrastructure.Ssh;
@@ -11,6 +13,7 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
 {
     private readonly IAppLogger _logger = logger.ForContext("SshWorkspaceClient");
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly ConcurrentDictionary<string, bool> _commandCache = new(StringComparer.Ordinal);
     private SshClient? _ssh;
     private SftpClient? _sftp;
     private string? _connectionKey;
@@ -36,6 +39,11 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
         }
 
         var remoteRoot = RemotePathNormalizer.NormalizeRoot(request.RemoteRoot);
+        if (string.IsNullOrWhiteSpace(remoteRoot))
+        {
+            remoteRoot = "/";
+        }
+
         var key = $"{request.WorkspaceId}|{request.Host}|{request.Port}|{request.Username}|{remoteRoot}|{request.AuthMode}|{request.PrivateKeyPath}";
 
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -58,6 +66,8 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
 
             var ssh = new SshClient(connection);
             var sftp = new SftpClient(connection);
+            ssh.KeepAliveInterval = TimeSpan.FromSeconds(30);
+            sftp.KeepAliveInterval = TimeSpan.FromSeconds(30);
             try
             {
                 await Task.Run(() =>
@@ -78,6 +88,7 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
             _ssh = ssh;
             _sftp = sftp;
             _connectionKey = key;
+            _commandCache.Clear();
             RemoteRoot = remoteRoot;
             ConnectedWorkspaceId = request.WorkspaceId;
             _logger.Information(
@@ -108,89 +119,158 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
 
     public async Task<bool> FileExistsAsync(string remotePath, CancellationToken cancellationToken = default)
     {
-        var sftp = RequireSftp();
-        var path = RemotePathNormalizer.Collapse(remotePath);
-        return await Task.Run(() =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return sftp.Exists(path);
-        }, cancellationToken).ConfigureAwait(false);
+        var info = await TryGetFileInfoAsync(remotePath, cancellationToken).ConfigureAwait(false);
+        return info is not null;
     }
 
     public async Task<SshFileInfo> GetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default)
     {
-        var sftp = RequireSftp();
-        var path = RemotePathNormalizer.Collapse(remotePath);
-        return await Task.Run(() =>
+        var info = await TryGetFileInfoAsync(remotePath, cancellationToken).ConfigureAwait(false);
+        if (info is null)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var attrs = sftp.GetAttributes(path);
-            return new SshFileInfo(
-                path,
-                attrs.Size,
-                attrs.IsDirectory,
-                attrs.LastWriteTime.Kind == DateTimeKind.Unspecified
-                    ? DateTime.SpecifyKind(attrs.LastWriteTime, DateTimeKind.Utc)
-                    : attrs.LastWriteTime.ToUniversalTime());
-        }, cancellationToken).ConfigureAwait(false);
+            throw new FileNotFoundException($"Remote path not found: {remotePath}");
+        }
+
+        return info;
+    }
+
+    public async Task<SshFileInfo?> TryGetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default)
+    {
+        var path = RemotePathNormalizer.Collapse(remotePath);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var sftp = RequireSftp();
+            return await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    if (!sftp.Exists(path))
+                    {
+                        return null;
+                    }
+
+                    var attrs = sftp.GetAttributes(path);
+                    return ToFileInfo(path, attrs);
+                }
+                catch (SftpPathNotFoundException)
+                {
+                    return null;
+                }
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public async Task<string> ReadTextAsync(string remotePath, CancellationToken cancellationToken = default)
     {
-        var sftp = RequireSftp();
+        return await ReadViaStreamAsync(
+                remotePath,
+                async (stream, ct) =>
+                {
+                    using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 4096, leaveOpen: true);
+                    return await reader.ReadToEndAsync(ct).ConfigureAwait(false);
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<T> ReadViaStreamAsync<T>(
+        string remotePath,
+        Func<Stream, CancellationToken, Task<T>> reader,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(reader);
         var path = RemotePathNormalizer.Collapse(remotePath);
-        return await Task.Run(() =>
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            using var stream = sftp.OpenRead(path);
-            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-            return reader.ReadToEnd();
-        }, cancellationToken).ConfigureAwait(false);
+            var sftp = RequireSftp();
+            await using var stream = await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return (Stream)sftp.OpenRead(path);
+            }, cancellationToken).ConfigureAwait(false);
+            return await reader(stream, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public async Task WriteTextAsync(string remotePath, string content, CancellationToken cancellationToken = default)
     {
-        var sftp = RequireSftp();
         var path = RemotePathNormalizer.Collapse(remotePath);
         var directory = RemotePathNormalizer.GetDirectoryName(path);
-        await Task.Run(() =>
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (!string.IsNullOrWhiteSpace(directory) && directory != "/" && !sftp.Exists(directory))
+            var sftp = RequireSftp();
+            await Task.Run(() =>
             {
-                CreateDirectoryRecursive(sftp, directory);
-            }
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!string.IsNullOrWhiteSpace(directory) && directory != "/" && !sftp.Exists(directory))
+                {
+                    CreateDirectoryRecursive(sftp, directory);
+                }
 
-            using var stream = sftp.OpenWrite(path);
-            using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            writer.Write(content ?? string.Empty);
-            writer.Flush();
-            stream.SetLength(stream.Position);
-        }, cancellationToken).ConfigureAwait(false);
+                using var stream = sftp.OpenWrite(path);
+                using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                writer.Write(content ?? string.Empty);
+                writer.Flush();
+                stream.SetLength(stream.Position);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public async Task CreateDirectoryAsync(string remotePath, CancellationToken cancellationToken = default)
     {
-        var sftp = RequireSftp();
         var path = RemotePathNormalizer.Collapse(remotePath);
-        await Task.Run(() =>
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            CreateDirectoryRecursive(sftp, path);
-        }, cancellationToken).ConfigureAwait(false);
+            var sftp = RequireSftp();
+            await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                CreateDirectoryRecursive(sftp, path);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     public async IAsyncEnumerable<SshEntry> ListAsync(
         string remotePath,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var sftp = RequireSftp();
         var path = RemotePathNormalizer.Collapse(remotePath);
-        IList<ISftpFile> entries = await Task.Run(() =>
+        IList<ISftpFile> entries;
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            return (IList<ISftpFile>)sftp.ListDirectory(path).ToList();
-        }, cancellationToken).ConfigureAwait(false);
+            var sftp = RequireSftp();
+            entries = await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return (IList<ISftpFile>)sftp.ListDirectory(path).ToList();
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
 
         foreach (var entry in entries)
         {
@@ -211,7 +291,6 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
         TimeSpan timeout,
         CancellationToken cancellationToken = default)
     {
-        var ssh = RequireSsh();
         var cwd = string.IsNullOrWhiteSpace(workingDirectory)
             ? RemoteRoot
             : RemotePathNormalizer.Collapse(workingDirectory);
@@ -219,42 +298,75 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
             ? command
             : $"cd {ShellQuote(cwd)} && {command}";
 
-        return await Task.Run(() =>
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var sw = Stopwatch.StartNew();
-            using var cmd = ssh.CreateCommand(wrapped);
-            var asyncResult = cmd.BeginExecute();
-            using var registration = cancellationToken.Register(() =>
+            var ssh = RequireSsh();
+            return await Task.Run(() =>
             {
-                try
+                cancellationToken.ThrowIfCancellationRequested();
+                var sw = Stopwatch.StartNew();
+                using var cmd = ssh.CreateCommand(wrapped);
+                var asyncResult = cmd.BeginExecute();
+                using var registration = cancellationToken.Register(() =>
                 {
-                    cmd.CancelAsync();
-                }
-                catch
-                {
-                    // ignore
-                }
-            });
+                    try
+                    {
+                        cmd.CancelAsync();
+                    }
+                    catch
+                    {
+                        // ignore
+                    }
+                });
 
-            if (!asyncResult.AsyncWaitHandle.WaitOne(timeout))
-            {
-                try
+                if (!asyncResult.AsyncWaitHandle.WaitOne(timeout))
                 {
-                    cmd.CancelAsync();
-                }
-                catch
-                {
-                    // ignore
+                    try
+                    {
+                        cmd.CancelAsync();
+                    }
+                    catch
+                    {
+                        // ignore
+                    }
+
+                    throw new TimeoutException($"SSH command timed out after {timeout.TotalSeconds:0}s.");
                 }
 
-                throw new TimeoutException($"SSH command timed out after {timeout.TotalSeconds:0}s.");
-            }
+                var stdout = cmd.EndExecute(asyncResult) ?? string.Empty;
+                sw.Stop();
+                return new SshCommandResult(cmd.ExitStatus ?? -1, stdout, cmd.Error ?? string.Empty, sw.Elapsed);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
 
-            var stdout = cmd.EndExecute(asyncResult) ?? string.Empty;
-            sw.Stop();
-            return new SshCommandResult(cmd.ExitStatus ?? -1, stdout, cmd.Error ?? string.Empty, sw.Elapsed);
-        }, cancellationToken).ConfigureAwait(false);
+    public async Task<bool> HasCommandAsync(string commandName, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(commandName))
+        {
+            return false;
+        }
+
+        var name = commandName.Trim();
+        if (_commandCache.TryGetValue(name, out var cached))
+        {
+            return cached;
+        }
+
+        var result = await ExecuteAsync(
+                $"command -v {ShellQuote(name)} >/dev/null 2>&1",
+                RemoteRoot,
+                TimeSpan.FromSeconds(10),
+                cancellationToken)
+            .ConfigureAwait(false);
+        var exists = result.ExitCode == 0;
+        _commandCache[name] = exists;
+        return exists;
     }
 
     public void Dispose()
@@ -270,6 +382,7 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
         _ssh = null;
         _sftp = null;
         _connectionKey = null;
+        _commandCache.Clear();
         RemoteRoot = null;
         ConnectedWorkspaceId = null;
 
@@ -324,6 +437,15 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
         return _ssh;
     }
 
+    private static SshFileInfo ToFileInfo(string path, SftpFileAttributes attrs) =>
+        new(
+            path,
+            attrs.Size,
+            attrs.IsDirectory,
+            attrs.LastWriteTime.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(attrs.LastWriteTime, DateTimeKind.Utc)
+                : attrs.LastWriteTime.ToUniversalTime());
+
     private static AuthenticationMethod[] BuildAuthMethods(SshConnectRequest request)
     {
         if (string.Equals(request.AuthMode, "privateKey", StringComparison.OrdinalIgnoreCase))
@@ -359,7 +481,7 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
         sftp.CreateDirectory(normalized);
     }
 
-    private static string ShellQuote(string value) =>
+    internal static string ShellQuote(string value) =>
         "'" + value.Replace("'", "'\"'\"'", StringComparison.Ordinal) + "'";
 
     private static void SafeDispose(IDisposable? disposable)

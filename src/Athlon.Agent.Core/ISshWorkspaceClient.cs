@@ -33,7 +33,19 @@ public interface ISshWorkspaceClient
 
     Task<SshFileInfo> GetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default);
 
+    /// <summary>Returns null when the path does not exist (single round-trip).</summary>
+    Task<SshFileInfo?> TryGetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default);
+
     Task<string> ReadTextAsync(string remotePath, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Opens a remote file for sequential reading under the client lock.
+    /// Prefer this over <see cref="ReadTextAsync"/> when only a line range is needed.
+    /// </summary>
+    Task<T> ReadViaStreamAsync<T>(
+        string remotePath,
+        Func<Stream, CancellationToken, Task<T>> reader,
+        CancellationToken cancellationToken = default);
 
     Task WriteTextAsync(string remotePath, string content, CancellationToken cancellationToken = default);
 
@@ -46,4 +58,7 @@ public interface ISshWorkspaceClient
         string? workingDirectory,
         TimeSpan timeout,
         CancellationToken cancellationToken = default);
+
+    /// <summary>Cached probe for a remote executable (e.g. rg, find).</summary>
+    Task<bool> HasCommandAsync(string commandName, CancellationToken cancellationToken = default);
 }

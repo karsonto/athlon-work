@@ -2,7 +2,6 @@ using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 using Microsoft.Extensions.FileSystemGlobbing;
-using Microsoft.Extensions.FileSystemGlobbing.Abstractions;
 
 namespace Athlon.Agent.Infrastructure.Ssh;
 
@@ -46,13 +45,50 @@ public sealed class SshGrepFilesTool(
 
         var glob = invocation.Arguments.GetString("glob") ?? "*";
         var ignorePatterns = guard.GetIgnorePatterns();
-        var workspaceRoot = guard.Normalize(".");
-        var matches = new List<string>();
-        var scanned = 0;
 
         try
         {
-            await foreach (var file in EnumerateFilesAsync(fullPath, glob, ignorePatterns, cancellationToken).ConfigureAwait(false))
+            var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
+            if (info is null)
+            {
+                return ToolResult.Success("No matches found", "No matches found");
+            }
+
+            // Prefer remote rg/grep to avoid downloading every file over SFTP.
+            if (info.IsDirectory)
+            {
+                var remoteMatches = await SshRemoteSearch.TryGrepAsync(
+                        client,
+                        fullPath,
+                        pattern,
+                        glob,
+                        useRegex,
+                        MaxMatches,
+                        ignorePatterns,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                if (remoteMatches is not null)
+                {
+                    await WorkspaceToolHelper.AuditAsync(
+                        audit,
+                        "grep_files",
+                        new { path = fullPath, pattern, count = remoteMatches.Count, remote = true, via = "shell" },
+                        cancellationToken).ConfigureAwait(false);
+
+                    return remoteMatches.Count == 0
+                        ? ToolResult.Success("No matches found", "No matches found")
+                        : ToolResult.Success(
+                            $"Found {remoteMatches.Count} match(es)",
+                            string.Join(Environment.NewLine, remoteMatches));
+                }
+            }
+
+            var matches = new List<string>();
+            var scanned = 0;
+            var workspaceRoot = guard.Normalize(".");
+
+            await foreach (var file in EnumerateFilesAsync(fullPath, info, glob, ignorePatterns, cancellationToken)
+                               .ConfigureAwait(false))
             {
                 scanned++;
                 if (scanned > MaxFilesToScan || matches.Count >= MaxMatches)
@@ -60,38 +96,24 @@ public sealed class SshGrepFilesTool(
                     break;
                 }
 
-                SshFileInfo info;
-                try
-                {
-                    info = await client.GetFileInfoAsync(file, cancellationToken).ConfigureAwait(false);
-                }
-                catch
-                {
-                    continue;
-                }
-
-                if (info.IsDirectory || info.Length > MaxFileSizeBytes)
-                {
-                    continue;
-                }
-
                 string text;
                 try
                 {
-                    text = await client.ReadTextAsync(file, cancellationToken).ConfigureAwait(false);
+                    text = await client.ReadTextAsync(file.FullPath, cancellationToken).ConfigureAwait(false);
                 }
                 catch
                 {
                     continue;
                 }
 
-                var relative = SshWorkspaceToolHelper.ToRelative(workspaceRoot, file);
+                var relative = SshWorkspaceToolHelper.ToRelative(workspaceRoot, file.FullPath);
                 var lineNumber = 0;
                 using var reader = new StringReader(text);
-                while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+                string? line;
+                while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
                 {
                     lineNumber++;
-                    if (!matcher.IsMatch(line))
+                    if (matcher is null || !matcher.IsMatch(line))
                     {
                         continue;
                     }
@@ -107,7 +129,7 @@ public sealed class SshGrepFilesTool(
             await WorkspaceToolHelper.AuditAsync(
                 audit,
                 "grep_files",
-                new { path = fullPath, pattern, count = matches.Count, remote = true },
+                new { path = fullPath, pattern, count = matches.Count, remote = true, via = "sftp" },
                 cancellationToken).ConfigureAwait(false);
 
             return matches.Count == 0
@@ -120,23 +142,19 @@ public sealed class SshGrepFilesTool(
         }
     }
 
-    private async IAsyncEnumerable<string> EnumerateFilesAsync(
+    private async IAsyncEnumerable<SshEntry> EnumerateFilesAsync(
         string root,
+        SshFileInfo rootInfo,
         string glob,
         IReadOnlyList<string> ignorePatterns,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        if (!await client.FileExistsAsync(root, cancellationToken).ConfigureAwait(false))
+        if (!rootInfo.IsDirectory)
         {
-            yield break;
-        }
-
-        var info = await client.GetFileInfoAsync(root, cancellationToken).ConfigureAwait(false);
-        if (!info.IsDirectory)
-        {
-            if (MatchesGlob(RemotePathNormalizer.GetFileName(root), glob))
+            if (rootInfo.Length <= MaxFileSizeBytes
+                && MatchesGlob(RemotePathNormalizer.GetFileName(root), glob))
             {
-                yield return root;
+                yield return new SshEntry(RemotePathNormalizer.GetFileName(root), root, false, rootInfo.Length);
             }
 
             yield break;
@@ -166,13 +184,13 @@ public sealed class SshGrepFilesTool(
                     continue;
                 }
 
-                if (!MatchesGlob(entry.Name, glob))
+                if (entry.Length > MaxFileSizeBytes || !MatchesGlob(entry.Name, glob))
                 {
                     continue;
                 }
 
                 yielded++;
-                yield return entry.FullPath;
+                yield return entry;
                 if (yielded >= MaxFilesToScan)
                 {
                     yield break;
@@ -190,15 +208,11 @@ public sealed class SshGrepFilesTool(
 
         var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
         matcher.AddInclude(glob.Replace('\\', '/'));
-        // FileSystemGlobbing expects relative paths; match against the file name only.
-        var result = matcher.Match(fileName);
-        if (result.HasMatches)
+        if (matcher.Match(fileName).HasMatches)
         {
             return true;
         }
 
-        // Also allow patterns like **/*.cs by matching against a fake relative path.
-        result = matcher.Match(".", new[] { fileName });
-        return result.HasMatches;
+        return matcher.Match(".", new[] { fileName }).HasMatches;
     }
 }
