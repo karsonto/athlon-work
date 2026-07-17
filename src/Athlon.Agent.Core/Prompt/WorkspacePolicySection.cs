@@ -24,6 +24,11 @@ public sealed class WorkspacePolicySection : IEnvironmentPromptSection
         }
 
         builder.AppendLine("Active workspace information:");
+        if (context.WorkspaceKind == WorkspaceKind.Ssh)
+        {
+            builder.AppendLine("This is an SSH remote workspace. Paths are remote Unix paths (forward slashes).");
+        }
+
         builder.AppendLine("In file tool arguments (path), prefer forward slashes (/), e.g. src/foo.cs, even on Windows.");
         builder.AppendLine("Relative paths resolve from the active workspace root below; all paths must stay inside the workspace root.");
         builder.AppendLine($"When using relative paths, use src/foo.cs. Avoid prefixing with {context.WorkspaceName}/.");

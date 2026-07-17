@@ -42,7 +42,8 @@ public sealed class SessionCompactionService(
             Guid.NewGuid().ToString("N"),
             toolRouter,
             promptOrchestrator,
-            ResolveIgnorePatterns(session));
+            ResolveIgnorePatterns(session),
+            WorkspaceSessionResolver.ResolveKind(session, settings));
 
         var invocation = new AgentTurnInvocation
         {
@@ -81,22 +82,6 @@ public sealed class SessionCompactionService(
         return messageIdsAfter.Count != messageIdsBefore.Count;
     }
 
-    private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session)
-    {
-        if (!string.IsNullOrWhiteSpace(session.ActiveWorkspace))
-        {
-            var fullPath = Path.GetFullPath(session.ActiveWorkspace);
-            var match = settings.Workspaces.FirstOrDefault(workspace =>
-                !string.IsNullOrWhiteSpace(workspace.RootPath)
-                && string.Equals(Path.GetFullPath(workspace.RootPath), fullPath, StringComparison.OrdinalIgnoreCase));
-            return WorkspaceIgnoreResolver.Resolve(
-                workspacePatterns: match?.IgnorePatterns,
-                globalPatterns: settings.WorkspaceIgnore.DirectoryNames);
-        }
-
-        var configuredWorkspace = settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath));
-        return WorkspaceIgnoreResolver.Resolve(
-            workspacePatterns: configuredWorkspace?.IgnorePatterns,
-            globalPatterns: settings.WorkspaceIgnore.DirectoryNames);
-    }
+    private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session) =>
+        WorkspaceSessionResolver.ResolveIgnorePatterns(session, settings);
 }

@@ -100,6 +100,43 @@ public sealed class WorkspaceTreeNodeViewModel
         return tree;
     }
 
+    public static ObservableCollection<WorkspaceTreeNodeViewModel> BuildRemoteTree(
+        string rootPath,
+        string displayName,
+        IReadOnlyList<Athlon.Agent.Core.SshEntry> entries,
+        IReadOnlyCollection<string> ignorePatterns)
+    {
+        var tree = new ObservableCollection<WorkspaceTreeNodeViewModel>();
+        if (string.IsNullOrWhiteSpace(rootPath))
+        {
+            return tree;
+        }
+
+        var root = new WorkspaceTreeNodeViewModel(
+            string.IsNullOrWhiteSpace(displayName) ? rootPath : displayName,
+            rootPath,
+            isDirectory: true,
+            isPlaceholder: false)
+        {
+            IsExpanded = true
+        };
+        root._childrenLoaded = true;
+        foreach (var entry in entries
+                     .OrderBy(item => item.IsDirectory ? 0 : 1)
+                     .ThenBy(item => item.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            if (ignorePatterns.Any(pattern => string.Equals(entry.Name, pattern, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
+            root.Children.Add(new WorkspaceTreeNodeViewModel(entry.Name, entry.FullPath, entry.IsDirectory, false));
+        }
+
+        tree.Add(root);
+        return tree;
+    }
+
     private static WorkspaceTreeNodeViewModel CreateDirectoryNode(string directoryPath)
     {
         var name = Path.GetFileName(directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));

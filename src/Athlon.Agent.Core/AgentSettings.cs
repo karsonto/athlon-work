@@ -195,10 +195,22 @@ public sealed class SkillSettings
 }
 public sealed class WorkspaceSettings
 {
+    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>local | ssh — defaults to local for legacy settings.json entries.</summary>
+    public string Kind { get; set; } = WorkspaceKinds.Local;
+
     public string RootPath { get; set; } = string.Empty;
+
     /// <summary>When empty, inherits <see cref="AppSettings.WorkspaceIgnore"/>.</summary>
     public List<string> IgnorePatterns { get; set; } = new();
+
+    public SshWorkspaceSettings? Ssh { get; set; }
+
+    [JsonIgnore]
+    public WorkspaceKind WorkspaceKind => WorkspaceKinds.Parse(Kind);
 }
 public sealed class UiSettings
 {

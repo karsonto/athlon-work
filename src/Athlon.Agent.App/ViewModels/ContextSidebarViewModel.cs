@@ -79,12 +79,26 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
 
     private IReadOnlyList<string> _workspaceIgnorePatterns = Array.Empty<string>();
     private string? _pendingWorkspaceRootPath;
+    private (string RootPath, string DisplayName, IReadOnlyList<SshEntry> Entries)? _pendingRemoteTree;
     private DispatcherTimer? _workspaceTreeDebounceTimer;
 
     public void RefreshWorkspaceTree(string? workspaceRootPath, IReadOnlyList<string> ignorePatterns)
     {
         _workspaceIgnorePatterns = ignorePatterns;
         _pendingWorkspaceRootPath = workspaceRootPath;
+        _pendingRemoteTree = null;
+        ScheduleWorkspaceTreeRefresh();
+    }
+
+    public void RefreshRemoteWorkspaceTree(
+        string rootPath,
+        string displayName,
+        IReadOnlyList<SshEntry> entries,
+        IReadOnlyList<string> ignorePatterns)
+    {
+        _workspaceIgnorePatterns = ignorePatterns;
+        _pendingWorkspaceRootPath = rootPath;
+        _pendingRemoteTree = (rootPath, displayName, entries);
         ScheduleWorkspaceTreeRefresh();
     }
 
@@ -117,6 +131,20 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
     private void FlushWorkspaceTreeRefresh()
     {
         WorkspaceTree.Clear();
+        if (_pendingRemoteTree is { } remote)
+        {
+            foreach (var node in WorkspaceTreeNodeViewModel.BuildRemoteTree(
+                         remote.RootPath,
+                         remote.DisplayName,
+                         remote.Entries,
+                         _workspaceIgnorePatterns))
+            {
+                WorkspaceTree.Add(node);
+            }
+
+            return;
+        }
+
         foreach (var node in WorkspaceTreeNodeViewModel.BuildTree(_pendingWorkspaceRootPath, _workspaceIgnorePatterns))
         {
             WorkspaceTree.Add(node);

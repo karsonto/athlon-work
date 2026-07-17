@@ -13,7 +13,7 @@ using Serilog.Events;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool, IParallelizableAgentTool
+public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool, IParallelizableAgentTool, ILocalWorkspaceTool
 {
     public ToolDefinition Definition { get; } = new(
         "glob_files",

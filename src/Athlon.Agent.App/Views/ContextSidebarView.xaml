@@ -75,30 +75,16 @@
                                 CornerRadius="8"
                                 Padding="10,8"
                                 Margin="0,0,0,8">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="{loc:Localize Key=Context_Workspace}"
-                                               Foreground="{DynamicResource Brush.SubtleText}"
-                                               FontSize="11"
-                                               Margin="0,0,0,2" />
-                                    <TextBlock Text="{Binding ActiveWorkspaceName}"
-                                               FontWeight="SemiBold"
-                                               FontSize="13"
-                                               TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                                <Button Grid.Column="1"
-                                        Content="{Binding WorkspacePanelActionLabel}"
-                                        Command="{Binding WorkspacePanelActionCommand}"
-                                        Style="{StaticResource GhostButtonStyle}"
-                                        Padding="8,4"
-                                        FontSize="12"
-                                        MinHeight="28"
-                                        VerticalAlignment="Center" />
-                            </Grid>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{loc:Localize Key=Context_Workspace}"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           FontSize="11"
+                                           Margin="0,0,0,2" />
+                                <TextBlock Text="{Binding ActiveWorkspaceName}"
+                                           FontWeight="SemiBold"
+                                           FontSize="13"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
                         </Border>
                         <Border Background="{DynamicResource Brush.Panel}"
                                 BorderBrush="{DynamicResource Brush.Border}"

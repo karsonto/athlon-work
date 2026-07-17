@@ -10,6 +10,26 @@ public sealed class WorkspaceGuard(
 {
     public bool HasConfiguredWorkspace => TryGetWorkspaceRoot(out _);
 
+    public WorkspaceKind CurrentKind
+    {
+        get
+        {
+            var runContext = runContextAccessor.Current;
+            if (runContext is not null)
+            {
+                return runContext.WorkspaceKind;
+            }
+
+            var scoped = SessionWorkspaceScope.CurrentState;
+            if (scoped is not null)
+            {
+                return scoped.Kind;
+            }
+
+            return workspaceContext.Kind;
+        }
+    }
+
     public bool TryGetWorkspaceRoot(out string rootPath) => TryGetWorkspaceRootInternal(out rootPath);
 
     public bool IsInsideWorkspace(string path)
@@ -19,12 +39,27 @@ public sealed class WorkspaceGuard(
             return false;
         }
 
+        if (CurrentKind == WorkspaceKind.Ssh)
+        {
+            if (!TryGetWorkspaceRootInternal(out var remoteRoot))
+            {
+                return false;
+            }
+
+            return RemotePathNormalizer.IsUnderRoot(path, remoteRoot);
+        }
+
         var fullPath = Path.GetFullPath(path);
         return GetAllowedRoots().Any(root => IsPathUnderRoot(fullPath, root));
     }
 
     public string Normalize(string path, string? cwd = null)
     {
+        if (CurrentKind == WorkspaceKind.Ssh)
+        {
+            return NormalizeRemote(path, cwd);
+        }
+
         path = ToolPathNormalizer.ForModel(path);
 
         if (TryGetWorkspaceRootInternal(out var basePath))
@@ -41,6 +76,23 @@ public sealed class WorkspaceGuard(
 
         var fallbackBase = string.IsNullOrWhiteSpace(cwd) ? Environment.CurrentDirectory : cwd;
         return Path.GetFullPath(Path.Combine(fallbackBase, path));
+    }
+
+    private string NormalizeRemote(string path, string? cwd)
+    {
+        path = RemotePathNormalizer.ForModel(path);
+        if (!TryGetWorkspaceRootInternal(out var remoteRoot))
+        {
+            return RemotePathNormalizer.Collapse(path.StartsWith('/') ? path : "/" + path);
+        }
+
+        if (path.StartsWith('/'))
+        {
+            return RemotePathNormalizer.Collapse(path);
+        }
+
+        var basePath = string.IsNullOrWhiteSpace(cwd) ? remoteRoot : RemotePathNormalizer.Combine(remoteRoot, cwd);
+        return RemotePathNormalizer.Combine(basePath, path);
     }
 
     public IReadOnlyList<string> GetIgnorePatterns()
@@ -67,7 +119,7 @@ public sealed class WorkspaceGuard(
         {
             configuredWorkspace = settings.Workspaces.FirstOrDefault(workspace =>
                 !string.IsNullOrWhiteSpace(workspace.RootPath)
-                && string.Equals(Path.GetFullPath(workspace.RootPath), workspaceRoot, StringComparison.OrdinalIgnoreCase));
+                && RootsEqual(workspace.RootPath, workspaceRoot, workspace.WorkspaceKind));
         }
 
         return WorkspaceIgnoreResolver.Resolve(
@@ -104,7 +156,9 @@ public sealed class WorkspaceGuard(
             return false;
         }
 
-        rootPath = configured.RootPath;
+        rootPath = configured.WorkspaceKind == WorkspaceKind.Ssh
+            ? RemotePathNormalizer.NormalizeRoot(configured.RootPath)
+            : configured.RootPath;
         return true;
     }
 
@@ -115,10 +169,23 @@ public sealed class WorkspaceGuard(
             yield return workspaceRoot;
         }
 
-        if (!string.IsNullOrWhiteSpace(paths.RootPath))
+        if (!string.IsNullOrWhiteSpace(paths.RootPath) && CurrentKind != WorkspaceKind.Ssh)
         {
             yield return paths.RootPath;
         }
+    }
+
+    private static bool RootsEqual(string configuredRoot, string activeRoot, WorkspaceKind kind)
+    {
+        if (kind == WorkspaceKind.Ssh)
+        {
+            return string.Equals(
+                RemotePathNormalizer.NormalizeRoot(configuredRoot),
+                RemotePathNormalizer.NormalizeRoot(activeRoot),
+                StringComparison.Ordinal);
+        }
+
+        return string.Equals(Path.GetFullPath(configuredRoot), activeRoot, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsPathUnderRoot(string fullPath, string rootPath)

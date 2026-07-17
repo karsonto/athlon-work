@@ -50,6 +50,7 @@ public sealed class SystemPromptOrchestrator(
             Session = session,
             WorkspaceRoot = workspace?.RootPath,
             WorkspaceName = workspace?.Name,
+            WorkspaceKind = workspace?.WorkspaceKind ?? WorkspaceKind.Local,
             IgnorePatterns = WorkspaceIgnoreResolver.Resolve(
                 workspacePatterns: workspace?.IgnorePatterns,
                 globalPatterns: settings.WorkspaceIgnore.DirectoryNames),
@@ -78,23 +79,30 @@ public sealed class SystemPromptOrchestrator(
 
     private WorkspaceSettings? ResolveWorkspace(AgentSession session)
     {
+        var match = WorkspaceSessionResolver.FindMatch(session, settings);
         if (!string.IsNullOrWhiteSpace(session.ActiveWorkspace))
         {
-            var rootPath = Path.GetFullPath(session.ActiveWorkspace);
-            var match = settings.Workspaces.FirstOrDefault(workspace =>
-                !string.IsNullOrWhiteSpace(workspace.RootPath)
-                && string.Equals(Path.GetFullPath(workspace.RootPath), rootPath, StringComparison.OrdinalIgnoreCase));
-
+            var kind = match?.WorkspaceKind
+                ?? (string.IsNullOrWhiteSpace(session.ActiveWorkspaceId) ? WorkspaceKind.Local : WorkspaceKind.Ssh);
+            var rootPath = kind == WorkspaceKind.Ssh
+                ? RemotePathNormalizer.NormalizeRoot(session.ActiveWorkspace)
+                : Path.GetFullPath(session.ActiveWorkspace);
             return new WorkspaceSettings
             {
-                Name = Path.GetFileName(rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+                Id = match?.Id ?? session.ActiveWorkspaceId ?? string.Empty,
+                Name = match?.Name
+                    ?? (kind == WorkspaceKind.Ssh
+                        ? RemotePathNormalizer.GetFileName(rootPath)
+                        : Path.GetFileName(rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))),
+                Kind = WorkspaceKinds.ToSettingsValue(kind),
                 RootPath = rootPath,
                 IgnorePatterns = WorkspaceIgnoreResolver.Resolve(
                     workspacePatterns: match?.IgnorePatterns,
-                    globalPatterns: settings.WorkspaceIgnore.DirectoryNames).ToList()
+                    globalPatterns: settings.WorkspaceIgnore.DirectoryNames).ToList(),
+                Ssh = match?.Ssh
             };
         }
 
-        return settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath));
+        return null;
     }
 }

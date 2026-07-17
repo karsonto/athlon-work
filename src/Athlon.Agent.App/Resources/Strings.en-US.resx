@@ -1294,6 +1294,147 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   <data name="Shell_SelectWorkspace" xml:space="preserve">
     <value>Select agent workspace</value>
   </data>
+  <data name="Shell_RunOn" xml:space="preserve">
+    <value>Run on</value>
+  </data>
+  <data name="Shell_RunOnThisPc" xml:space="preserve">
+    <value>This PC</value>
+  </data>
+  <data name="Shell_RunOnRemote" xml:space="preserve">
+    <value>Remote</value>
+  </data>
+  <data name="Shell_RunOnRemoteMachines" xml:space="preserve">
+    <value>Remote Machines</value>
+  </data>
+  <data name="Shell_RunOnSearchRemotes" xml:space="preserve">
+    <value>Search Remote Machines…</value>
+  </data>
+  <data name="Shell_RunOnNoRemotes" xml:space="preserve">
+    <value>No remote machines yet.</value>
+  </data>
+  <data name="Shell_RunOnConnect" xml:space="preserve">
+    <value>+ Connect…</value>
+  </data>
+  <data name="Shell_RunOnConnectSsh" xml:space="preserve">
+    <value>SSH</value>
+  </data>
+  <data name="Shell_RunOnConnectSshAction" xml:space="preserve">
+    <value>Connect via SSH…</value>
+  </data>
+  <data name="Shell_RunOnConnectWsl" xml:space="preserve">
+    <value>WSL</value>
+  </data>
+  <data name="Shell_RunOnWslUnavailable" xml:space="preserve">
+    <value>WSL is not available yet</value>
+  </data>
+  <data name="Shell_SshWizardTitle" xml:space="preserve">
+    <value>Connect via SSH</value>
+  </data>
+  <data name="Shell_SshWizardStepHeader" xml:space="preserve">
+    <value>Connect via SSH · Step {0} of 3</value>
+  </data>
+  <data name="Shell_SshWizardConnect" xml:space="preserve">
+    <value>Connect ⏎</value>
+  </data>
+  <data name="Shell_SshWizardHostHint" xml:space="preserve">
+    <value>Type in a host like user@host or select from SSH config</value>
+  </data>
+  <data name="Shell_SshWizardOpenConfig" xml:space="preserve">
+    <value>Open SSH Config</value>
+  </data>
+  <data name="Shell_SshWizardRootHint" xml:space="preserve">
+    <value>Remote workspace root, e.g. /home/user/project</value>
+  </data>
+  <data name="Shell_SshWizardBack" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="Shell_SshWizardNext" xml:space="preserve">
+    <value>Next</value>
+  </data>
+  <data name="Shell_SshWizardFinish" xml:space="preserve">
+    <value>Finish &amp; connect</value>
+  </data>
+  <data name="Shell_SshWizardHostPlaceholder" xml:space="preserve">
+    <value>SSH Hostname</value>
+  </data>
+  <data name="Shell_SshWizardHostRequired" xml:space="preserve">
+    <value>Enter an SSH hostname (e.g. user@host)</value>
+  </data>
+  <data name="Shell_WorkspaceKindPrompt" xml:space="preserve">
+    <value>Choose workspace type</value>
+  </data>
+  <data name="Shell_WorkspaceKindLocal" xml:space="preserve">
+    <value>Local folder</value>
+  </data>
+  <data name="Shell_WorkspaceKindSsh" xml:space="preserve">
+    <value>SSH remote workspace</value>
+  </data>
+  <data name="Shell_SshWorkspaceTitle" xml:space="preserve">
+    <value>Configure SSH remote workspace</value>
+  </data>
+  <data name="Shell_SshName" xml:space="preserve">
+    <value>Display name</value>
+  </data>
+  <data name="Shell_SshHost" xml:space="preserve">
+    <value>Host</value>
+  </data>
+  <data name="Shell_SshPort" xml:space="preserve">
+    <value>Port</value>
+  </data>
+  <data name="Shell_SshUsername" xml:space="preserve">
+    <value>Username</value>
+  </data>
+  <data name="Shell_SshRemoteRoot" xml:space="preserve">
+    <value>Remote root path</value>
+  </data>
+  <data name="Shell_SshAuthMode" xml:space="preserve">
+    <value>Authentication</value>
+  </data>
+  <data name="Shell_SshAuthPassword" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="Shell_SshAuthPrivateKey" xml:space="preserve">
+    <value>Private key</value>
+  </data>
+  <data name="Shell_SshPassword" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="Shell_SshPrivateKeyPath" xml:space="preserve">
+    <value>Private key file</value>
+  </data>
+  <data name="Shell_SshKeyPassphrase" xml:space="preserve">
+    <value>Key passphrase (optional)</value>
+  </data>
+  <data name="Shell_SshTestConnection" xml:space="preserve">
+    <value>Test connection</value>
+  </data>
+  <data name="Shell_SshTesting" xml:space="preserve">
+    <value>Testing connection…</value>
+  </data>
+  <data name="Shell_SshTestSucceeded" xml:space="preserve">
+    <value>Connected successfully</value>
+  </data>
+  <data name="Shell_SshTestFailed" xml:space="preserve">
+    <value>Connection failed: {0}</value>
+  </data>
+  <data name="Shell_SshNameRequired" xml:space="preserve">
+    <value>Display name is required.</value>
+  </data>
+  <data name="Shell_SshFieldsRequired" xml:space="preserve">
+    <value>Host, username, and remote root are required.</value>
+  </data>
+  <data name="Shell_SshPortInvalid" xml:space="preserve">
+    <value>Port is invalid.</value>
+  </data>
+  <data name="Shell_SshPrivateKeyRequired" xml:space="preserve">
+    <value>Select a valid private key file.</value>
+  </data>
+  <data name="Shell_SshPasswordRequired" xml:space="preserve">
+    <value>Password is required.</value>
+  </data>
+  <data name="Shell_SshConnectedStatus" xml:space="preserve">
+    <value>SSH workspace: {0}</value>
+  </data>
   <data name="Shell_ShuttingDown" xml:space="preserve">
     <value>Shutting down…</value>
   </data>

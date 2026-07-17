@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Windows;
+using System.Windows.Threading;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Harness;
@@ -21,6 +22,8 @@ using System.Windows.Controls;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Navigation;
 using Athlon.Agent.App.Themes;
+using Athlon.Agent.App.Windows;
+using Athlon.Agent.Infrastructure.Ssh;
 
 namespace Athlon.Agent.App.ViewModels;
 
@@ -48,6 +51,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly ITaskListChangedNotifier _taskListChangedNotifier;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
+    private readonly SshWorkspaceConnectionService _sshConnection;
+    private readonly ICredentialStore _credentialStore;
+    private readonly ISshWorkspaceClient _sshClient;
 
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -90,7 +96,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ChatPageViewModel chatPage,
         ScheduleViewModel schedulePageVm,
         ILocalizationService localization,
-        IUserNotifier notifier)
+        IUserNotifier notifier,
+        SshWorkspaceConnectionService sshConnection,
+        ICredentialStore credentialStore,
+        ISshWorkspaceClient sshClient)
     {
         _storage = storage;
         _workspaceContext = workspaceContext;
@@ -110,6 +119,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _taskListChangedNotifier = taskListChangedNotifier;
         _loc = localization;
         _notifier = notifier;
+        _sshConnection = sshConnection;
+        _credentialStore = credentialStore;
+        _sshClient = sshClient;
         _skillCatalog = skillCatalog;
         _appSettings = settings;
         _contextSidebarEdgeGutterWidth = _appSettings.Ui.ContextSidebarVisible ? 12 : 0;
@@ -389,6 +401,35 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public string WorkspacePanelActionLabel =>
         HasSessionWorkspace ? _loc["Context_RemoveWorkspace"] : _loc["Common_Configure"];
+
+    public string RunOnDisplayName
+    {
+        get
+        {
+            if (!HasSessionWorkspace)
+            {
+                return _loc["Shell_RunOnThisPc"];
+            }
+
+            if (_workspaceContext.Kind == WorkspaceKind.Ssh)
+            {
+                var match = WorkspaceSessionResolver.FindMatch(_session, _appSettings);
+                if (match?.Ssh is not null)
+                {
+                    var user = match.Ssh.Username;
+                    var host = match.Ssh.Host;
+                    var label = string.IsNullOrWhiteSpace(match.Name)
+                        ? (string.IsNullOrWhiteSpace(user) ? host : $"{user}@{host}")
+                        : match.Name;
+                    return label;
+                }
+
+                return _workspaceContext.DisplayName ?? _loc["Shell_RunOnRemote"];
+            }
+
+            return _workspaceContext.DisplayName ?? _loc["Shell_RunOnThisPc"];
+        }
+    }
 
     public bool HasSessionWorkspace =>
         !string.IsNullOrWhiteSpace(_session.ActiveWorkspace);
@@ -1080,17 +1121,234 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [RelayCommand]
     private async Task WorkspacePanelActionAsync()
     {
+        // Kept for compatibility; primary entry is the Run on menu.
+        await ConfigureLocalWorkspaceAsync().ConfigureAwait(true);
+    }
+
+    public ContextMenu BuildRunOnMenu()
+    {
+        var menu = new ContextMenu
+        {
+            Style = Application.Current.TryFindResource("MarkdownContextMenuStyle") as Style
+        };
+
+        var itemStyle = Application.Current.TryFindResource("MarkdownContextMenuItemStyle") as Style;
+
+        menu.Items.Add(new MenuItem
+        {
+            Header = _loc["Shell_RunOn"],
+            IsEnabled = false,
+            Style = itemStyle
+        });
+
+        var thisPc = new MenuItem
+        {
+            Header = _loc["Shell_RunOnThisPc"],
+            Style = itemStyle,
+            IsChecked = HasSessionWorkspace && _workspaceContext.Kind == WorkspaceKind.Local,
+            IsCheckable = true
+        };
+        thisPc.Click += (_, _) => ScheduleUi(ConfigureLocalWorkspaceAsync);
+        menu.Items.Add(thisPc);
+
+        menu.Items.Add(new Separator());
+
+        var sshWorkspaces = _appSettings.Workspaces
+            .Where(workspace => workspace.WorkspaceKind == WorkspaceKind.Ssh && workspace.Ssh is not null)
+            .OrderBy(workspace => workspace.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (sshWorkspaces.Length == 0)
+        {
+            menu.Items.Add(new MenuItem
+            {
+                Header = _loc["Shell_RunOnNoRemotes"],
+                IsEnabled = false,
+                Style = itemStyle
+            });
+        }
+        else
+        {
+            foreach (var workspace in sshWorkspaces)
+            {
+                var item = new MenuItem
+                {
+                    Header = FormatRemoteLabel(workspace),
+                    Tag = workspace.Id,
+                    Style = itemStyle,
+                    IsCheckable = true,
+                    IsChecked = string.Equals(_session.ActiveWorkspaceId, workspace.Id, StringComparison.OrdinalIgnoreCase)
+                };
+                var captured = workspace;
+                item.Click += (_, _) => ScheduleUi(() => SelectExistingSshWorkspaceAsync(captured));
+                menu.Items.Add(item);
+            }
+        }
+
+        var sshItem = new MenuItem
+        {
+            Header = _loc["Shell_RunOnConnectSshAction"],
+            Style = itemStyle
+        };
+        sshItem.Click += (_, _) => ScheduleUi(ConfigureSshWorkspaceAsync);
+        menu.Items.Add(sshItem);
+
+        var wslItem = new MenuItem
+        {
+            Header = _loc["Shell_RunOnConnectWsl"],
+            IsEnabled = false,
+            Style = itemStyle,
+            ToolTip = _loc["Shell_RunOnWslUnavailable"]
+        };
+        menu.Items.Add(wslItem);
+
         if (HasSessionWorkspace)
         {
-            await RemoveSessionWorkspaceAsync();
+            menu.Items.Add(new Separator());
+            var remove = new MenuItem
+            {
+                Header = _loc["Context_RemoveWorkspace"],
+                Style = itemStyle
+            };
+            remove.Click += (_, _) => ScheduleUi(RemoveSessionWorkspaceAsync);
+            menu.Items.Add(remove);
+        }
+
+        return menu;
+    }
+
+    private static void ScheduleUi(Func<Task> action)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null)
+        {
+            _ = action();
             return;
         }
 
-        await ConfigureWorkspaceAsync();
+        // Defer until after ContextMenu closes so modal dialogs can take focus.
+        _ = dispatcher.InvokeAsync(async () =>
+        {
+            try
+            {
+                await action().ConfigureAwait(true);
+            }
+            catch (Exception ex)
+            {
+                // Surface unexpected UI failures instead of silent no-op.
+                System.Diagnostics.Debug.WriteLine(ex);
+            }
+        }, DispatcherPriority.ApplicationIdle);
+    }
+
+    private static string FormatRemoteLabel(WorkspaceSettings workspace)
+    {
+        if (!string.IsNullOrWhiteSpace(workspace.Name))
+        {
+            return workspace.Name;
+        }
+
+        var ssh = workspace.Ssh;
+        if (ssh is null)
+        {
+            return workspace.RootPath;
+        }
+
+        return string.IsNullOrWhiteSpace(ssh.Username)
+            ? ssh.Host
+            : $"{ssh.Username}@{ssh.Host}";
+    }
+
+    private async Task ConfigureSshWorkspaceAsync()
+    {
+        var dialog = new SshConnectWizardWindow(
+            _sshConnection,
+            _credentialStore,
+            _notifier,
+            _loc)
+        {
+            Owner = Application.Current?.MainWindow
+        };
+        if (dialog.ShowDialog() != true || dialog.ResultWorkspace is null)
+        {
+            return;
+        }
+
+        await ApplyConfiguredSshWorkspaceAsync(dialog.ResultWorkspace).ConfigureAwait(true);
+    }
+
+    private async Task SelectExistingSshWorkspaceAsync(WorkspaceSettings workspace)
+    {
+        try
+        {
+            await _sshConnection.SyncAsync(
+                _session.WithWorkspace(workspace.RootPath, workspace.Id),
+                _appSettings).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // Re-open wizard prefilled when reconnect fails.
+            var dialog = new SshConnectWizardWindow(
+                _sshConnection,
+                _credentialStore,
+                _notifier,
+                _loc,
+                workspace)
+            {
+                Owner = Application.Current?.MainWindow
+            };
+            if (dialog.ShowDialog() != true || dialog.ResultWorkspace is null)
+            {
+                _notifier.WarningText("Common_Prompt", _loc.Format("Shell_SshTestFailed", ex.Message));
+                return;
+            }
+
+            await ApplyConfiguredSshWorkspaceAsync(dialog.ResultWorkspace).ConfigureAwait(true);
+            return;
+        }
+
+        _session = _session.WithWorkspace(workspace.RootPath, workspace.Id);
+        await ApplySessionWorkspaceAsync().ConfigureAwait(true);
+        await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
+        Settings.SettingsStatus = _loc.Format("Shell_SshConnectedStatus", FormatRemoteLabel(workspace));
+    }
+
+    private async Task ApplyConfiguredSshWorkspaceAsync(WorkspaceSettings configured)
+    {
+        var existing = _appSettings.Workspaces.FindIndex(item =>
+            string.Equals(item.Id, configured.Id, StringComparison.OrdinalIgnoreCase));
+        if (existing >= 0)
+        {
+            _appSettings.Workspaces[existing] = configured;
+        }
+        else
+        {
+            _appSettings.Workspaces.Add(configured);
+        }
+
+        await _storage.SaveSettingsAsync(_appSettings).ConfigureAwait(true);
+        try
+        {
+            await _sshConnection.SyncAsync(
+                _session.WithWorkspace(configured.RootPath, configured.Id),
+                _appSettings).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            _notifier.WarningText("Common_Prompt", _loc.Format("Shell_SshTestFailed", ex.Message));
+            return;
+        }
+
+        _session = _session.WithWorkspace(configured.RootPath, configured.Id);
+        await ApplySessionWorkspaceAsync().ConfigureAwait(true);
+        await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
+        Settings.SettingsStatus = _loc.Format("Shell_SshConnectedStatus", FormatRemoteLabel(configured));
     }
 
     [RelayCommand]
-    private async Task ConfigureWorkspaceAsync()
+    private async Task ConfigureWorkspaceAsync() =>
+        await ConfigureLocalWorkspaceAsync().ConfigureAwait(true);
+
+    private async Task ConfigureLocalWorkspaceAsync()
     {
         var dialog = new OpenFolderDialog
         {
@@ -1098,7 +1356,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             Multiselect = false
         };
 
-        if (!string.IsNullOrWhiteSpace(_session.ActiveWorkspace) && Directory.Exists(_session.ActiveWorkspace))
+        if (!string.IsNullOrWhiteSpace(_session.ActiveWorkspace)
+            && _workspaceContext.Kind == WorkspaceKind.Local
+            && Directory.Exists(_session.ActiveWorkspace))
         {
             dialog.InitialDirectory = _session.ActiveWorkspace;
         }
@@ -1108,10 +1368,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
+        await _sshConnection.DisconnectAsync().ConfigureAwait(true);
+
         var folderName = new DirectoryInfo(dialog.FolderName).Name;
-        _session = _session.WithWorkspace(dialog.FolderName);
-        ApplySessionWorkspace();
-        await SaveCurrentSessionIfNeededAsync();
+        _session = _session.WithWorkspace(dialog.FolderName, workspaceId: null);
+        await ApplySessionWorkspaceAsync().ConfigureAwait(true);
+        await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
         Settings.SettingsStatus = _loc.Format("Shell_WorkspaceStatus", folderName);
     }
 
@@ -1127,9 +1389,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
-        _session = _session.WithWorkspace(null);
-        ApplySessionWorkspace();
-        await SaveCurrentSessionIfNeededAsync();
+        await _sshConnection.DisconnectAsync().ConfigureAwait(true);
+        _session = _session.WithWorkspace(null, workspaceId: null);
+        await ApplySessionWorkspaceAsync().ConfigureAwait(true);
+        await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
         Settings.SettingsStatus = _loc["Shell_WorkspaceRemoved"];
     }
 
@@ -1353,18 +1616,79 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public void CloseAtCompletion() => ChatPage.CloseAtCompletion();
 
-    private void ApplySessionWorkspace()
+    private void ApplySessionWorkspace() =>
+        _ = ApplySessionWorkspaceAsync();
+
+    private async Task ApplySessionWorkspaceAsync()
     {
         SyncWorkspaceContext();
+        if (_workspaceContext.Kind == WorkspaceKind.Ssh
+            && !string.IsNullOrWhiteSpace(_session.ActiveWorkspaceId))
+        {
+            try
+            {
+                await _sshConnection.SyncAsync(_session, _appSettings).ConfigureAwait(true);
+            }
+            catch
+            {
+                // Connection errors surface when tools run or when configuring workspace.
+            }
+        }
+        else if (_workspaceContext.Kind != WorkspaceKind.Ssh && _sshClient.IsConnected)
+        {
+            await _sshConnection.DisconnectAsync().ConfigureAwait(true);
+        }
+
         ActiveWorkspaceName = HasSessionWorkspace
             ? _workspaceContext.DisplayName ?? _loc["Shell_NoWorkspace"]
             : _loc["Shell_NoWorkspace"];
         RefreshAtCompletionSources(reloadSkills: true);
-        Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
+        await RefreshWorkspaceTreeAsync().ConfigureAwait(true);
         ConfigureWorkspaceWatcher();
         OnPropertyChanged(nameof(Sidebar));
         OnPropertyChanged(nameof(HasSessionWorkspace));
         OnPropertyChanged(nameof(WorkspacePanelActionLabel));
+        OnPropertyChanged(nameof(RunOnDisplayName));
+    }
+
+    private async Task RefreshWorkspaceTreeAsync()
+    {
+        if (_workspaceContext.Kind == WorkspaceKind.Ssh
+            && _sshClient.IsConnected
+            && !string.IsNullOrWhiteSpace(_workspaceContext.RootPath))
+        {
+            try
+            {
+                var entries = new List<SshEntry>();
+                await foreach (var entry in _sshClient.ListAsync(_workspaceContext.RootPath).ConfigureAwait(true))
+                {
+                    if (SshWorkspaceToolHelper.ShouldIgnore(entry.FullPath, _workspaceContext.IgnorePatterns))
+                    {
+                        continue;
+                    }
+
+                    entries.Add(entry);
+                    if (entries.Count >= 200)
+                    {
+                        break;
+                    }
+                }
+
+                Sidebar.RefreshRemoteWorkspaceTree(
+                    _workspaceContext.RootPath,
+                    _workspaceContext.DisplayName ?? _workspaceContext.RootPath,
+                    entries,
+                    _workspaceContext.IgnorePatterns);
+                return;
+            }
+            catch
+            {
+                Sidebar.RefreshWorkspaceTree(null, _workspaceContext.IgnorePatterns);
+                return;
+            }
+        }
+
+        Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
     }
 
     private void SyncWorkspaceContext() =>
@@ -1503,11 +1827,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private void ConfigureWorkspaceWatcher() =>
         _workspaceBridge.ConfigureWatcher(
             _session,
+            _workspaceContext,
             path => FileEditor.HandleExternalFileChange(path),
             () =>
             {
                 RefreshAtCompletionSources();
-                Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
+                _ = RefreshWorkspaceTreeAsync();
             });
 
     public bool HasPendingShutdownWork => _sessionTurns.HasActiveWork;
@@ -1522,6 +1847,14 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         _workspaceBridge.Dispose();
+        try
+        {
+            await _sshConnection.DisconnectAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // ignore disconnect errors during shutdown
+        }
 
         await _shutdownService.ShutdownAsync(progress, cancellationToken: cancellationToken).ConfigureAwait(false);
         _shutdownCompleted = true;

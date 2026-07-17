@@ -10,7 +10,15 @@ public interface IActiveWorkspaceContext
     string? RootPath { get; }
     string? DisplayName { get; }
     IReadOnlyList<string> IgnorePatterns { get; }
+    WorkspaceKind Kind { get; }
+    string? WorkspaceId { get; }
     void SetWorkspace(string? rootPath, string? displayName = null, IReadOnlyList<string>? ignorePatterns = null);
+    void SetWorkspace(
+        string? rootPath,
+        WorkspaceKind kind,
+        string? workspaceId,
+        string? displayName = null,
+        IReadOnlyList<string>? ignorePatterns = null);
 }
 public interface IAgentEnvironmentPromptBuilder
 {

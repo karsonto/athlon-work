@@ -12,10 +12,19 @@ public static class WorkspacePromptLoader
     private const string KnowledgeIndexFileName = "KNOWLEDGE.md";
     private const string TruncationNotice = "\n\n... (truncated — read the full file with file_read) ...\n";
 
-    public static void AppendWorkspaceFiles(StringBuilder builder, EnvironmentPromptContext context)
+    public static void AppendWorkspaceFiles(
+        StringBuilder builder,
+        EnvironmentPromptContext context,
+        ISshWorkspaceClient? sshClient = null)
     {
         if (!context.HasWorkspace || string.IsNullOrWhiteSpace(context.WorkspaceRoot))
         {
+            return;
+        }
+
+        if (context.WorkspaceKind == WorkspaceKind.Ssh)
+        {
+            AppendRemoteWorkspaceFiles(builder, context, sshClient);
             return;
         }
 
@@ -71,6 +80,75 @@ public static class WorkspacePromptLoader
             }
 
             builder.AppendLine();
+        }
+    }
+
+    private static void AppendRemoteWorkspaceFiles(
+        StringBuilder builder,
+        EnvironmentPromptContext context,
+        ISshWorkspaceClient? sshClient)
+    {
+        if (sshClient is not { IsConnected: true })
+        {
+            return;
+        }
+
+        var root = RemotePathNormalizer.NormalizeRoot(context.WorkspaceRoot!);
+        var settings = context.PromptSettings;
+        var hasContent = false;
+
+        var agentsContent = TryReadRemoteText(sshClient, RemotePathNormalizer.Combine(root, AgentsFileName), settings.MaxAgentsMdChars);
+        if (!string.IsNullOrWhiteSpace(agentsContent))
+        {
+            builder.AppendLine();
+            builder.AppendLine("Project rules below (from AGENTS.md) override your default habits when they conflict. Follow them for all workspace edits.");
+            builder.AppendLine("## AGENTS.md");
+            builder.AppendLine("<loaded_context>");
+            builder.AppendLine(agentsContent.TrimEnd());
+            builder.AppendLine("</loaded_context>");
+            builder.AppendLine();
+            hasContent = true;
+        }
+
+        var contributingContent = TryReadRemoteText(
+            sshClient,
+            RemotePathNormalizer.Combine(root, ContributingFileName),
+            settings.MaxContributingMdChars);
+        if (!string.IsNullOrWhiteSpace(contributingContent))
+        {
+            if (!hasContent)
+            {
+                builder.AppendLine();
+            }
+
+            builder.AppendLine("## CONTRIBUTING.md");
+            builder.AppendLine("<loaded_context>");
+            builder.AppendLine(contributingContent.TrimEnd());
+            builder.AppendLine("</loaded_context>");
+            builder.AppendLine();
+        }
+    }
+
+    private static string? TryReadRemoteText(ISshWorkspaceClient client, string remotePath, int maxChars)
+    {
+        try
+        {
+            if (!client.FileExistsAsync(remotePath).GetAwaiter().GetResult())
+            {
+                return null;
+            }
+
+            var text = client.ReadTextAsync(remotePath).GetAwaiter().GetResult();
+            if (string.IsNullOrEmpty(text))
+            {
+                return text;
+            }
+
+            return text.Length <= maxChars ? text : text[..maxChars] + TruncationNotice;
+        }
+        catch
+        {
+            return null;
         }
     }
 

@@ -28,21 +28,34 @@ public sealed class WorkspaceSessionBridge : IDisposable
             return;
         }
 
-        var activeRoot = Path.GetFullPath(session.ActiveWorkspace);
-        var match = appSettings.Workspaces.FirstOrDefault(workspace =>
-            !string.IsNullOrWhiteSpace(workspace.RootPath)
-            && string.Equals(Path.GetFullPath(workspace.RootPath), activeRoot, StringComparison.OrdinalIgnoreCase));
-        workspaceContext.SetWorkspace(activeRoot, match?.Name, ResolveIgnorePatterns(match, appSettings));
+        var match = WorkspaceSessionResolver.FindMatch(session, appSettings);
+        var kind = match?.WorkspaceKind
+            ?? (string.IsNullOrWhiteSpace(session.ActiveWorkspaceId) ? WorkspaceKind.Local : WorkspaceKind.Ssh);
+        var root = kind == WorkspaceKind.Ssh
+            ? RemotePathNormalizer.NormalizeRoot(session.ActiveWorkspace)
+            : Path.GetFullPath(session.ActiveWorkspace);
+        workspaceContext.SetWorkspace(
+            root,
+            kind,
+            match?.Id ?? session.ActiveWorkspaceId,
+            match?.Name,
+            ResolveIgnorePatterns(match, appSettings));
     }
 
     public void ConfigureWatcher(
         AgentSession session,
+        IActiveWorkspaceContext workspaceContext,
         Action<string> onExternalFileChange,
         Action onWorkspaceTreeRefresh)
     {
         _workspaceWatcher?.Dispose();
         _workspaceWatcher = null;
         StopWatcherDebounceTimer();
+
+        if (workspaceContext.Kind == WorkspaceKind.Ssh)
+        {
+            return;
+        }
 
         if (string.IsNullOrWhiteSpace(session.ActiveWorkspace) || !Directory.Exists(session.ActiveWorkspace))
         {

@@ -13,7 +13,7 @@ using Serilog.Events;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool, IParallelizableAgentTool
+public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool, IParallelizableAgentTool, ILocalWorkspaceTool
 {
     public ToolDefinition Definition { get; } = new(
         "file_list",

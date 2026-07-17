@@ -22,6 +22,7 @@ using Athlon.Agent.Infrastructure.Knowledge;
 using Athlon.Agent.Infrastructure.Licensing;
 using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Infrastructure.Sso;
+using Athlon.Agent.Infrastructure.Ssh;
 using Athlon.Agent.Infrastructure.SubAgents;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
@@ -87,6 +88,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IActiveAgentSessionContext, ActiveAgentSessionContext>();
         services.AddSingleton<ISessionHttpLogService, SessionHttpLogService>();
         services.AddSingleton<WorkspaceGuard>();
+        services.AddSingleton<ISshWorkspaceClient, SshWorkspaceClient>();
+        services.AddSingleton<SshWorkspaceConnectionService>();
         services.AddSingleton<WorkspaceFileEditorService>();
         services.AddSingleton<KnowledgeDocumentExtractor>();
         services.AddSingleton<KnowledgeChunker>();
@@ -109,6 +112,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, GrepFilesTool>();
         services.AddSingleton<IAgentTool, GlobFilesTool>();
         services.AddSingleton<IAgentTool, ExecuteCommandTool>();
+        services.AddSingleton<IAgentTool, SshFileListTool>();
+        services.AddSingleton<IAgentTool, SshFileReadTool>();
+        services.AddSingleton<IAgentTool, SshFileWriteTool>();
+        services.AddSingleton<IAgentTool, SshFileEditTool>();
+        services.AddSingleton<IAgentTool, SshApplyPatchTool>();
+        services.AddSingleton<IAgentTool, SshGrepFilesTool>();
+        services.AddSingleton<IAgentTool, SshGlobFilesTool>();
+        services.AddSingleton<IAgentTool, SshExecuteCommandTool>();
         services.AddSingleton<IAgentTool, KnowledgeSearchTool>();
         services.AddSingleton<IAgentTool, LoadSkillThroughPathTool>();
         services.AddSingleton<Lazy<ChildAgentToolRouter>>(static sp => new Lazy<ChildAgentToolRouter>(() =>

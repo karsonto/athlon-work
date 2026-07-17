@@ -2,7 +2,7 @@ using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool
+public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool, ILocalWorkspaceTool
 {
     /// <summary>Maximum file size in bytes for file_edit. Larger files should use apply_patch.</summary>
     public const long MaxFileEditBytes = 512 * 1024;

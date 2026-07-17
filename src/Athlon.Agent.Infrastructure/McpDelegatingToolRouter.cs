@@ -39,6 +39,16 @@ internal sealed class McpDelegatingToolRouter(
                 && sessionKnowledgeState.ShouldExposeKnowledgeTool(activeSessionContext.SessionId);
         }
 
+        if (tool is ILocalWorkspaceTool && workspaceGuard.CurrentKind == WorkspaceKind.Ssh)
+        {
+            return false;
+        }
+
+        if (tool is IRemoteWorkspaceTool && workspaceGuard.CurrentKind != WorkspaceKind.Ssh)
+        {
+            return false;
+        }
+
         if (!sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor)
             && tool is ILongTermMemoryTool or IHarnessTool)
         {

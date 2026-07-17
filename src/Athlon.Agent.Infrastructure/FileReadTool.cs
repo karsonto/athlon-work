@@ -2,7 +2,7 @@ using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, AppSettings settings) : IAgentTool, IParallelizableAgentTool
+public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, AppSettings settings) : IAgentTool, IParallelizableAgentTool, ILocalWorkspaceTool
 {
     public ToolDefinition Definition { get; } = new(
         "file_read",

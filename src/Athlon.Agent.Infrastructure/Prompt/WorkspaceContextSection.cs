@@ -1,4 +1,5 @@
 using System.Text;
+using Athlon.Agent.Core;
 using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Infrastructure.Prompt;
@@ -23,6 +24,11 @@ public sealed class WorkspaceContextSection : IEnvironmentPromptSection
         if (!string.IsNullOrWhiteSpace(context.WorkspaceName))
         {
             builder.AppendLine($"Name: {context.WorkspaceName}");
+        }
+
+        if (context.WorkspaceKind == WorkspaceKind.Ssh)
+        {
+            builder.AppendLine("Kind: ssh (remote Unix paths)");
         }
 
         builder.AppendLine();

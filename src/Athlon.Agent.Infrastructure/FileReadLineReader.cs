@@ -129,6 +129,90 @@ internal static class FileReadLineReader
         return new ReadResult(body, totalLines, linesReturned, selection.StartLine, truncated, nextStartLine);
     }
 
+    internal static ReadResult ReadFromText(string text, Selection selection, FileReadSettings settings)
+    {
+        var content = new StringBuilder();
+        var totalLines = 0;
+        var linesReturned = 0;
+        var truncated = false;
+        int? nextStartLine = null;
+        var stopCollecting = false;
+        var lineIndex = 0;
+
+        using var reader = new StringReader(text ?? string.Empty);
+        while (true)
+        {
+            var line = reader.ReadLine();
+            if (line is null)
+            {
+                break;
+            }
+
+            if (settings.CountTotalLines)
+            {
+                totalLines++;
+            }
+
+            if (!stopCollecting
+                && lineIndex + 1 >= selection.StartLine
+                && lineIndex + 1 <= selection.EndLine)
+            {
+                var formatted = FormatLine(lineIndex + 1, line, settings.MaxLineChars);
+                var prefix = linesReturned == 0 ? string.Empty : Environment.NewLine;
+                var addition = prefix + formatted;
+                if (content.Length + addition.Length > settings.MaxResponseChars)
+                {
+                    truncated = true;
+                    nextStartLine = lineIndex + 1;
+                    stopCollecting = true;
+                }
+                else
+                {
+                    content.Append(addition);
+                    linesReturned++;
+                }
+            }
+
+            if (!settings.CountTotalLines
+                && lineIndex + 1 >= selection.EndLine
+                && linesReturned >= selection.EndLine - selection.StartLine + 1)
+            {
+                totalLines = lineIndex + 1;
+                if (reader.ReadLine() is not null)
+                {
+                    truncated = true;
+                    nextStartLine = selection.StartLine + linesReturned;
+                }
+
+                break;
+            }
+
+            lineIndex++;
+        }
+
+        if (settings.CountTotalLines
+            && !truncated
+            && linesReturned >= selection.EndLine - selection.StartLine + 1
+            && totalLines >= selection.StartLine + linesReturned)
+        {
+            truncated = true;
+            nextStartLine = selection.StartLine + linesReturned;
+        }
+
+        if (!settings.CountTotalLines && totalLines == 0)
+        {
+            totalLines = lineIndex;
+        }
+
+        var body = content.ToString();
+        if (linesReturned > 0 || truncated || selection.StartLine > 1)
+        {
+            body = AppendMetaFooter(body, totalLines, linesReturned, selection.StartLine, truncated, nextStartLine);
+        }
+
+        return new ReadResult(body, totalLines, linesReturned, selection.StartLine, truncated, nextStartLine);
+    }
+
     internal static string FormatLine(int lineNumber, string line, int maxLineChars)
     {
         if (line.Length > maxLineChars)

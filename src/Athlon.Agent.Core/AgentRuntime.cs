@@ -74,42 +74,31 @@ public sealed class AgentRuntime(
         CancellationToken cancellationToken = default)
     {
         var ignorePatterns = ResolveIgnorePatterns(session);
+        var workspaceKind = WorkspaceSessionResolver.ResolveKind(session, settings);
         var runId = Guid.NewGuid().ToString("N");
         var runContext = AgentRunContext.CreateRoot(
             session,
             runId,
             toolRouter,
             systemPromptOrchestrator,
-            ignorePatterns);
+            ignorePatterns,
+            workspaceKind);
         if (AgentLoopOptionsScope.Current is { } loopOptions)
         {
             runContext = runContext with { LoopOptions = loopOptions };
         }
         using var runScope = runContextAccessor.Push(runContext);
-        using var workspaceScope = SessionWorkspaceScope.Enter(runContext.WorkspaceRoot, runContext.WorkspaceIgnorePatterns);
+        using var workspaceScope = SessionWorkspaceScope.Enter(
+            runContext.WorkspaceRoot,
+            runContext.WorkspaceIgnorePatterns,
+            runContext.WorkspaceKind);
         using var skillActivationScope = SessionSkillActivationScope.EnterNewTurn();
         using var sessionScope = activeSessionContext.Enter(session.Id);
         return await SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, runContext, cancellationToken).ConfigureAwait(false);
     }
 
-    private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session)
-    {
-        if (!string.IsNullOrWhiteSpace(session.ActiveWorkspace))
-        {
-            var fullPath = Path.GetFullPath(session.ActiveWorkspace);
-            var match = settings.Workspaces.FirstOrDefault(workspace =>
-                !string.IsNullOrWhiteSpace(workspace.RootPath)
-                && string.Equals(Path.GetFullPath(workspace.RootPath), fullPath, StringComparison.OrdinalIgnoreCase));
-            return WorkspaceIgnoreResolver.Resolve(
-                workspacePatterns: match?.IgnorePatterns,
-                globalPatterns: settings.WorkspaceIgnore.DirectoryNames);
-        }
-
-        var configuredWorkspace = settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath));
-        return WorkspaceIgnoreResolver.Resolve(
-            workspacePatterns: configuredWorkspace?.IgnorePatterns,
-            globalPatterns: settings.WorkspaceIgnore.DirectoryNames);
-    }
+    private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session) =>
+        WorkspaceSessionResolver.ResolveIgnorePatterns(session, settings);
 
     private async Task<AgentSession> SendAsyncTurnAsync(
         AgentSession session,

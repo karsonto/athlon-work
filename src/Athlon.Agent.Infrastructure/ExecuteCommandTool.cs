@@ -8,7 +8,7 @@ public sealed class ExecuteCommandTool(
     AppSettings settings,
     WorkspaceGuard guard,
     AuditLogService audit,
-    ExecuteCommandProcessRegistry processRegistry) : IAgentTool
+    ExecuteCommandProcessRegistry processRegistry) : IAgentTool, ILocalWorkspaceTool
 {
     public const int DefaultTimeoutSeconds = 3600;
     public const int MaxTimeoutSeconds = 3600;

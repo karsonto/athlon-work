@@ -665,6 +665,34 @@
                                                Margin="0,0,10,0"
                                                VerticalAlignment="Center"
                                                ToolTip="{Binding ComposerHarness.HarnessButtonToolTip}" />
+                                    <Button x:Name="RunOnButton"
+                                            Click="RunOnButton_OnClick"
+                                            ToolTip="{loc:Localize Key=Shell_RunOn}"
+                                            Margin="0,0,10,0"
+                                            Padding="8,4"
+                                            MinHeight="28"
+                                            VerticalAlignment="Center">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                                                <Setter Property="Background" Value="Transparent" />
+                                            </Style>
+                                        </Button.Style>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="💻"
+                                                       FontSize="11"
+                                                       Margin="0,0,4,0"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding RunOnDisplayName}"
+                                                       FontSize="12"
+                                                       MaxWidth="140"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center" />
+                                            <TextBlock Text=" ▾"
+                                                       FontSize="10"
+                                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                                       VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
                                     <Button Command="{Binding StopCommand}"
                                             ToolTip="{loc:Localize Key=Chat_PauseReplyTooltip}"
                                             Margin="0,0,8,0">

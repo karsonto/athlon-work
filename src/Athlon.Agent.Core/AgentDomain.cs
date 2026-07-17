@@ -75,6 +75,9 @@ public sealed record AgentSession(
     string? ModelName,
     IReadOnlyList<ChatMessage> Messages)
 {
+    /// <summary>When set, points at <see cref="WorkspaceSettings.Id"/> (used for SSH workspaces).</summary>
+    public string? ActiveWorkspaceId { get; init; }
+
     public static AgentSession Create(string title = "New chat") =>
         new(
             Guid.NewGuid().ToString("N"),
@@ -92,9 +95,10 @@ public sealed record AgentSession(
         Messages = Messages.Concat(new[] { message }).ToArray()
     };
 
-    public AgentSession WithWorkspace(string? workspaceRootPath) => this with
+    public AgentSession WithWorkspace(string? workspaceRootPath, string? workspaceId = null) => this with
     {
         ActiveWorkspace = workspaceRootPath,
+        ActiveWorkspaceId = workspaceId,
         UpdatedAt = DateTimeOffset.UtcNow
     };
 

@@ -3,7 +3,7 @@ using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, AppSettings settings) : IAgentTool, IParallelizableAgentTool
+public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, AppSettings settings) : IAgentTool, IParallelizableAgentTool, ILocalWorkspaceTool
 {
     private const int MaxFilesToScan = 2000;
     private const int MaxMatches = 200;

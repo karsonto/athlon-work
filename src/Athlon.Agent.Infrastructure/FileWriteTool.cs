@@ -3,7 +3,7 @@ using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool
+public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool, ILocalWorkspaceTool
 {
     public ToolDefinition Definition { get; } = new(
         "file_write",

@@ -38,16 +38,21 @@ public sealed class SubAgentRunExecutor(
         bundle = new SubAgentSessionBundle(session, role);
 
         var ignorePatterns = ResolveIgnorePatterns(session);
+        var workspaceKind = runContextAccessor.Current?.WorkspaceKind
+            ?? WorkspaceSessionResolver.ResolveKind(session, settings);
         var workspaceRoot = string.IsNullOrWhiteSpace(session.ActiveWorkspace)
             ? runContextAccessor.Current?.WorkspaceRoot
-            : Path.GetFullPath(session.ActiveWorkspace);
+            : workspaceKind == WorkspaceKind.Ssh
+                ? RemotePathNormalizer.NormalizeRoot(session.ActiveWorkspace)
+                : Path.GetFullPath(session.ActiveWorkspace);
         var parentRunContext = runContextAccessor.Current
             ?? AgentRunContext.CreateRoot(
                 new AgentSession(parentSessionId, string.Empty, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, workspaceRoot, null, settings.Model.ModelName, []),
                 Guid.NewGuid().ToString("N"),
                 childToolRouter.Value,
                 subAgentPromptOrchestrator,
-                ignorePatterns);
+                ignorePatterns,
+                workspaceKind);
         var childContext = parentRunContext.CreateChild(
             subSessionId,
             childToolRouter.Value,
@@ -60,7 +65,10 @@ public sealed class SubAgentRunExecutor(
         using var depthScope = SubAgentExecutionScope.Enter();
         using var runScope = runContextAccessor.Push(childContext);
         using var sessionScope = activeSessionContext.Enter(subSessionId);
-        using var workspaceScope = SessionWorkspaceScope.Enter(childContext.WorkspaceRoot, childContext.WorkspaceIgnorePatterns);
+        using var workspaceScope = SessionWorkspaceScope.Enter(
+            childContext.WorkspaceRoot,
+            childContext.WorkspaceIgnorePatterns,
+            childContext.WorkspaceKind);
 
         _logger.Information(
             "Starting sub-agent run parent={ParentId} sub={SubId} continue={Continue}",
@@ -145,27 +153,14 @@ public sealed class SubAgentRunExecutor(
             workspace,
             activeSkill,
             parent?.ModelName ?? settings.Model.ModelName,
-            Array.Empty<ChatMessage>());
-    }
-
-    private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session)
-    {
-        if (!string.IsNullOrWhiteSpace(session.ActiveWorkspace))
+            Array.Empty<ChatMessage>())
         {
-            var fullPath = Path.GetFullPath(session.ActiveWorkspace);
-            var match = settings.Workspaces.FirstOrDefault(workspace =>
-                !string.IsNullOrWhiteSpace(workspace.RootPath)
-                && string.Equals(Path.GetFullPath(workspace.RootPath), fullPath, StringComparison.OrdinalIgnoreCase));
-            return WorkspaceIgnoreResolver.Resolve(
-                workspacePatterns: match?.IgnorePatterns,
-                globalPatterns: settings.WorkspaceIgnore.DirectoryNames);
-        }
-
-        var configuredWorkspace = settings.Workspaces.FirstOrDefault(workspace => !string.IsNullOrWhiteSpace(workspace.RootPath));
-        return WorkspaceIgnoreResolver.Resolve(
-            workspacePatterns: configuredWorkspace?.IgnorePatterns,
-            globalPatterns: settings.WorkspaceIgnore.DirectoryNames);
+            ActiveWorkspaceId = parent?.ActiveWorkspaceId
+        };
     }
+
+    private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session) =>
+        WorkspaceSessionResolver.ResolveIgnorePatterns(session, settings);
 }
 
 public sealed record SubAgentRunOutcome(bool IsSuccess, string? ResultText, string? Error, AgentSession? Session)

@@ -25,6 +25,19 @@ public partial class ChatPageView : UserControl, IChatLayoutSurface
         ComposerRow = ComposerRow
     };
 
+    private void RunOnButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainShellViewModel shell)
+        {
+            return;
+        }
+
+        var menu = shell.BuildRunOnMenu();
+        menu.PlacementTarget = RunOnButton;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+        menu.IsOpen = true;
+    }
+
     private void ComposerInputWrapper_OnDragOver(object sender, DragEventArgs e)
     {
         e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop)

@@ -1,0 +1,150 @@
+<Window x:Class="Athlon.Agent.App.Windows.SshConnectWizardWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+        Title="{loc:Localize Key=Shell_SshWizardTitle}"
+        Width="560"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Brush.AppBackground}"
+        Foreground="{DynamicResource Brush.Text}"
+        FontFamily="Segoe UI"
+        FontSize="14"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <Border Padding="28,24"
+            Background="{DynamicResource Brush.Panel}"
+            BorderBrush="{DynamicResource Brush.Border}"
+            BorderThickness="1"
+            CornerRadius="12"
+            Margin="12">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <DockPanel Margin="0,0,0,20">
+                <Button DockPanel.Dock="Right"
+                        Content="✕"
+                        Width="28"
+                        Height="28"
+                        Style="{StaticResource IconButtonStyle}"
+                        Click="CloseButton_Click" />
+                <TextBlock x:Name="HeaderText"
+                           FontSize="18"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+            </DockPanel>
+
+            <!-- Step 1: Hostname -->
+            <StackPanel x:Name="Step1Panel" Grid.Row="1">
+                <TextBlock Text="{loc:Localize Key=Shell_SshWizardHostPlaceholder}"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Margin="0,0,0,8"
+                           Foreground="{DynamicResource Brush.SubtleText}" />
+                <DockPanel Margin="0,0,0,10">
+                    <Button DockPanel.Dock="Right"
+                            Content="{loc:Localize Key=Shell_SshWizardConnect}"
+                            MinWidth="108"
+                            Height="40"
+                            Margin="10,0,0,0"
+                            Style="{StaticResource GhostButtonStyle}"
+                            Background="{DynamicResource Brush.Accent}"
+                            Foreground="White"
+                            Click="Step1Connect_Click" />
+                    <TextBox x:Name="HostBox"
+                             Height="40"
+                             Padding="12,8"
+                             VerticalContentAlignment="Center"
+                             FontSize="15" />
+                </DockPanel>
+                <TextBlock Text="{loc:Localize Key=Shell_SshWizardHostHint}"
+                           Foreground="{DynamicResource Brush.SubtleText}"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,16" />
+                <TextBlock HorizontalAlignment="Right">
+                    <Hyperlink Click="OpenSshConfig_Click" Foreground="{DynamicResource Brush.Accent}">
+                        <Run Text="{loc:Localize Key=Shell_SshWizardOpenConfig}" />
+                    </Hyperlink>
+                </TextBlock>
+            </StackPanel>
+
+            <!-- Step 2: Auth -->
+            <StackPanel x:Name="Step2Panel" Grid.Row="1" Visibility="Collapsed">
+                <TextBlock Text="{loc:Localize Key=Shell_SshUsername}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBox x:Name="UsernameBox" Padding="10,8" Margin="0,0,0,14" Height="36" VerticalContentAlignment="Center" />
+
+                <TextBlock Text="{loc:Localize Key=Shell_SshPort}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBox x:Name="PortBox" Text="22" Padding="10,8" Width="120" HorizontalAlignment="Left" Margin="0,0,0,14" Height="36" VerticalContentAlignment="Center" />
+
+                <TextBlock Text="{loc:Localize Key=Shell_SshAuthMode}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <ComboBox x:Name="AuthModeCombo" Margin="0,0,0,14" Height="36" SelectionChanged="AuthModeCombo_OnSelectionChanged">
+                    <ComboBoxItem Tag="password" Content="{loc:Localize Key=Shell_SshAuthPassword}" IsSelected="True" />
+                    <ComboBoxItem Tag="privateKey" Content="{loc:Localize Key=Shell_SshAuthPrivateKey}" />
+                </ComboBox>
+
+                <StackPanel x:Name="PasswordPanel">
+                    <TextBlock Text="{loc:Localize Key=Shell_SshPassword}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <PasswordBox x:Name="PasswordBox" Padding="10,8" Margin="0,0,0,8" Height="36" />
+                </StackPanel>
+
+                <StackPanel x:Name="PrivateKeyPanel" Visibility="Collapsed">
+                    <TextBlock Text="{loc:Localize Key=Shell_SshPrivateKeyPath}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <DockPanel Margin="0,0,0,14">
+                        <Button DockPanel.Dock="Right" Content="…" Width="40" Margin="8,0,0,0" Height="36" Click="BrowseKeyButton_Click" />
+                        <TextBox x:Name="PrivateKeyPathBox" Padding="10,8" Height="36" VerticalContentAlignment="Center" />
+                    </DockPanel>
+                    <TextBlock Text="{loc:Localize Key=Shell_SshKeyPassphrase}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                    <PasswordBox x:Name="PassphraseBox" Padding="10,8" Height="36" />
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Step 3: Remote root -->
+            <StackPanel x:Name="Step3Panel" Grid.Row="1" Visibility="Collapsed">
+                <TextBlock Text="{loc:Localize Key=Shell_SshName}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBox x:Name="NameBox" Padding="10,8" Margin="0,0,0,14" Height="36" VerticalContentAlignment="Center" />
+
+                <TextBlock Text="{loc:Localize Key=Shell_SshRemoteRoot}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBox x:Name="RemoteRootBox" Text="/home" Padding="10,8" Margin="0,0,0,8" Height="36" VerticalContentAlignment="Center" />
+                <TextBlock Text="{loc:Localize Key=Shell_SshWizardRootHint}"
+                           Foreground="{DynamicResource Brush.SubtleText}"
+                           FontSize="12"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+
+            <TextBlock x:Name="StatusText"
+                       Grid.Row="2"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource Brush.SubtleText}"
+                       Margin="0,16,0,0"
+                       MinHeight="20" />
+
+            <DockPanel Grid.Row="3" Margin="0,20,0,0" LastChildFill="False">
+                <Button x:Name="BackButton"
+                        DockPanel.Dock="Left"
+                        Content="{loc:Localize Key=Shell_SshWizardBack}"
+                        Padding="16,8"
+                        Visibility="Collapsed"
+                        Click="BackButton_Click" />
+                <Button x:Name="NextButton"
+                        DockPanel.Dock="Right"
+                        Content="{loc:Localize Key=Shell_SshWizardNext}"
+                        Padding="16,8"
+                        Style="{StaticResource GhostButtonStyle}"
+                        Click="NextButton_Click" />
+                <Button x:Name="FinishButton"
+                        DockPanel.Dock="Right"
+                        Content="{loc:Localize Key=Shell_SshWizardFinish}"
+                        Padding="16,8"
+                        Style="{StaticResource GhostButtonStyle}"
+                        Visibility="Collapsed"
+                        Click="FinishButton_Click" />
+            </DockPanel>
+        </Grid>
+    </Border>
+</Window>

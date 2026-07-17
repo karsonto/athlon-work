@@ -10,6 +10,8 @@ public sealed class EnvironmentPromptContext
 
     public string? WorkspaceName { get; init; }
 
+    public WorkspaceKind WorkspaceKind { get; init; } = WorkspaceKind.Local;
+
     public IReadOnlyList<string> IgnorePatterns { get; init; } = [];
 
     public required IReadOnlyList<ToolDefinition> Tools { get; init; }

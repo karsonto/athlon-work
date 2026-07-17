@@ -13,6 +13,8 @@ public sealed record AgentRunContext
 
     public string? WorkspaceRoot { get; init; }
 
+    public WorkspaceKind WorkspaceKind { get; init; } = WorkspaceKind.Local;
+
     public IReadOnlyList<string> WorkspaceIgnorePatterns { get; init; } = WorkspaceIgnoreDefaults.BuiltIn;
 
     public required IToolRouter ToolRouter { get; init; }
@@ -30,14 +32,18 @@ public sealed record AgentRunContext
         string runId,
         IToolRouter toolRouter,
         ISystemPromptOrchestrator promptOrchestrator,
-        IReadOnlyList<string> ignorePatterns) =>
+        IReadOnlyList<string> ignorePatterns,
+        WorkspaceKind workspaceKind = WorkspaceKind.Local) =>
         new()
         {
             SessionId = session.Id,
             RunId = runId,
             WorkspaceRoot = string.IsNullOrWhiteSpace(session.ActiveWorkspace)
                 ? null
-                : Path.GetFullPath(session.ActiveWorkspace),
+                : workspaceKind == WorkspaceKind.Ssh
+                    ? RemotePathNormalizer.NormalizeRoot(session.ActiveWorkspace)
+                    : Path.GetFullPath(session.ActiveWorkspace),
+            WorkspaceKind = workspaceKind,
             WorkspaceIgnorePatterns = ignorePatterns,
             ToolRouter = toolRouter,
             PromptOrchestrator = promptOrchestrator,
@@ -60,6 +66,7 @@ public sealed record AgentRunContext
                 ? ParentSessionId
                 : SessionId,
             WorkspaceRoot = workspaceRoot,
+            WorkspaceKind = WorkspaceKind,
             WorkspaceIgnorePatterns = ignorePatterns,
             ToolRouter = childRouter,
             PromptOrchestrator = childPrompt,

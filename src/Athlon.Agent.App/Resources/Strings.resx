@@ -1303,6 +1303,147 @@
   <data name="Shell_SelectWorkspace" xml:space="preserve">
     <value>选择 Agent 工作区</value>
   </data>
+  <data name="Shell_RunOn" xml:space="preserve">
+    <value>运行于</value>
+  </data>
+  <data name="Shell_RunOnThisPc" xml:space="preserve">
+    <value>此电脑</value>
+  </data>
+  <data name="Shell_RunOnRemote" xml:space="preserve">
+    <value>远程机器</value>
+  </data>
+  <data name="Shell_RunOnRemoteMachines" xml:space="preserve">
+    <value>远程机器</value>
+  </data>
+  <data name="Shell_RunOnSearchRemotes" xml:space="preserve">
+    <value>搜索远程机器…</value>
+  </data>
+  <data name="Shell_RunOnNoRemotes" xml:space="preserve">
+    <value>暂无远程机器</value>
+  </data>
+  <data name="Shell_RunOnConnect" xml:space="preserve">
+    <value>+ 连接…</value>
+  </data>
+  <data name="Shell_RunOnConnectSsh" xml:space="preserve">
+    <value>SSH</value>
+  </data>
+  <data name="Shell_RunOnConnectSshAction" xml:space="preserve">
+    <value>通过 SSH 连接…</value>
+  </data>
+  <data name="Shell_RunOnConnectWsl" xml:space="preserve">
+    <value>WSL</value>
+  </data>
+  <data name="Shell_RunOnWslUnavailable" xml:space="preserve">
+    <value>WSL 暂未支持</value>
+  </data>
+  <data name="Shell_SshWizardTitle" xml:space="preserve">
+    <value>通过 SSH 连接</value>
+  </data>
+  <data name="Shell_SshWizardStepHeader" xml:space="preserve">
+    <value>通过 SSH 连接 · 第 {0} 步 / 共 3 步</value>
+  </data>
+  <data name="Shell_SshWizardConnect" xml:space="preserve">
+    <value>连接 ⏎</value>
+  </data>
+  <data name="Shell_SshWizardHostHint" xml:space="preserve">
+    <value>输入主机，例如 user@host，或从 SSH 配置中选择</value>
+  </data>
+  <data name="Shell_SshWizardOpenConfig" xml:space="preserve">
+    <value>打开 SSH Config</value>
+  </data>
+  <data name="Shell_SshWizardRootHint" xml:space="preserve">
+    <value>远程工作区根目录，例如 /home/user/project</value>
+  </data>
+  <data name="Shell_SshWizardBack" xml:space="preserve">
+    <value>上一步</value>
+  </data>
+  <data name="Shell_SshWizardNext" xml:space="preserve">
+    <value>下一步</value>
+  </data>
+  <data name="Shell_SshWizardFinish" xml:space="preserve">
+    <value>完成并连接</value>
+  </data>
+  <data name="Shell_SshWizardHostPlaceholder" xml:space="preserve">
+    <value>SSH 主机名</value>
+  </data>
+  <data name="Shell_SshWizardHostRequired" xml:space="preserve">
+    <value>请输入 SSH 主机名（例如 user@host）</value>
+  </data>
+  <data name="Shell_WorkspaceKindPrompt" xml:space="preserve">
+    <value>选择工作区类型</value>
+  </data>
+  <data name="Shell_WorkspaceKindLocal" xml:space="preserve">
+    <value>本地文件夹</value>
+  </data>
+  <data name="Shell_WorkspaceKindSsh" xml:space="preserve">
+    <value>SSH 远程工作区</value>
+  </data>
+  <data name="Shell_SshWorkspaceTitle" xml:space="preserve">
+    <value>配置 SSH 远程工作区</value>
+  </data>
+  <data name="Shell_SshName" xml:space="preserve">
+    <value>显示名称</value>
+  </data>
+  <data name="Shell_SshHost" xml:space="preserve">
+    <value>主机</value>
+  </data>
+  <data name="Shell_SshPort" xml:space="preserve">
+    <value>端口</value>
+  </data>
+  <data name="Shell_SshUsername" xml:space="preserve">
+    <value>用户名</value>
+  </data>
+  <data name="Shell_SshRemoteRoot" xml:space="preserve">
+    <value>远程根目录</value>
+  </data>
+  <data name="Shell_SshAuthMode" xml:space="preserve">
+    <value>认证方式</value>
+  </data>
+  <data name="Shell_SshAuthPassword" xml:space="preserve">
+    <value>密码</value>
+  </data>
+  <data name="Shell_SshAuthPrivateKey" xml:space="preserve">
+    <value>私钥</value>
+  </data>
+  <data name="Shell_SshPassword" xml:space="preserve">
+    <value>密码</value>
+  </data>
+  <data name="Shell_SshPrivateKeyPath" xml:space="preserve">
+    <value>私钥文件路径</value>
+  </data>
+  <data name="Shell_SshKeyPassphrase" xml:space="preserve">
+    <value>私钥口令（可选）</value>
+  </data>
+  <data name="Shell_SshTestConnection" xml:space="preserve">
+    <value>测试连接</value>
+  </data>
+  <data name="Shell_SshTesting" xml:space="preserve">
+    <value>正在测试连接…</value>
+  </data>
+  <data name="Shell_SshTestSucceeded" xml:space="preserve">
+    <value>连接成功</value>
+  </data>
+  <data name="Shell_SshTestFailed" xml:space="preserve">
+    <value>连接失败：{0}</value>
+  </data>
+  <data name="Shell_SshNameRequired" xml:space="preserve">
+    <value>请填写显示名称。</value>
+  </data>
+  <data name="Shell_SshFieldsRequired" xml:space="preserve">
+    <value>请填写主机、用户名和远程根目录。</value>
+  </data>
+  <data name="Shell_SshPortInvalid" xml:space="preserve">
+    <value>端口无效。</value>
+  </data>
+  <data name="Shell_SshPrivateKeyRequired" xml:space="preserve">
+    <value>请选择有效的私钥文件。</value>
+  </data>
+  <data name="Shell_SshPasswordRequired" xml:space="preserve">
+    <value>请填写密码。</value>
+  </data>
+  <data name="Shell_SshConnectedStatus" xml:space="preserve">
+    <value>SSH 工作区：{0}</value>
+  </data>
   <data name="Shell_ShuttingDown" xml:space="preserve">
     <value>正在关闭…</value>
   </data>

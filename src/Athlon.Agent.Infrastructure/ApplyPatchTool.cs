@@ -2,7 +2,7 @@ using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
 
-public sealed class ApplyPatchTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool
+public sealed class ApplyPatchTool(WorkspaceGuard guard, AuditLogService audit) : IAgentTool, ILocalWorkspaceTool
 {
     public ToolDefinition Definition { get; } = new(
         "apply_patch",
