@@ -402,9 +402,12 @@
                                         <Style TargetType="Button" BasedOn="{StaticResource ComposerToolButtonStyle}">
                                             <Setter Property="Grid.Row" Value="0" />
                                             <Setter Property="Grid.Column" Value="0" />
-                                            <Setter Property="VerticalAlignment" Value="Bottom" />
+                                            <Setter Property="VerticalAlignment" Value="Center" />
                                             <Setter Property="Margin" Value="0,0,6,0" />
                                             <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsComposerMultiLine}" Value="True">
+                                                    <Setter Property="VerticalAlignment" Value="Bottom" />
+                                                </DataTrigger>
                                                 <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
                                                     <Setter Property="Grid.Row" Value="1" />
                                                     <Setter Property="VerticalAlignment" Value="Center" />
@@ -643,8 +646,11 @@
                                         <Style TargetType="StackPanel">
                                             <Setter Property="Grid.Row" Value="0" />
                                             <Setter Property="Grid.Column" Value="2" />
-                                            <Setter Property="VerticalAlignment" Value="Bottom" />
+                                            <Setter Property="VerticalAlignment" Value="Center" />
                                             <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsComposerMultiLine}" Value="True">
+                                                    <Setter Property="VerticalAlignment" Value="Bottom" />
+                                                </DataTrigger>
                                                 <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
                                                     <Setter Property="Grid.Row" Value="1" />
                                                     <Setter Property="VerticalAlignment" Value="Center" />

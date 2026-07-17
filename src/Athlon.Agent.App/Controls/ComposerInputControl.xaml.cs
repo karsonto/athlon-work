@@ -247,6 +247,7 @@ public partial class ComposerInputControl : UserControl
                 height > MinComposerTextHeight + 4
                     ? VerticalAlignment.Top
                     : VerticalAlignment.Center;
+            _viewModel?.SetComposerMultiLine(height > MinComposerTextHeight + 4);
         }
         finally
         {

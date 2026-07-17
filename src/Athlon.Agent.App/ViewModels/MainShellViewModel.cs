@@ -387,6 +387,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [ObservableProperty]
     private bool isPlusMenuOpen;
 
+    [ObservableProperty]
+    private bool isComposerMultiLine;
+
     public string WorkspacePanelActionLabel =>
         HasSessionWorkspace ? _loc["Context_RemoveWorkspace"] : _loc["Common_Configure"];
 
@@ -1325,6 +1328,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _composerCaretIndex = caretIndex;
         ChatPage.UpdateComposerCompletion(composerText, caretIndex);
     }
+
+    public void SetComposerMultiLine(bool isMultiLine) => IsComposerMultiLine = isMultiLine;
 
     private void OnAtCompletionSourcesUpdated()
     {
