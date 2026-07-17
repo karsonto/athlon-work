@@ -4,7 +4,7 @@ namespace Athlon.Agent.Infrastructure;
 
 internal static class ModelApiKeyResolver
 {
-    public static async Task<string> ResolveAsync(
+    public static async Task<string?> ResolveAsync(
         ICredentialStore credentialStore,
         AppSettings settings,
         CancellationToken cancellationToken = default)
@@ -24,11 +24,6 @@ internal static class ModelApiKeyResolver
             apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         }
 
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            throw new InvalidOperationException("模型 API Key 未配置。请在 Settings > Model 中输入 API Key 并保存，或设置环境变量 OPENAI_API_KEY。");
-        }
-
-        return apiKey;
+        return string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
     }
 }

@@ -478,6 +478,66 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
         Assert.True(streamFlags[0]);
     }
 
+    [Fact]
+    public async Task CompleteAsync_OmitsAuthorizationHeader_WhenApiKeyMissing()
+    {
+        var previous = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        Environment.SetEnvironmentVariable("OPENAI_API_KEY", null);
+
+        HttpRequestMessage? capturedRequest = null;
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            capturedRequest = request;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "choices": [
+                        { "message": { "content": "ok" } }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+
+        try
+        {
+            var settings = new AppSettings
+            {
+                Model = new ModelSettings
+                {
+                    Endpoint = "https://example.com/v1",
+                    ModelName = "demo",
+                    EnableStreaming = false
+                }
+            };
+
+            var client = new OpenAiCompatibleChatModelClient(
+                new HttpClient(handler),
+                new NoOpLogger(),
+                settings,
+                new EmptyCredentialStore(),
+                new CaptureHttpLogService(),
+                new ActiveAgentSessionContext());
+
+            var result = await client.CompleteAsync(
+                new AgentModelRequest(
+                    [new AgentModelMessage("user", "hi")],
+                    Array.Empty<ToolDefinition>()));
+
+            Assert.Equal("ok", result.Content);
+            Assert.NotNull(capturedRequest);
+            Assert.Null(capturedRequest!.Headers.Authorization);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OPENAI_API_KEY", previous);
+        }
+    }
+
     private static OpenAiCompatibleChatModelClient CreateClient(HttpMessageHandler handler, bool enableStreaming)
     {
         var settings = new AppSettings
@@ -510,6 +570,13 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
         public Task SaveSecretAsync(string name, string secret, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string?> GetSecretAsync(string name, CancellationToken cancellationToken = default) => Task.FromResult<string?>(value);
         public Task<bool> HasSecretAsync(string name, CancellationToken cancellationToken = default) => Task.FromResult(true);
+    }
+
+    private sealed class EmptyCredentialStore : ICredentialStore
+    {
+        public Task SaveSecretAsync(string name, string secret, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<string?> GetSecretAsync(string name, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
+        public Task<bool> HasSecretAsync(string name, CancellationToken cancellationToken = default) => Task.FromResult(false);
     }
 
     private sealed class CaptureHttpLogService : ISessionHttpLogService

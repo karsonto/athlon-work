@@ -18,7 +18,6 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
     private readonly ILocalizationService _loc;
     private string _sessionId = "";
     private bool _suppressSave;
-    private bool _hasStoredEmbeddingApiKey;
 
     public ComposerKnowledgeViewModel(
         ISessionKnowledgeState sessionKnowledgeState,
@@ -63,9 +62,8 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
 
     public int SelectedModuleCount => Modules.Count(module => module.IsSelected);
 
-    public void SetEmbeddingApiKeyAvailable(bool hasStoredApiKey)
+    public void NotifyEmbeddingConfigurationChanged()
     {
-        _hasStoredEmbeddingApiKey = hasStoredApiKey;
         OnPropertyChanged(nameof(IsKnowledgeButtonEnabled));
         OnPropertyChanged(nameof(KnowledgeButtonToolTip));
     }
@@ -175,8 +173,7 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
 
     private bool IsEmbeddingConfigured() =>
         !string.IsNullOrWhiteSpace(_settings.Knowledge.Embedding.Endpoint)
-        && !string.IsNullOrWhiteSpace(_settings.Knowledge.Embedding.Model)
-        && _hasStoredEmbeddingApiKey;
+        && !string.IsNullOrWhiteSpace(_settings.Knowledge.Embedding.Model);
 }
 
 public sealed partial class ComposerKnowledgeModuleItemViewModel : ObservableObject

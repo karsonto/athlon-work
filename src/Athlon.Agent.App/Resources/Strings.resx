@@ -371,7 +371,7 @@
     <value>是</value>
   </data>
   <data name="ComposerKnowledge_ConfigRequired" xml:space="preserve">
-    <value>请先在设置页配置 Embedding Endpoint、Model 和 API Key</value>
+    <value>请先在设置页配置 Embedding Endpoint 和 Model</value>
   </data>
   <data name="ComposerKnowledge_Enabled" xml:space="preserve">
     <value>知识库已启用 · {0} 个知识空间</value>
@@ -991,7 +991,7 @@
     <value>请输入工作目录。</value>
   </data>
   <data name="Settings_ApiKeyDpapiHint" xml:space="preserve">
-    <value>API Key 使用 Windows DPAPI 加密保存在用户目录。PasswordBox 不会显示已保存的 Key；更换 Provider 后请重新粘贴并点「保存设置」。</value>
+    <value>API Key 使用 Windows DPAPI 加密保存在用户目录。PasswordBox 不会显示已保存的 Key；更换 Provider 后请重新粘贴并点「保存设置」。留空时不发送 Authorization 请求头。</value>
   </data>
   <data name="Settings_ApiKeyLabel" xml:space="preserve">
     <value>API Key</value>
@@ -1031,6 +1031,9 @@
   </data>
   <data name="Settings_EmbeddingApiKeySaved" xml:space="preserve">
     <value>已保存知识库 Embedding API Key：{0}</value>
+  </data>
+  <data name="Settings_EmbeddingApiKeyHint" xml:space="preserve">
+    <value>留空时不发送 Authorization 请求头；填写后会自动使用 Bearer 方式发送。</value>
   </data>
   <data name="Settings_EmbeddingEndpoint" xml:space="preserve">
     <value>Embedding Endpoint</value>

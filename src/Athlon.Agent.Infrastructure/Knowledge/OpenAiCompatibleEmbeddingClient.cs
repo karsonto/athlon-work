@@ -43,7 +43,11 @@ public sealed class OpenAiCompatibleEmbeddingClient(
                         input = batch
                     })
                 };
-                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+                if (!string.IsNullOrWhiteSpace(apiKey))
+                {
+                    request.Headers.Authorization =
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey.Trim());
+                }
 
                 using var response = await httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
                 var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
@@ -117,7 +121,7 @@ public sealed class OpenAiCompatibleEmbeddingClient(
         }
     }
 
-    private async Task<string> ResolveApiKeyAsync(CancellationToken cancellationToken)
+    private async Task<string?> ResolveApiKeyAsync(CancellationToken cancellationToken)
     {
         var apiKey = await credentialStore.GetSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(apiKey))
@@ -126,11 +130,6 @@ public sealed class OpenAiCompatibleEmbeddingClient(
                 ?? Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         }
 
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            throw new InvalidOperationException("知识库 Embedding API Key 未配置。请在设置中保存知识库 Embedding API Key，或设置 ATHLON_KNOWLEDGE_EMBEDDING_API_KEY。");
-        }
-
-        return apiKey;
+        return string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
     }
 }

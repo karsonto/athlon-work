@@ -145,8 +145,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Settings.SettingsSaved += async (_, _) => await OnSettingsSavedAsync();
-        Settings.EmbeddingApiKeyAvailabilityChanged += (_, available) =>
-            ComposerKnowledge.SetEmbeddingApiKeyAvailable(available);
         Sidebar = sidebar;
         FileEditor = fileEditor;
         FileEditor.Tabs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasOpenEditorTabs));
@@ -157,7 +155,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 OnPropertyChanged(nameof(HasOpenEditorTabs));
             }
         };
-        ComposerKnowledge.SetEmbeddingApiKeyAvailable(Settings.HasStoredKnowledgeEmbeddingApiKey);
         _layout.ClampInitialLayout();
 
         LogsPath = paths.LogsPath;
@@ -1142,6 +1139,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
         await RefreshMcpRuntimeAsync().ConfigureAwait(true);
         ApplySessionWorkspace();
+        ComposerKnowledge.NotifyEmbeddingConfigurationChanged();
         CurrentPage = AppPage.Chat;
     }
 

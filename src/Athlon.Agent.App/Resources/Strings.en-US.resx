@@ -371,7 +371,7 @@
     <value>Yes</value>
   </data>
   <data name="ComposerKnowledge_ConfigRequired" xml:space="preserve">
-    <value>Configure embedding endpoint, model, and API key in Settings first</value>
+    <value>Configure embedding endpoint and model in Settings first</value>
   </data>
   <data name="ComposerKnowledge_Enabled" xml:space="preserve">
     <value>Knowledge on · {0} space(s)</value>
@@ -982,7 +982,7 @@ Save anyway?</value>
     <value>Enter a working directory.</value>
   </data>
   <data name="Settings_ApiKeyDpapiHint" xml:space="preserve">
-    <value>API keys are encrypted with Windows DPAPI in your user profile. The password box does not show saved keys; paste again after changing provider and click Save settings.</value>
+    <value>API keys are encrypted with Windows DPAPI in your user profile. The password box does not show saved keys; paste again after changing provider and click Save settings. Leave blank to omit the Authorization header.</value>
   </data>
   <data name="Settings_ApiKeyLabel" xml:space="preserve">
     <value>API Key</value>
@@ -1022,6 +1022,9 @@ Save anyway?</value>
   </data>
   <data name="Settings_EmbeddingApiKeySaved" xml:space="preserve">
     <value>Saved knowledge embedding API key: {0}</value>
+  </data>
+  <data name="Settings_EmbeddingApiKeyHint" xml:space="preserve">
+    <value>Leave blank to omit the Authorization header; when set, requests use Bearer authentication.</value>
   </data>
   <data name="Settings_EmbeddingEndpoint" xml:space="preserve">
     <value>Embedding Endpoint</value>

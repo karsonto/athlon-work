@@ -44,7 +44,7 @@ public sealed class OpenAiCompatibleChatModelClient(
 
     private async Task<AgentModelResponse> CompleteOpenAiCompatibleAsync(
         AgentModelRequest request,
-        string apiKey,
+        string? apiKey,
         bool stream,
         Func<string, Task>? onTextDelta,
         Func<string, Task>? onReasoningDelta,
@@ -67,7 +67,11 @@ public sealed class OpenAiCompatibleChatModelClient(
             {
                 Content = JsonContent.Create(payload)
             };
-            httpRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                httpRequest.Headers.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey.Trim());
+            }
 
             using var response = await httpClient.SendAsync(
                 httpRequest,

@@ -179,6 +179,11 @@
                             <TextBlock Text="{Binding HasStoredKnowledgeEmbeddingApiKey, StringFormat=已保存知识库 Embedding API Key：{0}}"
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        FontSize="12" />
+                            <TextBlock Text="{loc:Localize Key=Settings_EmbeddingApiKeyHint}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,6,0,0" />
                         </StackPanel>
                     </Border>
 
