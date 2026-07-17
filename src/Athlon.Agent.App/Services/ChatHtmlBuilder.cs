@@ -246,14 +246,18 @@ public sealed class ChatHtmlBuilder
         """
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
-          font-family: "Inter", "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+          font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
           font-size: 14px;
+          font-weight: 400;
           line-height: 1.5;
+          letter-spacing: normal;
           color: var(--assistant-text);
           background: var(--chat-bg);
           height: 100%;
           overflow: hidden;
-          -webkit-font-smoothing: antialiased;
+          /* Keep ClearType/subpixel AA on Windows; antialiased makes Chromium text soft/blurry. */
+          -webkit-font-smoothing: auto;
+          text-rendering: auto;
         }
         #chat-scroll {
           position: relative;

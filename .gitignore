@@ -48,6 +48,9 @@ Desktop.ini
 .build-tmp/
 .obj-tmp/
 
+# Local NuGet global packages folder (see nuget.config)
+.nuget/
+
 # License signing private key (never commit)
 tools/license/keys/private.pem
 tools/license/.venv/

@@ -128,9 +128,13 @@ public static class MarkdownHtmlRenderer
           padding: 0;
           background: transparent;
           color: __TEXT_COLOR__;
-          font-family: "Segoe UI", "Inter", "PingFang SC", "Hiragino Sans GB", sans-serif;
+          font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
           font-size: 14px;
+          font-weight: 400;
           line-height: 1.6;
+          letter-spacing: normal;
+          -webkit-font-smoothing: auto;
+          text-rendering: auto;
           overflow-x: hidden;
           overflow-y: auto;
         }

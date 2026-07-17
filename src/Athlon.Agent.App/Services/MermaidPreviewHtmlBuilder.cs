@@ -60,7 +60,8 @@ public static class MermaidPreviewHtmlBuilder
                   min-height: 100%;
                   background: {{palette.PageBackground}};
                   color: {{palette.TextColor}};
-                  font-family: "Segoe UI", "PingFang SC", sans-serif;
+                  font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+                  -webkit-font-smoothing: auto;
                 }
                 h1 {
                   margin: 0 0 20px;
@@ -123,7 +124,7 @@ public static class MermaidPreviewHtmlBuilder
                       startOnLoad: false,
                       theme: '{{palette.MermaidTheme}}',
                       securityLevel: 'strict',
-                      fontFamily: 'Segoe UI, PingFang SC, sans-serif'
+                      fontFamily: 'Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, PingFang SC, system-ui, sans-serif'
                     });
                     await mermaid.run({ querySelector: '.mermaid' });
                     status.textContent = '渲染完成';
