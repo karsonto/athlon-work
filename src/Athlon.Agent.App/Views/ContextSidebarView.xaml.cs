@@ -11,7 +11,7 @@ public partial class ContextSidebarView : UserControl
         InitializeComponent();
     }
 
-    private void WorkspaceTreeItem_OnExpanded(object sender, RoutedEventArgs e)
+    private async void WorkspaceTreeItem_OnExpanded(object sender, RoutedEventArgs e)
     {
         if (sender is not TreeViewItem { DataContext: WorkspaceTreeNodeViewModel node })
         {
@@ -20,7 +20,7 @@ public partial class ContextSidebarView : UserControl
 
         if (Window.GetWindow(this)?.DataContext is MainShellViewModel viewModel)
         {
-            viewModel.Sidebar.ExpandWorkspaceTreeNode(node);
+            await viewModel.Sidebar.ExpandWorkspaceTreeNodeAsync(node).ConfigureAwait(true);
         }
     }
 }

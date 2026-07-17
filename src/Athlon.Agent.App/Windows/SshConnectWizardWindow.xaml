@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
         Title="{loc:Localize Key=Shell_SshWizardTitle}"
-        Width="560"
+        Width="600"
+        MinHeight="420"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource Brush.AppBackground}"
@@ -11,7 +12,8 @@
         FontFamily="Segoe UI"
         FontSize="14"
         ResizeMode="NoResize"
-        ShowInTaskbar="False">
+        ShowInTaskbar="False"
+        Closing="Window_OnClosing">
     <Border Padding="28,24"
             Background="{DynamicResource Brush.Panel}"
             BorderBrush="{DynamicResource Brush.Border}"
@@ -104,17 +106,58 @@
                 </StackPanel>
             </StackPanel>
 
-            <!-- Step 3: Remote root -->
+            <!-- Step 3: Pick remote folder from directory tree -->
             <StackPanel x:Name="Step3Panel" Grid.Row="1" Visibility="Collapsed">
                 <TextBlock Text="{loc:Localize Key=Shell_SshName}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
                 <TextBox x:Name="NameBox" Padding="10,8" Margin="0,0,0,14" Height="36" VerticalContentAlignment="Center" />
 
-                <TextBlock Text="{loc:Localize Key=Shell_SshRemoteRoot}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
-                <TextBox x:Name="RemoteRootBox" Text="/home" Padding="10,8" Margin="0,0,0,8" Height="36" VerticalContentAlignment="Center" />
-                <TextBlock Text="{loc:Localize Key=Shell_SshWizardRootHint}"
+                <TextBlock Text="{loc:Localize Key=Shell_SshWizardSelectedPath}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                <TextBox x:Name="SelectedPathBox"
+                         IsReadOnly="True"
+                         Padding="10,8"
+                         Margin="0,0,0,10"
+                         Height="36"
+                         VerticalContentAlignment="Center"
+                         Foreground="{DynamicResource Brush.SubtleText}" />
+
+                <TextBlock Text="{loc:Localize Key=Shell_SshWizardBrowseHint}"
                            Foreground="{DynamicResource Brush.SubtleText}"
                            FontSize="12"
-                           TextWrapping="Wrap" />
+                           TextWrapping="Wrap"
+                           Margin="0,0,0,8" />
+
+                <Border Background="{DynamicResource Brush.AppBackground}"
+                        BorderBrush="{DynamicResource Brush.Border}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        Padding="6"
+                        Height="280">
+                    <TreeView x:Name="RemoteTree"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              FontSize="13"
+                              Foreground="{DynamicResource Brush.Text}"
+                              SelectedItemChanged="RemoteTree_OnSelectedItemChanged"
+                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem" BasedOn="{StaticResource WorkspaceTreeViewItemStyle}">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}" />
+                                <EventSetter Event="Expanded" Handler="RemoteTreeItem_OnExpanded" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsPlaceholder}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Setter Property="Height" Value="0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TreeView.ItemContainerStyle>
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                </Border>
             </StackPanel>
 
             <TextBlock x:Name="StatusText"
@@ -133,7 +176,7 @@
                         Click="BackButton_Click" />
                 <Button x:Name="NextButton"
                         DockPanel.Dock="Right"
-                        Content="{loc:Localize Key=Shell_SshWizardNext}"
+                        Content="{loc:Localize Key=Shell_SshWizardConnectAndBrowse}"
                         Padding="16,8"
                         Style="{StaticResource GhostButtonStyle}"
                         Click="NextButton_Click" />

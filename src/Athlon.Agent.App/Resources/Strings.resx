@@ -1330,12 +1330,6 @@
   <data name="Shell_RunOnConnectSshAction" xml:space="preserve">
     <value>通过 SSH 连接…</value>
   </data>
-  <data name="Shell_RunOnConnectWsl" xml:space="preserve">
-    <value>WSL</value>
-  </data>
-  <data name="Shell_RunOnWslUnavailable" xml:space="preserve">
-    <value>WSL 暂未支持</value>
-  </data>
   <data name="Shell_SshWizardTitle" xml:space="preserve">
     <value>通过 SSH 连接</value>
   </data>
@@ -1352,7 +1346,25 @@
     <value>打开 SSH Config</value>
   </data>
   <data name="Shell_SshWizardRootHint" xml:space="preserve">
-    <value>远程工作区根目录，例如 /home/user/project</value>
+    <value>在目录树中选择远程工作区根目录</value>
+  </data>
+  <data name="Shell_SshWizardBrowseHint" xml:space="preserve">
+    <value>展开目录并点击选择工作区根目录，确认后才会绑定该路径。</value>
+  </data>
+  <data name="Shell_SshWizardSelectedPath" xml:space="preserve">
+    <value>已选目录</value>
+  </data>
+  <data name="Shell_SshWizardSelectFolder" xml:space="preserve">
+    <value>请在目录树中选择工作目录。</value>
+  </data>
+  <data name="Shell_SshWizardConnectAndBrowse" xml:space="preserve">
+    <value>连接并浏览</value>
+  </data>
+  <data name="Shell_SshWizardConnecting" xml:space="preserve">
+    <value>正在连接…</value>
+  </data>
+  <data name="Shell_SshWizardLoadingTree" xml:space="preserve">
+    <value>正在加载目录…</value>
   </data>
   <data name="Shell_SshWizardBack" xml:space="preserve">
     <value>上一步</value>

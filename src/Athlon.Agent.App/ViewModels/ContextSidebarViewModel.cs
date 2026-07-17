@@ -18,12 +18,19 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
     private readonly IAppPathProvider _paths;
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly IMcpRegistry _mcpRegistry;
+    private readonly ISshWorkspaceClient _sshClient;
 
-    public ContextSidebarViewModel(IAppPathProvider paths, IAgentSkillCatalog skillCatalog, IMcpRegistry mcpRegistry, AppSettings settings)
+    public ContextSidebarViewModel(
+        IAppPathProvider paths,
+        IAgentSkillCatalog skillCatalog,
+        IMcpRegistry mcpRegistry,
+        AppSettings settings,
+        ISshWorkspaceClient sshClient)
     {
         _paths = paths;
         _skillCatalog = skillCatalog;
         _mcpRegistry = mcpRegistry;
+        _sshClient = sshClient;
         Refresh(settings);
     }
 
@@ -151,6 +158,25 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
         }
     }
 
-    public void ExpandWorkspaceTreeNode(WorkspaceTreeNodeViewModel node) =>
+    public async Task ExpandWorkspaceTreeNodeAsync(WorkspaceTreeNodeViewModel node)
+    {
+        if (node.IsRemote)
+        {
+            await node.EnsureRemoteChildrenLoadedAsync(
+                async (path, cancellationToken) =>
+                {
+                    var entries = new List<SshEntry>();
+                    await foreach (var entry in _sshClient.ListAsync(path, cancellationToken).ConfigureAwait(false))
+                    {
+                        entries.Add(entry);
+                    }
+
+                    return entries;
+                },
+                _workspaceIgnorePatterns).ConfigureAwait(true);
+            return;
+        }
+
         node.EnsureChildrenLoaded(_workspaceIgnorePatterns);
+    }
 }

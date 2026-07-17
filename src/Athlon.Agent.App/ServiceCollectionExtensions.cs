@@ -93,7 +93,9 @@ public static class ServiceCollectionExtensions
 
             sp.GetRequiredService<IMcpRegistry>(),
 
-            sp.GetRequiredService<AppSettings>()));
+            sp.GetRequiredService<AppSettings>(),
+
+            sp.GetRequiredService<ISshWorkspaceClient>()));
 
         services.AddSingleton(sp => new KnowledgeViewModel(
 

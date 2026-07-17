@@ -1153,37 +1153,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         menu.Items.Add(new Separator());
 
-        var sshWorkspaces = _appSettings.Workspaces
-            .Where(workspace => workspace.WorkspaceKind == WorkspaceKind.Ssh && workspace.Ssh is not null)
-            .OrderBy(workspace => workspace.Name, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        if (sshWorkspaces.Length == 0)
-        {
-            menu.Items.Add(new MenuItem
-            {
-                Header = _loc["Shell_RunOnNoRemotes"],
-                IsEnabled = false,
-                Style = itemStyle
-            });
-        }
-        else
-        {
-            foreach (var workspace in sshWorkspaces)
-            {
-                var item = new MenuItem
-                {
-                    Header = FormatRemoteLabel(workspace),
-                    Tag = workspace.Id,
-                    Style = itemStyle,
-                    IsCheckable = true,
-                    IsChecked = string.Equals(_session.ActiveWorkspaceId, workspace.Id, StringComparison.OrdinalIgnoreCase)
-                };
-                var captured = workspace;
-                item.Click += (_, _) => ScheduleUi(() => SelectExistingSshWorkspaceAsync(captured));
-                menu.Items.Add(item);
-            }
-        }
-
         var sshItem = new MenuItem
         {
             Header = _loc["Shell_RunOnConnectSshAction"],
@@ -1191,15 +1160,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         };
         sshItem.Click += (_, _) => ScheduleUi(ConfigureSshWorkspaceAsync);
         menu.Items.Add(sshItem);
-
-        var wslItem = new MenuItem
-        {
-            Header = _loc["Shell_RunOnConnectWsl"],
-            IsEnabled = false,
-            Style = itemStyle,
-            ToolTip = _loc["Shell_RunOnWslUnavailable"]
-        };
-        menu.Items.Add(wslItem);
 
         if (HasSessionWorkspace)
         {
@@ -1262,6 +1222,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         var dialog = new SshConnectWizardWindow(
             _sshConnection,
+            _sshClient,
             _credentialStore,
             _notifier,
             _loc)
@@ -1274,42 +1235,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         await ApplyConfiguredSshWorkspaceAsync(dialog.ResultWorkspace).ConfigureAwait(true);
-    }
-
-    private async Task SelectExistingSshWorkspaceAsync(WorkspaceSettings workspace)
-    {
-        try
-        {
-            await _sshConnection.SyncAsync(
-                _session.WithWorkspace(workspace.RootPath, workspace.Id),
-                _appSettings).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            // Re-open wizard prefilled when reconnect fails.
-            var dialog = new SshConnectWizardWindow(
-                _sshConnection,
-                _credentialStore,
-                _notifier,
-                _loc,
-                workspace)
-            {
-                Owner = Application.Current?.MainWindow
-            };
-            if (dialog.ShowDialog() != true || dialog.ResultWorkspace is null)
-            {
-                _notifier.WarningText("Common_Prompt", _loc.Format("Shell_SshTestFailed", ex.Message));
-                return;
-            }
-
-            await ApplyConfiguredSshWorkspaceAsync(dialog.ResultWorkspace).ConfigureAwait(true);
-            return;
-        }
-
-        _session = _session.WithWorkspace(workspace.RootPath, workspace.Id);
-        await ApplySessionWorkspaceAsync().ConfigureAwait(true);
-        await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
-        Settings.SettingsStatus = _loc.Format("Shell_SshConnectedStatus", FormatRemoteLabel(workspace));
     }
 
     private async Task ApplyConfiguredSshWorkspaceAsync(WorkspaceSettings configured)

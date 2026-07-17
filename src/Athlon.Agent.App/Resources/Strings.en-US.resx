@@ -1321,12 +1321,6 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   <data name="Shell_RunOnConnectSshAction" xml:space="preserve">
     <value>Connect via SSH…</value>
   </data>
-  <data name="Shell_RunOnConnectWsl" xml:space="preserve">
-    <value>WSL</value>
-  </data>
-  <data name="Shell_RunOnWslUnavailable" xml:space="preserve">
-    <value>WSL is not available yet</value>
-  </data>
   <data name="Shell_SshWizardTitle" xml:space="preserve">
     <value>Connect via SSH</value>
   </data>
@@ -1343,7 +1337,25 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
     <value>Open SSH Config</value>
   </data>
   <data name="Shell_SshWizardRootHint" xml:space="preserve">
-    <value>Remote workspace root, e.g. /home/user/project</value>
+    <value>Select the remote workspace root in the directory tree</value>
+  </data>
+  <data name="Shell_SshWizardBrowseHint" xml:space="preserve">
+    <value>Expand folders and click to choose the workspace root. The path is applied only after you confirm.</value>
+  </data>
+  <data name="Shell_SshWizardSelectedPath" xml:space="preserve">
+    <value>Selected folder</value>
+  </data>
+  <data name="Shell_SshWizardSelectFolder" xml:space="preserve">
+    <value>Select a folder in the directory tree.</value>
+  </data>
+  <data name="Shell_SshWizardConnectAndBrowse" xml:space="preserve">
+    <value>Connect &amp; browse</value>
+  </data>
+  <data name="Shell_SshWizardConnecting" xml:space="preserve">
+    <value>Connecting…</value>
+  </data>
+  <data name="Shell_SshWizardLoadingTree" xml:space="preserve">
+    <value>Loading directories…</value>
   </data>
   <data name="Shell_SshWizardBack" xml:space="preserve">
     <value>Back</value>
