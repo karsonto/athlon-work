@@ -302,46 +302,93 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
         try
         {
             var ssh = RequireSsh();
-            return await Task.Run(() =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var sw = Stopwatch.StartNew();
-                using var cmd = ssh.CreateCommand(wrapped);
-                var asyncResult = cmd.BeginExecute();
-                using var registration = cancellationToken.Register(() =>
-                {
-                    try
-                    {
-                        cmd.CancelAsync();
-                    }
-                    catch
-                    {
-                        // ignore
-                    }
-                });
-
-                if (!asyncResult.AsyncWaitHandle.WaitOne(timeout))
-                {
-                    try
-                    {
-                        cmd.CancelAsync();
-                    }
-                    catch
-                    {
-                        // ignore
-                    }
-
-                    throw new TimeoutException($"SSH command timed out after {timeout.TotalSeconds:0}s.");
-                }
-
-                var stdout = cmd.EndExecute(asyncResult) ?? string.Empty;
-                sw.Stop();
-                return new SshCommandResult(cmd.ExitStatus ?? -1, stdout, cmd.Error ?? string.Empty, sw.Elapsed);
-            }, cancellationToken).ConfigureAwait(false);
+            // Do not pass cancellationToken into Task.Run: SSH.NET signals cancel via CancelAsync,
+            // and EndExecute then throws TaskCanceledException which we map explicitly below.
+            return await Task.Run(
+                    () => ExecuteCommandCore(ssh, wrapped, timeout, cancellationToken),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
+        }
+    }
+
+    private static SshCommandResult ExecuteCommandCore(
+        SshClient ssh,
+        string wrappedCommand,
+        TimeSpan timeout,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var sw = Stopwatch.StartNew();
+        using var cmd = ssh.CreateCommand(wrappedCommand);
+        var asyncResult = cmd.BeginExecute();
+        using var registration = cancellationToken.Register(static state =>
+        {
+            try
+            {
+                ((SshCommand)state!).CancelAsync();
+            }
+            catch
+            {
+                // ignore cancel races while disposing/disconnecting
+            }
+        }, cmd);
+
+        if (!asyncResult.AsyncWaitHandle.WaitOne(timeout))
+        {
+            try
+            {
+                cmd.CancelAsync();
+            }
+            catch
+            {
+                // ignore
+            }
+
+            TryEndExecuteQuietly(cmd, asyncResult);
+            throw new TimeoutException($"SSH command timed out after {timeout.TotalSeconds:0}s.");
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            TryEndExecuteQuietly(cmd, asyncResult);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        try
+        {
+            var stdout = cmd.EndExecute(asyncResult) ?? string.Empty;
+            sw.Stop();
+            return new SshCommandResult(cmd.ExitStatus ?? -1, stdout, cmd.Error ?? string.Empty, sw.Elapsed);
+        }
+        catch (Exception ex) when (ex is TaskCanceledException or OperationCanceledException)
+        {
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw new OperationCanceledException("SSH command was canceled.", ex, cancellationToken);
+            }
+
+            // SSH.NET aborted the command without our token (disconnect / library cancel).
+            throw new InvalidOperationException("SSH command was aborted.", ex);
+        }
+    }
+
+    private static void TryEndExecuteQuietly(SshCommand cmd, IAsyncResult asyncResult)
+    {
+        try
+        {
+            _ = cmd.EndExecute(asyncResult);
+        }
+        catch (Exception ex) when (ex is TaskCanceledException or OperationCanceledException or ObjectDisposedException)
+        {
+            // Expected after CancelAsync / timeout.
+        }
+        catch
+        {
+            // Best-effort drain; ignore secondary failures.
         }
     }
 
@@ -358,15 +405,28 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
             return cached;
         }
 
-        var result = await ExecuteAsync(
-                $"command -v {ShellQuote(name)} >/dev/null 2>&1",
-                RemoteRoot,
-                TimeSpan.FromSeconds(10),
-                cancellationToken)
-            .ConfigureAwait(false);
-        var exists = result.ExitCode == 0;
-        _commandCache[name] = exists;
-        return exists;
+        try
+        {
+            var result = await ExecuteAsync(
+                    $"command -v {ShellQuote(name)} >/dev/null 2>&1",
+                    RemoteRoot,
+                    TimeSpan.FromSeconds(10),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var exists = result.ExitCode == 0;
+            _commandCache[name] = exists;
+            return exists;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("Remote command probe failed for {Command}: {Message}", name, ex.Message);
+            _commandCache[name] = false;
+            return false;
+        }
     }
 
     public void Dispose()
