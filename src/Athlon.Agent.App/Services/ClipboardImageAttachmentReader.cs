@@ -18,7 +18,7 @@ public sealed class ClipboardImageAttachmentReader(IImageAttachmentReader imageA
         "image/webp",
     ];
 
-    public bool HasPotentialImages()
+    public bool HasPotentialPasteAttachments()
     {
         if (Clipboard.ContainsFileDropList() || Clipboard.ContainsImage())
         {
@@ -29,15 +29,28 @@ public sealed class ClipboardImageAttachmentReader(IImageAttachmentReader imageA
         return data is not null && HasImageFormats(data);
     }
 
+    /// <summary>Backward-compatible alias. </summary>
+    public bool HasPotentialImages() => HasPotentialPasteAttachments();
+
+    public string[] GetClipboardFilePaths()
+    {
+        if (!Clipboard.ContainsFileDropList())
+        {
+            return [];
+        }
+
+        return Clipboard.GetFileDropList()
+            .Cast<string>()
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .ToArray();
+    }
+
     public async Task<IReadOnlyList<ImageAttachment>> TryReadImagesAsync(
         CancellationToken cancellationToken = default)
     {
         if (Clipboard.ContainsFileDropList())
         {
-            var paths = Clipboard.GetFileDropList()
-                .Cast<string>()
-                .Where(path => !string.IsNullOrWhiteSpace(path))
-                .ToArray();
+            var paths = GetClipboardFilePaths();
             if (paths.Length > 0)
             {
                 var images = await imageAttachmentReader.ReadImagesAsync(paths, cancellationToken)

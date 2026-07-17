@@ -197,7 +197,31 @@
     <value>{0}s</value>
   </data>
   <data name="Chat_SelectImages" xml:space="preserve">
-    <value>Select images</value>
+    <value>Select files</value>
+  </data>
+  <data name="Chat_SelectFiles" xml:space="preserve">
+    <value>Select files</value>
+  </data>
+  <data name="Chat_SelectFilesFilter" xml:space="preserve">
+    <value>Files|*.pdf;*.docx;*.xlsx;*.xls;*.csv;*.pptx;*.txt;*.md;*.png;*.jpg;*.jpeg;*.webp;*.gif|All files|*.*</value>
+  </data>
+  <data name="Chat_LegacyPptRejected" xml:space="preserve">
+    <value>"{0}": legacy ".ppt" is not supported; save as ".pptx" and try again</value>
+  </data>
+  <data name="Chat_UnsupportedAttachment" xml:space="preserve">
+    <value>Unsupported file type: {0}</value>
+  </data>
+  <data name="Chat_AttachmentParseFailed" xml:space="preserve">
+    <value>Failed to parse attachments</value>
+  </data>
+  <data name="Chat_AttachmentParsePartial" xml:space="preserve">
+    <value>Parsed {0} attachment(s); {1} failed</value>
+  </data>
+  <data name="Chat_ReadingAttachments" xml:space="preserve">
+    <value>Parsing attachments…</value>
+  </data>
+  <data name="Chat_PendingParse" xml:space="preserve">
+    <value>Pending parse</value>
   </data>
   <data name="Chat_SelectKnowledgeModule" xml:space="preserve">
     <value>Select knowledge space</value>
@@ -272,7 +296,7 @@
     <value>(stopped)</value>
   </data>
   <data name="Chat_UploadImageTooltip" xml:space="preserve">
-    <value>Upload image (Ctrl+V to paste)</value>
+    <value>Add files (drag-and-drop or Ctrl+V to paste)</value>
   </data>
   <data name="Chat_WelcomeDescription" xml:space="preserve">
     <value>Athlon Agent can help you analyze code, build prototypes, refine designs, or handle development tasks.</value>
@@ -362,13 +386,13 @@
     <value>Agent mode</value>
   </data>
   <data name="ComposerPlus_Image" xml:space="preserve">
-    <value>Image</value>
+    <value>File</value>
   </data>
   <data name="ComposerPlus_Knowledge" xml:space="preserve">
     <value>Knowledge</value>
   </data>
   <data name="ComposerPlus_MenuTooltip" xml:space="preserve">
-    <value>Add mode, image, and knowledge</value>
+    <value>Add mode, files, and knowledge</value>
   </data>
   <data name="ComposerKnowledge_PickerSelect" xml:space="preserve">
     <value>Select knowledge spaces</value>

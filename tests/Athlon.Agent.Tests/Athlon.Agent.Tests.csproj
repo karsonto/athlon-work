@@ -29,4 +29,8 @@
     <ProjectReference Include="..\..\src\Athlon.Agent.Mcp\Athlon.Agent.Mcp.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Fixtures\Attachments\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

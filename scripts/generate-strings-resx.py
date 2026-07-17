@@ -200,8 +200,22 @@ ENTRIES: dict[str, tuple[str, str]] = {
     "Context_RemoveWorkspace": ("移除工作区", "Remove workspace"),
     "Chat_SettingsTooltip": ("设置", "Settings"),
     "Chat_LoadingConversation": ("正在加载对话…", "Loading conversation…"),
-    "Chat_UploadImageTooltip": ("上传图片（支持 Ctrl+V 粘贴）", "Upload image (Ctrl+V to paste)"),
+    "Chat_UploadImageTooltip": ("添加文件（支持拖拽与 Ctrl+V 粘贴）", "Add files (drag-and-drop or Ctrl+V to paste)"),
     "Chat_SelectKnowledgeModule": ("选择知识空间", "Select knowledge space"),
+    "Chat_SelectFiles": ("选择文件", "Select files"),
+    "Chat_SelectFilesFilter": (
+        "文件|*.pdf;*.docx;*.xlsx;*.xls;*.csv;*.pptx;*.txt;*.md;*.png;*.jpg;*.jpeg;*.webp;*.gif|所有文件|*.*",
+        "Files|*.pdf;*.docx;*.xlsx;*.xls;*.csv;*.pptx;*.txt;*.md;*.png;*.jpg;*.jpeg;*.webp;*.gif|All files|*.*",
+    ),
+    "Chat_LegacyPptRejected": (
+        '"{0}"：暂不支持老式 ".ppt" 文件，请另存为 ".pptx" 后上传',
+        '"{0}": legacy ".ppt" is not supported; save as ".pptx" and try again',
+    ),
+    "Chat_UnsupportedAttachment": ("不支持的文件类型：{0}", "Unsupported file type: {0}"),
+    "Chat_AttachmentParseFailed": ("附件解析失败", "Failed to parse attachments"),
+    "Chat_AttachmentParsePartial": ("已解析 {0} 个附件，另有 {1} 个失败", "Parsed {0} attachment(s); {1} failed"),
+    "Chat_ReadingAttachments": ("正在解析附件…", "Parsing attachments…"),
+    "Chat_PendingParse": ("待解析", "Pending parse"),
     "Chat_SearchKnowledgePlaceholder": ("搜索知识空间...", "Search knowledge spaces..."),
     "Chat_PauseReplyTooltip": ("暂停当前回复", "Pause current reply"),
     "Chat_SendTooltip": ("发送（生成中将加入排队）", "Send (queues while generating)"),
@@ -538,7 +552,7 @@ ENTRIES: dict[str, tuple[str, str]] = {
     "Tool_NoArgs": ("(无参数)", "(no arguments)"),
     "FileWrite_StreamingContent": ("content = 传输中…", "content = streaming…"),
     "FileWrite_ArgumentsJsonInvalid": ("参数 JSON 无效或不完整", "arguments JSON invalid or incomplete"),
-    "Chat_SelectImages": ("选择图片", "Select images"),
+    "Chat_SelectImages": ("选择文件", "Select files"),
     "Chat_QueuedStatus": ("已加入排队", "Added to queue"),
 }
 

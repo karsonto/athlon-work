@@ -174,6 +174,13 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         {
             ChatPage.OnPendingImagesChanged();
             OnPropertyChanged(nameof(HasPendingImages));
+            OnPropertyChanged(nameof(HasPendingAttachments));
+        };
+        ChatPage.PendingDocumentAttachments.CollectionChanged += (_, _) =>
+        {
+            ChatPage.OnPendingDocumentsChanged();
+            OnPropertyChanged(nameof(HasPendingDocuments));
+            OnPropertyChanged(nameof(HasPendingAttachments));
         };
         ChatPage.PropertyChanged += (_, e) =>
         {
@@ -191,6 +198,15 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                     break;
                 case nameof(ChatPageViewModel.SelectedAtCompletionIndex):
                     OnPropertyChanged(nameof(SelectedAtCompletionIndex));
+                    break;
+                case nameof(ChatPageViewModel.IsReadingAttachments):
+                    OnPropertyChanged(nameof(IsReadingAttachments));
+                    break;
+                case nameof(ChatPageViewModel.HasPendingAttachments):
+                    OnPropertyChanged(nameof(HasPendingAttachments));
+                    break;
+                case nameof(ChatPageViewModel.HasPendingDocuments):
+                    OnPropertyChanged(nameof(HasPendingDocuments));
                     break;
             }
         };
@@ -410,7 +426,16 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public ObservableCollection<PendingImageAttachmentViewModel> PendingImageAttachments => ChatPage.PendingImageAttachments;
 
+    public ObservableCollection<PendingDocumentAttachmentViewModel> PendingDocumentAttachments =>
+        ChatPage.PendingDocumentAttachments;
+
     public bool HasPendingImages => ChatPage.HasPendingImages;
+
+    public bool HasPendingDocuments => ChatPage.HasPendingDocuments;
+
+    public bool HasPendingAttachments => ChatPage.HasPendingAttachments;
+
+    public bool IsReadingAttachments => ChatPage.IsReadingAttachments;
 
     public IAsyncRelayCommand SendCommand => ChatPage.SendCommand;
 
@@ -418,7 +443,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public IAsyncRelayCommand SelectImagesCommand => ChatPage.SelectImagesCommand;
 
+    public IAsyncRelayCommand SelectAttachmentsCommand => ChatPage.SelectAttachmentsCommand;
+
     public IRelayCommand RemovePendingImageCommand => ChatPage.RemovePendingImageCommand;
+
+    public IRelayCommand RemovePendingDocumentCommand => ChatPage.RemovePendingDocumentCommand;
 
     public IRelayCommand RemoveQueuedTurnCommand => ChatPage.RemoveQueuedTurnCommand;
 
@@ -436,11 +465,14 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private async Task PlusSelectImagesAsync()
     {
         IsPlusMenuOpen = false;
-        if (SelectImagesCommand.CanExecute(null))
+        if (SelectAttachmentsCommand.CanExecute(null))
         {
-            await SelectImagesCommand.ExecuteAsync(null).ConfigureAwait(true);
+            await SelectAttachmentsCommand.ExecuteAsync(null).ConfigureAwait(true);
         }
     }
+
+    public Task AddPendingFromFilePathsAsync(IEnumerable<string> filePaths) =>
+        ChatPage.AddPendingFromFilePathsAsync(filePaths);
 
     public string SettingsStatus
     {
@@ -635,6 +667,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         CurrentSessionTitle = _session.Title;
         ComposerText = string.Empty;
         PendingImageAttachments.Clear();
+        PendingDocumentAttachments.Clear();
         UpdateDisplayedBusyState();
         CurrentPage = AppPage.Chat;
         KnowledgePageVm.SetSession(_displayedSessionId);
@@ -665,6 +698,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _olderDisplayCursor = null;
         await _storage.ClearConversationDisplayAsync(_session.Id);
         PendingImageAttachments.Clear();
+        PendingDocumentAttachments.Clear();
         await ComposerHarness.ClearTaskPlanAsync();
         _taskListChangedNotifier.Notify(_session.Id);
 
@@ -873,6 +907,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             CurrentSessionTitle = _session.Title;
             ComposerText = string.Empty;
             PendingImageAttachments.Clear();
+            PendingDocumentAttachments.Clear();
             ApplySessionWorkspace();
             CurrentPage = AppPage.Chat;
         }
@@ -1417,6 +1452,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             KnowledgePageVm.SetSession(_displayedSessionId);
             ComposerText = string.Empty;
             PendingImageAttachments.Clear();
+            PendingDocumentAttachments.Clear();
 
             if (!IsSessionLoadCurrent(loadGeneration))
             {

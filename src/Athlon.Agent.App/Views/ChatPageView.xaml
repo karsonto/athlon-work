@@ -241,7 +241,10 @@
                     <Border x:Name="ComposerInputWrapper"
                             Grid.Row="1"
                             Style="{StaticResource ComposerInputWrapperStyle}"
-                            HorizontalAlignment="Stretch">
+                            HorizontalAlignment="Stretch"
+                            AllowDrop="True"
+                            DragOver="ComposerInputWrapper_OnDragOver"
+                            Drop="ComposerInputWrapper_OnDrop">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -256,12 +259,75 @@
                                                             <Style TargetType="ScrollViewer">
                                                                 <Setter Property="Visibility" Value="Collapsed" />
                                                                 <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding HasPendingImages}" Value="True">
+                                                                    <DataTrigger Binding="{Binding HasPendingAttachments}" Value="True">
                                                                         <Setter Property="Visibility" Value="Visible" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
                                                         </ScrollViewer.Style>
+                                                        <StackPanel Orientation="Vertical">
+                                                        <TextBlock Margin="0,0,0,6"
+                                                                   FontSize="12"
+                                                                   Foreground="{DynamicResource Brush.SubtleText}">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsReadingAttachments}" Value="True">
+                                                                            <Setter Property="Visibility" Value="Visible" />
+                                                                            <Setter Property="Text" Value="{loc:Localize Key=Chat_ReadingAttachments}" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                        <ItemsControl ItemsSource="{Binding PendingDocumentAttachments}"
+                                                                      Margin="0,0,0,6">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <StackPanel Orientation="Horizontal" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Background="{DynamicResource Brush.PanelAlt}"
+                                                                            BorderBrush="{DynamicResource Brush.Border}"
+                                                                            BorderThickness="1"
+                                                                            CornerRadius="8"
+                                                                            Margin="0,0,8,0"
+                                                                            Padding="6,4">
+                                                                        <Grid>
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="*" />
+                                                                                <ColumnDefinition Width="Auto" />
+                                                                                <ColumnDefinition Width="Auto" />
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <TextBlock Grid.Column="0"
+                                                                                       Text="{Binding FileName}"
+                                                                                       FontSize="12"
+                                                                                       TextTrimming="CharacterEllipsis"
+                                                                                       MaxWidth="180"
+                                                                                       VerticalAlignment="Center"
+                                                                                       Margin="0,0,8,0" />
+                                                                            <TextBlock Grid.Column="1"
+                                                                                       FontSize="11"
+                                                                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                                                                       VerticalAlignment="Center"
+                                                                                       Margin="0,0,6,0">
+                                                                                <Run Text="{Binding SizeLabel}" />
+                                                                                <Run Text=" · " />
+                                                                                <Run Text="{loc:Localize Key=Chat_PendingParse}" />
+                                                                            </TextBlock>
+                                                                            <Button Grid.Column="2"
+                                                                                    Content="×"
+                                                                                    Command="{Binding DataContext.RemovePendingDocumentCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                                    CommandParameter="{Binding}"
+                                                                                    Style="{StaticResource SessionDeleteButtonStyle}" />
+                                                                        </Grid>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
                                                         <ItemsControl ItemsSource="{Binding PendingImageAttachments}">
                                                             <ItemsControl.ItemsPanel>
                                                                 <ItemsPanelTemplate>
@@ -310,6 +376,7 @@
                                                                 </DataTemplate>
                                                             </ItemsControl.ItemTemplate>
                                                         </ItemsControl>
+                                                        </StackPanel>
                                                     </ScrollViewer>
 
                             <!-- Docked: + | text | actions；空状态：上文本、下工具栏（图2比例） -->

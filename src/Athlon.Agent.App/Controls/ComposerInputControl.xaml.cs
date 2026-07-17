@@ -136,7 +136,7 @@ public partial class ComposerInputControl : UserControl
             return false;
         }
 
-        if (_viewModel is null || ClipboardImageReader is null || !ClipboardImageReader.HasPotentialImages())
+        if (_viewModel is null || ClipboardImageReader is null || !ClipboardImageReader.HasPotentialPasteAttachments())
         {
             return false;
         }
@@ -179,6 +179,13 @@ public partial class ComposerInputControl : UserControl
         if (_viewModel is null || ClipboardImageReader is null)
         {
             return false;
+        }
+
+        var filePaths = ClipboardImageReader.GetClipboardFilePaths();
+        if (filePaths.Length > 0)
+        {
+            await _viewModel.AddPendingFromFilePathsAsync(filePaths).ConfigureAwait(true);
+            return true;
         }
 
         var images = await ClipboardImageReader.TryReadImagesAsync().ConfigureAwait(true);
