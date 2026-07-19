@@ -107,6 +107,7 @@ public interface ICredentialStore
     Task SaveSecretAsync(string name, string secret, CancellationToken cancellationToken = default);
     Task<string?> GetSecretAsync(string name, CancellationToken cancellationToken = default);
     Task<bool> HasSecretAsync(string name, CancellationToken cancellationToken = default);
+    Task DeleteSecretAsync(string name, CancellationToken cancellationToken = default);
 }
 public interface IAgentOrchestrator
 {

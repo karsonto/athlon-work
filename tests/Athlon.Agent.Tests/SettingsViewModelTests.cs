@@ -155,6 +155,12 @@ public sealed class SettingsViewModelTests
         public Task<bool> HasSecretAsync(string name, CancellationToken cancellationToken = default) =>
             Task.FromResult(_secrets.ContainsKey(name));
 
+        public Task DeleteSecretAsync(string name, CancellationToken cancellationToken = default)
+        {
+            _secrets.Remove(name);
+            return Task.CompletedTask;
+        }
+
         public string? GetSaved(string name) =>
             _secrets.TryGetValue(name, out var value) ? value : null;
     }

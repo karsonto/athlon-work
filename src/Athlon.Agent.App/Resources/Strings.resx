@@ -1459,6 +1459,18 @@
   <data name="Shell_SshConnectedStatus" xml:space="preserve">
     <value>SSH 工作区：{0}</value>
   </data>
+  <data name="Shell_SshDeleteConnection" xml:space="preserve">
+    <value>删除连接</value>
+  </data>
+  <data name="Shell_SshDeleteConnectionTitle" xml:space="preserve">
+    <value>删除 SSH 连接</value>
+  </data>
+  <data name="Shell_SshDeleteConnectionConfirm" xml:space="preserve">
+    <value>确定删除连接「{0}」？此操作会移除已保存的远程工作区与凭证。</value>
+  </data>
+  <data name="Shell_SshConnectionDeleted" xml:space="preserve">
+    <value>已删除 SSH 连接：{0}</value>
+  </data>
   <data name="Shell_ShuttingDown" xml:space="preserve">
     <value>正在关闭…</value>
   </data>

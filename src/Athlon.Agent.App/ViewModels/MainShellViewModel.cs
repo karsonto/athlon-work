@@ -1180,7 +1180,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         var itemStyle = Application.Current.TryFindResource("RunOnMenuItemStyle") as Style;
         var isLocalActive = HasSessionWorkspace && _workspaceContext.Kind == WorkspaceKind.Local;
         var isSshActive = HasSessionWorkspace && _workspaceContext.Kind == WorkspaceKind.Ssh;
-        var activeWorkspaceId = _session.WorkspaceId;
+        var activeWorkspaceId = _session.ActiveWorkspaceId;
 
         menu.Items.Add(new MenuItem
         {
@@ -1231,10 +1231,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                     && string.Equals(workspace.Id, activeWorkspaceId, StringComparison.OrdinalIgnoreCase);
                 var item = new MenuItem
                 {
-                    Header = CreateRunOnRowHeader(
-                        glyph: "\uE7F4",
-                        text: FormatRemoteLabel(workspace),
-                        trailing: selected ? RunOnTrailing.Check : RunOnTrailing.None),
+                    Header = CreateSshConnectionRowHeader(workspace, selected),
                     Style = itemStyle,
                     Tag = workspace
                 };
@@ -1281,6 +1278,56 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         return menu;
     }
 
+    private async Task DeleteSshConnectionAsync(WorkspaceSettings workspace)
+    {
+        var label = FormatRemoteLabel(workspace);
+        if (!_notifier.ConfirmYesNo("Shell_SshDeleteConnectionTitle", "Shell_SshDeleteConnectionConfirm", label))
+        {
+            return;
+        }
+
+        var isActive = HasSessionWorkspace
+            && _workspaceContext.Kind == WorkspaceKind.Ssh
+            && !string.IsNullOrWhiteSpace(_session.ActiveWorkspaceId)
+            && string.Equals(workspace.Id, _session.ActiveWorkspaceId, StringComparison.OrdinalIgnoreCase);
+
+        if (isActive)
+        {
+            if (!await FileEditor.TryCloseAllTabsAsync().ConfigureAwait(true))
+            {
+                return;
+            }
+
+            await _sshConnection.DisconnectAsync().ConfigureAwait(true);
+            _session = _session.WithWorkspace(null, workspaceId: null);
+            await ApplySessionWorkspaceAsync().ConfigureAwait(true);
+            await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
+        }
+
+        _appSettings.Workspaces.RemoveAll(item =>
+            string.Equals(item.Id, workspace.Id, StringComparison.OrdinalIgnoreCase));
+
+        try
+        {
+            await _credentialStore
+                .DeleteSecretAsync(SshWorkspaceSettings.PasswordSecretName(workspace.Id))
+                .ConfigureAwait(true);
+            await _credentialStore
+                .DeleteSecretAsync(SshWorkspaceSettings.KeyPassphraseSecretName(workspace.Id))
+                .ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+        }
+
+        await _storage.SaveSettingsAsync(_appSettings).ConfigureAwait(true);
+        Settings.SettingsStatus = _loc.Format("Shell_SshConnectionDeleted", label);
+        OnPropertyChanged(nameof(RunOnDisplayName));
+        OnPropertyChanged(nameof(HasSessionWorkspace));
+        OnPropertyChanged(nameof(WorkspacePanelActionLabel));
+    }
+
     private enum RunOnTrailing
     {
         None,
@@ -1309,6 +1356,88 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             Margin = new Thickness(8, 10, 8, 10),
             TextWrapping = TextWrapping.Wrap
         };
+
+    private UIElement CreateSshConnectionRowHeader(WorkspaceSettings workspace, bool selected)
+    {
+        var grid = new Grid { MinWidth = 210 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var icon = new TextBlock
+        {
+            Text = "\uE7F4",
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 14,
+            Margin = new Thickness(0, 0, 10, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Opacity = 0.88,
+            Foreground = TryFindBrush("Brush.Text") ?? Brushes.Black
+        };
+        Grid.SetColumn(icon, 0);
+        grid.Children.Add(icon);
+
+        var label = new TextBlock
+        {
+            Text = FormatRemoteLabel(workspace),
+            FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        Grid.SetColumn(label, 1);
+        grid.Children.Add(label);
+
+        if (selected)
+        {
+            var check = new TextBlock
+            {
+                Text = "\uE73E",
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 12,
+                Margin = new Thickness(4, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0.95,
+                Foreground = TryFindBrush("Brush.SubtleText") ?? Brushes.Gray
+            };
+            Grid.SetColumn(check, 2);
+            grid.Children.Add(check);
+        }
+
+        var deleteButton = new Button
+        {
+            Width = 26,
+            Height = 26,
+            Padding = new Thickness(0),
+            Margin = new Thickness(2, 0, 0, 0),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Focusable = false,
+            ToolTip = _loc["Shell_SshDeleteConnection"],
+            VerticalAlignment = VerticalAlignment.Center,
+            Content = new TextBlock
+            {
+                Text = "\uE74D",
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = 12,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0.7,
+                Foreground = TryFindBrush("Brush.SubtleText") ?? Brushes.Gray
+            }
+        };
+        deleteButton.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            e.Handled = true;
+            ScheduleUi(() => DeleteSshConnectionAsync(workspace));
+        };
+        Grid.SetColumn(deleteButton, 3);
+        grid.Children.Add(deleteButton);
+
+        return grid;
+    }
 
     private static UIElement CreateRunOnRowHeader(string glyph, string text, RunOnTrailing trailing)
     {

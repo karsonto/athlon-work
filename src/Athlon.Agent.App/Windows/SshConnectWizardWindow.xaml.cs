@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
@@ -111,6 +112,14 @@ public partial class SshConnectWizardWindow : Window
         if (step != 3)
         {
             StatusText.Text = string.Empty;
+        }
+    }
+
+    private void Header_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left && e.ButtonState == MouseButtonState.Pressed)
+        {
+            DragMove();
         }
     }
 

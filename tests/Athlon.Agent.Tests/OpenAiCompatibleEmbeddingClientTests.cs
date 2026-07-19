@@ -84,6 +84,9 @@ public sealed class OpenAiCompatibleEmbeddingClientTests
 
         public Task<bool> HasSecretAsync(string name, CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
+
+        public Task DeleteSecretAsync(string name, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class NoOpLogger : IAppLogger

@@ -64,6 +64,9 @@ public sealed class ModelApiKeyResolverTests
 
         public Task<bool> HasSecretAsync(string name, CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
+
+        public Task DeleteSecretAsync(string name, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class DictionaryCredentialStore : ICredentialStore
@@ -81,5 +84,11 @@ public sealed class ModelApiKeyResolverTests
 
         public Task<bool> HasSecretAsync(string name, CancellationToken cancellationToken = default) =>
             Task.FromResult(_secrets.ContainsKey(name));
+
+        public Task DeleteSecretAsync(string name, CancellationToken cancellationToken = default)
+        {
+            _secrets.Remove(name);
+            return Task.CompletedTask;
+        }
     }
 }

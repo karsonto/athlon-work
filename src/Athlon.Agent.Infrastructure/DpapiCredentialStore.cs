@@ -49,6 +49,17 @@ public sealed class DpapiCredentialStore(IAppPathProvider paths) : ICredentialSt
         return Task.FromResult(File.Exists(GetCredentialPath(name)));
     }
 
+    public Task DeleteSecretAsync(string name, CancellationToken cancellationToken = default)
+    {
+        var path = GetCredentialPath(name);
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+
+        return Task.CompletedTask;
+    }
+
     private string GetCredentialPath(string name)
     {
         var safeName = FileNameSanitizer.Sanitize(string.IsNullOrWhiteSpace(name) ? "default" : name);

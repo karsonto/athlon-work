@@ -1450,6 +1450,18 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   <data name="Shell_SshConnectedStatus" xml:space="preserve">
     <value>SSH workspace: {0}</value>
   </data>
+  <data name="Shell_SshDeleteConnection" xml:space="preserve">
+    <value>Delete connection</value>
+  </data>
+  <data name="Shell_SshDeleteConnectionTitle" xml:space="preserve">
+    <value>Delete SSH connection</value>
+  </data>
+  <data name="Shell_SshDeleteConnectionConfirm" xml:space="preserve">
+    <value>Delete connection “{0}”? This removes the saved remote workspace and credentials.</value>
+  </data>
+  <data name="Shell_SshConnectionDeleted" xml:space="preserve">
+    <value>Deleted SSH connection: {0}</value>
+  </data>
   <data name="Shell_ShuttingDown" xml:space="preserve">
     <value>Shutting down…</value>
   </data>

@@ -570,6 +570,7 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
         public Task SaveSecretAsync(string name, string secret, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string?> GetSecretAsync(string name, CancellationToken cancellationToken = default) => Task.FromResult<string?>(value);
         public Task<bool> HasSecretAsync(string name, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task DeleteSecretAsync(string name, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class EmptyCredentialStore : ICredentialStore
@@ -577,6 +578,7 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
         public Task SaveSecretAsync(string name, string secret, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string?> GetSecretAsync(string name, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
         public Task<bool> HasSecretAsync(string name, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task DeleteSecretAsync(string name, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class CaptureHttpLogService : ISessionHttpLogService
