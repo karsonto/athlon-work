@@ -1,8 +1,8 @@
 using System.Text;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.Memory;
 
 namespace Athlon.Agent.Tests;
@@ -13,7 +13,7 @@ public sealed class MemoryPromptContributorTests
     public void Append_NoneMode_DoesNotInjectMemory()
     {
         var settings = new AppSettings { Memory = { InlinePromptMode = MemoryInlinePromptMode.None } };
-        var contributor = CreateContributor("remember this", harnessEnabled: true, settings);
+        var contributor = CreateContributor("remember this", hasWorkspace: true, settings);
         var builder = new StringBuilder();
 
         contributor.Append(builder, CreateContext());
@@ -32,7 +32,7 @@ public sealed class MemoryPromptContributorTests
                 MaxInlineMemoryChars = 20
             }
         };
-        var contributor = CreateContributor(new string('x', 100), harnessEnabled: true, settings);
+        var contributor = CreateContributor(new string('x', 100), hasWorkspace: true, settings);
         var builder = new StringBuilder();
 
         contributor.Append(builder, CreateContext());
@@ -49,7 +49,7 @@ public sealed class MemoryPromptContributorTests
     {
         var settings = new AppSettings { Memory = { InlinePromptMode = MemoryInlinePromptMode.Full } };
         var content = "User prefers tabs over spaces.";
-        var contributor = CreateContributor(content, harnessEnabled: true, settings);
+        var contributor = CreateContributor(content, hasWorkspace: true, settings);
         var builder = new StringBuilder();
 
         contributor.Append(builder, CreateContext());
@@ -60,13 +60,13 @@ public sealed class MemoryPromptContributorTests
     }
 
     [Fact]
-    public void Append_Skips_WhenHarnessDisabled()
+    public void Append_Skips_WhenNoWorkspace()
     {
         var settings = new AppSettings { Memory = { InlinePromptMode = MemoryInlinePromptMode.Full } };
-        var contributor = CreateContributor("remember this", harnessEnabled: false, settings);
+        var contributor = CreateContributor("remember this", hasWorkspace: false, settings);
         var builder = new StringBuilder();
 
-        contributor.Append(builder, CreateContext());
+        contributor.Append(builder, CreateContext(workspaceRoot: null));
 
         Assert.DoesNotContain("Long-Term Memory", builder.ToString(), StringComparison.Ordinal);
     }
@@ -92,27 +92,36 @@ public sealed class MemoryPromptContributorTests
         Assert.Contains("memory_get", result, StringComparison.Ordinal);
     }
 
-    private static MemoryPromptContributor CreateContributor(string memoryContent, bool harnessEnabled, AppSettings settings)
+    private static MemoryPromptContributor CreateContributor(string memoryContent, bool hasWorkspace, AppSettings settings)
     {
-        var harness = RouterTestDependencies.CreateSessionHarnessState(enabled: harnessEnabled);
-        var accessor = RouterTestDependencies.CreateRunContextAccessor(harnessEnabled: harnessEnabled);
-        var memory = new StubLongTermMemory(memoryContent);
-        return new MemoryPromptContributor(memory, harness, accessor, settings);
+        var workspace = new ActiveWorkspaceContext();
+        if (hasWorkspace)
+        {
+            workspace.SetWorkspace(@"C:\work\demo", "demo");
+        }
+
+        var session = new ActiveAgentSessionContext();
+        session.SetSession("sess-memory-prompt");
+        var memory = new StubLongTermMemory(memoryContent, hasActiveScope: hasWorkspace);
+        return new MemoryPromptContributor(memory, workspace, session, settings);
     }
 
-    private static EnvironmentPromptContext CreateContext() =>
+    private static EnvironmentPromptContext CreateContext(string? workspaceRoot = @"C:\work\demo") =>
         new()
         {
             Session = AgentSession.Create("memory-prompt-test"),
-            WorkspaceRoot = @"C:\work\demo",
+            WorkspaceRoot = workspaceRoot,
             Tools = Array.Empty<ToolDefinition>(),
             SkillsDirectory = @"C:\Users\test\.athlon-agent\skills",
             Host = new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
             PromptSettings = new PromptSettings()
         };
 
-    private sealed class StubLongTermMemory(string curated) : ILongTermMemory
+    private sealed class StubLongTermMemory(string curated, bool hasActiveScope = true) : ILongTermMemory
     {
+        public bool HasActiveScope => hasActiveScope;
+        public string? ActiveWorkspaceKey => hasActiveScope ? "ws" : null;
+        public string? ActiveSessionId => hasActiveScope ? "sess" : null;
         public Task<string> ReadCuratedAsync(CancellationToken cancellationToken = default) => Task.FromResult(curated);
         public Task<string> ReadDailyAsync(DateTime date, CancellationToken cancellationToken = default) => Task.FromResult("");
         public Task<string> ReadDailyFileAsync(string fileName, CancellationToken cancellationToken = default) => Task.FromResult("");
@@ -125,5 +134,8 @@ public sealed class MemoryPromptContributorTests
         public Task<IReadOnlyList<string>> ListAllMemoryFilePathsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<string>>(["MEMORY.md"]);
         public Task ArchiveDailyFileAsync(string relativePath, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteCurrentSessionMemoryAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteSessionMemoryAsync(string? workspaceKey, string sessionId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 }

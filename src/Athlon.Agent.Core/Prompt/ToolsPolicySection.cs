@@ -29,7 +29,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
         if (PromptModeHelper.IsAskMode(context))
         {
             builder.AppendLine("- Tool decision tree:");
-            builder.AppendLine("  1. Mode gate: Ask mode permits read-only tools only; use file_read, grep_files, glob_files, file_list, and knowledge_search when available.");
+            builder.AppendLine("  1. Mode gate: Ask mode permits read-only tools only; use file_read, grep_files, glob_files, file_list, memory_search, memory_get, and knowledge_search when available.");
             builder.AppendLine("  2. Reject mutation: do NOT call file_write, file_edit, apply_patch, execute_command, or sub-agent tools (sessions_*, task_output).");
             builder.AppendLine("  3. Execute independent read-only calls in parallel; otherwise preserve dependency order.");
             AppendMcpDecisionFlow(builder);

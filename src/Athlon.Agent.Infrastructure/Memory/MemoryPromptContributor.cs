@@ -1,7 +1,6 @@
 using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
 
@@ -9,20 +8,21 @@ namespace Athlon.Agent.Infrastructure.Memory;
 
 /// <summary>
 /// Optionally injects curated MEMORY.md into ephemeral runtime context before each reasoning iteration.
-/// Only when harness is enabled for the session. Default mode is None (use memory_search / memory_get).
+/// Requires an active workspace. Default mode is None (use memory_search / memory_get).
 /// </summary>
 public sealed class MemoryPromptContributor(
     ILongTermMemory longTermMemory,
-    ISessionHarnessState harnessState,
-    IAgentRunContextAccessor runContextAccessor,
+    IActiveWorkspaceContext workspaceContext,
+    IActiveAgentSessionContext sessionContext,
     AppSettings settings) : IRuntimeContextContributor
 {
     private const string TruncationNotice = "\n\n...(truncated — use memory_get)...";
-    private const string PreviewHint = "Use memory_search / memory_get for full memory.";
+    private const string PreviewHint = "Use memory_search / memory_get for full memory. Memory is scoped to the current project session.";
 
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(5);
     private readonly object _cacheLock = new();
     private string _cachedMemoryContent = string.Empty;
+    private string? _cachedScopeKey;
     private DateTimeOffset _nextRefreshAt = DateTimeOffset.MinValue;
     private Task? _refreshTask;
 
@@ -30,7 +30,8 @@ public sealed class MemoryPromptContributor(
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
-        if (!harnessState.IsCodingModeForActiveRun(runContextAccessor) || PromptModeHelper.IsChatOnly(context))
+        if (PromptModeHelper.IsChatOnly(context)
+            || (!HasWorkspace() || !longTermMemory.HasActiveScope))
         {
             return;
         }
@@ -56,7 +57,7 @@ public sealed class MemoryPromptContributor(
         }
 
         builder.AppendLine();
-        builder.AppendLine("## Long-Term Memory");
+        builder.AppendLine("## Long-Term Memory (current project session)");
         builder.AppendLine();
         if (mode == MemoryInlinePromptMode.Preview)
         {
@@ -65,7 +66,7 @@ public sealed class MemoryPromptContributor(
         }
         else
         {
-            builder.AppendLine("Below is the consolidated long-term memory from previous sessions. Use it to recall user preferences, past decisions, and persistent context.");
+            builder.AppendLine("Below is the consolidated long-term memory for this conversation session. Use it to recall user preferences, past decisions, and persistent context.");
             builder.AppendLine();
         }
 
@@ -110,8 +111,25 @@ public sealed class MemoryPromptContributor(
         return appendNotice ? truncated + TruncationNotice : truncated;
     }
 
+    private string CurrentScopeKey()
+    {
+        MemoryScopeResolver.TryResolve(workspaceContext, sessionContext, out var workspaceKey, out var sessionId);
+        return $"{workspaceKey}|{sessionId}";
+    }
+
     private void EnsureMemoryLoaded()
     {
+        var scopeKey = CurrentScopeKey();
+        lock (_cacheLock)
+        {
+            if (!string.Equals(_cachedScopeKey, scopeKey, StringComparison.Ordinal))
+            {
+                _cachedScopeKey = scopeKey;
+                _cachedMemoryContent = string.Empty;
+                _nextRefreshAt = DateTimeOffset.MinValue;
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(_cachedMemoryContent))
         {
             return;
@@ -120,6 +138,7 @@ public sealed class MemoryPromptContributor(
         try
         {
             _cachedMemoryContent = longTermMemory.ReadCuratedAsync().GetAwaiter().GetResult();
+            _cachedScopeKey = scopeKey;
         }
         catch
         {
@@ -138,20 +157,33 @@ public sealed class MemoryPromptContributor(
             }
 
             _nextRefreshAt = now.Add(RefreshInterval);
-            _refreshTask = RefreshCacheAsync();
+            var scopeKey = CurrentScopeKey();
+            _refreshTask = RefreshCacheAsync(scopeKey);
         }
     }
 
-    private async Task RefreshCacheAsync()
+    private async Task RefreshCacheAsync(string scopeKey)
     {
         try
         {
             var memoryContent = await longTermMemory.ReadCuratedAsync().ConfigureAwait(false);
-            _cachedMemoryContent = memoryContent;
+            lock (_cacheLock)
+            {
+                if (string.Equals(_cachedScopeKey, scopeKey, StringComparison.Ordinal)
+                    || string.IsNullOrEmpty(_cachedScopeKey))
+                {
+                    _cachedScopeKey = scopeKey;
+                    _cachedMemoryContent = memoryContent;
+                }
+            }
         }
         catch
         {
             // Keep the last good snapshot; prompt construction must not fail on memory I/O.
         }
     }
+
+    private bool HasWorkspace() =>
+        !string.IsNullOrWhiteSpace(workspaceContext.RootPath)
+        || !string.IsNullOrWhiteSpace(workspaceContext.WorkspaceId);
 }

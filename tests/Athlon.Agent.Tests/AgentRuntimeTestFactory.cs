@@ -1,6 +1,5 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Middleware;
 using Athlon.Agent.Core.Prompt;
@@ -56,9 +55,7 @@ internal static class AgentRuntimeTestFactory
         ITokenEstimatorCalibrator tokenEstimatorCalibrator,
         AppSettings settings,
         IAppLogger logger,
-        IPostTurnMemoryProcessor? memoryProcessor = null,
-        ISessionHarnessState? harnessState = null,
-        IAgentRunContextAccessor? runContextAccessor = null)
+        IPostTurnMemoryProcessor? memoryProcessor = null)
     {
         var compaction = new CompactionTurnMiddleware(
             preCompletionPipeline,
@@ -71,8 +68,6 @@ internal static class AgentRuntimeTestFactory
             new ToolStormTurnMiddleware(settings, new SessionToolStormStore()),
             compaction,
             new PostTurnMemoryMiddleware(
-                harnessState ?? RouterTestDependencies.CreateSessionHarnessState(),
-                runContextAccessor ?? new AgentRunContextAccessor(),
                 memoryProcessor ?? new NoOpPostTurnMemoryProcessor(),
                 logger)
         ];

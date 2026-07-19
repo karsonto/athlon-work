@@ -1192,7 +1192,7 @@
     <value>上下文已清空。</value>
   </data>
   <data name="Shell_ClearContextMessage" xml:space="preserve">
-    <value>将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录），并清空 Coding 任务计划。
+    <value>将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录），清空 Coding 任务计划，并删除本会话的项目记忆。
 
 会话 ID、工作区与标题会保留；磁盘上的 transcript 归档不会删除。
 
@@ -1304,13 +1304,16 @@
     <value>选择 Agent 工作区</value>
   </data>
   <data name="Shell_RunOn" xml:space="preserve">
-    <value>运行于</value>
+    <value>工作区</value>
   </data>
   <data name="Shell_RunOnThisPc" xml:space="preserve">
     <value>此电脑</value>
   </data>
   <data name="Shell_RunOnRemote" xml:space="preserve">
     <value>远程机器</value>
+  </data>
+  <data name="Shell_RunOnRemoteConnection" xml:space="preserve">
+    <value>远程连接</value>
   </data>
   <data name="Shell_RunOnRemoteMachines" xml:space="preserve">
     <value>远程机器</value>

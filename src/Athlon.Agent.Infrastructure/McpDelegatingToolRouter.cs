@@ -49,8 +49,12 @@ internal sealed class McpDelegatingToolRouter(
             return false;
         }
 
-        if (!sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor)
-            && tool is ILongTermMemoryTool or IHarnessTool)
+        if (tool is IHarnessTool && !sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor))
+        {
+            return false;
+        }
+
+        if (tool is ILongTermMemoryTool && !workspaceGuard.HasConfiguredWorkspace)
         {
             return false;
         }

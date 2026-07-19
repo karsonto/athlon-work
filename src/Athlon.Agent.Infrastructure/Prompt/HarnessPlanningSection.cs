@@ -21,7 +21,6 @@ public sealed class HarnessPlanningSection : IEnvironmentPromptSection
         builder.AppendLine("- Mark a todo completed only after its verification command passes.");
         builder.AppendLine("- Your current todo list is re-injected every reasoning turn; treat it as the source of truth.");
         builder.AppendLine("- Do not use todo_write for trivial single-step requests, pure questions, or chit-chat.");
-        builder.AppendLine("- Prior session facts are NOT inlined; call memory_search before answering questions about past work, preferences, or decisions. memory_get retrieves full memory files.");
         builder.AppendLine();
     }
 }

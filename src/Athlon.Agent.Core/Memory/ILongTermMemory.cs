@@ -1,19 +1,29 @@
 namespace Athlon.Agent.Core.Memory;
 
 /// <summary>
-/// Two-layer file-based long-term memory.
-/// Layer 1: memory/YYYY-MM-DD.md (append-only daily ledgers)
-/// Layer 2: memory/MEMORY.md     (LLM-consolidated, deduplicated, size-bounded)
+/// Two-layer file-based long-term memory, scoped per project session:
+/// AppData/memory/projects/{workspaceKey}/sessions/{sessionId}/
+/// Layer 1: YYYY-MM-DD.md (append-only daily ledgers)
+/// Layer 2: MEMORY.md (LLM-consolidated, deduplicated, size-bounded)
 /// </summary>
 public interface ILongTermMemory
 {
+    /// <summary>True when a workspace and session are bound so memory can be read/written.</summary>
+    bool HasActiveScope { get; }
+
+    /// <summary>Current scope workspace key, or null when unbound.</summary>
+    string? ActiveWorkspaceKey { get; }
+
+    /// <summary>Current scope session id, or null when unbound.</summary>
+    string? ActiveSessionId { get; }
+
     /// <summary>
     /// Reads the current curated MEMORY.md. Returns empty string if none exists.
     /// </summary>
     Task<string> ReadCuratedAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Appends text to today's daily ledger (memory/YYYY-MM-DD.md).
+    /// Appends text to today's daily ledger (YYYY-MM-DD.md).
     /// </summary>
     Task AppendDailyAsync(string text, CancellationToken cancellationToken = default);
 
@@ -55,8 +65,17 @@ public interface ILongTermMemory
     Task ArchiveDailyFileAsync(string relativePath, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Lists all memory files (MEMORY.md + memory/*.md) for the search tool.
-    /// Returns workspace-relative paths.
+    /// Lists all memory files (MEMORY.md + *.md) for the search tool.
+    /// Returns paths relative to the session memory directory.
     /// </summary>
     Task<IReadOnlyList<string>> ListAllMemoryFilePathsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes the memory directory for the current workspace + session scope.</summary>
+    Task DeleteCurrentSessionMemoryAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Deletes the memory directory for an explicit workspace key + session id.
+    /// When <paramref name="workspaceKey"/> is null/empty, resolves from the active workspace.
+    /// </summary>
+    Task DeleteSessionMemoryAsync(string? workspaceKey, string sessionId, CancellationToken cancellationToken = default);
 }

@@ -1,12 +1,9 @@
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Memory;
 
 namespace Athlon.Agent.Core.Middleware;
 
 public sealed class PostTurnMemoryMiddleware(
-    ISessionHarnessState harnessState,
-    IAgentRunContextAccessor runContextAccessor,
     IPostTurnMemoryProcessor memoryProcessor,
     IAppLogger logger) : AgentTurnMiddlewareBase
 {
@@ -14,7 +11,9 @@ public sealed class PostTurnMemoryMiddleware(
 
     public override ValueTask OnTurnCompletedAsync(AgentTurnInvocation invocation, CancellationToken cancellationToken)
     {
-        if (!harnessState.IsCodingModeForActiveRun(runContextAccessor))
+        // Memory is scoped per project session; flush in Agent/Coding/Ask whenever a workspace is bound.
+        if (string.IsNullOrWhiteSpace(invocation.Session.ActiveWorkspace)
+            && string.IsNullOrWhiteSpace(invocation.Session.ActiveWorkspaceId))
         {
             return ValueTask.CompletedTask;
         }

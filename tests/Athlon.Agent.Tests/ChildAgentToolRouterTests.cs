@@ -34,7 +34,7 @@ public sealed class ChildAgentToolRouterTests
     }
 
     [Fact]
-    public void ListTools_WhenHarnessDisabled_ExcludesMemoryTools()
+    public void ListTools_WhenWorkspaceConfigured_IncludesMemoryTools()
     {
         var memorySearch = new StubMemoryTool("memory_search");
         var other = new StubNamedTool("file_list");
@@ -52,8 +52,32 @@ public sealed class ChildAgentToolRouterTests
             RouterTestDependencies.CreateWorkspaceGuard());
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
-        Assert.DoesNotContain("memory_search", names);
+        Assert.Contains("memory_search", names);
         Assert.Contains("file_list", names);
+    }
+
+    [Fact]
+    public void ListTools_WhenNoWorkspace_ExcludesMemoryTools()
+    {
+        var memorySearch = new StubMemoryTool("memory_search");
+        var other = new StubNamedTool("file_list");
+        var registry = new StubMcpRegistry([]);
+        var settings = new AppSettings();
+
+        var router = new ChildAgentToolRouter(
+            [memorySearch, other],
+            registry,
+            settings,
+            RouterTestDependencies.CreateSessionContext(),
+            RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new AgentRunContextAccessor(),
+            RouterTestDependencies.CreateWorkspaceGuard(configured: false));
+        var names = router.ListTools().Select(tool => tool.Name).ToArray();
+
+        Assert.DoesNotContain("memory_search", names);
+        // Chat-only mode only exposes knowledge tools; file_list is also hidden.
+        Assert.DoesNotContain("file_list", names);
     }
 
     [Fact]

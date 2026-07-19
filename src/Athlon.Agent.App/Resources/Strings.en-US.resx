@@ -1183,7 +1183,7 @@ Save anyway?</value>
     <value>Context cleared.</value>
   </data>
   <data name="Shell_ClearContextMessage" xml:space="preserve">
-    <value>This clears all visible model history for the current conversation (user, assistant, tool, and compaction records) and clears the Coding task plan.
+    <value>This clears all visible model history for the current conversation (user, assistant, tool, and compaction records), clears the Coding task plan, and deletes this session's project memory.
 
 Session ID, workspace, and title are kept; transcript archives on disk are not deleted.
 
@@ -1295,13 +1295,16 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
     <value>Select agent workspace</value>
   </data>
   <data name="Shell_RunOn" xml:space="preserve">
-    <value>Run on</value>
+    <value>Workspace</value>
   </data>
   <data name="Shell_RunOnThisPc" xml:space="preserve">
     <value>This PC</value>
   </data>
   <data name="Shell_RunOnRemote" xml:space="preserve">
     <value>Remote</value>
+  </data>
+  <data name="Shell_RunOnRemoteConnection" xml:space="preserve">
+    <value>Remote Connection</value>
   </data>
   <data name="Shell_RunOnRemoteMachines" xml:space="preserve">
     <value>Remote Machines</value>

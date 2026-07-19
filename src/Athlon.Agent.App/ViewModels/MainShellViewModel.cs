@@ -9,6 +9,7 @@ using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Services.SlashCommands;
@@ -19,6 +20,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
 
 using System.Windows.Controls;
+using System.Windows.Media;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Navigation;
 using Athlon.Agent.App.Themes;
@@ -54,6 +56,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly SshWorkspaceConnectionService _sshConnection;
     private readonly ICredentialStore _credentialStore;
     private readonly ISshWorkspaceClient _sshClient;
+    private readonly ILongTermMemory _longTermMemory;
 
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -99,7 +102,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         IUserNotifier notifier,
         SshWorkspaceConnectionService sshConnection,
         ICredentialStore credentialStore,
-        ISshWorkspaceClient sshClient)
+        ISshWorkspaceClient sshClient,
+        ILongTermMemory longTermMemory)
     {
         _storage = storage;
         _workspaceContext = workspaceContext;
@@ -122,6 +126,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sshConnection = sshConnection;
         _credentialStore = credentialStore;
         _sshClient = sshClient;
+        _longTermMemory = longTermMemory;
         _skillCatalog = skillCatalog;
         _appSettings = settings;
         _contextSidebarEdgeGutterWidth = _appSettings.Ui.ContextSidebarVisible ? 12 : 0;
@@ -745,6 +750,15 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         await _storage.SaveSessionAsync(_session);
         _sessionNavigation.Invalidate(_session.Id);
+        try
+        {
+            await _longTermMemory.DeleteCurrentSessionMemoryAsync().ConfigureAwait(true);
+        }
+        catch
+        {
+            // Clearing chat must succeed even if memory cleanup fails.
+        }
+
         await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
         Settings.SettingsStatus = _loc["Shell_ClearContextDone"];
         NotifyCommandStatesChanged();
@@ -938,6 +952,37 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionTurns.QueuedTurnPresenter.RemoveSession(item.Id);
 
         _uiCache.Remove(item.Id);
+
+        string? workspaceKey = null;
+        try
+        {
+            var existing = await _storage.LoadSessionAsync(item.Id).ConfigureAwait(true);
+            if (existing is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(existing.ActiveWorkspaceId))
+                {
+                    workspaceKey = existing.ActiveWorkspaceId;
+                }
+                else if (!string.IsNullOrWhiteSpace(existing.ActiveWorkspace))
+                {
+                    workspaceKey = MemoryScopeResolver.HashPath(existing.ActiveWorkspace);
+                }
+            }
+        }
+        catch
+        {
+            // Fall back to active workspace when resolving the deleted session fails.
+        }
+
+        try
+        {
+            await _longTermMemory.DeleteSessionMemoryAsync(workspaceKey, item.Id).ConfigureAwait(true);
+        }
+        catch
+        {
+            // Session deletion must succeed even if memory cleanup fails.
+        }
+
         await _storage.DeleteSessionAsync(item.Id);
         _sessionNavigation.Invalidate(item.Id);
 
@@ -1129,44 +1174,104 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         var menu = new ContextMenu
         {
-            Style = Application.Current.TryFindResource("MarkdownContextMenuStyle") as Style
+            Style = Application.Current.TryFindResource("RunOnContextMenuStyle") as Style
         };
 
-        var itemStyle = Application.Current.TryFindResource("MarkdownContextMenuItemStyle") as Style;
+        var itemStyle = Application.Current.TryFindResource("RunOnMenuItemStyle") as Style;
+        var isLocalActive = HasSessionWorkspace && _workspaceContext.Kind == WorkspaceKind.Local;
+        var isSshActive = HasSessionWorkspace && _workspaceContext.Kind == WorkspaceKind.Ssh;
+        var activeWorkspaceId = _session.WorkspaceId;
 
         menu.Items.Add(new MenuItem
         {
-            Header = _loc["Shell_RunOn"],
+            Header = CreateRunOnSectionHeader(_loc["Shell_RunOn"]),
             IsEnabled = false,
             Style = itemStyle
         });
 
         var thisPc = new MenuItem
         {
-            Header = _loc["Shell_RunOnThisPc"],
-            Style = itemStyle,
-            IsChecked = HasSessionWorkspace && _workspaceContext.Kind == WorkspaceKind.Local,
-            IsCheckable = true
+            Header = CreateRunOnRowHeader(
+                glyph: "\uE7F8",
+                text: _loc["Shell_RunOnThisPc"],
+                trailing: isLocalActive ? RunOnTrailing.Check : RunOnTrailing.None),
+            Style = itemStyle
         };
         thisPc.Click += (_, _) => ScheduleUi(ConfigureLocalWorkspaceAsync);
         menu.Items.Add(thisPc);
 
-        menu.Items.Add(new Separator());
+        var remote = new MenuItem
+        {
+            Header = CreateRunOnRowHeader(
+                glyph: "\uE7F4",
+                text: _loc["Shell_RunOnRemoteConnection"],
+                trailing: RunOnTrailing.Chevron),
+            Style = itemStyle
+        };
+
+        var sshWorkspaces = _appSettings.Workspaces
+            .Where(item => item.WorkspaceKind == WorkspaceKind.Ssh && item.Ssh is not null)
+            .ToList();
+
+        if (sshWorkspaces.Count == 0)
+        {
+            remote.Items.Add(new MenuItem
+            {
+                Header = CreateRunOnEmptyHint(_loc["Shell_RunOnNoRemotes"]),
+                IsEnabled = false,
+                Style = itemStyle
+            });
+        }
+        else
+        {
+            foreach (var workspace in sshWorkspaces)
+            {
+                var selected = isSshActive
+                    && !string.IsNullOrWhiteSpace(activeWorkspaceId)
+                    && string.Equals(workspace.Id, activeWorkspaceId, StringComparison.OrdinalIgnoreCase);
+                var item = new MenuItem
+                {
+                    Header = CreateRunOnRowHeader(
+                        glyph: "\uE7F4",
+                        text: FormatRemoteLabel(workspace),
+                        trailing: selected ? RunOnTrailing.Check : RunOnTrailing.None),
+                    Style = itemStyle,
+                    Tag = workspace
+                };
+                item.Click += (_, _) =>
+                {
+                    if (item.Tag is WorkspaceSettings configured)
+                    {
+                        ScheduleUi(() => ApplyConfiguredSshWorkspaceAsync(configured));
+                    }
+                };
+                remote.Items.Add(item);
+            }
+        }
+
+        remote.Items.Add(new Separator());
 
         var sshItem = new MenuItem
         {
-            Header = _loc["Shell_RunOnConnectSshAction"],
+            Header = CreateRunOnRowHeader(
+                glyph: "\uE710",
+                text: _loc["Shell_RunOnConnectSshAction"],
+                trailing: RunOnTrailing.None),
             Style = itemStyle
         };
         sshItem.Click += (_, _) => ScheduleUi(ConfigureSshWorkspaceAsync);
-        menu.Items.Add(sshItem);
+        remote.Items.Add(sshItem);
+        menu.Items.Add(remote);
 
         if (HasSessionWorkspace)
         {
             menu.Items.Add(new Separator());
             var remove = new MenuItem
             {
-                Header = _loc["Context_RemoveWorkspace"],
+                Header = CreateRunOnRowHeader(
+                    glyph: "\uE74D",
+                    text: _loc["Context_RemoveWorkspace"],
+                    trailing: RunOnTrailing.None),
                 Style = itemStyle
             };
             remove.Click += (_, _) => ScheduleUi(RemoveSessionWorkspaceAsync);
@@ -1175,6 +1280,88 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         return menu;
     }
+
+    private enum RunOnTrailing
+    {
+        None,
+        Check,
+        Chevron
+    }
+
+    private static UIElement CreateRunOnSectionHeader(string text) =>
+        new TextBlock
+        {
+            Text = text,
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = TryFindBrush("Brush.SubtleText") ?? Brushes.Gray,
+            Margin = new Thickness(4, 2, 4, 4)
+        };
+
+    private static UIElement CreateRunOnEmptyHint(string text) =>
+        new TextBlock
+        {
+            Text = text,
+            FontSize = 12,
+            Foreground = TryFindBrush("Brush.SubtleText") ?? Brushes.Gray,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+            Margin = new Thickness(8, 10, 8, 10),
+            TextWrapping = TextWrapping.Wrap
+        };
+
+    private static UIElement CreateRunOnRowHeader(string glyph, string text, RunOnTrailing trailing)
+    {
+        var grid = new Grid { MinWidth = 188 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var icon = new TextBlock
+        {
+            Text = glyph,
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 14,
+            Margin = new Thickness(0, 0, 10, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Opacity = 0.88,
+            Foreground = TryFindBrush("Brush.Text") ?? Brushes.Black
+        };
+        Grid.SetColumn(icon, 0);
+        grid.Children.Add(icon);
+
+        var label = new TextBlock
+        {
+            Text = text,
+            FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis
+        };
+        Grid.SetColumn(label, 1);
+        grid.Children.Add(label);
+
+        if (trailing != RunOnTrailing.None)
+        {
+            var trailingGlyph = trailing == RunOnTrailing.Check ? "\uE73E" : "\uE76C";
+            var trailingBlock = new TextBlock
+            {
+                Text = trailingGlyph,
+                FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                FontSize = trailing == RunOnTrailing.Check ? 12 : 10,
+                Margin = new Thickness(12, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = trailing == RunOnTrailing.Check ? 0.95 : 0.55,
+                Foreground = TryFindBrush("Brush.SubtleText") ?? Brushes.Gray
+            };
+            Grid.SetColumn(trailingBlock, 2);
+            grid.Children.Add(trailingBlock);
+        }
+
+        return grid;
+    }
+
+    private static Brush? TryFindBrush(string key) =>
+        Application.Current?.TryFindResource(key) as Brush;
 
     private static void ScheduleUi(Func<Task> action)
     {

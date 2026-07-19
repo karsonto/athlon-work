@@ -10,22 +10,22 @@ namespace Athlon.Agent.Tests;
 public sealed class CompositeToolRouterHarnessTests
 {
     [Fact]
-    public void ListTools_WhenHarnessDisabled_ExcludesHarnessTools()
+    public void ListTools_WhenNotCoding_ExcludesHarnessTools_ButKeepsMemoryWithWorkspace()
     {
-        var router = CreateRouter(harnessEnabled: false);
+        var router = CreateRouter(SessionAgentMode.Agent);
 
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
-        Assert.DoesNotContain("memory_search", names);
-        Assert.DoesNotContain("memory_get", names);
+        Assert.Contains("memory_search", names);
+        Assert.Contains("memory_get", names);
         Assert.DoesNotContain("todo_write", names);
         Assert.Contains("file_list", names);
     }
 
     [Fact]
-    public void ListTools_WhenHarnessEnabled_IncludesHarnessTools()
+    public void ListTools_WhenCoding_IncludesHarnessAndMemoryTools()
     {
-        var router = CreateRouter(harnessEnabled: true);
+        var router = CreateRouter(SessionAgentMode.Coding);
 
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
@@ -36,9 +36,22 @@ public sealed class CompositeToolRouterHarnessTests
     }
 
     [Fact]
-    public async Task InvokeAsync_WhenHarnessDisabled_ReturnsNotFoundForHarnessTools()
+    public void ListTools_WhenNoWorkspace_ExcludesMemoryTools()
     {
-        var router = CreateRouter(harnessEnabled: false);
+        var router = CreateRouter(SessionAgentMode.Agent, includeWriteTools: false, includeSubAgentTools: false, workspaceConfigured: false);
+
+        var names = router.ListTools().Select(tool => tool.Name).ToArray();
+
+        Assert.DoesNotContain("memory_search", names);
+        Assert.DoesNotContain("memory_get", names);
+        Assert.DoesNotContain("todo_write", names);
+        Assert.DoesNotContain("file_list", names);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_WhenNotCoding_ReturnsNotFoundForHarnessTools_ButResolvesMemory()
+    {
+        var router = CreateRouter(SessionAgentMode.Agent);
 
         var searchResult = await router.InvokeAsync(new ToolInvocation("memory_search", new Dictionary<string, string> { ["query"] = "test" }));
         var todoResult = await router.InvokeAsync(new ToolInvocation("todo_write", new Dictionary<string, string>
@@ -47,14 +60,14 @@ public sealed class CompositeToolRouterHarnessTests
             ["merge"] = "false"
         }));
 
-        Assert.False(searchResult.Succeeded);
+        Assert.True(searchResult.Succeeded);
         Assert.False(todoResult.Succeeded);
     }
 
     [Fact]
-    public async Task InvokeAsync_WhenHarnessEnabled_ResolvesMemoryTools()
+    public async Task InvokeAsync_WhenCoding_ResolvesMemoryTools()
     {
-        var router = CreateRouter(harnessEnabled: true);
+        var router = CreateRouter(SessionAgentMode.Coding);
 
         var result = await router.InvokeAsync(new ToolInvocation("memory_search", new Dictionary<string, string> { ["query"] = "nonexistent-xyz-123" }));
 
@@ -62,18 +75,19 @@ public sealed class CompositeToolRouterHarnessTests
     }
 
     [Fact]
-    public void ListTools_WhenAskMode_ExcludesWriteAndExecuteTools()
+    public void ListTools_WhenAskMode_ExcludesWriteAndExecuteTools_ButKeepsMemory()
     {
         var router = CreateRouter(SessionAgentMode.Ask, includeWriteTools: true, includeSubAgentTools: true);
 
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
         Assert.Contains("file_list", names);
+        Assert.Contains("memory_search", names);
+        Assert.Contains("memory_get", names);
         Assert.DoesNotContain("file_write", names);
         Assert.DoesNotContain("file_edit", names);
         Assert.DoesNotContain("apply_patch", names);
         Assert.DoesNotContain("execute_command", names);
-        Assert.DoesNotContain("memory_search", names);
         Assert.DoesNotContain("todo_write", names);
         Assert.DoesNotContain("sessions_spawn", names);
     }
@@ -101,10 +115,14 @@ public sealed class CompositeToolRouterHarnessTests
         Assert.False(spawnResult.Succeeded);
     }
 
-    private static CompositeToolRouter CreateRouter(bool harnessEnabled) =>
-        CreateRouter(harnessEnabled ? SessionAgentMode.Coding : SessionAgentMode.Agent, includeWriteTools: false, includeSubAgentTools: false);
+    private static CompositeToolRouter CreateRouter(SessionAgentMode mode) =>
+        CreateRouter(mode, includeWriteTools: false, includeSubAgentTools: false, workspaceConfigured: true);
 
-    private static CompositeToolRouter CreateRouter(SessionAgentMode mode, bool includeWriteTools, bool includeSubAgentTools = false)
+    private static CompositeToolRouter CreateRouter(
+        SessionAgentMode mode,
+        bool includeWriteTools,
+        bool includeSubAgentTools = false,
+        bool workspaceConfigured = true)
     {
         var tools = new List<IAgentTool>
         {
@@ -135,7 +153,7 @@ public sealed class CompositeToolRouterHarnessTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(mode),
             RouterTestDependencies.CreateRunContextAccessor(mode),
-            RouterTestDependencies.CreateWorkspaceGuard());
+            RouterTestDependencies.CreateWorkspaceGuard(configured: workspaceConfigured));
     }
 
     private sealed class StubNamedTool(string name) : IAgentTool

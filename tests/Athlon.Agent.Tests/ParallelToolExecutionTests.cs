@@ -518,6 +518,9 @@ public sealed class ParallelToolExecutionTests
 
     private sealed class StubLongTermMemory : ILongTermMemory
     {
+        public bool HasActiveScope => false;
+        public string? ActiveWorkspaceKey => null;
+        public string? ActiveSessionId => null;
         public Task<string> ReadCuratedAsync(CancellationToken cancellationToken = default) => Task.FromResult(string.Empty);
         public Task AppendDailyAsync(string text, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<string> ReadDailyAsync(DateTime date, CancellationToken cancellationToken = default) => Task.FromResult(string.Empty);
@@ -530,6 +533,9 @@ public sealed class ParallelToolExecutionTests
         public Task ArchiveDailyFileAsync(string relativePath, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<string>> ListAllMemoryFilePathsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+        public Task DeleteCurrentSessionMemoryAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteSessionMemoryAsync(string? workspaceKey, string sessionId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class NoOpPreCompletionPipeline : IPreCompletionPipeline

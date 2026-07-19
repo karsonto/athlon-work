@@ -93,11 +93,17 @@ public sealed class HarnessTests
     }
 
     [Fact]
-    public void MemoryPromptContributor_Skips_WhenHarnessDisabled()
+    public void MemoryPromptContributor_Skips_WhenNoWorkspace()
     {
         var memory = new StubLongTermMemory("remember this");
-        var harness = RouterTestDependencies.CreateSessionHarnessState(enabled: false);
-        var contributor = new MemoryPromptContributor(memory, harness, new AgentRunContextAccessor(), new AppSettings());
+        var workspace = new ActiveWorkspaceContext();
+        var session = new ActiveAgentSessionContext();
+        session.SetSession("sess-1");
+        var contributor = new MemoryPromptContributor(
+            memory,
+            workspace,
+            session,
+            new AppSettings { Memory = { InlinePromptMode = MemoryInlinePromptMode.Full } });
         var builder = new StringBuilder();
 
         contributor.Append(builder, CreatePromptContext());
@@ -106,15 +112,11 @@ public sealed class HarnessTests
     }
 
     [Fact]
-    public async Task PostTurnMemoryMiddleware_Skips_WhenHarnessDisabled()
+    public async Task PostTurnMemoryMiddleware_Skips_WhenNoWorkspace()
     {
         var processor = new RecordingPostTurnMemoryProcessor();
-        var middleware = new PostTurnMemoryMiddleware(
-            RouterTestDependencies.CreateSessionHarnessState(enabled: false),
-            new AgentRunContextAccessor(),
-            processor,
-            new HarnessNoOpAppLogger());
-        var invocation = CreateTurnInvocation(RouterTestDependencies.CreateRunContextAccessor(harnessEnabled: false));
+        var middleware = new PostTurnMemoryMiddleware(processor, new HarnessNoOpAppLogger());
+        var invocation = CreateTurnInvocation(hasWorkspace: false);
 
         await middleware.OnTurnCompletedAsync(invocation, CancellationToken.None);
         await Task.Delay(50);
@@ -123,16 +125,11 @@ public sealed class HarnessTests
     }
 
     [Fact]
-    public async Task PostTurnMemoryMiddleware_Flushes_WhenHarnessEnabledOnRootRun()
+    public async Task PostTurnMemoryMiddleware_Flushes_WhenWorkspaceBound()
     {
         var processor = new RecordingPostTurnMemoryProcessor();
-        var accessor = RouterTestDependencies.CreateRunContextAccessor(harnessEnabled: true);
-        var middleware = new PostTurnMemoryMiddleware(
-            RouterTestDependencies.CreateSessionHarnessState(enabled: true),
-            accessor,
-            processor,
-            new HarnessNoOpAppLogger());
-        var invocation = CreateTurnInvocation(accessor);
+        var middleware = new PostTurnMemoryMiddleware(processor, new HarnessNoOpAppLogger());
+        var invocation = CreateTurnInvocation(hasWorkspace: true);
 
         await middleware.OnTurnCompletedAsync(invocation, CancellationToken.None);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -141,18 +138,21 @@ public sealed class HarnessTests
         Assert.Equal(1, processor.CallCount);
     }
 
-    private static AgentTurnInvocation CreateTurnInvocation(AgentRunContextAccessor accessor)
+    private static AgentTurnInvocation CreateTurnInvocation(bool hasWorkspace)
     {
-        var session = AgentSession.Create("test") with { Id = "test-session" };
+        var session = AgentSession.Create("test") with
+        {
+            Id = "test-session",
+            ActiveWorkspace = hasWorkspace ? @"C:\work\demo" : null
+        };
         return new AgentTurnInvocation
         {
-            RunContext = accessor.Current
-                ?? AgentRunContext.CreateRoot(
-                    session,
-                    "run-1",
-                    new ToolRouter(Array.Empty<IAgentTool>()),
-                    PromptTestHelpers.CreateStaticOrchestrator(),
-                    []),
+            RunContext = AgentRunContext.CreateRoot(
+                session,
+                "run-1",
+                new ToolRouter(Array.Empty<IAgentTool>()),
+                PromptTestHelpers.CreateStaticOrchestrator(),
+                []),
             Session = session,
             StreamAdapter = new AgentStreamAdapter(session.Id, "run-1")
         };
@@ -226,6 +226,9 @@ public sealed class HarnessTests
 
     private sealed class StubLongTermMemory(string curated) : ILongTermMemory
     {
+        public bool HasActiveScope => true;
+        public string? ActiveWorkspaceKey => "ws";
+        public string? ActiveSessionId => "sess";
         public Task<string> ReadCuratedAsync(CancellationToken cancellationToken = default) => Task.FromResult(curated);
         public Task<string> ReadDailyAsync(DateTime date, CancellationToken cancellationToken = default) => Task.FromResult("");
         public Task<string> ReadDailyFileAsync(string fileName, CancellationToken cancellationToken = default) => Task.FromResult("");
@@ -238,6 +241,9 @@ public sealed class HarnessTests
         public Task<IReadOnlyList<string>> ListAllMemoryFilePathsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<string>>(["MEMORY.md"]);
         public Task ArchiveDailyFileAsync(string relativePath, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteCurrentSessionMemoryAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteSessionMemoryAsync(string? workspaceKey, string sessionId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class HarnessNoOpAppLogger : IAppLogger

@@ -30,13 +30,15 @@ public sealed class MemorySearchTool(ILongTermMemory longTermMemory, IAppLogger 
             foreach (var relativePath in memoryPaths)
             {
                 string fileContent;
-                if (relativePath.EndsWith("MEMORY.md", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(relativePath, "MEMORY.md", StringComparison.OrdinalIgnoreCase)
+                    || relativePath.EndsWith("/MEMORY.md", StringComparison.OrdinalIgnoreCase)
+                    || relativePath.EndsWith("\\MEMORY.md", StringComparison.OrdinalIgnoreCase))
                 {
                     fileContent = await longTermMemory.ReadCuratedAsync(cancellationToken);
                 }
                 else
                 {
-                    var fileName = relativePath.Split('/')[^1];
+                    var fileName = relativePath.Split('/', '\\')[^1];
                     fileContent = await longTermMemory.ReadDailyFileAsync(fileName, cancellationToken);
                 }
 
