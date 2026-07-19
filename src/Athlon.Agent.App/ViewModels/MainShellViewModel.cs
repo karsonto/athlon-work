@@ -229,13 +229,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 case nameof(ChatPageViewModel.IsSpeechListening):
                     OnPropertyChanged(nameof(IsSpeechListening));
                     OnPropertyChanged(nameof(SendButtonToolTip));
-                    OnPropertyChanged(nameof(SendButtonGlyph));
                     break;
                 case nameof(ChatPageViewModel.SendButtonToolTip):
                     OnPropertyChanged(nameof(SendButtonToolTip));
-                    break;
-                case nameof(ChatPageViewModel.SendButtonGlyph):
-                    OnPropertyChanged(nameof(SendButtonGlyph));
                     break;
             }
         };
@@ -503,8 +499,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public bool IsSpeechListening => ChatPage.IsSpeechListening;
 
     public string SendButtonToolTip => ChatPage.SendButtonToolTip;
-
-    public string SendButtonGlyph => ChatPage.SendButtonGlyph;
 
     public Task StartSpeechInputAsync() => ChatPage.StartSpeechInputAsync();
 

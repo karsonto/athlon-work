@@ -708,28 +708,35 @@
                                         </Button.Style>
                                         <TextBlock Text="■" FontSize="12" />
                                     </Button>
-                                    <Button x:Name="SendButton"
-                                            Command="{Binding SendCommand}"
+                                    <Border x:Name="SendButton"
                                             ToolTip="{Binding SendButtonToolTip}"
-                                            PreviewMouseLeftButtonDown="SendButton_OnPreviewMouseLeftButtonDown"
-                                            PreviewMouseLeftButtonUp="SendButton_OnPreviewMouseLeftButtonUp"
+                                            MouseLeftButtonDown="SendButton_OnMouseLeftButtonDown"
+                                            MouseLeftButtonUp="SendButton_OnMouseLeftButtonUp"
                                             LostMouseCapture="SendButton_OnLostMouseCapture">
-                                        <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource ComposerSendButtonStyle}">
+                                        <Border.Style>
+                                            <Style TargetType="Border" BasedOn="{StaticResource ComposerSendHostStyle}">
                                                 <Setter Property="Visibility" Value="Visible" />
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding IsCompacting}" Value="True">
                                                         <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsReadingAttachments}" Value="True">
+                                                        <Setter Property="Opacity" Value="0.45" />
+                                                        <Setter Property="IsHitTestVisible" Value="False" />
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding IsSpeechListening}" Value="True">
                                                         <Setter Property="Background" Value="{DynamicResource Brush.AccentActive}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
-                                        </Button.Style>
-                                        <TextBlock FontSize="12"
-                                                   Text="{Binding DataContext.SendButtonGlyph, RelativeSource={RelativeSource AncestorType=Button}}" />
-                                    </Button>
+                                        </Border.Style>
+                                        <TextBlock Text="➤"
+                                                   FontSize="12"
+                                                   FontWeight="Medium"
+                                                   Foreground="White"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
+                                    </Border>
                                 </StackPanel>
                             </Grid>
 

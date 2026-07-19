@@ -10,7 +10,7 @@ namespace Athlon.Agent.App.Views;
 
 public partial class ChatPageView : UserControl, IChatLayoutSurface
 {
-    private static readonly TimeSpan LongPressThreshold = TimeSpan.FromMilliseconds(450);
+    private static readonly TimeSpan LongPressThreshold = TimeSpan.FromMilliseconds(400);
 
     private readonly DispatcherTimer _longPressTimer;
     private bool _sendPressActive;
@@ -20,7 +20,10 @@ public partial class ChatPageView : UserControl, IChatLayoutSurface
     public ChatPageView()
     {
         InitializeComponent();
-        _longPressTimer = new DispatcherTimer { Interval = LongPressThreshold };
+        _longPressTimer = new DispatcherTimer(DispatcherPriority.Input)
+        {
+            Interval = LongPressThreshold
+        };
         _longPressTimer.Tick += LongPressTimer_OnTick;
     }
 
@@ -49,23 +52,21 @@ public partial class ChatPageView : UserControl, IChatLayoutSurface
         menu.IsOpen = true;
     }
 
-    private void SendButton_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void SendButton_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (DataContext is not MainShellViewModel shell || !shell.IsSpeechInputAvailable)
+        if (DataContext is not MainShellViewModel)
         {
-            // Speech unavailable: keep default Button + Command behavior.
             return;
         }
 
         e.Handled = true;
         _sendPressActive = true;
         _speechGestureActive = false;
-        SendButton.CaptureMouse();
         _longPressTimer.Stop();
         _longPressTimer.Start();
     }
 
-    private async void SendButton_OnPreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    private async void SendButton_OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (!_sendPressActive && !_speechGestureActive)
         {
@@ -78,7 +79,8 @@ public partial class ChatPageView : UserControl, IChatLayoutSurface
 
     private async void SendButton_OnLostMouseCapture(object sender, MouseEventArgs e)
     {
-        if (_speechStopInFlight || (!_sendPressActive && !_speechGestureActive))
+        // Capture is only taken after long-press begins.
+        if (_speechStopInFlight || !_speechGestureActive)
         {
             return;
         }
@@ -89,13 +91,17 @@ public partial class ChatPageView : UserControl, IChatLayoutSurface
     private async void LongPressTimer_OnTick(object? sender, EventArgs e)
     {
         _longPressTimer.Stop();
-        if (!_sendPressActive || DataContext is not MainShellViewModel shell || !shell.IsSpeechInputAvailable)
+        if (!_sendPressActive || DataContext is not MainShellViewModel shell)
         {
             return;
         }
 
         _speechGestureActive = true;
-        // StartSpeechInputAsync arms the glyph first, then starts the recognizer.
+        if (!SendButton.IsMouseCaptured)
+        {
+            SendButton.CaptureMouse();
+        }
+
         await shell.StartSpeechInputAsync().ConfigureAwait(true);
     }
 

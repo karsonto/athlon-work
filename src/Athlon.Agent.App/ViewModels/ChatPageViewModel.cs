@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
-using System.Windows.Threading;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
@@ -23,6 +22,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
     private readonly IChatScrollService _chatScroll;
     private readonly ISpeechToTextService _speechToText;
     private readonly ILocalizationService _loc;
+    private string? _speechDraftBase;
 
     private Func<string>? _getDisplayedSessionId;
     private Func<AgentSession>? _getSession;
@@ -53,7 +53,9 @@ public sealed partial class ChatPageViewModel : ObservableObject
         _loc = localization;
 
         _speechToText.AvailabilityChanged += OnSpeechAvailabilityChanged;
+        _speechToText.PartialText += OnSpeechPartialText;
         _speechToText.FinalText += OnSpeechFinalText;
+        _speechToText.Failed += OnSpeechFailed;
         AppCultureManager.CultureChanged += OnCultureChanged;
 
         _ = InitializeSpeechAsync();
@@ -114,26 +116,16 @@ public sealed partial class ChatPageViewModel : ObservableObject
             ? _loc["Chat_SendTooltipWithSpeech"]
             : _loc["Chat_SendTooltip"];
 
-    public string SendButtonGlyph => IsSpeechListening ? "🎤" : "➤";
-
     public async Task StartSpeechInputAsync()
     {
-        if (!IsSpeechInputAvailable)
-        {
-            return;
-        }
-
-        // Arm UI first so the glyph flips even if the recognizer start is slow/fails.
         if (!IsSpeechListening)
         {
             IsSpeechListening = true;
+            _speechDraftBase = ComposerText;
         }
 
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is not null)
-        {
-            await dispatcher.InvokeAsync(static () => { }, DispatcherPriority.Render);
-        }
+        // Immediate UI feedback so long-press never feels like a no-op.
+        _setSettingsStatus?.Invoke(_loc["Chat_SpeechListeningTooltip"]);
 
         if (_speechToText.IsListening)
         {
@@ -141,7 +133,9 @@ public sealed partial class ChatPageViewModel : ObservableObject
         }
 
         await _speechToText.StartListeningAsync().ConfigureAwait(true);
-        // Keep IsSpeechListening true until StopSpeechInputAsync so the glyph stays while held.
+        OnPropertyChanged(nameof(IsSpeechInputAvailable));
+        OnPropertyChanged(nameof(SendButtonToolTip));
+        SendCommand.NotifyCanExecuteChanged();
     }
 
     public async Task StopSpeechInputAsync()
@@ -158,6 +152,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         finally
         {
             IsSpeechListening = false;
+            _speechDraftBase = null;
         }
     }
 
@@ -484,11 +479,9 @@ public sealed partial class ChatPageViewModel : ObservableObject
 
     private void RequestScrollToBottomImmediate() => _chatScroll.ScrollToBottomImmediate();
 
-    private bool CanSend() =>
-        !IsReadingAttachments
-        && (!string.IsNullOrWhiteSpace(ComposerText)
-            || PendingImageAttachments.Count > 0
-            || PendingDocumentAttachments.Count > 0);
+    // Keep the send button enabled so long-press speech works even with an empty composer.
+    // SendAsync still no-ops when there is nothing to send.
+    private bool CanSend() => !IsReadingAttachments;
 
     partial void OnComposerTextChanged(string value)
     {
@@ -511,33 +504,16 @@ public sealed partial class ChatPageViewModel : ObservableObject
 
         OnPropertyChanged(nameof(IsSpeechInputAvailable));
         OnPropertyChanged(nameof(SendButtonToolTip));
-        OnPropertyChanged(nameof(SendButtonGlyph));
+        SendCommand.NotifyCanExecuteChanged();
     }
 
     private void OnSpeechAvailabilityChanged(object? sender, EventArgs e)
     {
-        var dispatcher = Application.Current?.Dispatcher;
-        if (dispatcher is null || dispatcher.CheckAccess())
-        {
-            OnPropertyChanged(nameof(IsSpeechInputAvailable));
-            OnPropertyChanged(nameof(SendButtonToolTip));
-            OnPropertyChanged(nameof(SendButtonGlyph));
-            return;
-        }
-
-        dispatcher.Invoke(() =>
-        {
-            OnPropertyChanged(nameof(IsSpeechInputAvailable));
-            OnPropertyChanged(nameof(SendButtonToolTip));
-            OnPropertyChanged(nameof(SendButtonGlyph));
-        });
-    }
-
-    private void OnSpeechFinalText(object? sender, string text)
-    {
         void Apply()
         {
-            ComposerText = ComposerSpeechText.AppendTranscript(ComposerText, text);
+            OnPropertyChanged(nameof(IsSpeechInputAvailable));
+            OnPropertyChanged(nameof(SendButtonToolTip));
+            SendCommand.NotifyCanExecuteChanged();
         }
 
         var dispatcher = Application.Current?.Dispatcher;
@@ -550,17 +526,69 @@ public sealed partial class ChatPageViewModel : ObservableObject
         dispatcher.Invoke(Apply);
     }
 
-    private void OnCultureChanged(object? sender, EventArgs e)
+    private void OnSpeechPartialText(object? sender, string text)
     {
-        OnPropertyChanged(nameof(SendButtonToolTip));
-        OnPropertyChanged(nameof(SendButtonGlyph));
+        void Apply()
+        {
+            var baseline = _speechDraftBase ?? ComposerText;
+            ComposerText = ComposerSpeechText.AppendTranscript(baseline, text);
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            Apply();
+            return;
+        }
+
+        dispatcher.Invoke(Apply);
     }
 
-    partial void OnIsSpeechListeningChanged(bool value)
+    private void OnSpeechFinalText(object? sender, string text)
     {
-        OnPropertyChanged(nameof(SendButtonToolTip));
-        OnPropertyChanged(nameof(SendButtonGlyph));
+        void Apply()
+        {
+            var baseline = _speechDraftBase ?? ComposerText;
+            ComposerText = ComposerSpeechText.AppendTranscript(baseline, text);
+            _speechDraftBase = null;
+            _setSettingsStatus?.Invoke(string.Empty);
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            Apply();
+            return;
+        }
+
+        dispatcher.Invoke(Apply);
     }
+
+    private void OnSpeechFailed(object? sender, string message)
+    {
+        void Apply()
+        {
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                _setSettingsStatus?.Invoke(message);
+            }
+        }
+
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            Apply();
+            return;
+        }
+
+        dispatcher.Invoke(Apply);
+    }
+
+    private void OnCultureChanged(object? sender, EventArgs e) =>
+        OnPropertyChanged(nameof(SendButtonToolTip));
+
+    partial void OnIsSpeechListeningChanged(bool value) =>
+        OnPropertyChanged(nameof(SendButtonToolTip));
 }
 
 public sealed class PendingDocumentAttachmentViewModel(string filePath)

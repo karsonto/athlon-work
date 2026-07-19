@@ -15,6 +15,7 @@
     <PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.135" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="$(MicrosoftExtensionsVersion)" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2903.40" />
+    <PackageReference Include="System.Speech" Version="10.0.10" />
     <PackageReference Include="Velopack" Version="$(VelopackVersion)" />
   </ItemGroup>
 
