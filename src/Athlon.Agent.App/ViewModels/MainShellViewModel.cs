@@ -222,6 +222,21 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 case nameof(ChatPageViewModel.HasPendingDocuments):
                     OnPropertyChanged(nameof(HasPendingDocuments));
                     break;
+                case nameof(ChatPageViewModel.IsSpeechInputAvailable):
+                    OnPropertyChanged(nameof(IsSpeechInputAvailable));
+                    OnPropertyChanged(nameof(SendButtonToolTip));
+                    break;
+                case nameof(ChatPageViewModel.IsSpeechListening):
+                    OnPropertyChanged(nameof(IsSpeechListening));
+                    OnPropertyChanged(nameof(SendButtonToolTip));
+                    OnPropertyChanged(nameof(SendButtonGlyph));
+                    break;
+                case nameof(ChatPageViewModel.SendButtonToolTip):
+                    OnPropertyChanged(nameof(SendButtonToolTip));
+                    break;
+                case nameof(ChatPageViewModel.SendButtonGlyph):
+                    OnPropertyChanged(nameof(SendButtonGlyph));
+                    break;
             }
         };
         AppThemeManager.ThemeChanged += OnAppThemeChanged;
@@ -482,6 +497,18 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public bool HasPendingAttachments => ChatPage.HasPendingAttachments;
 
     public bool IsReadingAttachments => ChatPage.IsReadingAttachments;
+
+    public bool IsSpeechInputAvailable => ChatPage.IsSpeechInputAvailable;
+
+    public bool IsSpeechListening => ChatPage.IsSpeechListening;
+
+    public string SendButtonToolTip => ChatPage.SendButtonToolTip;
+
+    public string SendButtonGlyph => ChatPage.SendButtonGlyph;
+
+    public Task StartSpeechInputAsync() => ChatPage.StartSpeechInputAsync();
+
+    public Task StopSpeechInputAsync() => ChatPage.StopSpeechInputAsync();
 
     public IAsyncRelayCommand SendCommand => ChatPage.SendCommand;
 

@@ -1,6 +1,7 @@
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Navigation;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.Speech;
 
 using Athlon.Agent.App.ViewModels;
 
@@ -38,6 +39,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IUserNotifier, UserNotifier>();
         services.AddSingleton<ITaskPlanCompletionNotifier, TaskPlanCompletionNotifier>();
         services.AddSingleton<IChatScrollService, ChatScrollService>();
+        services.AddSingleton<ISpeechToTextService, WindowsSpeechToTextService>();
         services.AddSingleton<MainWindowShutdownCoordinator>();
 
         services.AddSingleton<ComposerCoordinator>();

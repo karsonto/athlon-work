@@ -708,8 +708,12 @@
                                         </Button.Style>
                                         <TextBlock Text="■" FontSize="12" />
                                     </Button>
-                                    <Button Command="{Binding SendCommand}"
-                                            ToolTip="{loc:Localize Key=Chat_SendTooltip}">
+                                    <Button x:Name="SendButton"
+                                            Command="{Binding SendCommand}"
+                                            ToolTip="{Binding SendButtonToolTip}"
+                                            PreviewMouseLeftButtonDown="SendButton_OnPreviewMouseLeftButtonDown"
+                                            PreviewMouseLeftButtonUp="SendButton_OnPreviewMouseLeftButtonUp"
+                                            LostMouseCapture="SendButton_OnLostMouseCapture">
                                         <Button.Style>
                                             <Style TargetType="Button" BasedOn="{StaticResource ComposerSendButtonStyle}">
                                                 <Setter Property="Visibility" Value="Visible" />
@@ -717,10 +721,14 @@
                                                     <DataTrigger Binding="{Binding IsCompacting}" Value="True">
                                                         <Setter Property="Visibility" Value="Collapsed" />
                                                     </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsSpeechListening}" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.AccentActive}" />
+                                                    </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
                                         </Button.Style>
-                                        <TextBlock Text="➤" FontSize="12" />
+                                        <TextBlock FontSize="12"
+                                                   Text="{Binding DataContext.SendButtonGlyph, RelativeSource={RelativeSource AncestorType=Button}}" />
                                     </Button>
                                 </StackPanel>
                             </Grid>

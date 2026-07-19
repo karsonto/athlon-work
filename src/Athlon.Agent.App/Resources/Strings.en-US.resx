@@ -229,6 +229,13 @@
   <data name="Chat_SendTooltip" xml:space="preserve">
     <value>Send (queues while generating)</value>
   </data>
+  <data name="Chat_SendTooltipWithSpeech" xml:space="preserve">
+    <value>Send (queues while generating)
+Hold to talk</value>
+  </data>
+  <data name="Chat_SpeechListeningTooltip" xml:space="preserve">
+    <value>Listening…</value>
+  </data>
   <data name="Chat_SettingsTooltip" xml:space="preserve">
     <value>Settings</value>
   </data>

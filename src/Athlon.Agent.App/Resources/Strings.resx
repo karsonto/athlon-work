@@ -229,6 +229,13 @@
   <data name="Chat_SendTooltip" xml:space="preserve">
     <value>发送（生成中将加入排队）</value>
   </data>
+  <data name="Chat_SendTooltipWithSpeech" xml:space="preserve">
+    <value>发送（生成中将加入排队）
+长按说话</value>
+  </data>
+  <data name="Chat_SpeechListeningTooltip" xml:space="preserve">
+    <value>正在聆听…</value>
+  </data>
   <data name="Chat_SettingsTooltip" xml:space="preserve">
     <value>设置</value>
   </data>
