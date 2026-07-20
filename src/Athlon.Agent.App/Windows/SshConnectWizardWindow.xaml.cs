@@ -234,14 +234,77 @@ public partial class SshConnectWizardWindow : Window
     private async Task LoadRemoteTreeAsync()
     {
         _treeRoots.Clear();
-        _selectedRemotePath = null;
-        SelectedPathBox.Text = string.Empty;
 
         var startPath = await ResolveStartPathAsync().ConfigureAwait(true);
+        _selectedRemotePath = startPath;
+        SelectedPathBox.Text = startPath;
+
         var root = await CreateDirectoryNodeAsync(startPath, displayName: startPath).ConfigureAwait(true);
         root.IsExpanded = true;
         _treeRoots.Add(root);
         await LoadChildrenAsync(root).ConfigureAwait(true);
+    }
+
+    private async void SelectedPathBox_OnKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        await BrowseToPathAsync(SelectedPathBox.Text).ConfigureAwait(true);
+    }
+
+    private async Task BrowseToPathAsync(string rawPath)
+    {
+        var path = RemotePathNormalizer.NormalizeRoot((rawPath ?? string.Empty).Trim());
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            StatusText.Text = _loc["Shell_SshWizardSelectFolder"];
+            return;
+        }
+
+        SelectedPathBox.IsEnabled = false;
+        FinishButton.IsEnabled = false;
+        StatusText.Text = _loc["Shell_SshWizardLoadingTree"];
+        try
+        {
+            var info = await _sshClient.TryGetFileInfoAsync(path).ConfigureAwait(true);
+            if (info is null || !info.IsDirectory)
+            {
+                StatusText.Text = _loc["Shell_SshWizardPathInvalid"];
+                return;
+            }
+
+            _selectedRemotePath = path;
+            SelectedPathBox.Text = path;
+
+            if (!_nameTouchedByUser)
+            {
+                var leaf = RemotePathNormalizer.GetFileName(path);
+                if (!string.IsNullOrWhiteSpace(leaf) && leaf != "/")
+                {
+                    SetNameBox(leaf);
+                }
+            }
+
+            _treeRoots.Clear();
+            var root = await CreateDirectoryNodeAsync(path, displayName: path).ConfigureAwait(true);
+            root.IsExpanded = true;
+            _treeRoots.Add(root);
+            await LoadChildrenAsync(root).ConfigureAwait(true);
+            StatusText.Text = string.Empty;
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = _loc.Format("Shell_SshTestFailed", ex.Message);
+        }
+        finally
+        {
+            SelectedPathBox.IsEnabled = true;
+            FinishButton.IsEnabled = true;
+        }
     }
 
     private async Task<string> ResolveStartPathAsync()
@@ -461,7 +524,12 @@ public partial class SshConnectWizardWindow : Window
     {
         error = string.Empty;
         var name = NameBox.Text.Trim();
-        var root = (_selectedRemotePath ?? string.Empty).Trim();
+        var root = SelectedPathBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            root = (_selectedRemotePath ?? string.Empty).Trim();
+        }
+
         if (string.IsNullOrWhiteSpace(root))
         {
             error = _loc["Shell_SshWizardSelectFolder"];
@@ -487,6 +555,7 @@ public partial class SshConnectWizardWindow : Window
             _workspace.RootPath = "/";
         }
 
+        _selectedRemotePath = _workspace.RootPath;
         return true;
     }
 

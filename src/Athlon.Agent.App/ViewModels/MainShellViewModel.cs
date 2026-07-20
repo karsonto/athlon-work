@@ -430,14 +430,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             if (_workspaceContext.Kind == WorkspaceKind.Ssh)
             {
                 var match = WorkspaceSessionResolver.FindMatch(_session, _appSettings);
-                if (match?.Ssh is not null)
+                if (match is not null)
                 {
-                    var user = match.Ssh.Username;
-                    var host = match.Ssh.Host;
-                    var label = string.IsNullOrWhiteSpace(match.Name)
-                        ? (string.IsNullOrWhiteSpace(user) ? host : $"{user}@{host}")
-                        : match.Name;
-                    return label;
+                    return FormatRemoteLabel(match);
                 }
 
                 return _workspaceContext.DisplayName ?? _loc["Shell_RunOnRemote"];
@@ -1539,20 +1534,46 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private static string FormatRemoteLabel(WorkspaceSettings workspace)
     {
-        if (!string.IsNullOrWhiteSpace(workspace.Name))
+        var ssh = workspace.Ssh;
+        var host = ssh?.Host?.Trim();
+        var name = workspace.Name?.Trim();
+        if (!string.IsNullOrWhiteSpace(host) && !string.IsNullOrWhiteSpace(name))
         {
-            return workspace.Name;
+            return $"{host}:{name}";
         }
 
-        var ssh = workspace.Ssh;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
         if (ssh is null)
         {
             return workspace.RootPath;
         }
 
         return string.IsNullOrWhiteSpace(ssh.Username)
-            ? ssh.Host
+            ? (string.IsNullOrWhiteSpace(host) ? workspace.RootPath : host)
             : $"{ssh.Username}@{ssh.Host}";
+    }
+
+    private string ResolveActiveWorkspaceName()
+    {
+        if (!HasSessionWorkspace)
+        {
+            return _loc["Shell_NoWorkspace"];
+        }
+
+        if (_workspaceContext.Kind == WorkspaceKind.Ssh)
+        {
+            var match = WorkspaceSessionResolver.FindMatch(_session, _appSettings);
+            if (match is not null)
+            {
+                return FormatRemoteLabel(match);
+            }
+        }
+
+        return _workspaceContext.DisplayName ?? _loc["Shell_NoWorkspace"];
     }
 
     private async Task ConfigureSshWorkspaceAsync()
@@ -1901,9 +1922,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             await _sshConnection.DisconnectAsync().ConfigureAwait(true);
         }
 
-        ActiveWorkspaceName = HasSessionWorkspace
-            ? _workspaceContext.DisplayName ?? _loc["Shell_NoWorkspace"]
-            : _loc["Shell_NoWorkspace"];
+        ActiveWorkspaceName = ResolveActiveWorkspaceName();
         RefreshAtCompletionSources(reloadSkills: true);
         await RefreshWorkspaceTreeAsync().ConfigureAwait(true);
         ConfigureWorkspaceWatcher();

@@ -1359,13 +1359,16 @@
     <value>在目录树中选择远程工作区根目录</value>
   </data>
   <data name="Shell_SshWizardBrowseHint" xml:space="preserve">
-    <value>展开目录并点击选择工作区根目录，确认后才会绑定该路径。</value>
+    <value>可手输路径后按 Enter 加载目录树，或展开目录点击选择工作区根目录。</value>
   </data>
   <data name="Shell_SshWizardSelectedPath" xml:space="preserve">
     <value>已选目录</value>
   </data>
   <data name="Shell_SshWizardSelectFolder" xml:space="preserve">
-    <value>请在目录树中选择工作目录。</value>
+    <value>请输入或选择工作目录。</value>
+  </data>
+  <data name="Shell_SshWizardPathInvalid" xml:space="preserve">
+    <value>路径不存在或不是目录，请检查后重试。</value>
   </data>
   <data name="Shell_SshWizardConnectAndBrowse" xml:space="preserve">
     <value>连接并浏览</value>

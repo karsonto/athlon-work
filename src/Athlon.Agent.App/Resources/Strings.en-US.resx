@@ -1350,13 +1350,16 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
     <value>Select the remote workspace root in the directory tree</value>
   </data>
   <data name="Shell_SshWizardBrowseHint" xml:space="preserve">
-    <value>Expand folders and click to choose the workspace root. The path is applied only after you confirm.</value>
+    <value>Type a path and press Enter to load the tree, or expand folders and click to choose the workspace root.</value>
   </data>
   <data name="Shell_SshWizardSelectedPath" xml:space="preserve">
     <value>Selected folder</value>
   </data>
   <data name="Shell_SshWizardSelectFolder" xml:space="preserve">
-    <value>Select a folder in the directory tree.</value>
+    <value>Enter or select a workspace folder.</value>
+  </data>
+  <data name="Shell_SshWizardPathInvalid" xml:space="preserve">
+    <value>Path does not exist or is not a directory. Check and try again.</value>
   </data>
   <data name="Shell_SshWizardConnectAndBrowse" xml:space="preserve">
     <value>Connect &amp; browse</value>
