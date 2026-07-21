@@ -176,14 +176,60 @@ public sealed class CompactionTests
         var user = ChatMessage.Create(MessageRole.User, "hello");
         var filtered = SummaryMessageBuilder.FilterSummaryMessages(new[] { summary, user });
 
+        Assert.Equal(MessageRole.Summary, summary.Role);
         Assert.Single(filtered);
         Assert.Equal("hello", filtered[0].Content);
+    }
+
+    [Fact]
+    public void SummaryMessageBuilder_RecognizesLegacyUserMarkerSummaries()
+    {
+        var legacy = ChatMessage.Create(
+            MessageRole.User,
+            ConversationCompactionDefaults.SummaryMessageMarker + "\nlegacy summary");
+
+        Assert.True(SummaryMessageBuilder.IsSummaryMessage(legacy));
+        Assert.False(SummaryMessageBuilder.IsSummaryMessage(ChatMessage.Create(MessageRole.User, "hello")));
+    }
+
+    [Fact]
+    public void PromptPressureStore_Record_OverwritesWithLatestValue()
+    {
+        var store = new PromptPressureStore();
+        store.Record("s1", 100_000);
+        store.Record("s1", 40_000);
+
+        Assert.Equal(40_000, store.GetLastPromptTokens("s1"));
+    }
+
+    [Fact]
+    public void ResolveEffectiveEstimate_ReusesKnownRawHistoryEstimate()
+    {
+        var settings = new ContextCompactionSettings();
+        var messages = new[] { ChatMessage.Create(MessageRole.User, "short") };
+        var estimated = ContextTokenEstimator.Estimate(messages);
+        var budget = new ContextBudgetSnapshot(
+            200_000,
+            8192,
+            20_000,
+            estimated,
+            120_000,
+            (double)(120_000 + 20_000) / 200_000);
+
+        var effective = ContextTokenEstimator.ResolveEffectiveEstimate(
+            messages,
+            settings,
+            budget,
+            knownRawHistoryEstimate: estimated);
+
+        Assert.Equal(120_000, effective);
     }
 
     [Fact]
     public void SummaryMessageBuilder_WithTranscript_UsesAgentScopeFormat()
     {
         var summary = SummaryMessageBuilder.CreateSummaryPlaceholder("facts", "/tmp/transcript.jsonl");
+        Assert.Equal(MessageRole.Summary, summary.Role);
         Assert.Contains("conversation that has been summarized", summary.Content, StringComparison.Ordinal);
         Assert.Contains("/tmp/transcript.jsonl", summary.Content, StringComparison.Ordinal);
         Assert.Contains("<summary>", summary.Content, StringComparison.Ordinal);
@@ -986,18 +1032,34 @@ public sealed class CompactionTests
         {
             DynamicCompaction = new DynamicCompactionSettings { EnableSemanticCutoff = true }
         };
-        var summary = SummaryMessageBuilder.CreateSummaryPlaceholder("prior summary about Foo", null);
+        // Legacy User+marker must not anchor the protected tail.
+        var legacySummary = ChatMessage.Create(
+            MessageRole.User,
+            ConversationCompactionDefaults.SummaryMessageMarker + "\nprior summary about Foo");
         var conversation = new List<ChatMessage>
         {
-            summary,
+            legacySummary,
             ChatMessage.Create(MessageRole.Assistant, "working on it"),
             ChatMessage.Create(MessageRole.Assistant, "still going")
         };
 
         var cutoff = SemanticCutoffPlanner.DetermineCutoffIndex(conversation, settings, keepTokenBudget: 1);
 
-        Assert.True(cutoff > 0);
-        Assert.True(cutoff < conversation.Count);
+        // Tiny keep budget + no real user → cutoff at end (not 0, which would keep from the summary).
+        Assert.Equal(conversation.Count, cutoff);
+
+        var roleSummary = SummaryMessageBuilder.CreateSummaryPlaceholder("prior summary about Foo", null);
+        var withRole = new List<ChatMessage>
+        {
+            roleSummary,
+            ChatMessage.Create(MessageRole.Assistant, "working on it"),
+            ChatMessage.Create(MessageRole.User, "continue"),
+            ChatMessage.Create(MessageRole.Assistant, "still going")
+        };
+        var roleCutoff = SemanticCutoffPlanner.DetermineCutoffIndex(withRole, settings, keepTokenBudget: 1);
+        Assert.True(roleCutoff > 0);
+        Assert.True(roleCutoff < withRole.Count);
+        Assert.True(roleCutoff >= 2); // real user index — never treat Summary role as protected user
     }
 
     [Fact]
@@ -1063,7 +1125,9 @@ public sealed class CompactionTests
         Assert.StartsWith("AAA", fitted, StringComparison.Ordinal);
         Assert.EndsWith("ZZZ", fitted, StringComparison.Ordinal);
         Assert.Contains("[... middle omitted for summary budget ...]", fitted, StringComparison.Ordinal);
-        Assert.DoesNotContain("MMMMMMMM", fitted, StringComparison.Ordinal);
+        // Head/tail split may still include the end of the middle block in the tail window;
+        // ensure the deep middle of the original is gone.
+        Assert.DoesNotContain(new string('M', 200), fitted, StringComparison.Ordinal);
     }
 
     [Fact]

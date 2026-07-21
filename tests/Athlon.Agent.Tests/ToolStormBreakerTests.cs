@@ -16,4 +16,18 @@ public sealed class ToolStormBreakerTests
         Assert.False(breaker.TryInspect(call with { Id = "3" }, out var reason));
         Assert.Contains("repeat-loop guard", reason);
     }
+
+    [Fact]
+    public void TryInspect_treats_equivalent_paths_as_identical()
+    {
+        var breaker = new ToolStormBreaker(new ToolStormSettings { Threshold = 3 });
+        var first = new AgentToolCall("1", "file_read", new Dictionary<string, string> { ["path"] = "a/b" });
+        var second = new AgentToolCall("2", "file_read", new Dictionary<string, string> { ["path"] = "./a/b" });
+        var third = new AgentToolCall("3", "file_read", new Dictionary<string, string> { ["path"] = @"a\b" });
+
+        Assert.True(breaker.TryInspect(first, out _));
+        Assert.True(breaker.TryInspect(second, out _));
+        Assert.False(breaker.TryInspect(third, out var reason));
+        Assert.Contains("repeat-loop guard", reason);
+    }
 }

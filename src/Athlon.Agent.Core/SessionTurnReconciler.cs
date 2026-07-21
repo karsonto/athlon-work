@@ -1,3 +1,5 @@
+using Athlon.Agent.Core.Compaction;
+
 namespace Athlon.Agent.Core;
 
 public sealed record SessionTurnEndSnapshot(
@@ -144,7 +146,7 @@ public static class SessionTurnReconciler
     {
         for (var index = messages.Count - 1; index >= 0; index--)
         {
-            if (messages[index].Role == MessageRole.User)
+            if (IsRealUserMessage(messages[index]))
             {
                 return messages[index].Id;
             }
@@ -158,7 +160,7 @@ public static class SessionTurnReconciler
         var lastUserIndex = -1;
         for (var index = messages.Count - 1; index >= 0; index--)
         {
-            if (messages[index].Role == MessageRole.User)
+            if (IsRealUserMessage(messages[index]))
             {
                 lastUserIndex = index;
                 break;
@@ -180,6 +182,9 @@ public static class SessionTurnReconciler
 
         return null;
     }
+
+    private static bool IsRealUserMessage(ChatMessage message) =>
+        message.Role == MessageRole.User && !SummaryMessageBuilder.IsSummaryMessage(message);
 
     private static HashSet<string> BuildAnsweredToolCallIds(IReadOnlyList<ChatMessage> messages)
     {

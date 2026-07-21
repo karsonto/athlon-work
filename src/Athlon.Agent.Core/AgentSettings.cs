@@ -178,6 +178,18 @@ public sealed class McpSearchSettings
 
     public int AutoThresholdSchemaChars { get; set; } = 80_000;
 
+    /// <summary>
+    /// Auto mode must drop this many tools below <see cref="AutoThresholdToolCount"/>
+    /// before a session stuck in search exits search.
+    /// </summary>
+    public int AutoHysteresisToolCount { get; set; } = 3;
+
+    /// <summary>
+    /// Auto mode must drop this many schema chars below <see cref="AutoThresholdSchemaChars"/>
+    /// before a session stuck in search exits search.
+    /// </summary>
+    public int AutoHysteresisSchemaChars { get; set; } = 10_000;
+
     public int TopKDefault { get; set; } = 8;
 
     public int TopKMax { get; set; } = 20;

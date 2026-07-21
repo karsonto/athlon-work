@@ -15,6 +15,10 @@ public sealed class HostEnvironmentSectionTests
 
         Assert.Equal(first, second);
         Assert.Contains("tz=UTC+8", first, StringComparison.Ordinal);
+        Assert.Contains("skills=available", first, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"TESTDOMAIN\karson", first, StringComparison.Ordinal);
+        Assert.DoesNotContain("cwd=", first, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"C:\Users\test\.athlon-agent\skills", first, StringComparison.Ordinal);
         Assert.DoesNotMatch(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", first);
     }
 

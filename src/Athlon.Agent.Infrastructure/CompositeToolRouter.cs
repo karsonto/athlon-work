@@ -27,6 +27,10 @@ public sealed class CompositeToolRouter(
 
     public IReadOnlyList<ToolDefinition> ListTools() => _inner.ListTools();
 
+    public ToolDefinition? FindDefinition(string name) => _inner.FindDefinition(name);
+
+    public bool IsParallelizable(string toolName) => _inner.IsParallelizable(toolName);
+
     public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
         _inner.InvokeAsync(invocation, cancellationToken);
 }

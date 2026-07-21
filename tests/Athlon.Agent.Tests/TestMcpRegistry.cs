@@ -6,7 +6,7 @@ namespace Athlon.Agent.Tests;
 
 internal sealed class TestMcpRegistry(IReadOnlyList<McpCatalogEntry>? catalog = null) : IMcpRegistry
 {
-    private readonly IReadOnlyList<McpCatalogEntry> _catalog = catalog ?? Array.Empty<McpCatalogEntry>();
+    private IReadOnlyList<McpCatalogEntry> _catalog = catalog ?? Array.Empty<McpCatalogEntry>();
 
     public int InvocationCount { get; private set; }
     public string? LastServerName { get; private set; }
@@ -19,6 +19,9 @@ internal sealed class TestMcpRegistry(IReadOnlyList<McpCatalogEntry>? catalog = 
 
     public int CatalogSchemaCharCount => _catalog.Sum(entry =>
         entry.Description.Length + entry.InputSchemaJson.Length + entry.EncodedName.Length);
+
+    public void SetCatalog(IReadOnlyList<McpCatalogEntry> catalog) =>
+        _catalog = catalog ?? Array.Empty<McpCatalogEntry>();
 
     public IReadOnlyList<McpCatalogEntry> ListCatalogEntries() => _catalog;
 

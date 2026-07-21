@@ -5,11 +5,17 @@ public static class SummaryMessageBuilder
     public static ChatMessage CreateSummaryPlaceholder(string summaryText, string? transcriptPath)
     {
         var content = BuildSummaryContent(summaryText, transcriptPath);
-        return ChatMessage.Create(MessageRole.User, content);
+        return ChatMessage.Create(MessageRole.Summary, content);
     }
 
     public static bool IsSummaryMessage(ChatMessage message)
     {
+        if (message.Role == MessageRole.Summary)
+        {
+            return true;
+        }
+
+        // Legacy sessions stored summaries as User + marker / compressed placeholder.
         if (message.Role != MessageRole.User)
         {
             return false;
@@ -21,8 +27,6 @@ public static class SummaryMessageBuilder
 
     public static IReadOnlyList<ChatMessage> FilterSummaryMessages(IReadOnlyList<ChatMessage> messages) =>
         messages.Where(message => !IsSummaryMessage(message)).ToList();
-
-    private const string SummaryMarkerLine = ConversationCompactionDefaults.SummaryMessageMarker + "\n";
 
     private static string BuildSummaryContent(string summaryText, string? transcriptPath)
     {

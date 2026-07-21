@@ -29,8 +29,8 @@ public sealed class ClearContextTests
         Assert.Equal("system", messages[0].Role);
         Assert.Equal("user", messages[1].Role);
         var content = Assert.IsType<string>(messages[1].Content);
-        Assert.StartsWith("[2026-06-30 22:30 UTC+8]", content, StringComparison.Ordinal);
         Assert.Contains("fresh start", content, StringComparison.Ordinal);
+        Assert.EndsWith("[2026-06-30 22:30 UTC+8]", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public sealed class ClearContextTests
 
             var prompt = builder.Build(session, tools);
 
-            Assert.Contains($"Workspace root: {workspaceRoot}", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain($"Workspace root: {workspaceRoot}", prompt, StringComparison.Ordinal);
             Assert.Contains("not a path prefix", prompt, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Native tools via function calling", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("- file_read: Read a file", prompt, StringComparison.Ordinal);

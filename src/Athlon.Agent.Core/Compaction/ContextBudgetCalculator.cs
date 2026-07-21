@@ -24,7 +24,7 @@ public static class ContextBudgetCalculator
         var fixedOverhead = systemTokens + toolsTokens + margin;
         var historyBudget = Math.Max(0, totalWindow - reservedOutput - fixedOverhead);
 
-        var conversation = FilterConversation(messages);
+        var conversation = ConversationMessageFilters.WithoutCompactionAudits(messages);
         var estimatedHistory = ContextTokenEstimator.Estimate(
             conversation,
             compactionSettings.IncludeReasoningInModelContext,
@@ -46,7 +46,7 @@ public static class ContextBudgetCalculator
         ContextCompactionSettings compactionSettings,
         double calibrationMultiplier = 1.0)
     {
-        var conversation = FilterConversation(messages);
+        var conversation = ConversationMessageFilters.WithoutCompactionAudits(messages);
         var estimatedHistory = ContextTokenEstimator.Estimate(
             conversation,
             compactionSettings.IncludeReasoningInModelContext,
@@ -54,6 +54,14 @@ public static class ContextBudgetCalculator
 
         return snapshot.WithHistoryEstimate(estimatedHistory, snapshot.HistoryBudget);
     }
+
+    /// <summary>Uncalibrated history estimate for static thresholds / ResolveEffectiveEstimate reuse.</summary>
+    public static int EstimateRawHistory(
+        IReadOnlyList<ChatMessage> messages,
+        ContextCompactionSettings compactionSettings) =>
+        ContextTokenEstimator.Estimate(
+            ConversationMessageFilters.WithoutCompactionAudits(messages),
+            compactionSettings.IncludeReasoningInModelContext);
 
     private static int EstimateToolsTokens(IReadOnlyList<ToolDefinition> tools, double calibrationMultiplier)
     {
@@ -73,7 +81,4 @@ public static class ContextBudgetCalculator
 
         return total + ContextTokenEstimator.EstimateTextTokens("schema-overhead", calibrationMultiplier);
     }
-
-    private static List<ChatMessage> FilterConversation(IReadOnlyList<ChatMessage> messages) =>
-        messages.Where(message => message.Role != MessageRole.Compaction).ToList();
 }

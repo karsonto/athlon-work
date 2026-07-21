@@ -31,16 +31,28 @@ public sealed class AgentEnvironmentPromptBuilderTests
 
             Assert.Contains("Host: Win", prompt, StringComparison.Ordinal);
             Assert.Contains("tz=UTC+8", prompt, StringComparison.Ordinal);
+            Assert.Contains("skills=available", prompt, StringComparison.Ordinal);
             Assert.DoesNotMatch(@"\d{4}-\d{2}-\d{2} \d{2}:\d{2}", prompt);
             Assert.Contains("Encoding and locale:", prompt, StringComparison.Ordinal);
             Assert.Contains("UTF-8", prompt, StringComparison.Ordinal);
-            Assert.Contains(@"TESTDOMAIN\karson", prompt, StringComparison.Ordinal);
-            Assert.Contains($"skills={skillsPath}", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain(@"TESTDOMAIN\karson", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain($"skills={skillsPath}", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain($"cwd={workspaceRoot}", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain($"Workspace root: {workspaceRoot}", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain($"none installed under {skillsPath}", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("~/.athlon-agent/skills", prompt, StringComparison.Ordinal);
             Assert.Contains("Shell: cmd.exe only, not PowerShell", prompt, StringComparison.Ordinal);
             Assert.Contains("File tools:", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("prefer PowerShell", prompt, StringComparison.OrdinalIgnoreCase);
+
+            var runtime = PromptTestHelpers.CreateOrchestrator(
+                    new PromptTestHelpers.FakeHostEnvironment(skillsPath, appDataPath),
+                    settings)
+                .BuildRuntimeContext(session, Array.Empty<ToolDefinition>());
+            Assert.NotNull(runtime);
+            Assert.Contains(@"Host user: TESTDOMAIN\karson", runtime, StringComparison.Ordinal);
+            Assert.Contains($"Skills directory: {skillsPath}", runtime, StringComparison.Ordinal);
+            Assert.Contains($"Workspace root: {workspaceRoot}", runtime, StringComparison.Ordinal);
         }
         finally
         {
@@ -93,20 +105,30 @@ public sealed class AgentEnvironmentPromptBuilderTests
     }
 
     [Fact]
-    public void Build_WithWorkspace_HostCwdMatchesWorkspaceRoot()
+    public void Build_WithWorkspace_SystemPromptOmitsPaths_RuntimeHasWorkspaceRoot()
     {
         var workspaceRoot = @"C:\work\demo";
+        var skillsPath = @"C:\Users\test\.athlon-agent\skills";
         var settings = new AppSettings
         {
             Workspaces = { new WorkspaceSettings { Name = "demo", RootPath = workspaceRoot } }
         };
-        var builder = PromptTestHelpers.CreateBuilder(
-            new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
+        var orchestrator = PromptTestHelpers.CreateOrchestrator(
+            new PromptTestHelpers.FakeHostEnvironment(skillsPath, @"C:\Users\test\.athlon-agent"),
             settings);
+        var session = AgentSession.Create("cwd-test").WithWorkspace(workspaceRoot);
 
-        var prompt = builder.Build(AgentSession.Create("cwd-test"), Array.Empty<ToolDefinition>());
+        var prompt = orchestrator.PrepareForTurn(session, Array.Empty<ToolDefinition>()).Text;
+        Assert.DoesNotContain($"cwd={workspaceRoot}", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain($"Workspace root: {workspaceRoot}", prompt, StringComparison.Ordinal);
+        Assert.Contains("skills=available", prompt, StringComparison.Ordinal);
+        Assert.Contains("not a path prefix", prompt, StringComparison.OrdinalIgnoreCase);
 
-        Assert.Contains($"cwd={workspaceRoot}", prompt, StringComparison.Ordinal);
+        var runtime = orchestrator.BuildRuntimeContext(session, Array.Empty<ToolDefinition>());
+        Assert.NotNull(runtime);
+        Assert.Contains($"Workspace root: {workspaceRoot}", runtime, StringComparison.Ordinal);
+        Assert.Contains("Workspace name: demo", runtime, StringComparison.Ordinal);
+        Assert.Contains($"Skills directory: {skillsPath}", runtime, StringComparison.Ordinal);
     }
 
     [Fact]

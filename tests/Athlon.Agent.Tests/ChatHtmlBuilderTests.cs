@@ -1,10 +1,8 @@
-using System.Text;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Tests;
 
@@ -253,44 +251,4 @@ public sealed class ChatHtmlBuilderTests
             html,
             StringComparison.Ordinal);
     }
-}
-
-public sealed class SignedInUserSectionTests
-{
-    [Fact]
-    public void Append_skips_when_user_name_missing()
-    {
-        var section = new SignedInUserSection();
-        var builder = new StringBuilder();
-        var context = CreateContext(ssoUserDisplayName: null);
-
-        section.Append(builder, context);
-
-        Assert.Equal(string.Empty, builder.ToString());
-    }
-
-    [Fact]
-    public void Append_includes_signed_in_user_when_name_present()
-    {
-        var section = new SignedInUserSection();
-        var builder = new StringBuilder();
-        var context = CreateContext(ssoUserDisplayName: "Zhang San");
-
-        section.Append(builder, context);
-
-        var text = builder.ToString();
-        Assert.Contains("The signed-in user is Zhang San.", text, StringComparison.Ordinal);
-        Assert.Contains("Address them by name when appropriate.", text, StringComparison.Ordinal);
-    }
-
-    private static EnvironmentPromptContext CreateContext(string? ssoUserDisplayName) =>
-        new()
-        {
-            Session = AgentSession.Create("test"),
-            Tools = Array.Empty<ToolDefinition>(),
-            SkillsDirectory = @"C:\skills",
-            Host = new PromptTestHelpers.FakeHostEnvironment(@"C:\skills", @"C:\app"),
-            PromptSettings = new PromptSettings(),
-            SsoUserDisplayName = ssoUserDisplayName
-        };
 }

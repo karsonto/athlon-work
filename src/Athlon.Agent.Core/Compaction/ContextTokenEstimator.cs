@@ -77,9 +77,11 @@ public static class ContextTokenEstimator
     public static int ResolveEffectiveEstimate(
         IReadOnlyList<ChatMessage> messages,
         ContextCompactionSettings settings,
-        ContextBudgetSnapshot? budget)
+        ContextBudgetSnapshot? budget,
+        int? knownRawHistoryEstimate = null)
     {
-        var estimated = Estimate(messages, settings.IncludeReasoningInModelContext);
+        var estimated = knownRawHistoryEstimate
+            ?? Estimate(messages, settings.IncludeReasoningInModelContext);
         if (budget is null)
         {
             return estimated;

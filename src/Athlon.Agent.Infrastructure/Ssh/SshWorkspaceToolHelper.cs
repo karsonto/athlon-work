@@ -93,6 +93,9 @@ internal static class SshWorkspaceToolHelper
         return path.TrimStart('/');
     }
 
+    public static string ToAuditPath(WorkspaceGuard guard, string fullPath) =>
+        ToRelative(guard.Normalize("."), fullPath);
+
     public static bool ShouldIgnore(string fullPath, IReadOnlyList<string> ignorePatterns)
     {
         var segments = RemotePathNormalizer.ForModel(fullPath)

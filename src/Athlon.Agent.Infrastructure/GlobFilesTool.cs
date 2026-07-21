@@ -36,7 +36,7 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
                 : $"{Path.GetRelativePath(fullPath, path)} ({new FileInfo(path).Length} bytes)")
             .ToArray();
 
-        await WorkspaceToolHelper.AuditAsync(audit, "glob_files", new { path = fullPath, pattern, count = matches.Length }, cancellationToken);
+        await WorkspaceToolHelper.AuditAsync(audit, "glob_files", new { path = WorkspaceToolHelper.ToAuditPath(guard, fullPath), pattern, count = matches.Length }, cancellationToken);
         return matches.Length == 0
             ? ToolResult.Success("No matching files found", "No matching files found")
             : ToolResult.Success($"Found {matches.Length} matching entries", string.Join(Environment.NewLine, matches));

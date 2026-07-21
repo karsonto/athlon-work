@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
@@ -26,6 +27,10 @@ internal sealed class McpDelegatingToolRouter(
             mcpRegistry,
             settings,
             refreshMcpCatalogAsync ?? (() => mcpRegistry.RefreshAsync(settings.McpServers, CancellationToken.None))));
+    private readonly ConcurrentDictionary<string, bool> _autoSearchStickyBySession = new(StringComparer.Ordinal);
+
+    private ToolRouter? _cachedLocalRouter;
+    private string? _cachedLocalStamp;
 
     private bool IsChatOnlyMode => !workspaceGuard.HasConfiguredWorkspace;
 
@@ -74,9 +79,39 @@ internal sealed class McpDelegatingToolRouter(
         return true;
     }
 
+    private ToolRouter GetOrCreateLocalRouter()
+    {
+        var stamp = ComputeLocalStamp();
+        if (_cachedLocalRouter is not null
+            && string.Equals(_cachedLocalStamp, stamp, StringComparison.Ordinal))
+        {
+            return _cachedLocalRouter;
+        }
+
+        _cachedLocalRouter = new ToolRouter(ActiveLocalTools);
+        _cachedLocalStamp = stamp;
+        return _cachedLocalRouter;
+    }
+
+    private string ComputeLocalStamp()
+    {
+        var sessionId = activeSessionContext.SessionId ?? string.Empty;
+        var knowledge = sessionKnowledgeState.ShouldExposeKnowledgeTool(sessionId);
+        var coding = sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor);
+        var ask = sessionHarnessState.IsAskModeForActiveRun(runContextAccessor);
+        return string.Join(
+            '|',
+            (int)workspaceGuard.CurrentKind,
+            workspaceGuard.HasConfiguredWorkspace,
+            sessionId,
+            knowledge,
+            coding,
+            ask);
+    }
+
     public IReadOnlyList<ToolDefinition> ListTools()
     {
-        var local = new ToolRouter(ActiveLocalTools).ListTools();
+        var local = GetOrCreateLocalRouter().ListTools();
         if (IsChatOnlyMode)
         {
             return local;
@@ -97,6 +132,57 @@ internal sealed class McpDelegatingToolRouter(
             mcpRegistry.CatalogCount,
             mcpRegistry.CatalogSchemaCharCount);
         return tools;
+    }
+
+    public ToolDefinition? FindDefinition(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        var local = GetOrCreateLocalRouter().FindDefinition(name);
+        if (local is not null)
+        {
+            return local;
+        }
+
+        if (IsChatOnlyMode)
+        {
+            return null;
+        }
+
+        if (ShouldUseMcpSearch())
+        {
+            return _searchGatewayTools.Value
+                .Select(tool => tool.Definition)
+                .FirstOrDefault(tool => string.Equals(tool.Name, name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return mcpRegistry.ListToolDefinitions()
+            .FirstOrDefault(tool => string.Equals(tool.Name, name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public bool IsParallelizable(string toolName)
+    {
+        if (string.IsNullOrWhiteSpace(toolName))
+        {
+            return false;
+        }
+
+        if (GetOrCreateLocalRouter().IsParallelizable(toolName))
+        {
+            return true;
+        }
+
+        if (!ShouldUseMcpSearch())
+        {
+            return false;
+        }
+
+        return _searchGatewayTools.Value.Any(tool =>
+            string.Equals(tool.Definition.Name, toolName, StringComparison.OrdinalIgnoreCase)
+            && tool is IParallelizableAgentTool);
     }
 
     public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
@@ -133,45 +219,50 @@ internal sealed class McpDelegatingToolRouter(
                     $"Tool {invocation.ToolName} is not advertised in search mode. Use {McpSearchGatewayTools.SearchToolName} and {McpSearchGatewayTools.CallToolName}."));
             }
 
-            var mcpDefinition = mcpRegistry.ListToolDefinitions()
-                .FirstOrDefault(tool => string.Equals(tool.Name, invocation.ToolName, StringComparison.OrdinalIgnoreCase));
-            if (mcpDefinition is not null)
+            if (!invocation.SkipValidation)
             {
-                var validationError = ToolInvocationValidator.Validate(mcpDefinition.ParametersSchema, invocation.Arguments);
-                if (validationError is not null)
+                var mcpDefinition = mcpRegistry.ListToolDefinitions()
+                    .FirstOrDefault(tool => string.Equals(tool.Name, invocation.ToolName, StringComparison.OrdinalIgnoreCase));
+                if (mcpDefinition is not null)
                 {
-                    return Task.FromResult(ToolInvocationErrors.Failure("Invalid tool arguments", validationError));
-                }
+                    var validationError = ToolInvocationValidator.Validate(mcpDefinition.ParametersSchema, invocation.Arguments);
+                    if (validationError is not null)
+                    {
+                        return Task.FromResult(ToolInvocationErrors.Failure("Invalid tool arguments", validationError));
+                    }
 
-                var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(
-                    mcpDefinition,
-                    invocation.ApprovalDecision);
-                if (blocked is not null)
-                {
-                    return Task.FromResult(blocked);
+                    var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(
+                        mcpDefinition,
+                        invocation.ApprovalDecision);
+                    if (blocked is not null)
+                    {
+                        return Task.FromResult(blocked);
+                    }
                 }
             }
 
             return mcpRegistry.InvokeAsync(serverName, toolName, invocation.Arguments, cancellationToken);
         }
 
-        var localRouter = new ToolRouter(ActiveLocalTools);
-        var localDefinition = localRouter.ListTools()
-            .FirstOrDefault(tool => string.Equals(tool.Name, invocation.ToolName, StringComparison.OrdinalIgnoreCase));
-        if (localDefinition is not null)
+        var localRouter = GetOrCreateLocalRouter();
+        if (!invocation.SkipValidation)
         {
-            var validationError = ToolInvocationValidator.Validate(localDefinition.ParametersSchema, invocation.Arguments);
-            if (validationError is not null)
+            var localDefinition = localRouter.FindDefinition(invocation.ToolName);
+            if (localDefinition is not null)
             {
-                return Task.FromResult(ToolInvocationErrors.Failure("Invalid tool arguments", validationError));
-            }
+                var validationError = ToolInvocationValidator.Validate(localDefinition.ParametersSchema, invocation.Arguments);
+                if (validationError is not null)
+                {
+                    return Task.FromResult(ToolInvocationErrors.Failure("Invalid tool arguments", validationError));
+                }
 
-            var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(
-                localDefinition,
-                invocation.ApprovalDecision);
-            if (blocked is not null)
-            {
-                return Task.FromResult(blocked);
+                var blocked = ToolInvocationPolicyEnforcer.TryBlockInvocation(
+                    localDefinition,
+                    invocation.ApprovalDecision);
+                if (blocked is not null)
+                {
+                    return Task.FromResult(blocked);
+                }
             }
         }
 
@@ -183,21 +274,75 @@ internal sealed class McpDelegatingToolRouter(
         var config = settings.McpSearch;
         if (!config.Enabled)
         {
+            ClearStickyForActiveSession();
             return false;
         }
 
         if (string.Equals(config.Mode, "direct", StringComparison.OrdinalIgnoreCase))
         {
+            ClearStickyForActiveSession();
             return false;
         }
 
         if (string.Equals(config.Mode, "search", StringComparison.OrdinalIgnoreCase))
         {
+            ClearStickyForActiveSession();
             return mcpRegistry.CatalogCount > 0;
         }
 
-        return mcpRegistry.CatalogCount >= config.AutoThresholdToolCount
-            || mcpRegistry.CatalogSchemaCharCount >= config.AutoThresholdSchemaChars;
+        // auto
+        var enterSearch = MeetsAutoEnterThreshold(config);
+        var sessionId = activeSessionContext.SessionId;
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return enterSearch;
+        }
+
+        if (_autoSearchStickyBySession.TryGetValue(sessionId, out var stuckSearch))
+        {
+            if (stuckSearch)
+            {
+                if (MeetsAutoExitThreshold(config))
+                {
+                    _autoSearchStickyBySession[sessionId] = false;
+                    return false;
+                }
+
+                return true;
+            }
+
+            if (enterSearch)
+            {
+                _autoSearchStickyBySession[sessionId] = true;
+                return true;
+            }
+
+            return false;
+        }
+
+        _autoSearchStickyBySession[sessionId] = enterSearch;
+        return enterSearch;
+    }
+
+    private bool MeetsAutoEnterThreshold(McpSearchSettings config) =>
+        mcpRegistry.CatalogCount >= config.AutoThresholdToolCount
+        || mcpRegistry.CatalogSchemaCharCount >= config.AutoThresholdSchemaChars;
+
+    private bool MeetsAutoExitThreshold(McpSearchSettings config)
+    {
+        var exitToolCount = Math.Max(0, config.AutoThresholdToolCount - Math.Max(0, config.AutoHysteresisToolCount));
+        var exitSchemaChars = Math.Max(0, config.AutoThresholdSchemaChars - Math.Max(0, config.AutoHysteresisSchemaChars));
+        return mcpRegistry.CatalogCount < exitToolCount
+            && mcpRegistry.CatalogSchemaCharCount < exitSchemaChars;
+    }
+
+    private void ClearStickyForActiveSession()
+    {
+        var sessionId = activeSessionContext.SessionId;
+        if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            _autoSearchStickyBySession.TryRemove(sessionId, out _);
+        }
     }
 
     private sealed class NullAppLogger : IAppLogger

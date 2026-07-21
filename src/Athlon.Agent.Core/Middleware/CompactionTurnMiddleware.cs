@@ -50,6 +50,12 @@ public sealed class CompactionTurnMiddleware(
                 settings.Model,
                 multiplier,
                 invocation.RuntimeContext);
+            // Capture raw (uncalibrated) history before prompt-pressure may raise EstimatedHistory.
+            var rawHistoryEstimate = Math.Abs(multiplier - 1.0) < 0.001
+                ? budget.EstimatedHistory
+                : ContextBudgetCalculator.EstimateRawHistory(
+                    invocation.Session.Messages,
+                    settings.ContextCompaction);
             budget = ApplyPromptPressure(budget, invocation.Session.Id);
             runtimeContext = new CompactionRuntimeContext(
                 budget,
@@ -57,7 +63,8 @@ public sealed class CompactionTurnMiddleware(
                 tools,
                 multiplier,
                 pressureOverride,
-                promptPressureStore.GetLastPromptTokens(invocation.Session.Id));
+                promptPressureStore.GetLastPromptTokens(invocation.Session.Id),
+                rawHistoryEstimate);
         }
 
         invocation.CompactionContext = runtimeContext;

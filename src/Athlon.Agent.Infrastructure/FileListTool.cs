@@ -43,7 +43,7 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
             .Select(path => FormatEntry(workspaceRoot, path))
             .ToArray();
 
-        await WorkspaceToolHelper.AuditAsync(audit, "file_list", new { path = fullPath, count = files.Length }, cancellationToken);
+        await WorkspaceToolHelper.AuditAsync(audit, "file_list", new { path = WorkspaceToolHelper.ToAuditPath(guard, fullPath), count = files.Length }, cancellationToken);
         var content = files.Length == 0
             ? "(empty directory)"
             : string.Join(Environment.NewLine, files) + Environment.NewLine + FileListPathCopyNotice;

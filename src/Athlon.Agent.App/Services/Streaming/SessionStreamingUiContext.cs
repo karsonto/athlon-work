@@ -206,9 +206,9 @@ public sealed class SessionStreamingUiContext
             return;
         }
 
-        if (message.Role == MessageRole.User
-            && (SummaryMessageBuilder.IsSummaryMessage(message)
-                || SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)))
+        if (SummaryMessageBuilder.IsSummaryMessage(message)
+            || message.Role == MessageRole.User
+                && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message))
         {
             RemoveEmptyActiveAssistantBubble(messages);
             return;

@@ -24,17 +24,22 @@ public sealed class TruncateArgsService
             return messages;
         }
 
-        var conversation = messages.Where(message => message.Role != MessageRole.Compaction).ToList();
+        var conversation = ConversationMessageFilters.WithoutCompactionAudits(messages);
         if (conversation.Count == 0)
         {
             return messages;
         }
 
-        var estimatedTokens = ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
-        if (keepTokenBudgetOverride is null
-            && !ConversationCutoffPlanner.ShouldTruncateArgs(conversation, estimatedTokens, truncateSettings))
+        // Dynamic plan already decided to truncate via keepTokenBudgetOverride — skip dead Estimate.
+        if (keepTokenBudgetOverride is null)
         {
-            return messages;
+            var estimatedTokens = ContextTokenEstimator.Estimate(
+                conversation,
+                settings.IncludeReasoningInModelContext);
+            if (!ConversationCutoffPlanner.ShouldTruncateArgs(conversation, estimatedTokens, truncateSettings))
+            {
+                return messages;
+            }
         }
 
         // Dynamic plan passes keepTokenBudgetOverride (including 0). Zero means truncate all

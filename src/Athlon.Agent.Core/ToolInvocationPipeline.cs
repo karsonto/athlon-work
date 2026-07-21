@@ -61,8 +61,7 @@ internal sealed class ToolInvocationPipeline(
                 sw.ElapsedMilliseconds),
             cancellationToken).ConfigureAwait(false);
 
-        var definition = resolveToolRouter().ListTools().FirstOrDefault(
-            tool => string.Equals(tool.Name, toolCall.Name, StringComparison.OrdinalIgnoreCase));
+        var definition = resolveToolRouter().FindDefinition(toolCall.Name);
         var context = runContextAccessor.Current;
         await storage.AppendAttemptEventAsync(
             sessionId,
@@ -128,8 +127,7 @@ internal sealed class ToolInvocationPipeline(
         }
 
         var router = resolveToolRouter();
-        var definition = router.ListTools().FirstOrDefault(
-            tool => string.Equals(tool.Name, toolCall.Name, StringComparison.OrdinalIgnoreCase));
+        var definition = router.FindDefinition(toolCall.Name);
         if (definition is null)
         {
             return await router
@@ -220,7 +218,8 @@ internal sealed class ToolInvocationPipeline(
                 new ToolInvocation(
                     toolCall.Name,
                     toolCall.Arguments,
-                    ApprovalDecision: approvalDecision),
+                    ApprovalDecision: approvalDecision,
+                    SkipValidation: true),
                 cancellationToken)
             .ConfigureAwait(false);
     }

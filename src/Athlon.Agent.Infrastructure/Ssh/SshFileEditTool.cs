@@ -77,7 +77,7 @@ public sealed class SshFileEditTool(
                 "file_edit",
                 new
                 {
-                    path = fullPath,
+                    path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath),
                     oldChars = match.MatchedOldText.Length,
                     newChars = effectiveNewText.Length,
                     occurrences = replaceAll ? match.Occurrences : 1,

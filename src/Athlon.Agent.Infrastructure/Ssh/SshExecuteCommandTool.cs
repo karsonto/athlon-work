@@ -35,7 +35,7 @@ public sealed class SshExecuteCommandTool(
             return error;
         }
 
-        if (settings.ToolPermissions.CommandDenyList.Any(deny => command.Contains(deny, StringComparison.OrdinalIgnoreCase)))
+        if (CommandDenyListMatcher.IsDenied(command, settings.ToolPermissions.CommandDenyList))
         {
             return ToolResult.Failure("Command denied", command);
         }

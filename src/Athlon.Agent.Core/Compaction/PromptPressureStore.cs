@@ -30,9 +30,7 @@ public sealed class PromptPressureStore : IPromptPressureStore
             return;
         }
 
-        _lastPromptTokens.AddOrUpdate(
-            sessionId,
-            promptTokens,
-            (_, current) => Math.Max(current, promptTokens));
+        // Store the latest actual prompt size so pressure can fall after compaction.
+        _lastPromptTokens[sessionId] = promptTokens;
     }
 }

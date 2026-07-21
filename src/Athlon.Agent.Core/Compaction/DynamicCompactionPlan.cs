@@ -13,7 +13,8 @@ public sealed record DynamicCompactionPlan(
         ContextBudgetSnapshot budget,
         IReadOnlyList<ChatMessage> conversation,
         ContextCompactionSettings settings,
-        bool force)
+        bool force,
+        int? knownRawHistoryEstimate = null)
     {
         var dynamic = settings.DynamicCompaction;
         if (!dynamic.Enabled)
@@ -37,13 +38,16 @@ public sealed record DynamicCompactionPlan(
             conversation,
             settings,
             pressure,
-            force);
+            force,
+            knownRawHistoryEstimate);
         var applyReEvict = ContextPressureEvaluator.ShouldApplyPrefixReEvict(
             budget,
             conversation,
             settings,
             pressure,
-            force);
+            force,
+            applyTruncate,
+            knownRawHistoryEstimate);
         var applyCompact = ContextPressureEvaluator.ShouldCompact(
             budget,
             conversation,

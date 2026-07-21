@@ -126,7 +126,7 @@ internal static class ChatTimelineHydrator
     }
 
     public static bool ShouldHideMessageFromChat(ChatMessage message) =>
-        message.Role == MessageRole.User && SummaryMessageBuilder.IsSummaryMessage(message)
+        SummaryMessageBuilder.IsSummaryMessage(message)
         || message.Role == MessageRole.User && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
         || ChatMessageViewModel.IsAssistantToolCallsOnly(message);
 }

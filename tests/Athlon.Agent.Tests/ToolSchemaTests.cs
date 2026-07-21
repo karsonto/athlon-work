@@ -28,6 +28,20 @@ public sealed class ToolSchemaTests
     }
 
     [Fact]
+    public void ToCanonicalJson_returns_cached_string()
+    {
+        var schema = ToolSchema.Object()
+            .String("path", "workspace path", required: true)
+            .Build();
+
+        var first = schema.ToCanonicalJson();
+        var second = schema.ToCanonicalJson();
+
+        Assert.Same(first, second);
+        Assert.Equal(first, schema.ToJsonElement().GetRawText());
+    }
+
+    [Fact]
     public void FromMcp_PreservesObjectSchema()
     {
         const string mcpSchema = """

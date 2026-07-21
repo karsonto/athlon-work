@@ -13,6 +13,7 @@ public sealed class ToolJsonSchema
     };
 
     private readonly Dictionary<string, object?> _parametersObject;
+    private string? _canonicalJson;
 
     internal ToolJsonSchema(
         IReadOnlyDictionary<string, object?> properties,
@@ -30,7 +31,12 @@ public sealed class ToolJsonSchema
 
     public IReadOnlyDictionary<string, object?> ToOpenAiParameters() => _parametersObject;
 
-    public string ToCanonicalJson() => JsonSerializer.Serialize(_parametersObject, CanonicalJsonOptions);
+    public string ToCanonicalJson() =>
+        _canonicalJson ??= JsonSerializer.Serialize(_parametersObject, CanonicalJsonOptions);
 
-    public JsonElement ToJsonElement() => JsonSerializer.SerializeToElement(_parametersObject, CanonicalJsonOptions);
+    public JsonElement ToJsonElement()
+    {
+        using var document = JsonDocument.Parse(ToCanonicalJson());
+        return document.RootElement.Clone();
+    }
 }

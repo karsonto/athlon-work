@@ -1,6 +1,5 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Infrastructure.Compaction;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -43,6 +42,7 @@ public sealed class PreCompletionPipeline(
         }
 
         var budget = runtimeContext.Budget;
+        var rawHistoryEstimate = runtimeContext.RawHistoryEstimate;
         var conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
         if (conversation.Count == 0)
         {
@@ -58,13 +58,19 @@ public sealed class PreCompletionPipeline(
         if (!isManualCompact
             && !force
             && pressure == ContextPressureLevel.Normal
-            && !ContextPressureEvaluator.MeetsStaticTruncateThreshold(conversation, cfg)
+            && !ContextPressureEvaluator.MeetsStaticTruncateThreshold(conversation, cfg, rawHistoryEstimate)
             && budget.TotalUtilization < ContextPressureEvaluator.ResolveTruncateThreshold(cfg.DynamicCompaction))
         {
             return session;
         }
 
-        var plan = DynamicCompactionPlan.Create(pressure, budget, conversation, cfg, force);
+        var plan = DynamicCompactionPlan.Create(
+            pressure,
+            budget,
+            conversation,
+            cfg,
+            force,
+            rawHistoryEstimate);
         if (isManualCompact)
         {
             plan = plan with { ApplyConversationCompact = true };
@@ -89,6 +95,14 @@ public sealed class PreCompletionPipeline(
                     session.Messages,
                     cfg,
                     runtimeContext.CalibrationMultiplier);
+                rawHistoryEstimate = Math.Abs(runtimeContext.CalibrationMultiplier - 1.0) < 0.001
+                    ? budget.EstimatedHistory
+                    : ContextBudgetCalculator.EstimateRawHistory(session.Messages, cfg);
+                runtimeContext = runtimeContext with
+                {
+                    Budget = budget,
+                    RawHistoryEstimate = rawHistoryEstimate
+                };
             }
         }
 
@@ -112,6 +126,14 @@ public sealed class PreCompletionPipeline(
                     session.Messages,
                     cfg,
                     runtimeContext.CalibrationMultiplier);
+                rawHistoryEstimate = Math.Abs(runtimeContext.CalibrationMultiplier - 1.0) < 0.001
+                    ? budget.EstimatedHistory
+                    : ContextBudgetCalculator.EstimateRawHistory(session.Messages, cfg);
+                runtimeContext = runtimeContext with
+                {
+                    Budget = budget,
+                    RawHistoryEstimate = rawHistoryEstimate
+                };
             }
         }
 
@@ -135,7 +157,7 @@ public sealed class PreCompletionPipeline(
                 force,
                 options.EmitCompactionAudit,
                 options.Strategy,
-                runtimeContext with { Budget = budget },
+                runtimeContext with { Budget = budget, RawHistoryEstimate = rawHistoryEstimate },
                 plan with
                 {
                     ApplyTruncateArgs = truncateApplied,

@@ -84,7 +84,8 @@ public sealed class ChatOnlyPromptTests
             Assert.Contains("Session mode:", prompt, StringComparison.Ordinal);
             Assert.Contains("Agent mode", prompt, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("File tools:", prompt, StringComparison.Ordinal);
-            Assert.Contains($"Workspace root: {workspaceRoot}", prompt, StringComparison.Ordinal);
+            Assert.DoesNotContain($"Workspace root: {workspaceRoot}", prompt, StringComparison.Ordinal);
+            Assert.Contains("not a path prefix", prompt, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

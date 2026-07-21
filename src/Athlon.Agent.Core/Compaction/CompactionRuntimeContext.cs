@@ -6,7 +6,8 @@ public sealed record CompactionRuntimeContext(
     IReadOnlyList<ToolDefinition> Tools,
     double CalibrationMultiplier = 1.0,
     ContextPressureLevel PressureOverride = ContextPressureLevel.Normal,
-    int? LastActualPromptTokens = null)
+    int? LastActualPromptTokens = null,
+    int? RawHistoryEstimate = null)
 {
     public bool ForceOverflow => PressureOverride == ContextPressureLevel.Overflow;
 }

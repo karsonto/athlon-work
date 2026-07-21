@@ -248,7 +248,7 @@ public sealed class GrepFilesToolTests
 
         try
         {
-            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var tool = CreateTool(workspaceRoot, appDataRoot, sequential: true);
             var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
             {
                 ["pattern"] = "order-marker"
@@ -284,7 +284,7 @@ public sealed class GrepFilesToolTests
 
         try
         {
-            var tool = CreateTool(workspaceRoot, appDataRoot);
+            var tool = CreateTool(workspaceRoot, appDataRoot, sequential: true);
             var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
             {
                 ["pattern"] = "cap-marker"
@@ -307,13 +307,19 @@ public sealed class GrepFilesToolTests
         }
     }
 
-    private static GrepFilesTool CreateTool(string workspaceRoot, string appDataRoot)
+    private static GrepFilesTool CreateTool(string workspaceRoot, string appDataRoot, bool sequential = false)
     {
         var context = new ActiveWorkspaceContext();
         context.SetWorkspace(workspaceRoot);
         var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
         var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
-        return new GrepFilesTool(guard, audit, new AppSettings());
+        var settings = new AppSettings();
+        if (sequential)
+        {
+            settings.ParallelToolExecution.MaxDegreeOfParallelism = 1;
+        }
+
+        return new GrepFilesTool(guard, audit, settings);
     }
 
     private sealed class NoOpLogger : IAppLogger

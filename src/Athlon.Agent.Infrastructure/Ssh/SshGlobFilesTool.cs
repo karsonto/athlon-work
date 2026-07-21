@@ -55,7 +55,7 @@ public sealed class SshGlobFilesTool(
                 await WorkspaceToolHelper.AuditAsync(
                     audit,
                     "glob_files",
-                    new { path = fullPath, pattern, count = remoteMatches.Count, remote = true, via = "shell" },
+                    new { path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath), pattern, count = remoteMatches.Count, remote = true, via = "shell" },
                     cancellationToken).ConfigureAwait(false);
 
                 return remoteMatches.Count == 0
@@ -116,7 +116,7 @@ public sealed class SshGlobFilesTool(
             await WorkspaceToolHelper.AuditAsync(
                 audit,
                 "glob_files",
-                new { path = fullPath, pattern, count = matches.Count, remote = true, via = "sftp" },
+                new { path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath), pattern, count = matches.Count, remote = true, via = "sftp" },
                 cancellationToken).ConfigureAwait(false);
 
             return matches.Count == 0

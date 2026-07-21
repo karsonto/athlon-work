@@ -50,6 +50,19 @@ internal static class WorkspaceToolHelper
         return true;
     }
 
+    public static string ToAuditPath(WorkspaceGuard guard, string fullPath)
+    {
+        try
+        {
+            var root = guard.Normalize(".");
+            return ToolPathNormalizer.ForModel(Path.GetRelativePath(root, fullPath));
+        }
+        catch
+        {
+            return ToolPathNormalizer.ForModel(fullPath);
+        }
+    }
+
     public static Task AuditAsync(
         AuditLogService audit,
         string toolName,

@@ -80,14 +80,15 @@ public static class ContextPressureEvaluator
         IReadOnlyList<ChatMessage> conversation,
         ContextCompactionSettings settings,
         ContextPressureLevel pressure,
-        bool force)
+        bool force,
+        int? knownRawHistoryEstimate = null)
     {
         if (force || pressure is ContextPressureLevel.Overflow)
         {
             return true;
         }
 
-        if (MeetsStaticTruncateThreshold(conversation, settings))
+        if (MeetsStaticTruncateThreshold(conversation, settings, knownRawHistoryEstimate))
         {
             return true;
         }
@@ -100,14 +101,19 @@ public static class ContextPressureEvaluator
         IReadOnlyList<ChatMessage> conversation,
         ContextCompactionSettings settings,
         ContextPressureLevel pressure,
-        bool force)
+        bool force,
+        bool? truncateArgsDecision = null,
+        int? knownRawHistoryEstimate = null)
     {
+        var applyTruncate = truncateArgsDecision
+            ?? ShouldApplyTruncateArgs(budget, conversation, settings, pressure, force, knownRawHistoryEstimate);
+
         if (force || pressure is ContextPressureLevel.Overflow or ContextPressureLevel.Critical)
         {
-            return ShouldApplyTruncateArgs(budget, conversation, settings, pressure, force);
+            return applyTruncate;
         }
 
-        return ShouldApplyTruncateArgs(budget, conversation, settings, pressure, force)
+        return applyTruncate
             && budget.TotalUtilization >= ResolveTruncateThreshold(settings.DynamicCompaction);
     }
 
@@ -134,9 +140,11 @@ public static class ContextPressureEvaluator
 
     public static bool MeetsStaticTruncateThreshold(
         IReadOnlyList<ChatMessage> conversation,
-        ContextCompactionSettings settings)
+        ContextCompactionSettings settings,
+        int? knownRawHistoryEstimate = null)
     {
-        var estimated = ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
+        var estimated = knownRawHistoryEstimate
+            ?? ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
         return ConversationCutoffPlanner.ShouldTruncateArgs(
             conversation,
             estimated,
@@ -145,9 +153,11 @@ public static class ContextPressureEvaluator
 
     public static bool MeetsStaticCompactThreshold(
         IReadOnlyList<ChatMessage> conversation,
-        ContextCompactionSettings settings)
+        ContextCompactionSettings settings,
+        int? knownRawHistoryEstimate = null)
     {
-        var estimated = ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
+        var estimated = knownRawHistoryEstimate
+            ?? ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
         return ConversationCutoffPlanner.ShouldCompact(conversation, estimated, settings, force: false);
     }
 

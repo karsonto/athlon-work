@@ -67,7 +67,7 @@ public sealed class SshFileListTool(
             await WorkspaceToolHelper.AuditAsync(
                 audit,
                 "file_list",
-                new { path = fullPath, count = lines.Length, remote = true },
+                new { path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath), count = lines.Length, remote = true },
                 cancellationToken).ConfigureAwait(false);
 
             var listedDir = SshWorkspaceToolHelper.ToRelative(workspaceRoot, fullPath);

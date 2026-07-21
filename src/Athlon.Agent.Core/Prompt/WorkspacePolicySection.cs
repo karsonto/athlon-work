@@ -30,10 +30,9 @@ public sealed class WorkspacePolicySection : IEnvironmentPromptSection
         }
 
         builder.AppendLine("In file tool arguments (path), prefer forward slashes (/), e.g. src/foo.cs, even on Windows.");
-        builder.AppendLine("Relative paths resolve from the active workspace root below; all paths must stay inside the workspace root.");
-        builder.AppendLine($"When using relative paths, use src/foo.cs. Avoid prefixing with {context.WorkspaceName}/.");
-        builder.AppendLine($"Active workspace label: {context.WorkspaceName} (informational, not a path prefix).");
-        builder.AppendLine($"Workspace root: {context.WorkspaceRoot}");
+        builder.AppendLine("Relative paths resolve from the active workspace root; all paths must stay inside the workspace root.");
+        builder.AppendLine("When using relative paths, use src/foo.cs. Avoid prefixing with the workspace label/.");
+        builder.AppendLine("The workspace label is informational, not a path prefix. Exact root/name are in runtime context.");
         builder.AppendLine("Workspace contents are intentionally not embedded in this prompt because they change often.");
         builder.AppendLine("Use file_list to fetch a live directory listing when needed.");
         builder.AppendLine();

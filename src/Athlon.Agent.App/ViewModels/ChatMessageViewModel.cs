@@ -45,9 +45,8 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             : Array.Empty<ImageAttachment>();
         IsHiddenPlaceholder = isFoldedHistoryPlaceholder
             ? false
-            : IsUser && (CompactionMessageContent.IsSummaryPlaceholder(message.Content)
-            || SummaryMessageBuilder.IsSummaryMessage(message)
-            || SubAgentAutoContinuePrompt.IsAutoContinueMessage(message))
+            : SummaryMessageBuilder.IsSummaryMessage(message)
+            || IsUser && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
             || IsAssistantToolCallsOnly(message);
         DisplayRole = IsUser
             ? Strings.Get("Chat_RoleUser")

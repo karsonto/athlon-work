@@ -2,7 +2,6 @@ using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Infrastructure.BehaviorReport;
-using Athlon.Agent.Infrastructure.Compaction;
 using System.Diagnostics;
 
 namespace Athlon.Agent.Infrastructure;
@@ -47,7 +46,8 @@ public sealed class ConversationCompactor(
         var estimatedTokens = ContextTokenEstimator.ResolveEffectiveEstimate(
             conversation,
             cfg,
-            request.RuntimeContext?.Budget);
+            request.RuntimeContext?.Budget,
+            request.RuntimeContext?.RawHistoryEstimate);
         var shouldCompact = isManualCompact
             || (request.RuntimeContext is { } runtime && cfg.DynamicCompaction.Enabled
                 ? ContextPressureEvaluator.ShouldCompact(

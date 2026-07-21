@@ -45,7 +45,7 @@ public sealed class SshFileWriteTool(
             await WorkspaceToolHelper.AuditAsync(
                 audit,
                 "file_write",
-                new { path = fullPath, chars = content.Length, remote = true },
+                new { path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath), chars = content.Length, remote = true },
                 cancellationToken).ConfigureAwait(false);
             return ToolResult.Success($"Wrote {content.Length} chars to {RemotePathNormalizer.GetFileName(fullPath)}");
         }

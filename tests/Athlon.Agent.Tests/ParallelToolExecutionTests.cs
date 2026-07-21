@@ -10,6 +10,18 @@ namespace Athlon.Agent.Tests;
 
 public sealed class ParallelToolExecutionTests
 {
+    private static readonly IToolRouter PolicyRouter = new ToolRouter(
+    [
+        new ParallelStubTool("file_read"),
+        new ParallelStubTool("grep_files"),
+        new ParallelStubTool("glob_files"),
+        new ParallelStubTool("file_list"),
+        new ParallelStubTool("memory_search"),
+        new SequentialStubTool("memory_get"),
+        new SequentialStubTool("file_write"),
+        new SequentialStubTool("execute_command")
+    ]);
+
     [Theory]
     [InlineData("file_read", true)]
     [InlineData("grep_files", true)]
@@ -19,8 +31,8 @@ public sealed class ParallelToolExecutionTests
     [InlineData("memory_get", false)]
     [InlineData("file_write", false)]
     [InlineData("execute_command", false)]
-    public void IsParallelizable_MatchesAllowlist(string toolName, bool expected) =>
-        Assert.Equal(expected, ParallelToolPolicy.IsParallelizable(toolName));
+    public void IsParallelizable_MatchesMarkedTools(string toolName, bool expected) =>
+        Assert.Equal(expected, PolicyRouter.IsParallelizable(toolName));
 
     [Fact]
     public void CanParallelizeBatch_RequiresAllParallelizableAndCountGreaterThanOne()
@@ -37,11 +49,12 @@ public sealed class ParallelToolExecutionTests
             new AgentToolCall("2", "file_write", new Dictionary<string, string> { ["path"] = "a", ["content"] = "b" })
         };
 
-        Assert.True(ParallelToolPolicy.CanParallelizeBatch(parallelBatch, settings));
-        Assert.False(ParallelToolPolicy.CanParallelizeBatch(mixedBatch, settings));
+        Assert.True(ParallelToolPolicy.CanParallelizeBatch(parallelBatch, settings, PolicyRouter));
+        Assert.False(ParallelToolPolicy.CanParallelizeBatch(mixedBatch, settings, PolicyRouter));
         Assert.False(ParallelToolPolicy.CanParallelizeBatch(
             [new AgentToolCall("1", "file_read", new Dictionary<string, string>())],
-            settings));
+            settings,
+            PolicyRouter));
     }
 
     [Fact]
@@ -55,17 +68,18 @@ public sealed class ParallelToolExecutionTests
 
         Assert.False(ParallelToolPolicy.CanParallelizeBatch(
             calls,
-            new ParallelToolExecutionSettings { Enabled = false }));
+            new ParallelToolExecutionSettings { Enabled = false },
+            PolicyRouter));
     }
 
     [Fact]
-    public void MarkedTools_AreListedInPolicy()
+    public void MarkedTools_AreParallelizableViaInterface()
     {
-        Assert.Contains(FileReadToolName(), ParallelToolPolicy.AllowedToolNames);
-        Assert.Contains(GrepFilesToolName(), ParallelToolPolicy.AllowedToolNames);
-        Assert.Contains(GlobFilesToolName(), ParallelToolPolicy.AllowedToolNames);
-        Assert.Contains(FileListToolName(), ParallelToolPolicy.AllowedToolNames);
-        Assert.Contains(MemorySearchToolName(), ParallelToolPolicy.AllowedToolNames);
+        Assert.True(PolicyRouter.IsParallelizable(FileReadToolName()));
+        Assert.True(PolicyRouter.IsParallelizable(GrepFilesToolName()));
+        Assert.True(PolicyRouter.IsParallelizable(GlobFilesToolName()));
+        Assert.True(PolicyRouter.IsParallelizable(FileListToolName()));
+        Assert.True(PolicyRouter.IsParallelizable(MemorySearchToolName()));
     }
 
     [Fact]
@@ -445,6 +459,10 @@ public sealed class ParallelToolExecutionTests
             new ToolDefinition("file_write", "write", ToolSchema.Object().AllowAdditionalProperties().Build())
         ];
 
+        public bool IsParallelizable(string toolName) =>
+            string.Equals(toolName, "file_read", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(toolName, "grep_files", StringComparison.OrdinalIgnoreCase);
+
         public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
         {
             Interlocked.Increment(ref _invokeCount);
@@ -472,6 +490,22 @@ public sealed class ParallelToolExecutionTests
                 }
             }
         }
+    }
+
+    private sealed class ParallelStubTool(string name) : IAgentTool, IParallelizableAgentTool
+    {
+        public ToolDefinition Definition { get; } = new(name, name, ToolSchema.Object().Build());
+
+        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ToolResult.Success(name));
+    }
+
+    private sealed class SequentialStubTool(string name) : IAgentTool
+    {
+        public ToolDefinition Definition { get; } = new(name, name, ToolSchema.Object().Build());
+
+        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ToolResult.Success(name));
     }
 
     private sealed class ApprovalTrackingToolRouter : IToolRouter

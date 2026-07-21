@@ -126,6 +126,30 @@ public sealed class SessionTurnReconcilerTests
     }
 
     [Fact]
+    public void Reconcile_SkipsSummaryWhenFindingLastUserMessage()
+    {
+        var session = AgentSession.Create("test");
+        var realUser = ChatMessage.Create(MessageRole.User, "hello");
+        var summary = Athlon.Agent.Core.Compaction.SummaryMessageBuilder.CreateSummaryPlaceholder(
+            "prior",
+            null);
+        session = session.WithMessage(realUser).WithMessage(summary);
+
+        var snapshot = new SessionTurnEndSnapshot(
+            "partial",
+            null,
+            Array.Empty<AgentToolCall>(),
+            WasCancelled: true,
+            TimedOut: false,
+            ErrorMessage: null);
+
+        var result = SessionTurnReconciler.Reconcile(session, snapshot);
+        var assistant = Assert.Single(result.PersistedMessages, message => message.Role == MessageRole.Assistant);
+
+        Assert.Equal(realUser.Id, assistant.ParentId);
+    }
+
+    [Fact]
     public void BuildModelMessages_IncludesPersistedSystemNotice()
     {
         var session = AgentSession.Create("test");

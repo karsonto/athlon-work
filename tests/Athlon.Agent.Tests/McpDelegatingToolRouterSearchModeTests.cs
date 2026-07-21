@@ -80,6 +80,58 @@ public sealed class McpDelegatingToolRouterSearchModeTests
         Assert.Equal(expectedSuccess, result.Succeeded);
     }
 
+    [Fact]
+    public void ListTools_AutoMode_StickySearch_UsesHysteresisBeforeExit()
+    {
+        var registry = new TestMcpRegistry(CreateCatalog(15));
+        var settings = new AppSettings
+        {
+            McpSearch = new McpSearchSettings
+            {
+                Enabled = true,
+                Mode = "auto",
+                AutoThresholdToolCount = 12,
+                AutoThresholdSchemaChars = int.MaxValue,
+                AutoHysteresisToolCount = 3,
+                AutoHysteresisSchemaChars = 0
+            }
+        };
+        var router = CreateRouter(registry, settings);
+
+        Assert.Contains(router.ListTools(), tool => tool.Name == McpSearchGatewayTools.SearchToolName);
+
+        // Still above exit band (12 - 3 = 9): stay in search.
+        registry.SetCatalog(CreateCatalog(10));
+        Assert.Contains(router.ListTools(), tool => tool.Name == McpSearchGatewayTools.SearchToolName);
+
+        // Below exit band: leave search.
+        registry.SetCatalog(CreateCatalog(8));
+        Assert.DoesNotContain(router.ListTools(), tool => tool.Name == McpSearchGatewayTools.SearchToolName);
+        Assert.Contains(router.ListTools(), tool => tool.Name.StartsWith("mcp_server__", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ListTools_DirectMode_IgnoresStickySearch()
+    {
+        var registry = new TestMcpRegistry(CreateCatalog(15));
+        var settings = new AppSettings
+        {
+            McpSearch = new McpSearchSettings
+            {
+                Enabled = true,
+                Mode = "auto",
+                AutoThresholdToolCount = 12,
+                AutoThresholdSchemaChars = int.MaxValue
+            }
+        };
+        var router = CreateRouter(registry, settings);
+        Assert.Contains(router.ListTools(), tool => tool.Name == McpSearchGatewayTools.SearchToolName);
+
+        settings.McpSearch.Mode = "direct";
+        Assert.DoesNotContain(router.ListTools(), tool => tool.Name == McpSearchGatewayTools.SearchToolName);
+        Assert.Contains(router.ListTools(), tool => tool.Name.StartsWith("mcp_server__", StringComparison.Ordinal));
+    }
+
     private static McpDelegatingToolRouter CreateRouter(
         IMcpRegistry registry,
         AppSettings settings) =>

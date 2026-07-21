@@ -169,6 +169,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, MemorySearchTool>();
         services.AddSingleton<IAgentTool, MemoryGetTool>();
         services.AddSingleton<IAgentTool, TodoWriteTool>();
+        services.AddSingleton<IRuntimeContextContributor, HostWorkspaceRuntimeContributor>();
         services.AddSingleton<IRuntimeContextContributor, MemoryPromptContributor>();
         services.AddSingleton<IRuntimeContextContributor, TaskListPromptContributor>();
         services.AddSingleton<CompactionTurnMiddleware>();

@@ -282,7 +282,10 @@ public sealed class AgentRuntime(
                     return session;
                 }
 
-                if (ParallelToolPolicy.CanParallelizeBatch(response.ToolCalls, settings.ParallelToolExecution))
+                if (ParallelToolPolicy.CanParallelizeBatch(
+                    response.ToolCalls,
+                    settings.ParallelToolExecution,
+                    ResolveToolRouter()))
                 {
                     turnInvocation.Session = session;
                     session = await InvokeParallelToolBatchAsync(

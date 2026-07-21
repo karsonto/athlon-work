@@ -40,7 +40,8 @@ internal static class PromptTestHelpers
             NullCurrentSsoUserContext.Instance,
             DefaultSessionHarnessState.Instance,
             sections,
-            new RuntimeContextAssembler(runtimeContextContributors ?? Array.Empty<IRuntimeContextContributor>()));
+            new RuntimeContextAssembler(
+                runtimeContextContributors ?? [new HostWorkspaceRuntimeContributor()]));
     }
 
     public static ISystemPromptOrchestrator CreateStaticOrchestrator(string text = "prompt") =>

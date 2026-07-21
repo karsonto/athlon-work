@@ -75,7 +75,7 @@ public sealed class SshFileReadTool(
                 "file_read",
                 new
                 {
-                    path = fullPath,
+                    path = SshWorkspaceToolHelper.ToAuditPath(guard, fullPath),
                     totalLines = read.TotalLines,
                     linesReturned = read.LinesReturned,
                     startLine = read.StartLine,

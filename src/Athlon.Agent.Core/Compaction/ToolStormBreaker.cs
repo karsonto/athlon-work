@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 
 namespace Athlon.Agent.Core.Compaction;
@@ -75,13 +74,45 @@ public sealed class ToolStormBreaker
     {
         try
         {
-            return JsonSerializer.Serialize(
-                arguments.OrderBy(pair => pair.Key).ToDictionary(pair => pair.Key, pair => pair.Value));
+            var normalized = arguments
+                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                .ToDictionary(
+                    pair => pair.Key,
+                    pair => NormalizeArgumentValue(pair.Key, pair.Value),
+                    StringComparer.Ordinal);
+            return JsonSerializer.Serialize(normalized);
         }
         catch
         {
-            return string.Join("|", arguments.OrderBy(pair => pair.Key).Select(pair => $"{pair.Key}={pair.Value}"));
+            return string.Join(
+                "|",
+                arguments
+                    .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .Select(pair => $"{pair.Key}={NormalizeArgumentValue(pair.Key, pair.Value)}"));
         }
+    }
+
+    private static object NormalizeArgumentValue(string key, JsonElement value)
+    {
+        if (value.ValueKind == JsonValueKind.String
+            && (string.Equals(key, ToolPathNormalizer.PathArgumentName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(key, ToolPathNormalizer.CwdArgumentName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return StabilizePath(value.GetString());
+        }
+
+        return value;
+    }
+
+    private static string StabilizePath(string? path)
+    {
+        var normalized = ToolPathNormalizer.ForModel(path ?? string.Empty);
+        while (normalized.StartsWith("./", StringComparison.Ordinal))
+        {
+            normalized = normalized[2..];
+        }
+
+        return normalized;
     }
 
     private sealed record RecentToolCall(string Name, string Args, bool ReadOnly);

@@ -64,7 +64,7 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
         await WorkspaceToolHelper.AuditAsync(
             audit,
             "file_write",
-            new { path = fullPath, chars = content.Length },
+            new { path = WorkspaceToolHelper.ToAuditPath(guard, fullPath), chars = content.Length },
             cancellationToken);
 
         var fileName = Path.GetFileName(fullPath);

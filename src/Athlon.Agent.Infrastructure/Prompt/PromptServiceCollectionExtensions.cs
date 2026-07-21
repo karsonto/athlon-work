@@ -8,13 +8,11 @@ public static class PromptServiceCollectionExtensions
 {
     public static IServiceCollection AddAthlonEnvironmentPrompt(this IServiceCollection services)
     {
-        services.AddSingleton<IEnvironmentPromptSection, SignedInUserSection>();
         services.AddSingleton<IEnvironmentPromptSection, BasePersonaSection>();
         services.AddSingleton<IEnvironmentPromptSection, AgentModeSection>();
         services.AddSingleton<IEnvironmentPromptSection, HostEnvironmentSection>();
         services.AddSingleton<IEnvironmentPromptSection, EncodingPolicySection>();
         services.AddSingleton<IEnvironmentPromptSection, WorkspacePolicySection>();
-        services.AddSingleton<IEnvironmentPromptSection, WorkspaceContextSection>();
         services.AddSingleton<IEnvironmentPromptSection, CodingWorkflowSection>();
         services.AddSingleton<IEnvironmentPromptSection, HarnessPlanningSection>();
         services.AddSingleton<IEnvironmentPromptSection, MemoryPolicySection>();

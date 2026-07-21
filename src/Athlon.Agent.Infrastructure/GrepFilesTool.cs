@@ -65,13 +65,12 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, A
             if (!File.Exists(file))
                 return;
 
-            var fileInfo = new FileInfo(file);
-            if (fileInfo.Length > MaxFileSizeBytes)
-                return;
-
             try
             {
                 await using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite, bufferSize: 4096, useAsync: true);
+                if (stream.Length > MaxFileSizeBytes)
+                    return;
+
                 using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
                 var lineNumber = 0;
                 string? line;
@@ -107,7 +106,7 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, A
             }
         }).ConfigureAwait(false);
 
-        await WorkspaceToolHelper.AuditAsync(audit, "grep_files", new { path = fullPath, pattern, regex = useRegex, count = matches.Count }, cancellationToken);
+        await WorkspaceToolHelper.AuditAsync(audit, "grep_files", new { path = WorkspaceToolHelper.ToAuditPath(guard, fullPath), pattern, regex = useRegex, count = matches.Count }, cancellationToken);
         return matches.Count == 0
             ? ToolResult.Success("No matches found", "No matches found")
             : ToolResult.Success($"Found {matches.Count} matches", string.Join(Environment.NewLine, matches));

@@ -54,7 +54,7 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, Ap
             "file_read",
             new
             {
-                path = fullPath,
+                path = WorkspaceToolHelper.ToAuditPath(guard, fullPath),
                 totalLines = read.TotalLines,
                 linesReturned = read.LinesReturned,
                 startLine = read.StartLine,
