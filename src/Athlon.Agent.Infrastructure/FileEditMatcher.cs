@@ -77,7 +77,10 @@ internal static partial class FileEditMatcher
             _ => originalNewText
         };
 
-    public static string BuildNotFoundMessage(string oldText)
+    public static string BuildNotFoundMessage(string oldText) =>
+        BuildNotFoundMessage(content: null, oldText);
+
+    public static string BuildNotFoundMessage(string? content, string oldText)
     {
         var builder = new StringBuilder("old_text did not match the file on disk.");
         if (FileReadLinePrefix.IsMatch(oldText))
@@ -90,9 +93,144 @@ internal static partial class FileEditMatcher
         }
 
         builder.Append(" Check whitespace, indentation, and line endings (CRLF vs LF).");
-        builder.Append(" Re-read the file and retry once, or use apply_patch with a unified diff.");
+
+        var closestLine = TryFindClosestSimilarBlockLine(content, oldText);
+        if (closestLine is > 0)
+        {
+            builder.Append(
+                $" Closest similar block starts near line {closestLine}. Use file_read around that line, then retry or apply_patch.");
+        }
+        else
+        {
+            builder.Append(" Re-read the file and retry once, or use apply_patch with a unified diff.");
+        }
+
         return builder.ToString();
     }
+
+    public static string BuildNotUniqueMessage(string content, string matchedOldText, int occurrences)
+    {
+        var lineNumbers = CollectOccurrenceLineNumbers(content, matchedOldText, maxCount: 3);
+        var builder = new StringBuilder(
+            $"old_text matched {occurrences} times; it must match exactly once unless replace_all is true.");
+        if (lineNumbers.Count > 0)
+        {
+            builder.Append(" Occurrences start near line(s) ");
+            builder.Append(string.Join(", ", lineNumbers));
+            builder.Append('.');
+        }
+
+        builder.Append(" Set replace_all=true, narrow old_text to a unique span, or use apply_patch.");
+        return builder.ToString();
+    }
+
+    private static List<int> CollectOccurrenceLineNumbers(string content, string matchedOldText, int maxCount)
+    {
+        var lines = new List<int>(maxCount);
+        if (string.IsNullOrEmpty(matchedOldText) || maxCount <= 0)
+        {
+            return lines;
+        }
+
+        var index = 0;
+        while (lines.Count < maxCount
+               && (index = content.IndexOf(matchedOldText, index, StringComparison.Ordinal)) >= 0)
+        {
+            lines.Add(GetOneBasedLineNumber(content, index));
+            index += matchedOldText.Length;
+        }
+
+        return lines;
+    }
+
+    private static int GetOneBasedLineNumber(string content, int charIndex)
+    {
+        var line = 1;
+        var limit = Math.Min(charIndex, content.Length);
+        for (var i = 0; i < limit; i++)
+        {
+            if (content[i] == '\n')
+            {
+                line++;
+            }
+        }
+
+        return line;
+    }
+
+    private static int? TryFindClosestSimilarBlockLine(string? content, string oldText)
+    {
+        if (string.IsNullOrEmpty(content)
+            || oldText.Length is 0 or > 800)
+        {
+            return null;
+        }
+
+        var needleLines = SplitLines(oldText);
+        if (needleLines.Length is 0 or > 12)
+        {
+            return null;
+        }
+
+        var haystackLines = SplitLines(content);
+        if (haystackLines.Length > 8000 || haystackLines.Length < needleLines.Length)
+        {
+            return null;
+        }
+
+        var anchor = needleLines.FirstOrDefault(static line => line.Length > 0);
+        if (string.IsNullOrEmpty(anchor))
+        {
+            return null;
+        }
+
+        var bestLine = 0;
+        var bestRatio = 1.0;
+        for (var i = 0; i <= haystackLines.Length - needleLines.Length; i++)
+        {
+            if (!string.Equals(haystackLines[i], anchor, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var ratio = MismatchRatio(needleLines, haystackLines, i);
+            if (ratio < bestRatio)
+            {
+                bestRatio = ratio;
+                bestLine = i + 1;
+            }
+        }
+
+        return bestRatio < 0.35 && bestLine > 0 ? bestLine : null;
+    }
+
+    private static double MismatchRatio(string[] needle, string[] haystack, int start)
+    {
+        var needleChars = 0;
+        var mismatches = 0;
+        for (var i = 0; i < needle.Length; i++)
+        {
+            var left = needle[i];
+            var right = haystack[start + i];
+            needleChars += Math.Max(left.Length, 1);
+            var shared = Math.Min(left.Length, right.Length);
+            mismatches += Math.Abs(left.Length - right.Length);
+            for (var c = 0; c < shared; c++)
+            {
+                if (left[c] != right[c])
+                {
+                    mismatches++;
+                }
+            }
+        }
+
+        return needleChars == 0 ? 1.0 : (double)mismatches / needleChars;
+    }
+
+    private static string[] SplitLines(string text) =>
+        text.Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n')
+            .Split('\n');
 
     private static IEnumerable<OldTextCandidate> EnumerateOldTextCandidates(string content, string oldText)
     {

@@ -421,6 +421,18 @@ public partial class WebChatView : UserControl
                         }
 
                         break;
+                    case "preview":
+                        var html = root.TryGetProperty("html", out var htmlElement)
+                            ? htmlElement.GetString()
+                            : null;
+                        if (!string.IsNullOrEmpty(html))
+                        {
+                            Dispatcher.BeginInvoke(
+                                () => Windows.HtmlPreviewWindow.Show(html, Window.GetWindow(this)),
+                                DispatcherPriority.Normal);
+                        }
+
+                        break;
                     case "loadOlder":
                         OlderMessagesRequested?.Invoke(this, EventArgs.Empty);
                         break;

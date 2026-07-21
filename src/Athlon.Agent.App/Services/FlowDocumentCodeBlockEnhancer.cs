@@ -445,6 +445,8 @@ public static class FlowDocumentCodeBlockEnhancer
 
         var cardState = new CodeBlockCardState { Text = codeText };
 
+        var headerContent = new DockPanel { LastChildFill = true };
+
         var copyButton = new Button
         {
             Content = Strings.Get("Chat_Copy"),
@@ -461,11 +463,28 @@ public static class FlowDocumentCodeBlockEnhancer
                 }
             }
         };
-
-        var headerContent = new DockPanel { LastChildFill = true };
-
         DockPanel.SetDock(copyButton, Dock.Right);
         headerContent.Children.Add(copyButton);
+
+        if (IsHtmlLanguage(language))
+        {
+            var previewButton = new Button
+            {
+                Content = Strings.Get("Markdown_PreviewButton"),
+                Style = copyButtonStyle,
+                Margin = new Thickness(0, 0, 8, 0),
+            };
+            previewButton.Click += (_, _) =>
+            {
+                if (!string.IsNullOrEmpty(codeText))
+                {
+                    Windows.HtmlPreviewWindow.Show(codeText, Application.Current?.MainWindow);
+                }
+            };
+            DockPanel.SetDock(previewButton, Dock.Right);
+            headerContent.Children.Add(previewButton);
+        }
+
         headerContent.Children.Add(new TextBlock
         {
             Text = language,
@@ -547,4 +566,8 @@ public static class FlowDocumentCodeBlockEnhancer
             Margin = new Thickness(0),
         };
     }
+
+    private static bool IsHtmlLanguage(string? language) =>
+        string.Equals(language, "html", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(language, "htm", StringComparison.OrdinalIgnoreCase);
 }

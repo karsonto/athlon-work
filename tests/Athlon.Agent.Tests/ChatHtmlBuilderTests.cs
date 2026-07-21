@@ -172,6 +172,17 @@ public sealed class ChatHtmlBuilderTests
     }
 
     [Fact]
+    public void BuildShellHtml_supports_html_code_block_preview()
+    {
+        var html = _builder.BuildShellHtml();
+
+        Assert.Contains("\"preview\":", html, StringComparison.Ordinal);
+        Assert.Contains("t('preview')", html, StringComparison.Ordinal);
+        Assert.Contains("langKey === 'html' || langKey === 'htm'", html, StringComparison.Ordinal);
+        Assert.Contains("post({ type: 'preview', html: raw })", html, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BuildShellHtml_supports_loading_older_messages_with_scroll_anchor()
     {
         var html = _builder.BuildShellHtml();

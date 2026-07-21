@@ -101,6 +101,7 @@ public sealed class ChatHtmlBuilder
         {
             ["copy"] = Strings.Get("Chat_Copy"),
             ["copied"] = Strings.Get("Chat_Copied"),
+            ["preview"] = Strings.Get("Markdown_PreviewButton"),
             ["code"] = Strings.Get("Chat_Code"),
             ["thinking"] = Strings.Get("Chat_Thinking"),
             ["thought"] = Strings.Get("Chat_Thought"),
@@ -951,7 +952,12 @@ public sealed class ChatHtmlBuilder
           const loadOlder = document.getElementById('load-older');
           if (loadOlder) loadOlder.textContent = t('loadOlder');
           document.querySelectorAll('.code-btn').forEach(function (btn) {
-            if (!btn.classList.contains('copied')) btn.textContent = t('copy');
+            if (btn.classList.contains('copied')) return;
+            if (btn.dataset.i18n === 'preview') {
+              btn.textContent = t('preview');
+              return;
+            }
+            btn.textContent = t('copy');
           });
           document.querySelectorAll('[data-i18n]').forEach(function (element) {
             element.textContent = t(element.dataset.i18n);
@@ -1127,6 +1133,19 @@ public sealed class ChatHtmlBuilder
 
             const actions = document.createElement('div');
             actions.className = 'code-block-actions';
+
+            const langKey = (match ? match[1] : '').toLowerCase();
+            if (langKey === 'html' || langKey === 'htm') {
+              const previewBtn = document.createElement('button');
+              previewBtn.type = 'button';
+              previewBtn.className = 'code-btn';
+              previewBtn.dataset.i18n = 'preview';
+              previewBtn.textContent = t('preview');
+              previewBtn.addEventListener('click', function () {
+                post({ type: 'preview', html: raw });
+              });
+              actions.appendChild(previewBtn);
+            }
 
             const copyBtn = document.createElement('button');
             copyBtn.type = 'button';

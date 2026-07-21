@@ -57,6 +57,25 @@ public sealed class ToolInvocationValidationTests
         Assert.False(string.IsNullOrWhiteSpace(error.Expected));
         Assert.False(string.IsNullOrWhiteSpace(error.Actual));
         Assert.False(string.IsNullOrWhiteSpace(error.Remediation));
+        Assert.Contains("status", error.Remediation, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("one of the allowed values", error.Remediation, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Validate_TypeMismatch_RemediationIncludesPropertyExample()
+    {
+        var schema = ToolSchema.Object()
+            .Integer("start_line", "start", required: true)
+            .Build();
+        var args = ToolCallArguments.Parse("""{"start_line":"1"}""");
+
+        var error = ToolInvocationValidator.Validate(schema, args);
+
+        Assert.NotNull(error);
+        Assert.Equal("schema.type_mismatch", error!.Code);
+        Assert.Equal("$.start_line", error.Path);
+        Assert.Contains("start_line", error.Remediation, StringComparison.Ordinal);
+        Assert.Contains("\"start_line\": 1", error.Remediation, StringComparison.Ordinal);
     }
 
     [Fact]

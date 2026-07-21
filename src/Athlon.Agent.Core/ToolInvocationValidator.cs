@@ -37,7 +37,7 @@ public static class ToolInvocationValidator
                 path,
                 type.GetString() ?? "declared JSON type",
                 Describe(value),
-                "Pass a value whose JSON type matches the tool schema.");
+                TypeMismatchRemediation(path, type.GetString()));
         }
 
         if (schema.TryGetProperty("enum", out var enumValues)
@@ -49,7 +49,7 @@ public static class ToolInvocationValidator
                 path,
                 enumValues.GetRawText(),
                 value.GetRawText(),
-                "Use one of the values listed by the tool schema.");
+                EnumRemediation(path, enumValues));
         }
 
         if (value.ValueKind == JsonValueKind.Object)
@@ -272,6 +272,56 @@ public static class ToolInvocationValidator
         property.All(character => char.IsLetterOrDigit(character) || character == '_')
             ? $"{path}.{property}"
             : $"{path}[{JsonSerializer.Serialize(property)}]";
+
+    private static string TypeMismatchRemediation(string path, string? expectedType)
+    {
+        var name = PropertyNameFromPath(path);
+        return expectedType switch
+        {
+            "integer" => $"Pass an integer for {name}, e.g. \"{name}\": 1. Got a non-integer value instead.",
+            "number" => $"Pass a number for {name}, e.g. \"{name}\": 1.5. Got a non-number value instead.",
+            "boolean" => $"Pass a boolean for {name}, e.g. \"{name}\": true. Got a non-boolean value instead.",
+            "string" => $"Pass a string for {name}, e.g. \"{name}\": \"src/foo.cs\". Got a non-string value instead.",
+            "array" => $"Pass a JSON array for {name}, e.g. \"{name}\": []. Got a non-array value instead.",
+            "object" => $"Pass a JSON object for {name}, e.g. \"{name}\": {{}}. Got a non-object value instead.",
+            _ => $"Pass a value whose JSON type matches the schema for {name} (expected {expectedType ?? "declared type"})."
+        };
+    }
+
+    private static string EnumRemediation(string path, JsonElement enumValues)
+    {
+        var name = PropertyNameFromPath(path);
+        var options = enumValues.EnumerateArray()
+            .Take(8)
+            .Select(static item => item.GetRawText())
+            .ToArray();
+        var listed = string.Join(", ", options);
+        var suffix = enumValues.GetArrayLength() > 8 ? ", ..." : string.Empty;
+        return $"Use one of the allowed values for {name}: {listed}{suffix}.";
+    }
+
+    private static string PropertyNameFromPath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || path == "$")
+        {
+            return "argument";
+        }
+
+        var leaf = path;
+        var dot = path.LastIndexOf('.');
+        if (dot >= 0 && dot < path.Length - 1)
+        {
+            leaf = path[(dot + 1)..];
+        }
+
+        var bracket = leaf.IndexOf('[');
+        if (bracket >= 0)
+        {
+            leaf = bracket == 0 ? "argument" : leaf[..bracket];
+        }
+
+        return string.IsNullOrWhiteSpace(leaf) ? "argument" : leaf;
+    }
 
     private static string Describe(JsonElement value) => value.ValueKind switch
     {

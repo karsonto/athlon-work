@@ -111,6 +111,78 @@ public sealed class FileEditToolTests
     }
 
     [Fact]
+    public void Definition_GuidesMultiLineOldTextToApplyPatch()
+    {
+        var root = CreateWorkspaceRoot();
+        try
+        {
+            var tool = CreateTool(root);
+            Assert.Contains(">= 5 lines", tool.Definition.Description, StringComparison.Ordinal);
+            Assert.Contains("apply_patch", tool.Definition.Description, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_WhenNotUnique_ReportsOccurrenceCountAndLines()
+    {
+        var root = CreateWorkspaceRoot();
+        var file = Path.Combine(root, "sample.txt");
+        await File.WriteAllTextAsync(file, "hello\nhello\nhello");
+
+        try
+        {
+            var tool = CreateTool(root);
+            var result = await tool.InvokeAsync(new ToolInvocation("file_edit", new Dictionary<string, string>
+            {
+                ["path"] = "sample.txt",
+                ["old_text"] = "hello",
+                ["new_text"] = "hi"
+            }));
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("Text is not unique", result.Summary);
+            Assert.Contains("matched 3 times", result.Error!, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("line(s) 1, 2, 3", result.Error!, StringComparison.Ordinal);
+            Assert.Contains("replace_all=true", result.Error!, StringComparison.Ordinal);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_WhenNearMiss_SuggestsClosestLine()
+    {
+        var root = CreateWorkspaceRoot();
+        var file = Path.Combine(root, "sample.txt");
+        await File.WriteAllTextAsync(file, "alpha\nbeta\ngamma");
+
+        try
+        {
+            var tool = CreateTool(root);
+            var result = await tool.InvokeAsync(new ToolInvocation("file_edit", new Dictionary<string, string>
+            {
+                ["path"] = "sample.txt",
+                ["old_text"] = "alpha\nbete\ngamma",
+                ["new_text"] = "x"
+            }));
+
+            Assert.False(result.Succeeded);
+            Assert.Contains("Closest similar block starts near line 1", result.Error!, StringComparison.Ordinal);
+            Assert.Contains("file_read", result.Error!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public async Task InvokeAsync_WhenTextMissing_ReturnsHelpfulError()
     {
         var root = CreateWorkspaceRoot();

@@ -10,6 +10,7 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
     public ToolDefinition Definition { get; } = new(
         "file_edit",
         "Replace exact text in a file. old_text must match disk content exactly — not file_read's N|line prefixes. "
+            + "For multi-line or long (>= 5 lines) old_text, use apply_patch instead — exact text matching is fragile for large blocks. "
             + "If matching fails, use apply_patch with a unified diff instead. "
             + $"For files larger than {MaxFileEditBytes / 1024} KiB, use apply_patch.",
         ToolSchema.Object()
@@ -69,11 +70,11 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         switch (match.Status)
         {
             case FileEditMatchStatus.NotFound:
-                return ToolResult.Failure("Text not found", FileEditMatcher.BuildNotFoundMessage(oldText));
+                return ToolResult.Failure("Text not found", FileEditMatcher.BuildNotFoundMessage(content, oldText));
             case FileEditMatchStatus.NotUnique:
                 return ToolResult.Failure(
                     "Text is not unique",
-                    "old_text must match exactly once unless replace_all is true.");
+                    FileEditMatcher.BuildNotUniqueMessage(content, match.MatchedOldText, match.Occurrences));
         }
 
         var effectiveNewText = FileEditMatcher.ResolveNewText(oldText, newText, match);

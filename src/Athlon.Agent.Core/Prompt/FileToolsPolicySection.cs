@@ -23,6 +23,7 @@ public sealed class FileToolsPolicySection : IEnvironmentPromptSection
         if (!PromptModeHelper.IsAskMode(context))
         {
             builder.AppendLine("- file_read line output uses N| prefixes for display only; file_edit old_text must match disk content without those prefixes.");
+            builder.AppendLine("- Editing: prefer apply_patch when old_text would span 5+ lines; exact matching is fragile for large blocks.");
             builder.AppendLine("- Editing: if file_edit fails, re-read the file and retry once; after two failures switch to apply_patch or file_write (small files only). Never retry the same old_text a third time.");
             builder.AppendLine("- file_write requires non-empty `content` as a JSON string with the full file body; do not omit it or pass null/empty.");
             builder.AppendLine("- For file_write, put `path` before `content` in the arguments object so streaming truncation still preserves the path.");

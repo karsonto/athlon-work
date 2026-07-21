@@ -10,7 +10,10 @@ public sealed class SshFileListTool(
 {
     public ToolDefinition Definition { get; } = new(
         "file_list",
-        "List files in a directory.",
+        "List files and directories (top-level only, up to 200 entries). "
+            + "Directories listed first, then files, both alphabetically. "
+            + "Output format: [FILE] relative/path (bytes) or [DIR] relative/path/. "
+            + "Respects workspace ignore rules.",
         ToolSchema.Object()
             .String("path", ToolPathDescriptions.OptionalWorkspaceRelativeDirectory)
             .Build());
