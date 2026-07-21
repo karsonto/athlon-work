@@ -29,7 +29,7 @@ public static class ContextBudgetCalculator
             conversation,
             compactionSettings.IncludeReasoningInModelContext,
             calibrationMultiplier);
-        var utilization = historyBudget > 0 ? (double)estimatedHistory / historyBudget : 1.0;
+        var historyUtilization = historyBudget > 0 ? (double)estimatedHistory / historyBudget : 1.0;
 
         return new ContextBudgetSnapshot(
             totalWindow,
@@ -37,7 +37,7 @@ public static class ContextBudgetCalculator
             fixedOverhead,
             historyBudget,
             estimatedHistory,
-            utilization);
+            historyUtilization);
     }
 
     public static ContextBudgetSnapshot RecomputeHistory(

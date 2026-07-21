@@ -60,11 +60,6 @@ public static class SessionTurnReconciler
                 snapshot.AssistantReasoning);
             messages.Add(assistant);
             persisted.Add(assistant);
-
-            foreach (var toolCall in incompleteTools)
-            {
-                answeredToolCallIds.Add(toolCall.Id);
-            }
         }
 
         foreach (var toolCall in incompleteTools)

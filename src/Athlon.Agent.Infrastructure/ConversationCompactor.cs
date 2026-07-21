@@ -93,7 +93,9 @@ public sealed class ConversationCompactor(
             return new ConversationCompactResult(session, false);
         }
 
-        var prefix = SummaryMessageBuilder.FilterSummaryMessages(conversation.Take(cutoff).ToList());
+        // Keep prior __compaction_summary__ placeholders in the prefix so repeated
+        // compaction can fold condensed context instead of dropping it.
+        var prefix = conversation.Take(cutoff).ToList();
         var tail = conversation.Skip(cutoff).ToList();
         var originalCount = conversation.Count;
         var tokensBefore = estimatedTokens;
@@ -121,7 +123,7 @@ public sealed class ConversationCompactor(
 
         if (formatted.Length > cfg.MaxConversationCharsForSummary)
         {
-            formatted = formatted[^cfg.MaxConversationCharsForSummary..];
+            formatted = ConversationSummaryFormatter.FitToMaxChars(formatted, cfg.MaxConversationCharsForSummary);
             summaryInputCharsAfter = formatted.Length;
         }
 
@@ -157,7 +159,10 @@ public sealed class ConversationCompactor(
             summary = summaryResponse.Content.Trim();
             if (string.IsNullOrWhiteSpace(summary))
             {
-                summary = "(Summary unavailable)";
+                _logger.Warning(
+                    "Summarization returned empty content for session {SessionId}; aborting compaction",
+                    session.Id);
+                return new ConversationCompactResult(session, false);
             }
         }
         catch (OperationCanceledException)
@@ -182,8 +187,8 @@ public sealed class ConversationCompactor(
                     promptTokens, 0, "failure",
                     ex.GetType().Name, summaryStopwatch.ElapsedMilliseconds),
                 CancellationToken.None).ConfigureAwait(false);
-            _logger.Error(ex, "Summarization LLM call failed for session {SessionId}", session.Id);
-            summary = "(Conversation summarization was temporarily unavailable)";
+            _logger.Error(ex, "Summarization LLM call failed for session {SessionId}; aborting compaction", session.Id);
+            return new ConversationCompactResult(session, false);
         }
 
         var summaryMessage = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath);

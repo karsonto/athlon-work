@@ -3,6 +3,7 @@ namespace Athlon.Agent.Core.Compaction;
 public static class ConversationSummaryFormatter
 {
     private const int MaxToolResultChars = 500;
+    private const string MiddleOmitMarker = "\n\n[... middle omitted for summary budget ...]\n\n";
 
     public static string FormatMessages(IReadOnlyList<ChatMessage> messages)
     {
@@ -14,6 +15,35 @@ public static class ConversationSummaryFormatter
         }
 
         return string.Join("\n\n", lines);
+    }
+
+    /// <summary>
+    /// Fits text into <paramref name="maxChars"/> by keeping ~40% head and the remaining tail,
+    /// with an omit marker between them.
+    /// </summary>
+    public static string FitToMaxChars(string text, int maxChars)
+    {
+        if (string.IsNullOrEmpty(text) || maxChars <= 0 || text.Length <= maxChars)
+        {
+            return text;
+        }
+
+        var marker = MiddleOmitMarker;
+        var markerLen = marker.Length;
+        if (maxChars <= markerLen + 2)
+        {
+            return text[^Math.Min(maxChars, text.Length)..];
+        }
+
+        var budget = maxChars - markerLen;
+        var head = Math.Max(1, budget * 40 / 100);
+        var tail = Math.Max(1, budget - head);
+        if (head + tail > budget)
+        {
+            tail = budget - head;
+        }
+
+        return text[..head] + marker + text[^tail..];
     }
 
     private static string FormatMessage(ChatMessage message)

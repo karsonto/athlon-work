@@ -78,10 +78,19 @@ public sealed class SubAgentRunExecutor(
 
         RecordSubagent("started", role, parentSessionId, subSessionId);
         var sw = Stopwatch.StartNew();
+        var callbacks = new AgentTurnCallbacks
+        {
+            OnSessionUpdated = updated =>
+            {
+                session = updated;
+                bundle = bundle with { Session = updated };
+                return Task.CompletedTask;
+            }
+        };
         try
         {
             var orchestrator = serviceProvider.GetRequiredService<IAgentOrchestrator>();
-            session = await orchestrator.SendAsync(session, message.Trim(), null, null, cancellationToken).ConfigureAwait(false);
+            session = await orchestrator.SendAsync(session, message.Trim(), null, callbacks, cancellationToken).ConfigureAwait(false);
             bundle = bundle with { Session = session };
             await sessionStore.SaveAsync(parentSessionId, subSessionId, bundle, cancellationToken).ConfigureAwait(false);
 

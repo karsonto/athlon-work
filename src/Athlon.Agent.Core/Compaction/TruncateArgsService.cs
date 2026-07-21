@@ -31,24 +31,40 @@ public sealed class TruncateArgsService
         }
 
         var estimatedTokens = ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
-        if (keepTokenBudgetOverride is null or <= 0
+        if (keepTokenBudgetOverride is null
             && !ConversationCutoffPlanner.ShouldTruncateArgs(conversation, estimatedTokens, truncateSettings))
         {
             return messages;
         }
 
-        var cutoff = keepTokenBudgetOverride is > 0
-            ? ConversationCutoffPlanner.DetermineTruncateArgsCutoffFromKeepBudget(
-                conversation,
-                keepTokenBudgetOverride.Value,
-                settings.IncludeReasoningInModelContext)
-            : ConversationCutoffPlanner.DetermineTruncateArgsCutoff(
+        // Dynamic plan passes keepTokenBudgetOverride (including 0). Zero means truncate all
+        // assistant tool args in history, without falling back to the static message/token gate.
+        int cutoff;
+        if (keepTokenBudgetOverride is null)
+        {
+            cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoff(
                 conversation,
                 truncateSettings,
                 settings.IncludeReasoningInModelContext);
-        if (cutoff >= conversation.Count)
+            if (cutoff >= conversation.Count)
+            {
+                return messages;
+            }
+        }
+        else if (keepTokenBudgetOverride.Value <= 0)
         {
-            return messages;
+            cutoff = conversation.Count;
+        }
+        else
+        {
+            cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoffFromKeepBudget(
+                conversation,
+                keepTokenBudgetOverride.Value,
+                settings.IncludeReasoningInModelContext);
+            if (cutoff >= conversation.Count)
+            {
+                return messages;
+            }
         }
 
         var updatedConversation = new List<ChatMessage>(conversation.Count);

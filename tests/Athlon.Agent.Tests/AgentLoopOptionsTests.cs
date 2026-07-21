@@ -11,6 +11,7 @@ public sealed class AgentLoopOptionsTests
     {
         var storage = new NoOpStorage();
         var model = new LoopTestModelClient();
+        var toolRouter = new LoopTestToolRouter();
         var settings = new AppSettings();
         var logger = new LoopNoOpAppLogger();
         var (pipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
@@ -22,7 +23,7 @@ public sealed class AgentLoopOptionsTests
         var runtime = new AgentRuntime(
             model,
             storage,
-            new LoopTestToolRouter(),
+            toolRouter,
             new LoopTestPrompt(),
             new NoOpPreCompletionPipeline(),
             new NoOpToolResultEvictor(),
@@ -45,7 +46,10 @@ public sealed class AgentLoopOptionsTests
         }
 
         Assert.Equal(1, model.CompleteCount);
-        Assert.DoesNotContain(session.Messages, message => message.Role == MessageRole.Tool);
+        Assert.Equal(0, toolRouter.InvokeCount);
+        Assert.Contains(session.Messages, message => message.Role == MessageRole.Tool);
+        var tool = Assert.Single(session.Messages, message => message.Role == MessageRole.Tool);
+        Assert.Contains("Max model tool rounds", tool.Content, StringComparison.OrdinalIgnoreCase);
         var lastAssistant = session.Messages.Last(message => message.Role == MessageRole.Assistant);
         Assert.Contains("calling tool", lastAssistant.Content);
     }
@@ -75,11 +79,16 @@ public sealed class AgentLoopOptionsTests
 
     private sealed class LoopTestToolRouter : IToolRouter
     {
+        public int InvokeCount { get; private set; }
+
         public IReadOnlyList<ToolDefinition> ListTools() =>
             [new ToolDefinition("noop", "noop", ToolSchema.Object().Build())];
 
-        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
-            Task.FromResult(ToolResult.Success("ran", "tool-output"));
+        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
+        {
+            InvokeCount++;
+            return Task.FromResult(ToolResult.Success("ran", "tool-output"));
+        }
     }
 
     private sealed class LoopTestPrompt : Athlon.Agent.Core.Prompt.ISystemPromptOrchestrator

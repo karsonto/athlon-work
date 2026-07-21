@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Memory;
@@ -73,20 +72,35 @@ public sealed class AgentRuntime(
         AgentTurnCallbacks? callbacks = null,
         CancellationToken cancellationToken = default)
     {
-        var ignorePatterns = ResolveIgnorePatterns(session);
-        var workspaceKind = WorkspaceSessionResolver.ResolveKind(session, settings);
-        var runId = Guid.NewGuid().ToString("N");
-        var runContext = AgentRunContext.CreateRoot(
-            session,
-            runId,
-            toolRouter,
-            systemPromptOrchestrator,
-            ignorePatterns,
-            workspaceKind);
-        if (AgentLoopOptionsScope.Current is { } loopOptions)
+        var existing = runContextAccessor.Current;
+        AgentRunContext runContext;
+        if (existing is { Kind: AgentRunKind.SubAgent }
+            && string.Equals(existing.SessionId, session.Id, StringComparison.Ordinal))
         {
-            runContext = runContext with { LoopOptions = loopOptions };
+            runContext = existing;
+            if (runContext.LoopOptions is null && AgentLoopOptionsScope.Current is { } ambientLoopOptions)
+            {
+                runContext = runContext with { LoopOptions = ambientLoopOptions };
+            }
         }
+        else
+        {
+            var ignorePatterns = ResolveIgnorePatterns(session);
+            var workspaceKind = WorkspaceSessionResolver.ResolveKind(session, settings);
+            var runId = Guid.NewGuid().ToString("N");
+            runContext = AgentRunContext.CreateRoot(
+                session,
+                runId,
+                toolRouter,
+                systemPromptOrchestrator,
+                ignorePatterns,
+                workspaceKind);
+            if (AgentLoopOptionsScope.Current is { } loopOptions)
+            {
+                runContext = runContext with { LoopOptions = loopOptions };
+            }
+        }
+
         using var runScope = runContextAccessor.Push(runContext);
         using var workspaceScope = SessionWorkspaceScope.Enter(
             runContext.WorkspaceRoot,
@@ -117,6 +131,7 @@ public sealed class AgentRuntime(
                 imageAttachments: imageAttachments);
             session = session.WithMessage(userMessage);
             await PersistMessageAsync(session, userMessage, cancellationToken).ConfigureAwait(false);
+            await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
 
             var activeRouter = ResolveToolRouter();
             var activePrompt = ResolveSystemPromptOrchestrator();
@@ -151,16 +166,6 @@ public sealed class AgentRuntime(
                     cancellationToken).ConfigureAwait(false);
             }
             await PublishStreamEventsAsync(callbacks, streamAdapter.CreateRunStarted()).ConfigureAwait(false);
-
-            if (ShouldListWorkspaceFiles(userInput) && tools.Any(tool => string.Equals(tool.Name, "file_list", StringComparison.OrdinalIgnoreCase)))
-            {
-                var toolCall = new AgentToolCall(Guid.NewGuid().ToString("N"), "file_list", new Dictionary<string, string>());
-                session = await InvokeToolAndPersistAsync(
-                    turnInvocation,
-                    userMessage.Id,
-                    toolCall,
-                    cancellationToken).ConfigureAwait(false);
-            }
 
             while (true)
             {
@@ -222,6 +227,7 @@ public sealed class AgentRuntime(
                         reasoningContent: response.ReasoningContent);
                     session = session.WithMessage(assistant);
                     await PersistMessageAsync(session, assistant, cancellationToken).ConfigureAwait(false);
+                    await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
                     await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun()).ConfigureAwait(false);
                     _logger.Information("Saved session {SessionId} with {MessageCount} messages", session.Id, session.Messages.Count);
                     turnInvocation.Session = session;
@@ -240,6 +246,7 @@ public sealed class AgentRuntime(
                     response.ReasoningContent);
                 session = session.WithMessage(assistantWithToolCalls);
                 await PersistMessageAsync(session, assistantWithToolCalls, cancellationToken).ConfigureAwait(false);
+                await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
                 await PublishStreamEventsAsync(callbacks, streamAdapter.OnAssistantRoundCompleted(assistantWithToolCalls)).ConfigureAwait(false);
 
                 modelToolRound++;
@@ -247,9 +254,22 @@ public sealed class AgentRuntime(
                 if (maxModelToolRounds is > 0 && modelToolRound >= maxModelToolRounds)
                 {
                     _logger.Warning(
-                        "Max model tool rounds ({MaxRounds}) reached for session {SessionId}; stopping without executing pending tools",
+                        "Max model tool rounds ({MaxRounds}) reached for session {SessionId}; writing failure tool results and stopping",
                         maxModelToolRounds,
                         session.Id);
+                    foreach (var toolCall in response.ToolCalls)
+                    {
+                        var failure = ToolResult.Failure(
+                            "Max model tool rounds reached",
+                            $"Tool was not executed because the session reached the max model tool rounds limit ({maxModelToolRounds}).");
+                        var content = FormatToolResult(toolCall, failure);
+                        var toolMessage = ChatMessage.Create(MessageRole.Tool, content, userMessage.Id);
+                        session = session.WithMessage(toolMessage);
+                        await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall)).ConfigureAwait(false);
+                        await PersistMessageAsync(session, toolMessage, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
                     await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun()).ConfigureAwait(false);
                     turnInvocation.Session = session;
                     await turnPipeline.OnTurnCompletedAsync(turnInvocation, cancellationToken).ConfigureAwait(false);
@@ -292,12 +312,21 @@ public sealed class AgentRuntime(
             try
             {
                 await storage.SaveSessionAsync(session, saveCts.Token).ConfigureAwait(false);
+                await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
                 // Save timed out — proceed with cancellation
             }
             throw;
+        }
+    }
+
+    private static async Task NotifySessionUpdatedAsync(AgentTurnCallbacks? callbacks, AgentSession session)
+    {
+        if (callbacks?.OnSessionUpdated is { } onSessionUpdated)
+        {
+            await onSessionUpdated(session).ConfigureAwait(false);
         }
     }
 
@@ -355,6 +384,7 @@ public sealed class AgentRuntime(
             await PersistMessageAsync(session, toolMessage, cancellationToken).ConfigureAwait(false);
             invocation.Session = session;
             await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
+            await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
             return session;
         }
 
@@ -368,6 +398,7 @@ public sealed class AgentRuntime(
             cancellationToken).ConfigureAwait(false);
         invocation.Session = session;
         await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
+        await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
         return session;
     }
 
@@ -396,6 +427,11 @@ public sealed class AgentRuntime(
             }
         }
 
+        foreach (var item in pending)
+        {
+            await turnPipeline.OnBeforeToolInvokeAsync(invocation, item.Call, cancellationToken).ConfigureAwait(false);
+        }
+
         if (pending.Count > 0)
         {
             var maxDegree = Math.Max(1, settings.ParallelToolExecution.MaxDegreeOfParallelism);
@@ -421,8 +457,6 @@ public sealed class AgentRuntime(
         for (var index = 0; index < toolCalls.Count; index++)
         {
             var toolCall = toolCalls[index];
-            await turnPipeline.OnBeforeToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
-
             var result = results[index]
                 ?? ToolResult.Failure("Tool invocation failed", "No result was produced for this tool call.");
             session = await _toolPipeline.PersistToolResultAsync(
@@ -438,6 +472,7 @@ public sealed class AgentRuntime(
             await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
         }
 
+        await NotifySessionUpdatedAsync(invocation.Callbacks, session).ConfigureAwait(false);
         return session;
     }
 
@@ -535,25 +570,6 @@ public sealed class AgentRuntime(
 
     public static string? ExtractToolCallId(string? content) =>
         ModelMessageBuilder.ExtractToolCallId(content);
-
-    private static bool ShouldListWorkspaceFiles(string userInput)
-    {
-        if (string.IsNullOrWhiteSpace(userInput))
-            return false;
-
-        var input = userInput.Trim();
-        // 中文短语直接子串匹配（中文没有词边界概念）
-        if (ContainsAny(input, "有哪些文件", "文件列表", "目录下", "目录里", "工作区文件"))
-            return true;
-
-        // 英文用正则词边界匹配，防止误触发
-        return Regex.IsMatch(input, @"\b(list files|what files|which files)\b", RegexOptions.IgnoreCase);
-    }
-
-    private static bool ContainsAny(string value, params string[] terms)
-    {
-        return terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
-    }
 
     private async Task RecordTrainingDataAsync(AgentSession session, CancellationToken cancellationToken)
     {

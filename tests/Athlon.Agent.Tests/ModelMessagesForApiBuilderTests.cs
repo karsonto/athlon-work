@@ -127,4 +127,74 @@ public sealed class ModelMessagesForApiBuilderTests
         Assert.Single(next.Messages, message => Equals(message.Content, "runtime"));
         Assert.Equal("tool", next.Messages[^2].Role);
     }
+
+    [Fact]
+    public void ModelMessageCache_ApplyHygiene_ReturnsIncrementalSavings()
+    {
+        var cache = new ModelMessageCache();
+        var huge = new string('y', 40_000);
+        var history = new List<ChatMessage>
+        {
+            ChatMessage.Create(MessageRole.User, "one"),
+            ChatMessage.CreateWithId(
+                "a1",
+                MessageRole.Assistant,
+                string.Empty,
+                null,
+                [new AgentToolCall("tc1", "file_read", new Dictionary<string, string>())]),
+            ChatMessage.Create(
+                MessageRole.Tool,
+                AgentRuntime.FormatToolResult(
+                    new AgentToolCall("tc1", "file_read", new Dictionary<string, string>()),
+                    ToolResult.Success("ok", huge)))
+        };
+
+        cache.Build("sys", history, includeReasoningInModelContext: false);
+        var first = cache.ApplyHygiene(new RequestHistoryHygieneSettings());
+        Assert.True(first.EstimatedSavingsTokens > 0);
+
+        history.Add(ChatMessage.Create(MessageRole.User, "two"));
+        cache.Build("sys", history, includeReasoningInModelContext: false);
+        var second = cache.ApplyHygiene(new RequestHistoryHygieneSettings());
+        Assert.True(second.EstimatedSavingsTokens < first.EstimatedSavingsTokens);
+    }
+
+    [Fact]
+    public void ModelMessageCache_NotePreCompletionResult_InvalidatesOnInPlaceContentChange()
+    {
+        var cache = new ModelMessageCache();
+        var before = new List<ChatMessage>
+        {
+            ChatMessage.CreateWithId(
+                "a1",
+                MessageRole.Assistant,
+                string.Empty,
+                null,
+                [new AgentToolCall("tc1", "file_write", new Dictionary<string, string> { ["content"] = new string('x', 100) })])
+        };
+        cache.Build("sys", before, includeReasoningInModelContext: false);
+
+        var after = new TruncateArgsService().ApplyToMessages(
+            before,
+            new ContextCompactionSettings
+            {
+                TruncateArgs = new TruncateArgsSettings
+                {
+                    Enabled = true,
+                    MaxArgLength = 10,
+                    TruncationText = "...(truncated)",
+                    TriggerMessages = 1
+                }
+            },
+            out var changed,
+            keepTokenBudgetOverride: 0);
+
+        Assert.True(changed);
+        cache.NotePreCompletionResult(before, after);
+        // After invalidate, Build rebuilds from after history rather than appending stale prefix.
+        var rebuilt = cache.Build("sys", after, includeReasoningInModelContext: false);
+        var assistant = Assert.Single(rebuilt, message => message.Role == "assistant" && message.ToolCalls is { Count: > 0 });
+        var contentArg = assistant.ToolCalls![0].Arguments["content"].GetString();
+        Assert.Contains("...(truncated)", contentArg, StringComparison.Ordinal);
+    }
 }

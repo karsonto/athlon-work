@@ -59,10 +59,17 @@ public static class SemanticCutoffPlanner
     {
         for (var index = conversation.Count - 1; index >= 0; index--)
         {
-            if (conversation[index].Role == MessageRole.User)
+            if (conversation[index].Role != MessageRole.User)
             {
-                return index;
+                continue;
             }
+
+            if (SummaryMessageBuilder.IsSummaryMessage(conversation[index]))
+            {
+                continue;
+            }
+
+            return index;
         }
 
         return conversation.Count;

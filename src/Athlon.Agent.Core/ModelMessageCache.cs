@@ -50,7 +50,7 @@ public sealed class ModelMessageCache
             _hygienizedMessageCount = _messages.Count;
             _hygienizedSavings += tailResult.EstimatedSavingsTokens;
             _rawPrefixFingerprint = ComputeFingerprint(_messages, _hygienizedMessageCount);
-            return new RequestHistoryHygiene.ApplyResult(merged, _hygienizedSavings);
+            return new RequestHistoryHygiene.ApplyResult(merged, tailResult.EstimatedSavingsTokens);
         }
 
         var full = RequestHistoryHygiene.ApplyToModelMessages(_messages, settings);
@@ -92,7 +92,11 @@ public sealed class ModelMessageCache
         var compareCount = Math.Min(_processedHistoryCount, Math.Min(historyBefore.Count, historyAfter.Count));
         for (var index = 0; index < compareCount; index++)
         {
-            if (!string.Equals(historyBefore[index].Id, historyAfter[index].Id, StringComparison.Ordinal))
+            var before = historyBefore[index];
+            var after = historyAfter[index];
+            if (!string.Equals(before.Id, after.Id, StringComparison.Ordinal)
+                || !string.Equals(before.Content, after.Content, StringComparison.Ordinal)
+                || !string.Equals(before.ToolCallsJson, after.ToolCallsJson, StringComparison.Ordinal))
             {
                 Invalidate();
                 return;

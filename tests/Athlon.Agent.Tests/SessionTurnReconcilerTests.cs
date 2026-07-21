@@ -104,6 +104,28 @@ public sealed class SessionTurnReconcilerTests
     }
 
     [Fact]
+    public void Reconcile_CreatesAssistantThenWritesFailureTools_WhenTailAssistantMissing()
+    {
+        var callId = "call_new";
+        var session = AgentSession.Create("test");
+        session = session.WithMessage(ChatMessage.Create(MessageRole.User, "run"));
+
+        var snapshot = new SessionTurnEndSnapshot(
+            "started",
+            null,
+            [new AgentToolCall(callId, "file_read", new Dictionary<string, string>())],
+            WasCancelled: true,
+            TimedOut: false,
+            ErrorMessage: null);
+
+        var result = SessionTurnReconciler.Reconcile(session, snapshot);
+
+        Assert.Contains(result.Session.Messages, message => message.Role == MessageRole.Assistant);
+        Assert.Contains(result.Session.Messages, message =>
+            message.Role == MessageRole.Tool && message.Content.Contains(callId, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void BuildModelMessages_IncludesPersistedSystemNotice()
     {
         var session = AgentSession.Create("test");
