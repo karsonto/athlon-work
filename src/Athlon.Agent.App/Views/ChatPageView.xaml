@@ -457,9 +457,69 @@
                                                                                         HorizontalContentAlignment="Left"
                                                                                         Padding="10,8"
                                                                                         Margin="0,0,0,2"
-                                                                                        Style="{StaticResource GhostButtonStyle}"
+                                                                                        BorderThickness="0"
                                                                                         ToolTip="{loc:Localize Key=Chat_UploadImageTooltip}">
-                                                                                    <TextBlock Text="{loc:Localize Key=ComposerPlus_Image}" />
+                                                                                    <Button.Style>
+                                                                                        <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                                                                                            <Setter Property="BorderThickness" Value="0" />
+                                                                                            <Setter Property="Template">
+                                                                                                <Setter.Value>
+                                                                                                    <ControlTemplate TargetType="Button">
+                                                                                                        <Border x:Name="Root"
+                                                                                                                Background="{TemplateBinding Background}"
+                                                                                                                BorderThickness="0"
+                                                                                                                CornerRadius="6"
+                                                                                                                Padding="{TemplateBinding Padding}">
+                                                                                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                                                                                              VerticalAlignment="Center" />
+                                                                                                        </Border>
+                                                                                                        <ControlTemplate.Triggers>
+                                                                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                                                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.HoverNeutral}" />
+                                                                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                                                                                            </Trigger>
+                                                                                                            <Trigger Property="IsPressed" Value="True">
+                                                                                                                <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.HoverNeutralAlt}" />
+                                                                                                            </Trigger>
+                                                                                                        </ControlTemplate.Triggers>
+                                                                                                    </ControlTemplate>
+                                                                                                </Setter.Value>
+                                                                                            </Setter>
+                                                                                        </Style>
+                                                                                    </Button.Style>
+                                                                                    <StackPanel Orientation="Horizontal">
+                                                                                        <Viewbox Width="16"
+                                                                                                 Height="16"
+                                                                                                 Margin="0,0,10,0"
+                                                                                                 VerticalAlignment="Center"
+                                                                                                 Stretch="Uniform">
+                                                                                            <Canvas Width="16" Height="16">
+                                                                                                <!-- Document / file outline -->
+                                                                                                <Path Data="M4,1.75 H9.1 L12.25,4.9 V14.25 H4 Z"
+                                                                                                      Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
+                                                                                                      StrokeThickness="1.4"
+                                                                                                      StrokeLineJoin="Round"
+                                                                                                      Fill="Transparent" />
+                                                                                                <Path Data="M9.1,1.75 V4.9 H12.25"
+                                                                                                      Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
+                                                                                                      StrokeThickness="1.4"
+                                                                                                      StrokeLineJoin="Round"
+                                                                                                      Fill="Transparent" />
+                                                                                                <Line X1="6" Y1="8" X2="10.25" Y2="8"
+                                                                                                      Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
+                                                                                                      StrokeThickness="1.4"
+                                                                                                      StrokeStartLineCap="Round"
+                                                                                                      StrokeEndLineCap="Round" />
+                                                                                                <Line X1="6" Y1="10.75" X2="10.25" Y2="10.75"
+                                                                                                      Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
+                                                                                                      StrokeThickness="1.4"
+                                                                                                      StrokeStartLineCap="Round"
+                                                                                                      StrokeEndLineCap="Round" />
+                                                                                            </Canvas>
+                                                                                        </Viewbox>
+                                                                                        <TextBlock Text="{loc:Localize Key=ComposerPlus_Image}"
+                                                                                                   VerticalAlignment="Center" />
+                                                                                    </StackPanel>
                                                                                 </Button>
 
                                                                                 <TextBlock Text="{loc:Localize Key=ComposerPlus_Knowledge}"
