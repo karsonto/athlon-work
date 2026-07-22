@@ -106,6 +106,8 @@ internal static class RouterTestDependencies
 
         public bool IsAskMode(string? sessionId) => snapshot.Mode == SessionAgentMode.Ask;
 
+        public bool IsPlanMode(string? sessionId) => snapshot.Mode == SessionAgentMode.Plan;
+
         public bool IsEnabled(string? sessionId) => IsCodingMode(sessionId);
 
         public bool IsCodingModeForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
@@ -113,6 +115,9 @@ internal static class RouterTestDependencies
 
         public bool IsAskModeForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
             IsActiveRun(runContextAccessor) && IsAskMode(runContextAccessor.Current!.SessionId);
+
+        public bool IsPlanModeForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
+            IsActiveRun(runContextAccessor) && IsPlanMode(runContextAccessor.Current!.SessionId);
 
         public bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
             IsCodingModeForActiveRun(runContextAccessor);

@@ -5,6 +5,7 @@ public enum SessionAgentMode
     Agent = 0,
     Coding = 1,
     Ask = 2,
+    Plan = 3,
 }
 
 public sealed class SessionHarnessFile
@@ -56,6 +57,12 @@ public sealed record SessionHarnessSnapshot(SessionAgentMode Mode)
             return true;
         }
 
+        if (string.Equals(value, "plan", StringComparison.OrdinalIgnoreCase))
+        {
+            mode = SessionAgentMode.Plan;
+            return true;
+        }
+
         mode = SessionAgentMode.Agent;
         return false;
     }
@@ -64,6 +71,7 @@ public sealed record SessionHarnessSnapshot(SessionAgentMode Mode)
     {
         SessionAgentMode.Coding => "coding",
         SessionAgentMode.Ask => "ask",
+        SessionAgentMode.Plan => "plan",
         _ => "agent",
     };
 }
@@ -82,11 +90,15 @@ public interface ISessionHarnessState
 
     bool IsAskMode(string? sessionId);
 
+    bool IsPlanMode(string? sessionId);
+
     bool IsEnabled(string? sessionId);
 
     bool IsCodingModeForActiveRun(IAgentRunContextAccessor runContextAccessor);
 
     bool IsAskModeForActiveRun(IAgentRunContextAccessor runContextAccessor);
+
+    bool IsPlanModeForActiveRun(IAgentRunContextAccessor runContextAccessor);
 
     bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor);
 }

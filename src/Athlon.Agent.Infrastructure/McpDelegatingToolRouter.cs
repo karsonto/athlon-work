@@ -59,12 +59,19 @@ internal sealed class McpDelegatingToolRouter(
             return false;
         }
 
+        if (tool is IPlanTool && !sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor))
+        {
+            return false;
+        }
+
         if (tool is ILongTermMemoryTool && !workspaceGuard.HasConfiguredWorkspace)
         {
             return false;
         }
 
-        if (sessionHarnessState.IsAskModeForActiveRun(runContextAccessor)
+        var askOrPlan = sessionHarnessState.IsAskModeForActiveRun(runContextAccessor)
+            || sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor);
+        if (askOrPlan
             && (tool.Definition.Name is "file_write" or "file_edit" or "apply_patch" or "execute_command"
                 || tool is ISubAgentTool))
         {
@@ -99,6 +106,7 @@ internal sealed class McpDelegatingToolRouter(
         var knowledge = sessionKnowledgeState.ShouldExposeKnowledgeTool(sessionId);
         var coding = sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor);
         var ask = sessionHarnessState.IsAskModeForActiveRun(runContextAccessor);
+        var plan = sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor);
         return string.Join(
             '|',
             (int)workspaceGuard.CurrentKind,
@@ -106,7 +114,8 @@ internal sealed class McpDelegatingToolRouter(
             sessionId,
             knowledge,
             coding,
-            ask);
+            ask,
+            plan);
     }
 
     public IReadOnlyList<ToolDefinition> ListTools()

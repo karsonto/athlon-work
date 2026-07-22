@@ -26,12 +26,17 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
             return;
         }
 
-        if (PromptModeHelper.IsAskMode(context))
+        if (PromptModeHelper.IsAskMode(context) || PromptModeHelper.IsPlanMode(context))
         {
             builder.AppendLine("- Tool decision tree:");
-            builder.AppendLine("  1. Mode gate: Ask mode permits read-only tools only; use file_read, grep_files, glob_files, file_list, memory_search, memory_get, and knowledge_search when available.");
+            builder.AppendLine("  1. Mode gate: read-only tools only; use file_read, grep_files, glob_files, file_list, memory_search, memory_get, and knowledge_search when available.");
             builder.AppendLine("  2. Reject mutation: do NOT call file_write, file_edit, apply_patch, execute_command, or sub-agent tools (sessions_*, task_output).");
-            builder.AppendLine("  3. Execute independent read-only calls in parallel; otherwise preserve dependency order.");
+            if (PromptModeHelper.IsPlanMode(context))
+            {
+                builder.AppendLine("  3. Session Plan: after enough exploration, call create_plan (or update_plan on revisions); then stop for user confirmation.");
+            }
+
+            builder.AppendLine("  4. Execute independent read-only calls in parallel; otherwise preserve dependency order.");
             AppendMcpDecisionFlow(builder);
             builder.AppendLine("- If the same tool fails with the same error twice, stop repeating it; gather more context or switch tools.");
             builder.AppendLine();
@@ -44,7 +49,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
         builder.AppendLine("  2. Run independent read-only calls (file_read, grep_files, glob_files, file_list, memory_search) in parallel; preserve dependency order and never mix writes or execute_command into that round.");
         if (PromptModeHelper.IsCodingMode(context))
         {
-            builder.AppendLine("  3. Coding multi-step work: ensure the todo list is complete via todo_write before file_write, file_edit, or apply_patch.");
+            builder.AppendLine("  3. Coding multi-step / multi-file work: maintain an accurate todo list via todo_write (create or merge) before and during file_write, file_edit, or apply_patch.");
             builder.AppendLine("  4. Before file_write, file_edit, or apply_patch, explain the intended write.");
             builder.AppendLine("  5. Shell: cmd.exe only, not PowerShell; quote paths with spaces or non-ASCII and source workspace paths from tool results.");
         }

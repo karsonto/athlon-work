@@ -105,11 +105,11 @@ public sealed class SystemPromptOrchestratorTests
 
         Assert.Contains("Coding workflow:", prompt, StringComparison.Ordinal);
         Assert.Contains("mvn -q -pl", prompt, StringComparison.Ordinal);
-        Assert.Contains("in Coding mode use todo_write", prompt, StringComparison.Ordinal);
+        Assert.Contains("state a brief plan before editing", prompt, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PrepareForTurn_ExcludesPlanGuidance()
+    public void PrepareForTurn_ExcludesLegacyPlanGuidance_InAgentMode()
     {
         var host = new PromptTestHelpers.FakeHostEnvironment(
             @"C:\Users\test\.athlon-agent\skills",
@@ -122,8 +122,9 @@ public sealed class SystemPromptOrchestratorTests
         var prompt = orchestrator.PrepareForTurn(AgentSession.Create("agent-mode"), Array.Empty<ToolDefinition>()).Text;
 
         Assert.DoesNotContain("Plan mode (spec-first workflow)", prompt, StringComparison.Ordinal);
-        Assert.DoesNotContain("create_plan", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("finish_subtask", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Session Plan mode workflow:", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("create_plan", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

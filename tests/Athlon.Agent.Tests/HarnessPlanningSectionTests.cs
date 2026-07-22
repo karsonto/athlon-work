@@ -15,10 +15,20 @@ public sealed class HarnessPlanningSectionTests
         new HarnessPlanningSection().Append(builder, CreateContext(SessionAgentMode.Coding));
 
         var text = builder.ToString();
-        Assert.Contains("Coding planning:", text, StringComparison.Ordinal);
+        Assert.Contains("Coding long-task discipline:", text, StringComparison.Ordinal);
         Assert.Contains("todo_write", text, StringComparison.Ordinal);
         Assert.Contains("in_progress", text, StringComparison.Ordinal);
         Assert.Contains("merge=false", text, StringComparison.Ordinal);
+        Assert.Contains("prior Session Plan is optional", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Append_Skips_WhenPlanMode()
+    {
+        var builder = new StringBuilder();
+        new HarnessPlanningSection().Append(builder, CreateContext(SessionAgentMode.Plan));
+
+        Assert.Equal(string.Empty, builder.ToString());
     }
 
     [Fact]

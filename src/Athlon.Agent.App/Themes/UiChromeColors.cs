@@ -26,7 +26,11 @@ public sealed class UiChromeColors
     public required Color ModeAgentBg { get; init; }
     public required Color ModeAgentBorder { get; init; }
     public required Color ModeAgentForeground { get; init; }
-    /// <summary>Composer mode pill: Coding / Plan (bronze).</summary>
+    /// <summary>Composer mode pill: Plan (sky blue).</summary>
+    public required Color ModePlanBg { get; init; }
+    public required Color ModePlanBorder { get; init; }
+    public required Color ModePlanForeground { get; init; }
+    /// <summary>Composer mode pill: Coding (bronze).</summary>
     public required Color ModeCodingBg { get; init; }
     public required Color ModeCodingBorder { get; init; }
     public required Color ModeCodingForeground { get; init; }

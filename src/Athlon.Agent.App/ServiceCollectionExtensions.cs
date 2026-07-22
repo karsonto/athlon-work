@@ -125,6 +125,8 @@ public static class ServiceCollectionExtensions
 
             sp.GetRequiredService<ISessionTaskListStore>(),
 
+            sp.GetRequiredService<ISessionPlanStore>(),
+
             sp.GetRequiredService<ITaskPlanCompletionNotifier>(),
 
             sp.GetRequiredService<ILocalizationService>()));

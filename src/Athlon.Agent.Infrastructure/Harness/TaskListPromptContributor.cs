@@ -33,6 +33,7 @@ public sealed class TaskListPromptContributor(
         builder.AppendLine("- Focus this turn on the current in_progress item (at most one).");
         builder.AppendLine("- Mark completed only after verification passes.");
         builder.AppendLine("- If scope changes, call todo_write before further edits.");
+        builder.AppendLine("- If an approved Session Plan is in context, keep work aligned with it.");
         builder.AppendLine();
         foreach (var item in list.Items)
         {

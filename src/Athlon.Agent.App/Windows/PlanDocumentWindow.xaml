@@ -1,0 +1,50 @@
+<Window x:Class="Athlon.Agent.App.Windows.PlanDocumentWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
+        xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+        Title="{loc:Localize Key=Harness_Mode_Plan}"
+        Width="880"
+        Height="720"
+        MinWidth="560"
+        MinHeight="420"
+        WindowStartupLocation="CenterOwner"
+        Style="{StaticResource PreviewWindowStyle}">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            CornerRadius="0"
+                            GlassFrameThickness="0"
+                            ResizeBorderThickness="8"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0"
+              Margin="0,0,0,12"
+              MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
+            <StackPanel>
+                <TextBlock Text="{loc:Localize Key=Harness_Mode_Plan}"
+                           Style="{StaticResource PreviewWindowTitleStyle}" />
+                <TextBlock Text="{loc:Localize Key=Harness_PlanDialogSubtitle}"
+                           Style="{StaticResource PreviewWindowSubtitleStyle}" />
+            </StackPanel>
+            <Button HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Click="CloseButton_OnClick"
+                    ToolTip="{loc:Localize Key=Common_Close}"
+                    ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
+                    shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                    Style="{StaticResource WindowCloseCaptionButtonStyle}" />
+        </Grid>
+
+        <Border Grid.Row="1"
+                Style="{StaticResource PreviewContentFrameStyle}">
+            <controls:PlanDocumentView Plan="{Binding CurrentPlan}" />
+        </Border>
+    </Grid>
+</Window>

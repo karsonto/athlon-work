@@ -485,6 +485,9 @@ Hold to talk</value>
   <data name="Harness_TaskPending" xml:space="preserve">
     <value>Pending</value>
   </data>
+  <data name="Harness_PlanDialogSubtitle" xml:space="preserve">
+    <value>Review the plan, then confirm to switch to Coding and start implementing</value>
+  </data>
   <data name="Knowledge_DefaultStatus" xml:space="preserve">
     <value>Turn on the knowledge base toggle in the composer for the agent to use retrieval in answers.</value>
   </data>
@@ -1190,9 +1193,9 @@ Save anyway?</value>
     <value>Context cleared.</value>
   </data>
   <data name="Shell_ClearContextMessage" xml:space="preserve">
-    <value>This clears all visible model history for the current conversation (user, assistant, tool, and compaction records), clears the Coding task plan, and deletes this session's project memory.
+    <value>This clears all visible model history for the current conversation (user, assistant, tool, and compaction records), and clears the Coding task plan.
 
-Session ID, workspace, and title are kept; transcript archives on disk are not deleted.
+Session ID, workspace, title, and this session's project memory are kept; transcript archives on disk are not deleted.
 
 The system prompt will be rebuilt on the next message (workspace, tools, skills, etc.).</value>
   </data>

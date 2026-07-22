@@ -13,6 +13,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
 {
     private readonly ISessionHarnessState _harnessState;
     private readonly ISessionTaskListStore _taskListStore;
+    private readonly ISessionPlanStore _planStore;
     private readonly ITaskPlanCompletionNotifier _taskPlanCompletionNotifier;
     private readonly ILocalizationService _loc;
     private string _sessionId = "";
@@ -20,11 +21,13 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
     public ComposerHarnessViewModel(
         ISessionHarnessState harnessState,
         ISessionTaskListStore taskListStore,
+        ISessionPlanStore planStore,
         ITaskPlanCompletionNotifier taskPlanCompletionNotifier,
         ILocalizationService localization)
     {
         _harnessState = harnessState;
         _taskListStore = taskListStore;
+        _planStore = planStore;
         _taskPlanCompletionNotifier = taskPlanCompletionNotifier;
         _loc = localization;
         AppCultureManager.CultureChanged += OnCultureChanged;
@@ -38,14 +41,34 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
     [ObservableProperty]
     private bool _isModePickerOpen;
 
+    [ObservableProperty]
+    private SessionPlan? _currentPlan;
+
     public bool IsHarnessActive => SelectedMode == SessionAgentMode.Coding;
 
+    public bool IsPlanMode => SelectedMode == SessionAgentMode.Plan;
+
     public bool ShowTaskPanel => IsHarnessActive && Tasks.Count > 0;
+
+    public bool ShowPlanPanel =>
+        IsPlanMode
+        && CurrentPlan is not null
+        && CurrentPlan.HasContent
+        && !string.Equals(CurrentPlan.Status, SessionPlanStatuses.Approved, StringComparison.OrdinalIgnoreCase);
+
+    public bool CanConfirmPlan =>
+        IsPlanMode
+        && CurrentPlan is not null
+        && string.Equals(
+            SessionPlanStatuses.Normalize(CurrentPlan.Status),
+            SessionPlanStatuses.AwaitingConfirmation,
+            StringComparison.OrdinalIgnoreCase);
 
     public string HarnessButtonToolTip => SelectedMode switch
     {
         SessionAgentMode.Coding => _loc["Harness_Mode_Coding_Tooltip"],
         SessionAgentMode.Ask => _loc["Harness_Mode_Ask_Tooltip"],
+        SessionAgentMode.Plan => _loc["Harness_Mode_Plan_Tooltip"],
         _ => _loc["Harness_Mode_Agent_Tooltip"],
     };
 
@@ -53,6 +76,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
     {
         SessionAgentMode.Coding => _loc["Harness_Mode_Coding"],
         SessionAgentMode.Ask => _loc["Harness_Mode_Ask"],
+        SessionAgentMode.Plan => _loc["Harness_Mode_Plan"],
         _ => _loc["Harness_Mode_Agent"],
     };
 
@@ -60,17 +84,24 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
 
     public int InProgressTaskCount { get; private set; }
 
+    /// <summary>Host starts a Coding turn after plan confirmation.</summary>
+    public Func<Task>? OnPlanConfirmedAsync { get; set; }
+
+    public Action? OnModePickerOpened { get; set; }
+
     public async Task LoadForSessionAsync(string sessionId)
     {
         if (!string.Equals(_sessionId, sessionId, StringComparison.Ordinal))
         {
             Tasks.Clear();
+            CurrentPlan = null;
         }
 
         _sessionId = sessionId;
         await _harnessState.LoadAsync(sessionId).ConfigureAwait(true);
         SelectedMode = _harnessState.GetMode(sessionId);
         await RefreshTasksAsync().ConfigureAwait(true);
+        await RefreshPlanAsync().ConfigureAwait(true);
         NotifyHarnessStateChanged();
     }
 
@@ -107,11 +138,13 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
             await RefreshTasksAsync().ConfigureAwait(true);
         }
 
+        if (mode == SessionAgentMode.Plan)
+        {
+            await RefreshPlanAsync().ConfigureAwait(true);
+        }
+
         NotifyHarnessStateChanged();
     }
-
-    /// <summary>Invoked when the mode picker opens so the host can close the + menu.</summary>
-    public Action? OnModePickerOpened { get; set; }
 
     public async Task RefreshTasksAsync()
     {
@@ -164,6 +197,59 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         NotifyTaskCollectionChanged();
     }
 
+    public async Task RefreshPlanAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_sessionId))
+        {
+            CurrentPlan = null;
+            OnPropertyChanged(nameof(ShowPlanPanel));
+            OnPropertyChanged(nameof(CanConfirmPlan));
+            ConfirmPlanCommand.NotifyCanExecuteChanged();
+            return;
+        }
+
+        CurrentPlan = await _planStore.GetAsync(_sessionId).ConfigureAwait(true);
+        OnPropertyChanged(nameof(ShowPlanPanel));
+        OnPropertyChanged(nameof(CanConfirmPlan));
+        ConfirmPlanCommand.NotifyCanExecuteChanged();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanConfirmPlan))]
+    private async Task ConfirmPlanAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_sessionId) || CurrentPlan is null || !CanConfirmPlan)
+        {
+            return;
+        }
+
+        var plan = CurrentPlan;
+        plan.Status = SessionPlanStatuses.Approved;
+        await _planStore.SaveAsync(_sessionId, plan).ConfigureAwait(true);
+
+        var seeded = new SessionTaskList
+        {
+            Items = plan.Todos.Select(todo => new AgentTaskItem
+            {
+                Id = todo.Id,
+                Content = todo.Content,
+                Status = AgentTaskStatuses.Pending
+            }).ToList()
+        };
+        await _taskListStore.ReplaceAsync(_sessionId, seeded).ConfigureAwait(true);
+
+        await _harnessState.SaveAsync(_sessionId, new SessionHarnessSnapshot(SessionAgentMode.Coding))
+            .ConfigureAwait(true);
+        SelectedMode = SessionAgentMode.Coding;
+        await RefreshTasksAsync().ConfigureAwait(true);
+        await RefreshPlanAsync().ConfigureAwait(true);
+        NotifyHarnessStateChanged();
+
+        if (OnPlanConfirmedAsync is not null)
+        {
+            await OnPlanConfirmedAsync().ConfigureAwait(true);
+        }
+    }
+
     public async Task ClearTaskPlanAsync()
     {
         if (string.IsNullOrWhiteSpace(_sessionId))
@@ -192,6 +278,10 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         OnPropertyChanged(nameof(HarnessButtonToolTip));
         OnPropertyChanged(nameof(HarnessPickerLabel));
         OnPropertyChanged(nameof(IsHarnessActive));
+        OnPropertyChanged(nameof(IsPlanMode));
+        OnPropertyChanged(nameof(ShowPlanPanel));
+        OnPropertyChanged(nameof(CanConfirmPlan));
+        ConfirmPlanCommand.NotifyCanExecuteChanged();
     }
 
     private void NotifyHarnessStateChanged()
@@ -200,9 +290,20 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         OnPropertyChanged(nameof(HarnessPickerLabel));
         OnPropertyChanged(nameof(ShowTaskPanel));
         OnPropertyChanged(nameof(IsHarnessActive));
+        OnPropertyChanged(nameof(IsPlanMode));
+        OnPropertyChanged(nameof(ShowPlanPanel));
+        OnPropertyChanged(nameof(CanConfirmPlan));
+        ConfirmPlanCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnSelectedModeChanged(SessionAgentMode value) => NotifyHarnessStateChanged();
+
+    partial void OnCurrentPlanChanged(SessionPlan? value)
+    {
+        OnPropertyChanged(nameof(ShowPlanPanel));
+        OnPropertyChanged(nameof(CanConfirmPlan));
+        ConfirmPlanCommand.NotifyCanExecuteChanged();
+    }
 
     private void OnCultureChanged(object? sender, EventArgs e)
     {

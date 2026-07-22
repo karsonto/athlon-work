@@ -33,12 +33,21 @@ public sealed class CodingWorkflowSectionTests
 
         var text = builder.ToString();
         Assert.Contains("Coding workflow:", text, StringComparison.Ordinal);
-        Assert.Contains("in Coding mode use todo_write", text, StringComparison.Ordinal);
+        Assert.Contains("use todo_write for structured steps", text, StringComparison.Ordinal);
         Assert.Contains("Verification:", text, StringComparison.Ordinal);
         Assert.Contains("mvn -q -pl", text, StringComparison.Ordinal);
         Assert.Contains("npx tsc", text, StringComparison.Ordinal);
         Assert.Contains("pytest", text, StringComparison.Ordinal);
         Assert.Contains("apply_patch", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Append_SkipsContent_InPlanMode()
+    {
+        var builder = new StringBuilder();
+        new CodingWorkflowSection().Append(builder, CreateContext(hasWorkspace: true, SessionAgentMode.Plan));
+
+        Assert.Equal(string.Empty, builder.ToString());
     }
 
     private static EnvironmentPromptContext CreateContext(bool hasWorkspace, SessionAgentMode mode = SessionAgentMode.Agent) =>

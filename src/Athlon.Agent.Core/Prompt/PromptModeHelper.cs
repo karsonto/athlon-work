@@ -16,6 +16,9 @@ public static class PromptModeHelper
     public static bool IsAskMode(EnvironmentPromptContext context) =>
         context.AgentMode == SessionAgentMode.Ask;
 
+    public static bool IsPlanMode(EnvironmentPromptContext context) =>
+        context.AgentMode == SessionAgentMode.Plan;
+
     public static bool HasKnowledgeTool(EnvironmentPromptContext context) =>
         context.Tools.Any(tool => string.Equals(tool.Name, "knowledge_search", StringComparison.OrdinalIgnoreCase));
 

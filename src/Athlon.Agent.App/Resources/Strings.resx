@@ -477,7 +477,22 @@
     <value>Coding</value>
   </data>
   <data name="Harness_Mode_Coding_Tooltip" xml:space="preserve">
-    <value>启用长期记忆与任务规划</value>
+    <value>启用长期记忆与任务规划；可直接实现长任务</value>
+  </data>
+  <data name="Harness_Mode_Plan" xml:space="preserve">
+    <value>Plan</value>
+  </data>
+  <data name="Harness_Mode_Plan_Tooltip" xml:space="preserve">
+    <value>只读探索并生成详细计划；确认后自动进入 Coding</value>
+  </data>
+  <data name="Harness_ConfirmPlan" xml:space="preserve">
+    <value>确认并开始实现</value>
+  </data>
+  <data name="Harness_ConfirmPlanPrompt" xml:space="preserve">
+    <value>按已批准的计划开始实现</value>
+  </data>
+  <data name="Harness_PlanDialogSubtitle" xml:space="preserve">
+    <value>审阅计划后确认，将切换到 Coding 并开始实现</value>
   </data>
   <data name="Harness_Picker_SelectMode" xml:space="preserve">
     <value>选择 Agent 模式</value>
@@ -1199,9 +1214,9 @@
     <value>上下文已清空。</value>
   </data>
   <data name="Shell_ClearContextMessage" xml:space="preserve">
-    <value>将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录），清空 Coding 任务计划，并删除本会话的项目记忆。
+    <value>将清空当前对话在模型中的全部可见历史（用户、助手、工具与压缩记录），并清空 Coding 任务计划。
 
-会话 ID、工作区与标题会保留；磁盘上的 transcript 归档不会删除。
+会话 ID、工作区、标题与本会话项目记忆会保留；磁盘上的 transcript 归档不会删除。
 
 下次发送消息时会重新构建系统提示（工作区、工具、技能等）。</value>
   </data>

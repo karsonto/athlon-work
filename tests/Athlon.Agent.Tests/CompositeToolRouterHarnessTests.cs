@@ -89,7 +89,36 @@ public sealed class CompositeToolRouterHarnessTests
         Assert.DoesNotContain("apply_patch", names);
         Assert.DoesNotContain("execute_command", names);
         Assert.DoesNotContain("todo_write", names);
+        Assert.DoesNotContain("create_plan", names);
         Assert.DoesNotContain("sessions_spawn", names);
+    }
+
+    [Fact]
+    public void ListTools_WhenPlanMode_IncludesPlanTools_ExcludesWritesAndTodo()
+    {
+        var router = CreateRouter(SessionAgentMode.Plan, includeWriteTools: true, includeSubAgentTools: true);
+
+        var names = router.ListTools().Select(tool => tool.Name).ToArray();
+
+        Assert.Contains("create_plan", names);
+        Assert.Contains("update_plan", names);
+        Assert.Contains("file_list", names);
+        Assert.DoesNotContain("todo_write", names);
+        Assert.DoesNotContain("file_write", names);
+        Assert.DoesNotContain("execute_command", names);
+        Assert.DoesNotContain("sessions_spawn", names);
+    }
+
+    [Fact]
+    public void ListTools_WhenCoding_ExcludesPlanTools()
+    {
+        var router = CreateRouter(SessionAgentMode.Coding);
+
+        var names = router.ListTools().Select(tool => tool.Name).ToArray();
+
+        Assert.Contains("todo_write", names);
+        Assert.DoesNotContain("create_plan", names);
+        Assert.DoesNotContain("update_plan", names);
     }
 
     [Fact]
@@ -130,6 +159,8 @@ public sealed class CompositeToolRouterHarnessTests
             new StubMemoryTool("memory_search"),
             new StubMemoryTool("memory_get"),
             new StubHarnessTool("todo_write"),
+            new StubPlanTool("create_plan"),
+            new StubPlanTool("update_plan"),
         };
 
         if (includeWriteTools)
@@ -176,6 +207,13 @@ public sealed class CompositeToolRouterHarnessTests
     }
 
     private sealed class StubHarnessTool(string name) : IAgentTool, IHarnessTool
+    {
+        public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
+        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ToolResult.Success("ok"));
+    }
+
+    private sealed class StubPlanTool(string name) : IAgentTool, IPlanTool
     {
         public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
         public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>

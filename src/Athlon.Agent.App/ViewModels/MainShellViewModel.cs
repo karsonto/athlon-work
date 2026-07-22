@@ -51,6 +51,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly ISessionUsageAccumulator _sessionUsageAccumulator;
     private readonly PageViewFactory _pageViewFactory;
     private readonly ITaskListChangedNotifier _taskListChangedNotifier;
+    private readonly IPlanChangedNotifier _planChangedNotifier;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
     private readonly SshWorkspaceConnectionService _sshConnection;
@@ -68,6 +69,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private Controls.WebChatView? _savedChatView;
     private ConversationDisplayCursor? _olderDisplayCursor;
     private bool _olderHistoryLoadInProgress;
+    private PlanDocumentWindow? _planDocumentWindow;
+    private string? _dismissedPlanWindowKey;
 
     public MainShellViewModel(
         IFileStorageService storage,
@@ -95,6 +98,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ComposerKnowledgeViewModel composerKnowledge,
         ComposerHarnessViewModel composerHarness,
         ITaskListChangedNotifier taskListChangedNotifier,
+        IPlanChangedNotifier planChangedNotifier,
         PageViewFactory pageViewFactory,
         ChatPageViewModel chatPage,
         ScheduleViewModel schedulePageVm,
@@ -121,6 +125,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionUsageAccumulator = sessionUsageAccumulator;
         _pageViewFactory = pageViewFactory;
         _taskListChangedNotifier = taskListChangedNotifier;
+        _planChangedNotifier = planChangedNotifier;
         _loc = localization;
         _notifier = notifier;
         _sshConnection = sshConnection;
@@ -143,10 +148,13 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         KnowledgePageVm = knowledgePageVm;
         KnowledgePageVm.KnowledgeDataChanged += OnKnowledgeDataChanged;
         _taskListChangedNotifier.TaskListChanged += OnTaskListChanged;
+        _planChangedNotifier.PlanChanged += OnPlanChanged;
         _composer.AtCompletionSourcesUpdated += OnAtCompletionSourcesUpdated;
         ComposerKnowledge = composerKnowledge;
         ComposerHarness = composerHarness;
         ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
+        ComposerHarness.OnPlanConfirmedAsync = StartCodingFromApprovedPlanAsync;
+        ComposerHarness.PropertyChanged += OnComposerHarnessPropertyChanged;
         ChatPage = chatPage;
         ChatPage.Configure(
             () => _displayedSessionId,
@@ -766,14 +774,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         await _storage.SaveSessionAsync(_session);
         _sessionNavigation.Invalidate(_session.Id);
-        try
-        {
-            await _longTermMemory.DeleteCurrentSessionMemoryAsync().ConfigureAwait(true);
-        }
-        catch
-        {
-            // Clearing chat must succeed even if memory cleanup fails.
-        }
 
         await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
         Settings.SettingsStatus = _loc["Shell_ClearContextDone"];
@@ -1139,6 +1139,112 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         Application.Current?.Dispatcher.InvokeAsync(() => _ = ComposerHarness.RefreshTasksAsync());
+    }
+
+    private void OnPlanChanged(string sessionId)
+    {
+        if (!string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        Application.Current?.Dispatcher.InvokeAsync(async () =>
+        {
+            await ComposerHarness.RefreshPlanAsync().ConfigureAwait(true);
+            SyncPlanDocumentWindow(activateIfOpen: true);
+        });
+    }
+
+    private void OnComposerHarnessPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ComposerHarnessViewModel.ShowPlanPanel)
+            or nameof(ComposerHarnessViewModel.CurrentPlan)
+            or nameof(ComposerHarnessViewModel.IsPlanMode))
+        {
+            Application.Current?.Dispatcher.InvokeAsync(() => SyncPlanDocumentWindow());
+        }
+    }
+
+    private void SyncPlanDocumentWindow(bool activateIfOpen = false)
+    {
+        if (!ComposerHarness.ShowPlanPanel || ComposerHarness.CurrentPlan is null)
+        {
+            ClosePlanDocumentWindow();
+            return;
+        }
+
+        var planKey = BuildPlanWindowKey(ComposerHarness.CurrentPlan);
+        if (_planDocumentWindow is not null)
+        {
+            if (activateIfOpen)
+            {
+                if (_planDocumentWindow.WindowState == WindowState.Minimized)
+                {
+                    _planDocumentWindow.WindowState = WindowState.Normal;
+                }
+
+                _planDocumentWindow.Activate();
+            }
+
+            return;
+        }
+
+        if (string.Equals(planKey, _dismissedPlanWindowKey, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var owner = Application.Current?.MainWindow;
+        var window = new PlanDocumentWindow
+        {
+            Owner = owner,
+            DataContext = ComposerHarness
+        };
+        window.Closed += OnPlanDocumentWindowClosed;
+        _planDocumentWindow = window;
+        _dismissedPlanWindowKey = null;
+        window.Show();
+    }
+
+    private void OnPlanDocumentWindowClosed(object? sender, EventArgs e)
+    {
+        if (sender is PlanDocumentWindow window)
+        {
+            window.Closed -= OnPlanDocumentWindowClosed;
+        }
+
+        if (ComposerHarness.ShowPlanPanel && ComposerHarness.CurrentPlan is not null)
+        {
+            _dismissedPlanWindowKey = BuildPlanWindowKey(ComposerHarness.CurrentPlan);
+        }
+
+        _planDocumentWindow = null;
+    }
+
+    private void ClosePlanDocumentWindow()
+    {
+        _dismissedPlanWindowKey = null;
+        if (_planDocumentWindow is null)
+        {
+            return;
+        }
+
+        var window = _planDocumentWindow;
+        _planDocumentWindow = null;
+        window.Closed -= OnPlanDocumentWindowClosed;
+        window.Close();
+    }
+
+    private string BuildPlanWindowKey(SessionPlan plan) =>
+        $"{_displayedSessionId}|{plan.UpdatedAt}|{plan.Title}|{plan.Overview}|{plan.Body.Length}|{plan.Status}";
+
+    private async Task StartCodingFromApprovedPlanAsync()
+    {
+        ComposerText = _loc["Harness_ConfirmPlanPrompt"];
+        if (SendCommand.CanExecute(null))
+        {
+            await SendCommand.ExecuteAsync(null).ConfigureAwait(true);
+        }
     }
 
     private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)
@@ -2179,6 +2285,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionTurns.TurnHost.TurnStateChanged -= OnTurnStateChanged;
         KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;
         _taskListChangedNotifier.TaskListChanged -= OnTaskListChanged;
+        _planChangedNotifier.PlanChanged -= OnPlanChanged;
+        ComposerHarness.PropertyChanged -= OnComposerHarnessPropertyChanged;
+        ClosePlanDocumentWindow();
         _composer.AtCompletionSourcesUpdated -= OnAtCompletionSourcesUpdated;
         if (_savedChatView is not null)
         {

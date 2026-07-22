@@ -9,7 +9,8 @@ public sealed class SubAgentDelegationSection(AppSettings settings) : IEnvironme
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
-        if (!settings.SubAgent.Enabled || PromptModeHelper.IsChatOnly(context) || PromptModeHelper.IsAskMode(context))
+        if (!settings.SubAgent.Enabled || PromptModeHelper.IsChatOnly(context) || PromptModeHelper.IsAskMode(context)
+            || PromptModeHelper.IsPlanMode(context))
         {
             return;
         }

@@ -100,6 +100,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISessionHarnessState, SessionHarnessState>();
         services.AddSingleton<ISessionTaskListStore, FileSessionTaskListStore>();
         services.AddSingleton<ITaskListChangedNotifier, TaskListChangedNotifier>();
+        services.AddSingleton<ISessionPlanStore, FileSessionPlanStore>();
+        services.AddSingleton<IPlanChangedNotifier, PlanChangedNotifier>();
         services.AddHttpClient<IEmbeddingClient, OpenAiCompatibleEmbeddingClient>(
             static client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddSingleton<AuditLogService>();
@@ -169,9 +171,12 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, MemorySearchTool>();
         services.AddSingleton<IAgentTool, MemoryGetTool>();
         services.AddSingleton<IAgentTool, TodoWriteTool>();
+        services.AddSingleton<IAgentTool, CreatePlanTool>();
+        services.AddSingleton<IAgentTool, UpdatePlanTool>();
         services.AddSingleton<IRuntimeContextContributor, HostWorkspaceRuntimeContributor>();
         services.AddSingleton<IRuntimeContextContributor, MemoryPromptContributor>();
         services.AddSingleton<IRuntimeContextContributor, TaskListPromptContributor>();
+        services.AddSingleton<IRuntimeContextContributor, SessionPlanPromptContributor>();
         services.AddSingleton<CompactionTurnMiddleware>();
         services.AddSingleton<IAgentTurnMiddleware, CompactionTurnMiddleware>();
         services.AddSingleton<IAgentTurnMiddleware, PostTurnMemoryMiddleware>();

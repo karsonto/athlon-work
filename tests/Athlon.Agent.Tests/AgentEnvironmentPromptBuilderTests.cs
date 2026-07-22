@@ -145,6 +145,7 @@ public sealed class AgentEnvironmentPromptBuilderTests
         var prompt = builder.Build(AgentSession.Create("plan-test"), Array.Empty<ToolDefinition>());
 
         Assert.DoesNotContain("Plan mode (spec-first workflow)", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("Session Plan mode workflow:", prompt, StringComparison.Ordinal);
         Assert.DoesNotContain("create_plan", prompt, StringComparison.Ordinal);
     }
 
