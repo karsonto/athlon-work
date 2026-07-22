@@ -146,7 +146,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _composer.AtCompletionSourcesUpdated += OnAtCompletionSourcesUpdated;
         ComposerKnowledge = composerKnowledge;
         ComposerHarness = composerHarness;
-        ComposerHarness.OnModeSelected = () => IsPlusMenuOpen = false;
+        ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
         ChatPage = chatPage;
         ChatPage.Configure(
             () => _displayedSessionId,
@@ -1262,7 +1262,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
         }
 
-        remote.Items.Add(new Separator());
+        remote.Items.Add(CreateRunOnSeparator());
 
         var sshItem = new MenuItem
         {
@@ -1278,7 +1278,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         if (HasSessionWorkspace)
         {
-            menu.Items.Add(new Separator());
+            menu.Items.Add(CreateRunOnSeparator());
             var remove = new MenuItem
             {
                 Header = CreateRunOnRowHeader(
@@ -1292,6 +1292,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         return menu;
+    }
+
+    private static Separator CreateRunOnSeparator()
+    {
+        var style = Application.Current?.TryFindResource("RunOnMenuSeparatorStyle") as Style;
+        return new Separator { Style = style };
     }
 
     private async Task DeleteSshConnectionAsync(WorkspaceSettings workspace)

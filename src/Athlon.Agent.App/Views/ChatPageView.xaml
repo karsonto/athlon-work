@@ -453,79 +453,6 @@
                                                                             MaxHeight="480">
                                                                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                                                                             <StackPanel>
-                                                                                <TextBlock Text="{loc:Localize Key=ComposerPlus_Modes}"
-                                                                                           FontWeight="SemiBold"
-                                                                                           Foreground="{DynamicResource Brush.SubtleText}"
-                                                                                           FontSize="11"
-                                                                                           Margin="4,0,0,6" />
-                                                                                <Button Command="{Binding ComposerHarness.SelectModeCommand}"
-                                                                                        CommandParameter="{x:Static harness:SessionAgentMode.Agent}"
-                                                                                        HorizontalContentAlignment="Left"
-                                                                                        Padding="10,8"
-                                                                                        Margin="0,0,0,2"
-                                                                                        Style="{StaticResource GhostButtonStyle}">
-                                                                                    <Grid>
-                                                                                        <TextBlock Text="{loc:Localize Key=Harness_Mode_Agent}" />
-                                                                                        <TextBlock Text="✓" HorizontalAlignment="Right" Visibility="Collapsed">
-                                                                                            <TextBlock.Style>
-                                                                                                <Style TargetType="TextBlock">
-                                                                                                    <Style.Triggers>
-                                                                                                        <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}" Value="{x:Static harness:SessionAgentMode.Agent}">
-                                                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                                                        </DataTrigger>
-                                                                                                    </Style.Triggers>
-                                                                                                </Style>
-                                                                                            </TextBlock.Style>
-                                                                                        </TextBlock>
-                                                                                    </Grid>
-                                                                                </Button>
-                                                                                <Button Command="{Binding ComposerHarness.SelectModeCommand}"
-                                                                                        CommandParameter="{x:Static harness:SessionAgentMode.Coding}"
-                                                                                        HorizontalContentAlignment="Left"
-                                                                                        Padding="10,8"
-                                                                                        Margin="0,0,0,2"
-                                                                                        Style="{StaticResource GhostButtonStyle}">
-                                                                                    <Grid>
-                                                                                        <TextBlock Text="{loc:Localize Key=Harness_Mode_Coding}" />
-                                                                                        <TextBlock Text="✓" HorizontalAlignment="Right" Visibility="Collapsed">
-                                                                                            <TextBlock.Style>
-                                                                                                <Style TargetType="TextBlock">
-                                                                                                    <Style.Triggers>
-                                                                                                        <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}" Value="{x:Static harness:SessionAgentMode.Coding}">
-                                                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                                                        </DataTrigger>
-                                                                                                    </Style.Triggers>
-                                                                                                </Style>
-                                                                                            </TextBlock.Style>
-                                                                                        </TextBlock>
-                                                                                    </Grid>
-                                                                                </Button>
-                                                                                <Button Command="{Binding ComposerHarness.SelectModeCommand}"
-                                                                                        CommandParameter="{x:Static harness:SessionAgentMode.Ask}"
-                                                                                        HorizontalContentAlignment="Left"
-                                                                                        Padding="10,8"
-                                                                                        Margin="0,0,0,4"
-                                                                                        Style="{StaticResource GhostButtonStyle}">
-                                                                                    <Grid>
-                                                                                        <TextBlock Text="{loc:Localize Key=Harness_Mode_Ask}" />
-                                                                                        <TextBlock Text="✓" HorizontalAlignment="Right" Visibility="Collapsed">
-                                                                                            <TextBlock.Style>
-                                                                                                <Style TargetType="TextBlock">
-                                                                                                    <Style.Triggers>
-                                                                                                        <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}" Value="{x:Static harness:SessionAgentMode.Ask}">
-                                                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                                                        </DataTrigger>
-                                                                                                    </Style.Triggers>
-                                                                                                </Style>
-                                                                                            </TextBlock.Style>
-                                                                                        </TextBlock>
-                                                                                    </Grid>
-                                                                                </Button>
-
-                                                                                <Border Height="1"
-                                                                                        Background="{DynamicResource Brush.Border}"
-                                                                                        Margin="4,6,4,8" />
-
                                                                                 <Button Command="{Binding PlusSelectImagesCommand}"
                                                                                         HorizontalContentAlignment="Left"
                                                                                         Padding="10,8"
@@ -659,12 +586,7 @@
                                             </Style.Triggers>
                                         </Style>
                                     </StackPanel.Style>
-                                    <TextBlock Text="{Binding ComposerHarness.HarnessPickerLabel}"
-                                               FontSize="12"
-                                               Foreground="{DynamicResource Brush.SubtleText}"
-                                               Margin="0,0,10,0"
-                                               VerticalAlignment="Center"
-                                               ToolTip="{Binding ComposerHarness.HarnessButtonToolTip}" />
+                                    <controls:ComposerModePicker VerticalAlignment="Center" />
                                     <Button x:Name="RunOnButton"
                                             Click="RunOnButton_OnClick"
                                             ToolTip="{loc:Localize Key=Shell_RunOn}"

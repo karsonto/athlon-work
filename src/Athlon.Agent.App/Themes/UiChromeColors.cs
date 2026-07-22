@@ -22,6 +22,18 @@ public sealed class UiChromeColors
     public required Color AccentHover { get; init; }
     public required Color AccentActive { get; init; }
     public required Color AccentSubtle { get; init; }
+    /// <summary>Composer mode pill: Agent (indigo).</summary>
+    public required Color ModeAgentBg { get; init; }
+    public required Color ModeAgentBorder { get; init; }
+    public required Color ModeAgentForeground { get; init; }
+    /// <summary>Composer mode pill: Coding / Plan (bronze).</summary>
+    public required Color ModeCodingBg { get; init; }
+    public required Color ModeCodingBorder { get; init; }
+    public required Color ModeCodingForeground { get; init; }
+    /// <summary>Composer mode pill: Ask (green).</summary>
+    public required Color ModeAskBg { get; init; }
+    public required Color ModeAskBorder { get; init; }
+    public required Color ModeAskForeground { get; init; }
     public required Color SurfaceHover { get; init; }
     public required Color SurfaceActive { get; init; }
     public required Color UserBubble { get; init; }

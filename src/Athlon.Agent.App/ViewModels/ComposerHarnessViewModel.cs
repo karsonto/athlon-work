@@ -78,6 +78,10 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
     private void ToggleModePicker()
     {
         IsModePickerOpen = !IsModePickerOpen;
+        if (IsModePickerOpen)
+        {
+            OnModePickerOpened?.Invoke();
+        }
     }
 
     [RelayCommand]
@@ -86,7 +90,6 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(_sessionId) || SelectedMode == mode)
         {
             IsModePickerOpen = false;
-            OnModeSelected?.Invoke();
             return;
         }
 
@@ -94,7 +97,6 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         await _harnessState.SaveAsync(_sessionId, new SessionHarnessSnapshot(mode)).ConfigureAwait(true);
         SelectedMode = mode;
         IsModePickerOpen = false;
-        OnModeSelected?.Invoke();
 
         if (wasCoding && mode != SessionAgentMode.Coding)
         {
@@ -108,8 +110,8 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         NotifyHarnessStateChanged();
     }
 
-    /// <summary>Invoked after a mode is chosen so the host can close the shared + menu.</summary>
-    public Action? OnModeSelected { get; set; }
+    /// <summary>Invoked when the mode picker opens so the host can close the + menu.</summary>
+    public Action? OnModePickerOpened { get; set; }
 
     public async Task RefreshTasksAsync()
     {
