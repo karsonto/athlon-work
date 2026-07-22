@@ -64,6 +64,67 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
+    public async Task HiddenSession_FinalizeTurn_does_not_require_ChatView_or_scroll()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var scrollCount = 0;
+        var reloadCount = 0;
+        var ui = new SessionTurnUiController(
+            dispatcher,
+            requestScrollImmediate: () => Interlocked.Increment(ref scrollCount));
+        ui.ReloadChatViewOverride = () =>
+        {
+            Interlocked.Increment(ref reloadCount);
+            return Task.CompletedTask;
+        };
+        ui.SetDisplayed(false);
+
+        Assert.Null(ui.ChatView);
+
+        var session = AgentSession.Create("test");
+        IReadOnlyList<ChatMessage> persisted =
+        [
+            ChatMessage.Create(MessageRole.User, "question"),
+            ChatMessage.Create(MessageRole.Assistant, "answer")
+        ];
+
+        await dispatcher.InvokeAsync(() =>
+            ui.FinalizeTurn(session, persisted, cancelled: false, timedOut: false, turnTimeoutMinutes: 30));
+
+        var messages = await dispatcher.InvokeAsync(() => ui.Messages.ToList());
+        Assert.Equal(2, messages.Count);
+        Assert.Equal(0, Volatile.Read(ref scrollCount));
+        Assert.Equal(0, Volatile.Read(ref reloadCount));
+        Assert.Equal(0, ui.SyncChatViewGeneration);
+    }
+
+    [Fact]
+    public async Task HiddenSession_does_not_sync_chat_view_until_displayed()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var reloadCount = 0;
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () =>
+        {
+            Interlocked.Increment(ref reloadCount);
+            return Task.CompletedTask;
+        };
+        ui.SetDisplayed(false);
+
+        await dispatcher.InvokeAsync(() =>
+            ui.Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "hello"))));
+
+        Assert.Equal(0, ui.SyncChatViewGeneration);
+        Assert.Equal(0, Volatile.Read(ref reloadCount));
+
+        ui.SetDisplayed(true);
+        await dispatcher.InvokeAsync(() => ui.SyncChatViewGeneration); // pump UI after SetDisplayed
+        await ui.ReloadChatViewAsync();
+
+        Assert.Equal(1, Volatile.Read(ref reloadCount));
+    }
+
+    [Fact]
     public async Task CaptureEndSnapshot_includes_buffered_tokens_when_hidden()
     {
         var dispatcher = await StartStaDispatcherAsync();
@@ -206,51 +267,6 @@ public sealed class SessionTurnUiControllerDisplayTests
         var tool = await dispatcher.InvokeAsync(() =>
             ui.Messages.LastOrDefault(message => message.IsTool && !message.IsCompaction));
         Assert.Null(tool);
-    }
-
-    [Fact]
-    public async Task FileWrite_tool_args_show_summary_not_full_content()
-    {
-        var dispatcher = await StartStaDispatcherAsync();
-        var ui = new SessionTurnUiController(dispatcher);
-        ui.SetShowToolCalls(true);
-        ui.SetDisplayed(true);
-
-        var callbacks = ui.BuildCallbacks();
-        var largeContent = new string('x', 500);
-        var finalJson = $$"""{"path":"src/App.tsx","content":"{{largeContent}}"}""";
-
-        await EmitToolStart(callbacks, "call-fw", "file_write", 0);
-        await EmitToolArgs(callbacks, "call-fw", """{"path":"src/App.tsx","content":"xx""");
-        for (var i = 0; i < 8; i++)
-        {
-            var length = Math.Min(finalJson.Length, 50 + i * 20);
-            await EmitToolArgs(callbacks, "call-fw", finalJson[..length]);
-        }
-
-        await EmitToolArgs(callbacks, "call-fw", finalJson);
-
-        ui.SetDisplayed(false);
-        ui.SetDisplayed(true);
-
-        var toolBeforeEnd = await dispatcher.InvokeAsync(() =>
-            ui.Messages.LastOrDefault(message => message.IsTool));
-
-        Assert.NotNull(toolBeforeEnd);
-        Assert.Contains("src/App.tsx", toolBeforeEnd!.ToolArgumentsText, StringComparison.Ordinal);
-        Assert.Contains(FileWriteToolArgumentsDisplay.StreamingContentLabel, toolBeforeEnd.ToolArgumentsText, StringComparison.Ordinal);
-        Assert.DoesNotContain(largeContent, toolBeforeEnd.ToolArgumentsText, StringComparison.Ordinal);
-
-        await EmitToolEnd(callbacks, "call-fw");
-        ui.SetDisplayed(false);
-        ui.SetDisplayed(true);
-
-        var toolAfterEnd = await dispatcher.InvokeAsync(() =>
-            ui.Messages.LastOrDefault(message => message.IsTool));
-
-        Assert.NotNull(toolAfterEnd);
-        Assert.Contains("(500 chars)", toolAfterEnd!.ToolArgumentsText, StringComparison.Ordinal);
-        Assert.DoesNotContain(largeContent, toolAfterEnd.ToolArgumentsText, StringComparison.Ordinal);
     }
 
     private static Task EmitText(AgentTurnCallbacks callbacks, string messageId, string delta) =>

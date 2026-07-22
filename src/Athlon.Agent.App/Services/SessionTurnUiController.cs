@@ -139,16 +139,33 @@ public sealed class SessionTurnUiController
         }
     }
 
-    public bool IsDisplayed { get; private set; }
+    private volatile bool _isDisplayed;
+
+    public bool IsDisplayed => _isDisplayed;
+
+    private bool CanTouchChatView => _isDisplayed && ChatView is not null;
+
+    /// <summary>
+    /// Sync/reload may run with a test override when no real <see cref="WebChatView"/> is attached.
+    /// Incremental ChatView dispatch still requires <see cref="CanTouchChatView"/>.
+    /// </summary>
+    private bool CanSyncChatView =>
+        _isDisplayed && (ChatView is not null || ReloadChatViewOverride is not null);
+
+    /// <summary>Test seam: replaces <see cref="WebChatView.LoadMessagesAsync"/> during Sync/Reload.</summary>
+    internal Func<Task>? ReloadChatViewOverride { get; set; }
+
+    /// <summary>Test seam: generation bumped when a chat-view sync is scheduled.</summary>
+    internal int SyncChatViewGeneration => Volatile.Read(ref _syncChatViewGeneration);
 
     public void SetDisplayed(bool displayed)
     {
-        if (IsDisplayed == displayed)
+        if (_isDisplayed == displayed)
         {
             return;
         }
 
-        IsDisplayed = displayed;
+        _isDisplayed = displayed;
         RunOnUiSync(() =>
         {
             if (displayed)
@@ -335,12 +352,23 @@ public sealed class SessionTurnUiController
 
     public async Task ReloadChatViewAsync()
     {
-        var chatView = ChatView;
-        if (chatView is null)
+        if (!_isDisplayed)
         {
             return;
         }
 
+        if (ReloadChatViewOverride is not null)
+        {
+            await ReloadChatViewOverride().ConfigureAwait(true);
+            return;
+        }
+
+        if (ChatView is null)
+        {
+            return;
+        }
+
+        var chatView = ChatView;
         await chatView.LoadMessagesAsync(Messages, _showToolCalls(), _activitySourceMessages).ConfigureAwait(true);
         if (ReferenceEquals(ChatView, chatView) && IsDisplayed)
         {
@@ -526,7 +554,10 @@ public sealed class SessionTurnUiController
                 _bulkChatViewSyncDepth--;
                 FinalizeStreamingDisplay();
                 DispatchCurrentTurnActivity();
-                RequestScrollImmediate();
+                if (IsDisplayed)
+                {
+                    RequestScrollImmediate();
+                }
             }
         });
     }
@@ -539,7 +570,7 @@ public sealed class SessionTurnUiController
     /// </summary>
     private void SealCurrentSegment()
     {
-        if (ChatView is null)
+        if (!CanTouchChatView)
         {
             _turnActivityTracker.BeginSegment();
             return;
@@ -549,13 +580,13 @@ public sealed class SessionTurnUiController
         var summary = _turnActivityTracker.Snapshot();
         if (summary is { HasContent: true })
         {
-            _ = ChatView.DispatchTurnActivityAsync(summary, upsert: false);
+            _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: false);
         }
 
         var files = _modifiedFilesTracker.TakeAndClearSegmentSucceededFiles();
         if (files.Count > 0)
         {
-            _ = ChatView.DispatchFilesChangedAsync(files, upsert: false);
+            _ = ChatView!.DispatchFilesChangedAsync(files, upsert: false);
         }
 
         _turnActivityTracker.BeginSegment();
@@ -578,7 +609,7 @@ public sealed class SessionTurnUiController
 
     private void PublishTurnActivity(bool upsert = true)
     {
-        if (ChatView is null)
+        if (!CanTouchChatView)
         {
             return;
         }
@@ -589,12 +620,12 @@ public sealed class SessionTurnUiController
             return;
         }
 
-        _ = ChatView.DispatchTurnActivityAsync(summary, upsert: upsert);
+        _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: upsert);
     }
 
     private void PublishFilesChanged(bool upsert = true)
     {
-        if (ChatView is null)
+        if (!CanTouchChatView)
         {
             return;
         }
@@ -607,7 +638,7 @@ public sealed class SessionTurnUiController
             return;
         }
 
-        _ = ChatView.DispatchFilesChangedAsync(files, upsert: upsert);
+        _ = ChatView!.DispatchFilesChangedAsync(files, upsert: upsert);
     }
 
     private void ProcessUiStreamEvents(AgentStreamEvent streamEvent, bool notifyTracker)
@@ -721,7 +752,7 @@ public sealed class SessionTurnUiController
 
     private void OnMessagesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (ChatView is null || _bulkChatViewSyncDepth > 0)
+        if (!CanSyncChatView || _bulkChatViewSyncDepth > 0)
         {
             return;
         }
@@ -810,7 +841,7 @@ public sealed class SessionTurnUiController
 
     private void SyncChatView(bool immediate = false)
     {
-        if (ChatView is null)
+        if (!CanSyncChatView)
         {
             return;
         }
@@ -825,7 +856,7 @@ public sealed class SessionTurnUiController
         var generation = Interlocked.Increment(ref _syncChatViewGeneration);
         _dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
-            if (generation != _syncChatViewGeneration || ChatView is null)
+            if (generation != _syncChatViewGeneration || !CanSyncChatView)
             {
                 return;
             }

@@ -190,43 +190,53 @@ internal sealed class StreamingTokenBuffer
 
     public void StopFlushTimer()
     {
-        if (_streamingFlushTimer is null)
-        {
-            lock (_scheduleLock)
-            {
-                _streamingFlushTimerActive = false;
-            }
-
-            return;
-        }
-
-        _streamingFlushTimer.Stop();
-        _streamingFlushTimer = null;
         lock (_scheduleLock)
         {
             _streamingFlushTimerActive = false;
+            if (_streamingFlushTimer is null)
+            {
+                return;
+            }
+
+            _streamingFlushTimer.Stop();
+            _streamingFlushTimer = null;
         }
     }
 
     private void StartFlushTimer()
     {
-        if (_streamingFlushTimer is not null)
+        lock (_scheduleLock)
         {
-            return;
-        }
+            if (!_streamingFlushTimerActive || _streamingFlushTimer is not null)
+            {
+                return;
+            }
 
-        _streamingFlushTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
-        {
-            Interval = FlushInterval
-        };
-        _streamingFlushTimer.Tick += OnFlushTimerTick;
-        _streamingFlushTimer.Start();
+            _streamingFlushTimer = new DispatcherTimer(DispatcherPriority.Background, _dispatcher)
+            {
+                Interval = FlushInterval
+            };
+            _streamingFlushTimer.Tick += OnFlushTimerTick;
+            _streamingFlushTimer.Start();
+        }
     }
 
     private void OnFlushTimerTick(object? sender, EventArgs e)
     {
         // Caller wires flush via delegate; timer only signals token drain.
         FlushTimerTick?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Test seam: whether a flush timer is currently running.</summary>
+    internal bool HasActiveFlushTimer
+    {
+        get
+        {
+            lock (_scheduleLock)
+            {
+                return _streamingFlushTimer is not null;
+            }
+        }
     }
 
     public event EventHandler? FlushTimerTick;
