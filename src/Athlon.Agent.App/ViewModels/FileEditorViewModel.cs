@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
 using Athlon.Agent.App.Localization;
+using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -11,16 +12,19 @@ namespace Athlon.Agent.App.ViewModels;
 public sealed partial class FileEditorViewModel : ObservableObject
 {
     private readonly WorkspaceFileEditorService _editorService;
+    private readonly WorkspaceGuard _guard;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
     private EditorDocumentViewModel? _activeDocument;
 
     public FileEditorViewModel(
         WorkspaceFileEditorService editorService,
+        WorkspaceGuard guard,
         ILocalizationService localization,
         IUserNotifier notifier)
     {
         _editorService = editorService;
+        _guard = guard;
         _loc = localization;
         _notifier = notifier;
         Tabs = new ObservableCollection<EditorDocumentViewModel>();
@@ -47,9 +51,8 @@ public sealed partial class FileEditorViewModel : ObservableObject
 
     public async Task<bool> OpenFileAsync(string path, string? workspaceRoot, bool readOnly = false)
     {
-        var fullPath = Path.GetFullPath(path);
-        var existing = Tabs.FirstOrDefault(tab =>
-            string.Equals(tab.FilePath, fullPath, StringComparison.OrdinalIgnoreCase));
+        var fullPath = NormalizeEditorPath(path);
+        var existing = Tabs.FirstOrDefault(tab => PathsEqual(tab.FilePath, fullPath));
         if (existing is not null)
         {
             existing.IsReadOnly = readOnly;
@@ -81,9 +84,8 @@ public sealed partial class FileEditorViewModel : ObservableObject
 
     public EditorDocumentViewModel? FindOpenDocument(string fullPath)
     {
-        var normalized = Path.GetFullPath(fullPath);
-        return Tabs.FirstOrDefault(tab =>
-            string.Equals(tab.FilePath, normalized, StringComparison.OrdinalIgnoreCase));
+        var normalized = NormalizeEditorPath(fullPath);
+        return Tabs.FirstOrDefault(tab => PathsEqual(tab.FilePath, normalized));
     }
 
     [RelayCommand]
@@ -196,6 +198,11 @@ public sealed partial class FileEditorViewModel : ObservableObject
 
     public void HandleExternalFileChange(string fullPath)
     {
+        if (_guard.CurrentKind == WorkspaceKind.Ssh)
+        {
+            return;
+        }
+
         var document = Tabs.FirstOrDefault(tab =>
             string.Equals(tab.FilePath, fullPath, StringComparison.OrdinalIgnoreCase));
         if (document is null || !File.Exists(fullPath))
@@ -219,7 +226,20 @@ public sealed partial class FileEditorViewModel : ObservableObject
         }
     }
 
-    private static string? TryGetRelativePath(string? workspaceRoot, string fullPath)
+    private string NormalizeEditorPath(string path) =>
+        _guard.CurrentKind == WorkspaceKind.Ssh
+            ? _guard.Normalize(path)
+            : Path.GetFullPath(path);
+
+    private bool PathsEqual(string left, string right) =>
+        _guard.CurrentKind == WorkspaceKind.Ssh
+            ? string.Equals(
+                RemotePathNormalizer.Collapse(RemotePathNormalizer.ForModel(left)),
+                RemotePathNormalizer.Collapse(RemotePathNormalizer.ForModel(right)),
+                StringComparison.Ordinal)
+            : string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+
+    private string? TryGetRelativePath(string? workspaceRoot, string fullPath)
     {
         if (string.IsNullOrWhiteSpace(workspaceRoot))
         {
@@ -228,8 +248,28 @@ public sealed partial class FileEditorViewModel : ObservableObject
 
         try
         {
-            var root = Path.GetFullPath(workspaceRoot);
-            return Path.GetRelativePath(root, fullPath).Replace('\\', '/');
+            if (_guard.CurrentKind == WorkspaceKind.Ssh)
+            {
+                var root = RemotePathNormalizer.NormalizeRoot(workspaceRoot);
+                var normalized = RemotePathNormalizer.Collapse(RemotePathNormalizer.ForModel(fullPath));
+                if (!RemotePathNormalizer.IsUnderRoot(normalized, root))
+                {
+                    return null;
+                }
+
+                if (string.Equals(normalized, root, StringComparison.Ordinal))
+                {
+                    return ".";
+                }
+
+                var prefix = root.TrimEnd('/') + "/";
+                return normalized.StartsWith(prefix, StringComparison.Ordinal)
+                    ? normalized[prefix.Length..]
+                    : null;
+            }
+
+            var localRoot = Path.GetFullPath(workspaceRoot);
+            return Path.GetRelativePath(localRoot, fullPath).Replace('\\', '/');
         }
         catch
         {

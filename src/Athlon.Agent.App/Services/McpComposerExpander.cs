@@ -1,11 +1,13 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Mcp;
 
 namespace Athlon.Agent.App.Services;
 
 /// <summary>
-/// Expands //mcp:encodedName references in user composer text before sending to the agent.
+/// Expands //mcp:serverOrTool references in user composer text before sending to the agent.
 /// </summary>
 public static partial class McpComposerExpander
 {
@@ -19,9 +21,16 @@ public static partial class McpComposerExpander
             return userInput;
         }
 
-        var knownToolIds = registry.ListCatalogEntries()
+        var catalog = registry.ListCatalogEntries();
+        var knownToolIds = catalog
             .Select(entry => entry.EncodedName)
             .ToHashSet(StringComparer.Ordinal);
+        var knownServerNames = catalog
+            .Select(entry => entry.ServerName)
+            .Concat(registry.GetStatuses()
+                .Where(status => status.State == McpConnectionState.Connected)
+                .Select(status => status.Name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var matches = McpReferencePattern().Matches(userInput);
         if (matches.Count == 0)
@@ -34,18 +43,26 @@ public static partial class McpComposerExpander
 
         foreach (Match match in matches)
         {
-            var toolId = match.Groups[1].Value;
-            if (knownToolIds.Contains(toolId))
+            var reference = match.Groups[1].Value;
+            if (knownToolIds.Contains(reference))
             {
                 blocks.Add(
-                    $"[MCP reference: {toolId}]{Environment.NewLine}"
-                    + $"Use mcp_call(toolId=\"{toolId}\", arguments={{}}) "
+                    $"[MCP reference: {reference}]{Environment.NewLine}"
+                    + $"Use mcp_call(toolId=\"{reference}\", arguments={{}}) "
                     + "to invoke this MCP tool when needed.");
+                continue;
             }
-            else
+
+            if (knownServerNames.Contains(reference))
             {
-                warnings.Add($"Unknown MCP tool '{toolId}' in //mcp reference; connect the MCP server first.");
+                blocks.Add(
+                    $"[MCP server reference: {reference}]{Environment.NewLine}"
+                    + $"Prefer MCP tools from server \"{reference}\" when needed. "
+                    + "Use the advertised function schemas / mcp_call for tools on that server.");
+                continue;
             }
+
+            warnings.Add($"Unknown MCP reference '{reference}'; connect the MCP server first.");
         }
 
         var builder = new StringBuilder();

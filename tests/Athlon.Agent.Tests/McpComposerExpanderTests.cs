@@ -21,12 +21,23 @@ public sealed class McpComposerExpanderTests
     }
 
     [Fact]
+    public void Expand_AddsKnownMcpServerReferenceBlock()
+    {
+        var registry = new ComposerTestFactory.ConnectedMcpRegistry("demo-server", "browser_navigate");
+        var expanded = McpComposerExpander.Expand("Use //mcp:demo-server here.", registry);
+
+        Assert.Contains("[MCP server reference: demo-server]", expanded, StringComparison.Ordinal);
+        Assert.Contains("Prefer MCP tools from server \"demo-server\"", expanded, StringComparison.Ordinal);
+        Assert.Contains("//mcp:demo-server", expanded, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Expand_AppendsWarningForUnknownMcpReference()
     {
         var expanded = McpComposerExpander.Expand(
             "//mcp:missing__tool",
             new TestMcpRegistry());
 
-        Assert.Contains("Unknown MCP tool 'missing__tool'", expanded, StringComparison.Ordinal);
+        Assert.Contains("Unknown MCP reference 'missing__tool'", expanded, StringComparison.Ordinal);
     }
 }

@@ -90,6 +90,22 @@ public sealed class HarnessTests
 
         Assert.Contains("## Current Task List", builder.ToString(), StringComparison.Ordinal);
         Assert.Contains("Do work", builder.ToString(), StringComparison.Ordinal);
+        Assert.Contains("in_progress", builder.ToString(), StringComparison.Ordinal);
+        Assert.Contains("todo_write before further edits", builder.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TodoWriteTool_Description_IncludesCodingDiscipline()
+    {
+        var tool = new TodoWriteTool(
+            CreateTaskStore(CreateTempRoot()),
+            new ActiveAgentSessionContext(),
+            new TaskListChangedNotifier(),
+            new HarnessNoOpAppLogger());
+
+        Assert.Contains("in_progress", tool.Definition.Description, StringComparison.Ordinal);
+        Assert.Contains("merge=false", tool.Definition.Description, StringComparison.Ordinal);
+        Assert.Contains("kebab-case", tool.Definition.Description, StringComparison.Ordinal);
     }
 
     [Fact]

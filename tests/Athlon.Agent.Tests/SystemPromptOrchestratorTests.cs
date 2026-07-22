@@ -100,10 +100,12 @@ public sealed class SystemPromptOrchestratorTests
         var orchestrator = PromptTestHelpers.CreateOrchestrator(
             new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
             settings);
-        var prompt = orchestrator.PrepareForTurn(AgentSession.Create("coding-workflow"), Array.Empty<ToolDefinition>()).Text;
+        var session = AgentSession.Create("coding-workflow") with { ActiveWorkspace = @"C:\work\demo" };
+        var prompt = orchestrator.PrepareForTurn(session, Array.Empty<ToolDefinition>()).Text;
 
         Assert.Contains("Coding workflow:", prompt, StringComparison.Ordinal);
         Assert.Contains("mvn -q -pl", prompt, StringComparison.Ordinal);
+        Assert.Contains("in Coding mode use todo_write", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

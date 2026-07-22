@@ -1728,6 +1728,19 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return null;
         }
 
+        if (_workspaceContext.Kind == WorkspaceKind.Ssh)
+        {
+            if (string.IsNullOrWhiteSpace(_session.ActiveWorkspace))
+            {
+                return null;
+            }
+
+            var remote = relativeOrFullPath.Replace('\\', '/').Trim();
+            return remote.StartsWith('/')
+                ? RemotePathNormalizer.Collapse(remote)
+                : RemotePathNormalizer.Combine(_session.ActiveWorkspace, remote);
+        }
+
         if (Path.IsPathRooted(relativeOrFullPath))
         {
             return Path.GetFullPath(relativeOrFullPath);
@@ -2255,7 +2268,8 @@ public sealed record AtCompletionItemViewModel(
     string InsertText,
     string MatchText,
     ComposerCompletionItemKind Kind = ComposerCompletionItemKind.File,
-    string? SlashCommandName = null);
+    string? SlashCommandName = null,
+    WorkspaceFileIconKind? IconKind = null);
 
 public sealed class PendingImageAttachmentViewModel
 {

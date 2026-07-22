@@ -23,9 +23,14 @@ public static class TextFileDetector
         "dockerfile", "makefile", "cmakelists.txt", "license", "readme", ".gitignore",
     };
 
-    public static bool IsTextFile(string path)
+    public static bool IsTextFile(string path, bool skipLocalDirectoryCheck = false)
     {
-        if (string.IsNullOrWhiteSpace(path) || Directory.Exists(path))
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        if (!skipLocalDirectoryCheck && Directory.Exists(path))
         {
             return false;
         }

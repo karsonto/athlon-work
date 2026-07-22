@@ -19,6 +19,10 @@ public sealed class AgentModeSectionTests
         var text = builder.ToString();
         Assert.Contains("Session mode:", text, StringComparison.Ordinal);
         Assert.Contains(expectedPhrase, text, StringComparison.Ordinal);
+        if (mode == SessionAgentMode.Coding)
+        {
+            Assert.Contains("structure todos with todo_write before editing", text, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
              xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
              mc:Ignorable="d"
              d:DesignHeight="120"
@@ -72,6 +73,26 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
+                                <controls:WorkspaceFileIcon Grid.Column="0"
+                                                            Width="16"
+                                                            Height="16"
+                                                            Margin="2,0,8,0"
+                                                            VerticalAlignment="Center"
+                                                            Kind="{Binding IconKind, TargetNullValue=File}">
+                                    <controls:WorkspaceFileIcon.Style>
+                                        <Style TargetType="controls:WorkspaceFileIcon">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Kind}" Value="File">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind}" Value="Folder">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </controls:WorkspaceFileIcon.Style>
+                                </controls:WorkspaceFileIcon>
                                 <Border Grid.Column="0"
                                         BorderThickness="1"
                                         CornerRadius="8"
@@ -79,9 +100,16 @@
                                         Margin="0,0,8,0">
                                     <Border.Style>
                                         <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Visible" />
                                             <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionFileBadgeBg}" />
                                             <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionFileBadgeBorder}" />
                                             <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Kind}" Value="File">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Kind}" Value="Folder">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
                                                 <DataTrigger Binding="{Binding Type}" Value="技能">
                                                     <Setter Property="Background" Value="{DynamicResource Brush.AtCompletionSkillBadgeBg}" />
                                                     <Setter Property="BorderBrush" Value="{DynamicResource Brush.AtCompletionSkillBadgeBorder}" />

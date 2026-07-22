@@ -20,6 +20,7 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
             case SessionAgentMode.Coding:
                 builder.AppendLine("- The user selected Coding mode for this session.");
                 builder.AppendLine("- You have full workspace tools (read, write, shell) plus long-term memory and task planning (todo_write).");
+                builder.AppendLine("- For complex multi-step work: structure todos with todo_write before editing; update statuses after verification.");
                 break;
             case SessionAgentMode.Ask:
                 builder.AppendLine("- The user selected Ask mode for this session — read-only Q&A about the workspace.");

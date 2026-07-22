@@ -13,7 +13,6 @@ public sealed class ComposerAtCompletionService
 {
     private const int MaxCompletionItems = 30;
     private const int MaxIndexedFiles = 4000;
-    private const double McpSearchMinScore = 0.1;
 
     private readonly IMcpRegistry _mcpRegistry;
     private readonly IComposerSlashCommandRegistry _slashRegistry;
@@ -48,7 +47,7 @@ public sealed class ComposerAtCompletionService
         }
 
         _skillSnapshot = BuildSkillIndex(skillCatalog, settings);
-        _mcpSnapshot = BuildMcpToolIndex(settings);
+        _mcpSnapshot = BuildMcpServerIndex(settings);
         _slashSourcesInitialized = true;
 
         if (string.IsNullOrWhiteSpace(activeWorkspace) || !Directory.Exists(activeWorkspace))
@@ -147,7 +146,7 @@ public sealed class ComposerAtCompletionService
     public IReadOnlyList<AtCompletionItemViewModel> FilterMatches(ComposerCompletionTrigger trigger, string query) =>
         trigger switch
         {
-            ComposerCompletionTrigger.At => FilterItems(_fileSnapshot, query),
+            ComposerCompletionTrigger.At => FilterPathItems(_fileSnapshot, query),
             ComposerCompletionTrigger.Slash => FilterSlashItems(query),
             _ => Array.Empty<AtCompletionItemViewModel>()
         };
@@ -226,34 +225,19 @@ public sealed class ComposerAtCompletionService
             .Take(MaxCompletionItems)
             .ToArray();
 
-    private IReadOnlyList<AtCompletionItemViewModel> FilterMcpItems(string query)
-    {
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            return _mcpSnapshot;
-        }
-
-        var allowedEncodedNames = _mcpSnapshot
-            .Select(GetMcpEncodedName)
-            .ToHashSet(StringComparer.Ordinal);
-
-        var fromSearch = _mcpRegistry
-            .SearchCatalog(query, MaxCompletionItems, McpSearchMinScore)
-            .Select(result => result.Entry.EncodedName)
-            .Where(allowedEncodedNames.Contains)
-            .ToHashSet(StringComparer.Ordinal);
-
-        var searched = _mcpSnapshot
-            .Where(item => fromSearch.Contains(GetMcpEncodedName(item)))
+    private static IReadOnlyList<AtCompletionItemViewModel> FilterPathItems(
+        IEnumerable<AtCompletionItemViewModel> source,
+        string query) =>
+        source
+            .Where(item => MatchesQuery(item.MatchText, query))
+            .OrderBy(item => Rank(item.MatchText, query))
+            .ThenBy(item => item.Kind == ComposerCompletionItemKind.Folder ? 0 : 1)
+            .ThenBy(item => item.PrimaryText, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxCompletionItems)
             .ToArray();
 
-        return searched.Length > 0 ? searched : FilterItems(_mcpSnapshot, query);
-    }
-
-    private static string GetMcpEncodedName(AtCompletionItemViewModel item) =>
-        item.InsertText.StartsWith("//mcp:", StringComparison.Ordinal)
-            ? item.InsertText["//mcp:".Length..]
-            : item.InsertText;
+    private IReadOnlyList<AtCompletionItemViewModel> FilterMcpItems(string query) =>
+        FilterItems(_mcpSnapshot, query);
 
     private IReadOnlyList<AtCompletionItemViewModel> BuildSkillIndex(IAgentSkillCatalog skillCatalog, AppSettings settings)
     {
@@ -272,7 +256,7 @@ public sealed class ComposerAtCompletionService
         return items;
     }
 
-    private IReadOnlyList<AtCompletionItemViewModel> BuildMcpToolIndex(AppSettings settings)
+    private IReadOnlyList<AtCompletionItemViewModel> BuildMcpServerIndex(AppSettings settings)
     {
         var items = new List<AtCompletionItemViewModel>();
         var statuses = _mcpRegistry.GetStatuses().ToDictionary(status => status.Name, StringComparer.OrdinalIgnoreCase);
@@ -284,17 +268,13 @@ public sealed class ComposerAtCompletionService
                 continue;
             }
 
-            foreach (var tool in status.Tools)
-            {
-                var encoded = McpToolNameCodec.Encode(server.Name, tool.Name);
-                items.Add(new AtCompletionItemViewModel(
-                    Type: "MCP",
-                    PrimaryText: tool.Name,
-                    SecondaryText: server.Name,
-                    InsertText: $"//mcp:{encoded}",
-                    MatchText: $"{server.Name} {tool.Name} {encoded} {tool.Description}",
-                    Kind: ComposerCompletionItemKind.Mcp));
-            }
+            items.Add(new AtCompletionItemViewModel(
+                Type: "MCP",
+                PrimaryText: server.Name,
+                SecondaryText: $"{status.Tools.Count} 个工具",
+                InsertText: $"//mcp:{server.Name}",
+                MatchText: server.Name,
+                Kind: ComposerCompletionItemKind.Mcp));
         }
 
         return items
@@ -307,6 +287,54 @@ public sealed class ComposerAtCompletionService
         var candidates = new List<(AtCompletionItemViewModel Item, int Depth, DateTime LastWriteUtc)>();
         try
         {
+            foreach (var path in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories))
+            {
+                if (generation != _buildGeneration)
+                {
+                    return;
+                }
+
+                if (WorkspacePathFilter.ShouldIgnorePath(path, ignorePatterns))
+                {
+                    continue;
+                }
+
+                var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+                if (string.IsNullOrWhiteSpace(relative) || relative == ".")
+                {
+                    continue;
+                }
+
+                var name = Path.GetFileName(path);
+                var depth = relative.Count(c => c == '/');
+                DateTime lastWriteUtc;
+                try
+                {
+                    lastWriteUtc = Directory.GetLastWriteTimeUtc(path);
+                }
+                catch
+                {
+                    lastWriteUtc = DateTime.MinValue;
+                }
+
+                candidates.Add((
+                    new AtCompletionItemViewModel(
+                        Type: "文件夹",
+                        PrimaryText: name,
+                        SecondaryText: relative + "/",
+                        InsertText: $"@{relative}/",
+                        MatchText: $"{relative} {name}",
+                        Kind: ComposerCompletionItemKind.Folder,
+                        IconKind: WorkspaceFileIconKind.Folder),
+                    depth,
+                    lastWriteUtc));
+
+                if (candidates.Count > MaxIndexedFiles * 2)
+                {
+                    TrimCandidateBuffer(candidates);
+                }
+            }
+
             foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
             {
                 if (generation != _buildGeneration)
@@ -338,7 +366,8 @@ public sealed class ComposerAtCompletionService
                         SecondaryText: relative,
                         InsertText: $"@{relative}",
                         MatchText: $"{relative} {Path.GetFileName(path)}",
-                        Kind: ComposerCompletionItemKind.File),
+                        Kind: ComposerCompletionItemKind.File,
+                        IconKind: WorkspaceFileIconKind.File),
                     depth,
                     lastWriteUtc));
 

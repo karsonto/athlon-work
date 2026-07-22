@@ -66,6 +66,28 @@ public sealed class ToolsPolicySectionTests
         Assert.DoesNotContain("cmd.exe", text, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Append_CodingMode_RequiresTodoBeforeWrites()
+    {
+        var builder = new StringBuilder();
+        new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools: [], mode: SessionAgentMode.Coding));
+
+        var text = builder.ToString();
+        Assert.Contains("todo_write before file_write", text, StringComparison.Ordinal);
+        Assert.Contains("  5. Shell:", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Append_AgentMode_DoesNotRequireTodoBeforeWrites()
+    {
+        var builder = new StringBuilder();
+        new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools: [], mode: SessionAgentMode.Agent));
+
+        var text = builder.ToString();
+        Assert.DoesNotContain("todo_write before file_write", text, StringComparison.Ordinal);
+        Assert.Contains("  4. Shell:", text, StringComparison.Ordinal);
+    }
+
     private static EnvironmentPromptContext CreateContext(
         bool hasWorkspace,
         IReadOnlyList<ToolDefinition> tools,

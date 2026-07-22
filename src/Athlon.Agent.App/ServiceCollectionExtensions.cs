@@ -80,11 +80,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SettingsViewModel>();
 
         services.AddSingleton(sp => new FileEditorViewModel(
-
             sp.GetRequiredService<WorkspaceFileEditorService>(),
-
+            sp.GetRequiredService<WorkspaceGuard>(),
             sp.GetRequiredService<ILocalizationService>(),
-
             sp.GetRequiredService<IUserNotifier>()));
 
         services.AddSingleton(sp => new ContextSidebarViewModel(

@@ -42,8 +42,17 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
         builder.AppendLine("- Tool decision tree:");
         builder.AppendLine("  1. Inspect with the narrowest native read tool whose schema matches the need; do not guess file contents.");
         builder.AppendLine("  2. Run independent read-only calls (file_read, grep_files, glob_files, file_list, memory_search) in parallel; preserve dependency order and never mix writes or execute_command into that round.");
-        builder.AppendLine("  3. Before file_write, file_edit, or apply_patch, explain the intended write.");
-        builder.AppendLine("  4. Shell: cmd.exe only, not PowerShell; quote paths with spaces or non-ASCII and source workspace paths from tool results.");
+        if (PromptModeHelper.IsCodingMode(context))
+        {
+            builder.AppendLine("  3. Coding multi-step work: ensure the todo list is complete via todo_write before file_write, file_edit, or apply_patch.");
+            builder.AppendLine("  4. Before file_write, file_edit, or apply_patch, explain the intended write.");
+            builder.AppendLine("  5. Shell: cmd.exe only, not PowerShell; quote paths with spaces or non-ASCII and source workspace paths from tool results.");
+        }
+        else
+        {
+            builder.AppendLine("  3. Before file_write, file_edit, or apply_patch, explain the intended write.");
+            builder.AppendLine("  4. Shell: cmd.exe only, not PowerShell; quote paths with spaces or non-ASCII and source workspace paths from tool results.");
+        }
         builder.AppendLine("- Skill scripts: use absolute paths from each skill's files-root; execute_command cwd defaults to workspace root.");
         AppendMcpDecisionFlow(builder);
         builder.AppendLine("- If the same tool fails with the same error twice, stop repeating it; gather more context or switch tools.");

@@ -29,10 +29,11 @@ public sealed class CodingWorkflowSectionTests
     public void Append_IncludesVerificationAndDotnet_InCodingMode()
     {
         var builder = new StringBuilder();
-        new CodingWorkflowSection().Append(builder, CreateContext(hasWorkspace: true));
+        new CodingWorkflowSection().Append(builder, CreateContext(hasWorkspace: true, SessionAgentMode.Coding));
 
         var text = builder.ToString();
         Assert.Contains("Coding workflow:", text, StringComparison.Ordinal);
+        Assert.Contains("in Coding mode use todo_write", text, StringComparison.Ordinal);
         Assert.Contains("Verification:", text, StringComparison.Ordinal);
         Assert.Contains("mvn -q -pl", text, StringComparison.Ordinal);
         Assert.Contains("npx tsc", text, StringComparison.Ordinal);

@@ -6,6 +6,7 @@ namespace Athlon.Agent.App.Services.SlashCommands;
 public enum ComposerCompletionItemKind
 {
     File,
+    Folder,
     Skill,
     Mcp,
     SlashCommand
