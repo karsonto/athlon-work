@@ -199,15 +199,22 @@ public partial class MarkdownMessageView : UserControl
     {
         if (FillViewport)
         {
+            // Editor / full-pane: let MarkdownScrollViewer own scrolling.
+            // Nesting an outer HostScroll (Auto) around FlowDocumentScrollViewer
+            // (Disabled) eats mouse wheel without producing a scrollable extent.
             VerticalAlignment = VerticalAlignment.Stretch;
             HostScroll.VerticalAlignment = VerticalAlignment.Stretch;
             HostScroll.ClearValue(FrameworkElement.MaxHeightProperty);
-            HostScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            HostScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            MarkdownViewer.VerticalAlignment = VerticalAlignment.Stretch;
+            MarkdownViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
             return;
         }
 
         VerticalAlignment = VerticalAlignment.Top;
         HostScroll.VerticalAlignment = VerticalAlignment.Top;
+        MarkdownViewer.VerticalAlignment = VerticalAlignment.Top;
+        MarkdownViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
 
         if (MaxContentHeight <= 0)
         {
