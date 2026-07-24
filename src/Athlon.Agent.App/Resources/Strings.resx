@@ -452,6 +452,12 @@
   <data name="Editor_UnsavedTitle" xml:space="preserve">
     <value>未保存的更改</value>
   </data>
+  <data name="Editor_Preview" xml:space="preserve">
+    <value>预览</value>
+  </data>
+  <data name="Editor_Code" xml:space="preserve">
+    <value>代码</value>
+  </data>
   <data name="FileWrite_StreamingContent" xml:space="preserve">
     <value>content = 传输中…</value>
   </data>

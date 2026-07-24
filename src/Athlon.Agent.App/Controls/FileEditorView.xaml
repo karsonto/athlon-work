@@ -5,6 +5,8 @@
              xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
              xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
              xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+             xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              x:Name="EditorRoot"
              Background="{DynamicResource Brush.Panel}"
              HorizontalAlignment="Stretch"
@@ -12,6 +14,7 @@
     <Grid HorizontalAlignment="Stretch"
           VerticalAlignment="Stretch">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
@@ -58,8 +61,69 @@
             </ScrollViewer>
         </Border>
 
-        <Border x:Name="EditorSurface"
+        <Border x:Name="ViewModeBar"
                 Grid.Row="1"
+                Height="34"
+                Visibility="Collapsed"
+                Background="{DynamicResource Brush.Chrome}"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,0,0,1"
+                Padding="10,0,12,0">
+            <Grid VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0"
+                        Style="{StaticResource EditorViewModeTrackStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="{loc:Localize Key=Editor_Preview}"
+                                Command="{Binding SetViewModeCommand}"
+                                CommandParameter="{x:Static vm:EditorViewMode.Preview}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource EditorViewModeButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ActiveDocument.ViewMode}"
+                                                     Value="{x:Static vm:EditorViewMode.Preview}">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.PanelAlt}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content="{loc:Localize Key=Editor_Code}"
+                                Command="{Binding SetViewModeCommand}"
+                                CommandParameter="{x:Static vm:EditorViewMode.Code}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource EditorViewModeButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding ActiveDocument.ViewMode}"
+                                                     Value="{x:Static vm:EditorViewMode.Code}">
+                                            <Setter Property="Background" Value="{DynamicResource Brush.PanelAlt}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock x:Name="PathLabelText"
+                           Grid.Column="1"
+                           Margin="14,0,0,0"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="{DynamicResource Brush.SubtleText}"
+                           TextTrimming="CharacterEllipsis"
+                           Text="{Binding ActiveDocument.PathLabel}" />
+            </Grid>
+        </Border>
+
+        <Border x:Name="EditorSurface"
+                Grid.Row="2"
                 Background="{DynamicResource Brush.Panel}"
                 BorderBrush="{DynamicResource Brush.Border}"
                 BorderThickness="0,1,0,0"
@@ -85,6 +149,21 @@
                                               FillViewport="True"
                                               Padding="20,16"
                                               AssistantTone="True" />
+                <Grid x:Name="HtmlPreviewHost"
+                      Visibility="Collapsed">
+                    <wv2:WebView2 x:Name="HtmlPreviewWebView" />
+                    <Border x:Name="HtmlPreviewError"
+                            Visibility="Collapsed"
+                            Background="{DynamicResource Brush.Panel}"
+                            Padding="24">
+                        <TextBlock x:Name="HtmlPreviewErrorText"
+                                   TextWrapping="Wrap"
+                                   FontSize="13"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                </Grid>
             </Grid>
         </Border>
     </Grid>

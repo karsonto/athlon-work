@@ -452,6 +452,12 @@ Hold to talk</value>
   <data name="Editor_UnsavedTitle" xml:space="preserve">
     <value>Unsaved changes</value>
   </data>
+  <data name="Editor_Preview" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="Editor_Code" xml:space="preserve">
+    <value>Code</value>
+  </data>
   <data name="FileWrite_StreamingContent" xml:space="preserve">
     <value>content = streaming…</value>
   </data>

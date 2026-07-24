@@ -89,6 +89,17 @@ public sealed partial class FileEditorViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void SetViewMode(EditorViewMode mode)
+    {
+        if (ActiveDocument is null || !ActiveDocument.CanPreview)
+        {
+            return;
+        }
+
+        ActiveDocument.ViewMode = mode;
+    }
+
+    [RelayCommand]
     private async Task SaveActiveAsync()
     {
         if (ActiveDocument is null)

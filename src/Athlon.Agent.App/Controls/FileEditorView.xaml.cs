@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Threading;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
@@ -15,16 +16,18 @@ public partial class FileEditorView : UserControl
     private FileEditorViewModel? _editor;
     private EditorDocumentViewModel? _loadedDocument;
     private bool _suppressEditorChange;
-    private readonly DispatcherTimer _markdownPreviewTimer;
+    private bool _htmlPreviewReady;
+    private string? _lastHtmlPreviewContent;
+    private readonly DispatcherTimer _previewRefreshTimer;
 
     public FileEditorView()
     {
         InitializeComponent();
-        _markdownPreviewTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        _previewRefreshTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
         {
             Interval = TimeSpan.FromMilliseconds(120)
         };
-        _markdownPreviewTimer.Tick += OnMarkdownPreviewTimerTick;
+        _previewRefreshTimer.Tick += OnPreviewRefreshTimerTick;
         ApplyEditorChrome();
         CodeEditor.TextChanged += OnCodeEditorTextChanged;
         DataContextChanged += (_, _) => AttachEditor(DataContext as FileEditorViewModel);
@@ -37,14 +40,20 @@ public partial class FileEditorView : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         AppThemeManager.ThemeChanged -= OnThemeChanged;
-        _markdownPreviewTimer.Stop();
+        _previewRefreshTimer.Stop();
     }
 
     private void OnThemeChanged(object? sender, EventArgs e)
     {
         ApplyEditorChrome();
-        if (_loadedDocument is null || _loadedDocument.PreferMarkdownPreview)
+        if (_loadedDocument is null || _loadedDocument.ShowPreview)
         {
+            if (_loadedDocument is { ShowPreview: true, IsHtmlFile: true })
+            {
+                _lastHtmlPreviewContent = null;
+                RefreshPreviewSurface(immediate: true);
+            }
+
             return;
         }
 
@@ -95,7 +104,7 @@ public partial class FileEditorView : UserControl
 
     private void SyncEditorToActiveDocument()
     {
-        if (_suppressEditorChange || _loadedDocument is null || _loadedDocument.PreferMarkdownPreview)
+        if (_suppressEditorChange || _loadedDocument is null || _loadedDocument.ShowPreview)
         {
             return;
         }
@@ -114,7 +123,7 @@ public partial class FileEditorView : UserControl
         {
             ApplyReadOnlyState();
             UpdateEditorSurfaceMode();
-            RefreshMarkdownPreview();
+            RefreshPreviewSurface();
             return;
         }
 
@@ -129,6 +138,7 @@ public partial class FileEditorView : UserControl
             _loadedDocument.PropertyChanged += OnActiveDocumentPropertyChanged;
         }
 
+        _lastHtmlPreviewContent = null;
         _suppressEditorChange = true;
         try
         {
@@ -138,6 +148,7 @@ public partial class FileEditorView : UserControl
                 CodeEditor.IsReadOnly = true;
                 CodeEditor.SyntaxHighlighting = null;
                 MarkdownPreview.Markdown = string.Empty;
+                ClearHtmlPreview();
                 UpdateEditorSurfaceMode();
                 return;
             }
@@ -146,9 +157,9 @@ public partial class FileEditorView : UserControl
             CodeEditor.SyntaxHighlighting = EditorSyntaxHighlighting.Resolve(document.FilePath);
             CodeEditor.TextArea.TextView.Redraw();
             CodeEditor.ScrollToHome();
-            RefreshMarkdownPreview();
             ApplyReadOnlyState();
             UpdateEditorSurfaceMode();
+            RefreshPreviewSurface(immediate: true);
         }
         finally
         {
@@ -161,14 +172,73 @@ public partial class FileEditorView : UserControl
         if (e.PropertyName == nameof(EditorDocumentViewModel.IsReadOnly))
         {
             ApplyReadOnlyState();
+            return;
+        }
+
+        if (e.PropertyName == nameof(EditorDocumentViewModel.ViewMode)
+            || e.PropertyName == nameof(EditorDocumentViewModel.ShowPreview))
+        {
+            if (_loadedDocument?.ShowPreview == true)
+            {
+                SyncEditorToActiveDocumentBeforePreview();
+            }
+            else if (_loadedDocument is not null)
+            {
+                SyncDocumentContentToCodeEditor();
+            }
+
             UpdateEditorSurfaceMode();
-            RefreshMarkdownPreview();
+            RefreshPreviewSurface(immediate: true);
             return;
         }
 
         if (e.PropertyName == nameof(EditorDocumentViewModel.Content))
         {
-            RefreshMarkdownPreview();
+            if (_loadedDocument?.ShowPreview == true)
+            {
+                SyncDocumentContentToCodeEditor();
+                RefreshPreviewSurface();
+            }
+            else if (!_suppressEditorChange
+                     && _loadedDocument is not null
+                     && !string.Equals(CodeEditor.Document.Text, _loadedDocument.Content, StringComparison.Ordinal))
+            {
+                SyncDocumentContentToCodeEditor();
+            }
+        }
+    }
+
+    private void SyncDocumentContentToCodeEditor()
+    {
+        if (_loadedDocument is null
+            || string.Equals(CodeEditor.Document.Text, _loadedDocument.Content, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _suppressEditorChange = true;
+        try
+        {
+            CodeEditor.Document.Text = _loadedDocument.Content;
+        }
+        finally
+        {
+            _suppressEditorChange = false;
+        }
+    }
+
+    private void SyncEditorToActiveDocumentBeforePreview()
+    {
+        if (_suppressEditorChange || _loadedDocument is null)
+        {
+            return;
+        }
+
+        // Capture AvalonEdit buffer before hiding Code surface.
+        var text = CodeEditor.Document.Text;
+        if (!string.Equals(_loadedDocument.Content, text, StringComparison.Ordinal))
+        {
+            _loadedDocument.Content = text;
         }
     }
 
@@ -179,37 +249,125 @@ public partial class FileEditorView : UserControl
 
     private void UpdateEditorSurfaceMode()
     {
-        var useMarkdownPreview = _loadedDocument?.PreferMarkdownPreview ?? false;
-        CodeEditor.Visibility = useMarkdownPreview ? Visibility.Collapsed : Visibility.Visible;
-        MarkdownPreview.Visibility = useMarkdownPreview ? Visibility.Visible : Visibility.Collapsed;
+        var document = _loadedDocument;
+        var canPreview = document?.CanPreview == true;
+        var showPreview = document?.ShowPreview == true;
+        var showMarkdown = showPreview && document!.IsMarkdownFile;
+        var showHtml = showPreview && document!.IsHtmlFile;
+
+        ViewModeBar.Visibility = canPreview ? Visibility.Visible : Visibility.Collapsed;
+
+        CodeEditor.Visibility = showPreview ? Visibility.Collapsed : Visibility.Visible;
+        MarkdownPreview.Visibility = showMarkdown ? Visibility.Visible : Visibility.Collapsed;
+        HtmlPreviewHost.Visibility = showHtml ? Visibility.Visible : Visibility.Collapsed;
+
+        if (!showMarkdown)
+        {
+            MarkdownPreview.Markdown = string.Empty;
+        }
+
+        if (!showHtml)
+        {
+            ClearHtmlPreview();
+        }
     }
 
-    private void RefreshMarkdownPreview()
+    private void RefreshPreviewSurface(bool immediate = false)
     {
-        if (_loadedDocument is null || !_loadedDocument.PreferMarkdownPreview)
+        if (_loadedDocument is null || !_loadedDocument.ShowPreview)
         {
-            _markdownPreviewTimer.Stop();
-            MarkdownPreview.Markdown = string.Empty;
+            _previewRefreshTimer.Stop();
             return;
         }
 
-        _markdownPreviewTimer.Stop();
-        _markdownPreviewTimer.Start();
+        if (immediate)
+        {
+            _previewRefreshTimer.Stop();
+            ApplyPreviewContent();
+            return;
+        }
+
+        _previewRefreshTimer.Stop();
+        _previewRefreshTimer.Start();
     }
 
-    private void OnMarkdownPreviewTimerTick(object? sender, EventArgs e)
+    private void OnPreviewRefreshTimerTick(object? sender, EventArgs e)
     {
-        _markdownPreviewTimer.Stop();
-        if (_loadedDocument is { PreferMarkdownPreview: true } document
-            && !string.Equals(MarkdownPreview.Markdown, document.Content, StringComparison.Ordinal))
+        _previewRefreshTimer.Stop();
+        ApplyPreviewContent();
+    }
+
+    private void ApplyPreviewContent()
+    {
+        if (_loadedDocument is not { ShowPreview: true } document)
         {
-            MarkdownPreview.Markdown = document.Content;
+            return;
         }
+
+        if (document.IsMarkdownFile)
+        {
+            if (!string.Equals(MarkdownPreview.Markdown, document.Content, StringComparison.Ordinal))
+            {
+                MarkdownPreview.Markdown = document.Content;
+            }
+
+            return;
+        }
+
+        if (document.IsHtmlFile)
+        {
+            _ = LoadHtmlPreviewAsync(document.Content);
+        }
+    }
+
+    private async Task LoadHtmlPreviewAsync(string content)
+    {
+        if (string.Equals(_lastHtmlPreviewContent, content, StringComparison.Ordinal)
+            && HtmlPreviewError.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        try
+        {
+            await WebView2Initializer.EnsureCoreWebView2Async(HtmlPreviewWebView).ConfigureAwait(true);
+            if (HtmlPreviewWebView.CoreWebView2 is null)
+            {
+                throw new InvalidOperationException("WebView2 未初始化。");
+            }
+
+            if (!_htmlPreviewReady)
+            {
+                HtmlPreviewWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+                HtmlPreviewWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+                _htmlPreviewReady = true;
+            }
+
+            HtmlPreviewWebView.NavigateToString(MarkdownHtmlRenderer.BuildPreviewDocument(content));
+            _lastHtmlPreviewContent = content;
+            HtmlPreviewError.Visibility = Visibility.Collapsed;
+            HtmlPreviewWebView.Visibility = Visibility.Visible;
+        }
+        catch (Exception exception)
+        {
+            _lastHtmlPreviewContent = null;
+            HtmlPreviewWebView.Visibility = Visibility.Collapsed;
+            HtmlPreviewErrorText.Text = Strings.Format("Preview_HtmlFailedMessage", exception.Message);
+            HtmlPreviewError.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void ClearHtmlPreview()
+    {
+        HtmlPreviewError.Visibility = Visibility.Collapsed;
+        HtmlPreviewErrorText.Text = string.Empty;
+        // Keep WebView instance; only hide host. Avoid NavigateToString(empty) flicker.
+        _lastHtmlPreviewContent = null;
     }
 
     private void OnCodeEditorTextChanged(object? sender, EventArgs e)
     {
-        if (_suppressEditorChange || _loadedDocument is null || _loadedDocument.PreferMarkdownPreview)
+        if (_suppressEditorChange || _loadedDocument is null || _loadedDocument.ShowPreview)
         {
             return;
         }
