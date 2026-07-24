@@ -151,7 +151,7 @@ public sealed class ChildAgentToolRouterTests
             return McpSearchIndex.Search(catalog, query, topK, minScore);
         }
 
-        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>
+        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null) =>
             Task.CompletedTask;
 
         public Task<ToolResult> InvokeAsync(

@@ -250,7 +250,7 @@ public sealed class CompositeToolRouterHarnessTests
         public IReadOnlyList<McpSearchIndex.SearchResult> SearchCatalog(string query, int topK, double minScore, string? serverName = null) =>
             McpSearchIndex.Search(ListCatalogEntries(), query, topK, minScore);
 
-        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>
+        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null) =>
             Task.CompletedTask;
 
         public Task<ToolResult> InvokeAsync(

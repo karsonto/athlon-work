@@ -49,6 +49,7 @@ public sealed class AppSettings
 {
     public ModelSettings Model { get; set; } = new();
     public ToolPermissionSettings ToolPermissions { get; set; } = new();
+    [JsonConverter(typeof(McpServersJsonConverter))]
     public List<McpServerSettings> McpServers { get; set; } = new();
     public McpSearchSettings McpSearch { get; set; } = new();
     public List<SkillSettings> Skills { get; set; } = new();
@@ -150,14 +151,18 @@ public sealed class McpServerSettings
 {
     public string Name { get; set; } = "filesystem";
     public bool Enabled { get; set; } = true;
-    /// <summary>Claude Desktop field: <c>type</c> (<c>stdio</c> or <c>http</c> / streamable HTTP).</summary>
+    /// <summary>
+    /// Claude Desktop field: <c>type</c> —
+    /// <c>stdio</c>, <c>http</c>/<c>https</c> (auto-detect Streamable HTTP then SSE),
+    /// <c>sse</c> (classic HTTP+SSE), or <c>streamable-http</c>.
+    /// </summary>
     public string TransportType { get; set; } = "stdio";
-    /// <summary>Streamable HTTP MCP endpoint URL (required when <see cref="TransportType"/> is HTTP).</summary>
+    /// <summary>HTTP MCP endpoint URL (required when <see cref="TransportType"/> is HTTP/SSE).</summary>
     public string Url { get; set; } = string.Empty;
     public string Command { get; set; } = "npx";
     public List<string> Args { get; set; } = new();
     public Dictionary<string, string> Env { get; set; } = new();
-    /// <summary>Optional HTTP headers (e.g. Authorization) for streamable HTTP transport.</summary>
+    /// <summary>Optional HTTP headers (e.g. Authorization) for HTTP/SSE MCP transports.</summary>
     public Dictionary<string, string> Headers { get; set; } = new();
 
     /// <summary>Working directory for stdio MCP server process (Claude Desktop <c>cwd</c>).</summary>

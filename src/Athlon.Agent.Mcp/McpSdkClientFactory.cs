@@ -26,7 +26,7 @@ public static class McpSdkClientFactory
                         Name = clientName ?? "Athlon.Agent",
                         Version = typeof(McpSdkClientFactory).Assembly.GetName().Version?.ToString(3) ?? "1.0.0"
                     },
-                    InitializationTimeout = McpClientDefaults.RequestTimeout
+                    InitializationTimeout = McpClientDefaults.ConnectInitializationTimeout
                 },
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
@@ -52,16 +52,20 @@ public static class McpSdkClientFactory
     {
         getLastStderrLine = null;
 
-        if (McpTransportKinds.IsStreamableHttp(server.TransportType))
+        if (McpTransportKinds.IsHttp(server.TransportType))
         {
-            transportLabel = "streamable-http";
-            var httpClient = new HttpClient { Timeout = McpClientDefaults.RequestTimeout };
+            var httpMode = McpTransportKinds.ResolveHttpTransportMode(server.TransportType, server.Url);
+            transportLabel = McpTransportKinds.FormatHttpTransportLabel(httpMode);
+            // SSE / Streamable HTTP keep a long-lived response open; a finite HttpClient.Timeout
+            // aborts the stream. Per-RPC timing uses McpClientOptions.InitializationTimeout instead.
+            var httpClient = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
             return new HttpClientTransport(
                 new HttpClientTransportOptions
                 {
                     Name = name,
                     Endpoint = new Uri(server.Url, UriKind.Absolute),
-                    TransportMode = HttpTransportMode.StreamableHttp,
+                    TransportMode = httpMode,
+                    ConnectionTimeout = McpClientDefaults.HttpConnectionTimeout,
                     AdditionalHeaders = server.Headers.Count == 0
                         ? null
                         : new Dictionary<string, string>(server.Headers)

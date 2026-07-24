@@ -288,11 +288,31 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private async Task RefreshMcpRuntimeAsync()
     {
-        await _mcpRegistry.RefreshAsync(Settings.Settings.McpServers);
-        Settings.RefreshRuntimeStates();
-        Sidebar.Refresh(Settings.Settings);
-        RefreshAtCompletionSources();
-        OnPropertyChanged(nameof(Sidebar));
+        void PublishMcpStatuses()
+        {
+            void Apply()
+            {
+                Settings.RefreshRuntimeStates();
+                Sidebar.Refresh(Settings.Settings);
+                RefreshAtCompletionSources();
+                OnPropertyChanged(nameof(Sidebar));
+            }
+
+            var dispatcher = System.Windows.Application.Current?.Dispatcher;
+            if (dispatcher is null || dispatcher.CheckAccess())
+            {
+                Apply();
+                return;
+            }
+
+            _ = dispatcher.InvokeAsync(Apply);
+        }
+
+        await _mcpRegistry.RefreshAsync(
+            Settings.Settings.McpServers,
+            cancellationToken: default,
+            onStatusesChanged: PublishMcpStatuses).ConfigureAwait(true);
+        PublishMcpStatuses();
     }
 
     public async Task InitializeAsync()

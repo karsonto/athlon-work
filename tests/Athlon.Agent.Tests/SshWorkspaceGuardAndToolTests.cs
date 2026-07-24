@@ -153,7 +153,7 @@ public sealed class SshWorkspaceGuardAndToolTests
             int topK,
             double minScore,
             string? serverName = null) => [];
-        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>
+        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null) =>
             Task.CompletedTask;
         public Task<ToolResult> InvokeAsync(
             string serverName,

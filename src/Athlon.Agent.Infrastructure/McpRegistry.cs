@@ -22,7 +22,10 @@ public interface IMcpRegistry
         int topK,
         double minScore,
         string? serverName = null);
-    Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default);
+    Task RefreshAsync(
+        IReadOnlyList<McpServerSettings> settings,
+        CancellationToken cancellationToken = default,
+        Action? onStatusesChanged = null);
     Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments args, CancellationToken cancellationToken = default);
 }
 
@@ -114,7 +117,10 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         _catalogCache = null;
     }
 
-    public async Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default)
+    public async Task RefreshAsync(
+        IReadOnlyList<McpServerSettings> settings,
+        CancellationToken cancellationToken = default,
+        Action? onStatusesChanged = null)
     {
         await _refreshLock.WaitAsync(cancellationToken);
         try
@@ -127,6 +133,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 .ToDictionary(server => server.Name.Trim(), StringComparer.OrdinalIgnoreCase);
 
             // Stop disabled/removed servers.
+            var removedAny = false;
             foreach (var existing in _clients.Keys.ToArray())
             {
                 if (!enabled.ContainsKey(existing) && _clients.TryRemove(existing, out var removed))
@@ -137,10 +144,16 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                     _statuses[existing] = new McpServerStatus(existing, McpConnectionState.Disabled, "stdio", Array.Empty<McpTool>());
                     try { await removed.DisposeAsync(); } catch { /* ignore */ }
                     RecordMcpServer(existing, "disconnected");
+                    removedAny = true;
                 }
             }
 
-            // Start/refresh enabled servers (always recreate so saved config changes apply).
+            if (removedAny)
+            {
+                onStatusesChanged?.Invoke();
+            }
+
+            var toConnect = new List<(string Name, McpServerSettings Server, string Fingerprint)>();
             foreach (var (name, server) in enabled)
             {
                 var fingerprint = CreateConfigFingerprint(server);
@@ -157,53 +170,103 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                     try { await existing.DisposeAsync(); } catch { /* ignore */ }
                 }
 
-                IMcpClient client;
-                try
-                {
-                    client = await McpSdkClientFactory.ConnectAsync(
-                        name,
-                        WithStdioSsoEnvironment(server),
-                        workspaceContext.RootPath,
-                        clientName: "Athlon.Agent",
-                        cancellationToken);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.Warning("MCP connect failed for {Server}: {Message}", name, ex.Message);
-                    _tools[name] = Array.Empty<McpTool>();
-                    _statuses[name] = new McpServerStatus(
-                        name,
-                        McpConnectionState.Error,
-                        ResolveTransportLabel(server),
-                        Array.Empty<McpTool>(),
-                        LastError: ex.Message);
-                    RecordMcpServer(name, "disconnected", errorType: ex.GetType().Name);
-                    continue;
-                }
-
-                _clients[name] = client;
-                _configFingerprints[name] = fingerprint;
-                try
-                {
-                    var tools = await client.ListToolsAsync(cancellationToken);
-                    _tools[name] = tools;
-                    _statuses[name] = client.Status with { Tools = tools.ToArray() };
-                    RecordMcpServer(name, "connected", toolCount: tools.Count);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.Warning("MCP refresh failed for {Server}: {Message}", name, ex.Message);
-                    _tools[name] = Array.Empty<McpTool>();
-                    _statuses[name] = client.Status with { State = McpConnectionState.Error, Tools = Array.Empty<McpTool>(), LastError = ex.Message };
-                    RecordMcpServer(name, "disconnected", errorType: ex.GetType().Name);
-                }
+                var transportLabel = ResolveTransportLabel(server);
+                _tools[name] = Array.Empty<McpTool>();
+                _statuses[name] = new McpServerStatus(
+                    name,
+                    McpConnectionState.Connecting,
+                    transportLabel,
+                    Array.Empty<McpTool>());
+                toConnect.Add((name, server, fingerprint));
             }
+
+            if (toConnect.Count > 0)
+            {
+                onStatusesChanged?.Invoke();
+            }
+
+            // Connect independently so one wedged stdio server cannot hide HTTP MCP status.
+            var connectTasks = toConnect.Select(item => ConnectOneAsync(
+                item.Name,
+                item.Server,
+                item.Fingerprint,
+                onStatusesChanged,
+                cancellationToken));
+            await Task.WhenAll(connectTasks).ConfigureAwait(false);
         }
         finally
         {
             InvalidateCatalogCache();
             _refreshLock.Release();
         }
+    }
+
+    private async Task ConnectOneAsync(
+        string name,
+        McpServerSettings server,
+        string fingerprint,
+        Action? onStatusesChanged,
+        CancellationToken cancellationToken)
+    {
+        var transportLabel = ResolveTransportLabel(server);
+        IMcpClient client;
+        try
+        {
+            using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            connectCts.CancelAfter(McpClientDefaults.ConnectInitializationTimeout + TimeSpan.FromSeconds(5));
+
+            client = await McpSdkClientFactory.ConnectAsync(
+                name,
+                WithStdioSsoEnvironment(server),
+                workspaceContext.RootPath,
+                clientName: "Athlon.Agent",
+                connectCts.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var message = ex is OperationCanceledException
+                ? $"Timed out connecting to MCP server ({transportLabel})."
+                : ex.Message;
+            _logger.Warning("MCP connect failed for {Server}: {Message}", name, message);
+            _tools[name] = Array.Empty<McpTool>();
+            _statuses[name] = new McpServerStatus(
+                name,
+                McpConnectionState.Error,
+                transportLabel,
+                Array.Empty<McpTool>(),
+                LastError: message);
+            RecordMcpServer(name, "disconnected", errorType: ex.GetType().Name);
+            onStatusesChanged?.Invoke();
+            return;
+        }
+
+        _clients[name] = client;
+        _configFingerprints[name] = fingerprint;
+        try
+        {
+            var tools = await client.ListToolsAsync(cancellationToken).ConfigureAwait(false);
+            _tools[name] = tools;
+            _statuses[name] = client.Status with { Tools = tools.ToArray() };
+            RecordMcpServer(name, "connected", toolCount: tools.Count);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.Warning("MCP refresh failed for {Server}: {Message}", name, ex.Message);
+            _tools[name] = Array.Empty<McpTool>();
+            _statuses[name] = client.Status with
+            {
+                State = McpConnectionState.Error,
+                Tools = Array.Empty<McpTool>(),
+                LastError = ex.Message
+            };
+            RecordMcpServer(name, "disconnected", errorType: ex.GetType().Name);
+        }
+
+        onStatusesChanged?.Invoke();
     }
 
     private static void RecordMcpServer(string serverName, string action, int? toolCount = null, string? errorType = null)
@@ -305,7 +368,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
     }
 
     private static bool IsValidServerConfig(McpServerSettings server) =>
-        McpTransportKinds.IsStreamableHttp(server.TransportType)
+        McpTransportKinds.IsHttp(server.TransportType)
             ? !string.IsNullOrWhiteSpace(server.Url)
             : !string.IsNullOrWhiteSpace(server.Command);
 
@@ -336,7 +399,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
     }
 
     private static bool IsSupportedTransport(string? transportType) =>
-        McpTransportKinds.IsStdio(transportType) || McpTransportKinds.IsStreamableHttp(transportType);
+        McpTransportKinds.IsStdio(transportType) || McpTransportKinds.IsHttp(transportType);
 
     private static string CreateConfigFingerprint(McpServerSettings server) =>
         JsonSerializer.Serialize(server, JsonFileStore.Options);
@@ -347,7 +410,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
     /// </summary>
     internal static McpServerSettings WithStdioSsoEnvironment(McpServerSettings server)
     {
-        if (McpTransportKinds.IsStreamableHttp(server.TransportType))
+        if (McpTransportKinds.IsHttp(server.TransportType))
         {
             return server;
         }
@@ -415,8 +478,16 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         }
     }
 
-    private static string ResolveTransportLabel(McpServerSettings server) =>
-        McpTransportKinds.IsStreamableHttp(server.TransportType) ? "streamable-http" : "stdio";
+    private static string ResolveTransportLabel(McpServerSettings server)
+    {
+        if (!McpTransportKinds.IsHttp(server.TransportType))
+        {
+            return "stdio";
+        }
+
+        var mode = McpTransportKinds.ResolveHttpTransportMode(server.TransportType, server.Url);
+        return McpTransportKinds.FormatHttpTransportLabel(mode);
+    }
 
     public async ValueTask DisposeAsync()
     {

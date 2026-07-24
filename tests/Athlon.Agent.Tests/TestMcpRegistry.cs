@@ -46,7 +46,7 @@ internal sealed class TestMcpRegistry(IReadOnlyList<McpCatalogEntry>? catalog = 
             ToolSchema.FromMcp(entry.InputSchemaJson),
             Source: "mcp")).ToArray();
 
-    public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>
+    public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null) =>
         Task.CompletedTask;
 
     public Task<ToolResult> InvokeAsync(

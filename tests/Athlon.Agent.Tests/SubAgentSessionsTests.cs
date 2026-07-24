@@ -137,7 +137,7 @@ public sealed class SubAgentSessionsTests
         public int CatalogSchemaCharCount => 0;
         public IReadOnlyList<McpSearchIndex.SearchResult> SearchCatalog(string query, int topK, double minScore, string? serverName = null) =>
             Array.Empty<McpSearchIndex.SearchResult>();
-        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) =>
+        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null) =>
             Task.CompletedTask;
         public Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments arguments, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Failure("none", "none"));

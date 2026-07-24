@@ -305,7 +305,7 @@ public sealed class AgentRuntimeProgressTests
         public IReadOnlyList<McpSearchIndex.SearchResult> SearchCatalog(string query, int topK, double minScore, string? serverName = null) =>
             McpSearchIndex.Search(ListCatalogEntries(), query, topK, minScore);
 
-        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null) => Task.CompletedTask;
 
         public Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments args, CancellationToken cancellationToken = default)
         {
