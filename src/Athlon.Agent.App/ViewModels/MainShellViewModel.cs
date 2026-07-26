@@ -1171,7 +1171,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         Application.Current?.Dispatcher.InvokeAsync(async () =>
         {
             await ComposerHarness.RefreshPlanAsync().ConfigureAwait(true);
-            SyncPlanDocumentWindow(activateIfOpen: true);
+            // create_plan / update_plan: always resurface the plan window, even if the user
+            // previously dismissed the prior draft.
+            SyncPlanDocumentWindow(forceShow: true);
         });
     }
 
@@ -1185,7 +1187,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
     }
 
-    private void SyncPlanDocumentWindow(bool activateIfOpen = false)
+    private void SyncPlanDocumentWindow(bool forceShow = false)
     {
         if (!ComposerHarness.ShowPlanPanel || ComposerHarness.CurrentPlan is null)
         {
@@ -1193,23 +1195,23 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
+        if (forceShow)
+        {
+            _dismissedPlanWindowKey = null;
+        }
+
         var planKey = BuildPlanWindowKey(ComposerHarness.CurrentPlan);
         if (_planDocumentWindow is not null)
         {
-            if (activateIfOpen)
+            if (forceShow)
             {
-                if (_planDocumentWindow.WindowState == WindowState.Minimized)
-                {
-                    _planDocumentWindow.WindowState = WindowState.Normal;
-                }
-
-                _planDocumentWindow.Activate();
+                BringPlanDocumentWindowToFront(_planDocumentWindow);
             }
 
             return;
         }
 
-        if (string.Equals(planKey, _dismissedPlanWindowKey, StringComparison.Ordinal))
+        if (!forceShow && string.Equals(planKey, _dismissedPlanWindowKey, StringComparison.Ordinal))
         {
             return;
         }
@@ -1224,6 +1226,21 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _planDocumentWindow = window;
         _dismissedPlanWindowKey = null;
         window.Show();
+        if (forceShow)
+        {
+            BringPlanDocumentWindowToFront(window);
+        }
+    }
+
+    private static void BringPlanDocumentWindowToFront(Window window)
+    {
+        if (window.WindowState == WindowState.Minimized)
+        {
+            window.WindowState = WindowState.Normal;
+        }
+
+        window.Activate();
+        window.Focus();
     }
 
     private void OnPlanDocumentWindowClosed(object? sender, EventArgs e)
