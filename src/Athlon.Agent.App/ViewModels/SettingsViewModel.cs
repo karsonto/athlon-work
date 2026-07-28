@@ -188,8 +188,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     public AppSettings Settings { get; }
     public string SettingsConfigPath => Path.Combine(_paths.ConfigPath, "settings.json");
     public string SkillsDirectoryPath => _paths.SkillsPath;
-    public string SkillsSettingsDescription =>
-        _loc.Format("Settings_SkillsDescription", SkillsDirectoryPath, SettingsConfigPath);
 
     public IReadOnlyList<LanguageOption> LanguageOptions => AppCultureManager.GetLanguageOptions();
 
@@ -202,7 +200,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     private void OnCultureChanged(object? sender, EventArgs e)
     {
         OnPropertyChanged(nameof(LanguageOptions));
-        OnPropertyChanged(nameof(SkillsSettingsDescription));
     }
 
     public string[] Sections { get; } = { "Models", "MCP", "Skills", "Workspace", "Tool Permissions", "Appearance" };

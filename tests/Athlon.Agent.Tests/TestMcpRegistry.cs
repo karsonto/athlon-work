@@ -9,6 +9,8 @@ internal sealed class TestMcpRegistry(IReadOnlyList<McpCatalogEntry>? catalog = 
     private IReadOnlyList<McpCatalogEntry> _catalog = catalog ?? Array.Empty<McpCatalogEntry>();
 
     public int InvocationCount { get; private set; }
+    public int ReconnectCount { get; private set; }
+    public string? LastReconnectServerName { get; private set; }
     public string? LastServerName { get; private set; }
     public string? LastToolName { get; private set; }
     public ToolCallArguments? LastArguments { get; private set; }
@@ -48,6 +50,13 @@ internal sealed class TestMcpRegistry(IReadOnlyList<McpCatalogEntry>? catalog = 
 
     public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null) =>
         Task.CompletedTask;
+
+    public Task ReconnectAsync(string serverName, IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null)
+    {
+        ReconnectCount++;
+        LastReconnectServerName = serverName;
+        return Task.CompletedTask;
+    }
 
     public Task<ToolResult> InvokeAsync(
         string serverName,

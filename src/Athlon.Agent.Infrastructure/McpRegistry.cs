@@ -26,6 +26,14 @@ public interface IMcpRegistry
         IReadOnlyList<McpServerSettings> settings,
         CancellationToken cancellationToken = default,
         Action? onStatusesChanged = null);
+    /// <summary>
+    /// Force-reconnect a single enabled server, ignoring config fingerprint skip logic.
+    /// </summary>
+    Task ReconnectAsync(
+        string serverName,
+        IReadOnlyList<McpServerSettings> settings,
+        CancellationToken cancellationToken = default,
+        Action? onStatusesChanged = null);
     Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments args, CancellationToken cancellationToken = default);
 }
 
@@ -193,6 +201,58 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 onStatusesChanged,
                 cancellationToken));
             await Task.WhenAll(connectTasks).ConfigureAwait(false);
+        }
+        finally
+        {
+            InvalidateCatalogCache();
+            _refreshLock.Release();
+        }
+    }
+
+    public async Task ReconnectAsync(
+        string serverName,
+        IReadOnlyList<McpServerSettings> settings,
+        CancellationToken cancellationToken = default,
+        Action? onStatusesChanged = null)
+    {
+        if (string.IsNullOrWhiteSpace(serverName))
+        {
+            return;
+        }
+
+        await _refreshLock.WaitAsync(cancellationToken);
+        try
+        {
+            var server = settings.FirstOrDefault(item =>
+                item.Enabled
+                && !string.IsNullOrWhiteSpace(item.Name)
+                && string.Equals(item.Name.Trim(), serverName.Trim(), StringComparison.OrdinalIgnoreCase)
+                && IsValidServerConfig(item)
+                && IsSupportedTransport(item.TransportType));
+            if (server is null)
+            {
+                return;
+            }
+
+            var name = server.Name.Trim();
+            if (_clients.TryRemove(name, out var existing))
+            {
+                try { await existing.DisposeAsync(); } catch { /* ignore */ }
+            }
+
+            _configFingerprints.TryRemove(name, out _);
+            _tools[name] = Array.Empty<McpTool>();
+            var fingerprint = CreateConfigFingerprint(server);
+            _toolCallTimeoutSeconds[name] = Math.Clamp(server.ToolCallTimeoutSeconds, 1, 3600);
+            var transportLabel = ResolveTransportLabel(server);
+            _statuses[name] = new McpServerStatus(
+                name,
+                McpConnectionState.Connecting,
+                transportLabel,
+                Array.Empty<McpTool>());
+            onStatusesChanged?.Invoke();
+            await ConnectOneAsync(name, server, fingerprint, onStatusesChanged, cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {

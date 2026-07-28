@@ -7,7 +7,14 @@ namespace Athlon.Agent.App.ViewModels;
 
 public sealed partial class McpSidebarServerViewModel : ObservableObject
 {
-    public McpSidebarServerViewModel(string name, bool enabled, McpServerStatus? status, bool isExpanded = false)
+    private readonly Func<string, Task>? _onActivate;
+
+    public McpSidebarServerViewModel(
+        string name,
+        bool enabled,
+        McpServerStatus? status,
+        bool isExpanded = false,
+        Func<string, Task>? onActivate = null)
     {
         Name = name;
         Enabled = enabled;
@@ -18,6 +25,7 @@ public sealed partial class McpSidebarServerViewModel : ObservableObject
                 ? status.Tools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
                 : Array.Empty<string>());
         IsExpanded = isExpanded && ToolNames.Count > 0;
+        _onActivate = onActivate;
     }
 
     public string Name { get; }
@@ -42,6 +50,17 @@ public sealed partial class McpSidebarServerViewModel : ObservableObject
         {
             IsExpanded = !IsExpanded;
         }
+    }
+
+    [RelayCommand]
+    private async Task ActivateAsync()
+    {
+        if (_onActivate is null || string.IsNullOrWhiteSpace(Name))
+        {
+            return;
+        }
+
+        await _onActivate(Name).ConfigureAwait(true);
     }
 
     private static string BuildSummary(bool enabled, McpServerStatus? status)

@@ -416,6 +416,15 @@
   <data name="Context_McpServers" xml:space="preserve">
     <value>MCP 服务器</value>
   </data>
+  <data name="Context_SkillsMcpHint" xml:space="preserve">
+    <value>双击标签启停；MCP 异常时双击重连</value>
+  </data>
+  <data name="Context_SkillTagTooltip" xml:space="preserve">
+    <value>双击启停技能</value>
+  </data>
+  <data name="Context_McpExpandTooltip" xml:space="preserve">
+    <value>展开或收起工具列表</value>
+  </data>
   <data name="Context_OpenInEditor" xml:space="preserve">
     <value>在编辑器中打开</value>
   </data>
@@ -1115,7 +1124,7 @@
     <value>MCP Search Mode</value>
   </data>
   <data name="Settings_McpServersHint" xml:space="preserve">
-    <value>MCP 服务从 {0} 读取；此页面仅控制每个服务是否启用。新增、删除和命令参数请直接修改 JSON 配置。</value>
+    <value>MCP 服务从 {0} 读取。启停请在右侧上下文「技能」页双击标签；新增、删除和命令参数请直接修改 JSON 配置。</value>
   </data>
   <data name="Settings_McpServersTitle" xml:space="preserve">
     <value>Installed MCP Servers</value>
@@ -1163,7 +1172,7 @@
     <value>关闭后聊天中不显示 file_read、execute_command 等工具卡片；上下文压缩通知仍会显示。</value>
   </data>
   <data name="Settings_SkillsDescription" xml:space="preserve">
-    <value>技能从 {0} 自动加载；此页面控制每个技能是否启用。关闭后不会出现在系统提示与 @skill 补全中。保存设置后写入 {1}。</value>
+    <value>技能从 {0} 自动加载。启停请在右侧上下文「技能」页双击标签；关闭后不会出现在系统提示与 @skill 补全中。状态写入 {1}。</value>
   </data>
   <data name="Settings_SkillsTitle" xml:space="preserve">
     <value>Installed Skills</value>
@@ -1172,7 +1181,7 @@
     <value>Storm 阈值</value>
   </data>
   <data name="Settings_Subtitle" xml:space="preserve">
-    <value>配置模型、MCP、技能、工作区、上下文压缩与工具权限。</value>
+    <value>配置模型、工作区、上下文压缩与工具权限。</value>
   </data>
   <data name="Settings_Title" xml:space="preserve">
     <value>设置</value>

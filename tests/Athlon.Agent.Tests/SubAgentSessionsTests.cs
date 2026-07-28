@@ -139,6 +139,8 @@ public sealed class SubAgentSessionsTests
             Array.Empty<McpSearchIndex.SearchResult>();
         public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null) =>
             Task.CompletedTask;
+        public Task ReconnectAsync(string serverName, IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null) =>
+            Task.CompletedTask;
         public Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments arguments, CancellationToken cancellationToken = default) =>
             Task.FromResult(ToolResult.Failure("none", "none"));
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;

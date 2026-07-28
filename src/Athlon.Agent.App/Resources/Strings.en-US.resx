@@ -416,6 +416,15 @@ Hold to talk</value>
   <data name="Context_McpServers" xml:space="preserve">
     <value>MCP servers</value>
   </data>
+  <data name="Context_SkillsMcpHint" xml:space="preserve">
+    <value>Double-click a tag to enable/disable; double-click an unhealthy MCP server to reconnect</value>
+  </data>
+  <data name="Context_SkillTagTooltip" xml:space="preserve">
+    <value>Double-click to enable or disable this skill</value>
+  </data>
+  <data name="Context_McpExpandTooltip" xml:space="preserve">
+    <value>Expand or collapse tool list</value>
+  </data>
   <data name="Context_OpenInEditor" xml:space="preserve">
     <value>Open in editor</value>
   </data>
@@ -1094,7 +1103,7 @@ Save anyway?</value>
     <value>MCP Search Mode</value>
   </data>
   <data name="Settings_McpServersHint" xml:space="preserve">
-    <value>MCP servers are loaded from {0}; this page only toggles enablement. Add, remove, and command args in the JSON config.</value>
+    <value>MCP servers are loaded from {0}. Toggle them by double-clicking tags on the Context Skills tab; add, remove, and command args in the JSON config.</value>
   </data>
   <data name="Settings_McpServersTitle" xml:space="preserve">
     <value>Installed MCP servers</value>
@@ -1142,7 +1151,7 @@ Save anyway?</value>
     <value>When off, tool cards such as file_read and execute_command are hidden in chat; compaction notices still appear.</value>
   </data>
   <data name="Settings_SkillsDescription" xml:space="preserve">
-    <value>Skills load automatically from {0}; this page controls which are enabled. Disabled skills are omitted from the system prompt and @skill completion. Saved to {1}.</value>
+    <value>Skills load automatically from {0}. Toggle them by double-clicking tags on the Context Skills tab; disabled skills are omitted from the system prompt and @skill completion. State is stored in {1}.</value>
   </data>
   <data name="Settings_SkillsTitle" xml:space="preserve">
     <value>Installed skills</value>
@@ -1151,7 +1160,7 @@ Save anyway?</value>
     <value>Storm threshold</value>
   </data>
   <data name="Settings_Subtitle" xml:space="preserve">
-    <value>Configure model, MCP, skills, workspaces, context compaction, and tool permissions.</value>
+    <value>Configure model, workspaces, context compaction, and tool permissions.</value>
   </data>
   <data name="Settings_Title" xml:space="preserve">
     <value>Settings</value>

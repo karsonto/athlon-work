@@ -307,6 +307,8 @@ public sealed class AgentRuntimeProgressTests
 
         public Task RefreshAsync(IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null) => Task.CompletedTask;
 
+        public Task ReconnectAsync(string serverName, IReadOnlyList<McpServerSettings> settings, CancellationToken cancellationToken = default, Action? onStatusesChanged = null) => Task.CompletedTask;
+
         public Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments args, CancellationToken cancellationToken = default)
         {
             LastInvocation = (serverName, toolName);

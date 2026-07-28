@@ -171,6 +171,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Settings.SettingsSaved += async (_, _) => await OnSettingsSavedAsync();
         Sidebar = sidebar;
+        Sidebar.SetActivateHandlers(ToggleSkillFromSidebarAsync, ActivateMcpFromSidebarAsync);
+        Sidebar.Refresh(_appSettings);
         FileEditor = fileEditor;
         FileEditor.Tabs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasOpenEditorTabs));
         FileEditor.PropertyChanged += (_, e) =>
@@ -313,6 +315,128 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             cancellationToken: default,
             onStatusesChanged: PublishMcpStatuses).ConfigureAwait(true);
         PublishMcpStatuses();
+    }
+
+    private async Task ToggleSkillFromSidebarAsync(string skillName)
+    {
+        if (string.IsNullOrWhiteSpace(skillName))
+        {
+            return;
+        }
+
+        var existing = _appSettings.Skills.FirstOrDefault(skill =>
+            string.Equals(skill.Name, skillName, StringComparison.OrdinalIgnoreCase));
+        var currentlyEnabled = existing?.Enabled ?? true;
+        var enabled = !currentlyEnabled;
+
+        if (existing is null)
+        {
+            _appSettings.Skills.Add(new SkillSettings
+            {
+                Name = skillName,
+                Enabled = enabled,
+                Path = skillName
+            });
+        }
+        else
+        {
+            existing.Enabled = enabled;
+        }
+
+        try
+        {
+            Athlon.Agent.Infrastructure.BehaviorReport.BehaviorEventManager.Instance.Record(
+                Athlon.Agent.Core.BehaviorReport.BehaviorEventIds.SkillToggle,
+                Athlon.Agent.Core.BehaviorReport.BehaviorEventTypes.Event,
+                Athlon.Agent.Core.BehaviorReport.BehaviorEventIds.SkillToggle,
+                new Dictionary<string, object?>
+                {
+                    ["skill_id"] = skillName,
+                    ["enabled"] = enabled
+                });
+        }
+        catch
+        {
+            // ignore
+        }
+
+        await _storage.SaveSettingsAsync(_appSettings).ConfigureAwait(true);
+        Settings.SyncSkillsFromCatalog();
+        OnSkillConfigurationChanged();
+    }
+
+    private async Task ActivateMcpFromSidebarAsync(string serverName)
+    {
+        if (string.IsNullOrWhiteSpace(serverName) || !Sidebar.HasConfiguredMcpServers)
+        {
+            return;
+        }
+
+        var server = _appSettings.McpServers.FirstOrDefault(item =>
+            string.Equals(item.Name, serverName, StringComparison.OrdinalIgnoreCase));
+        if (server is null)
+        {
+            return;
+        }
+
+        var runtime = _mcpRegistry.GetStatuses()
+            .FirstOrDefault(status => string.Equals(status.Name, serverName, StringComparison.OrdinalIgnoreCase));
+        var runtimeState = !server.Enabled
+            ? Athlon.Agent.Mcp.McpConnectionState.Disabled
+            : runtime?.State ?? Athlon.Agent.Mcp.McpConnectionState.Connecting;
+        var action = McpSidebarActivate.Resolve(server.Enabled, runtimeState);
+
+        if (action == McpSidebarActivateAction.Reconnect)
+        {
+            void PublishMcpStatuses()
+            {
+                void Apply()
+                {
+                    Settings.RefreshRuntimeStates();
+                    Sidebar.Refresh(_appSettings);
+                    RefreshAtCompletionSources();
+                    OnPropertyChanged(nameof(Sidebar));
+                }
+
+                var dispatcher = Application.Current?.Dispatcher;
+                if (dispatcher is null || dispatcher.CheckAccess())
+                {
+                    Apply();
+                    return;
+                }
+
+                _ = dispatcher.InvokeAsync(Apply);
+            }
+
+            await _mcpRegistry.ReconnectAsync(
+                serverName,
+                _appSettings.McpServers,
+                cancellationToken: default,
+                onStatusesChanged: PublishMcpStatuses).ConfigureAwait(true);
+            PublishMcpStatuses();
+            return;
+        }
+
+        server.Enabled = action == McpSidebarActivateAction.Enable;
+        try
+        {
+            Athlon.Agent.Infrastructure.BehaviorReport.BehaviorEventManager.Instance.Record(
+                Athlon.Agent.Core.BehaviorReport.BehaviorEventIds.McpServer,
+                Athlon.Agent.Core.BehaviorReport.BehaviorEventTypes.Event,
+                Athlon.Agent.Core.BehaviorReport.BehaviorEventIds.McpServer,
+                new Dictionary<string, object?>
+                {
+                    ["server_name"] = serverName,
+                    ["action"] = server.Enabled ? "enabled" : "disabled"
+                });
+        }
+        catch
+        {
+            // ignore
+        }
+
+        await _storage.SaveSettingsAsync(_appSettings).ConfigureAwait(true);
+        await RefreshMcpRuntimeAsync().ConfigureAwait(true);
     }
 
     public async Task InitializeAsync()

@@ -1,6 +1,4 @@
 using System.Collections.ObjectModel;
-using System.IO;
-using System.Text;
 using System.Windows;
 using System.Windows.Threading;
 using Athlon.Agent.Core;
@@ -8,8 +6,6 @@ using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
-using Microsoft.Win32;
 
 namespace Athlon.Agent.App.ViewModels;
 
@@ -19,6 +15,8 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly IMcpRegistry _mcpRegistry;
     private readonly ISshWorkspaceClient _sshClient;
+    private Func<string, Task>? _onSkillActivate;
+    private Func<string, Task>? _onMcpActivate;
 
     public ContextSidebarViewModel(
         IAppPathProvider paths,
@@ -34,10 +32,25 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
         Refresh(settings);
     }
 
-    public ObservableCollection<string> Skills { get; } = new();
+    public ObservableCollection<SkillSidebarItemViewModel> Skills { get; } = new();
     public ObservableCollection<McpSidebarServerViewModel> McpServers { get; } = new();
     public ObservableCollection<WorkspaceTreeNodeViewModel> WorkspaceTree { get; } = new();
     public string LocalModelStatus { get; set; } = "Local Model Active";
+
+    [ObservableProperty]
+    private bool hasInstalledSkills;
+
+    [ObservableProperty]
+    private string skillsEmptyMessage = string.Empty;
+
+    [ObservableProperty]
+    private bool hasConfiguredMcpServers;
+
+    public void SetActivateHandlers(Func<string, Task> onSkillActivate, Func<string, Task> onMcpActivate)
+    {
+        _onSkillActivate = onSkillActivate;
+        _onMcpActivate = onMcpActivate;
+    }
 
     public void Refresh(AppSettings settings)
     {
@@ -46,14 +59,19 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
 
         if (_skillCatalog.Skills.Count == 0)
         {
-            Skills.Add($"未安装技能 ({_paths.SkillsPath})");
+            HasInstalledSkills = false;
+            SkillsEmptyMessage = $"未安装技能 ({_paths.SkillsPath})";
         }
         else
         {
+            HasInstalledSkills = true;
+            SkillsEmptyMessage = string.Empty;
             foreach (var skill in _skillCatalog.Skills.OrderBy(skill => skill.Name, StringComparer.Ordinal))
             {
-                var status = SkillFilter.IsEnabled(skill, settings) ? "●" : "○";
-                Skills.Add($"{status} {skill.Name}");
+                Skills.Add(new SkillSidebarItemViewModel(
+                    skill.Name,
+                    SkillFilter.IsEnabled(skill, settings),
+                    _onSkillActivate));
             }
         }
 
@@ -65,10 +83,12 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
         McpServers.Clear();
         if (settings.McpServers.Count == 0)
         {
+            HasConfiguredMcpServers = false;
             McpServers.Add(new McpSidebarServerViewModel("未配置 MCP 服务器", enabled: false, status: null));
         }
         else
         {
+            HasConfiguredMcpServers = true;
             var statuses = _mcpRegistry.GetStatuses().ToDictionary(status => status.Name, StringComparer.OrdinalIgnoreCase);
             foreach (var server in settings.McpServers)
             {
@@ -77,7 +97,8 @@ public sealed partial class ContextSidebarViewModel : ObservableObject
                     server.Name,
                     server.Enabled,
                     runtime,
-                    expandedServers.Contains(server.Name)));
+                    expandedServers.Contains(server.Name),
+                    _onMcpActivate));
             }
         }
     }

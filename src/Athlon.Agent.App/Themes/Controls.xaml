@@ -1353,4 +1353,39 @@
         </Setter>
     </Style>
 
+    <!-- Skills / MCP sidebar tags (double-click to toggle / reconnect) -->
+    <Style x:Key="SkillTagChipStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Brush.PanelAlt}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="10,5" />
+        <Setter Property="Margin" Value="0,0,6,6" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Opacity" Value="1" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsDisabled}" Value="True">
+                <Setter Property="Opacity" Value="0.55" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+                <Setter Property="Background" Value="Transparent" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="McpTagChipStyle" TargetType="Border" BasedOn="{StaticResource SkillTagChipStyle}">
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsDisabled}" Value="True">
+                <Setter Property="Opacity" Value="0.55" />
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+                <Setter Property="Background" Value="Transparent" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding IsWarning}" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Warning}" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding IsHealthy}" Value="True">
+                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Success}" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
 </ResourceDictionary>

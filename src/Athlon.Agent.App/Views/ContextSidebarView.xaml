@@ -167,25 +167,68 @@
                     </ScrollViewer.Style>
                     <!-- Skills + MCP tab -->
                     <StackPanel>
-                        <TextBlock Text="{loc:Localize Key=Context_TabSkills}" Foreground="{DynamicResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <TextBlock Text="{loc:Localize Key=Context_TabSkills}" Foreground="{DynamicResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,4" />
+                        <TextBlock Text="{loc:Localize Key=Context_SkillsMcpHint}"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,8" />
                         <Border Background="{DynamicResource Brush.Panel}"
                                 BorderBrush="{DynamicResource Brush.Border}"
                                 BorderThickness="1"
                                 CornerRadius="8"
                                 Padding="10"
                                 Margin="0,0,0,16">
-                            <ItemsControl ItemsSource="{Binding Sidebar.Skills}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding}"
-                                                   Margin="0,4"
-                                                   FontSize="13"
-                                                   TextWrapping="Wrap"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   Foreground="{DynamicResource Brush.Text}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <Grid>
+                                <TextBlock Text="{Binding Sidebar.SkillsEmptyMessage}"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           FontSize="12"
+                                           TextWrapping="Wrap">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Sidebar.HasInstalledSkills}" Value="False">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <ItemsControl ItemsSource="{Binding Sidebar.Skills}">
+                                    <ItemsControl.Style>
+                                        <Style TargetType="ItemsControl">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Sidebar.HasInstalledSkills}" Value="False">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ItemsControl.Style>
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Style="{StaticResource SkillTagChipStyle}"
+                                                    ToolTip="{loc:Localize Key=Context_SkillTagTooltip}">
+                                                <i:Interaction.Behaviors>
+                                                    <behaviors:CommandDoubleClickBehavior Command="{Binding ActivateCommand}" />
+                                                </i:Interaction.Behaviors>
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="12"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource Brush.Text}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           MaxWidth="160" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
                         </Border>
                         <TextBlock Text="{loc:Localize Key=Context_McpServers}" Foreground="{DynamicResource Brush.SubtleText}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
                         <Border Background="{DynamicResource Brush.Panel}"
@@ -194,42 +237,67 @@
                                 CornerRadius="8"
                                 Padding="10">
                             <ItemsControl ItemsSource="{Binding Sidebar.McpServers}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <StackPanel Margin="0,3">
-                                            <Button Command="{Binding ToggleExpandedCommand}"
-                                                    Style="{StaticResource McpSidebarItemButtonStyle}">
+                                        <StackPanel Margin="0,0,0,4">
+                                            <Border Style="{StaticResource McpTagChipStyle}"
+                                                    ToolTip="{Binding Summary}">
+                                                <i:Interaction.Behaviors>
+                                                    <behaviors:CommandDoubleClickBehavior Command="{Binding ActivateCommand}" />
+                                                </i:Interaction.Behaviors>
                                                 <Grid>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="Auto" />
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
-                                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                    <Ellipse Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,6,0"
                                                              Style="{StaticResource McpStatusIndicatorStyle}" />
-                                                    <StackPanel Grid.Column="1">
-                                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
-                                                                   TextTrimming="CharacterEllipsis" Style="{StaticResource McpStatusNameStyle}" />
-                                                        <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource Brush.SubtleText}"
-                                                                   FontSize="11" TextWrapping="Wrap" Margin="0,2,0,0" />
-                                                    </StackPanel>
-                                                    <TextBlock Grid.Column="2" Text="{Binding Chevron}"
-                                                               Foreground="{DynamicResource Brush.SubtleText}" FontSize="11"
-                                                               VerticalAlignment="Center" Margin="8,0,0,0">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding Name}"
+                                                               FontSize="12"
+                                                               FontWeight="SemiBold"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               MaxWidth="140"
+                                                               Style="{StaticResource McpStatusNameStyle}" />
+                                                    <Button Grid.Column="2"
+                                                            Command="{Binding ToggleExpandedCommand}"
+                                                            Content="{Binding Chevron}"
+                                                            Margin="6,0,0,0"
+                                                            Padding="4,0"
+                                                            FontSize="11"
+                                                            Foreground="{DynamicResource Brush.SubtleText}"
+                                                            Background="Transparent"
+                                                            BorderThickness="0"
+                                                            Cursor="Hand"
+                                                            ToolTip="{loc:Localize Key=Context_McpExpandTooltip}">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button">
                                                                 <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Setter Property="Template">
+                                                                    <Setter.Value>
+                                                                        <ControlTemplate TargetType="Button">
+                                                                            <ContentPresenter />
+                                                                        </ControlTemplate>
+                                                                    </Setter.Value>
+                                                                </Setter>
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding HasTools}" Value="True">
                                                                         <Setter Property="Visibility" Value="Visible" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
+                                                        </Button.Style>
+                                                    </Button>
                                                 </Grid>
-                                            </Button>
-                                            <ItemsControl ItemsSource="{Binding ToolNames}" Margin="22,2,0,4">
+                                            </Border>
+                                            <ItemsControl ItemsSource="{Binding ToolNames}" Margin="12,2,0,4">
                                                 <ItemsControl.Style>
                                                     <Style TargetType="ItemsControl">
                                                         <Setter Property="Visibility" Value="Collapsed" />
