@@ -379,44 +379,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
-        var runtime = _mcpRegistry.GetStatuses()
-            .FirstOrDefault(status => string.Equals(status.Name, serverName, StringComparison.OrdinalIgnoreCase));
-        var runtimeState = !server.Enabled
-            ? Athlon.Agent.Mcp.McpConnectionState.Disabled
-            : runtime?.State ?? Athlon.Agent.Mcp.McpConnectionState.Connecting;
-        var action = McpSidebarActivate.Resolve(server.Enabled, runtimeState);
-
-        if (action == McpSidebarActivateAction.Reconnect)
-        {
-            void PublishMcpStatuses()
-            {
-                void Apply()
-                {
-                    Settings.RefreshRuntimeStates();
-                    Sidebar.Refresh(_appSettings);
-                    RefreshAtCompletionSources();
-                    OnPropertyChanged(nameof(Sidebar));
-                }
-
-                var dispatcher = Application.Current?.Dispatcher;
-                if (dispatcher is null || dispatcher.CheckAccess())
-                {
-                    Apply();
-                    return;
-                }
-
-                _ = dispatcher.InvokeAsync(Apply);
-            }
-
-            await _mcpRegistry.ReconnectAsync(
-                serverName,
-                _appSettings.McpServers,
-                cancellationToken: default,
-                onStatusesChanged: PublishMcpStatuses).ConfigureAwait(true);
-            PublishMcpStatuses();
-            return;
-        }
-
+        var action = McpSidebarActivate.Resolve(server.Enabled);
         server.Enabled = action == McpSidebarActivateAction.Enable;
         try
         {
@@ -436,7 +399,21 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         await _storage.SaveSettingsAsync(_appSettings).ConfigureAwait(true);
-        await RefreshMcpRuntimeAsync().ConfigureAwait(true);
+
+        // Update sidebar immediately so other MCP tags stay clickable while connections run.
+        Settings.RefreshRuntimeStates();
+        Sidebar.Refresh(_appSettings);
+        RefreshAtCompletionSources();
+        OnPropertyChanged(nameof(Sidebar));
+
+        try
+        {
+            await RefreshMcpRuntimeAsync().ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer MCP toggle; sidebar already reflects the latest settings.
+        }
     }
 
     public async Task InitializeAsync()

@@ -47,6 +47,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
     private readonly ConcurrentDictionary<string, int> _toolCallTimeoutSeconds = new(StringComparer.OrdinalIgnoreCase);
     private readonly McpSearchIndexCache _searchIndexCache = new();
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private readonly ConcurrentDictionary<string, long> _connectGenerations = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<McpCatalogEntry>? _catalogCache;
     private int _catalogVersion;
     private int _disposed;
@@ -130,6 +131,8 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         CancellationToken cancellationToken = default,
         Action? onStatusesChanged = null)
     {
+        var toConnect = new List<(string Name, McpServerSettings Server, string Fingerprint, long Generation)>();
+        var removedAny = false;
         await _refreshLock.WaitAsync(cancellationToken);
         try
         {
@@ -141,11 +144,11 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 .ToDictionary(server => server.Name.Trim(), StringComparer.OrdinalIgnoreCase);
 
             // Stop disabled/removed servers.
-            var removedAny = false;
             foreach (var existing in _clients.Keys.ToArray())
             {
                 if (!enabled.ContainsKey(existing) && _clients.TryRemove(existing, out var removed))
                 {
+                    InvalidateConnect(existing);
                     _tools.TryRemove(existing, out _);
                     _configFingerprints.TryRemove(existing, out _);
                     _toolCallTimeoutSeconds.TryRemove(existing, out _);
@@ -161,7 +164,6 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 onStatusesChanged?.Invoke();
             }
 
-            var toConnect = new List<(string Name, McpServerSettings Server, string Fingerprint)>();
             foreach (var (name, server) in enabled)
             {
                 var fingerprint = CreateConfigFingerprint(server);
@@ -185,27 +187,62 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                     McpConnectionState.Connecting,
                     transportLabel,
                     Array.Empty<McpTool>());
-                toConnect.Add((name, server, fingerprint));
+                var generation = InvalidateConnect(name);
+                toConnect.Add((name, server, fingerprint, generation));
             }
 
             if (toConnect.Count > 0)
             {
                 onStatusesChanged?.Invoke();
             }
-
-            // Connect independently so one wedged stdio server cannot hide HTTP MCP status.
-            var connectTasks = toConnect.Select(item => ConnectOneAsync(
-                item.Name,
-                item.Server,
-                item.Fingerprint,
-                onStatusesChanged,
-                cancellationToken));
-            await Task.WhenAll(connectTasks).ConfigureAwait(false);
         }
         finally
         {
-            InvalidateCatalogCache();
+            if (removedAny)
+            {
+                InvalidateCatalogCache();
+            }
+
             _refreshLock.Release();
+        }
+
+        if (toConnect.Count == 0)
+        {
+            return;
+        }
+
+        // Connect outside the refresh lock so one slow server cannot block other MCP toggles.
+        var connectTasks = toConnect.Select(item => ConnectOneSafeAsync(
+            item.Name,
+            item.Server,
+            item.Fingerprint,
+            item.Generation,
+            onStatusesChanged,
+            cancellationToken));
+        await Task.WhenAll(connectTasks).ConfigureAwait(false);
+        InvalidateCatalogCache();
+    }
+
+    private async Task ConnectOneSafeAsync(
+        string name,
+        McpServerSettings server,
+        string fingerprint,
+        long generation,
+        Action? onStatusesChanged,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await ConnectOneAsync(name, server, fingerprint, generation, onStatusesChanged, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer refresh; safe to ignore.
         }
     }
 
@@ -220,10 +257,14 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
             return;
         }
 
+        string? name = null;
+        McpServerSettings? server = null;
+        string? fingerprint = null;
+        long generation = 0;
         await _refreshLock.WaitAsync(cancellationToken);
         try
         {
-            var server = settings.FirstOrDefault(item =>
+            server = settings.FirstOrDefault(item =>
                 item.Enabled
                 && !string.IsNullOrWhiteSpace(item.Name)
                 && string.Equals(item.Name.Trim(), serverName.Trim(), StringComparison.OrdinalIgnoreCase)
@@ -234,7 +275,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 return;
             }
 
-            var name = server.Name.Trim();
+            name = server.Name.Trim();
             if (_clients.TryRemove(name, out var existing))
             {
                 try { await existing.DisposeAsync(); } catch { /* ignore */ }
@@ -242,7 +283,7 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
 
             _configFingerprints.TryRemove(name, out _);
             _tools[name] = Array.Empty<McpTool>();
-            var fingerprint = CreateConfigFingerprint(server);
+            fingerprint = CreateConfigFingerprint(server);
             _toolCallTimeoutSeconds[name] = Math.Clamp(server.ToolCallTimeoutSeconds, 1, 3600);
             var transportLabel = ResolveTransportLabel(server);
             _statuses[name] = new McpServerStatus(
@@ -250,21 +291,35 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 McpConnectionState.Connecting,
                 transportLabel,
                 Array.Empty<McpTool>());
+            generation = InvalidateConnect(name);
             onStatusesChanged?.Invoke();
-            await ConnectOneAsync(name, server, fingerprint, onStatusesChanged, cancellationToken)
-                .ConfigureAwait(false);
         }
         finally
         {
-            InvalidateCatalogCache();
             _refreshLock.Release();
         }
+
+        if (name is null || server is null || fingerprint is null)
+        {
+            return;
+        }
+
+        await ConnectOneAsync(name, server, fingerprint, generation, onStatusesChanged, cancellationToken)
+            .ConfigureAwait(false);
+        InvalidateCatalogCache();
     }
+
+    private long InvalidateConnect(string name) =>
+        _connectGenerations.AddOrUpdate(name, 1, static (_, generation) => generation + 1);
+
+    private bool IsConnectSuperseded(string name, long generation) =>
+        !_connectGenerations.TryGetValue(name, out var current) || current != generation;
 
     private async Task ConnectOneAsync(
         string name,
         McpServerSettings server,
         string fingerprint,
+        long generation,
         Action? onStatusesChanged,
         CancellationToken cancellationToken)
     {
@@ -288,6 +343,11 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
         }
         catch (Exception ex)
         {
+            if (IsConnectSuperseded(name, generation))
+            {
+                return;
+            }
+
             var message = ex is OperationCanceledException
                 ? $"Timed out connecting to MCP server ({transportLabel})."
                 : ex.Message;
@@ -304,17 +364,54 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
             return;
         }
 
+        if (IsConnectSuperseded(name, generation))
+        {
+            try { await client.DisposeAsync(); } catch { /* ignore */ }
+            return;
+        }
+
         _clients[name] = client;
         _configFingerprints[name] = fingerprint;
         try
         {
             var tools = await client.ListToolsAsync(cancellationToken).ConfigureAwait(false);
+            if (IsConnectSuperseded(name, generation))
+            {
+                _clients.TryRemove(name, out _);
+                _configFingerprints.TryRemove(name, out _);
+                try { await client.DisposeAsync(); } catch { /* ignore */ }
+                return;
+            }
+
             _tools[name] = tools;
             _statuses[name] = client.Status with { Tools = tools.ToArray() };
             RecordMcpServer(name, "connected", toolCount: tools.Count);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            _clients.TryRemove(name, out _);
+            _configFingerprints.TryRemove(name, out _);
+            try { await client.DisposeAsync(); } catch { /* ignore */ }
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            // Another refresh disposed this client while list-tools was in flight.
+            _clients.TryRemove(name, out _);
+            _configFingerprints.TryRemove(name, out _);
+            try { await client.DisposeAsync(); } catch { /* ignore */ }
+            return;
+        }
+        catch (Exception ex)
+        {
+            if (IsConnectSuperseded(name, generation))
+            {
+                _clients.TryRemove(name, out _);
+                _configFingerprints.TryRemove(name, out _);
+                try { await client.DisposeAsync(); } catch { /* ignore */ }
+                return;
+            }
+
             _logger.Warning("MCP refresh failed for {Server}: {Message}", name, ex.Message);
             _tools[name] = Array.Empty<McpTool>();
             _statuses[name] = client.Status with

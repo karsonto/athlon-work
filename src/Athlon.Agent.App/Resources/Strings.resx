@@ -420,7 +420,10 @@
     <value>下载到本地…</value>
   </data>
   <data name="Context_SkillsMcpHint" xml:space="preserve">
-    <value>双击标签启停；MCP 异常时双击重连</value>
+    <value>双击标签启停</value>
+  </data>
+  <data name="Context_McpTagTooltip" xml:space="preserve">
+    <value>双击启停 MCP 服务器</value>
   </data>
   <data name="Context_SkillTagTooltip" xml:space="preserve">
     <value>双击启停技能</value>

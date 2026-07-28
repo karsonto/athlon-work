@@ -420,7 +420,10 @@ Hold to talk</value>
     <value>Download to local…</value>
   </data>
   <data name="Context_SkillsMcpHint" xml:space="preserve">
-    <value>Double-click a tag to enable/disable; double-click an unhealthy MCP server to reconnect</value>
+    <value>Double-click a tag to enable or disable</value>
+  </data>
+  <data name="Context_McpTagTooltip" xml:space="preserve">
+    <value>Double-click to enable or disable this MCP server</value>
   </data>
   <data name="Context_SkillTagTooltip" xml:space="preserve">
     <value>Double-click to enable or disable this skill</value>

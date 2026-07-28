@@ -36,18 +36,18 @@ public sealed class CommandDoubleClickBehavior : Behavior<FrameworkElement>
     protected override void OnAttached()
     {
         base.OnAttached();
-        AssociatedObject.PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDown;
+        AssociatedObject.MouseDown += OnMouseDown;
     }
 
     protected override void OnDetaching()
     {
-        AssociatedObject.PreviewMouseLeftButtonDown -= OnPreviewMouseLeftButtonDown;
+        AssociatedObject.MouseDown -= OnMouseDown;
         base.OnDetaching();
     }
 
-    private void OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void OnMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount < 2)
+        if (e.ChangedButton != MouseButton.Left || e.ClickCount != 2)
         {
             return;
         }

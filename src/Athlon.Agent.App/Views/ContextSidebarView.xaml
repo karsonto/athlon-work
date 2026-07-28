@@ -264,7 +264,7 @@
                                     <DataTemplate>
                                         <StackPanel Margin="0,0,0,4">
                                             <Border Style="{StaticResource McpTagChipStyle}"
-                                                    ToolTip="{Binding Summary}">
+                                                    ToolTip="{loc:Localize Key=Context_McpTagTooltip}">
                                                 <i:Interaction.Behaviors>
                                                     <behaviors:CommandDoubleClickBehavior Command="{Binding ActivateCommand}" />
                                                 </i:Interaction.Behaviors>
