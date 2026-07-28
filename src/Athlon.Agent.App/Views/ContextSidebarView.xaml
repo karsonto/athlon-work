@@ -101,11 +101,15 @@
                                     </Style.Triggers>
                                 </Style>
                             </Border.Style>
-                            <TreeView ItemsSource="{Binding Sidebar.WorkspaceTree}"
+                            <TreeView x:Name="WorkspaceTreeView"
+                                      ItemsSource="{Binding Sidebar.WorkspaceTree}"
                                       Background="Transparent"
                                       BorderThickness="0"
                                       FontSize="13"
                                       Foreground="{DynamicResource Brush.Text}"
+                                      AllowDrop="True"
+                                      PreviewDragOver="WorkspaceTree_OnPreviewDragOver"
+                                      Drop="WorkspaceTree_OnDrop"
                                       ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                 <i:Interaction.Behaviors>
                                     <behaviors:TreeViewItemDoubleClickBehavior />
@@ -126,6 +130,20 @@
                                                               Style="{StaticResource MarkdownContextMenuItemStyle}"
                                                               Command="{Binding PlacementTarget.Tag.OpenWorkspaceTreeNodeInExplorerCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                               CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                    <MenuItem Header="{loc:Localize Key=Context_DownloadToLocal}"
+                                                              Command="{Binding PlacementTarget.Tag.DownloadWorkspaceTreeNodeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                        <MenuItem.Style>
+                                                            <Style TargetType="MenuItem" BasedOn="{StaticResource MarkdownContextMenuItemStyle}">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding PlacementTarget.DataContext.IsRemote, RelativeSource={RelativeSource AncestorType=ContextMenu}}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </MenuItem.Style>
+                                                    </MenuItem>
                                                     <MenuItem Header="{loc:Localize Key=Common_Delete}"
                                                               Style="{StaticResource MarkdownContextMenuItemStyle}"
                                                               Command="{Binding PlacementTarget.Tag.DeleteWorkspaceItemCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"

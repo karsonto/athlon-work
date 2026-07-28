@@ -254,6 +254,29 @@ public sealed class WorkspaceFileEditorServiceTests
             return Task.CompletedTask;
         }
 
+        public async Task DownloadFileAsync(string remotePath, string localPath, CancellationToken cancellationToken = default)
+        {
+            if (!Files.TryGetValue(RemotePathNormalizer.Collapse(remotePath), out var content)
+                && !Files.TryGetValue(remotePath, out content))
+            {
+                throw new FileNotFoundException(remotePath);
+            }
+
+            var directory = Path.GetDirectoryName(localPath);
+            if (!string.IsNullOrWhiteSpace(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            await File.WriteAllTextAsync(localPath, content, cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task UploadFileAsync(string localPath, string remotePath, CancellationToken cancellationToken = default)
+        {
+            var content = await File.ReadAllTextAsync(localPath, cancellationToken).ConfigureAwait(false);
+            Files[RemotePathNormalizer.Collapse(remotePath)] = content;
+        }
+
         public Task CreateDirectoryAsync(string remotePath, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public async IAsyncEnumerable<SshEntry> ListAsync(
@@ -261,7 +284,30 @@ public sealed class WorkspaceFileEditorServiceTests
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             await Task.CompletedTask.ConfigureAwait(false);
-            yield break;
+            var root = RemotePathNormalizer.Collapse(remotePath).TrimEnd('/');
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var path in Files.Keys.OrderBy(key => key, StringComparer.Ordinal))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var collapsed = RemotePathNormalizer.Collapse(path);
+                if (!collapsed.StartsWith(root + "/", StringComparison.Ordinal) && root != "/")
+                {
+                    continue;
+                }
+
+                var relative = root == "/"
+                    ? collapsed.TrimStart('/')
+                    : collapsed[(root.Length + 1)..];
+                var slash = relative.IndexOf('/');
+                var name = slash < 0 ? relative : relative[..slash];
+                if (string.IsNullOrWhiteSpace(name) || !seen.Add(name))
+                {
+                    continue;
+                }
+
+                var fullPath = root == "/" ? "/" + name : root + "/" + name;
+                yield return new SshEntry(name, fullPath, slash >= 0, slash < 0 ? Files[path].Length : 0);
+            }
         }
 
         public Task<SshCommandResult> ExecuteAsync(

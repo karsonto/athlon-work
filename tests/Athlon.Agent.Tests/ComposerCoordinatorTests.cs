@@ -264,33 +264,119 @@ public sealed class ComposerCoordinatorTests
     }
 
     [Fact]
-    public void UpdateAtCompletion_Slash_ShowsConnectedMcpServers()
+    public async Task UpdateAtCompletion_At_IncludesFilesFromRemoteWorkspace()
     {
-        var settings = new AppSettings
+        var workspace = new ComposerTestFactory.LocalWorkspaceContext();
+        workspace.SetWorkspace("/home/proj", WorkspaceKind.Ssh, "ws-ssh", "proj");
+
+        var ssh = new IndexingSshClient("/home/proj");
+        ssh.EntriesByDirectory["/home/proj"] =
+        [
+            new SshEntry("src", "/home/proj/src", true, 0),
+            new SshEntry("readme.md", "/home/proj/readme.md", false, 10)
+        ];
+        ssh.EntriesByDirectory["/home/proj/src"] =
+        [
+            new SshEntry("main.cs", "/home/proj/src/main.cs", false, 20)
+        ];
+
+        var service = ComposerTestFactory.CreateCompletionService(sshClient: ssh, workspaceContext: workspace);
+        var coordinator = ComposerTestFactory.CreateCoordinator(completionService: service);
+        var indexCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var updateCount = 0;
+        service.SourcesUpdated += () =>
         {
-            McpServers = [new McpServerSettings { Name = "demo-server", Enabled = true }]
+            if (Interlocked.Increment(ref updateCount) >= 2)
+            {
+                indexCompleted.TrySetResult();
+            }
         };
-        var coordinator = ComposerTestFactory.CreateCoordinator(
-            settings: settings,
-            mcpRegistry: new ComposerTestFactory.ConnectedMcpRegistry("demo-server", "browser_navigate"));
+
+        service.EnsureFileIndexBuilt(
+            new ComposerTestFactory.StubSkillCatalog([]),
+            new AppSettings(),
+            "/home/proj",
+            ignorePatterns: [".git"]);
+
+        await indexCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         var items = new ObservableCollection<AtCompletionItemViewModel>();
         var isOpen = false;
-
         coordinator.UpdateAtCompletion(
-            "/",
-            caretIndex: 1,
-            activeWorkspace: null,
-            ignorePatterns: [],
+            "@main",
+            caretIndex: "@main".Length,
+            activeWorkspace: "/home/proj",
+            ignorePatterns: [".git"],
             items,
             open => isOpen = open,
             _ => { },
             -1);
 
         Assert.True(isOpen);
-        Assert.Contains(items, item => item.Type == "MCP" && item.PrimaryText == "demo-server");
-        Assert.DoesNotContain(items, item => item.PrimaryText == "browser_navigate");
-        Assert.Contains(items, item => item.InsertText == "//mcp:demo-server");
+        Assert.Contains(items, item => item.Kind == ComposerCompletionItemKind.File && item.InsertText == "@src/main.cs");
+        Assert.Contains(
+            service.FilterMatches(ComposerCompletionTrigger.At, "readme"),
+            item => item.InsertText == "@readme.md");
+    }
+
+    private sealed class IndexingSshClient(string remoteRoot) : ISshWorkspaceClient
+    {
+        public Dictionary<string, IReadOnlyList<SshEntry>> EntriesByDirectory { get; } = new(StringComparer.Ordinal);
+
+        public bool IsConnected => true;
+        public string? RemoteRoot => remoteRoot;
+        public string? ConnectedWorkspaceId => "ws-ssh";
+
+        public Task ConnectAsync(SshConnectRequest request, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DisconnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> FileExistsAsync(string remotePath, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<SshFileInfo> GetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SshFileInfo(remotePath, 0, false, DateTimeOffset.UtcNow));
+        public Task<SshFileInfo?> TryGetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SshFileInfo?>(new SshFileInfo(remotePath, 0, false, DateTimeOffset.UtcNow));
+        public Task<string> ReadTextAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult(string.Empty);
+        public Task<T> ReadViaStreamAsync<T>(
+            string remotePath,
+            Func<Stream, CancellationToken, Task<T>> reader,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+        public Task WriteTextAsync(string remotePath, string content, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+        public Task DownloadFileAsync(string remotePath, string localPath, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+        public Task UploadFileAsync(string localPath, string remotePath, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+        public Task CreateDirectoryAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public async IAsyncEnumerable<SshEntry> ListAsync(
+            string remotePath,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask.ConfigureAwait(false);
+            var key = RemotePathNormalizer.Collapse(remotePath);
+            if (!EntriesByDirectory.TryGetValue(key, out var entries))
+            {
+                yield break;
+            }
+
+            foreach (var entry in entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return entry;
+            }
+        }
+
+        public Task<SshCommandResult> ExecuteAsync(
+            string command,
+            string? workingDirectory,
+            TimeSpan timeout,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SshCommandResult(0, string.Empty, string.Empty, TimeSpan.Zero));
+
+        public Task<bool> HasCommandAsync(string commandName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
     }
 
     [Fact]

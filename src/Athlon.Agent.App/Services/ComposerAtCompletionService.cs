@@ -13,9 +13,12 @@ public sealed class ComposerAtCompletionService
 {
     private const int MaxCompletionItems = 30;
     private const int MaxIndexedFiles = 4000;
+    private const int MaxRemoteWalkDepth = 12;
 
     private readonly IMcpRegistry _mcpRegistry;
     private readonly IComposerSlashCommandRegistry _slashRegistry;
+    private readonly ISshWorkspaceClient _sshClient;
+    private readonly IActiveWorkspaceContext _workspaceContext;
     private readonly object _fileIndexStateLock = new();
     private volatile IReadOnlyList<AtCompletionItemViewModel> _fileSnapshot = Array.Empty<AtCompletionItemViewModel>();
     private volatile IReadOnlyList<AtCompletionItemViewModel> _skillSnapshot = Array.Empty<AtCompletionItemViewModel>();
@@ -26,10 +29,16 @@ public sealed class ComposerAtCompletionService
     private volatile bool _fileIndexInitialized;
     private volatile bool _fileIndexBuildInFlight;
 
-    public ComposerAtCompletionService(IMcpRegistry mcpRegistry, IComposerSlashCommandRegistry slashRegistry)
+    public ComposerAtCompletionService(
+        IMcpRegistry mcpRegistry,
+        IComposerSlashCommandRegistry slashRegistry,
+        ISshWorkspaceClient sshClient,
+        IActiveWorkspaceContext workspaceContext)
     {
         _mcpRegistry = mcpRegistry;
         _slashRegistry = slashRegistry;
+        _sshClient = sshClient;
+        _workspaceContext = workspaceContext;
     }
 
     public event Action? SourcesUpdated;
@@ -50,7 +59,10 @@ public sealed class ComposerAtCompletionService
         _mcpSnapshot = BuildMcpServerIndex(settings);
         _slashSourcesInitialized = true;
 
-        if (string.IsNullOrWhiteSpace(activeWorkspace) || !Directory.Exists(activeWorkspace))
+        var isRemote = _workspaceContext.Kind == WorkspaceKind.Ssh;
+        if (string.IsNullOrWhiteSpace(activeWorkspace)
+            || (!isRemote && !Directory.Exists(activeWorkspace))
+            || (isRemote && !_sshClient.IsConnected))
         {
             lock (_fileIndexStateLock)
             {
@@ -65,12 +77,16 @@ public sealed class ComposerAtCompletionService
             return;
         }
 
-        var root = Path.GetFullPath(activeWorkspace);
+        var root = isRemote
+            ? RemotePathNormalizer.NormalizeRoot(activeWorkspace)
+            : Path.GetFullPath(activeWorkspace);
         int? generation = null;
         lock (_fileIndexStateLock)
         {
-            if (!string.Equals(_indexedWorkspace, root, StringComparison.OrdinalIgnoreCase)
-                || (_fileSnapshot.Count == 0 && !_fileIndexBuildInFlight))
+            var sameWorkspace = isRemote
+                ? string.Equals(_indexedWorkspace, root, StringComparison.Ordinal)
+                : string.Equals(_indexedWorkspace, root, StringComparison.OrdinalIgnoreCase);
+            if (!sameWorkspace || (_fileSnapshot.Count == 0 && !_fileIndexBuildInFlight))
             {
                 _indexedWorkspace = root;
                 _fileSnapshot = Array.Empty<AtCompletionItemViewModel>();
@@ -83,7 +99,14 @@ public sealed class ComposerAtCompletionService
         if (generation is not null)
         {
             var patterns = ignorePatterns.ToArray();
-            _ = Task.Run(() => BuildFileIndex(root, patterns, generation.Value));
+            if (isRemote)
+            {
+                _ = Task.Run(() => BuildRemoteFileIndexAsync(root, patterns, generation.Value));
+            }
+            else
+            {
+                _ = Task.Run(() => BuildFileIndex(root, patterns, generation.Value));
+            }
         }
 
         RaiseSourcesUpdated();
@@ -101,7 +124,10 @@ public sealed class ComposerAtCompletionService
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(activeWorkspace) || !Directory.Exists(activeWorkspace))
+        var isRemote = _workspaceContext.Kind == WorkspaceKind.Ssh;
+        if (string.IsNullOrWhiteSpace(activeWorkspace)
+            || (!isRemote && !Directory.Exists(activeWorkspace))
+            || (isRemote && !_sshClient.IsConnected))
         {
             bool needsRefresh;
             lock (_fileIndexStateLock)
@@ -117,11 +143,15 @@ public sealed class ComposerAtCompletionService
             return;
         }
 
-        var root = Path.GetFullPath(activeWorkspace);
+        var root = isRemote
+            ? RemotePathNormalizer.NormalizeRoot(activeWorkspace)
+            : Path.GetFullPath(activeWorkspace);
         bool shouldRefresh;
         lock (_fileIndexStateLock)
         {
-            var isCurrentWorkspace = string.Equals(_indexedWorkspace, root, StringComparison.OrdinalIgnoreCase);
+            var isCurrentWorkspace = isRemote
+                ? string.Equals(_indexedWorkspace, root, StringComparison.Ordinal)
+                : string.Equals(_indexedWorkspace, root, StringComparison.OrdinalIgnoreCase);
             shouldRefresh = !isCurrentWorkspace || (!_fileIndexInitialized && !_fileIndexBuildInFlight);
         }
 
@@ -382,6 +412,99 @@ public sealed class ComposerAtCompletionService
             // Keep whatever was indexed successfully.
         }
 
+        PublishFileIndex(candidates, generation);
+    }
+
+    private async Task BuildRemoteFileIndexAsync(string root, IReadOnlyList<string> ignorePatterns, int generation)
+    {
+        var candidates = new List<(AtCompletionItemViewModel Item, int Depth, DateTime LastWriteUtc)>();
+        try
+        {
+            var queue = new Queue<(string Path, string Relative, int Depth)>();
+            queue.Enqueue((root, string.Empty, 0));
+
+            while (queue.Count > 0 && candidates.Count < MaxIndexedFiles * 2)
+            {
+                if (generation != _buildGeneration)
+                {
+                    return;
+                }
+
+                var (current, relative, depth) = queue.Dequeue();
+                await foreach (var entry in _sshClient.ListAsync(current).ConfigureAwait(false))
+                {
+                    if (generation != _buildGeneration)
+                    {
+                        return;
+                    }
+
+                    if (WorkspacePathFilter.ShouldIgnorePath(entry.FullPath, ignorePatterns)
+                        || WorkspacePathFilter.ShouldIgnoreEntryName(entry.Name, ignorePatterns))
+                    {
+                        continue;
+                    }
+
+                    var childRelative = string.IsNullOrEmpty(relative)
+                        ? entry.Name
+                        : relative + "/" + entry.Name;
+                    if (string.IsNullOrWhiteSpace(childRelative))
+                    {
+                        continue;
+                    }
+
+                    if (entry.IsDirectory)
+                    {
+                        candidates.Add((
+                            new AtCompletionItemViewModel(
+                                Type: "文件夹",
+                                PrimaryText: entry.Name,
+                                SecondaryText: childRelative + "/",
+                                InsertText: $"@{childRelative}/",
+                                MatchText: $"{childRelative} {entry.Name}",
+                                Kind: ComposerCompletionItemKind.Folder,
+                                IconKind: WorkspaceFileIconKind.Folder),
+                            depth,
+                            DateTime.MinValue));
+
+                        if (depth < MaxRemoteWalkDepth)
+                        {
+                            queue.Enqueue((entry.FullPath, childRelative, depth + 1));
+                        }
+                    }
+                    else
+                    {
+                        candidates.Add((
+                            new AtCompletionItemViewModel(
+                                Type: "文件",
+                                PrimaryText: entry.Name,
+                                SecondaryText: childRelative,
+                                InsertText: $"@{childRelative}",
+                                MatchText: $"{childRelative} {entry.Name}",
+                                Kind: ComposerCompletionItemKind.File,
+                                IconKind: WorkspaceFileIconKind.File),
+                            depth,
+                            DateTime.MinValue));
+                    }
+
+                    if (candidates.Count > MaxIndexedFiles * 2)
+                    {
+                        TrimCandidateBuffer(candidates);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // Keep whatever was indexed successfully.
+        }
+
+        PublishFileIndex(candidates, generation);
+    }
+
+    private void PublishFileIndex(
+        List<(AtCompletionItemViewModel Item, int Depth, DateTime LastWriteUtc)> candidates,
+        int generation)
+    {
         var ordered = candidates
             .OrderBy(item => item.Depth)
             .ThenByDescending(item => item.LastWriteUtc)

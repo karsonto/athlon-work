@@ -416,6 +416,9 @@
   <data name="Context_McpServers" xml:space="preserve">
     <value>MCP 服务器</value>
   </data>
+  <data name="Context_DownloadToLocal" xml:space="preserve">
+    <value>下载到本地…</value>
+  </data>
   <data name="Context_SkillsMcpHint" xml:space="preserve">
     <value>双击标签启停；MCP 异常时双击重连</value>
   </data>
@@ -1300,6 +1303,57 @@
   </data>
   <data name="Shell_DeleteSuccess" xml:space="preserve">
     <value>已删除{0}「{1}」。</value>
+  </data>
+  <data name="Shell_DownloadCompleteStatus" xml:space="preserve">
+    <value>下载完成：{0} 个文件，跳过 {1} 个</value>
+  </data>
+  <data name="Shell_DownloadFailedMessage" xml:space="preserve">
+    <value>下载「{0}」失败：{1}</value>
+  </data>
+  <data name="Shell_DownloadFailedStatus" xml:space="preserve">
+    <value>下载失败：{0}</value>
+  </data>
+  <data name="Shell_DownloadFailedTitle" xml:space="preserve">
+    <value>下载失败</value>
+  </data>
+  <data name="Shell_DownloadFileDialogTitle" xml:space="preserve">
+    <value>下载文件到本地</value>
+  </data>
+  <data name="Shell_DownloadFileFilter" xml:space="preserve">
+    <value>所有文件|*.*</value>
+  </data>
+  <data name="Shell_DownloadFileSuccess" xml:space="preserve">
+    <value>已下载「{0}」</value>
+  </data>
+  <data name="Shell_DownloadFolderDialogTitle" xml:space="preserve">
+    <value>选择下载保存位置</value>
+  </data>
+  <data name="Shell_DownloadSkippedStatus" xml:space="preserve">
+    <value>已取消下载</value>
+  </data>
+  <data name="Shell_OverwriteLocalMessage" xml:space="preserve">
+    <value>本地已存在「{0}」，是否覆盖？</value>
+  </data>
+  <data name="Shell_OverwriteRemoteMessage" xml:space="preserve">
+    <value>远程已存在「{0}」，是否覆盖？</value>
+  </data>
+  <data name="Shell_OverwriteTitle" xml:space="preserve">
+    <value>覆盖确认</value>
+  </data>
+  <data name="Shell_UploadCompleteStatus" xml:space="preserve">
+    <value>上传完成：{0} 个文件，跳过 {1} 个</value>
+  </data>
+  <data name="Shell_UploadFailedMessage" xml:space="preserve">
+    <value>上传失败：{0}</value>
+  </data>
+  <data name="Shell_UploadFailedStatus" xml:space="preserve">
+    <value>上传失败：{0}</value>
+  </data>
+  <data name="Shell_UploadFailedTitle" xml:space="preserve">
+    <value>上传失败</value>
+  </data>
+  <data name="Shell_UploadTargetInvalid" xml:space="preserve">
+    <value>上传目标不在当前远程工作区内。</value>
   </data>
   <data name="Shell_ExitMessage" xml:space="preserve">
     <value>有对话正在生成或消息排队中，退出将停止所有任务。确定退出？</value>

@@ -416,6 +416,9 @@ Hold to talk</value>
   <data name="Context_McpServers" xml:space="preserve">
     <value>MCP servers</value>
   </data>
+  <data name="Context_DownloadToLocal" xml:space="preserve">
+    <value>Download to local…</value>
+  </data>
   <data name="Context_SkillsMcpHint" xml:space="preserve">
     <value>Double-click a tag to enable/disable; double-click an unhealthy MCP server to reconnect</value>
   </data>
@@ -1279,6 +1282,57 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   </data>
   <data name="Shell_DeleteSuccess" xml:space="preserve">
     <value>Deleted {0} "{1}".</value>
+  </data>
+  <data name="Shell_DownloadCompleteStatus" xml:space="preserve">
+    <value>Download finished: {0} file(s), skipped {1}</value>
+  </data>
+  <data name="Shell_DownloadFailedMessage" xml:space="preserve">
+    <value>Failed to download "{0}": {1}</value>
+  </data>
+  <data name="Shell_DownloadFailedStatus" xml:space="preserve">
+    <value>Download failed: {0}</value>
+  </data>
+  <data name="Shell_DownloadFailedTitle" xml:space="preserve">
+    <value>Download failed</value>
+  </data>
+  <data name="Shell_DownloadFileDialogTitle" xml:space="preserve">
+    <value>Download file</value>
+  </data>
+  <data name="Shell_DownloadFileFilter" xml:space="preserve">
+    <value>All files|*.*</value>
+  </data>
+  <data name="Shell_DownloadFileSuccess" xml:space="preserve">
+    <value>Downloaded "{0}"</value>
+  </data>
+  <data name="Shell_DownloadFolderDialogTitle" xml:space="preserve">
+    <value>Choose download location</value>
+  </data>
+  <data name="Shell_DownloadSkippedStatus" xml:space="preserve">
+    <value>Download cancelled</value>
+  </data>
+  <data name="Shell_OverwriteLocalMessage" xml:space="preserve">
+    <value>"{0}" already exists locally. Overwrite?</value>
+  </data>
+  <data name="Shell_OverwriteRemoteMessage" xml:space="preserve">
+    <value>"{0}" already exists remotely. Overwrite?</value>
+  </data>
+  <data name="Shell_OverwriteTitle" xml:space="preserve">
+    <value>Overwrite?</value>
+  </data>
+  <data name="Shell_UploadCompleteStatus" xml:space="preserve">
+    <value>Upload finished: {0} file(s), skipped {1}</value>
+  </data>
+  <data name="Shell_UploadFailedMessage" xml:space="preserve">
+    <value>Upload failed: {0}</value>
+  </data>
+  <data name="Shell_UploadFailedStatus" xml:space="preserve">
+    <value>Upload failed: {0}</value>
+  </data>
+  <data name="Shell_UploadFailedTitle" xml:space="preserve">
+    <value>Upload failed</value>
+  </data>
+  <data name="Shell_UploadTargetInvalid" xml:space="preserve">
+    <value>Upload target is outside the current remote workspace.</value>
   </data>
   <data name="Shell_ExitMessage" xml:space="preserve">
     <value>A reply is generating or messages are queued. Exiting will stop all tasks. Exit anyway?</value>

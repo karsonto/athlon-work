@@ -17,8 +17,14 @@ internal static class ComposerTestFactory
 
     public static ComposerAtCompletionService CreateCompletionService(
         IMcpRegistry? mcpRegistry = null,
-        IComposerSlashCommandRegistry? slashRegistry = null) =>
-        new(mcpRegistry ?? new TestMcpRegistry(), slashRegistry ?? CreateSlashRegistry());
+        IComposerSlashCommandRegistry? slashRegistry = null,
+        ISshWorkspaceClient? sshClient = null,
+        IActiveWorkspaceContext? workspaceContext = null) =>
+        new(
+            mcpRegistry ?? new TestMcpRegistry(),
+            slashRegistry ?? CreateSlashRegistry(),
+            sshClient ?? new DisconnectedSshClient(),
+            workspaceContext ?? new LocalWorkspaceContext());
 
     public static ComposerCoordinator CreateCoordinator(
         IAgentSkillCatalog? skillCatalog = null,
@@ -37,6 +43,78 @@ internal static class ComposerTestFactory
             settings ?? new AppSettings(),
             new StubImageAttachmentStore(),
             new AppPathProvider());
+    }
+
+    internal sealed class LocalWorkspaceContext : IActiveWorkspaceContext
+    {
+        public string? RootPath { get; private set; }
+        public string? DisplayName { get; private set; }
+        public IReadOnlyList<string> IgnorePatterns { get; private set; } = Array.Empty<string>();
+        public WorkspaceKind Kind { get; private set; } = WorkspaceKind.Local;
+        public string? WorkspaceId { get; private set; }
+
+        public void SetWorkspace(string? rootPath, string? displayName = null, IReadOnlyList<string>? ignorePatterns = null) =>
+            SetWorkspace(rootPath, WorkspaceKind.Local, null, displayName, ignorePatterns);
+
+        public void SetWorkspace(
+            string? rootPath,
+            WorkspaceKind kind,
+            string? workspaceId,
+            string? displayName = null,
+            IReadOnlyList<string>? ignorePatterns = null)
+        {
+            RootPath = rootPath;
+            Kind = kind;
+            WorkspaceId = workspaceId;
+            DisplayName = displayName;
+            IgnorePatterns = ignorePatterns ?? Array.Empty<string>();
+        }
+    }
+
+    internal sealed class DisconnectedSshClient : ISshWorkspaceClient
+    {
+        public bool IsConnected => false;
+        public string? RemoteRoot => null;
+        public string? ConnectedWorkspaceId => null;
+        public Task ConnectAsync(SshConnectRequest request, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DisconnectAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> FileExistsAsync(string remotePath, CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<SshFileInfo> GetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("SSH not connected");
+        public Task<SshFileInfo?> TryGetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult<SshFileInfo?>(null);
+        public Task<string> ReadTextAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("SSH not connected");
+        public Task<T> ReadViaStreamAsync<T>(
+            string remotePath,
+            Func<Stream, CancellationToken, Task<T>> reader,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("SSH not connected");
+        public Task WriteTextAsync(string remotePath, string content, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("SSH not connected");
+        public Task DownloadFileAsync(string remotePath, string localPath, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("SSH not connected");
+        public Task UploadFileAsync(string localPath, string remotePath, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("SSH not connected");
+        public Task CreateDirectoryAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("SSH not connected");
+        public async IAsyncEnumerable<SshEntry> ListAsync(
+            string remotePath,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
+
+        public Task<SshCommandResult> ExecuteAsync(
+            string command,
+            string? workingDirectory,
+            TimeSpan timeout,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("SSH not connected");
+
+        public Task<bool> HasCommandAsync(string commandName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
     }
 
     internal sealed class StubImageAttachmentStore : IImageAttachmentStore

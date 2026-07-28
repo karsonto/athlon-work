@@ -232,6 +232,71 @@ public sealed class SshWorkspaceClient(IAppLogger logger) : ISshWorkspaceClient,
         }
     }
 
+    public async Task DownloadFileAsync(string remotePath, string localPath, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(localPath);
+        var path = RemotePathNormalizer.Collapse(remotePath);
+        var localFullPath = Path.GetFullPath(localPath);
+        var localDirectory = Path.GetDirectoryName(localFullPath);
+        if (!string.IsNullOrWhiteSpace(localDirectory))
+        {
+            Directory.CreateDirectory(localDirectory);
+        }
+
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var sftp = RequireSftp();
+            await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                using var remote = sftp.OpenRead(path);
+                using var local = File.Create(localFullPath);
+                remote.CopyTo(local);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task UploadFileAsync(string localPath, string remotePath, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(localPath);
+        var localFullPath = Path.GetFullPath(localPath);
+        if (!File.Exists(localFullPath))
+        {
+            throw new FileNotFoundException("Local file not found.", localFullPath);
+        }
+
+        var path = RemotePathNormalizer.Collapse(remotePath);
+        var directory = RemotePathNormalizer.GetDirectoryName(path);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var sftp = RequireSftp();
+            await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!string.IsNullOrWhiteSpace(directory) && directory != "/" && !sftp.Exists(directory))
+                {
+                    CreateDirectoryRecursive(sftp, directory);
+                }
+
+                using var local = File.OpenRead(localFullPath);
+                using var remote = sftp.OpenWrite(path);
+                local.CopyTo(remote);
+                remote.Flush();
+                remote.SetLength(remote.Position);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task CreateDirectoryAsync(string remotePath, CancellationToken cancellationToken = default)
     {
         var path = RemotePathNormalizer.Collapse(remotePath);

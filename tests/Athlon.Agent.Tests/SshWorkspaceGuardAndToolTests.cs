@@ -105,6 +105,10 @@ public sealed class SshWorkspaceGuardAndToolTests
             throw new InvalidOperationException("SSH not connected");
         public Task WriteTextAsync(string remotePath, string content, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("SSH not connected");
+        public Task DownloadFileAsync(string remotePath, string localPath, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("SSH not connected");
+        public Task UploadFileAsync(string localPath, string remotePath, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("SSH not connected");
         public Task CreateDirectoryAsync(string remotePath, CancellationToken cancellationToken = default) =>
             throw new InvalidOperationException("SSH not connected");
         public async IAsyncEnumerable<SshEntry> ListAsync(

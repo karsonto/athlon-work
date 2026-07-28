@@ -49,6 +49,12 @@ public interface ISshWorkspaceClient
 
     Task WriteTextAsync(string remotePath, string content, CancellationToken cancellationToken = default);
 
+    /// <summary>Download a remote file to a local path (binary-safe).</summary>
+    Task DownloadFileAsync(string remotePath, string localPath, CancellationToken cancellationToken = default);
+
+    /// <summary>Upload a local file to a remote path (binary-safe). Creates parent directories as needed.</summary>
+    Task UploadFileAsync(string localPath, string remotePath, CancellationToken cancellationToken = default);
+
     Task CreateDirectoryAsync(string remotePath, CancellationToken cancellationToken = default);
 
     IAsyncEnumerable<SshEntry> ListAsync(string remotePath, CancellationToken cancellationToken = default);
