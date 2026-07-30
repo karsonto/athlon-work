@@ -67,6 +67,7 @@ public sealed class OpenAiCompatibleChatModelClient(
             {
                 Content = JsonContent.Create(payload)
             };
+            httpRequest.Headers.TryAddWithoutValidation("User-Agent", "Athlon-Agent");
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
                 httpRequest.Headers.Authorization =

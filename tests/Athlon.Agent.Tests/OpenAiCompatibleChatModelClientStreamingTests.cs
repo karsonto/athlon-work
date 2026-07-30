@@ -531,6 +531,7 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
             Assert.Equal("ok", result.Content);
             Assert.NotNull(capturedRequest);
             Assert.Null(capturedRequest!.Headers.Authorization);
+            Assert.Equal("Athlon-Agent", capturedRequest.Headers.UserAgent.ToString());
         }
         finally
         {
