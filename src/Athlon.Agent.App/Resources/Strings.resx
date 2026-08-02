@@ -443,6 +443,39 @@
   <data name="Context_TabSkills" xml:space="preserve">
     <value>技能</value>
   </data>
+  <data name="Workspace_Browser" xml:space="preserve">
+    <value>浏览器</value>
+  </data>
+  <data name="Workspace_BrowserN" xml:space="preserve">
+    <value>浏览器 {0}</value>
+  </data>
+  <data name="Workspace_Terminal" xml:space="preserve">
+    <value>终端</value>
+  </data>
+  <data name="Workspace_TerminalN" xml:space="preserve">
+    <value>终端 {0}</value>
+  </data>
+  <data name="Workspace_AddTabTooltip" xml:space="preserve">
+    <value>添加工作区标签</value>
+  </data>
+  <data name="Workspace_BrowserBack" xml:space="preserve">
+    <value>后退</value>
+  </data>
+  <data name="Workspace_BrowserForward" xml:space="preserve">
+    <value>前进</value>
+  </data>
+  <data name="Workspace_BrowserReload" xml:space="preserve">
+    <value>刷新</value>
+  </data>
+  <data name="Workspace_BrowserGo" xml:space="preserve">
+    <value>转到</value>
+  </data>
+  <data name="Workspace_TerminalPlaceholderTitle" xml:space="preserve">
+    <value>终端即将推出</value>
+  </data>
+  <data name="Workspace_TerminalPlaceholderBody" xml:space="preserve">
+    <value>交互式终端将在后续版本提供。当前标签页为占位，可随时关闭。</value>
+  </data>
   <data name="Context_Title" xml:space="preserve">
     <value>上下文</value>
   </data>

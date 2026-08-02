@@ -1,0 +1,273 @@
+<UserControl x:Class="Athlon.Agent.App.Views.WorkspacePaneView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:app="clr-namespace:Athlon.Agent.App"
+             xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
+             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+             xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
+             Background="{DynamicResource Brush.AppBackground}">
+    <UserControl.Resources>
+        <DataTemplate DataType="{x:Type vm:FilesWorkspaceTabViewModel}">
+            <controls:WorkspaceFilesPanel DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}" />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:SkillsWorkspaceTabViewModel}">
+            <controls:WorkspaceSkillsPanel DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}" />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:BrowserWorkspaceTabViewModel}">
+            <controls:BrowserWorkspaceView />
+        </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:TerminalWorkspaceTabViewModel}">
+            <controls:TerminalWorkspaceView />
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Tab strip (hidden when empty) -->
+        <Border Grid.Row="0"
+                Height="{x:Static app:AppLayoutMetrics.SplitPaneHeaderHeight}"
+                Background="{DynamicResource Brush.Chrome}"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,0,0,1"
+                Padding="4,0,8,0">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding WorkspacePane.IsEmpty}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                              VerticalScrollBarVisibility="Disabled"
+                              VerticalAlignment="Center">
+                    <ListBox ItemsSource="{Binding WorkspacePane.Tabs}"
+                             SelectedItem="{Binding WorkspacePane.ActiveTab, Mode=TwoWay}"
+                             BorderThickness="0"
+                             Background="Transparent"
+                             Style="{StaticResource EditorTabListStyle}"
+                             ItemContainerStyle="{StaticResource EditorTabItemStyle}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,4,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0"
+                                               Text="{Binding Title}"
+                                               VerticalAlignment="Center"
+                                               Margin="10,4"
+                                               Foreground="{DynamicResource Brush.Text}"
+                                               FontSize="12" />
+                                    <Button Grid.Column="1"
+                                            Content="×"
+                                            Margin="2,0,0,0"
+                                            Command="{Binding DataContext.WorkspacePane.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}"
+                                            Style="{StaticResource EditorTabCloseButtonStyle}"
+                                            ToolTip="{loc:Localize Key=Common_Close}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </ScrollViewer>
+                <Grid Grid.Column="1" VerticalAlignment="Center">
+                    <Button x:Name="AddTabButton"
+                            Command="{Binding WorkspacePane.ToggleAddMenuCommand}"
+                            Content="+"
+                            Width="28"
+                            Height="28"
+                            FontSize="16"
+                            Style="{StaticResource IconButtonStyle}"
+                            ToolTip="{loc:Localize Key=Workspace_AddTabTooltip}" />
+                    <Popup PlacementTarget="{Binding ElementName=AddTabButton}"
+                           Placement="Bottom"
+                           HorizontalOffset="-120"
+                           StaysOpen="False"
+                           AllowsTransparency="True"
+                           IsOpen="{Binding WorkspacePane.IsAddMenuOpen, Mode=TwoWay}">
+                        <Border Background="Transparent" Padding="12" Margin="-12">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="20"
+                                                  ShadowDepth="3"
+                                                  Direction="270"
+                                                  Opacity="0.18"
+                                                  Color="#FF000000" />
+                            </Border.Effect>
+                            <Border Background="{DynamicResource Brush.MenuBackground}"
+                                    BorderBrush="{DynamicResource Brush.Border}"
+                                    BorderThickness="1"
+                                    CornerRadius="12"
+                                    Padding="6"
+                                    MinWidth="200">
+                                <StackPanel>
+                                    <Button Command="{Binding WorkspacePane.AddBrowserTabCommand}"
+                                            Style="{StaticResource ComposerModeMenuItemStyle}"
+                                            HorizontalContentAlignment="Stretch"
+                                            Padding="10,8">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{loc:Localize Key=Workspace_Browser}" FontSize="13" />
+                                            <Border Grid.Column="1"
+                                                    Background="{DynamicResource Brush.PanelAlt}"
+                                                    CornerRadius="4"
+                                                    Padding="6,2"
+                                                    Margin="12,0,0,0">
+                                                <TextBlock Text="Ctrl+T"
+                                                           FontSize="11"
+                                                           Foreground="{DynamicResource Brush.SubtleText}" />
+                                            </Border>
+                                        </Grid>
+                                    </Button>
+                                    <Button Command="{Binding WorkspacePane.AddTerminalTabCommand}"
+                                            Content="{loc:Localize Key=Workspace_Terminal}"
+                                            Style="{StaticResource ComposerModeMenuItemStyle}"
+                                            HorizontalContentAlignment="Left"
+                                            Padding="10,8" />
+                                    <Button Command="{Binding WorkspacePane.AddFilesTabCommand}"
+                                            Content="{loc:Localize Key=Context_TabFiles}"
+                                            Style="{StaticResource ComposerModeMenuItemStyle}"
+                                            HorizontalContentAlignment="Left"
+                                            Padding="10,8" />
+                                    <Button Command="{Binding WorkspacePane.AddSkillsTabCommand}"
+                                            Content="{loc:Localize Key=Context_TabSkills}"
+                                            Style="{StaticResource ComposerModeMenuItemStyle}"
+                                            HorizontalContentAlignment="Left"
+                                            Padding="10,8" />
+                                </StackPanel>
+                            </Border>
+                        </Border>
+                    </Popup>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Empty state -->
+        <Grid Grid.Row="1">
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding WorkspacePane.IsEmpty}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        MinWidth="220"
+                        MaxWidth="320">
+                <Button Command="{Binding WorkspacePane.AddBrowserTabCommand}"
+                        Style="{StaticResource GhostButtonStyle}"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="12,10"
+                        Margin="0,0,0,6"
+                        BorderThickness="0"
+                        Background="Transparent"
+                        Cursor="Hand">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="🌐" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <TextBlock Grid.Column="1"
+                                   Text="{loc:Localize Key=Workspace_Browser}"
+                                   FontSize="14"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Text}" />
+                        <Border Grid.Column="2"
+                                Background="{DynamicResource Brush.PanelAlt}"
+                                CornerRadius="4"
+                                Padding="6,2">
+                            <TextBlock Text="Ctrl+T"
+                                       FontSize="11"
+                                       Foreground="{DynamicResource Brush.SubtleText}" />
+                        </Border>
+                    </Grid>
+                </Button>
+                <Button Command="{Binding WorkspacePane.AddTerminalTabCommand}"
+                        Style="{StaticResource GhostButtonStyle}"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="12,10"
+                        Margin="0,0,0,6"
+                        BorderThickness="0"
+                        Background="Transparent"
+                        Cursor="Hand">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text=">_ " FontFamily="Consolas" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"
+                                   Foreground="{DynamicResource Brush.SubtleText}" />
+                        <TextBlock Text="{loc:Localize Key=Workspace_Terminal}"
+                                   FontSize="14"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Text}" />
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding WorkspacePane.AddFilesTabCommand}"
+                        Style="{StaticResource GhostButtonStyle}"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="12,10"
+                        Margin="0,0,0,6"
+                        BorderThickness="0"
+                        Background="Transparent"
+                        Cursor="Hand">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="📁" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <TextBlock Text="{loc:Localize Key=Context_TabFiles}"
+                                   FontSize="14"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Text}" />
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding WorkspacePane.AddSkillsTabCommand}"
+                        Style="{StaticResource GhostButtonStyle}"
+                        HorizontalContentAlignment="Stretch"
+                        Padding="12,10"
+                        BorderThickness="0"
+                        Background="Transparent"
+                        Cursor="Hand">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="✦" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0"
+                                   Foreground="{DynamicResource Brush.SubtleText}" />
+                        <TextBlock Text="{loc:Localize Key=Context_TabSkills}"
+                                   FontSize="14"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource Brush.Text}" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+
+        <!-- Active tab content -->
+        <ContentControl Grid.Row="1"
+                        Content="{Binding WorkspacePane.ActiveTab}">
+            <ContentControl.Style>
+                <Style TargetType="ContentControl">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding WorkspacePane.IsEmpty}" Value="True">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </ContentControl.Style>
+        </ContentControl>
+    </Grid>
+</UserControl>

@@ -180,21 +180,25 @@
                StaysOpen="False"
                AllowsTransparency="True"
                PopupAnimation="Fade">
-            <Border Background="{DynamicResource Brush.MenuBackground}"
-                    BorderBrush="{DynamicResource Brush.ComposerBorder}"
-                    BorderThickness="1"
-                    CornerRadius="12"
-                    Padding="5"
-                    MinWidth="212"
-                    SnapsToDevicePixels="True"
-                    UseLayoutRounding="True">
+            <!-- Effect on transparent host; rounded fill on inner — avoids black corner triangles -->
+            <Border Background="Transparent"
+                    Padding="12"
+                    Margin="-12">
                 <Border.Effect>
-                    <DropShadowEffect BlurRadius="24"
-                                      ShadowDepth="8"
+                    <DropShadowEffect BlurRadius="20"
+                                      ShadowDepth="3"
                                       Direction="270"
-                                      Opacity="0.45"
-                                      Color="#000000" />
+                                      Opacity="0.18"
+                                      Color="#FF000000" />
                 </Border.Effect>
+                <Border Background="{DynamicResource Brush.MenuBackground}"
+                        BorderBrush="{DynamicResource Brush.ComposerBorder}"
+                        BorderThickness="1"
+                        CornerRadius="12"
+                        Padding="5"
+                        MinWidth="212"
+                        SnapsToDevicePixels="True"
+                        UseLayoutRounding="True">
                 <StackPanel>
                     <!-- Agent -->
                     <Button Command="{Binding ComposerHarness.SelectModeCommand}"
@@ -438,6 +442,7 @@
                         </Grid>
                     </Button>
                 </StackPanel>
+                </Border>
             </Border>
         </Popup>
     </StackPanel>

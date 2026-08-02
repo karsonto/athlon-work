@@ -29,6 +29,7 @@
     <Window.InputBindings>
         <KeyBinding Key="B" Modifiers="Control" Command="{Binding ToggleNavigationSidebarCommand}" />
         <KeyBinding Key="B" Modifiers="Control+Alt" Command="{Binding ToggleContextSidebarCommand}" />
+        <KeyBinding Key="T" Modifiers="Control" Command="{Binding OpenBrowserWorkspaceTabCommand}" />
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveActiveEditorCommand}" />
     </Window.InputBindings>
     <shell:WindowChrome.WindowChrome>
@@ -211,7 +212,7 @@
                 ClipToBounds="True"
                 Background="{DynamicResource Brush.AppBackground}"
                 BorderThickness="0">
-            <views:ContextSidebarView />
+            <views:WorkspacePaneView />
         </Border>
 
         <!-- Collapsed left affordance: Cursor-style floating icon (no chrome rail) -->

@@ -443,6 +443,39 @@ Hold to talk</value>
   <data name="Context_TabSkills" xml:space="preserve">
     <value>Skills</value>
   </data>
+  <data name="Workspace_Browser" xml:space="preserve">
+    <value>Browser</value>
+  </data>
+  <data name="Workspace_BrowserN" xml:space="preserve">
+    <value>Browser {0}</value>
+  </data>
+  <data name="Workspace_Terminal" xml:space="preserve">
+    <value>Terminal</value>
+  </data>
+  <data name="Workspace_TerminalN" xml:space="preserve">
+    <value>Terminal {0}</value>
+  </data>
+  <data name="Workspace_AddTabTooltip" xml:space="preserve">
+    <value>Add workspace tab</value>
+  </data>
+  <data name="Workspace_BrowserBack" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="Workspace_BrowserForward" xml:space="preserve">
+    <value>Forward</value>
+  </data>
+  <data name="Workspace_BrowserReload" xml:space="preserve">
+    <value>Reload</value>
+  </data>
+  <data name="Workspace_BrowserGo" xml:space="preserve">
+    <value>Go</value>
+  </data>
+  <data name="Workspace_TerminalPlaceholderTitle" xml:space="preserve">
+    <value>Terminal coming soon</value>
+  </data>
+  <data name="Workspace_TerminalPlaceholderBody" xml:space="preserve">
+    <value>An interactive terminal will be available in a later release. You can close this placeholder tab anytime.</value>
+  </data>
   <data name="Context_Title" xml:space="preserve">
     <value>Context</value>
   </data>

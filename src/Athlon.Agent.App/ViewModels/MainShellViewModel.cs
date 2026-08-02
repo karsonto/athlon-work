@@ -95,6 +95,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         KnowledgeViewModel knowledgePageVm,
         ContextSidebarViewModel sidebar,
         FileEditorViewModel fileEditor,
+        WorkspacePaneViewModel workspacePane,
         ComposerKnowledgeViewModel composerKnowledge,
         ComposerHarnessViewModel composerHarness,
         ITaskListChangedNotifier taskListChangedNotifier,
@@ -174,6 +175,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         Sidebar.SetActivateHandlers(ToggleSkillFromSidebarAsync, ActivateMcpFromSidebarAsync);
         Sidebar.Refresh(_appSettings);
         FileEditor = fileEditor;
+        WorkspacePane = workspacePane;
         FileEditor.Tabs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasOpenEditorTabs));
         FileEditor.PropertyChanged += (_, e) =>
         {
@@ -440,6 +442,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public ContextSidebarViewModel Sidebar { get; }
     public SettingsViewModel Settings { get; }
     public FileEditorViewModel FileEditor { get; }
+    public WorkspacePaneViewModel WorkspacePane { get; }
     public string LogsPath { get; }
 
     public bool HasOpenEditorTabs => FileEditor.HasOpenTabs;
@@ -714,6 +717,18 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         SetContextSidebarVisible(!_appSettings.Ui.ContextSidebarVisible, animate: true);
         await _layout.PersistNowAsync();
+    }
+
+    [RelayCommand]
+    private async Task OpenBrowserWorkspaceTabAsync()
+    {
+        if (!_appSettings.Ui.ContextSidebarVisible)
+        {
+            SetContextSidebarVisible(true, animate: true);
+            await _layout.PersistNowAsync().ConfigureAwait(true);
+        }
+
+        WorkspacePane.AddBrowserTabCommand.Execute(null);
     }
 
     [RelayCommand]
