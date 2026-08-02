@@ -2,7 +2,7 @@ using System.Windows.Media;
 
 namespace Athlon.Agent.App.Themes;
 
-/// <summary>Light palette aligned with <c>F:\athlon\report\html</c>.</summary>
+/// <summary>Light palette: Codex-leaning shell surfaces + report/html slate accents.</summary>
 public static class LightAppThemePalette
 {
     public static AppThemePalette Create() => new()
@@ -15,17 +15,17 @@ public static class LightAppThemePalette
 
     private static UiChromeColors CreateChrome() => new()
     {
-        // Sidebars + shell: cool grey (Cursor right pane)
+        // Sidebars + shell behind floating workspace card
         AppBackground = C(ReportHtmlLightColors.Sidebar),
-        // Pane headers match their parent surface; chat uses ChatBackground via XAML
+        // Pane headers / chrome match white workspace card fill
         Chrome = C(ReportHtmlLightColors.Workspace),
         // Elevated cards / bubbles
         Panel = C(ReportHtmlLightColors.White),
         PanelAlt = C(ReportHtmlLightColors.Slate50),
         // Composer card
         Composer = C(ReportHtmlLightColors.White),
-        ComposerBorder = C(ReportHtmlLightColors.Slate200),
-        Border = C(ReportHtmlLightColors.Slate200),
+        ComposerBorder = C(ReportHtmlLightColors.SoftBorder),
+        Border = C(ReportHtmlLightColors.SoftBorder),
         BorderHover = C(ReportHtmlLightColors.Slate400),
         Text = C(ReportHtmlLightColors.Slate900),
         TextSecondary = C(ReportHtmlLightColors.Slate600),

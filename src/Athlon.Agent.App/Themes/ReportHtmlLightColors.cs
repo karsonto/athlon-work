@@ -1,22 +1,25 @@
 namespace Athlon.Agent.App.Themes;
 
 /// <summary>
-/// Light-theme color tokens from <c>F:\athlon\report\html</c> (Tailwind slate / indigo / violet).
-/// Sources: <c>src/index.css</c>, <c>App.tsx</c>, <c>AppHeader.tsx</c>, <c>ChatPane.tsx</c>, <c>Sidebar.tsx</c>, <c>Composer.tsx</c>.
+/// Light-theme color tokens (Tailwind slate / indigo / violet + Codex-like shell surfaces).
+/// Slate scale remains report/html-aligned; <see cref="Sidebar"/> / <see cref="Workspace"/> /
+/// <see cref="SoftBorder"/> are the Codex-leaning shell tokens.
 /// </summary>
 internal static class ReportHtmlLightColors
 {
-    // Workspace surfaces (Cursor-style flat panes)
-    /// <summary>Main chat / editor canvas — slightly lighter than sidebars.</summary>
-    public const string Workspace = "#F8FAFC";
-    /// <summary>Left/right sidebars — cool grey, slightly deeper than workspace.</summary>
-    public const string Sidebar = "#F1F5F9";
+    // Workspace surfaces (Codex-like: white main card on soft grey shell)
+    /// <summary>Main chat / settings canvas (white card fill).</summary>
+    public const string Workspace = "#FFFFFF";
+    /// <summary>Left/right sidebars + shell behind the floating workspace card.</summary>
+    public const string Sidebar = "#F5F5F7";
+    /// <summary>Softer card borders for floating workspace / composer elevation.</summary>
+    public const string SoftBorder = "#E8E8EA";
 
     // Legacy chat gradient tokens (kept flat for pane unity)
     public const string ChatGradientTop = Workspace;
     public const string ChatGradientBottom = Workspace;
 
-    // Slate
+    // Slate (component accents / chips — keep Tailwind values; do not reuse for shell)
     public const string Slate50 = "#F8FAFC";
     public const string Slate100 = "#F1F5F9";
     public const string Slate200 = "#E2E8F0";

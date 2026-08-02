@@ -124,81 +124,94 @@
                                      Grid.RowSpan="2"
                                      Grid.Column="0" />
 
-        <!-- Main column: chat / settings + composer + footer -->
-        <!-- Main column: lazy-loaded pages -->
-        <ContentControl x:Name="PageHost"
-                          Grid.Row="1"
-                          Grid.Column="1"
-                          Content="{Binding CurrentPageView}" />
+        <!-- Main column: Codex-like floating card (chat / settings + footer) -->
+        <Border x:Name="MainWorkspaceCard"
+                Grid.Row="1"
+                Grid.RowSpan="2"
+                Grid.Column="1"
+                Style="{StaticResource MainWorkspaceCardOuterStyle}">
+            <Border Style="{StaticResource MainWorkspaceCardInnerStyle}">
+                <i:Interaction.Behaviors>
+                    <behaviors:RoundedClipBehavior CornerRadius="{x:Static app:AppLayoutMetrics.MainWorkspaceCardCornerRadius}" />
+                </i:Interaction.Behaviors>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <ContentControl x:Name="PageHost"
+                                    Grid.Row="0"
+                                    Content="{Binding CurrentPageView}" />
+                    <!-- 底部状态栏：与主卡片同面贯通 -->
+                    <Border Grid.Row="1"
+                            Background="Transparent"
+                            BorderBrush="{DynamicResource Brush.Border}"
+                            BorderThickness="0,1,0,0"
+                            Padding="24,8"
+                            MinHeight="36">
+                        <Grid VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding Sidebar.LocalModelStatus, StringFormat=● {0}}"
+                                       Foreground="{DynamicResource Brush.Success}"
+                                       VerticalAlignment="Center"
+                                       FontSize="12" />
+                            <StackPanel Grid.Column="1"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Settings.Settings.Model.ModelName, StringFormat=模型: {0}}"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontSize="12" />
+                                <TextBlock Text="{Binding SessionUsageLine}"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           HorizontalAlignment="Center"
+                                           Margin="0,2,0,0"
+                                           FontSize="11"
+                                           TextTrimming="CharacterEllipsis">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SessionUsageLine}" Value="">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding SessionUsageLine}" Value="{x:Null}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                            <TextBlock Grid.Column="2"
+                                       Text="{Binding LogsPath, StringFormat=Logs: {0}}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       HorizontalAlignment="Right"
+                                       VerticalAlignment="Center"
+                                       FontSize="12"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding LogsPath}" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Border>
+        </Border>
 
-        <!-- Context panel (full height under caption) -->
+        <!-- Context panel (shell surface outside the main card) -->
         <Border x:Name="ContextSidebarPanel"
                 Grid.Row="1"
                 Grid.RowSpan="2"
                 Grid.Column="2"
                 ClipToBounds="True"
-                Background="{DynamicResource Brush.ChatBackground}"
+                Background="{DynamicResource Brush.AppBackground}"
                 BorderThickness="0">
             <views:ContextSidebarView />
-        </Border>
-
-        <!-- 底部状态栏：仅主列，与聊天区同色贯通 -->
-        <Border Grid.Row="2"
-                Grid.Column="1"
-                Background="{DynamicResource Brush.ChatBackground}"
-                BorderBrush="{DynamicResource Brush.Border}"
-                BorderThickness="0"
-                Padding="24,8"
-                MinHeight="36">
-            <Grid VerticalAlignment="Center">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0"
-                           Text="{Binding Sidebar.LocalModelStatus, StringFormat=● {0}}"
-                           Foreground="{DynamicResource Brush.Success}"
-                           VerticalAlignment="Center"
-                           FontSize="12" />
-                <StackPanel Grid.Column="1"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center">
-                    <TextBlock Text="{Binding Settings.Settings.Model.ModelName, StringFormat=模型: {0}}"
-                               Foreground="{DynamicResource Brush.SubtleText}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               FontSize="12" />
-                    <TextBlock Text="{Binding SessionUsageLine}"
-                               Foreground="{DynamicResource Brush.SubtleText}"
-                               HorizontalAlignment="Center"
-                               Margin="0,2,0,0"
-                               FontSize="11"
-                               TextTrimming="CharacterEllipsis">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Visible" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding SessionUsageLine}" Value="">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding SessionUsageLine}" Value="{x:Null}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </StackPanel>
-                <TextBlock Grid.Column="2"
-                           Text="{Binding LogsPath, StringFormat=Logs: {0}}"
-                           Foreground="{DynamicResource Brush.SubtleText}"
-                           HorizontalAlignment="Right"
-                           VerticalAlignment="Center"
-                           FontSize="12"
-                           TextTrimming="CharacterEllipsis"
-                           ToolTip="{Binding LogsPath}" />
-            </Grid>
         </Border>
 
         <!-- Collapsed left affordance: Cursor-style floating icon (no chrome rail) -->
@@ -241,7 +254,7 @@
                       Grid.Row="1"
                       Grid.RowSpan="2"
                       Grid.Column="0"
-                      Style="{StaticResource LayoutColumnSplitterStyle}"
+                      Style="{StaticResource LayoutColumnSplitterHitOnlyStyle}"
                       ResizeDirection="Columns"
                       ResizeBehavior="CurrentAndNext"
                       Panel.ZIndex="3">
@@ -254,7 +267,7 @@
                       Grid.Row="1"
                       Grid.RowSpan="2"
                       Grid.Column="1"
-                      Style="{StaticResource LayoutColumnSplitterStyle}"
+                      Style="{StaticResource LayoutColumnSplitterHitOnlyStyle}"
                       ResizeDirection="Columns"
                       ResizeBehavior="CurrentAndNext"
                       Panel.ZIndex="3">

@@ -47,6 +47,19 @@ public static class AppLayoutMetrics
     /// <summary>Minimum text-area height inside the empty-state composer card.</summary>
     public const double ComposerEmptyTextMinHeight = 64;
 
+    /// <summary>Codex-like main workspace card corner radius (uniform, all four corners).</summary>
+    public const double MainWorkspaceCardCornerRadiusValue = 12;
+
+    /// <summary><see cref="MainWorkspaceCardCornerRadiusValue"/> as <see cref="CornerRadius"/>.</summary>
+    public static readonly CornerRadius MainWorkspaceCardCornerRadius =
+        new(MainWorkspaceCardCornerRadiusValue);
+
+    /// <summary>
+    /// Main workspace card inset. All sides 0 — card is flush to the column;
+    /// rounded corners still reveal <c>Brush.AppBackground</c> in the crescents.
+    /// </summary>
+    public static readonly Thickness MainWorkspaceCardMargin = new(0);
+
     /// <summary>Inset of the visible splitter line inside the hit target.</summary>
     public const double SplitterLineInset = 0;
 }

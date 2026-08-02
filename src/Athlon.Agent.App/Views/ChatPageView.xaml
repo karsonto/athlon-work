@@ -181,9 +181,9 @@
                     </i:Interaction.Behaviors>
                 </GridSplitter>
 
-            <!-- Composer：无消息时居中（产品空状态），有消息时贴底 -->
+            <!-- Composer：无消息时居中（产品空状态），有消息时贴底；False 以免裁切卡片软阴影 -->
             <Border Panel.ZIndex="20"
-                    ClipToBounds="True">
+                    ClipToBounds="False">
                 <Border.Style>
                     <Style TargetType="Border" BasedOn="{StaticResource ComposerOuterBorderStyle}">
                         <Setter Property="Grid.Row" Value="3" />
@@ -192,7 +192,7 @@
                             <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
                                 <Setter Property="Grid.Row" Value="1" />
                                 <Setter Property="VerticalAlignment" Value="Center" />
-                                <Setter Property="Padding" Value="0,0,0,24" />
+                                <Setter Property="Padding" Value="6,12,6,24" />
                                 <Setter Property="Margin" Value="0,-56,0,0" />
                             </DataTrigger>
                         </Style.Triggers>

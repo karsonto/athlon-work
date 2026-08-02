@@ -707,6 +707,32 @@
         </Setter>
     </Style>
 
+    <!-- Codex-like floating main workspace (chat / settings) over shell AppBackground.
+         Shadow lives on the outer border; rounded clip is applied to the inner fill. -->
+    <Style x:Key="MainWorkspaceCardOuterStyle" TargetType="Border">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Margin" Value="{x:Static app:AppLayoutMetrics.MainWorkspaceCardMargin}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="16"
+                                  ShadowDepth="2"
+                                  Opacity="0.10"
+                                  Direction="270"
+                                  Color="#FF000000" />
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="MainWorkspaceCardInnerStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Brush.Panel}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{x:Static app:AppLayoutMetrics.MainWorkspaceCardCornerRadius}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
     <Style x:Key="SettingsCardStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.Panel}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
@@ -924,7 +950,33 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Line" Property="Background" Value="{DynamicResource Brush.Accent}" />
+                            <Setter TargetName="Line" Property="Background" Value="{DynamicResource Brush.BorderHover}" />
+                            <Setter TargetName="Line" Property="Opacity" Value="1" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Resize hit-target only; card border provides the shared edge (avoids double line in corner crescents). -->
+    <Style x:Key="LayoutColumnSplitterHitOnlyStyle"
+           TargetType="{x:Type GridSplitter}"
+           BasedOn="{StaticResource LayoutColumnSplitterStyle}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type GridSplitter}">
+                    <Border Background="Transparent"
+                            Width="12"
+                            HorizontalAlignment="Stretch">
+                        <Border x:Name="Line"
+                                Width="2"
+                                HorizontalAlignment="Right"
+                                Background="{DynamicResource Brush.BorderHover}"
+                                Opacity="0" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Line" Property="Opacity" Value="1" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -956,7 +1008,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Line" Property="Background" Value="{DynamicResource Brush.Accent}" />
+                            <Setter TargetName="Line" Property="Background" Value="{DynamicResource Brush.BorderHover}" />
                             <Setter TargetName="Line" Property="Opacity" Value="1" />
                         </Trigger>
                     </ControlTemplate.Triggers>

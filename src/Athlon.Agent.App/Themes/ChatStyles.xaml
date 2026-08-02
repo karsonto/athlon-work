@@ -232,7 +232,8 @@
     <Style x:Key="ComposerOuterBorderStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.ChatBackground}" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="0,8,0,16" />
+        <!-- Extra inset so composer DropShadow is not clipped by parent grids -->
+        <Setter Property="Padding" Value="6,12,6,20" />
     </Style>
 
     <Style x:Key="ComposerEmptyHeroStyle" TargetType="StackPanel">
@@ -285,14 +286,25 @@
         <Setter Property="Background" Value="{DynamicResource Brush.Composer}" />
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="22" />
+        <Setter Property="CornerRadius" Value="18" />
         <Setter Property="Padding" Value="10,8" />
+        <Setter Property="Margin" Value="2,4" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="18"
+                                  ShadowDepth="3"
+                                  Opacity="0.14"
+                                  Direction="270"
+                                  Color="#FF000000" />
+            </Setter.Value>
+        </Setter>
         <Style.Triggers>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderHover}" />
             </Trigger>
             <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
-                <Setter Property="CornerRadius" Value="24" />
+                <Setter Property="CornerRadius" Value="20" />
                 <Setter Property="Padding" Value="18,16,18,12" />
                 <Setter Property="MinHeight" Value="128" />
             </DataTrigger>
