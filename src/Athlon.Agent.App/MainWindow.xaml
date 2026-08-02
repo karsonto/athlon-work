@@ -55,7 +55,7 @@
             <ColumnDefinition x:Name="ContextSidebarColumn"
                               Width="320"
                               MinWidth="220"
-                              MaxWidth="560" />
+                              MaxWidth="960" />
         </Grid.ColumnDefinitions>
 
         <!-- Window chrome (minimize / maximize / close only) -->
@@ -232,7 +232,7 @@
                                             IsPanelOpen="{Binding IsNavigationSidebarVisible}" />
         </Button>
 
-        <!-- Collapsed right affordance: same floating toggle as left (no chrome rail) -->
+        <!-- Collapsed right affordance unused: chat header already has the toggle (avoid icon overlap). -->
         <Button x:Name="ContextSidebarCollapsedRail"
                 Grid.Row="1"
                 Grid.RowSpan="2"
@@ -244,7 +244,8 @@
                 Style="{StaticResource RightSidebarToggleButtonStyle}"
                 Command="{Binding ToggleContextSidebarCommand}"
                 ToolTip="{Binding ContextSidebarToggleToolTip}"
-                Visibility="Collapsed">
+                Visibility="Collapsed"
+                IsHitTestVisible="False">
             <controls:RightSidebarToggleIcon Foreground="{DynamicResource Brush.SubtleText}"
                                              IsPanelOpen="{Binding IsContextSidebarVisible}" />
         </Button>
@@ -267,11 +268,11 @@
         <GridSplitter x:Name="ContextSidebarSplitter"
                       Grid.Row="1"
                       Grid.RowSpan="2"
-                      Grid.Column="1"
-                      Style="{StaticResource LayoutColumnSplitterHitOnlyStyle}"
+                      Grid.Column="2"
+                      Style="{StaticResource LayoutColumnSplitterLeadingStyle}"
                       ResizeDirection="Columns"
-                      ResizeBehavior="CurrentAndNext"
-                      Panel.ZIndex="3">
+                      ResizeBehavior="PreviousAndCurrent"
+                      Panel.ZIndex="4">
             <i:Interaction.Behaviors>
                 <behaviors:GridSplitterLayoutBehavior Kind="ContextSidebar" />
             </i:Interaction.Behaviors>

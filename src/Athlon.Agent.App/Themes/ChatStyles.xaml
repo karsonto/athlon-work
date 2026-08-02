@@ -246,25 +246,34 @@
         </Style.Triggers>
     </Style>
 
+    <!-- Codex-like empty hero: large centered display title, regular weight -->
     <Style x:Key="ComposerWelcomeTitleStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="28" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, PingFang SC" />
+        <Setter Property="FontSize" Value="26" />
+        <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="TextAlignment" Value="Center" />
         <Setter Property="TextWrapping" Value="Wrap" />
-        <Setter Property="Margin" Value="0,0,0,10" />
+        <Setter Property="LineHeight" Value="34" />
+        <Setter Property="Margin" Value="0,0,0,28" />
+        <Setter Property="TextOptions.TextFormattingMode" Value="Display" />
+        <Setter Property="TextOptions.TextRenderingMode" Value="ClearType" />
     </Style>
 
     <Style x:Key="ComposerWelcomeDescriptionStyle" TargetType="TextBlock">
-        <Setter Property="FontSize" Value="14" />
-        <Setter Property="LineHeight" Value="22" />
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, PingFang SC" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="Normal" />
+        <Setter Property="LineHeight" Value="20" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="TextAlignment" Value="Center" />
         <Setter Property="TextWrapping" Value="Wrap" />
         <Setter Property="MaxWidth" Value="440" />
-        <Setter Property="Opacity" Value="0.92" />
+        <Setter Property="Opacity" Value="0.85" />
+        <Setter Property="Margin" Value="0,0,0,4" />
     </Style>
 
     <Style x:Key="ComposerHintStyle" TargetType="TextBlock">

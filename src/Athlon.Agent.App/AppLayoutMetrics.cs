@@ -68,7 +68,7 @@ public static class AppLayoutMetrics
 public static class UiLayoutConstraints
 {
     public const double ContextSidebarMinWidth = 220;
-    public const double ContextSidebarMaxWidth = 560;
+    public const double ContextSidebarMaxWidth = 960;
     public const double ContextSidebarDefaultWidth = 320;
     public const double ContextSidebarCollapseDragThreshold = 200;
 

@@ -309,10 +309,10 @@ Hold to talk</value>
     <value>Athlon Agent can help you analyze code, build prototypes, refine designs, or handle development tasks.</value>
   </data>
   <data name="Chat_WelcomeTitle" xml:space="preserve">
-    <value>Start a new conversation</value>
+    <value>What should Athlon help you build?</value>
   </data>
   <data name="Chat_WelcomeTitleWithName" xml:space="preserve">
-    <value>Hello, {0}</value>
+    <value>Hi {0}, what should Athlon help you build?</value>
   </data>
   <data name="Common_About" xml:space="preserve">
     <value>About</value>

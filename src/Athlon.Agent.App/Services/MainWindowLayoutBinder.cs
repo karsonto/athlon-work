@@ -13,6 +13,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
     private const double ContextSidebarEdgeGutterWidth = 12;
 
     private Storyboard? _contextSidebarStoryboard;
+    private int _contextSidebarAnimationGeneration;
 
     public void BindChatSurface(IChatLayoutSurface chatSurface)
     {
@@ -174,6 +175,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
     public void ApplyContextSidebarImmediate()
     {
         StopContextSidebarAnimation();
+        ClearContextSidebarPropertyAnimations();
 
         if (elements.ContextSidebarColumn is null || elements.ContextSidebarPanel is null || elements.ContextSidebarSplitter is null)
         {
@@ -182,35 +184,11 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
 
         if (viewModel.IsContextSidebarVisible)
         {
-            elements.ContextSidebarColumn.MinWidth = UiLayoutConstraints.ContextSidebarMinWidth;
-            elements.ContextSidebarColumn.MaxWidth = UiLayoutConstraints.ContextSidebarMaxWidth;
-            elements.ContextSidebarColumn.Width = new GridLength(viewModel.ContextSidebarWidth);
-            elements.ContextSidebarPanel.Visibility = Visibility.Visible;
-            elements.ContextSidebarPanel.Opacity = 1;
-            elements.ContextSidebarSplitter.Visibility = Visibility.Visible;
-            elements.ContextSidebarSplitter.IsEnabled = true;
-            if (elements.ContextSidebarCollapsedRail is not null)
-            {
-                elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
-            }
-
-            viewModel.SetContextSidebarEdgeGutterWidth(ContextSidebarEdgeGutterWidth);
+            ApplyContextSidebarOpenedLayout();
         }
         else
         {
-            elements.ContextSidebarColumn.MinWidth = 0;
-            elements.ContextSidebarColumn.MaxWidth = double.PositiveInfinity;
-            elements.ContextSidebarColumn.Width = new GridLength(0);
-            elements.ContextSidebarPanel.Visibility = Visibility.Collapsed;
-            elements.ContextSidebarPanel.Opacity = 0;
-            elements.ContextSidebarSplitter.Visibility = Visibility.Collapsed;
-            elements.ContextSidebarSplitter.IsEnabled = false;
-            if (elements.ContextSidebarCollapsedRail is not null)
-            {
-                elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
-            }
-
-            viewModel.SetContextSidebarEdgeGutterWidth(0);
+            ApplyContextSidebarClosedLayout();
         }
     }
 
@@ -222,16 +200,24 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
         }
 
         StopContextSidebarAnimation();
+        ClearContextSidebarPropertyAnimations();
 
+        var generation = ++_contextSidebarAnimationGeneration;
         var opening = viewModel.IsContextSidebarVisible;
-        var fromWidth = opening ? 0 : GetCurrentSidebarWidth();
+        var fromWidth = opening
+            ? 0
+            : Math.Max(GetCurrentSidebarWidth(), viewModel.ContextSidebarWidth);
         var toWidth = opening ? viewModel.ContextSidebarWidth : 0;
         var fromGutter = opening ? 0 : ContextSidebarEdgeGutterWidth;
-        var toGutter = opening ? ContextSidebarEdgeGutterWidth : 0;
 
         elements.ContextSidebarColumn.MinWidth = 0;
         elements.ContextSidebarColumn.MaxWidth = double.PositiveInfinity;
         elements.ContextSidebarColumn.Width = new GridLength(fromWidth);
+
+        if (elements.ContextSidebarCollapsedRail is not null)
+        {
+            elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
+        }
 
         if (opening)
         {
@@ -242,13 +228,10 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
         }
         else
         {
+            elements.ContextSidebarPanel.Visibility = Visibility.Visible;
             elements.ContextSidebarPanel.Opacity = 1;
+            elements.ContextSidebarSplitter.Visibility = Visibility.Visible;
             elements.ContextSidebarSplitter.IsEnabled = false;
-        }
-
-        if (elements.ContextSidebarCollapsedRail is not null)
-        {
-            elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
         }
 
         viewModel.SetContextSidebarEdgeGutterWidth(fromGutter);
@@ -258,6 +241,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             From = new GridLength(fromWidth),
             To = new GridLength(toWidth),
             Duration = TimeSpan.FromMilliseconds(SidebarAnimationDurationMs),
+            FillBehavior = FillBehavior.Stop,
             EasingFunction = opening
                 ? new CubicEase { EasingMode = EasingMode.EaseOut }
                 : new CubicEase { EasingMode = EasingMode.EaseIn }
@@ -268,6 +252,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             From = opening ? 0 : 1,
             To = opening ? 1 : 0,
             Duration = TimeSpan.FromMilliseconds(SidebarAnimationDurationMs),
+            FillBehavior = FillBehavior.Stop,
             EasingFunction = opening
                 ? new CubicEase { EasingMode = EasingMode.EaseOut }
                 : new CubicEase { EasingMode = EasingMode.EaseIn }
@@ -276,7 +261,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
         widthAnimation.CurrentTimeInvalidated += (_, _) =>
             SyncEdgeGutterToSidebarWidth(opening, fromWidth);
 
-        var storyboard = new Storyboard();
+        var storyboard = new Storyboard { FillBehavior = FillBehavior.Stop };
         storyboard.Children.Add(widthAnimation);
         storyboard.Children.Add(opacityAnimation);
 
@@ -288,8 +273,14 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
 
         storyboard.Completed += (_, _) =>
         {
+            if (generation != _contextSidebarAnimationGeneration)
+            {
+                return;
+            }
+
             _contextSidebarStoryboard = null;
-            if (opening)
+            ClearContextSidebarPropertyAnimations();
+            if (viewModel.IsContextSidebarVisible)
             {
                 ApplyContextSidebarOpenedLayout();
             }
@@ -310,6 +301,8 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             return;
         }
 
+        ClearContextSidebarPropertyAnimations();
+
         var width = elements.ContextSidebarColumn.ActualWidth;
         if (width < UiLayoutConstraints.ContextSidebarCollapseDragThreshold)
         {
@@ -322,6 +315,8 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
         {
             viewModel.UpdateContextSidebarWidth(width);
         }
+
+        ApplyContextSidebarOpenedLayout();
     }
 
     private void ApplyContextSidebarOpenedLayout()
@@ -331,13 +326,23 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             return;
         }
 
+        ClearContextSidebarPropertyAnimations();
+
         elements.ContextSidebarColumn.MinWidth = UiLayoutConstraints.ContextSidebarMinWidth;
         elements.ContextSidebarColumn.MaxWidth = UiLayoutConstraints.ContextSidebarMaxWidth;
         elements.ContextSidebarColumn.Width = new GridLength(viewModel.ContextSidebarWidth);
         elements.ContextSidebarPanel.Visibility = Visibility.Visible;
         elements.ContextSidebarPanel.Opacity = 1;
+        // Leave a grip strip so the leading splitter is never covered by the panel.
+        elements.ContextSidebarPanel.Margin = new Thickness(12, 0, 0, 0);
         elements.ContextSidebarSplitter.Visibility = Visibility.Visible;
         elements.ContextSidebarSplitter.IsEnabled = true;
+        elements.ContextSidebarSplitter.IsHitTestVisible = true;
+        if (elements.ContextSidebarCollapsedRail is not null)
+        {
+            elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
+        }
+
         viewModel.SetContextSidebarEdgeGutterWidth(ContextSidebarEdgeGutterWidth);
     }
 
@@ -348,13 +353,21 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             return;
         }
 
+        ClearContextSidebarPropertyAnimations();
+
         elements.ContextSidebarColumn.MinWidth = 0;
         elements.ContextSidebarColumn.MaxWidth = double.PositiveInfinity;
         elements.ContextSidebarColumn.Width = new GridLength(0);
         elements.ContextSidebarPanel.Visibility = Visibility.Collapsed;
         elements.ContextSidebarPanel.Opacity = 0;
+        elements.ContextSidebarPanel.Margin = new Thickness(0);
         elements.ContextSidebarSplitter.Visibility = Visibility.Collapsed;
         elements.ContextSidebarSplitter.IsEnabled = false;
+        if (elements.ContextSidebarCollapsedRail is not null)
+        {
+            elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
+        }
+
         viewModel.SetContextSidebarEdgeGutterWidth(0);
     }
 
@@ -365,8 +378,17 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             return;
         }
 
+        _contextSidebarAnimationGeneration++;
         _contextSidebarStoryboard.Stop();
         _contextSidebarStoryboard = null;
+        ClearContextSidebarPropertyAnimations();
+    }
+
+    private void ClearContextSidebarPropertyAnimations()
+    {
+        // Animating ColumnDefinition.Width holds a clock that blocks GridSplitter until cleared.
+        elements.ContextSidebarColumn?.BeginAnimation(ColumnDefinition.WidthProperty, null);
+        elements.ContextSidebarPanel?.BeginAnimation(UIElement.OpacityProperty, null);
     }
 
     private void SyncEdgeGutterToSidebarWidth(bool opening, double fromWidth)

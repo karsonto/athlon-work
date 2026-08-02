@@ -309,10 +309,10 @@
     <value>Athlon Agent 可以帮您分析代码、生成原型、优化设计，或执行任何开发任务。</value>
   </data>
   <data name="Chat_WelcomeTitle" xml:space="preserve">
-    <value>开始新的对话</value>
+    <value>Athlon需要帮你构建什么？</value>
   </data>
   <data name="Chat_WelcomeTitleWithName" xml:space="preserve">
-    <value>你好，{0}</value>
+    <value>你好{0}，Athlon需要帮你构建什么？</value>
   </data>
   <data name="Common_About" xml:space="preserve">
     <value>About</value>

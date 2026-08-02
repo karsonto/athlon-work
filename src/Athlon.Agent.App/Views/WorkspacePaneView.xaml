@@ -19,6 +19,48 @@
         <DataTemplate DataType="{x:Type vm:TerminalWorkspaceTabViewModel}">
             <controls:TerminalWorkspaceView />
         </DataTemplate>
+
+        <!-- Codex-like monoline icons -->
+        <Style x:Key="WorkspaceIconStroke" TargetType="Shape">
+            <Setter Property="Stroke" Value="{DynamicResource Brush.Text}" />
+            <Setter Property="StrokeThickness" Value="1.4" />
+            <Setter Property="StrokeStartLineCap" Value="Round" />
+            <Setter Property="StrokeEndLineCap" Value="Round" />
+            <Setter Property="StrokeLineJoin" Value="Round" />
+            <Setter Property="Fill" Value="Transparent" />
+            <Setter Property="SnapsToDevicePixels" Value="False" />
+            <Setter Property="Opacity" Value="0.88" />
+        </Style>
+
+        <Style x:Key="WorkspaceShortcutPillStyle" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource Brush.PanelAlt}" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="WorkspaceShortcutTextStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Medium" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="WorkspaceEmptyRowStyle" TargetType="Button" BasedOn="{StaticResource ComposerModeMenuItemStyle}">
+            <Setter Property="Padding" Value="14,12" />
+            <Setter Property="Margin" Value="0,2" />
+            <Setter Property="MinHeight" Value="44" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+
+        <Style x:Key="WorkspaceEmptyLabelStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="Normal" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+        </Style>
     </UserControl.Resources>
 
     <Grid>
@@ -94,7 +136,7 @@
                             ToolTip="{loc:Localize Key=Workspace_AddTabTooltip}" />
                     <Popup PlacementTarget="{Binding ElementName=AddTabButton}"
                            Placement="Bottom"
-                           HorizontalOffset="-120"
+                           HorizontalOffset="-140"
                            StaysOpen="False"
                            AllowsTransparency="True"
                            IsOpen="{Binding WorkspacePane.IsAddMenuOpen, Mode=TwoWay}">
@@ -111,44 +153,111 @@
                                     BorderThickness="1"
                                     CornerRadius="12"
                                     Padding="6"
-                                    MinWidth="200">
+                                    MinWidth="220">
                                 <StackPanel>
                                     <Button Command="{Binding WorkspacePane.AddBrowserTabCommand}"
-                                            Style="{StaticResource ComposerModeMenuItemStyle}"
-                                            HorizontalContentAlignment="Stretch"
-                                            Padding="10,8">
+                                            Style="{StaticResource WorkspaceEmptyRowStyle}"
+                                            Padding="10,9"
+                                            MinHeight="38"
+                                            Margin="0,1">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="28" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{loc:Localize Key=Workspace_Browser}" FontSize="13" />
-                                            <Border Grid.Column="1"
-                                                    Background="{DynamicResource Brush.PanelAlt}"
-                                                    CornerRadius="4"
-                                                    Padding="6,2"
+                                            <Viewbox Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                <Canvas Width="16" Height="16">
+                                                    <Ellipse Canvas.Left="1.5" Canvas.Top="1.5" Width="13" Height="13"
+                                                             Style="{StaticResource WorkspaceIconStroke}" />
+                                                    <Ellipse Canvas.Left="5.25" Canvas.Top="1.5" Width="5.5" Height="13"
+                                                             Style="{StaticResource WorkspaceIconStroke}" />
+                                                    <Line X1="1.5" Y1="8" X2="14.5" Y2="8"
+                                                          Style="{StaticResource WorkspaceIconStroke}" />
+                                                </Canvas>
+                                            </Viewbox>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{loc:Localize Key=Workspace_Browser}"
+                                                       Style="{StaticResource WorkspaceEmptyLabelStyle}"
+                                                       FontSize="13" />
+                                            <Border Grid.Column="2"
+                                                    Style="{StaticResource WorkspaceShortcutPillStyle}"
                                                     Margin="12,0,0,0">
-                                                <TextBlock Text="Ctrl+T"
-                                                           FontSize="11"
-                                                           Foreground="{DynamicResource Brush.SubtleText}" />
+                                                <TextBlock Text="Ctrl+T" Style="{StaticResource WorkspaceShortcutTextStyle}" />
                                             </Border>
                                         </Grid>
                                     </Button>
                                     <Button Command="{Binding WorkspacePane.AddTerminalTabCommand}"
-                                            Content="{loc:Localize Key=Workspace_Terminal}"
-                                            Style="{StaticResource ComposerModeMenuItemStyle}"
-                                            HorizontalContentAlignment="Left"
-                                            Padding="10,8" />
+                                            Style="{StaticResource WorkspaceEmptyRowStyle}"
+                                            Padding="10,9"
+                                            MinHeight="38"
+                                            Margin="0,1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="28" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Viewbox Width="15" Height="15" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                <Canvas Width="16" Height="16">
+                                                    <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="12"
+                                                               RadiusX="2" RadiusY="2"
+                                                               Style="{StaticResource WorkspaceIconStroke}" />
+                                                    <Polyline Points="4.5,6 6.5,8 4.5,10"
+                                                              Style="{StaticResource WorkspaceIconStroke}" />
+                                                    <Line X1="8" Y1="10.5" X2="11.5" Y2="10.5"
+                                                          Style="{StaticResource WorkspaceIconStroke}" />
+                                                </Canvas>
+                                            </Viewbox>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{loc:Localize Key=Workspace_Terminal}"
+                                                       Style="{StaticResource WorkspaceEmptyLabelStyle}"
+                                                       FontSize="13" />
+                                        </Grid>
+                                    </Button>
                                     <Button Command="{Binding WorkspacePane.AddFilesTabCommand}"
-                                            Content="{loc:Localize Key=Context_TabFiles}"
-                                            Style="{StaticResource ComposerModeMenuItemStyle}"
-                                            HorizontalContentAlignment="Left"
-                                            Padding="10,8" />
+                                            Style="{StaticResource WorkspaceEmptyRowStyle}"
+                                            Padding="10,9"
+                                            MinHeight="38"
+                                            Margin="0,1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="28" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Viewbox Width="15" Height="15" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                <Canvas Width="16" Height="16">
+                                                    <Path Data="M2,3.5 H6.2 L7.6,5.2 H14 V13.5 H2 Z"
+                                                          Style="{StaticResource WorkspaceIconStroke}" />
+                                                </Canvas>
+                                            </Viewbox>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{loc:Localize Key=Context_TabFiles}"
+                                                       Style="{StaticResource WorkspaceEmptyLabelStyle}"
+                                                       FontSize="13" />
+                                        </Grid>
+                                    </Button>
                                     <Button Command="{Binding WorkspacePane.AddSkillsTabCommand}"
-                                            Content="{loc:Localize Key=Context_TabSkills}"
-                                            Style="{StaticResource ComposerModeMenuItemStyle}"
-                                            HorizontalContentAlignment="Left"
-                                            Padding="10,8" />
+                                            Style="{StaticResource WorkspaceEmptyRowStyle}"
+                                            Padding="10,9"
+                                            MinHeight="38"
+                                            Margin="0,1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="28" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Viewbox Width="14" Height="14" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                <Canvas Width="16" Height="16">
+                                                    <Path Data="M8,1.5 L9.6,6.2 L14.5,6.2 L10.5,9.1 L12.1,13.8 L8,11 L3.9,13.8 L5.5,9.1 L1.5,6.2 L6.4,6.2 Z"
+                                                          Style="{StaticResource WorkspaceIconStroke}" />
+                                                </Canvas>
+                                            </Viewbox>
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{loc:Localize Key=Context_TabSkills}"
+                                                       Style="{StaticResource WorkspaceEmptyLabelStyle}"
+                                                       FontSize="13" />
+                                        </Grid>
+                                    </Button>
                                 </StackPanel>
                             </Border>
                         </Border>
@@ -157,8 +266,8 @@
             </Grid>
         </Border>
 
-        <!-- Empty state -->
-        <Grid Grid.Row="1">
+        <!-- Empty state: Codex-like launcher rows -->
+        <Grid Grid.Row="1" Background="{DynamicResource Brush.AppBackground}">
             <Grid.Style>
                 <Style TargetType="Grid">
                     <Setter Property="Visibility" Value="Collapsed" />
@@ -170,87 +279,96 @@
                 </Style>
             </Grid.Style>
             <StackPanel VerticalAlignment="Center"
-                        HorizontalAlignment="Center"
-                        MinWidth="220"
-                        MaxWidth="320">
+                        HorizontalAlignment="Stretch"
+                        Margin="28,0"
+                        MaxWidth="360">
                 <Button Command="{Binding WorkspacePane.AddBrowserTabCommand}"
-                        Style="{StaticResource GhostButtonStyle}"
-                        HorizontalContentAlignment="Stretch"
-                        Padding="12,10"
-                        Margin="0,0,0,6"
-                        BorderThickness="0"
-                        Background="Transparent"
-                        Cursor="Hand">
+                        Style="{StaticResource WorkspaceEmptyRowStyle}">
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="28" />
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="🌐" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <Viewbox Width="18" Height="18" VerticalAlignment="Center" HorizontalAlignment="Left">
+                            <Canvas Width="16" Height="16">
+                                <Ellipse Canvas.Left="1.5" Canvas.Top="1.5" Width="13" Height="13"
+                                         Style="{StaticResource WorkspaceIconStroke}" />
+                                <Ellipse Canvas.Left="5.25" Canvas.Top="1.5" Width="5.5" Height="13"
+                                         Style="{StaticResource WorkspaceIconStroke}" />
+                                <Line X1="1.5" Y1="8" X2="14.5" Y2="8"
+                                      Style="{StaticResource WorkspaceIconStroke}" />
+                            </Canvas>
+                        </Viewbox>
                         <TextBlock Grid.Column="1"
                                    Text="{loc:Localize Key=Workspace_Browser}"
-                                   FontSize="14"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource Brush.Text}" />
-                        <Border Grid.Column="2"
-                                Background="{DynamicResource Brush.PanelAlt}"
-                                CornerRadius="4"
-                                Padding="6,2">
-                            <TextBlock Text="Ctrl+T"
-                                       FontSize="11"
-                                       Foreground="{DynamicResource Brush.SubtleText}" />
+                                   Style="{StaticResource WorkspaceEmptyLabelStyle}" />
+                        <Border Grid.Column="2" Style="{StaticResource WorkspaceShortcutPillStyle}">
+                            <TextBlock Text="Ctrl+T" Style="{StaticResource WorkspaceShortcutTextStyle}" />
                         </Border>
                     </Grid>
                 </Button>
+
                 <Button Command="{Binding WorkspacePane.AddTerminalTabCommand}"
-                        Style="{StaticResource GhostButtonStyle}"
-                        HorizontalContentAlignment="Stretch"
-                        Padding="12,10"
-                        Margin="0,0,0,6"
-                        BorderThickness="0"
-                        Background="Transparent"
-                        Cursor="Hand">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text=">_ " FontFamily="Consolas" FontSize="14" VerticalAlignment="Center" Margin="0,0,8,0"
-                                   Foreground="{DynamicResource Brush.SubtleText}" />
-                        <TextBlock Text="{loc:Localize Key=Workspace_Terminal}"
-                                   FontSize="14"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource Brush.Text}" />
-                    </StackPanel>
+                        Style="{StaticResource WorkspaceEmptyRowStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="28" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Viewbox Width="17" Height="17" VerticalAlignment="Center" HorizontalAlignment="Left">
+                            <Canvas Width="16" Height="16">
+                                <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="12"
+                                           RadiusX="2" RadiusY="2"
+                                           Style="{StaticResource WorkspaceIconStroke}" />
+                                <Polyline Points="4.5,6 6.5,8 4.5,10"
+                                          Style="{StaticResource WorkspaceIconStroke}" />
+                                <Line X1="8" Y1="10.5" X2="11.5" Y2="10.5"
+                                      Style="{StaticResource WorkspaceIconStroke}" />
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Grid.Column="1"
+                                   Text="{loc:Localize Key=Workspace_Terminal}"
+                                   Style="{StaticResource WorkspaceEmptyLabelStyle}" />
+                    </Grid>
                 </Button>
+
                 <Button Command="{Binding WorkspacePane.AddFilesTabCommand}"
-                        Style="{StaticResource GhostButtonStyle}"
-                        HorizontalContentAlignment="Stretch"
-                        Padding="12,10"
-                        Margin="0,0,0,6"
-                        BorderThickness="0"
-                        Background="Transparent"
-                        Cursor="Hand">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="📁" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0" />
-                        <TextBlock Text="{loc:Localize Key=Context_TabFiles}"
-                                   FontSize="14"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource Brush.Text}" />
-                    </StackPanel>
+                        Style="{StaticResource WorkspaceEmptyRowStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="28" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Viewbox Width="17" Height="17" VerticalAlignment="Center" HorizontalAlignment="Left">
+                            <Canvas Width="16" Height="16">
+                                <Path Data="M2,3.5 H6.2 L7.6,5.2 H14 V13.5 H2 Z"
+                                      Style="{StaticResource WorkspaceIconStroke}" />
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Grid.Column="1"
+                                   Text="{loc:Localize Key=Context_TabFiles}"
+                                   Style="{StaticResource WorkspaceEmptyLabelStyle}" />
+                    </Grid>
                 </Button>
+
                 <Button Command="{Binding WorkspacePane.AddSkillsTabCommand}"
-                        Style="{StaticResource GhostButtonStyle}"
-                        HorizontalContentAlignment="Stretch"
-                        Padding="12,10"
-                        BorderThickness="0"
-                        Background="Transparent"
-                        Cursor="Hand">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="✦" FontSize="14" VerticalAlignment="Center" Margin="0,0,10,0"
-                                   Foreground="{DynamicResource Brush.SubtleText}" />
-                        <TextBlock Text="{loc:Localize Key=Context_TabSkills}"
-                                   FontSize="14"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource Brush.Text}" />
-                    </StackPanel>
+                        Style="{StaticResource WorkspaceEmptyRowStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="28" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Viewbox Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left">
+                            <Canvas Width="16" Height="16">
+                                <Path Data="M8,1.5 L9.6,6.2 L14.5,6.2 L10.5,9.1 L12.1,13.8 L8,11 L3.9,13.8 L5.5,9.1 L1.5,6.2 L6.4,6.2 Z"
+                                      Style="{StaticResource WorkspaceIconStroke}" />
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Grid.Column="1"
+                                   Text="{loc:Localize Key=Context_TabSkills}"
+                                   Style="{StaticResource WorkspaceEmptyLabelStyle}" />
+                    </Grid>
                 </Button>
             </StackPanel>
         </Grid>
