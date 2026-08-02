@@ -41,6 +41,9 @@ public sealed partial class SessionHistoryItemViewModel : ObservableObject
 
     public bool CanStop => IsRunning;
 
+    /// <summary>True when the session index reports at least one message (for context-menu enablement).</summary>
+    public bool HasMessages => _messageCount > 0;
+
     /// <summary>Sidebar secondary line: running state, otherwise relative time.</summary>
     public string MetaText => IsRunning
         ? "生成中…"

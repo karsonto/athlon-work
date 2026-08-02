@@ -42,6 +42,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _apiKeySecretMigration = apiKeySecretMigration;
         _loc = localization;
         Language = Settings.Ui.Language;
+        TerminalShell = WorkspaceTerminalBootstrap.NormalizeShellPreference(Settings.Ui.TerminalShell);
         SettingsStatus = _loc["Settings_DefaultStatus"];
         AppCultureManager.CultureChanged += OnCultureChanged;
         foreach (var server in Settings.McpServers)
@@ -66,6 +67,9 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private string language = "zh-CN";
+
+    [ObservableProperty]
+    private string terminalShell = WorkspaceTerminalBootstrap.ShellCmd;
 
     [ObservableProperty]
     private string apiKey = string.Empty;
@@ -126,6 +130,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         PruneEmptyWorkspaces(Settings);
         SyncSkillsFromCatalog();
         Settings.Ui.Language = Language;
+        Settings.Ui.TerminalShell = WorkspaceTerminalBootstrap.NormalizeShellPreference(TerminalShell);
         AppCultureManager.ApplyFromSettings(Settings.Ui);
         await _storage.SaveSettingsAsync(Settings).ConfigureAwait(true);
         SettingsStatus = BuildSaveStatusMessage(modelKeySaved, embeddingKeySaved);
@@ -191,16 +196,31 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<LanguageOption> LanguageOptions => AppCultureManager.GetLanguageOptions();
 
+    public IReadOnlyList<TerminalShellOption> TerminalShellOptions =>
+    [
+        new(WorkspaceTerminalBootstrap.ShellCmd, _loc["Settings_TerminalShell_Cmd"]),
+        new(WorkspaceTerminalBootstrap.ShellPowerShell, _loc["Settings_TerminalShell_PowerShell"]),
+        new(WorkspaceTerminalBootstrap.ShellPwsh, _loc["Settings_TerminalShell_Pwsh"])
+    ];
+
     partial void OnLanguageChanged(string value)
     {
         Settings.Ui.Language = value;
         AppCultureManager.ApplyFromSettings(Settings.Ui);
     }
 
+    partial void OnTerminalShellChanged(string value)
+    {
+        Settings.Ui.TerminalShell = WorkspaceTerminalBootstrap.NormalizeShellPreference(value);
+    }
+
     private void OnCultureChanged(object? sender, EventArgs e)
     {
         OnPropertyChanged(nameof(LanguageOptions));
+        OnPropertyChanged(nameof(TerminalShellOptions));
     }
+
+    public sealed record TerminalShellOption(string Value, string DisplayName);
 
     public string[] Sections { get; } = { "Models", "MCP", "Skills", "Workspace", "Tool Permissions", "Appearance" };
     public ObservableCollection<McpServerItemViewModel> McpServers { get; } = new();

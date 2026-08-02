@@ -888,7 +888,20 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     }
 
     [RelayCommand(CanExecute = nameof(CanClearContext))]
-    private async Task ClearContextAsync()
+    private Task ClearContextAsync() => ClearDisplayedContextAsync();
+
+    [RelayCommand(CanExecute = nameof(CanClearSessionContext))]
+    private async Task ClearSessionContextAsync(SessionHistoryItemViewModel? item)
+    {
+        if (!await EnsureDisplayedSessionAsync(item).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        await ClearDisplayedContextAsync().ConfigureAwait(true);
+    }
+
+    private async Task ClearDisplayedContextAsync()
     {
         if (!_notifier.ConfirmYesNo("Shell_ClearContextTitle", "Shell_ClearContextMessage"))
         {
@@ -914,10 +927,24 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
         Settings.SettingsStatus = _loc["Shell_ClearContextDone"];
         NotifyCommandStatesChanged();
+        await RefreshSessionHistoryAsync().ConfigureAwait(true);
     }
 
     [RelayCommand(CanExecute = nameof(CanCompactContext))]
-    private async Task CompactContextAsync()
+    private Task CompactContextAsync() => CompactDisplayedContextAsync();
+
+    [RelayCommand(CanExecute = nameof(CanCompactSessionContext))]
+    private async Task CompactSessionContextAsync(SessionHistoryItemViewModel? item)
+    {
+        if (!await EnsureDisplayedSessionAsync(item).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        await CompactDisplayedContextAsync().ConfigureAwait(true);
+    }
+
+    private async Task CompactDisplayedContextAsync()
     {
         if (!_notifier.ConfirmYesNo("Shell_CompactContextTitle", "Shell_CompactContextMessage"))
         {
@@ -976,6 +1003,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
             SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
             Settings.SettingsStatus = _loc["Shell_CompactContextDone"];
+            await RefreshSessionHistoryAsync().ConfigureAwait(true);
         }
         finally
         {
@@ -985,6 +1013,25 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             NotifyComposerCompactionStateChanged();
             NotifyCommandStatesChanged();
         }
+    }
+
+    private async Task<bool> EnsureDisplayedSessionAsync(SessionHistoryItemViewModel? item)
+    {
+        if (item is null)
+        {
+            return false;
+        }
+
+        if (item.Id == _session.Id)
+        {
+            return true;
+        }
+
+        var previousSession = _session;
+        await LoadSessionInternalAsync(item.Id).ConfigureAwait(true);
+        _ = SaveSessionInBackgroundAsync(previousSession);
+        CurrentPage = AppPage.Chat;
+        return true;
     }
 
     private bool TryCancelCompaction()
@@ -1013,6 +1060,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         OnPropertyChanged(nameof(IsComposerStopVisible));
         OnPropertyChanged(nameof(IsComposerSendVisible));
         CompactContextCommand.NotifyCanExecuteChanged();
+        CompactSessionContextCommand.NotifyCanExecuteChanged();
+        ClearSessionContextCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
     }
 
@@ -1020,11 +1069,33 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private bool CanClearContext() => Messages.Count > 0 && !IsBusy;
 
+    private bool CanClearSessionContext(SessionHistoryItemViewModel? item)
+    {
+        if (item is null || IsBusy)
+        {
+            return false;
+        }
+
+        return item.Id == _session.Id ? Messages.Count > 0 : item.HasMessages;
+    }
+
+    private bool CanCompactSessionContext(SessionHistoryItemViewModel? item)
+    {
+        if (item is null || IsBusy || IsCompacting)
+        {
+            return false;
+        }
+
+        return item.Id == _session.Id ? Messages.Count > 0 : item.HasMessages;
+    }
+
     private void OnMessagesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(HasChatMessages));
         ClearContextCommand.NotifyCanExecuteChanged();
         CompactContextCommand.NotifyCanExecuteChanged();
+        ClearSessionContextCommand.NotifyCanExecuteChanged();
+        CompactSessionContextCommand.NotifyCanExecuteChanged();
 
         if (IsBusy && e.Action == NotifyCollectionChangedAction.Add)
         {
@@ -1056,6 +1127,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         SendCommand.NotifyCanExecuteChanged();
         ClearContextCommand.NotifyCanExecuteChanged();
         CompactContextCommand.NotifyCanExecuteChanged();
+        ClearSessionContextCommand.NotifyCanExecuteChanged();
+        CompactSessionContextCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(HasChatMessages));
     }
 
@@ -2697,6 +2770,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         ClearContextCommand.NotifyCanExecuteChanged();
         CompactContextCommand.NotifyCanExecuteChanged();
+        ClearSessionContextCommand.NotifyCanExecuteChanged();
+        CompactSessionContextCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(IsComposerStopVisible));
     }

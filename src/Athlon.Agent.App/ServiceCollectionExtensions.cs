@@ -98,7 +98,9 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ISshWorkspaceClient>()));
 
         services.AddSingleton(sp => new WorkspacePaneViewModel(
-            sp.GetRequiredService<ILocalizationService>()));
+            sp.GetRequiredService<ILocalizationService>(),
+            sp.GetRequiredService<IActiveWorkspaceContext>(),
+            sp.GetRequiredService<AppSettings>()));
 
         services.AddSingleton(sp => new KnowledgeViewModel(
 

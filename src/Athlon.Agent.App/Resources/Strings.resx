@@ -470,11 +470,11 @@
   <data name="Workspace_BrowserGo" xml:space="preserve">
     <value>转到</value>
   </data>
-  <data name="Workspace_TerminalPlaceholderTitle" xml:space="preserve">
-    <value>终端即将推出</value>
+  <data name="Workspace_TerminalErrorTitle" xml:space="preserve">
+    <value>无法启动终端</value>
   </data>
-  <data name="Workspace_TerminalPlaceholderBody" xml:space="preserve">
-    <value>交互式终端将在后续版本提供。当前标签页为占位，可随时关闭。</value>
+  <data name="Workspace_TerminalRestart" xml:space="preserve">
+    <value>重新启动</value>
   </data>
   <data name="Context_Title" xml:space="preserve">
     <value>上下文</value>
@@ -1140,6 +1140,21 @@
   </data>
   <data name="Settings_Language_zh_CN" xml:space="preserve">
     <value>简体中文</value>
+  </data>
+  <data name="Settings_TerminalShell" xml:space="preserve">
+    <value>终端默认 Shell</value>
+  </data>
+  <data name="Settings_TerminalShellHint" xml:space="preserve">
+    <value>仅影响新打开的终端标签；已打开的标签可点「重新启动」套用。</value>
+  </data>
+  <data name="Settings_TerminalShell_Cmd" xml:space="preserve">
+    <value>命令提示符 (cmd)</value>
+  </data>
+  <data name="Settings_TerminalShell_PowerShell" xml:space="preserve">
+    <value>Windows PowerShell</value>
+  </data>
+  <data name="Settings_TerminalShell_Pwsh" xml:space="preserve">
+    <value>PowerShell 7+ (pwsh)</value>
   </data>
   <data name="Settings_MaxTokensHint" xml:space="preserve">
     <value>单次回复最大输出 token（留空则使用 API 默认值）。仅影响对话补全，不影响上下文摘要。</value>

@@ -235,6 +235,8 @@ public sealed class UiSettings
     public string Language { get; set; } = "zh-CN";
     public string Theme { get; set; } = "Dark";
     public double FontSize { get; set; } = 14;
+    /// <summary>cmd | powershell | pwsh — default shell for workspace terminal tabs.</summary>
+    public string TerminalShell { get; set; } = "cmd";
     public bool ContextSidebarVisible { get; set; } = true;
     public bool NavigationSidebarVisible { get; set; } = true;
     public double ContextSidebarWidth { get; set; } = 300;

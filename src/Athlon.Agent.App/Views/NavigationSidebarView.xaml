@@ -134,7 +134,27 @@
                                         </ItemsControl.Style>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="{x:Type vm:SessionHistoryItemViewModel}">
-                                                <Border>
+                                                <DataTemplate.Resources>
+                                                    <ContextMenu x:Key="SessionRowContextMenu"
+                                                                 x:Shared="False"
+                                                                 Style="{StaticResource MarkdownContextMenuStyle}">
+                                                        <MenuItem Header="{loc:Localize Key=Shell_CompactContextTitle}"
+                                                                  Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                                                  Command="{Binding PlacementTarget.Tag.CompactSessionContextCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                        <MenuItem Header="{loc:Localize Key=Shell_ClearContextTitle}"
+                                                                  Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                                                  Command="{Binding PlacementTarget.Tag.ClearSessionContextCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                        <Separator />
+                                                        <MenuItem Header="{loc:Localize Key=Common_Delete}"
+                                                                  Style="{StaticResource MarkdownContextMenuItemStyle}"
+                                                                  Command="{Binding PlacementTarget.Tag.DeleteSessionCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                                  CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                                    </ContextMenu>
+                                                </DataTemplate.Resources>
+                                                <Border Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        ContextMenu="{StaticResource SessionRowContextMenu}">
                                                     <Border.Style>
                                                         <Style TargetType="Border" BasedOn="{StaticResource SessionItemBorderStyle}">
                                                             <Setter Property="Padding" Value="10,8" />
@@ -155,6 +175,8 @@
                                                             <ColumnDefinition Width="Auto" />
                                                         </Grid.ColumnDefinitions>
                                                         <Button Grid.Column="0"
+                                                                Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                                ContextMenu="{StaticResource SessionRowContextMenu}"
                                                                 Command="{Binding DataContext.LoadSessionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                                                 CommandParameter="{Binding}"
                                                                 Style="{StaticResource SessionHistoryButtonStyle}"

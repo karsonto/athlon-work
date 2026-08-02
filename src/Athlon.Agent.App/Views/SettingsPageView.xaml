@@ -80,6 +80,20 @@
                                       DisplayMemberPath="DisplayName"
                                       MinWidth="200"
                                       HorizontalAlignment="Left" />
+                            <TextBlock Text="{loc:Localize Key=Settings_TerminalShell}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       Margin="0,14,0,6" />
+                            <ComboBox ItemsSource="{Binding TerminalShellOptions}"
+                                      SelectedValue="{Binding TerminalShell, UpdateSourceTrigger=PropertyChanged}"
+                                      SelectedValuePath="Value"
+                                      DisplayMemberPath="DisplayName"
+                                      MinWidth="240"
+                                      HorizontalAlignment="Left" />
+                            <TextBlock Text="{loc:Localize Key=Settings_TerminalShellHint}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,8,0,0" />
                         </StackPanel>
                     </Border>
 

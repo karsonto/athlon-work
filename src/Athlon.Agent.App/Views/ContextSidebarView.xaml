@@ -24,23 +24,6 @@
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource Brush.TextSecondary}"
                                    VerticalAlignment="Center" />
-                        <StackPanel Orientation="Horizontal"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Center">
-                            <Button Command="{Binding CompactContextCommand}"
-                                    VerticalAlignment="Center"
-                                    ToolTip="{loc:Localize Key=Context_CompactTooltip}"
-                                    Style="{StaticResource IconButtonStyle}"
-                                    Margin="0,0,4,0">
-                                <TextBlock Text="🗜" FontSize="14" />
-                            </Button>
-                            <Button Command="{Binding ClearContextCommand}"
-                                    VerticalAlignment="Center"
-                                    ToolTip="{loc:Localize Key=Context_ClearTooltip}"
-                                    Style="{StaticResource IconButtonStyle}">
-                                <TextBlock Text="🗑" FontSize="14" />
-                            </Button>
-                        </StackPanel>
                     </Grid>
                 </Border>
 

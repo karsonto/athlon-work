@@ -3,28 +3,66 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:loc="clr-namespace:Athlon.Agent.App.Localization">
     <Grid Background="{DynamicResource Brush.Panel}">
-        <StackPanel VerticalAlignment="Center"
-                    HorizontalAlignment="Center"
-                    MaxWidth="280">
-            <TextBlock Text=">_"
-                       FontSize="28"
-                       FontFamily="Consolas"
-                       Foreground="{DynamicResource Brush.SubtleText}"
-                       HorizontalAlignment="Center"
-                       Margin="0,0,0,12" />
-            <TextBlock Text="{loc:Localize Key=Workspace_TerminalPlaceholderTitle}"
-                       FontSize="16"
-                       FontWeight="SemiBold"
-                       Foreground="{DynamicResource Brush.Text}"
-                       HorizontalAlignment="Center"
-                       TextAlignment="Center"
-                       Margin="0,0,0,8" />
-            <TextBlock Text="{loc:Localize Key=Workspace_TerminalPlaceholderBody}"
-                       FontSize="13"
-                       Foreground="{DynamicResource Brush.SubtleText}"
-                       TextWrapping="Wrap"
-                       TextAlignment="Center"
-                       HorizontalAlignment="Center" />
-        </StackPanel>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Background="{DynamicResource Brush.Chrome}"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,0,0,1"
+                Padding="8,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="ShellLabel"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="{DynamicResource Brush.SubtleText}"
+                           TextTrimming="CharacterEllipsis" />
+                <Button Grid.Column="1"
+                        Content="↻"
+                        Width="28"
+                        Height="28"
+                        Style="{StaticResource IconButtonStyle}"
+                        Click="RestartButton_OnClick"
+                        ToolTip="{loc:Localize Key=Workspace_TerminalRestart}" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" x:Name="TerminalHost" />
+
+        <Border x:Name="ErrorPanel"
+                Grid.Row="1"
+                Background="{DynamicResource Brush.Panel}"
+                Visibility="Collapsed">
+            <StackPanel VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        MaxWidth="300"
+                        Margin="24">
+                <TextBlock Text="{loc:Localize Key=Workspace_TerminalErrorTitle}"
+                           FontSize="15"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource Brush.Text}"
+                           HorizontalAlignment="Center"
+                           TextAlignment="Center"
+                           Margin="0,0,0,8" />
+                <TextBlock x:Name="ErrorDetail"
+                           FontSize="12"
+                           Foreground="{DynamicResource Brush.SubtleText}"
+                           TextWrapping="Wrap"
+                           TextAlignment="Center"
+                           HorizontalAlignment="Center"
+                           Margin="0,0,0,14" />
+                <Button Content="{loc:Localize Key=Workspace_TerminalRestart}"
+                        HorizontalAlignment="Center"
+                        Padding="14,6"
+                        Style="{StaticResource GhostButtonStyle}"
+                        Click="RestartButton_OnClick" />
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>
