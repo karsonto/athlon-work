@@ -7,16 +7,17 @@ public sealed class BrowserReadAriaTreeTool(IBrowserAutomationHost host) : IAgen
 {
     public ToolDefinition Definition { get; } = new(
         "browser_read_aria_tree",
-        "Read the page (or a subtree rooted at ref) as an ARIA semantic tree with refs for later interaction.",
+        "Read the page (or a subtree rooted at ref) as an ARIA semantic tree with refs for later interaction. Prefer filter=interactive for action targeting.",
         ToolSchema.Object()
             .Integer("depth", "Optional max tree depth.")
             .String("ref", "Optional root aria ref (e.g. aria_1).")
+            .String("filter", "Optional: interactive to keep only actionable controls (recommended for clicking/typing).")
             .Build());
 
     public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
         BrowserToolHelper.InvokeHostAsync(async ct =>
         {
-            var args = BrowserToolHelper.BuildArgsJson(invocation, "depth", "ref");
+            var args = BrowserToolHelper.BuildArgsJson(invocation, "depth", "ref", "filter");
             var json = await host.ExecuteAriaAsync("readAriaTree", args, ct).ConfigureAwait(false);
             return BrowserToolHelper.FromAriaJson(json, "ARIA tree");
         }, cancellationToken);
@@ -26,13 +27,13 @@ public sealed class BrowserFindAriaNodesTool(IBrowserAutomationHost host) : IAge
 {
     public ToolDefinition Definition { get; } = new(
         "browser_find_aria_nodes",
-        "Find ARIA nodes by name, role, and/or text. Prefer this over reading the full tree when locating a control.",
+        "Find ARIA nodes. Requires at least one of: name, role, or text. Prefer this over reading the full tree when locating a control.",
         ToolSchema.Object()
-            .String("name", "Accessible name substring or exact match.")
-            .String("role", "ARIA/role name, e.g. button, textbox, link.")
-            .String("text", "Visible text substring.")
+            .String("name", "Accessible name substring or exact match. Provide name and/or role and/or text.")
+            .String("role", "ARIA/role name, e.g. button, textbox, link, or field (alias for inputs). Provide name and/or role and/or text.")
+            .String("text", "Visible text substring. Provide name and/or role and/or text.")
             .String("scopeRef", "Optional aria ref to search under.")
-            .Integer("limit", "Max candidates (1-10).")
+            .Integer("limit", "Max candidates (1-10). Invalid alone — also pass name, role, or text.")
             .Boolean("interactiveOnly", "Only interactive roles.")
             .String("intent", "Optional hint: click | type | select.")
             .Build());
@@ -40,6 +41,13 @@ public sealed class BrowserFindAriaNodesTool(IBrowserAutomationHost host) : IAge
     public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
         BrowserToolHelper.InvokeHostAsync(async ct =>
         {
+            if (!BrowserToolHelper.HasAnyStringArg(invocation, "name", "role", "text"))
+            {
+                return ToolResult.Failure(
+                    "Invalid ARIA arguments",
+                    "browser_find_aria_nodes requires at least one of: name, role, text. Example: {\"role\":\"button\",\"limit\":10}");
+            }
+
             var args = BrowserToolHelper.BuildArgsJson(
                 invocation, "name", "role", "text", "scopeRef", "limit", "interactiveOnly", "intent");
             var json = await host.ExecuteAriaAsync("findAriaNodes", args, ct).ConfigureAwait(false);

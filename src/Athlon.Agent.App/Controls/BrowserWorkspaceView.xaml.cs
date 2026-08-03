@@ -100,7 +100,7 @@ public partial class BrowserWorkspaceView : UserControl
                     }
                 }
             };
-            BrowserWebView.CoreWebView2.NavigationCompleted += (_, _) =>
+            BrowserWebView.CoreWebView2.NavigationCompleted += async (_, _) =>
             {
                 if (_tab is null || BrowserWebView.CoreWebView2 is null)
                 {
@@ -115,6 +115,16 @@ public partial class BrowserWorkspaceView : UserControl
                 if (!string.IsNullOrWhiteSpace(BrowserWebView.CoreWebView2.DocumentTitle))
                 {
                     _tab.Title = TruncateTitle(BrowserWebView.CoreWebView2.DocumentTitle);
+                }
+
+                // Document-created hook covers most navigations; re-inject if the page wiped globals.
+                try
+                {
+                    await EnsureAriaHostScriptOnCurrentDocumentAsync().ConfigureAwait(true);
+                }
+                catch
+                {
+                    // Best-effort; ExecuteAriaAsync also injects on demand.
                 }
             };
             await EnsureAriaHostScriptAsync().ConfigureAwait(true);
@@ -143,16 +153,39 @@ public partial class BrowserWorkspaceView : UserControl
 
         await BrowserWebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script)
             .ConfigureAwait(true);
+        await EnsureAriaHostScriptOnCurrentDocumentAsync().ConfigureAwait(true);
+        _ariaScriptInstalled = true;
+    }
+
+    private async Task EnsureAriaHostScriptOnCurrentDocumentAsync()
+    {
+        if (BrowserWebView.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        var script = BrowserAutomationHost.TryLoadAriaHostScript();
+        if (string.IsNullOrWhiteSpace(script))
+        {
+            return;
+        }
+
         try
         {
+            var present = await BrowserWebView.CoreWebView2.ExecuteScriptAsync(
+                    "(function(){return !!(window.__athlonAria && window.__athlonAria.__version==='2' && typeof window.__athlonAria.invoke==='function');})()")
+                .ConfigureAwait(true);
+            if (string.Equals(present, "true", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             await BrowserWebView.CoreWebView2.ExecuteScriptAsync(script).ConfigureAwait(true);
         }
         catch
         {
             // Current document may not be ready; document-created hook covers navigations.
         }
-
-        _ariaScriptInstalled = true;
     }
 
     private void TryRegisterWebView()

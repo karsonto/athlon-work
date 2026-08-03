@@ -47,6 +47,12 @@ internal sealed class McpDelegatingToolRouter(
                 return true;
             }
 
+            // After navigate opens a Browser tab, expose page/ARIA tools even without a workspace.
+            if (tool is IBrowserTool && browserWorkspaceState.HasOpenBrowserTab)
+            {
+                return true;
+            }
+
             return tool is IGlobalKnowledgeTool
                 && sessionKnowledgeState.ShouldExposeKnowledgeTool(activeSessionContext.SessionId);
         }

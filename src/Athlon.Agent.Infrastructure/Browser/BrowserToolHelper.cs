@@ -64,6 +64,26 @@ internal static class BrowserToolHelper
         }
     }
 
+    public static bool HasAnyStringArg(ToolInvocation invocation, params string[] keys)
+    {
+        foreach (var key in keys)
+        {
+            if (!invocation.Arguments.TryGetValue(key, out var element)
+                || element.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+            {
+                continue;
+            }
+
+            if (element.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(element.GetString()))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static string BuildArgsJson(ToolInvocation invocation, params string[] keys)
     {
         using var stream = new MemoryStream();

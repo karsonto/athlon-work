@@ -44,6 +44,29 @@ public sealed class BrowserToolRouterTests
     }
 
     [Fact]
+    public void ListTools_ChatOnly_WithBrowserTab_IncludesAria()
+    {
+        var router = CreateRouter(hasBrowserTab: true, configuredWorkspace: false);
+        var names = router.ListTools().Select(t => t.Name).ToArray();
+        Assert.Contains("browser_navigate", names);
+        Assert.Contains("browser_read_aria_tree", names);
+        Assert.Contains("browser_find_aria_nodes", names);
+        Assert.Contains("browser_get_page_info", names);
+    }
+
+    [Fact]
+    public void ListTools_BrowserTabToggle_RefreshesAriaAvailability()
+    {
+        var browserState = new MutableBrowserWorkspaceState(hasOpenBrowserTab: false);
+        var router = CreateRouter(browserState, configuredWorkspace: true);
+
+        Assert.DoesNotContain("browser_read_aria_tree", router.ListTools().Select(t => t.Name));
+
+        browserState.HasOpenBrowserTab = true;
+        Assert.Contains("browser_read_aria_tree", router.ListTools().Select(t => t.Name));
+    }
+
+    [Fact]
     public async Task NavigateTool_NullHost_ReturnsFailure()
     {
         var tool = new BrowserNavigateTool(NullBrowserAutomationHost.Instance);
@@ -66,16 +89,49 @@ public sealed class BrowserToolRouterTests
     }
 
     [Fact]
+    public async Task FindAriaNodes_LimitOnly_FailsBeforeHost()
+    {
+        var tool = new BrowserFindAriaNodesTool(NullBrowserAutomationHost.Instance);
+        var result = await tool.InvokeAsync(
+            new ToolInvocation(
+                "browser_find_aria_nodes",
+                ToolCallArguments.FromStrings(new Dictionary<string, string>
+                {
+                    ["limit"] = "10"
+                })));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("Invalid ARIA arguments", result.Summary);
+        Assert.Contains("name, role, text", result.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void AriaHostScript_IsEmbeddedOrCopied()
+    {
+        var script = Athlon.Agent.App.Services.Browser.BrowserAutomationHost.TryLoadAriaHostScript();
+        Assert.False(string.IsNullOrWhiteSpace(script));
+        Assert.Contains("__athlonAria", script, StringComparison.Ordinal);
+        Assert.Contains("__version", script, StringComparison.Ordinal);
+        Assert.Contains("readAriaTree", script, StringComparison.Ordinal);
+        Assert.Contains("filter", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NormalizeUrl_AddsHttps_AndSearchesOnSpaces()
     {
         Assert.Equal(
-            "https://example.com/",
+            "https://example.com",
             Athlon.Agent.App.ViewModels.BrowserWorkspaceTabViewModel.NormalizeUrl("example.com"));
         var search = Athlon.Agent.App.ViewModels.BrowserWorkspaceTabViewModel.NormalizeUrl("hello world");
         Assert.StartsWith("https://www.bing.com/search?q=", search, StringComparison.Ordinal);
     }
 
-    private static McpDelegatingToolRouter CreateRouter(bool hasBrowserTab, bool configuredWorkspace = true)
+    private static McpDelegatingToolRouter CreateRouter(bool hasBrowserTab, bool configuredWorkspace = true) =>
+        CreateRouter(RouterTestDependencies.CreateBrowserWorkspaceState(hasBrowserTab), configuredWorkspace);
+
+    private static McpDelegatingToolRouter CreateRouter(
+        IBrowserWorkspaceState browserWorkspaceState,
+        bool configuredWorkspace = true)
     {
         IAgentTool[] tools =
         [
@@ -99,6 +155,11 @@ public sealed class BrowserToolRouterTests
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(configuredWorkspace),
-            RouterTestDependencies.CreateBrowserWorkspaceState(hasBrowserTab));
+            browserWorkspaceState);
+    }
+
+    private sealed class MutableBrowserWorkspaceState(bool hasOpenBrowserTab) : IBrowserWorkspaceState
+    {
+        public bool HasOpenBrowserTab { get; set; } = hasOpenBrowserTab;
     }
 }

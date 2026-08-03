@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  if (window.__athlonAria && window.__athlonAria.__version === "1") return;
+  if (window.__athlonAria && window.__athlonAria.__version === "2") return;
 
   var REF_MAX_AGE_MS = 10 * 60 * 1000;
   var ariaElementToRef = new WeakMap();
@@ -247,8 +247,9 @@
     return el.hasAttribute("tabindex");
   }
 
-  function shouldIncludeNode(el, role) {
+  function shouldIncludeNode(el, role, filter) {
     if (!isIncludedInAriaTree(el)) return false;
+    if (filter === "interactive" && !isElementInteractive(el, role)) return false;
     return Boolean(role || textContribution(el));
   }
 
@@ -274,16 +275,6 @@
     var line = parts.join(" ") + formatStates(summary);
     if (summary.props && summary.props.url) return line + " -> " + summary.props.url;
     return line;
-  }
-
-  function renderTree(nodes, depth, lines) {
-    depth = depth || 0;
-    lines = lines || [];
-    for (var i = 0; i < nodes.length; i++) {
-      lines.push(Array(depth + 1).join("  ") + formatNodeLine(nodes[i].summary));
-      if (nodes[i].children && nodes[i].children.length) renderTree(nodes[i].children, depth + 1, lines);
-    }
-    return lines;
   }
 
   function buildPath(parentPath, role, index) {
@@ -322,9 +313,36 @@
   function collectAriaTree(root, options) {
     var result = [];
     var childCounters = {};
+    var filter = options.filter || null;
     function visit(el, currentDepth, parentPath, frameRef) {
       if (options.depth !== undefined && currentDepth > options.depth) return null;
       var role = inferRole(el);
+      // Align with edge-plugin: when filtering interactive, still walk children of non-interactive parents.
+      if (filter === "interactive" && !isElementInteractive(el, role)) {
+        var passthrough = [];
+        if (el instanceof HTMLIFrameElement) {
+          try {
+            if (el.contentDocument && el.contentDocument.body) {
+              passthrough = collectAriaTree(el.contentDocument.body, {
+                depth: options.depth,
+                rootPath: parentPath,
+                frameRef: frameRef,
+                frames: options.frames,
+                filter: filter
+              });
+            }
+          } catch (e) {
+            var iframeRef = getOrCreateAriaRef(el, (parentPath || "iframe") + "/iframe", frameRef);
+            options.frames.push({ ref: iframeRef, role: "iframe", sameOrigin: false, src: el.src || undefined });
+          }
+        } else {
+          getTraversableChildren(el).forEach(function (child) {
+            var node = visit(child, currentDepth + 1, parentPath, frameRef);
+            if (node) passthrough.push(node);
+          });
+        }
+        return passthrough.length ? { summary: null, children: passthrough, _passthrough: true } : null;
+      }
       var key = parentPath || "__root__";
       childCounters[key] = (childCounters[key] || 0) + 1;
       var path = buildPath(parentPath, role || el.tagName.toLowerCase(), childCounters[key]);
@@ -338,7 +356,8 @@
               depth: options.depth,
               rootPath: path,
               frameRef: ref,
-              frames: options.frames
+              frames: options.frames,
+              filter: filter
             });
           }
         } catch (e) {
@@ -353,14 +372,19 @@
       if (!summary) {
         return children.length ? { summary: { ref: ref, role: "group", path: path, selectorHint: buildSelectorHint(el), rect: getElementRect(el), frameRef: frameRef }, children: children } : null;
       }
-      if (!shouldIncludeNode(el, role)) {
+      if (!shouldIncludeNode(el, role, filter)) {
         return children.length ? { summary: summary, children: children } : null;
       }
       return { summary: summary, children: children };
     }
     getTraversableChildren(root).forEach(function (child) {
       var node = visit(child, 1, options.rootPath, options.frameRef);
-      if (node) result.push(node);
+      if (!node) return;
+      if (node._passthrough) {
+        node.children.forEach(function (c) { result.push(c); });
+      } else {
+        result.push(node);
+      }
     });
     return result;
   }
@@ -368,10 +392,53 @@
   function flattenTree(nodes, out) {
     out = out || [];
     nodes.forEach(function (n) {
-      out.push(n.summary);
+      if (n.summary) out.push(n.summary);
       if (n.children) flattenTree(n.children, out);
     });
     return out;
+  }
+
+  function renderTree(nodes, depth, lines) {
+    depth = depth || 0;
+    lines = lines || [];
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      if (n.summary) {
+        lines.push(Array(depth + 1).join("  ") + formatNodeLine(n.summary));
+      }
+      if (n.children && n.children.length) {
+        renderTree(n.children, n.summary ? depth + 1 : depth, lines);
+      }
+    }
+    return lines;
+  }
+
+  function scoreFieldMatch(field, wanted, exact, starts, contains) {
+    if (!field) return 0;
+    if (field === wanted) return exact;
+    if (field.indexOf(wanted) === 0) return starts;
+    if (field.indexOf(wanted) >= 0) return contains;
+    return 0;
+  }
+
+  function getSearchFields(el) {
+    var htmlEl = el;
+    var inner = normalizeSpace(htmlEl.innerText || el.textContent).toLowerCase();
+    var aria = normalizeSpace(el.getAttribute("aria-label")).toLowerCase();
+    var title = normalizeSpace(el.getAttribute("title")).toLowerCase();
+    var placeholder = normalizeSpace(el.getAttribute("placeholder")).toLowerCase();
+    var value = "";
+    if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) {
+      value = normalizeSpace(el.value).toLowerCase();
+    }
+    var nameAttr = normalizeSpace(el.getAttribute("name")).toLowerCase();
+    var label = normalizeSpace(getLabelText(el)).toLowerCase();
+    var nearby = "";
+    try {
+      var parent = el.parentElement;
+      if (parent) nearby = normalizeSpace(parent.innerText || parent.textContent).toLowerCase().slice(0, 200);
+    } catch (e) {}
+    return { inner: inner, aria: aria, title: title, placeholder: placeholder, value: value, name: nameAttr, label: label, nearby: nearby };
   }
 
   function scoreAriaNodeMatch(node, query) {
@@ -379,26 +446,44 @@
     var wantedRole = normalizeSpace(query.role).toLowerCase();
     var wantedText = normalizeSpace(query.text).toLowerCase();
     var nodeRole = normalizeSpace(node.role).toLowerCase();
-    var nodeName = normalizeSpace(node.name).toLowerCase();
-    var nodeText = normalizeSpace(node.text).toLowerCase();
-    if (wantedRole && nodeRole !== wantedRole) return -1;
-    var score = 0;
-    if (wantedName) {
-      if (nodeName === wantedName) score += 120;
-      else if (nodeName.indexOf(wantedName) === 0) score += 95;
-      else if (nodeName.indexOf(wantedName) >= 0) score += 75;
-      else if (nodeText.indexOf(wantedName) >= 0) score += 45;
-      else return -1;
+    if (wantedRole) {
+      var roleOk = nodeRole === wantedRole
+        || (wantedRole === "field" && ["textbox", "combobox", "listbox", "searchbox", "spinbutton"].indexOf(nodeRole) >= 0)
+        || (wantedRole === "button" && (nodeRole === "button" || node.tag === "button"));
+      if (!roleOk) return -1;
     }
-    if (wantedText) {
-      if (nodeText === wantedText) score += 100;
-      else if (nodeText.indexOf(wantedText) === 0) score += 80;
-      else if (nodeText.indexOf(wantedText) >= 0) score += 60;
-      else if (nodeName.indexOf(wantedText) >= 0) score += 35;
-      else return wantedName ? score : -1;
+    if (query.interactiveOnly && !isInteractiveRole(node.role)) return -1;
+
+    var el = getStoredAriaElement(node.ref);
+    var fields = el ? getSearchFields(el) : {
+      inner: normalizeSpace(node.text).toLowerCase(),
+      aria: normalizeSpace(node.name).toLowerCase(),
+      title: "",
+      placeholder: "",
+      value: "",
+      name: "",
+      label: normalizeSpace(node.name).toLowerCase(),
+      nearby: ""
+    };
+
+    var score = 0;
+    var needle = wantedName || wantedText;
+    if (needle) {
+      var hay = [fields.label, fields.placeholder, fields.aria, fields.name, fields.title, fields.nearby, fields.inner, fields.value]
+        .filter(Boolean).join(" | ");
+      if (hay.indexOf(needle) < 0) return -1;
+      score = Math.max(score, scoreFieldMatch(fields.label, needle, 120, 100, 80));
+      score = Math.max(score, scoreFieldMatch(fields.placeholder, needle, 110, 90, 75));
+      score = Math.max(score, scoreFieldMatch(fields.aria, needle, 105, 90, 75));
+      score = Math.max(score, scoreFieldMatch(fields.name, needle, 90, 75, 60));
+      score = Math.max(score, scoreFieldMatch(fields.title, needle, 85, 70, 55));
+      score = Math.max(score, scoreFieldMatch(fields.nearby, needle, 80, 68, 52));
+      score = Math.max(score, scoreFieldMatch(fields.inner, needle, 75, 60, 45));
+      score = Math.max(score, scoreFieldMatch(fields.value, needle, 70, 55, 40));
     }
     if (wantedRole) score += 20;
-    if (query.interactiveOnly && !isInteractiveRole(node.role)) return -1;
+    if (wantedRole === "button" && (nodeRole === "button" || node.tag === "button")) score += 10;
+    if (wantedRole === "field" && ["textbox", "combobox", "listbox"].indexOf(nodeRole) >= 0) score += 15;
     if (query.intent === "type" && node.role !== "textbox") score -= 30;
     if (query.intent === "click" && isInteractiveRole(node.role)) score += 10;
     if (query.intent === "select" && (node.role === "combobox" || node.role === "listbox" || node.role === "option")) score += 15;
@@ -501,14 +586,22 @@
   function readAriaTree(args) {
     args = args || {};
     var depth = Number.isInteger(args.depth) && args.depth >= 0 ? args.depth : undefined;
+    var filter = args.filter === "interactive" ? "interactive" : null;
     var root = args.ref ? getStoredAriaElement(args.ref) : document.body;
-    if (!root) return { ok: false, tool: "readAriaTree", error: '未找到 ref "' + args.ref + '" 对应的节点' };
+    if (!root) {
+      return {
+        ok: false,
+        tool: "readAriaTree",
+        error: '未找到 ref "' + args.ref + '" 对应的节点。请重新 browser_read_aria_tree 或 browser_find_aria_nodes 获取有效 ref。'
+      };
+    }
     var frames = [];
-    var tree = collectAriaTree(root, { depth: depth, rootPath: args.ref, frames: frames });
+    var tree = collectAriaTree(root, { depth: depth, rootPath: args.ref, frames: frames, filter: filter });
     var flattened = flattenTree(tree);
     var treeText = renderTree(tree).join("\n");
     var interactiveCount = flattened.filter(function (n) { return isInteractiveRole(n.role); }).length;
-    var sparse = flattened.length < 6 || interactiveCount < 2;
+    var userControlled = depth !== undefined || Boolean(args.ref) || Boolean(filter);
+    var sparse = !userControlled && (flattened.length < 6 || interactiveCount < 2);
     var activeEl = document.activeElement instanceof Element ? document.activeElement : null;
     var activeRef = activeEl ? getOrCreateAriaRef(activeEl, "active") : undefined;
     return {
@@ -516,15 +609,19 @@
       tool: "readAriaTree",
       data: {
         tree: treeText,
-        filter: "all",
+        filter: filter || "all",
         nodeCount: flattened.length,
         refCount: flattened.length,
         sparse: sparse,
         fallbackSuggested: sparse,
+        tips: sparse
+          ? "Tree looks sparse. Retry with filter=\"interactive\", or use browser_find_aria_nodes with name/role/text."
+          : undefined,
         depth: depth,
         rootRef: args.ref,
         activeRef: activeRef,
-        frames: frames
+        frames: frames,
+        observations: { url: location.href, title: document.title }
       }
     };
   }
@@ -536,7 +633,11 @@
       return { ok: false, tool: "findAriaNodes", error: 'scopeRef "' + args.scopeRef + '" 格式无效，请使用完整 ref，例如 aria_1' };
     }
     if (!normalizeSpace(args.name) && !normalizeSpace(args.text) && !normalizeSpace(args.role)) {
-      return { ok: false, tool: "findAriaNodes", error: "findAriaNodes 需要至少提供 name、text 或 role 之一" };
+      return {
+        ok: false,
+        tool: "findAriaNodes",
+        error: "findAriaNodes 需要至少提供 name、text 或 role 之一。示例: {\"text\":\"登录\",\"role\":\"button\"} 或 {\"role\":\"textbox\",\"name\":\"邮箱\"}"
+      };
     }
     var candidates = findAriaTargets({
       name: args.name, role: args.role, text: args.text, scopeRef: scopeRef,
@@ -555,7 +656,8 @@
           interactiveOnly: Boolean(args.interactiveOnly),
           intent: args.intent
         },
-        candidates: candidates
+        candidates: candidates,
+        observations: { url: location.href, title: document.title }
       }
     };
   }
@@ -746,7 +848,7 @@
   }
 
   window.__athlonAria = {
-    __version: "1",
+    __version: "2",
     readAriaTree: readAriaTree,
     findAriaNodes: findAriaNodes,
     resolveAriaRef: resolveAriaRef,

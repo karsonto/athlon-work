@@ -12,16 +12,19 @@ public sealed class BrowserToolsPromptContributor(IBrowserWorkspaceState browser
     {
         if (browserWorkspaceState.HasOpenBrowserTab)
         {
+            // Aligned with edge-plugin browser-agent rules: read → find → inspect → act → verify.
             builder.AppendLine("Browser workspace tools are available for the open Browser tab.");
-            builder.AppendLine(
-                "Prefer ARIA tools: browser_find_aria_nodes → browser_aria_inspect → browser_aria_interact → browser_wait_for_aria.");
-            builder.AppendLine(
-                "Use full refs exactly as returned (e.g. aria_1). Do not invent CSS selectors first.");
-            builder.AppendLine("Use browser_read_aria_tree when you need page structure or a local subtree.");
+            builder.AppendLine("Rules:");
+            builder.AppendLine("1. Prefer find then act: browser_find_aria_nodes → browser_aria_inspect → browser_aria_interact → browser_wait_for_aria.");
+            builder.AppendLine("2. browser_find_aria_nodes requires at least one of name, role, or text (limit alone is invalid).");
+            builder.AppendLine("3. For form fields, prefer role=\"field\" or role=\"textbox\" with name/text; for buttons use text+role=\"button\".");
+            builder.AppendLine("4. Use browser_read_aria_tree with filter=\"interactive\" when you need page structure; avoid repeatedly reading the full tree.");
+            builder.AppendLine("5. Use full refs exactly as returned (e.g. aria_1). Do not invent CSS selectors first.");
+            builder.AppendLine("6. One action tool at a time; verify after each action before the next step.");
             return;
         }
 
         builder.AppendLine(
-            "No Browser tab is open yet. Call browser_navigate to open a page; ARIA page tools appear after a Browser tab exists.");
+            "No Browser tab is open yet. Call browser_navigate to open a page; after it succeeds, ARIA page tools unlock on the next model step in the same turn.");
     }
 }

@@ -169,6 +169,13 @@ public sealed class AgentRuntime(
 
             while (true)
             {
+                // Re-resolve tools each model round so mid-turn changes (e.g. browser_navigate
+                // opening a Browser tab) unlock IBrowserTool ARIA/page tools for the next call.
+                tools = activeRouter.ListTools();
+                turnInvocation.Tools = tools;
+                var roundFingerprint = ToolCatalogFingerprint.Compute(tools);
+                LogToolCatalogDrift(session.Id, roundFingerprint);
+
                 turnInvocation.Session = session;
                 turnInvocation.EnvironmentPrompt = environmentPrompt;
                 var runtimeContext = activePrompt.BuildRuntimeContext(session, tools);

@@ -10,6 +10,9 @@ namespace Athlon.Agent.App.Services.Browser;
 
 public sealed class BrowserAutomationHost : IBrowserAutomationHost
 {
+    internal const string AriaHostEmbeddedResourceName =
+        "Athlon.Agent.App.Assets.Browser.athlon-aria-host.js";
+
     private readonly WorkspacePaneViewModel _pane;
     private readonly BrowserWebViewRegistry _registry;
 
@@ -75,8 +78,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         InvokeOnUiAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var tab = ResolveTargetTab()
-                ?? throw new InvalidOperationException("No Browser tab is open.");
+            var tab = EnsureBrowserTabCore();
             var webView = await WaitForWebViewAsync(tab.Id, cancellationToken).ConfigureAwait(true);
             return new BrowserPageInfo(
                 webView.Source ?? tab.CurrentUrl ?? string.Empty,
@@ -95,9 +97,10 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
                 throw new ArgumentException("ARIA operation is required.", nameof(operation));
             }
 
-            var tab = ResolveTargetTab()
-                ?? throw new InvalidOperationException("No Browser tab is open.");
+            // Activate the Browser tab so ContentControl mounts WebView2 and registers it.
+            var tab = EnsureBrowserTabCore();
             var webView = await WaitForWebViewAsync(tab.Id, cancellationToken).ConfigureAwait(true);
+            await EnsureAriaHostInjectedAsync(webView).ConfigureAwait(true);
 
             var argsLiteral = string.IsNullOrWhiteSpace(argsJson) ? "{}" : argsJson.Trim();
             using (JsonDocument.Parse(argsLiteral))
@@ -110,11 +113,14 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
                 "const host=window.__athlonAria;" +
                 "if(!host||typeof host.invoke!=='function'){" +
                 "return JSON.stringify({ok:false,error:'ARIA host script is not loaded'});}" +
+                "try{" +
                 $"const result=await host.invoke({opLiteral},{argsLiteral});" +
                 "return JSON.stringify(result);" +
+                "}catch(e){return JSON.stringify({ok:false,error:String(e&&e.message||e)});} " +
                 "})()";
 
-            var raw = await webView.ExecuteScriptAsync(script).ConfigureAwait(true);
+            // ExecuteScriptAsync does not await Promises (returns "{}"); use CDP instead.
+            var raw = await EvaluateScriptAwaitingPromiseAsync(webView, script).ConfigureAwait(true);
             return UnwrapExecuteScriptJson(raw);
         }, cancellationToken);
 
@@ -162,6 +168,53 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         throw new InvalidOperationException("Browser WebView2 is not ready yet.");
     }
 
+    private static async Task EnsureAriaHostInjectedAsync(CoreWebView2 webView)
+    {
+        if (await IsAriaHostPresentAsync(webView).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        var script = TryLoadAriaHostScript();
+        if (string.IsNullOrWhiteSpace(script))
+        {
+            throw new InvalidOperationException(
+                "ARIA host script is missing from the app package (Assets/Browser/athlon-aria-host.js).");
+        }
+
+        try
+        {
+            await webView.AddScriptToExecuteOnDocumentCreatedAsync(script).ConfigureAwait(true);
+        }
+        catch
+        {
+            // May already be registered for this CoreWebView2; continue with immediate inject.
+        }
+
+        await webView.ExecuteScriptAsync(script).ConfigureAwait(true);
+
+        if (!await IsAriaHostPresentAsync(webView).ConfigureAwait(true))
+        {
+            throw new InvalidOperationException(
+                "ARIA host script injection failed for the current page.");
+        }
+    }
+
+    private static async Task<bool> IsAriaHostPresentAsync(CoreWebView2 webView)
+    {
+        try
+        {
+            var raw = await webView.ExecuteScriptAsync(
+                    "(function(){return !!(window.__athlonAria && window.__athlonAria.__version==='2' && typeof window.__athlonAria.invoke==='function');})()")
+                .ConfigureAwait(true);
+            return string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static string UnwrapExecuteScriptJson(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw) || raw == "null")
@@ -183,6 +236,57 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         {
             return raw;
         }
+    }
+
+    /// <summary>
+    /// WebView2 ExecuteScriptAsync does not await Promises (serializes them as "{}").
+    /// Use CDP Runtime.evaluate with awaitPromise=true instead.
+    /// </summary>
+    private static async Task<string> EvaluateScriptAwaitingPromiseAsync(CoreWebView2 webView, string expression)
+    {
+        var requestJson = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["expression"] = expression,
+            ["awaitPromise"] = true,
+            ["returnByValue"] = true
+        });
+
+        var responseJson = await webView
+            .CallDevToolsProtocolMethodAsync("Runtime.evaluate", requestJson)
+            .ConfigureAwait(true);
+
+        using var doc = JsonDocument.Parse(responseJson);
+        var root = doc.RootElement;
+
+        if (root.TryGetProperty("exceptionDetails", out var exceptionDetails))
+        {
+            var text = exceptionDetails.TryGetProperty("text", out var textEl)
+                ? textEl.GetString()
+                : null;
+            var description = exceptionDetails.TryGetProperty("exception", out var exEl)
+                && exEl.TryGetProperty("description", out var descEl)
+                    ? descEl.GetString()
+                    : null;
+            var message = !string.IsNullOrWhiteSpace(description)
+                ? description
+                : (text ?? "JavaScript evaluation failed");
+            return JsonSerializer.Serialize(new { ok = false, error = message });
+        }
+
+        if (!root.TryGetProperty("result", out var result)
+            || !result.TryGetProperty("value", out var value))
+        {
+            return """{"ok":false,"error":"Empty CDP evaluate result"}""";
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? """{"ok":false,"error":"Empty script result"}""",
+            JsonValueKind.Object or JsonValueKind.Array => value.GetRawText(),
+            JsonValueKind.Null or JsonValueKind.Undefined =>
+                """{"ok":false,"error":"Empty script result"}""",
+            _ => value.GetRawText()
+        };
     }
 
     private static async Task InvokeOnUiAsync(Func<Task> action, CancellationToken cancellationToken)
@@ -221,7 +325,27 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         try
         {
             var path = Path.Combine(AppContext.BaseDirectory, "Assets", "Browser", "athlon-aria-host.js");
-            return File.Exists(path) ? File.ReadAllText(path) : null;
+            if (File.Exists(path))
+            {
+                return File.ReadAllText(path);
+            }
+        }
+        catch
+        {
+            // Fall through to embedded resource.
+        }
+
+        try
+        {
+            var assembly = typeof(BrowserAutomationHost).Assembly;
+            using var stream = assembly.GetManifestResourceStream(AriaHostEmbeddedResourceName);
+            if (stream is null)
+            {
+                return null;
+            }
+
+            using var reader = new StreamReader(stream);
+            return reader.ReadToEnd();
         }
         catch
         {

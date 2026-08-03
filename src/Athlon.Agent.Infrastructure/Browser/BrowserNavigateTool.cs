@@ -50,8 +50,12 @@ public sealed class BrowserNavigateTool(IBrowserAutomationHost host) : IAgentToo
 
             await host.NavigateAsync(action, navigateUrl, ct).ConfigureAwait(false);
             var info = await host.GetPageInfoAsync(ct).ConfigureAwait(false);
-            return ToolResult.Success(
-                action == BrowserNavigateAction.Url ? $"Navigated to {info.Url}" : $"Browser {action.ToString().ToLowerInvariant()}",
-                $"url={info.Url}\ntitle={info.Title}");
+            var summary = action == BrowserNavigateAction.Url
+                ? $"Navigated to {info.Url}"
+                : $"Browser {action.ToString().ToLowerInvariant()}";
+            var content =
+                $"url={info.Url}\ntitle={info.Title}\n" +
+                "ARIA page tools (browser_read_aria_tree, browser_find_aria_nodes, …) are now available for the next model step.";
+            return ToolResult.Success(summary, content);
         }, cancellationToken);
 }
