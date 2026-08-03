@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Memory;
@@ -17,6 +18,7 @@ internal sealed class McpDelegatingToolRouter(
     ISessionHarnessState sessionHarnessState,
     IAgentRunContextAccessor runContextAccessor,
     WorkspaceGuard workspaceGuard,
+    IBrowserWorkspaceState browserWorkspaceState,
     Func<Task>? refreshMcpCatalogAsync = null,
     IAppLogger? logger = null) : IToolRouter
 {
@@ -40,6 +42,17 @@ internal sealed class McpDelegatingToolRouter(
     {
         if (IsChatOnlyMode)
         {
+            if (string.Equals(tool.Definition.Name, "browser_navigate", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            // After navigate opens a Browser tab, expose page/ARIA tools even without a workspace.
+            if (tool is IBrowserTool && browserWorkspaceState.HasOpenBrowserTab)
+            {
+                return true;
+            }
+
             return tool is IGlobalKnowledgeTool
                 && sessionKnowledgeState.ShouldExposeKnowledgeTool(activeSessionContext.SessionId);
         }
@@ -60,6 +73,11 @@ internal sealed class McpDelegatingToolRouter(
         }
 
         if (tool is IPlanTool && !sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor))
+        {
+            return false;
+        }
+
+        if (tool is IBrowserTool && !browserWorkspaceState.HasOpenBrowserTab)
         {
             return false;
         }
@@ -107,6 +125,7 @@ internal sealed class McpDelegatingToolRouter(
         var coding = sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor);
         var ask = sessionHarnessState.IsAskModeForActiveRun(runContextAccessor);
         var plan = sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor);
+        var browser = browserWorkspaceState.HasOpenBrowserTab;
         return string.Join(
             '|',
             (int)workspaceGuard.CurrentKind,
@@ -115,7 +134,8 @@ internal sealed class McpDelegatingToolRouter(
             knowledge,
             coding,
             ask,
-            plan);
+            plan,
+            browser);
     }
 
     public IReadOnlyList<ToolDefinition> ListTools()

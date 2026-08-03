@@ -102,6 +102,15 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<IActiveWorkspaceContext>(),
             sp.GetRequiredService<AppSettings>()));
 
+        services.AddSingleton<Athlon.Agent.App.Services.Browser.BrowserWebViewRegistry>();
+        services.AddSingleton<Athlon.Agent.Core.Browser.IBrowserWorkspaceState>(sp =>
+            new Athlon.Agent.App.Services.Browser.BrowserWorkspaceState(
+                sp.GetRequiredService<WorkspacePaneViewModel>()));
+        services.AddSingleton<Athlon.Agent.Core.Browser.IBrowserAutomationHost>(sp =>
+            new Athlon.Agent.App.Services.Browser.BrowserAutomationHost(
+                sp.GetRequiredService<WorkspacePaneViewModel>(),
+                sp.GetRequiredService<Athlon.Agent.App.Services.Browser.BrowserWebViewRegistry>()));
+
         services.AddSingleton(sp => new KnowledgeViewModel(
 
             sp.GetRequiredService<IKnowledgeStore>(),

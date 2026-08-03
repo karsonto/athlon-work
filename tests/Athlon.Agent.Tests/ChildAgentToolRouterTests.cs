@@ -25,7 +25,8 @@ public sealed class ChildAgentToolRouterTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
-            RouterTestDependencies.CreateWorkspaceGuard());
+            RouterTestDependencies.CreateWorkspaceGuard(),
+            RouterTestDependencies.CreateBrowserWorkspaceState());
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
         Assert.DoesNotContain("sessions_spawn", names);
@@ -49,7 +50,8 @@ public sealed class ChildAgentToolRouterTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
-            RouterTestDependencies.CreateWorkspaceGuard());
+            RouterTestDependencies.CreateWorkspaceGuard(),
+            RouterTestDependencies.CreateBrowserWorkspaceState());
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
         Assert.Contains("memory_search", names);
@@ -72,7 +74,8 @@ public sealed class ChildAgentToolRouterTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
-            RouterTestDependencies.CreateWorkspaceGuard(configured: false));
+            RouterTestDependencies.CreateWorkspaceGuard(configured: false),
+            RouterTestDependencies.CreateBrowserWorkspaceState());
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
 
         Assert.DoesNotContain("memory_search", names);
@@ -94,7 +97,8 @@ public sealed class ChildAgentToolRouterTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
-            RouterTestDependencies.CreateWorkspaceGuard());
+            RouterTestDependencies.CreateWorkspaceGuard(),
+            RouterTestDependencies.CreateBrowserWorkspaceState());
 
         var result = await router.InvokeAsync(new ToolInvocation("mcp__srv__ping", new Dictionary<string, string>()));
 

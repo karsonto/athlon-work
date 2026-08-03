@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.SubAgents;
@@ -13,7 +14,8 @@ public sealed class ChildAgentToolRouter(
     ISessionKnowledgeState sessionKnowledgeState,
     ISessionHarnessState sessionHarnessState,
     IAgentRunContextAccessor runContextAccessor,
-    WorkspaceGuard workspaceGuard) : IToolRouter
+    WorkspaceGuard workspaceGuard,
+    IBrowserWorkspaceState browserWorkspaceState) : IToolRouter
 {
     private readonly McpDelegatingToolRouter _inner = new(
         static tools => tools.Where(tool => tool is not IExcludedFromChildAgentToolkit),
@@ -24,7 +26,8 @@ public sealed class ChildAgentToolRouter(
         sessionKnowledgeState,
         sessionHarnessState,
         runContextAccessor,
-        workspaceGuard);
+        workspaceGuard,
+        browserWorkspaceState);
 
     public IReadOnlyList<ToolDefinition> ListTools() => _inner.ListTools();
 
