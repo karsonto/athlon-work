@@ -2,7 +2,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.Browser;
 using Athlon.Agent.App.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Web.WebView2.Core;
 
 namespace Athlon.Agent.App.Controls;
@@ -11,6 +13,8 @@ public partial class BrowserWorkspaceView : UserControl
 {
     private BrowserWorkspaceTabViewModel? _tab;
     private bool _webViewReady;
+    private bool _ariaScriptInstalled;
+    private BrowserWebViewRegistry? _registry;
 
     public BrowserWorkspaceView()
     {
@@ -22,20 +26,32 @@ public partial class BrowserWorkspaceView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        _registry ??= TryResolveRegistry();
         await EnsureWebViewAsync().ConfigureAwait(true);
+        TryRegisterWebView();
         TryNavigateInitial();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         DetachTab(_tab);
+        if (_tab is not null)
+        {
+            _registry?.Unregister(_tab.Id);
+        }
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
+        if (_tab is not null)
+        {
+            _registry?.Unregister(_tab.Id);
+        }
+
         DetachTab(_tab);
         _tab = e.NewValue as BrowserWorkspaceTabViewModel;
         AttachTab(_tab);
+        TryRegisterWebView();
         TryNavigateInitial();
     }
 
@@ -101,12 +117,70 @@ public partial class BrowserWorkspaceView : UserControl
                     _tab.Title = TruncateTitle(BrowserWebView.CoreWebView2.DocumentTitle);
                 }
             };
+            await EnsureAriaHostScriptAsync().ConfigureAwait(true);
             _webViewReady = true;
+            TryRegisterWebView();
         }
         catch (Exception ex)
         {
             App.StartupTrace($"Browser WebView2 init failed: {ex.Message}");
         }
+    }
+
+    private async Task EnsureAriaHostScriptAsync()
+    {
+        if (_ariaScriptInstalled || BrowserWebView.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        var script = BrowserAutomationHost.TryLoadAriaHostScript();
+        if (string.IsNullOrWhiteSpace(script))
+        {
+            App.StartupTrace("Browser ARIA host script missing");
+            return;
+        }
+
+        await BrowserWebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(script)
+            .ConfigureAwait(true);
+        try
+        {
+            await BrowserWebView.CoreWebView2.ExecuteScriptAsync(script).ConfigureAwait(true);
+        }
+        catch
+        {
+            // Current document may not be ready; document-created hook covers navigations.
+        }
+
+        _ariaScriptInstalled = true;
+    }
+
+    private void TryRegisterWebView()
+    {
+        if (_tab is null || !_webViewReady || BrowserWebView.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        _registry ??= TryResolveRegistry();
+        _registry?.Register(_tab.Id, BrowserWebView.CoreWebView2);
+    }
+
+    private static BrowserWebViewRegistry? TryResolveRegistry()
+    {
+        try
+        {
+            if (Application.Current is App app)
+            {
+                return app.Services?.GetService<BrowserWebViewRegistry>();
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return null;
     }
 
     private void TryNavigateInitial()

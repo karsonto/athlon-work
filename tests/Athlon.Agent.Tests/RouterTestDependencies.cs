@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Prompt;
@@ -8,6 +9,9 @@ namespace Athlon.Agent.Tests;
 
 internal static class RouterTestDependencies
 {
+    public static IBrowserWorkspaceState CreateBrowserWorkspaceState(bool hasOpenBrowserTab = false) =>
+        new StubBrowserWorkspaceState(hasOpenBrowserTab);
+
     public static ActiveAgentSessionContext CreateSessionContext()
     {
         var context = new ActiveAgentSessionContext();
@@ -143,6 +147,11 @@ internal static class RouterTestDependencies
 
         public Task<IReadOnlySet<string>> GetModuleIdsAsync(string sessionId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlySet<string>>(snapshot.Enabled ? snapshot.ModuleIds : new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+    }
+
+    private sealed class StubBrowserWorkspaceState(bool hasOpenBrowserTab) : IBrowserWorkspaceState
+    {
+        public bool HasOpenBrowserTab { get; } = hasOpenBrowserTab;
     }
 
     private sealed class RouterTestPathProvider(string rootPath) : IAppPathProvider

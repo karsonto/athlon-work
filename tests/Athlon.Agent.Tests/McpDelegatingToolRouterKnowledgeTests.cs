@@ -106,7 +106,8 @@ public sealed class McpDelegatingToolRouterKnowledgeTests
             RouterTestDependencies.CreateSessionKnowledgeState(enabled, moduleIds.ToArray()),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
-            RouterTestDependencies.CreateWorkspaceGuard(configuredWorkspace));
+            RouterTestDependencies.CreateWorkspaceGuard(configuredWorkspace),
+            RouterTestDependencies.CreateBrowserWorkspaceState());
     }
 
     private sealed class StubKnowledgeTool : IAgentTool, IGlobalKnowledgeTool

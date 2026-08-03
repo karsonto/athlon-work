@@ -106,7 +106,8 @@ public sealed class SubAgentSessionsTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
-            RouterTestDependencies.CreateWorkspaceGuard());
+            RouterTestDependencies.CreateWorkspaceGuard(),
+            RouterTestDependencies.CreateBrowserWorkspaceState());
 
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
         Assert.DoesNotContain("sessions_spawn", names);
@@ -184,7 +185,8 @@ public sealed class SubAgentSessionsTests
                     RouterTestDependencies.CreateSessionKnowledgeState(),
                     RouterTestDependencies.CreateSessionHarnessState(),
                     new AgentRunContextAccessor(),
-                    RouterTestDependencies.CreateWorkspaceGuard()));
+                    RouterTestDependencies.CreateWorkspaceGuard(),
+                    RouterTestDependencies.CreateBrowserWorkspaceState()));
             var prompt = new SubAgentSystemPromptOrchestrator(
                 settings,
                 new StubHostEnvironment(paths.SkillsPath),

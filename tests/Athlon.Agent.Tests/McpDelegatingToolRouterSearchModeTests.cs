@@ -144,7 +144,8 @@ public sealed class McpDelegatingToolRouterSearchModeTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
-            RouterTestDependencies.CreateWorkspaceGuard());
+            RouterTestDependencies.CreateWorkspaceGuard(),
+            RouterTestDependencies.CreateBrowserWorkspaceState());
 
     private static McpCatalogEntry[] CreateCatalog(int count) =>
         Enumerable.Range(0, count)

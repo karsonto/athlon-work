@@ -87,6 +87,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IActiveWorkspaceContext, ActiveWorkspaceContext>();
         services.AddSingleton<IActiveAgentSessionContext, ActiveAgentSessionContext>();
         services.AddSingleton<ISessionHttpLogService, SessionHttpLogService>();
+        services.AddSingleton<Athlon.Agent.Core.Browser.IBrowserWorkspaceState>(
+            Athlon.Agent.Core.Browser.NullBrowserWorkspaceState.Instance);
+        services.AddSingleton<Athlon.Agent.Core.Browser.IBrowserAutomationHost>(
+            Athlon.Agent.Core.Browser.NullBrowserAutomationHost.Instance);
         services.AddSingleton<WorkspaceGuard>();
         services.AddSingleton<ISshWorkspaceClient, SshWorkspaceClient>();
         services.AddSingleton<SshWorkspaceConnectionService>();
@@ -124,6 +128,15 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, SshExecuteCommandTool>();
         services.AddSingleton<IAgentTool, KnowledgeSearchTool>();
         services.AddSingleton<IAgentTool, LoadSkillThroughPathTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserNavigateTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserGetPageInfoTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserReadAriaTreeTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserFindAriaNodesTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserResolveAriaRefTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserAriaInspectTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserAriaInteractTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserWaitForAriaTool>();
+        services.AddSingleton<IRuntimeContextContributor, Athlon.Agent.Infrastructure.Browser.BrowserToolsPromptContributor>();
         services.AddSingleton<Lazy<ChildAgentToolRouter>>(static sp => new Lazy<ChildAgentToolRouter>(() =>
             new ChildAgentToolRouter(
                 sp.GetServices<IAgentTool>(),
@@ -133,7 +146,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<ISessionKnowledgeState>(),
                 sp.GetRequiredService<ISessionHarnessState>(),
                 sp.GetRequiredService<IAgentRunContextAccessor>(),
-                sp.GetRequiredService<WorkspaceGuard>())));
+                sp.GetRequiredService<WorkspaceGuard>(),
+                sp.GetRequiredService<Athlon.Agent.Core.Browser.IBrowserWorkspaceState>())));
         services.AddSingleton<SubAgentSystemPromptOrchestrator>();
         services.AddSingleton<ISubAgentSessionStore, FileSubAgentSessionStore>();
         services.AddSingleton<ISubAgentRegistry, FileSubAgentRegistry>();

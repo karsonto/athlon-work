@@ -83,7 +83,10 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void AddBrowserTab()
+    private void AddBrowserTab() => AddBrowserTabAndActivate();
+
+    /// <summary>Creates a Browser tab, activates it, and returns the view model (used by automation host).</summary>
+    public BrowserWorkspaceTabViewModel AddBrowserTabAndActivate()
     {
         _browserSerial++;
         var title = _browserSerial <= 1
@@ -93,6 +96,7 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
         Tabs.Add(tab);
         ActiveTab = tab;
         IsAddMenuOpen = false;
+        return tab;
     }
 
     [RelayCommand]
