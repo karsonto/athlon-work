@@ -143,25 +143,38 @@ public static class TurnActivitySummaryBuilder
             }
 
             var statusKey = ToActivityStatus(message.ToolCallStatus);
-            // Skip tools still in-flight; completed outcomes (incl. failed) are listed.
-            if (statusKey is "preparing" or "running" or "awaiting_approval")
+            // Approval UI owns awaiting cards; do not fold them into activity.
+            if (statusKey == "awaiting_approval")
             {
                 continue;
             }
 
+            var inFlight = statusKey is "preparing" or "running";
             var succeeded = statusKey == "succeeded";
             var toolName = message.ToolName;
             var args = message.ToolArgumentsText;
 
-            // File edits render in a separate FILES_CHANGED bubble.
+            // Successful edits render in FILES_CHANGED; show in-flight / failed edits here.
             if (EditTools.Contains(toolName))
             {
+                if (succeeded)
+                {
+                    continue;
+                }
+
+                var editPath = ModifiedFilePathExtractor.ExtractPathFromArguments(args) ?? "…";
+                items.Add(new TurnActivityItem(
+                    TurnActivityKind.Edited,
+                    inFlight ? "Writing" : "Edited",
+                    editPath,
+                    editPath,
+                    Status: statusKey));
                 continue;
             }
 
             if (ReadTools.Contains(toolName))
             {
-                var path = ModifiedFilePathExtractor.ExtractPathFromArguments(args);
+                var path = ModifiedFilePathExtractor.ExtractPathFromArguments(args) ?? (inFlight ? "…" : null);
                 if (path is null)
                 {
                     continue;
@@ -172,11 +185,16 @@ public static class TurnActivitySummaryBuilder
                     exploredPaths.Add(path);
                 }
 
-                var range = ExtractLineRange(args);
+                var range = path == "…" ? null : ExtractLineRange(args);
                 var detail = range is null
                     ? path
                     : $"{path} L{range.Value.Start}-{range.Value.End}";
-                items.Add(new TurnActivityItem(TurnActivityKind.Read, "Read", detail, path, Status: statusKey));
+                items.Add(new TurnActivityItem(
+                    TurnActivityKind.Read,
+                    inFlight ? "Reading" : "Read",
+                    detail,
+                    path == "…" ? null : path,
+                    Status: statusKey));
                 continue;
             }
 
@@ -192,21 +210,30 @@ public static class TurnActivitySummaryBuilder
                     ?? ExtractNamedArg(args, "glob")
                     ?? ".";
                 var detail = $"{Truncate(pattern, 48)} in {scope}";
-                items.Add(new TurnActivityItem(TurnActivityKind.Searched, "Searched", detail, Status: statusKey));
+                items.Add(new TurnActivityItem(
+                    TurnActivityKind.Searched,
+                    inFlight ? "Searching" : "Searched",
+                    detail,
+                    Status: statusKey));
                 continue;
             }
 
             if (ExploreTools.Contains(toolName))
             {
                 var pattern = ExtractNamedArg(args, "pattern");
-                var path = ModifiedFilePathExtractor.ExtractPathFromArguments(args) ?? ".";
+                var path = ModifiedFilePathExtractor.ExtractPathFromArguments(args) ?? (inFlight ? "…" : ".");
                 var detail = pattern is null ? path : $"{Truncate(pattern, 40)} in {path}";
-                if (succeeded)
+                if (succeeded && path != "…")
                 {
                     exploredPaths.Add(path);
                 }
 
-                items.Add(new TurnActivityItem(TurnActivityKind.Explored, "Explored", detail, path, Status: statusKey));
+                items.Add(new TurnActivityItem(
+                    TurnActivityKind.Explored,
+                    inFlight ? "Exploring" : "Explored",
+                    detail,
+                    path == "…" ? null : path,
+                    Status: statusKey));
                 continue;
             }
 
@@ -215,14 +242,14 @@ public static class TurnActivitySummaryBuilder
                 commandCount++;
                 var command = ExtractNamedArg(args, "command")
                     ?? FirstNonEmptyLine(args)
-                    ?? "execute_command";
+                    ?? (inFlight ? "…" : "execute_command");
                 var detail = Truncate(FlattenWhitespace(command), 72);
                 var body = string.IsNullOrWhiteSpace(message.ToolDetail)
                     ? command
                     : message.ToolDetail;
                 items.Add(new TurnActivityItem(
                     TurnActivityKind.Command,
-                    "Ran",
+                    inFlight ? "Running" : "Ran",
                     detail,
                     Body: body,
                     Status: statusKey));

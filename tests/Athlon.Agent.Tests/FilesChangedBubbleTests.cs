@@ -421,4 +421,135 @@ public sealed class FilesChangedBubbleTests
         Assert.Equal(1, summary!.ThoughtCount);
         Assert.Equal("分析路径", Assert.Single(summary.Items).Body);
     }
+
+    [Fact]
+    public void SessionTurnActivityTracker_shows_in_progress_tools_before_result()
+    {
+        var tracker = new SessionTurnActivityTracker();
+        tracker.BeginTurn();
+        tracker.Process(new AgentStreamEvent.ToolCallStart("c1", "file_read", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("c1", """{"path":"a.ts","start_line":1,"end_line":5}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd("c1"));
+        tracker.Process(new AgentStreamEvent.ToolCallStart("c2", "execute_command", 1));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("c2", """{"command":"Get-Content a.ts"}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd("c2"));
+        tracker.Process(new AgentStreamEvent.ToolCallStart("c3", "file_write", 2));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("c3", """{"path":"b.ts","content":"x"}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd("c3"));
+
+        var summary = tracker.Snapshot();
+        Assert.NotNull(summary);
+        Assert.Contains(
+            summary!.Items,
+            item => item.Kind == TurnActivityKind.Read
+                && item.Status == "running"
+                && item.Verb == "Reading"
+                && item.Detail.Contains("a.ts", StringComparison.Ordinal));
+        Assert.Contains(
+            summary.Items,
+            item => item.Kind == TurnActivityKind.Command
+                && item.Status == "running"
+                && item.Verb == "Running"
+                && item.Detail.Contains("Get-Content", StringComparison.Ordinal));
+        Assert.Contains(
+            summary.Items,
+            item => item.Kind == TurnActivityKind.Edited
+                && item.Status == "running"
+                && item.Verb == "Writing"
+                && item.Detail.Contains("b.ts", StringComparison.Ordinal));
+        Assert.Equal(0, summary.ExploredFileCount);
+    }
+
+    [Fact]
+    public void SessionTurnActivityTracker_result_replaces_pending_and_drops_successful_edit()
+    {
+        var tracker = new SessionTurnActivityTracker();
+        tracker.BeginTurn();
+        tracker.Process(new AgentStreamEvent.ToolCallStart("c1", "file_read", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("c1", """{"path":"a.ts"}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd("c1"));
+        tracker.Process(new AgentStreamEvent.ToolCallStart("c2", "file_write", 1));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("c2", """{"path":"b.ts","content":"hi"}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd("c2"));
+
+        tracker.Process(new AgentStreamEvent.ToolCallResult(
+            "c1",
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: c1",
+                "Tool `file_read` succeeded.",
+                "",
+                "Arguments: path = a.ts",
+                "Summary: Read a.ts",
+                ""),
+            "m1"));
+        tracker.Process(new AgentStreamEvent.ToolCallResult(
+            "c2",
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: c2",
+                "Tool `file_write` succeeded.",
+                "",
+                "Arguments: path = b.ts; content = hi",
+                "Summary: Wrote 2 chars",
+                ""),
+            "m2"));
+
+        var summary = tracker.Snapshot();
+        Assert.NotNull(summary);
+        Assert.Contains(
+            summary!.Items,
+            item => item.Kind == TurnActivityKind.Read
+                && item.Status == "succeeded"
+                && item.Verb == "Read");
+        Assert.DoesNotContain(summary.Items, item => item.Kind == TurnActivityKind.Edited);
+        Assert.Equal(1, summary.ExploredFileCount);
+    }
+
+    [Fact]
+    public void SessionTurnActivityTracker_keeps_failed_edit_in_activity()
+    {
+        var tracker = new SessionTurnActivityTracker();
+        tracker.BeginTurn();
+        tracker.Process(new AgentStreamEvent.ToolCallStart("c1", "file_write", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("c1", """{"path":"b.ts","content":"x"}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd("c1"));
+        tracker.Process(new AgentStreamEvent.ToolCallResult(
+            "c1",
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: c1",
+                "Tool `file_write` failed.",
+                "",
+                "Arguments: path = b.ts",
+                "Summary: Write failed",
+                ""),
+            "m1"));
+
+        var summary = tracker.Snapshot();
+        Assert.NotNull(summary);
+        Assert.Contains(
+            summary!.Items,
+            item => item.Kind == TurnActivityKind.Edited
+                && item.Status == "failed"
+                && item.Detail.Contains("b.ts", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TurnActivitySummaryBuilder_includes_in_progress_read_with_placeholder()
+    {
+        var pending = ChatMessageViewModel.CreatePendingTool(
+            new AgentToolCall("c1", "file_read", ToolCallArguments.Empty));
+        pending.ToolCallStatus = ToolCallDisplayStatus.Preparing;
+        pending.IsToolRunning = false;
+
+        var summary = TurnActivitySummaryBuilder.Build([pending]);
+        Assert.NotNull(summary);
+        var item = Assert.Single(summary!.Items);
+        Assert.Equal(TurnActivityKind.Read, item.Kind);
+        Assert.Equal("preparing", item.Status);
+        Assert.Equal("Reading", item.Verb);
+        Assert.Equal("…", item.Detail);
+        Assert.Equal(0, summary.ExploredFileCount);
+    }
 }

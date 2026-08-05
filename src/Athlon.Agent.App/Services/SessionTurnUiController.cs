@@ -663,7 +663,10 @@ public sealed class SessionTurnUiController
             NotifyChatViewAfterStreamEvent(uiEvent);
         }
 
-        if (streamEvent is AgentStreamEvent.ToolCallResult
+        if (streamEvent is AgentStreamEvent.ToolCallStart
+            or AgentStreamEvent.ToolCallArgs
+            or AgentStreamEvent.ToolCallEnd
+            or AgentStreamEvent.ToolCallResult
             or AgentStreamEvent.ReasoningMessageContent
             or AgentStreamEvent.ReasoningMessageEnd)
         {

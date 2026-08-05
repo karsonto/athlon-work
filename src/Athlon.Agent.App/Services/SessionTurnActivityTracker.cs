@@ -60,9 +60,14 @@ public sealed class SessionTurnActivityTracker
             case AgentStreamEvent.ToolCallStart(var toolCallId, var toolName, _):
                 FinishActiveThought();
                 _toolCallIdToName[toolCallId] = toolName;
+                EnsurePendingTool(toolCallId, toolName);
                 break;
             case AgentStreamEvent.ToolCallArgs(var toolCallId, var argsJson):
                 _toolCallIdToArgs[toolCallId] = argsJson;
+                UpdatePendingToolArgs(toolCallId, argsJson);
+                break;
+            case AgentStreamEvent.ToolCallEnd(var toolCallId):
+                PromotePendingToolToRunning(toolCallId);
                 break;
             case AgentStreamEvent.ToolCallResult(var toolCallId, var content, _):
                 FinishActiveThought();
@@ -115,6 +120,56 @@ public sealed class SessionTurnActivityTracker
             ChatMessage.Create(MessageRole.Assistant, string.Empty, reasoningContent: text)));
     }
 
+    private void EnsurePendingTool(string toolCallId, string toolName)
+    {
+        if (!TurnActivityClassifier.IsActivityTool(toolName)
+            || FindToolMessage(toolCallId) is not null)
+        {
+            return;
+        }
+
+        var pending = ChatMessageViewModel.CreatePendingTool(
+            new AgentToolCall(toolCallId, toolName, ToolCallArguments.Empty));
+        pending.ToolCallStatus = ToolCallDisplayStatus.Preparing;
+        pending.IsToolRunning = false;
+        if (_toolCallIdToArgs.TryGetValue(toolCallId, out var bufferedArgs)
+            && !string.IsNullOrWhiteSpace(bufferedArgs))
+        {
+            pending.ToolArgumentsText = FormatArgsForDisplay(bufferedArgs, toolName);
+        }
+
+        _turnMessages.Add(pending);
+    }
+
+    private void UpdatePendingToolArgs(string toolCallId, string argsJson)
+    {
+        var pending = FindToolMessage(toolCallId);
+        if (pending is null
+            || pending.ToolCallStatus is not (ToolCallDisplayStatus.Preparing or ToolCallDisplayStatus.Running))
+        {
+            return;
+        }
+
+        _toolCallIdToName.TryGetValue(toolCallId, out var toolName);
+        pending.ToolArgumentsText = FormatArgsForDisplay(argsJson, toolName ?? pending.ToolName);
+    }
+
+    private void PromotePendingToolToRunning(string toolCallId)
+    {
+        var pending = FindToolMessage(toolCallId);
+        if (pending is null)
+        {
+            return;
+        }
+
+        if (pending.ToolCallStatus is ToolCallDisplayStatus.Preparing or ToolCallDisplayStatus.Running)
+        {
+            pending.ToolCallStatus = ToolCallDisplayStatus.Running;
+            pending.IsToolRunning = true;
+            pending.IsToolArgumentsStreaming = false;
+        }
+    }
+
     private void HandleResult(string toolCallId, string content)
     {
         _toolCallIdToName.TryGetValue(toolCallId, out var toolName);
@@ -131,8 +186,9 @@ public sealed class SessionTurnActivityTracker
                 out _);
         }
 
-        if (!TurnActivityClassifier.IsActivityTool(toolName)
-            || TurnActivitySummaryBuilder.EditTools.Contains(toolName))
+        RemoveToolMessage(toolCallId);
+
+        if (!TurnActivityClassifier.IsActivityTool(toolName))
         {
             return;
         }
@@ -145,7 +201,38 @@ public sealed class SessionTurnActivityTracker
             message.ToolArgumentsText = FormatArgsForDisplay(rawArgs, toolName);
         }
 
+        // Successful edits belong in FILES_CHANGED, not the activity list.
+        if (TurnActivitySummaryBuilder.EditTools.Contains(toolName)
+            && message.ToolCallStatus == ToolCallDisplayStatus.Succeeded)
+        {
+            return;
+        }
+
         _turnMessages.Add(message);
+    }
+
+    private ChatMessageViewModel? FindToolMessage(string toolCallId)
+    {
+        if (string.IsNullOrWhiteSpace(toolCallId))
+        {
+            return null;
+        }
+
+        return _turnMessages.LastOrDefault(message =>
+            message.IsTool && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal));
+    }
+
+    private void RemoveToolMessage(string toolCallId)
+    {
+        for (var i = _turnMessages.Count - 1; i >= 0; i--)
+        {
+            var message = _turnMessages[i];
+            if (message.IsTool && string.Equals(message.ToolCallId, toolCallId, StringComparison.Ordinal))
+            {
+                _turnMessages.RemoveAt(i);
+                return;
+            }
+        }
     }
 
     private static string FormatArgsForDisplay(string argsJson, string? toolName)
