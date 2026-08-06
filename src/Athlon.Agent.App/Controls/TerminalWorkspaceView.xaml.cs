@@ -97,6 +97,7 @@ public partial class TerminalWorkspaceView : UserControl
         {
             EnsureShellConfigured(_tab);
             ShellLabel.Text = BuildShellCaption(_tab);
+            SyncTabTitle(_tab);
 
             var control = WorkspaceTerminalBootstrap.CreateControl(
                 _tab.StartupCommandLine,
@@ -186,6 +187,41 @@ public partial class TerminalWorkspaceView : UserControl
         }
 
         return $"{shell} · {tab.WorkingDirectory}";
+    }
+
+    private static void SyncTabTitle(TerminalWorkspaceTabViewModel tab)
+    {
+        if (string.IsNullOrWhiteSpace(tab.StartupCommandLine))
+        {
+            return;
+        }
+
+        var shell = System.IO.Path.GetFileNameWithoutExtension(tab.StartupCommandLine);
+        if (string.IsNullOrWhiteSpace(shell))
+        {
+            return;
+        }
+
+        // Keep serial suffix from the initial localized title when present (e.g. "终端 4" → "pwsh 4").
+        var serial = ExtractTrailingSerial(tab.Title);
+        tab.Title = serial is null ? shell : $"{shell} {serial}";
+    }
+
+    private static string? ExtractTrailingSerial(string? title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return null;
+        }
+
+        var parts = title.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            return null;
+        }
+
+        var last = parts[^1];
+        return int.TryParse(last, out _) ? last : null;
     }
 
     private void ShowError(string? detail)
