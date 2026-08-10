@@ -12,10 +12,8 @@ public sealed record ToolInvocationError(
 
 public static class ToolInvocationErrors
 {
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web);
-
     public static ToolResult Failure(string summary, ToolInvocationError error) =>
-        ToolResult.Failure(summary, JsonSerializer.Serialize(error, Options));
+        ToolResult.Failure(summary, JsonElementFormatter.SerializeForDisplay(error, indented: false));
 }
 
 public static class ToolInvocationValidator

@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -140,13 +141,21 @@ public static class JsonFileStoreOptions
 {
     public static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web)
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
+    public static readonly JsonSerializerOptions WebCompactRelaxed = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = false,
+        PropertyNameCaseInsensitive = true,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
     public static readonly JsonSerializerOptions WebIndented = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true,
-        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 }

@@ -284,7 +284,7 @@ internal static class ModelMessageBuilder
         return call.Arguments.Count == 0
             ? "(none)"
             : string.Join(Environment.NewLine, call.Arguments.Select(
-                argument => $"{argument.Key}={argument.Value.GetRawText()}"));
+                argument => $"{argument.Key}={JsonElementFormatter.FormatForDisplay(argument.Value, indented: false)}"));
     }
 
     private static string FormatInvalidArgumentsPreview(string? rawJson)

@@ -60,7 +60,7 @@ internal static class McpSearchGatewayTools
 
                     return ToolResult.Success(
                         $"Found {payload.Length} MCP tool(s) for query.",
-                        JsonSerializer.Serialize(new
+                        JsonElementFormatter.SerializeForDisplay(new
                         {
                             query,
                             totalIndexed = registry.CatalogCount,
@@ -127,7 +127,7 @@ internal static class McpSearchGatewayTools
                     var catalog = registry.ListCatalogEntries();
                     return ToolResult.Success(
                         "MCP catalog refreshed.",
-                        JsonSerializer.Serialize(new
+                        JsonElementFormatter.SerializeForDisplay(new
                         {
                             totalIndexed = catalog.Count,
                             refreshedAt = DateTimeOffset.UtcNow
@@ -151,7 +151,7 @@ internal static class McpSearchGatewayTools
         var presentation = McpSchemaPresenter.Present(entry.InputSchemaJson);
         using var document = JsonDocument.Parse(
             string.IsNullOrWhiteSpace(entry.InputSchemaJson) ? "{}" : entry.InputSchemaJson);
-        return JsonSerializer.Serialize(new
+        return JsonElementFormatter.SerializeForDisplay(new
         {
             toolId = entry.EncodedName,
             serverName = entry.ServerName,

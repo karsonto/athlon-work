@@ -189,11 +189,7 @@ internal static class ChatEventSerializer
     public static string SerializeToolResultMarkdown(ChatMessageViewModel message)
     {
         var toolCallId = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;
-        var detail = !string.IsNullOrWhiteSpace(message.ToolDetailExpandedDisplay)
-            ? message.ToolDetailExpandedDisplay
-            : !string.IsNullOrWhiteSpace(message.ToolDetail)
-                ? message.ToolDetail
-                : message.ToolSummary;
+        var detail = ResolveToolResultDetail(message);
         if (string.IsNullOrWhiteSpace(detail))
         {
             return "{}";
@@ -474,11 +470,7 @@ internal static class ChatEventSerializer
             yield break;
         }
 
-        var detail = !string.IsNullOrWhiteSpace(message.ToolDetailExpandedDisplay)
-            ? message.ToolDetailExpandedDisplay
-            : !string.IsNullOrWhiteSpace(message.ToolDetail)
-                ? message.ToolDetail
-                : message.ToolSummary;
+        var detail = ResolveToolResultDetail(message);
         if (!string.IsNullOrWhiteSpace(detail))
         {
             yield return SerializeAgui("TOOL_CALL_RESULT", new
@@ -493,6 +485,27 @@ internal static class ChatEventSerializer
                 html = RenderToolResultHtml(message, detail)
             });
         }
+    }
+
+    private static string ResolveToolResultDetail(ChatMessageViewModel message)
+    {
+        if (message.IsTool || message.IsCompaction)
+        {
+            var formatted = ToolResultDisplayFormatter.FormatDetail(message.Content);
+            if (!string.IsNullOrWhiteSpace(formatted))
+            {
+                var limit = message.IsExpanded
+                    ? ChatMessageViewModel.MaxToolDetailDisplayChars
+                    : 4_096;
+                return ChatMessageViewModel.TruncateToolDetailForDisplay(formatted, limit);
+            }
+        }
+
+        return !string.IsNullOrWhiteSpace(message.ToolDetailExpandedDisplay)
+            ? message.ToolDetailExpandedDisplay
+            : !string.IsNullOrWhiteSpace(message.ToolDetail)
+                ? message.ToolDetail
+                : message.ToolSummary;
     }
 
     private static string SerializeToolStatus(ToolCallDisplayStatus status, ToolApprovalState approvalState = ToolApprovalState.None) =>

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Athlon.Agent.Core;
 using ModelContextProtocol.Client;
 namespace Athlon.Agent.Mcp;
 
@@ -68,7 +69,7 @@ public sealed class SdkMcpClient : IMcpClient
 
             _state = McpConnectionState.Connected;
             _lastError = null;
-            return JsonSerializer.Serialize(result);
+            return JsonElementFormatter.SerializeForDisplay(result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

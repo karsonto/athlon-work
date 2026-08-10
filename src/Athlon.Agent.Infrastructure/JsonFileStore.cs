@@ -1,5 +1,6 @@
-using System.Text.Encodings.Web;
+using System.IO;
 using System.Text.Json;
+using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -12,19 +13,10 @@ public interface IJsonFileStore
 
 public sealed class JsonFileStore : IJsonFileStore
 {
-    public static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true,
-        // Persist UTF-8 Chinese (and other non-ASCII) literally in session.json instead of \uXXXX.
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
+    public static readonly JsonSerializerOptions Options = JsonFileStoreOptions.WebIndented;
 
     /// <summary>Single-line JSON for machine-friendly append logs (conversation/tool/audit).</summary>
-    public static readonly JsonSerializerOptions JsonLineOptions = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = false,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
+    public static readonly JsonSerializerOptions JsonLineOptions = JsonFileStoreOptions.WebCompactRelaxed;
 
     public Task SaveAsync<T>(string path, T value, CancellationToken cancellationToken = default)
     {
