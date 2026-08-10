@@ -1,21 +1,40 @@
+using System.IO;
 using Athlon.Agent.App.Services;
 
 namespace Athlon.Agent.Tests;
 
 public sealed class ChatHtmlBuilderCopyActionTests
 {
+    private static string TimelineJs => ReadChatAsset("chat-timeline.js");
+
+    private static string ReadChatAsset(string fileName)
+    {
+        var fromBase = Path.Combine(AppContext.BaseDirectory, "Assets", "Chat", fileName);
+        if (File.Exists(fromBase))
+            return File.ReadAllText(fromBase);
+
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "src", "Athlon.Agent.App", "Assets", "Chat", fileName);
+            if (File.Exists(candidate))
+                return File.ReadAllText(candidate);
+        }
+
+        throw new FileNotFoundException($"Chat asset not found: {fileName}");
+    }
+
     [Fact]
     public void BuildShellHtml_IncludesMessageCopyActionMarkupAndScript()
     {
-        var html = new ChatHtmlBuilder().BuildShellHtml();
+        var surface = new ChatHtmlBuilder().BuildShellHtml() + "\n" + TimelineJs + "\n" + ReadChatAsset("chat-shell.css");
 
-        Assert.Contains("message-stack", html);
-        Assert.Contains("message-actions", html);
-        Assert.Contains("message-action-btn", html);
-        Assert.Contains("dataset.copyText", html);
-        Assert.Contains("createMessageActions", html);
-        Assert.Contains("copyMessageText", html);
-        Assert.Contains("resolveRowCopyText", html);
+        Assert.Contains("message-stack", surface);
+        Assert.Contains("message-actions", surface);
+        Assert.Contains("message-action-btn", surface);
+        Assert.Contains("dataset.copyText", surface);
+        Assert.Contains("createMessageActions", surface);
+        Assert.Contains("copyMessageText", surface);
+        Assert.Contains("resolveRowCopyText", surface);
     }
 
     [Fact]

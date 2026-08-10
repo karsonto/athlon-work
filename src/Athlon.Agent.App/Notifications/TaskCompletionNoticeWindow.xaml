@@ -13,12 +13,9 @@
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent">
-    <Border Background="#FFFFFF"
-            BorderBrush="#E2E8F0"
-            BorderThickness="1"
-            CornerRadius="12"
-            Padding="14,12"
-            SnapsToDevicePixels="True">
+    <Border Background="Transparent"
+            Padding="12"
+            Margin="-12">
         <Border.Effect>
             <DropShadowEffect BlurRadius="20"
                               ShadowDepth="2"
@@ -26,43 +23,51 @@
                               Opacity="0.14"
                               Color="#0F172A" />
         </Border.Effect>
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
+        <Border Background="#FFFFFF"
+                BorderBrush="#E2E8F0"
+                BorderThickness="1"
+                CornerRadius="12"
+                Padding="14,12"
+                SnapsToDevicePixels="True"
+                UseLayoutRounding="True">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-            <Grid Grid.Column="0"
-                  Width="28"
-                  Height="28"
-                  Margin="0,2,12,0"
-                  VerticalAlignment="Top">
-                <Ellipse Width="28"
-                         Height="28"
-                         Fill="{DynamicResource Brush.Success}" />
-                <Path Data="M4,8 L7,11 L12,5"
-                      Stroke="{DynamicResource Brush.OnSuccess}"
-                      StrokeThickness="1.6"
-                      StrokeStartLineCap="Round"
-                      StrokeEndLineCap="Round"
-                      Stretch="Uniform"
-                      Margin="7" />
+                <Grid Grid.Column="0"
+                      Width="28"
+                      Height="28"
+                      Margin="0,2,12,0"
+                      VerticalAlignment="Top">
+                    <Ellipse Width="28"
+                             Height="28"
+                             Fill="{DynamicResource Brush.Success}" />
+                    <Path Data="M4,8 L7,11 L12,5"
+                          Stroke="{DynamicResource Brush.OnSuccess}"
+                          StrokeThickness="1.6"
+                          StrokeStartLineCap="Round"
+                          StrokeEndLineCap="Round"
+                          Stretch="Uniform"
+                          Margin="7" />
+                </Grid>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="TitleText"
+                               Text="{loc:Localize Key=Notification_TaskCompleteTitle}"
+                               FontSize="14"
+                               FontWeight="SemiBold"
+                               Foreground="#0F172A" />
+                    <TextBlock x:Name="SubtitleText"
+                               Margin="0,4,0,0"
+                               FontSize="12"
+                               LineHeight="18"
+                               MaxWidth="240"
+                               TextWrapping="Wrap"
+                               Foreground="#475569" />
+                </StackPanel>
             </Grid>
-
-            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                <TextBlock x:Name="TitleText"
-                           Text="{loc:Localize Key=Notification_TaskCompleteTitle}"
-                           FontSize="14"
-                           FontWeight="SemiBold"
-                           Foreground="#0F172A" />
-                <TextBlock x:Name="SubtitleText"
-                           Margin="0,4,0,0"
-                           FontSize="12"
-                           LineHeight="18"
-                           MaxWidth="240"
-                           TextWrapping="Wrap"
-                           Foreground="#475569" />
-            </StackPanel>
-        </Grid>
+        </Border>
     </Border>
 </Window>

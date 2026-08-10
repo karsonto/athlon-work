@@ -69,23 +69,18 @@
         </Setter>
     </Style>
 
-    <!-- Workspace / Run-on picker: supports nested submenu popups (Cursor-style). -->
+    <!-- Workspace / Run-on picker: supports nested submenu popups (Cursor-style).
+         Shadow on transparent host; stroke on inner — avoids soft-rasterized 1px curves. -->
     <Style x:Key="RunOnContextMenuStyle" TargetType="{x:Type ContextMenu}" BasedOn="{StaticResource MarkdownContextMenuStyle}">
         <Setter Property="MinWidth" Value="220" />
         <Setter Property="Padding" Value="6" />
-        <Setter Property="HasDropShadow" Value="True" />
+        <Setter Property="HasDropShadow" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ContextMenu}">
-                    <Border Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="10"
-                            Padding="{TemplateBinding Padding}"
-                            SnapsToDevicePixels="True">
-                        <Border.Resources>
-                            <Style TargetType="{x:Type Separator}" BasedOn="{StaticResource RunOnMenuSeparatorStyle}" />
-                        </Border.Resources>
+                    <Border Background="Transparent"
+                            Padding="12"
+                            Margin="-12">
                         <Border.Effect>
                             <DropShadowEffect BlurRadius="20"
                                               ShadowDepth="6"
@@ -93,7 +88,18 @@
                                               Direction="270"
                                               Color="#FF000000" />
                         </Border.Effect>
-                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10"
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True"
+                                UseLayoutRounding="True">
+                            <Border.Resources>
+                                <Style TargetType="{x:Type Separator}" BasedOn="{StaticResource RunOnMenuSeparatorStyle}" />
+                            </Border.Resources>
+                            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        </Border>
                     </Border>
                 </ControlTemplate>
             </Setter.Value>
@@ -130,16 +136,9 @@
                                Placement="Right"
                                PlacementTarget="{Binding ElementName=ItemBorder}"
                                PopupAnimation="Fade">
-                            <Border Background="{DynamicResource Brush.MenuBackground}"
-                                    BorderBrush="{DynamicResource Brush.Border}"
-                                    BorderThickness="1"
-                                    CornerRadius="10"
-                                    MinWidth="230"
-                                    Padding="6"
-                                    SnapsToDevicePixels="True">
-                                <Border.Resources>
-                                    <Style TargetType="{x:Type Separator}" BasedOn="{StaticResource RunOnMenuSeparatorStyle}" />
-                                </Border.Resources>
+                            <Border Background="Transparent"
+                                    Padding="12"
+                                    Margin="-12">
                                 <Border.Effect>
                                     <DropShadowEffect BlurRadius="20"
                                                       ShadowDepth="6"
@@ -147,7 +146,19 @@
                                                       Direction="270"
                                                       Color="#FF000000" />
                                 </Border.Effect>
-                                <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                <Border Background="{DynamicResource Brush.MenuBackground}"
+                                        BorderBrush="{DynamicResource Brush.Border}"
+                                        BorderThickness="1"
+                                        CornerRadius="10"
+                                        MinWidth="230"
+                                        Padding="6"
+                                        SnapsToDevicePixels="True"
+                                        UseLayoutRounding="True">
+                                    <Border.Resources>
+                                        <Style TargetType="{x:Type Separator}" BasedOn="{StaticResource RunOnMenuSeparatorStyle}" />
+                                    </Border.Resources>
+                                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+                                </Border>
                             </Border>
                         </Popup>
                     </Grid>

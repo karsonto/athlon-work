@@ -31,6 +31,10 @@
 
   <ItemGroup>
     <None Include="Fixtures\Attachments\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\src\Athlon.Agent.App\Assets\Chat\**\*">
+      <Link>Assets\Chat\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

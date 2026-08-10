@@ -282,7 +282,9 @@
         <Border Panel.ZIndex="100"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
-                Margin="0,20,20,0">
+                Margin="0,20,20,0"
+                Background="Transparent"
+                BorderThickness="0">
             <Border.Effect>
                 <DropShadowEffect Color="#000000"
                                   Opacity="0.45"
@@ -291,7 +293,7 @@
                                   Direction="270" />
             </Border.Effect>
             <Border.Style>
-                <Style TargetType="Border" BasedOn="{StaticResource ToastNoticeStyle}">
+                <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Collapsed" />
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding IsCopyNoticeVisible}" Value="True">
@@ -300,8 +302,10 @@
                     </Style.Triggers>
                 </Style>
             </Border.Style>
-            <TextBlock Text="{Binding CopyNotice}"
-                       Style="{StaticResource ToastNoticeTextStyle}" />
+            <Border Style="{StaticResource ToastNoticeStyle}">
+                <TextBlock Text="{Binding CopyNotice}"
+                           Style="{StaticResource ToastNoticeTextStyle}" />
+            </Border>
         </Border>
 
         <Border x:Name="ShutdownOverlay"

@@ -1,6 +1,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:app="clr-namespace:Athlon.Agent.App">
+                    xmlns:app="clr-namespace:Athlon.Agent.App"
+                    xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
+                    xmlns:loc="clr-namespace:Athlon.Agent.App.Localization">
 
     <Style x:Key="FocusRingVisualStyle" TargetType="Control">
         <Setter Property="Template">
@@ -618,6 +620,117 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
         <Setter Property="BorderThickness" Value="0,0,0,1" />
         <Setter Property="Padding" Value="20,0" />
+    </Style>
+
+    <!-- Composer Plus menu row item (image attach, etc.). Standalone — avoids
+         cross-dictionary StaticResource BasedOn (GhostButtonStyle) parse failures. -->
+    <Style x:Key="ComposerPlusMenuItemStyle" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Root"
+                            Background="{TemplateBinding Background}"
+                            BorderThickness="0"
+                            CornerRadius="6"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.HoverNeutral}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.HoverNeutralAlt}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ComposerKnowledgeSearchBoxStyle" TargetType="TextBox">
+        <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.Chrome}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Margin" Value="0,0,0,8" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6">
+                        <Grid>
+                            <ScrollViewer x:Name="PART_ContentHost" Padding="{TemplateBinding Padding}" />
+                            <TextBlock Text="{loc:Localize Key=Chat_SearchKnowledgePlaceholder}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       FontSize="12"
+                                       IsHitTestVisible="False"
+                                       Padding="8,6">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text.Length, RelativeSource={RelativeSource AncestorType=TextBox}}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="ComposerPendingChipBorderStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Brush.PanelAlt}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+        <Setter Property="Padding" Value="6,4" />
+    </Style>
+
+    <Style x:Key="ComposerKnowledgeChipBorderStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentSubtle}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="Margin" Value="0,0,6,0" />
+    </Style>
+
+    <Style x:Key="ComposerPlusMenuHostStyle" TargetType="controls:ComposerPlusMenuControl">
+        <Setter Property="Grid.Row" Value="0" />
+        <Setter Property="Grid.Column" Value="0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0,0,6,0" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsComposerMultiLine}" Value="True">
+                <Setter Property="VerticalAlignment" Value="Bottom" />
+            </DataTrigger>
+            <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
+                <Setter Property="Grid.Row" Value="1" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Margin" Value="0,10,0,0" />
+            </DataTrigger>
+        </Style.Triggers>
     </Style>
 
 </ResourceDictionary>
