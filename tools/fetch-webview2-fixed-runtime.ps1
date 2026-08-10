@@ -119,6 +119,153 @@ function Copy-RuntimeTree {
     Copy-Item -Path (Join-Path $SourceFolder '*') -Destination $TargetFolder -Recurse -Force
 }
 
+function Test-DownloadedCab {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return $false
+    }
+
+    $length = (Get-Item -LiteralPath $Path).Length
+    # Fixed runtime CABs are typically well over 50 MB; reject truncated downloads.
+    return $length -ge 50MB
+}
+
+function Invoke-CurlDownload {
+    param(
+        [string]$Uri,
+        [string]$DestinationPath
+    )
+
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($null -eq $curl) {
+        throw 'curl.exe is not available.'
+    }
+
+    if (Test-Path -LiteralPath $DestinationPath) {
+        Remove-Item -LiteralPath $DestinationPath -Force
+    }
+
+    & curl.exe `
+        --fail `
+        --location `
+        --retry 5 `
+        --retry-all-errors `
+        --retry-delay 5 `
+        --connect-timeout 30 `
+        --max-time 7200 `
+        --output $DestinationPath `
+        $Uri
+    if ($LASTEXITCODE -ne 0) {
+        throw "curl.exe failed with exit code $LASTEXITCODE"
+    }
+}
+
+function Invoke-BitsDownload {
+    param(
+        [string]$Uri,
+        [string]$DestinationPath
+    )
+
+    if (Test-Path -LiteralPath $DestinationPath) {
+        Remove-Item -LiteralPath $DestinationPath -Force
+    }
+
+    Start-BitsTransfer `
+        -Source $Uri `
+        -Destination $DestinationPath `
+        -TransferType Download `
+        -Priority Foreground `
+        -ErrorAction Stop
+}
+
+function Invoke-HttpClientDownload {
+    param(
+        [string]$Uri,
+        [string]$DestinationPath
+    )
+
+    if (Test-Path -LiteralPath $DestinationPath) {
+        Remove-Item -LiteralPath $DestinationPath -Force
+    }
+
+    $handler = [System.Net.Http.HttpClientHandler]::new()
+    $client = [System.Net.Http.HttpClient]::new($handler)
+    $client.Timeout = [TimeSpan]::FromMinutes(120)
+    try {
+        $response = $client.GetAsync(
+            $Uri,
+            [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+        $response.EnsureSuccessStatusCode()
+        $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
+        $fileStream = [System.IO.File]::Open(
+            $DestinationPath,
+            [System.IO.FileMode]::Create,
+            [System.IO.FileAccess]::Write,
+            [System.IO.FileShare]::None)
+        try {
+            $stream.CopyTo($fileStream)
+        }
+        finally {
+            $fileStream.Dispose()
+            $stream.Dispose()
+        }
+    }
+    finally {
+        $client.Dispose()
+        $handler.Dispose()
+    }
+}
+
+function Download-FileRobust {
+    param(
+        [string]$Uri,
+        [string]$DestinationPath,
+        [int]$MaxAttempts = 5
+    )
+
+    $parent = Split-Path -Parent $DestinationPath
+    if (-not (Test-Path -LiteralPath $parent)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+
+    $strategies = @(
+        @{ Name = 'curl'; Action = { Invoke-CurlDownload -Uri $Uri -DestinationPath $DestinationPath } },
+        @{ Name = 'bits'; Action = { Invoke-BitsDownload -Uri $Uri -DestinationPath $DestinationPath } },
+        @{ Name = 'httpclient'; Action = { Invoke-HttpClientDownload -Uri $Uri -DestinationPath $DestinationPath } }
+    )
+
+    $lastError = $null
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        foreach ($strategy in $strategies) {
+            try {
+                Write-Host "Downloading via $($strategy.Name) (attempt $attempt/$MaxAttempts) ..."
+                & $strategy.Action
+                if (Test-DownloadedCab -Path $DestinationPath) {
+                    return
+                }
+
+                throw "Downloaded CAB is missing or too small."
+            }
+            catch {
+                $lastError = $_
+                Write-Warning "$($strategy.Name) download failed: $($_.Exception.Message)"
+                if (Test-Path -LiteralPath $DestinationPath) {
+                    Remove-Item -LiteralPath $DestinationPath -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+
+        if ($attempt -lt $MaxAttempts) {
+            $delay = [Math]::Min(60, [Math]::Pow(2, $attempt))
+            Write-Host "Waiting ${delay}s before retry ..."
+            Start-Sleep -Seconds $delay
+        }
+    }
+
+    throw "Failed to download WebView2 CAB after $MaxAttempts attempts. Last error: $lastError"
+}
+
 $runtimeVersion = if ([string]::IsNullOrWhiteSpace($Version)) { Get-PinnedVersion -Path $VersionFile } else { $Version.Trim() }
 $targetFolder = Join-Path $DestinationRoot 'x64'
 $versionMarker = Join-Path $DestinationRoot 'VERSION'
@@ -142,7 +289,7 @@ $cabPath = Join-Path $tempRoot "Microsoft.WebView2.FixedVersionRuntime.$runtimeV
 $extractRoot = Join-Path $tempRoot 'extracted'
 
 try {
-    Invoke-WebRequest -Uri $resolvedUrl -OutFile $cabPath -UseBasicParsing -TimeoutSec 600
+    Download-FileRobust -Uri $resolvedUrl -DestinationPath $cabPath
     New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
 
     $expand = Join-Path $env:SystemRoot 'System32\expand.exe'
