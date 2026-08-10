@@ -291,14 +291,14 @@
         </Style.Triggers>
     </Style>
 
-    <Style x:Key="ComposerInputWrapperStyle" TargetType="Border">
+    <!-- Shadow plate only: sibling behind the input so DropShadowEffect does not soft-rasterize the 1px stroke. -->
+    <Style x:Key="ComposerInputShadowStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource Brush.Composer}" />
-        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
-        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderThickness" Value="0" />
         <Setter Property="CornerRadius" Value="18" />
-        <Setter Property="Padding" Value="10,8" />
-        <Setter Property="Margin" Value="2,4" />
+        <Setter Property="IsHitTestVisible" Value="False" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="UseLayoutRounding" Value="True" />
         <Setter Property="Effect">
             <Setter.Value>
                 <DropShadowEffect BlurRadius="18"
@@ -308,6 +308,23 @@
                                   Color="#FF000000" />
             </Setter.Value>
         </Setter>
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
+                <Setter Property="CornerRadius" Value="20" />
+                <Setter Property="MinHeight" Value="128" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- Crisp input chrome: no Effect (shadow lives on ComposerInputShadowStyle sibling). -->
+    <Style x:Key="ComposerInputWrapperStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Brush.Composer}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Brush.ComposerBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="UseLayoutRounding" Value="True" />
         <Style.Triggers>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
                 <Setter Property="BorderBrush" Value="{DynamicResource Brush.BorderHover}" />
@@ -395,6 +412,9 @@
         </Setter>
     </Style>
 
+    <!-- Capsule chrome: fill Border + inset Rectangle stroke.
+         Shape stroke AA is cleaner than Border's 1px curve; inset avoids half-stroke clip.
+         SnapsToDevicePixels off on the curve — snapping makes pill ends stair-step. -->
     <Style x:Key="ComposerModePillButtonStyle" TargetType="Button">
         <Setter Property="MinHeight" Value="28" />
         <Setter Property="Padding" Value="9,4,8,4" />
@@ -407,23 +427,30 @@
         <Setter Property="BorderBrush" Value="{DynamicResource Brush.ModeAgentBorder}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.ModeAgentForeground}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="SnapsToDevicePixels" Value="False" />
         <Setter Property="UseLayoutRounding" Value="True" />
         <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRingVisualStyle}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="Root"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="14"
-                            Padding="{TemplateBinding Padding}"
-                            SnapsToDevicePixels="True">
-                        <ContentPresenter HorizontalAlignment="Center"
+                    <Grid x:Name="Root" UseLayoutRounding="True">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="14"
+                                SnapsToDevicePixels="False" />
+                        <Rectangle Margin="0.5"
+                                   RadiusX="13.5"
+                                   RadiusY="13.5"
+                                   Fill="Transparent"
+                                   Stroke="{TemplateBinding BorderBrush}"
+                                   StrokeThickness="1"
+                                   StrokeLineJoin="Round"
+                                   IsHitTestVisible="False"
+                                   SnapsToDevicePixels="False" />
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
                                           RecognizesAccessKey="True" />
-                    </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Root" Property="Opacity" Value="0.9" />

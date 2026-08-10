@@ -238,13 +238,16 @@
                                    Style="{StaticResource ComposerWelcomeDescriptionStyle}" />
                     </StackPanel>
 
-                    <Border x:Name="ComposerInputWrapper"
-                            Grid.Row="1"
-                            Style="{StaticResource ComposerInputWrapperStyle}"
-                            HorizontalAlignment="Stretch"
-                            AllowDrop="True"
-                            DragOver="ComposerInputWrapper_OnDragOver"
-                            Drop="ComposerInputWrapper_OnDrop">
+                    <Grid Grid.Row="1"
+                          Margin="2,4"
+                          HorizontalAlignment="Stretch">
+                        <Border Style="{StaticResource ComposerInputShadowStyle}" />
+                        <Border x:Name="ComposerInputWrapper"
+                                Style="{StaticResource ComposerInputWrapperStyle}"
+                                HorizontalAlignment="Stretch"
+                                AllowDrop="True"
+                                DragOver="ComposerInputWrapper_OnDragOver"
+                                Drop="ComposerInputWrapper_OnDrop">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -767,7 +770,8 @@
                                 </ItemsControl>
                             </StackPanel>
                         </Grid>
-                    </Border>
+                        </Border>
+                    </Grid>
                 </Grid>
                 </Grid>
             </Border>

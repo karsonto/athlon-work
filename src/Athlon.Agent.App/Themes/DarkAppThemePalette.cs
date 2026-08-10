@@ -20,7 +20,8 @@ public static class DarkAppThemePalette
         Panel = C("#1A1A1E"),
         PanelAlt = C("#222226"),
         Composer = C("#1C1C1E"),
-        ComposerBorder = C("#2C2C30"),
+        // Slightly above panel fill so 1px rounded strokes stay readable on dark chrome
+        ComposerBorder = C("#3A3A40"),
 
         // Borders
         Border = C("#27272A"),
