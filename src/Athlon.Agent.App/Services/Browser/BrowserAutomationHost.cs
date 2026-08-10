@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
+using Athlon.Agent.Core;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core.Browser;
 using Microsoft.Web.WebView2.Core;
@@ -270,7 +271,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
             var message = !string.IsNullOrWhiteSpace(description)
                 ? description
                 : (text ?? "JavaScript evaluation failed");
-            return JsonSerializer.Serialize(new { ok = false, error = message });
+            return JsonElementFormatter.SerializeForDisplay(new { ok = false, error = message });
         }
 
         if (!root.TryGetProperty("result", out var result)
@@ -282,10 +283,10 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         return value.ValueKind switch
         {
             JsonValueKind.String => value.GetString() ?? """{"ok":false,"error":"Empty script result"}""",
-            JsonValueKind.Object or JsonValueKind.Array => value.GetRawText(),
+            JsonValueKind.Object or JsonValueKind.Array => JsonElementFormatter.FormatForDisplay(value, indented: true),
             JsonValueKind.Null or JsonValueKind.Undefined =>
                 """{"ok":false,"error":"Empty script result"}""",
-            _ => value.GetRawText()
+            _ => JsonElementFormatter.FormatForDisplay(value, indented: true)
         };
     }
 

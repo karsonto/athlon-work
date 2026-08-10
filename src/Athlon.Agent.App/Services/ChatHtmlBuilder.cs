@@ -312,8 +312,48 @@ public sealed class ChatHtmlBuilder
         html.replaying .message-row { animation: none; }
         .message-row.user { justify-content: flex-end; }
         .message-row.assistant { justify-content: flex-start; }
-        .bubble {
+        .message-stack {
+          display: flex;
+          flex-direction: column;
           max-width: 85%;
+        }
+        .message-row.user .message-stack { align-items: flex-end; }
+        .message-row.assistant-row .message-stack { align-items: flex-start; }
+        .bubble {
+          max-width: 100%;
+          width: 100%;
+        }
+        .message-actions {
+          display: flex;
+          gap: 4px;
+          margin-top: 4px;
+          padding: 0 2px;
+        }
+        .message-action-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          padding: 0;
+          border: 0;
+          border-radius: 6px;
+          background: transparent;
+          color: var(--subtle-text);
+          cursor: pointer;
+          opacity: 0.65;
+        }
+        .message-action-btn:hover {
+          opacity: 1;
+          color: var(--assistant-text);
+          background: rgba(127, 127, 127, 0.12);
+        }
+        .message-action-btn.copied {
+          color: #6EE7B7;
+          opacity: 1;
+        }
+        .message-row.user .message-action-btn:hover {
+          color: var(--user-bubble-text);
         }
         .message-row.user .bubble {
           background: var(--user-bubble);
@@ -1017,6 +1057,68 @@ public sealed class ChatHtmlBuilder
           }
         }
 
+        const copyIconSvg =
+          '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+            '<rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.25"></rect>' +
+            '<rect x="2" y="2" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.25" fill="var(--chat-bg)"></rect>' +
+          '</svg>';
+
+        function createCopyButton(onCopy) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'message-action-btn';
+          btn.setAttribute('aria-label', t('copy'));
+          btn.innerHTML = copyIconSvg;
+          btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            onCopy(btn);
+          });
+          return btn;
+        }
+
+        function copyMessageText(text, button) {
+          if (!text) return;
+          post({ type: 'copy', text: text });
+          if (!button) return;
+          button.classList.add('copied');
+          button.setAttribute('aria-label', t('copied'));
+          setTimeout(function () {
+            button.classList.remove('copied');
+            button.setAttribute('aria-label', t('copy'));
+          }, 1600);
+        }
+
+        function resolveRowCopyText(row) {
+          if (!row) return '';
+          if (row.dataset.copyText) return row.dataset.copyText;
+          const userText = row.querySelector('.user-text');
+          if (userText) return userText.textContent || '';
+          const content = row.querySelector('.message-content');
+          return content ? (content.innerText || '') : '';
+        }
+
+        function updateCopyText(row, text) {
+          if (!row) return;
+          row.dataset.copyText = text == null ? '' : String(text);
+        }
+
+        function createMessageActions(row) {
+          const actions = document.createElement('div');
+          actions.className = 'message-actions';
+          actions.appendChild(createCopyButton(function (button) {
+            copyMessageText(resolveRowCopyText(row), button);
+          }));
+          return actions;
+        }
+
+        function ensureMessageActions(row) {
+          if (!row || row.querySelector('.message-actions')) return;
+          const stack = row.querySelector('.message-stack');
+          if (!stack) return;
+          stack.appendChild(createMessageActions(row));
+        }
+
         function getChatScroller() {
           return document.getElementById('chat-scroll');
         }
@@ -1295,6 +1397,8 @@ public sealed class ChatHtmlBuilder
         function createUserRow(content, images) {
           const row = document.createElement('div');
           row.className = 'message-row user';
+          const stack = document.createElement('div');
+          stack.className = 'message-stack';
           const bubble = document.createElement('div');
           bubble.className = 'bubble';
 
@@ -1325,7 +1429,10 @@ public sealed class ChatHtmlBuilder
             bubble.appendChild(text);
           }
 
-          row.appendChild(bubble);
+          stack.appendChild(bubble);
+          stack.appendChild(createMessageActions(row));
+          row.appendChild(stack);
+          updateCopyText(row, content || '');
           return row;
         }
 
@@ -1333,10 +1440,16 @@ public sealed class ChatHtmlBuilder
           const row = document.createElement('div');
           row.className = 'message-row assistant assistant-row';
           row.dataset.messageId = messageId || '';
-          row.innerHTML =
-            '<div class="bubble">' +
-              '<div class="message-content md-root"></div>' +
-            '</div>';
+          const stack = document.createElement('div');
+          stack.className = 'message-stack';
+          const bubble = document.createElement('div');
+          bubble.className = 'bubble';
+          const content = document.createElement('div');
+          content.className = 'message-content md-root';
+          bubble.appendChild(content);
+          stack.appendChild(bubble);
+          stack.appendChild(createMessageActions(row));
+          row.appendChild(stack);
           return row;
         }
 
@@ -1872,6 +1985,9 @@ public sealed class ChatHtmlBuilder
                 resolveRenderedHtml(event),
                 event.createIfMissing !== false,
                 event.streaming === true);
+              updateCopyText(
+                findAssistantBubbleRow(event.messageId),
+                resolveEventMarkdown(event));
               if (!event.streaming) state.currentAssistantEl = null;
               break;
             case 'TOOL_CALL_START':

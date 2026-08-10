@@ -52,7 +52,7 @@ internal static class ToolMessageDisplayParser
             }
         }
 
-        detail = content.Trim();
+        detail = ToolResultDisplayFormatter.FormatDetail(content);
         if (detail.Contains("[Tool result evicted", StringComparison.OrdinalIgnoreCase))
         {
             header = Strings.Format("Tool_EvictedHeader", header);
@@ -99,7 +99,7 @@ internal static class ToolMessageDisplayParser
                     {
                         var value = argument.Value.ValueKind == System.Text.Json.JsonValueKind.String
                             ? argument.Value.GetString() ?? string.Empty
-                            : argument.Value.GetRawText();
+                            : JsonElementFormatter.FormatForDisplay(argument.Value, indented: false);
                         if (string.Equals(argument.Key, ToolPathNormalizer.PathArgumentName, StringComparison.OrdinalIgnoreCase))
                         {
                             value = ToolPathNormalizer.ForModel(value);

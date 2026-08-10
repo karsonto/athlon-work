@@ -47,7 +47,7 @@ internal static class BrowserToolHelper
             {
                 content = dataEl.ValueKind == JsonValueKind.String
                     ? dataEl.GetString()
-                    : dataEl.GetRawText();
+                    : JsonElementFormatter.FormatForDisplay(dataEl, indented: true);
                 if (dataEl.ValueKind == JsonValueKind.Object
                     && dataEl.TryGetProperty("tree", out var treeEl)
                     && treeEl.ValueKind == JsonValueKind.String)
