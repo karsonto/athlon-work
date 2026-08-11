@@ -25,7 +25,18 @@ public sealed class ComputerUseCaptureService
             throw new InvalidOperationException("Unable to read the cursor position.");
         }
 
-        var monitor = MonitorFromPoint(cursor, MonitorDefaultToNearest);
+        return CaptureAt(cursor.X, cursor.Y);
+    }
+
+    public ComputerUseCapturedDesktop CaptureAt(int x, int y)
+    {
+        if (!GetCursorPos(out var cursor))
+        {
+            cursor = new NativePoint { X = x, Y = y };
+        }
+
+        var probe = new NativePoint { X = x, Y = y };
+        var monitor = MonitorFromPoint(probe, MonitorDefaultToNearest);
         if (monitor == IntPtr.Zero)
         {
             throw new InvalidOperationException("Unable to resolve the active monitor.");

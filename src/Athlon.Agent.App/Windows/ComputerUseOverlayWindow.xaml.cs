@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
-using System.Windows.Interop;
+using Athlon.Agent.App.ViewModels;
 
 namespace Athlon.Agent.App.Windows;
 
@@ -18,10 +18,11 @@ public partial class ComputerUseOverlayWindow : Window
 
     public ICommand CloseCommand { get; }
 
-    public ComputerUseOverlayWindow()
+    public ComputerUseOverlayWindow(MainShellViewModel shell)
     {
+        ArgumentNullException.ThrowIfNull(shell);
         InitializeComponent();
-        DataContext = this;
+        DataContext = shell;
         CloseCommand = new RelayCommand(_ => Close());
         Loaded += OnLoaded;
         SizeChanged += OnSizeChanged;
@@ -53,12 +54,19 @@ public partial class ComputerUseOverlayWindow : Window
 
     private void SendButton_OnClick(object sender, RoutedEventArgs e)
     {
+        if (DataContext is MainShellViewModel { IsComposerStopVisible: true })
+        {
+            return;
+        }
+
         var text = PromptBox.Text?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(text))
         {
             return;
         }
 
+        PromptText = string.Empty;
+        PromptBox.Text = string.Empty;
         PromptSubmitted?.Invoke(this, text);
     }
 
@@ -116,7 +124,7 @@ public partial class ComputerUseOverlayWindow : Window
         var topPixels = Math.Max(
             workArea.Top + (int)Math.Round(12 * dpiScale),
             workArea.Bottom - targetHeightPixels - (int)Math.Round(BottomMargin * dpiScale));
-        var handle = new WindowInteropHelper(this).Handle;
+        var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
         if (handle != IntPtr.Zero)
         {
             SetWindowPos(

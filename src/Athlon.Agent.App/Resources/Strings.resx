@@ -473,6 +473,12 @@
   <data name="ComputerUse_Send" xml:space="preserve">
     <value>开始</value>
   </data>
+  <data name="ComputerUse_StatusThinking" xml:space="preserve">
+    <value>思考中…</value>
+  </data>
+  <data name="ComputerUse_StatusToolFormat" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
   <data name="Workspace_BrowserBack" xml:space="preserve">
     <value>后退</value>
   </data>

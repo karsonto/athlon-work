@@ -23,6 +23,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
@@ -48,7 +49,43 @@
                             Height="28"
                             Content="×" />
                 </Grid>
-                <Grid Grid.Row="1" Margin="0,4,0,0">
+                <StackPanel Grid.Row="1"
+                            Margin="4,6,4,2">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ComputerUseStatusVisible}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Text="{Binding ComputerUseActiveToolText}"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text}"
+                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="NoWrap" />
+                    <TextBlock Text="{Binding ComputerUseAssistantSummary}"
+                               Margin="0,2,0,0"
+                               FontSize="11"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               TextTrimming="CharacterEllipsis"
+                               TextWrapping="NoWrap">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ComputerUseAssistantSummary}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+                <Grid Grid.Row="2" Margin="0,4,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -59,13 +96,39 @@
                              VerticalContentAlignment="Center"
                              KeyDown="PromptBox_OnKeyDown"
                              Text="{Binding PromptText, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    <Button Grid.Column="1"
-                            Margin="8,0,0,0"
-                            VerticalAlignment="Center"
-                            Style="{StaticResource ComposerSendButtonStyle}"
-                            Click="SendButton_OnClick"
-                            ToolTip="{loc:Localize Key=ComputerUse_Send}"
-                            Content="➤" />
+                    <StackPanel Grid.Column="1"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center"
+                                Margin="8,0,0,0">
+                        <Button Command="{Binding StopCommand}"
+                                ToolTip="{loc:Localize Key=Chat_PauseReplyTooltip}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource DangerCircleButtonStyle}">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsComposerStopVisible}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="■" FontSize="12" />
+                        </Button>
+                        <Button Click="SendButton_OnClick"
+                                ToolTip="{loc:Localize Key=ComputerUse_Send}"
+                                Content="➤">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource ComposerSendButtonStyle}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsComposerStopVisible}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </Grid>
         </Border>

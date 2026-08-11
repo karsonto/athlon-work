@@ -67,8 +67,13 @@ public sealed class ComputerUseAutomationHost(
                     "stale_frame: the desktop changed or this frame is not current; call computer_observe again.");
             }
 
-            var x = request.X ?? 0;
-            var y = request.Y ?? 0;
+            if (!ComputerUseFrameFreshness.IsWithinAge(frame.CreatedAt, DateTimeOffset.UtcNow))
+            {
+                _latestFrame = null;
+                throw new InvalidOperationException(
+                    "stale_frame: the observation expired; call computer_observe again.");
+            }
+
             AutomationElement? target = null;
             if (!string.IsNullOrWhiteSpace(request.ElementId))
             {
@@ -77,27 +82,9 @@ public sealed class ComputerUseAutomationHost(
                     throw new InvalidOperationException(
                         $"Unknown element_id '{request.ElementId}' for frame '{request.FrameId}'.");
                 }
-
-                if (request.Action is "click" or "double_click" or "right_click" or "scroll" or "drag"
-                    or "type_text" or "key" or "hotkey")
-                {
-                    var point = await RunBoundedUiAutomationAsync(
-                        () => uiAutomationService.TryGetClickablePoint(target!, out var px, out var py)
-                            ? new ClickPoint(px, py)
-                            : null,
-                        cancellationToken).ConfigureAwait(false);
-                    if (point is null)
-                    {
-                        throw new InvalidOperationException(
-                            $"Element '{request.ElementId}' no longer has a clickable point.");
-                    }
-
-                    x = point.X;
-                    y = point.Y;
-                }
             }
 
-            if (request.Action is "click" or "double_click" or "right_click" or "scroll" or "drag"
+            if (request.Action is ("click" or "double_click" or "right_click" or "scroll" or "drag")
                 && target is null
                 && (request.X is null || request.Y is null))
             {
@@ -105,21 +92,84 @@ public sealed class ComputerUseAutomationHost(
                     $"{request.Action} requires element_id or physical x/y coordinates.");
             }
 
-            // A frame authorizes at most one atomic interaction, even when execution later fails.
-            _latestFrame = null;
             var result = await overlayRegistry.RunWithOverlayHiddenAsync(async ct =>
             {
                 ct.ThrowIfCancellationRequested();
+                // Validate against the observed monitor, not wherever the cursor drifted.
+                var monitorX = frame.Left + Math.Max(0, frame.Width / 2);
+                var monitorY = frame.Top + Math.Max(0, frame.Height / 2);
                 var currentDesktop = await CaptureStateAsync(
                     includeUiTree: false,
                     maxDepth: 1,
                     maxNodes: 20,
-                    ct).ConfigureAwait(false);
-                if (!MatchesFrame(frame, currentDesktop))
+                    ct,
+                    monitorX,
+                    monitorY).ConfigureAwait(false);
+                if (!ComputerUseFrameFreshness.MatchesMonitor(
+                        frame.Left,
+                        frame.Top,
+                        frame.Width,
+                        frame.Height,
+                        currentDesktop.Desktop.Left,
+                        currentDesktop.Desktop.Top,
+                        currentDesktop.Desktop.Width,
+                        currentDesktop.Desktop.Height))
                 {
+                    _latestFrame = null;
                     throw new InvalidOperationException(
                         "stale_frame: the visible desktop changed since observation; call computer_observe again.");
                 }
+
+                var x = request.X ?? 0;
+                var y = request.Y ?? 0;
+                if (target is not null
+                    && request.Action is ("click" or "double_click" or "right_click" or "scroll" or "drag"
+                        or "type_text" or "key" or "hotkey"))
+                {
+                    // Resolve the click point after the overlay is hidden so focus/geometry are stable.
+                    var point = await RunBoundedUiAutomationAsync(
+                        () => uiAutomationService.TryGetClickablePoint(target, out var px, out var py)
+                            ? new ClickPoint(px, py)
+                            : null,
+                        ct).ConfigureAwait(false);
+                    if (point is null)
+                    {
+                        _latestFrame = null;
+                        throw new InvalidOperationException(
+                            $"Element '{request.ElementId}' no longer has a clickable point; call computer_observe again.");
+                    }
+
+                    x = point.X;
+                    y = point.Y;
+                }
+                else if (request.Action is ("click" or "double_click" or "right_click" or "scroll" or "drag"))
+                {
+                    // Coordinate fallback: require the same foreground process and on-monitor point.
+                    if (!ComputerUseFrameFreshness.MatchesForegroundProcess(
+                            frame.ForegroundProcessName,
+                            currentDesktop.Ui.ForegroundProcessName))
+                    {
+                        _latestFrame = null;
+                        throw new InvalidOperationException(
+                            "stale_frame: the visible desktop changed since observation; call computer_observe again.");
+                    }
+
+                    if (!ComputerUseFrameFreshness.ContainsPoint(
+                            frame.Left,
+                            frame.Top,
+                            frame.Width,
+                            frame.Height,
+                            x,
+                            y))
+                    {
+                        _latestFrame = null;
+                        throw new InvalidOperationException(
+                            "Coordinates are outside the observed monitor; call computer_observe again.");
+                    }
+                }
+
+                // Burn the frame only after freshness checks pass so false stale checks can retry.
+                _latestFrame = null;
 
                 ct.ThrowIfCancellationRequested();
                 if (target is not null && request.Action is "type_text" or "key" or "hotkey")
@@ -163,8 +213,8 @@ public sealed class ComputerUseAutomationHost(
                     request.Action,
                     request.FrameId,
                     request.ElementId,
-                    x,
-                    y,
+                    result.Desktop.CursorX,
+                    result.Desktop.CursorY,
                     request.EndX,
                     request.EndY,
                     foreground_window = result.Ui.ForegroundWindowTitle
@@ -249,9 +299,16 @@ public sealed class ComputerUseAutomationHost(
         return BuildObservation(result);
     }
 
-    private CapturedState CaptureState(bool includeUiTree, int maxDepth, int maxNodes)
+    private CapturedState CaptureState(
+        bool includeUiTree,
+        int maxDepth,
+        int maxNodes,
+        int? monitorX = null,
+        int? monitorY = null)
     {
-        var desktop = captureService.CaptureCursorMonitor();
+        var desktop = monitorX is int x && monitorY is int y
+            ? captureService.CaptureAt(x, y)
+            : captureService.CaptureCursorMonitor();
         var foreground = uiAutomationService.Capture(
             includeUiTree ? maxDepth : 1,
             includeUiTree ? maxNodes : 1);
@@ -269,9 +326,11 @@ public sealed class ComputerUseAutomationHost(
         bool includeUiTree,
         int maxDepth,
         int maxNodes,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        int? monitorX = null,
+        int? monitorY = null) =>
         RunBoundedUiAutomationAsync(
-            () => CaptureState(includeUiTree, maxDepth, maxNodes),
+            () => CaptureState(includeUiTree, maxDepth, maxNodes, monitorX, monitorY),
             cancellationToken);
 
     private async Task<T> RunBoundedUiAutomationAsync<T>(
@@ -448,23 +507,6 @@ public sealed class ComputerUseAutomationHost(
                 throw new ArgumentException(
                     $"Unsupported wait condition '{request.Condition}'.");
         }
-    }
-
-    private static bool MatchesFrame(FrameState frame, CapturedState current)
-    {
-        return DateTimeOffset.UtcNow - frame.CreatedAt <= TimeSpan.FromSeconds(10)
-            && frame.Left == current.Desktop.Left
-            && frame.Top == current.Desktop.Top
-            && frame.Width == current.Desktop.Width
-            && frame.Height == current.Desktop.Height
-            && string.Equals(
-                frame.ForegroundWindowTitle,
-                current.Ui.ForegroundWindowTitle,
-                StringComparison.Ordinal)
-            && string.Equals(
-                frame.ForegroundProcessName,
-                current.Ui.ForegroundProcessName,
-                StringComparison.Ordinal);
     }
 
     private sealed record CapturedState(

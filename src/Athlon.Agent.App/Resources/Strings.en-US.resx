@@ -473,6 +473,12 @@ Hold to talk</value>
   <data name="ComputerUse_Send" xml:space="preserve">
     <value>Start</value>
   </data>
+  <data name="ComputerUse_StatusThinking" xml:space="preserve">
+    <value>Thinking…</value>
+  </data>
+  <data name="ComputerUse_StatusToolFormat" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
   <data name="Workspace_BrowserBack" xml:space="preserve">
     <value>Back</value>
   </data>

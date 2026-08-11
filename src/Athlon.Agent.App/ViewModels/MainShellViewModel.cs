@@ -13,7 +13,9 @@ using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.ComputerUse;
 using Athlon.Agent.App.Services.SlashCommands;
+using Athlon.Agent.App.Resources;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -486,6 +488,16 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [ObservableProperty]
     private bool isComputerUseOverlayActive;
 
+    [ObservableProperty]
+    private string computerUseActiveToolText = string.Empty;
+
+    [ObservableProperty]
+    private string computerUseAssistantSummary = string.Empty;
+
+    private readonly HashSet<ChatMessageViewModel> _computerUseStatusMessageSubscriptions = new();
+
+    public bool ComputerUseStatusVisible => IsComputerUseOverlayActive && IsBusy;
+
     public bool IsContextSidebarVisible => _appSettings.Ui.ContextSidebarVisible;
 
     public bool IsNavigationSidebarVisible => _appSettings.Ui.NavigationSidebarVisible;
@@ -809,6 +821,20 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         IsComputerUseOverlayActive = false;
+    }
+
+    partial void OnIsComputerUseOverlayActiveChanged(bool value)
+    {
+        if (value)
+        {
+            AttachComputerUseStatusMessageListeners();
+        }
+        else
+        {
+            DetachComputerUseStatusMessageListeners();
+        }
+
+        RefreshComputerUseStatus();
     }
 
     [RelayCommand]
@@ -1198,6 +1224,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         {
             _chatScroll.ScrollToBottom();
         }
+
+        if (IsComputerUseOverlayActive)
+        {
+            SyncComputerUseStatusMessageSubscriptions(e);
+            RefreshComputerUseStatus();
+        }
     }
 
     private void OnModifiedFilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -1413,6 +1445,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         OnPropertyChanged(nameof(QueuedTurns));
         OnPropertyChanged(nameof(HasQueuedTurns));
         UpdateDisplayedBusyState();
+        if (IsComputerUseOverlayActive)
+        {
+            AttachComputerUseStatusMessageListeners();
+            RefreshComputerUseStatus();
+        }
+
         KnowledgePageVm.SetSession(_displayedSessionId);
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
         _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
@@ -2872,6 +2910,104 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         CompactSessionContextCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(IsComposerStopVisible));
+        RefreshComputerUseStatus();
+    }
+
+    private void RefreshComputerUseStatus()
+    {
+        OnPropertyChanged(nameof(ComputerUseStatusVisible));
+        if (!ComputerUseStatusVisible)
+        {
+            ComputerUseActiveToolText = string.Empty;
+            ComputerUseAssistantSummary = string.Empty;
+            return;
+        }
+
+        var tool = ComputerUseStatusFormatter.FindLatestComputerUseTool(Messages);
+        ComputerUseActiveToolText = ComputerUseStatusFormatter.FormatToolLine(
+            tool?.ToolName,
+            tool?.ToolStatusLabel,
+            Strings.Get("ComputerUse_StatusThinking"),
+            Strings.Get("ComputerUse_StatusToolFormat"));
+
+        var assistant = ComputerUseStatusFormatter.FindLatestAssistantWithContent(Messages);
+        ComputerUseAssistantSummary = ComputerUseStatusFormatter.FormatAssistantSummary(assistant?.Content);
+    }
+
+    private void AttachComputerUseStatusMessageListeners()
+    {
+        DetachComputerUseStatusMessageListeners();
+        foreach (var message in Messages)
+        {
+            SubscribeComputerUseStatusMessage(message);
+        }
+    }
+
+    private void DetachComputerUseStatusMessageListeners()
+    {
+        foreach (var message in _computerUseStatusMessageSubscriptions.ToArray())
+        {
+            UnsubscribeComputerUseStatusMessage(message);
+        }
+    }
+
+    private void SyncComputerUseStatusMessageSubscriptions(NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            AttachComputerUseStatusMessageListeners();
+            return;
+        }
+
+        if (e.OldItems is not null)
+        {
+            foreach (ChatMessageViewModel message in e.OldItems)
+            {
+                UnsubscribeComputerUseStatusMessage(message);
+            }
+        }
+
+        if (e.NewItems is not null)
+        {
+            foreach (ChatMessageViewModel message in e.NewItems)
+            {
+                SubscribeComputerUseStatusMessage(message);
+            }
+        }
+    }
+
+    private void SubscribeComputerUseStatusMessage(ChatMessageViewModel message)
+    {
+        if (!_computerUseStatusMessageSubscriptions.Add(message))
+        {
+            return;
+        }
+
+        message.PropertyChanged += OnComputerUseStatusMessagePropertyChanged;
+    }
+
+    private void UnsubscribeComputerUseStatusMessage(ChatMessageViewModel message)
+    {
+        if (!_computerUseStatusMessageSubscriptions.Remove(message))
+        {
+            return;
+        }
+
+        message.PropertyChanged -= OnComputerUseStatusMessagePropertyChanged;
+    }
+
+    private void OnComputerUseStatusMessagePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ChatMessageViewModel.Content)
+            or nameof(ChatMessageViewModel.ToolName)
+            or nameof(ChatMessageViewModel.ToolCallStatus)
+            or nameof(ChatMessageViewModel.ToolApprovalState)
+            or nameof(ChatMessageViewModel.IsStreaming)
+            or nameof(ChatMessageViewModel.IsToolRunning)
+            or nameof(ChatMessageViewModel.ToolStatusLabel))
+        {
+            RefreshComputerUseStatus();
+        }
     }
 
     partial void OnIsCompactingChanged(bool value) => NotifyComposerCompactionStateChanged();

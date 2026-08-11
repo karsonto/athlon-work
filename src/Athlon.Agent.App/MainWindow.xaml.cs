@@ -395,7 +395,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         }
 
         WindowState = WindowState.Minimized;
-        var overlay = new Windows.ComputerUseOverlayWindow();
+        var overlay = new Windows.ComputerUseOverlayWindow(_viewModel);
         overlay.PromptSubmitted += OnComputerUsePromptSubmitted;
         overlay.Closed += OnComputerUseOverlayClosed;
         _computerUseOverlayWindow = overlay;
