@@ -1,5 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Threading;
 using Athlon.Agent.App.Controls;
 using Athlon.Agent.App.Navigation;
 using Athlon.Agent.App.Services;
@@ -23,6 +25,12 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     private readonly RoutedEventHandler _loadedHandler;
     private readonly CancelEventHandler _closingHandler;
     private Windows.ComputerUseOverlayWindow? _computerUseOverlayWindow;
+    private Windows.WorkspaceComposerOverlayWindow? _workspaceComposerOverlayWindow;
+    private bool _workspaceComposerPositionPending;
+
+    private const double WorkspaceComposerMaxWidth = 784;
+    private const double WorkspaceComposerSideMargin = 12;
+    private const double WorkspaceComposerBottomMargin = 8;
 
     public MainWindow(
         MainShellViewModel viewModel,
@@ -55,7 +63,11 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         DataContext = _viewModel;
         _viewModelPropertyChangedHandler = OnViewModelPropertyChanged;
         _contextSidebarLayoutChangedHandler = (_, args) =>
-            ExecuteOnUiThread(() => _layoutBinder.ApplyContextSidebar(args));
+            ExecuteOnUiThread(() =>
+            {
+                _layoutBinder.ApplyContextSidebar(args);
+                ScheduleWorkspaceComposerPosition();
+            });
         _loadedHandler = OnMainWindowLoaded;
         _closingHandler = OnMainWindowClosing;
         _viewModel.ContextSidebarLayoutChanged += _contextSidebarLayoutChangedHandler;
@@ -63,6 +75,11 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         Loaded += _loadedHandler;
         Closing += _closingHandler;
         Closed += OnMainWindowClosed;
+        LocationChanged += OnMainWindowBoundsChanged;
+        SizeChanged += OnMainWindowBoundsChanged;
+        StateChanged += OnMainWindowStateChanged;
+        DpiChanged += OnMainWindowDpiChanged;
+        ContextSidebarPanel.LayoutUpdated += OnContextSidebarLayoutUpdated;
         App.StartupTrace("MainWindow DataContext assigned");
     }
 
@@ -94,6 +111,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             _layoutBinder.ApplyAll();
         }
 
+        SyncWorkspaceComposerOverlay();
         App.StartupTrace("MainWindow page host ready");
     }
 
@@ -121,6 +139,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 
     private void OnMainWindowClosed(object? sender, EventArgs e)
     {
+        CloseWorkspaceComposerOverlay();
         CloseComputerUseOverlay(restoreMainWindow: false);
         if (_viewModel.CurrentPageView is ChatPageView chatPage)
         {
@@ -130,6 +149,11 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         _viewModel.PropertyChanged -= _viewModelPropertyChangedHandler;
         Loaded -= _loadedHandler;
         Closing -= _closingHandler;
+        LocationChanged -= OnMainWindowBoundsChanged;
+        SizeChanged -= OnMainWindowBoundsChanged;
+        StateChanged -= OnMainWindowStateChanged;
+        DpiChanged -= OnMainWindowDpiChanged;
+        ContextSidebarPanel.LayoutUpdated -= OnContextSidebarLayoutUpdated;
     }
 
     internal void ShowShutdownOverlay() =>
@@ -148,6 +172,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         }
 
         _shutdownInProgress = true;
+        CloseWorkspaceComposerOverlay();
         Application.Current.Shutdown();
     }
 
@@ -200,23 +225,147 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             ExecuteOnUiThread(() =>
             {
                 _layoutBinder.ApplyContextSidebarImmediate();
-                if (_viewModel.IsWorkspaceMaximized
-                    && ContextSidebarPanel.Child is WorkspacePaneView workspacePane)
-                {
-                    workspacePane.FocusFollowUpComposer();
-                }
+                SyncWorkspaceComposerOverlay(focusComposer: _viewModel.IsWorkspaceMaximized);
             });
         }
 
         if (e.PropertyName == nameof(MainShellViewModel.IsComputerUseOverlayActive))
         {
-            ExecuteOnUiThread(SyncComputerUseOverlay);
+            ExecuteOnUiThread(() =>
+            {
+                SyncWorkspaceComposerOverlay();
+                SyncComputerUseOverlay();
+            });
         }
 
         if (e.PropertyName == nameof(MainShellViewModel.IsBusy))
         {
             // WebView2 内部处理流式状态变化，无需额外操作
         }
+    }
+
+    private void OnMainWindowBoundsChanged(object? sender, EventArgs e) =>
+        ScheduleWorkspaceComposerPosition();
+
+    private void OnMainWindowStateChanged(object? sender, EventArgs e) =>
+        SyncWorkspaceComposerOverlay();
+
+    private void OnMainWindowDpiChanged(object sender, DpiChangedEventArgs e) =>
+        ScheduleWorkspaceComposerPosition();
+
+    private void OnContextSidebarLayoutUpdated(object? sender, EventArgs e) =>
+        ScheduleWorkspaceComposerPosition();
+
+    private void SyncWorkspaceComposerOverlay(bool focusComposer = false)
+    {
+        var shouldShow = IsLoaded
+            && !_shutdownInProgress
+            && WindowState != WindowState.Minimized
+            && _viewModel.IsWorkspaceMaximized
+            && _viewModel.IsContextSidebarVisible
+            && _viewModel.WorkspacePane.CanMaximizeActiveTab
+            && !_viewModel.IsComputerUseOverlayActive;
+
+        if (!shouldShow)
+        {
+            CloseWorkspaceComposerOverlay();
+            return;
+        }
+
+        if (_workspaceComposerOverlayWindow is not { IsLoaded: true })
+        {
+            var overlay = new Windows.WorkspaceComposerOverlayWindow(_viewModel, _clipboardImageReader)
+            {
+                Owner = this
+            };
+            overlay.SizeChanged += OnWorkspaceComposerSizeChanged;
+            overlay.Closed += OnWorkspaceComposerClosed;
+            _workspaceComposerOverlayWindow = overlay;
+            overlay.Show();
+            focusComposer = true;
+        }
+
+        ScheduleWorkspaceComposerPosition();
+        if (focusComposer)
+        {
+            _workspaceComposerOverlayWindow.FocusComposer();
+        }
+    }
+
+    private void ScheduleWorkspaceComposerPosition()
+    {
+        if (_workspaceComposerPositionPending
+            || _workspaceComposerOverlayWindow is not { IsLoaded: true })
+        {
+            return;
+        }
+
+        _workspaceComposerPositionPending = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _workspaceComposerPositionPending = false;
+            PositionWorkspaceComposerOverlay();
+        }, DispatcherPriority.Render);
+    }
+
+    private void PositionWorkspaceComposerOverlay()
+    {
+        if (_workspaceComposerOverlayWindow is not { IsLoaded: true } overlay
+            || !ContextSidebarPanel.IsLoaded
+            || ContextSidebarPanel.ActualWidth <= 0
+            || ContextSidebarPanel.ActualHeight <= 0
+            || overlay.ActualHeight <= 0)
+        {
+            return;
+        }
+
+        var topLeftPixels = ContextSidebarPanel.PointToScreen(new Point(0, 0));
+        var fromDevice = PresentationSource.FromVisual(this)?.CompositionTarget?.TransformFromDevice
+            ?? Matrix.Identity;
+        var topLeft = fromDevice.Transform(topLeftPixels);
+
+        var availableWidth = Math.Max(0, ContextSidebarPanel.ActualWidth - (WorkspaceComposerSideMargin * 2));
+        var targetWidth = Math.Min(WorkspaceComposerMaxWidth, availableWidth);
+        if (targetWidth <= 0)
+        {
+            return;
+        }
+
+        overlay.Width = targetWidth;
+        overlay.Left = topLeft.X + ((ContextSidebarPanel.ActualWidth - targetWidth) / 2);
+        overlay.Top = topLeft.Y
+            + ContextSidebarPanel.ActualHeight
+            - overlay.ActualHeight
+            - WorkspaceComposerBottomMargin;
+        overlay.Opacity = 1;
+    }
+
+    private void OnWorkspaceComposerSizeChanged(object sender, SizeChangedEventArgs e) =>
+        ScheduleWorkspaceComposerPosition();
+
+    private void OnWorkspaceComposerClosed(object? sender, EventArgs e)
+    {
+        if (_workspaceComposerOverlayWindow is not { } overlay)
+        {
+            return;
+        }
+
+        overlay.SizeChanged -= OnWorkspaceComposerSizeChanged;
+        overlay.Closed -= OnWorkspaceComposerClosed;
+        _workspaceComposerOverlayWindow = null;
+    }
+
+    private void CloseWorkspaceComposerOverlay()
+    {
+        if (_workspaceComposerOverlayWindow is not { } overlay)
+        {
+            return;
+        }
+
+        overlay.SizeChanged -= OnWorkspaceComposerSizeChanged;
+        overlay.Closed -= OnWorkspaceComposerClosed;
+        _workspaceComposerOverlayWindow = null;
+        overlay.CloseFromOwner();
     }
 
     private void SyncComputerUseOverlay()

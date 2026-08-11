@@ -6,9 +6,10 @@ namespace Athlon.Agent.App.Windows;
 
 public partial class ComputerUseOverlayWindow : Window
 {
-    private const double DefaultWidth = 880;
+    private const double DefaultWidth = 784;
     private const double BottomMargin = 56;
     private const double MinSideMargin = 24;
+    private bool _hasUserPositioned;
 
     public event EventHandler<string>? PromptSubmitted;
 
@@ -40,7 +41,7 @@ public partial class ComputerUseOverlayWindow : Window
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
     {
-        if (!IsLoaded)
+        if (!IsLoaded || _hasUserPositioned)
         {
             return;
         }
@@ -69,6 +70,24 @@ public partial class ComputerUseOverlayWindow : Window
     }
 
     private void CloseButton_OnClick(object sender, RoutedEventArgs e) => Close();
+
+    private void DragHandle_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left)
+        {
+            return;
+        }
+
+        try
+        {
+            DragMove();
+            _hasUserPositioned = true;
+        }
+        catch (InvalidOperationException)
+        {
+            // The mouse button may have been released before WPF entered the move loop.
+        }
+    }
 
     private void PositionFloatingComposer()
     {
