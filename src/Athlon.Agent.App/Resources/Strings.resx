@@ -467,6 +467,12 @@
   <data name="Workspace_FollowUpPlaceholder" xml:space="preserve">
     <value>继续对话…</value>
   </data>
+  <data name="ComputerUse_MenuStart" xml:space="preserve">
+    <value>Computer Use</value>
+  </data>
+  <data name="ComputerUse_Send" xml:space="preserve">
+    <value>开始</value>
+  </data>
   <data name="Workspace_BrowserBack" xml:space="preserve">
     <value>后退</value>
   </data>

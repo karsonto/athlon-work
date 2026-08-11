@@ -467,6 +467,12 @@ Hold to talk</value>
   <data name="Workspace_FollowUpPlaceholder" xml:space="preserve">
     <value>Send follow-up…</value>
   </data>
+  <data name="ComputerUse_MenuStart" xml:space="preserve">
+    <value>Computer Use</value>
+  </data>
+  <data name="ComputerUse_Send" xml:space="preserve">
+    <value>Start</value>
+  </data>
   <data name="Workspace_BrowserBack" xml:space="preserve">
     <value>Back</value>
   </data>

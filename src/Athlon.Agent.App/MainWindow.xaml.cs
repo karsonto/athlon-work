@@ -22,6 +22,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     private readonly EventHandler<ContextSidebarLayoutChangedEventArgs> _contextSidebarLayoutChangedHandler;
     private readonly RoutedEventHandler _loadedHandler;
     private readonly CancelEventHandler _closingHandler;
+    private Windows.ComputerUseOverlayWindow? _computerUseOverlayWindow;
 
     public MainWindow(
         MainShellViewModel viewModel,
@@ -120,6 +121,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 
     private void OnMainWindowClosed(object? sender, EventArgs e)
     {
+        CloseComputerUseOverlay(restoreMainWindow: false);
         if (_viewModel.CurrentPageView is ChatPageView chatPage)
         {
             ((IChatLayoutSurface)chatPage).ChatWebView.InitializationFailed -= OnChatWebViewInitializationFailed;
@@ -206,9 +208,100 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             });
         }
 
+        if (e.PropertyName == nameof(MainShellViewModel.IsComputerUseOverlayActive))
+        {
+            ExecuteOnUiThread(SyncComputerUseOverlay);
+        }
+
         if (e.PropertyName == nameof(MainShellViewModel.IsBusy))
         {
             // WebView2 内部处理流式状态变化，无需额外操作
+        }
+    }
+
+    private void SyncComputerUseOverlay()
+    {
+        if (_viewModel.IsComputerUseOverlayActive)
+        {
+            ShowComputerUseOverlay();
+            return;
+        }
+
+        CloseComputerUseOverlay(restoreMainWindow: false);
+    }
+
+    private void ShowComputerUseOverlay()
+    {
+        if (_computerUseOverlayWindow is { IsLoaded: true })
+        {
+            _computerUseOverlayWindow.Activate();
+            _computerUseOverlayWindow.FocusComposer();
+            return;
+        }
+
+        WindowState = WindowState.Minimized;
+        var overlay = new Windows.ComputerUseOverlayWindow();
+        overlay.PromptSubmitted += OnComputerUsePromptSubmitted;
+        overlay.Closed += OnComputerUseOverlayClosed;
+        _computerUseOverlayWindow = overlay;
+        overlay.Show();
+        overlay.FocusComposer();
+    }
+
+    private async void OnComputerUsePromptSubmitted(object? sender, string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            return;
+        }
+
+        _viewModel.ComposerText = prompt.Trim();
+        if (_viewModel.SendCommand.CanExecute(null))
+        {
+            await _viewModel.SendCommand.ExecuteAsync(null).ConfigureAwait(true);
+        }
+
+        CloseComputerUseOverlay(restoreMainWindow: true);
+    }
+
+    private void OnComputerUseOverlayClosed(object? sender, EventArgs e)
+    {
+        if (_computerUseOverlayWindow is not null)
+        {
+            _computerUseOverlayWindow.PromptSubmitted -= OnComputerUsePromptSubmitted;
+            _computerUseOverlayWindow.Closed -= OnComputerUseOverlayClosed;
+            _computerUseOverlayWindow = null;
+        }
+
+        _viewModel.EndComputerUseOverlay();
+        if (!_shutdownInProgress)
+        {
+            WindowState = WindowState.Normal;
+            Activate();
+        }
+    }
+
+    private void CloseComputerUseOverlay(bool restoreMainWindow)
+    {
+        if (_computerUseOverlayWindow is null)
+        {
+            if (restoreMainWindow && !_shutdownInProgress)
+            {
+                WindowState = WindowState.Normal;
+                Activate();
+            }
+            return;
+        }
+
+        var window = _computerUseOverlayWindow;
+        window.PromptSubmitted -= OnComputerUsePromptSubmitted;
+        window.Closed -= OnComputerUseOverlayClosed;
+        _computerUseOverlayWindow = null;
+        window.Close();
+        if (restoreMainWindow && !_shutdownInProgress)
+        {
+            WindowState = WindowState.Normal;
+            Activate();
         }
     }
 

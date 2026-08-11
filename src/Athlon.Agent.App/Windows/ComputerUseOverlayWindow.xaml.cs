@@ -1,0 +1,172 @@
+using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Input;
+
+namespace Athlon.Agent.App.Windows;
+
+public partial class ComputerUseOverlayWindow : Window
+{
+    private const double DefaultWidth = 880;
+    private const double BottomMargin = 56;
+    private const double MinSideMargin = 24;
+
+    public event EventHandler<string>? PromptSubmitted;
+
+    public string PromptText { get; set; } = string.Empty;
+
+    public ICommand CloseCommand { get; }
+
+    public ComputerUseOverlayWindow()
+    {
+        InitializeComponent();
+        DataContext = this;
+        CloseCommand = new RelayCommand(_ => Close());
+        Loaded += OnLoaded;
+        SizeChanged += OnSizeChanged;
+    }
+
+    public void FocusComposer()
+    {
+        PromptBox.Focus();
+        Keyboard.Focus(PromptBox);
+        PromptBox.CaretIndex = PromptBox.Text.Length;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        PositionFloatingComposer();
+        FocusComposer();
+    }
+
+    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (!IsLoaded)
+        {
+            return;
+        }
+
+        PositionFloatingComposer();
+    }
+
+    private void SendButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        var text = PromptBox.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return;
+        }
+
+        PromptSubmitted?.Invoke(this, text);
+    }
+
+    private void PromptBox_OnKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
+        {
+            SendButton_OnClick(sender, e);
+            e.Handled = true;
+        }
+    }
+
+    private void CloseButton_OnClick(object sender, RoutedEventArgs e) => Close();
+
+    private void PositionFloatingComposer()
+    {
+        if (!TryGetCursorWorkArea(out var workArea))
+        {
+            workArea = new Rect(
+                SystemParameters.WorkArea.Left,
+                SystemParameters.WorkArea.Top,
+                SystemParameters.WorkArea.Width,
+                SystemParameters.WorkArea.Height);
+        }
+
+        var targetWidth = Math.Min(DefaultWidth, Math.Max(420, workArea.Width - (MinSideMargin * 2)));
+        Width = targetWidth;
+
+        Left = workArea.Left + ((workArea.Width - targetWidth) / 2);
+        Top = Math.Max(workArea.Top + 12, workArea.Bottom - ActualHeight - BottomMargin);
+    }
+
+    private static bool TryGetCursorWorkArea(out Rect workArea)
+    {
+        workArea = default;
+        if (!GetCursorPos(out var point))
+        {
+            return false;
+        }
+
+        var monitor = MonitorFromPoint(point, MonitorDefaultToNearest);
+        if (monitor == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var info = new MonitorInfoEx();
+        info.Size = Marshal.SizeOf<MonitorInfoEx>();
+        if (!GetMonitorInfo(monitor, ref info))
+        {
+            return false;
+        }
+
+        var area = info.WorkArea;
+        workArea = new Rect(area.Left, area.Top, area.Right - area.Left, area.Bottom - area.Top);
+        return true;
+    }
+
+    private sealed class RelayCommand(Action<object?> execute) : ICommand
+    {
+        private readonly Action<object?> _execute = execute;
+
+        public bool CanExecute(object? parameter) => true;
+
+        public void Execute(object? parameter) => _execute(parameter);
+
+        public event EventHandler? CanExecuteChanged
+        {
+            add { }
+            remove { }
+        }
+    }
+
+    private const uint MonitorDefaultToNearest = 0x00000002;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct RectNative
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MonitorInfoEx
+    {
+        public int Size;
+        public RectNative Monitor;
+        public RectNative WorkArea;
+        public uint Flags;
+
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string DeviceName;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out Point point);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromPoint(Point point, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfoEx monitorInfo);
+}

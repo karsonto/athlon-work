@@ -355,6 +355,33 @@
                                                                FontSize="13" />
                                                 </Grid>
                                             </Button>
+                                            <Button Command="{Binding StartComputerUseOverlayCommand}"
+                                                    Style="{StaticResource WorkspaceEmptyRowStyle}"
+                                                    Padding="10,9"
+                                                    MinHeight="38"
+                                                    Margin="0,1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="28" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                        <Canvas Width="16" Height="16">
+                                                            <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="9"
+                                                                       RadiusX="1.5" RadiusY="1.5"
+                                                                       Style="{StaticResource WorkspaceIconStroke}" />
+                                                            <Line X1="5.5" Y1="11" X2="10.5" Y2="11"
+                                                                  Style="{StaticResource WorkspaceIconStroke}" />
+                                                            <Line X1="8" Y1="11" X2="8" Y2="13.5"
+                                                                  Style="{StaticResource WorkspaceIconStroke}" />
+                                                        </Canvas>
+                                                    </Viewbox>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{loc:Localize Key=ComputerUse_MenuStart}"
+                                                               Style="{StaticResource WorkspaceEmptyLabelStyle}"
+                                                               FontSize="13" />
+                                                </Grid>
+                                            </Button>
                                         </StackPanel>
                                     </Border>
                                 </Border>
@@ -488,6 +515,30 @@
                         </Viewbox>
                         <TextBlock Grid.Column="1"
                                    Text="{loc:Localize Key=Context_TabSkills}"
+                                   Style="{StaticResource WorkspaceEmptyLabelStyle}" />
+                    </Grid>
+                </Button>
+
+                <Button Command="{Binding StartComputerUseOverlayCommand}"
+                        Style="{StaticResource WorkspaceEmptyRowStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="28" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Viewbox Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left">
+                            <Canvas Width="16" Height="16">
+                                <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="9"
+                                           RadiusX="1.5" RadiusY="1.5"
+                                           Style="{StaticResource WorkspaceIconStroke}" />
+                                <Line X1="5.5" Y1="11" X2="10.5" Y2="11"
+                                      Style="{StaticResource WorkspaceIconStroke}" />
+                                <Line X1="8" Y1="11" X2="8" Y2="13.5"
+                                      Style="{StaticResource WorkspaceIconStroke}" />
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Grid.Column="1"
+                                   Text="{loc:Localize Key=ComputerUse_MenuStart}"
                                    Style="{StaticResource WorkspaceEmptyLabelStyle}" />
                     </Grid>
                 </Button>

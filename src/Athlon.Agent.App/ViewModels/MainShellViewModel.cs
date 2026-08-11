@@ -483,6 +483,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [ObservableProperty]
     private bool isWorkspaceMaximized;
 
+    [ObservableProperty]
+    private bool isComputerUseOverlayActive;
+
     public bool IsContextSidebarVisible => _appSettings.Ui.ContextSidebarVisible;
 
     public bool IsNavigationSidebarVisible => _appSettings.Ui.NavigationSidebarVisible;
@@ -783,6 +786,28 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     partial void OnIsWorkspaceMaximizedChanged(bool value) =>
         OnPropertyChanged(nameof(WorkspaceMaximizeToolTip));
+
+    [RelayCommand]
+    private void StartComputerUseOverlay()
+    {
+        if (IsComputerUseOverlayActive)
+        {
+            return;
+        }
+
+        WorkspacePane.IsAddMenuOpen = false;
+        IsComputerUseOverlayActive = true;
+    }
+
+    public void EndComputerUseOverlay()
+    {
+        if (!IsComputerUseOverlayActive)
+        {
+            return;
+        }
+
+        IsComputerUseOverlayActive = false;
+    }
 
     [RelayCommand]
     private async Task OpenBrowserWorkspaceTabAsync()
