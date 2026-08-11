@@ -1221,9 +1221,9 @@
                         <Border x:Name="ItemBorder"
                                 Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="8,4">
+                                BorderThickness="0"
+                                CornerRadius="4"
+                                Padding="4,2">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
@@ -1232,15 +1232,30 @@
                                 <ToggleButton x:Name="Expander"
                                               Width="14"
                                               Height="14"
-                                              Margin="0,0,4,0"
+                                              Margin="0,0,2,0"
                                               IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}}"
                                               ClickMode="Press"
                                               Background="Transparent"
                                               BorderThickness="0"
                                               Foreground="{DynamicResource Brush.SubtleText}"
-                                              Visibility="Hidden">
-                                    <TextBlock Text="▸"
-                                               FontSize="10"
+                                              Visibility="Hidden"
+                                              Focusable="False"
+                                              Cursor="Hand">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border Background="Transparent"
+                                                    BorderThickness="0"
+                                                    Padding="0">
+                                                <ContentPresenter HorizontalAlignment="Center"
+                                                                  VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                    <TextBlock Text=">"
+                                               FontSize="9"
+                                               FontWeight="Light"
+                                               FontFamily="Segoe UI Variable Text, Segoe UI"
+                                               Opacity="0.7"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center" />
                                 </ToggleButton>
@@ -1272,7 +1287,6 @@
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Brush.SelectionActive}" />
-                            <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Brush.SelectionBorder}" />
                             <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
                         </Trigger>
                         <MultiTrigger>
@@ -1281,7 +1295,6 @@
                                 <Condition Property="IsSelectionActive" Value="False" />
                             </MultiTrigger.Conditions>
                             <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource Brush.SelectionInactive}" />
-                            <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{DynamicResource Brush.SelectionBorder}" />
                             <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
                         </MultiTrigger>
                         <Trigger Property="IsEnabled" Value="False">

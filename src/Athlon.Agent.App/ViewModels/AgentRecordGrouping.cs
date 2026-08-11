@@ -15,7 +15,7 @@ public static class AgentRecordGrouping
         Action<string>? stopSession,
         IReadOnlySet<string>? previouslyExpandedKeys = null)
     {
-        var buckets = new Dictionary<string, (string Title, string? WorkspacePath, List<SessionHistoryItemViewModel> Items)>(
+        var buckets = new Dictionary<string, (string Title, string? WorkspacePath, bool IsRemote, List<SessionHistoryItemViewModel> Items)>(
             StringComparer.OrdinalIgnoreCase);
 
         foreach (var entry in entries)
@@ -26,12 +26,14 @@ public static class AgentRecordGrouping
                 isRunning(entry.Id),
                 stopSession);
 
-            var key = ResolveRepositoryKey(entry.ActiveWorkspace);
+            var isRemote = !string.IsNullOrWhiteSpace(entry.ActiveWorkspaceId);
+            var key = ResolveRepositoryKey(entry.ActiveWorkspace, entry.ActiveWorkspaceId);
             if (!buckets.TryGetValue(key, out var bucket))
             {
                 bucket = (
-                    ResolveRepositoryTitle(entry.ActiveWorkspace),
-                    NormalizeWorkspacePath(entry.ActiveWorkspace),
+                    ResolveRepositoryTitle(entry.ActiveWorkspace, isRemote),
+                    NormalizeWorkspacePath(entry.ActiveWorkspace, isRemote),
+                    isRemote,
                     []);
                 buckets[key] = bucket;
             }
@@ -66,7 +68,8 @@ public static class AgentRecordGrouping
                 key,
                 bucket.Title,
                 isExpandedByDefault: expanded,
-                workspacePath: bucket.WorkspacePath);
+                workspacePath: bucket.WorkspacePath,
+                isRemote: bucket.IsRemote);
             foreach (var item in bucket.Items.OrderByDescending(i => i.UpdatedAt))
             {
                 group.Items.Add(item);
@@ -78,29 +81,44 @@ public static class AgentRecordGrouping
         return result;
     }
 
-    public static string ResolveRepositoryKey(string? activeWorkspace)
+    public static string ResolveRepositoryKey(string? activeWorkspace, string? activeWorkspaceId = null)
     {
-        var normalized = NormalizeWorkspacePath(activeWorkspace);
-        return normalized is null ? NoWorkspaceKey : normalized;
+        var isRemote = !string.IsNullOrWhiteSpace(activeWorkspaceId);
+        var normalized = NormalizeWorkspacePath(activeWorkspace, isRemote);
+        if (normalized is null)
+        {
+            return NoWorkspaceKey;
+        }
+
+        return isRemote
+            ? $"ssh:{activeWorkspaceId!.Trim()}:{normalized}"
+            : normalized;
     }
 
-    public static string ResolveRepositoryTitle(string? activeWorkspace)
+    public static string ResolveRepositoryTitle(string? activeWorkspace, bool isRemote = false)
     {
-        var normalized = NormalizeWorkspacePath(activeWorkspace);
+        var normalized = NormalizeWorkspacePath(activeWorkspace, isRemote);
         if (normalized is null)
         {
             return Strings.Get("RecordGroup_NoWorkspace");
         }
 
-        var name = Path.GetFileName(normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var name = isRemote
+            ? RemotePathNormalizer.GetFileName(normalized)
+            : Path.GetFileName(normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
         return string.IsNullOrWhiteSpace(name) ? normalized : name;
     }
 
-    private static string? NormalizeWorkspacePath(string? activeWorkspace)
+    private static string? NormalizeWorkspacePath(string? activeWorkspace, bool isRemote)
     {
         if (string.IsNullOrWhiteSpace(activeWorkspace))
         {
             return null;
+        }
+
+        if (isRemote)
+        {
+            return RemotePathNormalizer.NormalizeRoot(activeWorkspace);
         }
 
         try

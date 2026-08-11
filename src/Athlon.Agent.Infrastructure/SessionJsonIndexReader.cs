@@ -46,8 +46,22 @@ internal static class SessionJsonIndexReader
                 activeWorkspace = workspace;
             }
 
+            string? activeWorkspaceId = null;
+            if (TryGetString(root, "activeWorkspaceId", out var workspaceId)
+                && !string.IsNullOrWhiteSpace(workspaceId))
+            {
+                activeWorkspaceId = workspaceId;
+            }
+
             var sessionDir = Path.GetDirectoryName(sessionJsonPath)!;
-            return new SessionIndexEntry(id, title, sessionDir, updatedAt, messageCount, activeWorkspace);
+            return new SessionIndexEntry(
+                id,
+                title,
+                sessionDir,
+                updatedAt,
+                messageCount,
+                activeWorkspace,
+                activeWorkspaceId);
         }
         catch (JsonException)
         {

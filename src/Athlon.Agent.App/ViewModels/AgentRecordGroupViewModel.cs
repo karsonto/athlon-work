@@ -10,17 +10,20 @@ public sealed partial class AgentRecordGroupViewModel : ObservableObject
         string key,
         string title,
         bool isExpandedByDefault,
-        string? workspacePath = null)
+        string? workspacePath = null,
+        bool isRemote = false)
     {
         Key = key;
         Title = title;
         WorkspacePath = workspacePath;
+        IsRemote = isRemote;
         IsExpanded = isExpandedByDefault;
     }
 
     public string Key { get; }
     public string Title { get; }
     public string? WorkspacePath { get; }
+    public bool IsRemote { get; }
     public ObservableCollection<SessionHistoryItemViewModel> Items { get; } = new();
     public bool HasItems => Items.Count > 0;
     public bool HasWorkspace => !string.IsNullOrWhiteSpace(WorkspacePath);
@@ -30,8 +33,10 @@ public sealed partial class AgentRecordGroupViewModel : ObservableObject
 
     public string ExpandGlyph => IsExpanded ? "▾" : "▸";
 
-    /// <summary>Segoe Fluent Icons: OpenFolder / Folder.</summary>
-    public string FolderGlyph => IsExpanded ? "\uE838" : "\uE8B7";
+    /// <summary>Segoe Fluent Icons: Cloud for remote; OpenFolder / Folder for local.</summary>
+    public string FolderGlyph => IsRemote
+        ? "\uE753"
+        : IsExpanded ? "\uE838" : "\uE8B7";
 
     partial void OnIsExpandedChanged(bool value)
     {

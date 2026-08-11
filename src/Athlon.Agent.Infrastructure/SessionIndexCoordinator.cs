@@ -38,7 +38,8 @@ internal sealed class SessionIndexCoordinator
             sessionDir,
             session.UpdatedAt,
             session.Messages.Count,
-            session.ActiveWorkspace);
+            session.ActiveWorkspace,
+            session.ActiveWorkspaceId);
         ScheduleUpdate(entry);
     }
 
@@ -321,12 +322,14 @@ internal sealed class SessionIndexCoordinator
             }
 
             if (!string.Equals(entry.ActiveWorkspace, fromDisk.ActiveWorkspace, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(entry.ActiveWorkspaceId, fromDisk.ActiveWorkspaceId, StringComparison.OrdinalIgnoreCase)
                 || entry.MessageCount != fromDisk.MessageCount)
             {
                 changed = true;
                 enriched.Add(entry with
                 {
                     ActiveWorkspace = fromDisk.ActiveWorkspace,
+                    ActiveWorkspaceId = fromDisk.ActiveWorkspaceId,
                     MessageCount = entry.MessageCount ?? fromDisk.MessageCount
                 });
             }

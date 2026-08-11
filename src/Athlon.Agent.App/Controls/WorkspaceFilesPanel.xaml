@@ -43,7 +43,9 @@
                           ItemsSource="{Binding Sidebar.WorkspaceTree}"
                           Background="Transparent"
                           BorderThickness="0"
-                          FontSize="13"
+                          FontSize="12"
+                          FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, PingFang SC"
+                          FontWeight="Normal"
                           Foreground="{DynamicResource Brush.Text}"
                           AllowDrop="True"
                           PreviewDragOver="WorkspaceTree_OnPreviewDragOver"
@@ -100,8 +102,34 @@
                     <TreeView.ItemTemplate>
                         <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                             <StackPanel Orientation="Horizontal">
-                                <controls:WorkspaceFileIcon Kind="{Binding IconKind}" Margin="0,0,6,0" />
-                                <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                <controls:WorkspaceFileIcon Kind="{Binding IconKind}" Margin="0,0,6,0">
+                                    <controls:WorkspaceFileIcon.Style>
+                                        <Style TargetType="controls:WorkspaceFileIcon">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsDirectory}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </controls:WorkspaceFileIcon.Style>
+                                </controls:WorkspaceFileIcon>
+                                <TextBlock Text="{Binding Name}"
+                                           TextTrimming="CharacterEllipsis"
+                                           FontSize="12"
+                                           FontWeight="Normal"
+                                           FontFamily="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, PingFang SC"
+                                           VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsDirectory}" Value="True">
+                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.SubtleText}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </StackPanel>
                         </HierarchicalDataTemplate>
                     </TreeView.ItemTemplate>

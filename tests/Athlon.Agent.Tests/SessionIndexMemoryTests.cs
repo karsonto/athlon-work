@@ -55,6 +55,43 @@ public sealed class SessionIndexMemoryTests
         var entry = Assert.Single(entries!);
         Assert.Equal("legacy", entry.Id);
         Assert.Null(entry.MessageCount);
+        Assert.Null(entry.ActiveWorkspaceId);
+    }
+
+    [Fact]
+    public void TryRead_parses_active_workspace_id_for_remote_sessions()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-index-remote-{Guid.NewGuid():N}");
+        var sessionDir = Path.Combine(root, "sessions", "session-remote");
+        Directory.CreateDirectory(sessionDir);
+        var sessionJson = Path.Combine(sessionDir, "session.json");
+        var payload = new
+        {
+            id = "session-remote",
+            title = "SSH chat",
+            createdAt = DateTimeOffset.Parse("2025-06-01T00:00:00Z"),
+            updatedAt = DateTimeOffset.Parse("2025-06-02T00:00:00Z"),
+            activeWorkspace = "/home/user/project",
+            activeWorkspaceId = "ws-ssh-1",
+            messages = Array.Empty<object>()
+        };
+        File.WriteAllText(sessionJson, JsonSerializer.Serialize(payload, JsonFileStore.Options));
+
+        try
+        {
+            var entry = SessionJsonIndexReader.TryRead(sessionJson);
+
+            Assert.NotNull(entry);
+            Assert.Equal("/home/user/project", entry!.ActiveWorkspace);
+            Assert.Equal("ws-ssh-1", entry.ActiveWorkspaceId);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     [Fact]
