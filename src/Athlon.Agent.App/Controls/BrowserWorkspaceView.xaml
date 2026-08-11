@@ -59,7 +59,10 @@
             </Grid>
         </Border>
 
-        <wv2:WebView2 x:Name="BrowserWebView"
-                      Grid.Row="1" />
+        <Border Grid.Row="1"
+                Background="{DynamicResource Brush.AppBackground}">
+            <wv2:WebView2 x:Name="BrowserWebView"
+                          DefaultBackgroundColor="Transparent" />
+        </Border>
     </Grid>
 </UserControl>

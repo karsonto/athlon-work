@@ -67,7 +67,6 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Tab strip (hidden when empty) -->
@@ -373,13 +372,13 @@
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
                             <Setter Property="Visibility" Value="Collapsed" />
-                            <Setter Property="ContentTemplate" Value="{StaticResource WindowCaptionMaximizeIconTemplate}" />
+                            <Setter Property="ContentTemplate" Value="{StaticResource WorkspaceMaximizeIconTemplate}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding WorkspacePane.CanMaximizeActiveTab}" Value="True">
                                     <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsWorkspaceMaximized}" Value="True">
-                                    <Setter Property="ContentTemplate" Value="{StaticResource WindowCaptionRestoreIconTemplate}" />
+                                    <Setter Property="ContentTemplate" Value="{StaticResource WorkspaceRestoreIconTemplate}" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -510,10 +509,15 @@
             </ContentControl.Style>
         </ContentControl>
 
-        <!-- Maximized follow-up composer (same Shell send pipeline) -->
-        <Border Grid.Row="2"
-                Padding="20,8,20,16"
-                Background="{DynamicResource Brush.AppBackground}">
+        <!-- Maximized follow-up composer: floats over Browser/Terminal (Cursor-style) -->
+        <Border Grid.Row="1"
+                Panel.ZIndex="20"
+                VerticalAlignment="Bottom"
+                HorizontalAlignment="Stretch"
+                Background="Transparent"
+                ClipToBounds="False"
+                IsHitTestVisible="False"
+                Padding="0,0,0,20">
             <Border.Style>
                 <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Collapsed" />
@@ -524,71 +528,82 @@
                     </Style.Triggers>
                 </Style>
             </Border.Style>
-            <Border MaxWidth="760"
-                    HorizontalAlignment="Center"
-                    Style="{StaticResource ComposerInputWrapperStyle}"
-                    AllowDrop="True">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <controls:ComposerAttachmentChipsControl Grid.Row="0" />
-                    <Grid Grid.Row="1" Margin="0,4,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <controls:ComposerPlusMenuControl Grid.Column="0"
-                                                          VerticalAlignment="Center"
-                                                          Margin="0,0,4,0" />
-                        <controls:ComposerInputControl x:Name="FollowUpComposerInput"
-                                                       Grid.Column="1"
-                                                       VerticalAlignment="Center"
-                                                       Margin="0,0,8,0"
-                                                       Placeholder="{loc:Localize Key=Workspace_FollowUpPlaceholder}" />
-                        <StackPanel Grid.Column="2"
-                                    Orientation="Horizontal"
-                                    VerticalAlignment="Center">
-                            <controls:ComposerModePicker VerticalAlignment="Center" />
-                            <Button Command="{Binding StopCommand}"
-                                    ToolTip="{loc:Localize Key=Chat_PauseReplyTooltip}"
-                                    Margin="0,0,8,0">
-                                <Button.Style>
-                                    <Style TargetType="Button" BasedOn="{StaticResource DangerCircleButtonStyle}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsComposerStopVisible}" Value="True">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                                <TextBlock Text="■" FontSize="12" />
-                            </Button>
-                            <Button Command="{Binding SendCommand}"
-                                    ToolTip="{Binding SendButtonToolTip}"
-                                    Content="➤">
-                                <Button.Style>
-                                    <Style TargetType="Button" BasedOn="{StaticResource ComposerSendButtonStyle}">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsComposerSendVisible}" Value="False">
+            <Grid IsHitTestVisible="True">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="0.75*" MinWidth="12" />
+                    <ColumnDefinition Width="8.5*" MaxWidth="760" />
+                    <ColumnDefinition Width="0.75*" MinWidth="12" />
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="1"
+                      Margin="2,4"
+                      HorizontalAlignment="Stretch">
+                    <Border Style="{StaticResource ComposerInputShadowStyle}" />
+                    <Border Style="{StaticResource ComposerInputWrapperStyle}"
+                            HorizontalAlignment="Stretch"
+                            AllowDrop="True">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <controls:ComposerAttachmentChipsControl Grid.Row="0" />
+                            <Grid Grid.Row="1" Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <controls:ComposerPlusMenuControl Grid.Column="0"
+                                                                  VerticalAlignment="Center"
+                                                                  Margin="0,0,4,0" />
+                                <controls:ComposerInputControl x:Name="FollowUpComposerInput"
+                                                               Grid.Column="1"
+                                                               VerticalAlignment="Center"
+                                                               Margin="0,0,8,0"
+                                                               Placeholder="{loc:Localize Key=Workspace_FollowUpPlaceholder}" />
+                                <StackPanel Grid.Column="2"
+                                            Orientation="Horizontal"
+                                            VerticalAlignment="Center">
+                                    <controls:ComposerModePicker VerticalAlignment="Center" />
+                                    <Button Command="{Binding StopCommand}"
+                                            ToolTip="{loc:Localize Key=Chat_PauseReplyTooltip}"
+                                            Margin="0,0,8,0">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource DangerCircleButtonStyle}">
                                                 <Setter Property="Visibility" Value="Collapsed" />
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding IsReadingAttachments}" Value="True">
-                                                <Setter Property="Opacity" Value="0.45" />
-                                                <Setter Property="IsEnabled" Value="False" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </Button.Style>
-                            </Button>
-                        </StackPanel>
-                    </Grid>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsComposerStopVisible}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                        <TextBlock Text="■" FontSize="12" />
+                                    </Button>
+                                    <Button Command="{Binding SendCommand}"
+                                            ToolTip="{Binding SendButtonToolTip}"
+                                            Content="➤">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource ComposerSendButtonStyle}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsComposerSendVisible}" Value="False">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding IsReadingAttachments}" Value="True">
+                                                        <Setter Property="Opacity" Value="0.45" />
+                                                        <Setter Property="IsEnabled" Value="False" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </Border>
                 </Grid>
-            </Border>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>

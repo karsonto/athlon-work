@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Services.Browser;
+using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Web.WebView2.Core;
@@ -26,6 +27,9 @@ public partial class BrowserWorkspaceView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        AppThemeManager.ThemeChanged -= OnAppThemeChanged;
+        AppThemeManager.ThemeChanged += OnAppThemeChanged;
+        ApplyThemeBackground();
         _registry ??= TryResolveRegistry();
         await EnsureWebViewAsync().ConfigureAwait(true);
         TryRegisterWebView();
@@ -34,11 +38,20 @@ public partial class BrowserWorkspaceView : UserControl
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        AppThemeManager.ThemeChanged -= OnAppThemeChanged;
         DetachTab(_tab);
         if (_tab is not null)
         {
             _registry?.Unregister(_tab.Id);
         }
+    }
+
+    private void OnAppThemeChanged(object? sender, EventArgs e) => ApplyThemeBackground();
+
+    private void ApplyThemeBackground()
+    {
+        var bg = AppThemeManager.Current.Chrome.AppBackground;
+        BrowserWebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(bg.A, bg.R, bg.G, bg.B);
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -129,6 +142,7 @@ public partial class BrowserWorkspaceView : UserControl
             };
             await EnsureAriaHostScriptAsync().ConfigureAwait(true);
             _webViewReady = true;
+            ApplyThemeBackground();
             TryRegisterWebView();
         }
         catch (Exception ex)
