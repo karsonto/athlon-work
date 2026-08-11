@@ -89,7 +89,7 @@ public sealed class BuildModelMessagesTests
         var history = new[]
         {
             ChatMessage.Create(MessageRole.User, "hello"),
-            ChatMessage.Create(MessageRole.Tool, "ToolCallId: x\nTool `grep` succeeded.\n\nSummary: ok")
+            ChatMessage.Create(MessageRole.Tool, "Tool `grep` succeeded.\n\nSummary: ok")
         };
 
         var messages = AgentRuntime.BuildModelMessages("system", history);
@@ -194,17 +194,120 @@ public sealed class BuildModelMessagesTests
     }
 
     [Fact]
-    public void BuildModelMessages_SkipsCompactionAudit()
+    public void BuildModelMessages_RetainsOnlyLatestTwoToolScreenshots()
     {
-        var history = new[]
+        var history = new List<ChatMessage>
         {
-            ChatMessage.Create(MessageRole.User, "hi"),
-            ChatMessage.Create(MessageRole.Compaction, "CompactionKind: microcompact\n\nSummary: cleared")
+            ChatMessage.Create(MessageRole.User, "open browser")
         };
+        AppendComputerObserveTurn(history, "call_1", "data:image/png;base64,AA==");
+        AppendComputerObserveTurn(history, "call_2", "data:image/png;base64,AQ==");
+        AppendComputerObserveTurn(history, "call_3", "data:image/png;base64,Ag==");
 
         var messages = AgentRuntime.BuildModelMessages("system", history);
+        var imageUrls = CollectImageUrls(messages);
 
-        Assert.Equal(2, messages.Count);
-        Assert.DoesNotContain(messages, message => message.Content.ToString()!.Contains("microcompact", StringComparison.Ordinal));
+        Assert.Equal(2, imageUrls.Count);
+        Assert.Contains("data:image/png;base64,AQ==", imageUrls);
+        Assert.Contains("data:image/png;base64,Ag==", imageUrls);
+        Assert.DoesNotContain("data:image/png;base64,AA==", imageUrls);
+    }
+
+    [Fact]
+    public void BuildModelMessages_UserUploadedImages_AreNotCappedByToolScreenshotLimit()
+    {
+        var history = new List<ChatMessage>
+        {
+            ChatMessage.Create(
+                MessageRole.User,
+                "use this reference",
+                imageAttachments:
+                [
+                    new ImageAttachment("user.png", "image/png", DataUrl: "data:image/png;base64,USER")
+                ])
+        };
+        AppendComputerObserveTurn(history, "call_1", "data:image/png;base64,AA==");
+        AppendComputerObserveTurn(history, "call_2", "data:image/png;base64,AQ==");
+        AppendComputerObserveTurn(history, "call_3", "data:image/png;base64,Ag==");
+
+        var messages = AgentRuntime.BuildModelMessages("system", history);
+        var imageUrls = CollectImageUrls(messages);
+
+        Assert.Equal(3, imageUrls.Count);
+        Assert.Contains("data:image/png;base64,USER", imageUrls);
+        Assert.Contains("data:image/png;base64,AQ==", imageUrls);
+        Assert.Contains("data:image/png;base64,Ag==", imageUrls);
+        Assert.DoesNotContain("data:image/png;base64,AA==", imageUrls);
+    }
+
+    [Fact]
+    public void ModelMessageCache_IncrementalBuild_ReappliesToolScreenshotCap()
+    {
+        var cache = new ModelMessageCache();
+        var history = new List<ChatMessage>
+        {
+            ChatMessage.Create(MessageRole.User, "open browser")
+        };
+        AppendComputerObserveTurn(history, "call_1", "data:image/png;base64,AA==");
+        cache.Build("system", history, includeReasoningInModelContext: false);
+
+        AppendComputerObserveTurn(history, "call_2", "data:image/png;base64,AQ==");
+        AppendComputerObserveTurn(history, "call_3", "data:image/png;base64,Ag==");
+        var messages = cache.Build("system", history, includeReasoningInModelContext: false);
+        var imageUrls = CollectImageUrls(messages);
+
+        Assert.Equal(2, imageUrls.Count);
+        Assert.Contains("data:image/png;base64,AQ==", imageUrls);
+        Assert.Contains("data:image/png;base64,Ag==", imageUrls);
+        Assert.DoesNotContain("data:image/png;base64,AA==", imageUrls);
+    }
+
+    private static void AppendComputerObserveTurn(
+        List<ChatMessage> history,
+        string toolCallId,
+        string dataUrl)
+    {
+        var call = new AgentToolCall(toolCallId, "computer_observe", ToolCallArguments.Empty);
+        history.Add(ChatMessage.Create(MessageRole.Assistant, string.Empty, toolCalls: [call]));
+        history.Add(ChatMessage.Create(
+            MessageRole.Tool,
+            AgentRuntime.FormatToolResult(
+                call,
+                ToolResult.Success("observed", "{\"frame_id\":\"" + toolCallId + "\"}")),
+            imageAttachments:
+            [
+                new ImageAttachment($"{toolCallId}.png", "image/png", DataUrl: dataUrl)
+            ]));
+    }
+
+    private static List<string> CollectImageUrls(IReadOnlyList<AgentModelMessage> messages)
+    {
+        var urls = new List<string>();
+        foreach (var message in messages)
+        {
+            if (message.Content is not IEnumerable<object> parts)
+            {
+                continue;
+            }
+
+            foreach (var part in parts)
+            {
+                if (part is not IDictionary<string, object?> map
+                    || !map.TryGetValue("type", out var typeObj)
+                    || typeObj is not string type
+                    || !string.Equals(type, "image_url", StringComparison.Ordinal)
+                    || !map.TryGetValue("image_url", out var imageObj)
+                    || imageObj is not IDictionary<string, object?> imageMap
+                    || !imageMap.TryGetValue("url", out var urlObj)
+                    || urlObj is not string url)
+                {
+                    continue;
+                }
+
+                urls.Add(url);
+            }
+        }
+
+        return urls;
     }
 }

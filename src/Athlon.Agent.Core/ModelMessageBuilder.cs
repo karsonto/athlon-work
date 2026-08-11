@@ -2,6 +2,10 @@ namespace Athlon.Agent.Core;
 
 internal static class ModelMessageBuilder
 {
+    internal const int MaxToolScreenshotsInModelContext = 2;
+    internal const string ToolScreenshotCaption =
+        "[Computer Use screenshot returned by the preceding tool result.]";
+
     public static List<AgentModelMessage> BuildForSession(
         string environmentPrompt,
         IReadOnlyList<ChatMessage> history,
@@ -19,7 +23,143 @@ internal static class ModelMessageBuilder
         };
 
         AppendHistoryRange(messages, history, 0, includeReasoningInModelContext);
+        RetainLatestToolScreenshots(messages, MaxToolScreenshotsInModelContext);
         return messages;
+    }
+
+    /// <summary>
+    /// Keeps at most <paramref name="maxImages"/> Computer Use tool screenshots in the API
+    /// payload (newest first). Older tool-screenshot user messages are removed; user-uploaded
+    /// images are left untouched.
+    /// </summary>
+    public static void RetainLatestToolScreenshots(
+        List<AgentModelMessage> messages,
+        int maxImages = MaxToolScreenshotsInModelContext)
+    {
+        if (messages.Count == 0 || maxImages < 0)
+        {
+            return;
+        }
+
+        var keptImages = 0;
+        for (var index = messages.Count - 1; index >= 0; index--)
+        {
+            var message = messages[index];
+            if (!TryGetToolScreenshotParts(message, out var parts))
+            {
+                continue;
+            }
+
+            var imageIndexes = new List<int>();
+            for (var partIndex = 0; partIndex < parts.Count; partIndex++)
+            {
+                if (IsImageUrlPart(parts[partIndex]))
+                {
+                    imageIndexes.Add(partIndex);
+                }
+            }
+
+            if (imageIndexes.Count == 0)
+            {
+                continue;
+            }
+
+            if (keptImages >= maxImages)
+            {
+                messages.RemoveAt(index);
+                continue;
+            }
+
+            var remaining = maxImages - keptImages;
+            if (imageIndexes.Count <= remaining)
+            {
+                keptImages += imageIndexes.Count;
+                continue;
+            }
+
+            // Keep the newest images within this message (last image_url parts).
+            var dropCount = imageIndexes.Count - remaining;
+            for (var drop = 0; drop < dropCount; drop++)
+            {
+                parts.RemoveAt(imageIndexes[drop]);
+            }
+
+            // Re-resolve after removals: text + remaining images.
+            if (CountImageUrlParts(parts) == 0)
+            {
+                messages.RemoveAt(index);
+                continue;
+            }
+
+            messages[index] = message with { Content = parts };
+            keptImages += remaining;
+        }
+    }
+
+    private static bool TryGetToolScreenshotParts(
+        AgentModelMessage message,
+        out List<object> parts)
+    {
+        parts = null!;
+        if (!string.Equals(message.Role, "user", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (message.Content is not IEnumerable<object> contentParts)
+        {
+            return false;
+        }
+
+        var list = contentParts as List<object> ?? contentParts.ToList();
+        if (list.Count == 0 || !IsTextPart(list[0], ToolScreenshotCaption))
+        {
+            return false;
+        }
+
+        parts = list;
+        return true;
+    }
+
+    private static bool IsTextPart(object part, string expectedText)
+    {
+        if (part is IDictionary<string, object?> map)
+        {
+            return map.TryGetValue("type", out var typeObj)
+                && typeObj is string type
+                && string.Equals(type, "text", StringComparison.Ordinal)
+                && map.TryGetValue("text", out var textObj)
+                && textObj is string text
+                && string.Equals(text, expectedText, StringComparison.Ordinal);
+        }
+
+        return false;
+    }
+
+    private static bool IsImageUrlPart(object part)
+    {
+        if (part is IDictionary<string, object?> map
+            && map.TryGetValue("type", out var typeObj)
+            && typeObj is string type)
+        {
+            return string.Equals(type, "image_url", StringComparison.Ordinal);
+        }
+
+        return false;
+    }
+
+    private static int CountImageUrlParts(IReadOnlyList<object> parts)
+    {
+        var count = 0;
+        foreach (var part in parts)
+        {
+            if (IsImageUrlPart(part))
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     public static int AppendHistoryMessage(
@@ -246,7 +386,7 @@ internal static class ModelMessageBuilder
         }
 
         var parts = BuildImageContentParts(
-            "[Computer Use screenshot returned by the preceding tool result.]",
+            ToolScreenshotCaption,
             toolMessage.ImageAttachments);
         if (parts.Count > 1)
         {
