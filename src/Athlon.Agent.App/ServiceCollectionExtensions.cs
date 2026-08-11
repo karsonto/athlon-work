@@ -110,6 +110,19 @@ public static class ServiceCollectionExtensions
             new Athlon.Agent.App.Services.Browser.BrowserAutomationHost(
                 sp.GetRequiredService<WorkspacePaneViewModel>(),
                 sp.GetRequiredService<Athlon.Agent.App.Services.Browser.BrowserWebViewRegistry>()));
+        services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.ComputerUseOverlayRegistry>();
+        services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.ComputerUseCaptureService>();
+        services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.ComputerUseUiAutomationService>();
+        services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.ComputerUseInputService>();
+        services.AddSingleton<Athlon.Agent.Core.ComputerUse.IComputerUseAutomationHost>(sp =>
+            new Athlon.Agent.App.Services.ComputerUse.ComputerUseAutomationHost(
+                sp.GetRequiredService<Athlon.Agent.App.Services.ComputerUse.ComputerUseCaptureService>(),
+                sp.GetRequiredService<Athlon.Agent.App.Services.ComputerUse.ComputerUseUiAutomationService>(),
+                sp.GetRequiredService<Athlon.Agent.App.Services.ComputerUse.ComputerUseInputService>(),
+                sp.GetRequiredService<Athlon.Agent.App.Services.ComputerUse.ComputerUseOverlayRegistry>(),
+                sp.GetRequiredService<IImageAttachmentStore>(),
+                sp.GetRequiredService<IAgentRunContextAccessor>(),
+                sp.GetRequiredService<AuditLogService>()));
 
         services.AddSingleton(sp => new KnowledgeViewModel(
 

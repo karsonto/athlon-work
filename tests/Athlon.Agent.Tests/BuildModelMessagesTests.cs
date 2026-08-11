@@ -1,9 +1,60 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
 
 public sealed class BuildModelMessagesTests
 {
+    [Fact]
+    public void BuildModelMessages_ToolScreenshot_AddsProviderCompatibleUserImageMessage()
+    {
+        var toolCallId = "call_observe";
+        var call = new AgentToolCall(toolCallId, "computer_observe", ToolCallArguments.Empty);
+        var toolContent = AgentRuntime.FormatToolResult(
+            call,
+            ToolResult.Success("observed", """{"frame_id":"frame_1"}"""));
+        var history = new[]
+        {
+            ChatMessage.Create(MessageRole.User, "inspect desktop"),
+            ChatMessage.Create(MessageRole.Assistant, string.Empty, toolCalls: [call]),
+            ChatMessage.Create(
+                MessageRole.Tool,
+                toolContent,
+                imageAttachments:
+                [
+                    new ImageAttachment(
+                        "desktop.png",
+                        "image/png",
+                        DataUrl: "data:image/png;base64,AQID")
+                ])
+        };
+
+        var messages = AgentRuntime.BuildModelMessages("system", history);
+
+        Assert.Equal("tool", messages[^2].Role);
+        Assert.Equal(toolCallId, messages[^2].ToolCallId);
+        Assert.Equal("user", messages[^1].Role);
+        var parts = Assert.IsAssignableFrom<IEnumerable<object>>(messages[^1].Content).ToArray();
+        Assert.Equal(2, parts.Length);
+        Assert.Contains("image_url", System.Text.Json.JsonSerializer.Serialize(parts[1]));
+
+        var payload = OpenAiChatRequestFactory.BuildPayload(
+            new AgentModelRequest(messages, []),
+            new AppSettings(),
+            stream: false);
+        using var document = System.Text.Json.JsonDocument.Parse(
+            System.Text.Json.JsonSerializer.Serialize(payload["messages"]));
+        var providerMessages = document.RootElement.EnumerateArray().ToArray();
+        Assert.Equal("assistant", providerMessages[^3].GetProperty("role").GetString());
+        Assert.True(providerMessages[^3].TryGetProperty("tool_calls", out _));
+        Assert.Equal("tool", providerMessages[^2].GetProperty("role").GetString());
+        Assert.Equal(toolCallId, providerMessages[^2].GetProperty("tool_call_id").GetString());
+        Assert.Equal("user", providerMessages[^1].GetProperty("role").GetString());
+        Assert.Equal(
+            "image_url",
+            providerMessages[^1].GetProperty("content")[1].GetProperty("type").GetString());
+    }
+
     [Fact]
     public void BuildModelMessages_AssistantWithToolCalls_FollowedByTool_IsValidForApi()
     {

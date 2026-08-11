@@ -22,10 +22,11 @@ internal static class RouterTestDependencies
     public static AgentRunContextAccessor CreateRunContextAccessor(
         SessionAgentMode mode = SessionAgentMode.Agent,
         AgentRunKind kind = AgentRunKind.Root,
-        string sessionId = "test-session")
+        string sessionId = "test-session",
+        bool computerUseActive = false)
     {
         var accessor = new AgentRunContextAccessor();
-        if (mode == SessionAgentMode.Agent && kind == AgentRunKind.Root)
+        if (mode == SessionAgentMode.Agent && kind == AgentRunKind.Root && !computerUseActive)
         {
             return accessor;
         }
@@ -37,7 +38,8 @@ internal static class RouterTestDependencies
             "run-1",
             new ToolRouter(Array.Empty<IAgentTool>()),
             PromptTestHelpers.CreateStaticOrchestrator(),
-            []);
+            [],
+            computerUseActive: computerUseActive);
         if (kind == AgentRunKind.SubAgent)
         {
             runContext = runContext.CreateChild(

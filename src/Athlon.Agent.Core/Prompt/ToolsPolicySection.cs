@@ -10,6 +10,17 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
     {
         builder.AppendLine("Tools:");
 
+        if (context.Tools.Count > 0
+            && context.Tools.All(tool => string.Equals(tool.Source, "computer-use", StringComparison.Ordinal)))
+        {
+            builder.AppendLine("Computer Use is the exclusive runtime tool mode for this turn.");
+            builder.AppendLine("Only computer_observe, computer_interact, and computer_wait may be called.");
+            builder.AppendLine("Observe first, perform one action, then verify from the returned screenshot.");
+            builder.AppendLine("Do not attempt native workspace, shell, browser, memory, knowledge, MCP, skill, plan, todo, or sub-agent tools.");
+            builder.AppendLine();
+            return;
+        }
+
         if (PromptModeHelper.IsChatOnly(context))
         {
             if (PromptModeHelper.HasKnowledgeTool(context))

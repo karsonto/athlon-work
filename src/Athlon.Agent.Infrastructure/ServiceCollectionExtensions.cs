@@ -91,6 +91,8 @@ public static class ServiceCollectionExtensions
             Athlon.Agent.Core.Browser.NullBrowserWorkspaceState.Instance);
         services.AddSingleton<Athlon.Agent.Core.Browser.IBrowserAutomationHost>(
             Athlon.Agent.Core.Browser.NullBrowserAutomationHost.Instance);
+        services.AddSingleton<Athlon.Agent.Core.ComputerUse.IComputerUseAutomationHost>(
+            Athlon.Agent.Core.ComputerUse.NullComputerUseAutomationHost.Instance);
         services.AddSingleton<WorkspaceGuard>();
         services.AddSingleton<ISshWorkspaceClient, SshWorkspaceClient>();
         services.AddSingleton<SshWorkspaceConnectionService>();
@@ -137,6 +139,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserAriaInteractTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserWaitForAriaTool>();
         services.AddSingleton<IRuntimeContextContributor, Athlon.Agent.Infrastructure.Browser.BrowserToolsPromptContributor>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.ComputerUse.ComputerObserveTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.ComputerUse.ComputerInteractTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.ComputerUse.ComputerWaitTool>();
+        services.AddSingleton<IRuntimeContextContributor, Athlon.Agent.Infrastructure.ComputerUse.ComputerUseToolsPromptContributor>();
         services.AddSingleton<Lazy<ChildAgentToolRouter>>(static sp => new Lazy<ChildAgentToolRouter>(() =>
             new ChildAgentToolRouter(
                 sp.GetServices<IAgentTool>(),

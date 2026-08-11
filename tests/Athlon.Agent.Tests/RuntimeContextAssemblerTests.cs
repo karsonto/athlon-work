@@ -1,11 +1,29 @@
 using System.Text;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.ComputerUse;
 using Athlon.Agent.Core.Prompt;
 
 namespace Athlon.Agent.Tests;
 
 public sealed class RuntimeContextAssemblerTests
 {
+    [Fact]
+    public void Build_WhenComputerUseActive_ExcludesUnrelatedContributors()
+    {
+        var accessor = RouterTestDependencies.CreateRunContextAccessor(computerUseActive: true);
+        var assembler = new RuntimeContextAssembler(
+        [
+            new StubContributor(10, "workspace secret"),
+            new StubComputerUseContributor(20, "computer rules")
+        ],
+        accessor);
+
+        var result = assembler.Build(CreateContext());
+
+        Assert.DoesNotContain("workspace secret", result, StringComparison.Ordinal);
+        Assert.Contains("computer rules", result, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Build_orders_contributors_and_wraps_runtime_context()
     {
@@ -68,5 +86,14 @@ public sealed class RuntimeContextAssemblerTests
                 builder.AppendLine(content);
             }
         }
+    }
+
+    private sealed class StubComputerUseContributor(int priority, string content)
+        : IComputerUseRuntimeContextContributor
+    {
+        public int Priority { get; } = priority;
+
+        public void Append(StringBuilder builder, EnvironmentPromptContext context) =>
+            builder.AppendLine(content);
     }
 }

@@ -1,12 +1,21 @@
 using System.Text;
 using System.Security.Cryptography;
+using Athlon.Agent.Core.ComputerUse;
 
 namespace Athlon.Agent.Core.Prompt;
 
-public sealed class RuntimeContextAssembler(IEnumerable<IRuntimeContextContributor> contributors)
+public sealed class RuntimeContextAssembler
 {
-    private readonly IReadOnlyList<IRuntimeContextContributor> _contributors =
-        contributors.OrderBy(contributor => contributor.Priority).ToArray();
+    private readonly IReadOnlyList<IRuntimeContextContributor> _contributors;
+    private readonly IAgentRunContextAccessor? _runContextAccessor;
+
+    public RuntimeContextAssembler(
+        IEnumerable<IRuntimeContextContributor> contributors,
+        IAgentRunContextAccessor? runContextAccessor = null)
+    {
+        _contributors = contributors.OrderBy(contributor => contributor.Priority).ToArray();
+        _runContextAccessor = runContextAccessor;
+    }
 
     public string? Build(EnvironmentPromptContext context) => BuildSnapshot(context)?.Content;
 
@@ -15,6 +24,12 @@ public sealed class RuntimeContextAssembler(IEnumerable<IRuntimeContextContribut
         var content = new StringBuilder();
         foreach (var contributor in _contributors)
         {
+            if (_runContextAccessor?.Current?.ComputerUseActive == true
+                && contributor is not IComputerUseRuntimeContextContributor)
+            {
+                continue;
+            }
+
             contributor.Append(content, context);
         }
 

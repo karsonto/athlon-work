@@ -70,7 +70,8 @@ public sealed class AgentRuntime(
         string userInput,
         IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool computerUseActive = false)
     {
         var existing = runContextAccessor.Current;
         AgentRunContext runContext;
@@ -94,7 +95,8 @@ public sealed class AgentRuntime(
                 toolRouter,
                 systemPromptOrchestrator,
                 ignorePatterns,
-                workspaceKind);
+                workspaceKind,
+                computerUseActive);
             if (AgentLoopOptionsScope.Current is { } loopOptions)
             {
                 runContext = runContext with { LoopOptions = loopOptions };

@@ -7,6 +7,29 @@ namespace Athlon.Agent.Tests;
 public sealed class AgentRunContextTests
 {
     [Fact]
+    public void ComputerUseActive_IsTurnScopedAndInheritedByChildContext()
+    {
+        var root = AgentRunContext.CreateRoot(
+            AgentSession.Create("parent") with { Id = "parent-1" },
+            "run-root",
+            new NoOpToolRouter(),
+            PromptTestHelpers.CreateStaticOrchestrator(),
+            WorkspaceIgnoreDefaults.BuiltIn,
+            computerUseActive: true);
+        var child = root.CreateChild(
+            "sub-1",
+            new NoOpToolRouter(),
+            PromptTestHelpers.CreateStaticOrchestrator(),
+            "role",
+            null,
+            null,
+            WorkspaceIgnoreDefaults.BuiltIn);
+
+        Assert.True(root.ComputerUseActive);
+        Assert.True(child.ComputerUseActive);
+    }
+
+    [Fact]
     public void CreateRoot_UsesSessionIdAndWorkspace()
     {
         var session = AgentSession.Create("test") with { Id = "sess-1", ActiveWorkspace = @"C:\work" };

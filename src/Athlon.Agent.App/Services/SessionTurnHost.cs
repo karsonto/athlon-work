@@ -11,7 +11,8 @@ public sealed record SessionTurnRequest(
     string UserInput,
     IReadOnlyList<ImageAttachment> ImageAttachments,
     SessionTurnUiController Ui,
-    bool IsAutoContinue = false);
+    bool IsAutoContinue = false,
+    bool ComputerUseActive = false);
 
 public enum SessionTurnState
 {
@@ -394,7 +395,8 @@ public sealed class SessionTurnHost
                     _request.UserInput,
                     _request.ImageAttachments,
                     callbacks,
-                    turnToken).ConfigureAwait(false);
+                    turnToken,
+                    _request.ComputerUseActive).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

@@ -19,6 +19,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     private readonly MainWindowLayoutBinder _layoutBinder;
     private readonly MainWindowShutdownCoordinator _shutdownCoordinator;
     private readonly PageViewFactory _pageViewFactory;
+    private readonly Services.ComputerUse.ComputerUseOverlayRegistry _computerUseOverlayRegistry;
     private bool _shutdownInProgress;
     private readonly PropertyChangedEventHandler _viewModelPropertyChangedHandler;
     private readonly EventHandler<ContextSidebarLayoutChangedEventArgs> _contextSidebarLayoutChangedHandler;
@@ -37,7 +38,8 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         ClipboardImageAttachmentReader clipboardImageReader,
         AppUpdateService updateService,
         PageViewFactory pageViewFactory,
-        MainWindowShutdownCoordinator shutdownCoordinator)
+        MainWindowShutdownCoordinator shutdownCoordinator,
+        Services.ComputerUse.ComputerUseOverlayRegistry computerUseOverlayRegistry)
     {
         App.StartupTrace("MainWindow constructor entered");
         InitializeComponent();
@@ -48,6 +50,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         _updateService = updateService;
         _pageViewFactory = pageViewFactory;
         _shutdownCoordinator = shutdownCoordinator;
+        _computerUseOverlayRegistry = computerUseOverlayRegistry;
         _layoutBinder = new MainWindowLayoutBinder(_viewModel, new MainWindowLayoutElements
         {
             NavigationSidebarColumn = NavigationSidebarColumn,
@@ -240,7 +243,10 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 
         if (e.PropertyName == nameof(MainShellViewModel.IsBusy))
         {
-            // WebView2 内部处理流式状态变化，无需额外操作
+            if (_viewModel.IsComputerUseOverlayActive && !_viewModel.IsBusy)
+            {
+                ExecuteOnUiThread(() => CloseComputerUseOverlay(restoreMainWindow: true));
+            }
         }
     }
 
@@ -393,6 +399,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         overlay.PromptSubmitted += OnComputerUsePromptSubmitted;
         overlay.Closed += OnComputerUseOverlayClosed;
         _computerUseOverlayWindow = overlay;
+        _computerUseOverlayRegistry.Register(overlay);
         overlay.Show();
         overlay.FocusComposer();
     }
@@ -404,25 +411,24 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             return;
         }
 
-        _viewModel.ComposerText = prompt.Trim();
-        if (_viewModel.SendCommand.CanExecute(null))
-        {
-            await _viewModel.SendCommand.ExecuteAsync(null).ConfigureAwait(true);
-        }
-
-        CloseComputerUseOverlay(restoreMainWindow: true);
+        await _viewModel.SendComputerUseAsync(prompt).ConfigureAwait(true);
     }
 
     private void OnComputerUseOverlayClosed(object? sender, EventArgs e)
     {
         if (_computerUseOverlayWindow is not null)
         {
+            _computerUseOverlayRegistry.Unregister(_computerUseOverlayWindow);
             _computerUseOverlayWindow.PromptSubmitted -= OnComputerUsePromptSubmitted;
             _computerUseOverlayWindow.Closed -= OnComputerUseOverlayClosed;
             _computerUseOverlayWindow = null;
         }
 
         _viewModel.EndComputerUseOverlay();
+        if (_viewModel.IsBusy && _viewModel.StopCommand.CanExecute(null))
+        {
+            _viewModel.StopCommand.Execute(null);
+        }
         if (!_shutdownInProgress)
         {
             WindowState = WindowState.Normal;
@@ -436,6 +442,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         {
             if (restoreMainWindow && !_shutdownInProgress)
             {
+                _viewModel.EndComputerUseOverlay();
                 WindowState = WindowState.Normal;
                 Activate();
             }
@@ -443,12 +450,14 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         }
 
         var window = _computerUseOverlayWindow;
+        _computerUseOverlayRegistry.Unregister(window);
         window.PromptSubmitted -= OnComputerUsePromptSubmitted;
         window.Closed -= OnComputerUseOverlayClosed;
         _computerUseOverlayWindow = null;
         window.Close();
         if (restoreMainWindow && !_shutdownInProgress)
         {
+            _viewModel.EndComputerUseOverlay();
             WindowState = WindowState.Normal;
             Activate();
         }

@@ -27,13 +27,16 @@ public sealed record AgentRunContext
 
     public AgentRunKind Kind { get; init; } = AgentRunKind.Root;
 
+    public bool ComputerUseActive { get; init; }
+
     public static AgentRunContext CreateRoot(
         AgentSession session,
         string runId,
         IToolRouter toolRouter,
         ISystemPromptOrchestrator promptOrchestrator,
         IReadOnlyList<string> ignorePatterns,
-        WorkspaceKind workspaceKind = WorkspaceKind.Local) =>
+        WorkspaceKind workspaceKind = WorkspaceKind.Local,
+        bool computerUseActive = false) =>
         new()
         {
             SessionId = session.Id,
@@ -47,7 +50,8 @@ public sealed record AgentRunContext
             WorkspaceIgnorePatterns = ignorePatterns,
             ToolRouter = toolRouter,
             PromptOrchestrator = promptOrchestrator,
-            Kind = AgentRunKind.Root
+            Kind = AgentRunKind.Root,
+            ComputerUseActive = computerUseActive
         };
 
     public AgentRunContext CreateChild(
@@ -72,7 +76,8 @@ public sealed record AgentRunContext
             PromptOrchestrator = childPrompt,
             SubAgentRole = role,
             LoopOptions = loopOptions,
-            Kind = AgentRunKind.SubAgent
+            Kind = AgentRunKind.SubAgent,
+            ComputerUseActive = ComputerUseActive
         };
 
     public string ResolveSessionDirectory(string sessionsPath, string sessionId)

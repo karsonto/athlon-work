@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Browser;
+using Athlon.Agent.Core.ComputerUse;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Memory;
@@ -33,13 +34,21 @@ internal sealed class McpDelegatingToolRouter(
 
     private ToolRouter? _cachedLocalRouter;
     private string? _cachedLocalStamp;
+    private readonly object _localRouterGate = new();
 
     private bool IsChatOnlyMode => !workspaceGuard.HasConfiguredWorkspace;
+
+    private bool IsComputerUseMode => runContextAccessor.Current?.ComputerUseActive == true;
 
     private IEnumerable<IAgentTool> ActiveLocalTools => _allLocalTools.Where(IsToolEnabled);
 
     private bool IsToolEnabled(IAgentTool tool)
     {
+        if (IsComputerUseMode)
+        {
+            return tool is IComputerUseTool;
+        }
+
         if (IsChatOnlyMode)
         {
             if (string.Equals(tool.Definition.Name, "browser_navigate", StringComparison.OrdinalIgnoreCase))
@@ -107,15 +116,19 @@ internal sealed class McpDelegatingToolRouter(
     private ToolRouter GetOrCreateLocalRouter()
     {
         var stamp = ComputeLocalStamp();
-        if (_cachedLocalRouter is not null
-            && string.Equals(_cachedLocalStamp, stamp, StringComparison.Ordinal))
+        lock (_localRouterGate)
         {
-            return _cachedLocalRouter;
-        }
+            if (_cachedLocalRouter is not null
+                && string.Equals(_cachedLocalStamp, stamp, StringComparison.Ordinal))
+            {
+                return _cachedLocalRouter;
+            }
 
-        _cachedLocalRouter = new ToolRouter(ActiveLocalTools);
-        _cachedLocalStamp = stamp;
-        return _cachedLocalRouter;
+            var router = new ToolRouter(ActiveLocalTools);
+            _cachedLocalRouter = router;
+            _cachedLocalStamp = stamp;
+            return router;
+        }
     }
 
     private string ComputeLocalStamp()
@@ -126,6 +139,7 @@ internal sealed class McpDelegatingToolRouter(
         var ask = sessionHarnessState.IsAskModeForActiveRun(runContextAccessor);
         var plan = sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor);
         var browser = browserWorkspaceState.HasOpenBrowserTab;
+        var computerUse = IsComputerUseMode;
         return string.Join(
             '|',
             (int)workspaceGuard.CurrentKind,
@@ -135,13 +149,14 @@ internal sealed class McpDelegatingToolRouter(
             coding,
             ask,
             plan,
-            browser);
+            browser,
+            computerUse);
     }
 
     public IReadOnlyList<ToolDefinition> ListTools()
     {
         var local = GetOrCreateLocalRouter().ListTools();
-        if (IsChatOnlyMode)
+        if (IsComputerUseMode || IsChatOnlyMode)
         {
             return local;
         }
@@ -176,7 +191,7 @@ internal sealed class McpDelegatingToolRouter(
             return local;
         }
 
-        if (IsChatOnlyMode)
+        if (IsComputerUseMode || IsChatOnlyMode)
         {
             return null;
         }
@@ -199,7 +214,13 @@ internal sealed class McpDelegatingToolRouter(
             return false;
         }
 
-        if (GetOrCreateLocalRouter().IsParallelizable(toolName))
+        if (IsComputerUseMode)
+        {
+            return false;
+        }
+
+        var localRouter = GetOrCreateLocalRouter();
+        if (localRouter.IsParallelizable(toolName))
         {
             return true;
         }
@@ -216,6 +237,19 @@ internal sealed class McpDelegatingToolRouter(
 
     public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
+        if (IsComputerUseMode)
+        {
+            var computerUseRouter = GetOrCreateLocalRouter();
+            if (computerUseRouter.FindDefinition(invocation.ToolName) is null)
+            {
+                return Task.FromResult(ToolResult.Failure(
+                    "Tool not available",
+                    $"Tool '{invocation.ToolName}' is not available during a Computer Use turn."));
+            }
+
+            return computerUseRouter.InvokeAsync(invocation, cancellationToken);
+        }
+
         if (IsChatOnlyMode)
         {
             if (IsSearchGatewayTool(invocation.ToolName)

@@ -1,4 +1,5 @@
 using Athlon.Agent.Core.Compaction;
+using System.Text.Json;
 
 namespace Athlon.Agent.Core;
 
@@ -78,7 +79,7 @@ public sealed class ModelMessageCache
         {
             null => string.Empty,
             string text => text,
-            _ => content.ToString() ?? string.Empty
+            _ => JsonSerializer.Serialize(content)
         };
 
     public void NotePreCompletionResult(IReadOnlyList<ChatMessage> historyBefore, IReadOnlyList<ChatMessage> historyAfter)
@@ -96,7 +97,8 @@ public sealed class ModelMessageCache
             var after = historyAfter[index];
             if (!string.Equals(before.Id, after.Id, StringComparison.Ordinal)
                 || !string.Equals(before.Content, after.Content, StringComparison.Ordinal)
-                || !string.Equals(before.ToolCallsJson, after.ToolCallsJson, StringComparison.Ordinal))
+                || !string.Equals(before.ToolCallsJson, after.ToolCallsJson, StringComparison.Ordinal)
+                || !Equals(before.ImageAttachments, after.ImageAttachments))
             {
                 Invalidate();
                 return;

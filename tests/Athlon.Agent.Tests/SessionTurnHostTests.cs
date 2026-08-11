@@ -204,7 +204,8 @@ public sealed class SessionTurnHostTests
             string userInput,
             IReadOnlyList<ImageAttachment>? imageAttachments = null,
             AgentTurnCallbacks? callbacks = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            bool computerUseActive = false)
         {
             await Task.Delay(delay, cancellationToken);
             return session.WithMessages(session.Messages.Append(ChatMessage.Create(MessageRole.Assistant, "ok")).ToArray());

@@ -10,6 +10,7 @@ public static class ContextTokenEstimator
     private const int MessageOverhead = 5;
     private const int ToolCallOverhead = 10;
     private const int ToolResultOverhead = 8;
+    private const int ImageAttachmentEstimate = 900;
 
     private static int EstimateRawTextTokens(string? text)
     {
@@ -147,6 +148,11 @@ public static class ContextTokenEstimator
             default:
                 tokens += EstimateRawTextTokens(message.Content);
                 break;
+        }
+
+        if (message.ImageAttachments is { Count: > 0 })
+        {
+            tokens += message.ImageAttachments.Count * ImageAttachmentEstimate;
         }
 
         return tokens;

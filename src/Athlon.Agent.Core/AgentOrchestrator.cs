@@ -7,6 +7,13 @@ public sealed class AgentOrchestrator(IAgentRuntime agentRuntime) : IAgentOrches
         string userInput,
         IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
-        CancellationToken cancellationToken = default) =>
-        agentRuntime.SendAsync(session, userInput, imageAttachments, callbacks, cancellationToken);
+        CancellationToken cancellationToken = default,
+        bool computerUseActive = false) =>
+        agentRuntime.SendAsync(
+            session,
+            userInput,
+            imageAttachments,
+            callbacks,
+            cancellationToken,
+            computerUseActive);
 }

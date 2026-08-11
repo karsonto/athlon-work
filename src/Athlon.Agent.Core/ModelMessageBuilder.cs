@@ -64,10 +64,12 @@ internal static class ModelMessageBuilder
                 {
                     var stripped = StripToolCallIdAndMetadata(message.Content);
                     messages.Add(new AgentModelMessage("tool", stripped, toolCallId));
+                    AppendToolImageMessage(messages, message);
                 }
                 else
                 {
                     messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(message.Content)));
+                    AppendToolImageMessage(messages, message);
                 }
                 return index;
             }
@@ -198,6 +200,7 @@ internal static class ModelMessageBuilder
         }
 
         messages.Add(new AgentModelMessage("assistant", message.Content, ToolCalls: toolCalls, ReasoningContent: reasoningContent));
+        var toolImageMessages = new List<ChatMessage>();
         foreach (var toolCall in toolCalls)
         {
             var rawContent = toolByCallId.TryGetValue(toolCall.Id, out var toolMessage)
@@ -205,6 +208,15 @@ internal static class ModelMessageBuilder
                 : "Tool did not run or the result was not recorded.";
             var content = StripToolCallIdAndMetadata(rawContent);
             messages.Add(new AgentModelMessage("tool", content, toolCall.Id));
+            if (toolMessage?.ImageAttachments is { Count: > 0 })
+            {
+                toolImageMessages.Add(toolMessage);
+            }
+        }
+
+        foreach (var toolImageMessage in toolImageMessages)
+        {
+            AppendToolImageMessage(messages, toolImageMessage);
         }
 
         var consumed = new HashSet<string>(toolCalls.Select(call => call.Id), StringComparer.Ordinal);
@@ -217,6 +229,7 @@ internal static class ModelMessageBuilder
             }
 
             messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(toolMessage.Content)));
+            AppendToolImageMessage(messages, toolMessage);
         }
 
         return scanIndex - 1;
@@ -225,6 +238,22 @@ internal static class ModelMessageBuilder
     private static string FormatToolResultAsUserContent(string content) =>
         string.Join(Environment.NewLine, "[Tool output]", content);
 
+    private static void AppendToolImageMessage(List<AgentModelMessage> messages, ChatMessage toolMessage)
+    {
+        if (toolMessage.ImageAttachments is not { Count: > 0 })
+        {
+            return;
+        }
+
+        var parts = BuildImageContentParts(
+            "[Computer Use screenshot returned by the preceding tool result.]",
+            toolMessage.ImageAttachments);
+        if (parts.Count > 1)
+        {
+            messages.Add(new AgentModelMessage("user", parts));
+        }
+    }
+
     private static object BuildUserContent(ChatMessage message)
     {
         if (message.ImageAttachments is not { Count: > 0 })
@@ -232,16 +261,25 @@ internal static class ModelMessageBuilder
             return AppendUserTimestamp(message.Content, message.CreatedAt);
         }
 
+        return BuildImageContentParts(
+            AppendUserTimestamp(message.Content, message.CreatedAt),
+            message.ImageAttachments);
+    }
+
+    private static List<object> BuildImageContentParts(
+        string text,
+        IReadOnlyList<ImageAttachment> images)
+    {
         var parts = new List<object>
         {
             new Dictionary<string, object?>
             {
                 ["type"] = "text",
-                ["text"] = AppendUserTimestamp(message.Content, message.CreatedAt)
+                ["text"] = text
             }
         };
 
-        foreach (var image in message.ImageAttachments)
+        foreach (var image in images)
         {
             var dataUrl = ImageAttachmentDataUrlResolver.ResolveDataUrl(image);
             if (string.IsNullOrWhiteSpace(dataUrl))

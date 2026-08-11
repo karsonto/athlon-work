@@ -31,7 +31,8 @@ public sealed class SessionTurnQueuePolicyTests
             string userInput,
             IReadOnlyList<ImageAttachment>? imageAttachments = null,
             AgentTurnCallbacks? callbacks = null,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default,
+            bool computerUseActive = false) =>
             Task.FromResult(session);
     }
 

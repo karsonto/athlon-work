@@ -26,9 +26,21 @@ public sealed record ToolInvocation(
     }
 }
 
-public sealed record ToolResult(bool Succeeded, string Summary, string? Content = null, string? Error = null, TimeSpan? Duration = null)
+public sealed record ToolResult(
+    bool Succeeded,
+    string Summary,
+    string? Content = null,
+    string? Error = null,
+    TimeSpan? Duration = null,
+    IReadOnlyList<ImageAttachment>? ImageAttachments = null)
 {
-    public static ToolResult Success(string summary, string? content = null, TimeSpan? duration = null) => new(true, summary, content, null, duration);
+    public static ToolResult Success(
+        string summary,
+        string? content = null,
+        TimeSpan? duration = null,
+        IReadOnlyList<ImageAttachment>? imageAttachments = null) =>
+        new(true, summary, content, null, duration, imageAttachments);
+
     public static ToolResult Failure(string summary, string error, TimeSpan? duration = null) => new(false, summary, null, error, duration);
 }
 

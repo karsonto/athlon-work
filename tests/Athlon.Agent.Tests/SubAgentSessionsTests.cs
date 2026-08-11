@@ -293,7 +293,8 @@ public sealed class SubAgentSessionsTests
             string userInput,
             IReadOnlyList<ImageAttachment>? imageAttachments = null,
             AgentTurnCallbacks? callbacks = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            bool computerUseActive = false)
         {
             SendCount++;
             var assistant = ChatMessage.Create(MessageRole.Assistant, "done from sub", session.Messages.LastOrDefault()?.Id);

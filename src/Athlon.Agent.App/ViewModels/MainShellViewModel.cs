@@ -645,6 +645,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public IAsyncRelayCommand SendCommand => ChatPage.SendCommand;
 
+    public Task<bool> SendComputerUseAsync(string prompt) => ChatPage.SendComputerUseAsync(prompt);
+
     public IRelayCommand StopCommand => ChatPage.StopCommand;
 
     public IAsyncRelayCommand SelectImagesCommand => ChatPage.SelectImagesCommand;

@@ -54,7 +54,8 @@ public interface IAgentRuntime
         string userInput,
         IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool computerUseActive = false);
 }
 public interface IFileStorageService
 {
@@ -116,7 +117,8 @@ public interface IAgentOrchestrator
         string userInput,
         IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        bool computerUseActive = false);
 }
 
 public interface IImageAttachmentReader

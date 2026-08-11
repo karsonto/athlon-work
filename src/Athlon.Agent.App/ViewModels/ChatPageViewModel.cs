@@ -393,6 +393,50 @@ public sealed partial class ChatPageViewModel : ObservableObject
         _notifyCommandStatesChanged!();
     }
 
+    public Task<bool> SendComputerUseAsync(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(prompt) || IsReadingAttachments)
+        {
+            return Task.FromResult(false);
+        }
+
+        var displayedSessionId = _getDisplayedSessionId!();
+        if (_sessionTurns.IsRunning(displayedSessionId))
+        {
+            _setSettingsStatus!(Strings.Get("Chat_QueuedStatus"));
+            return Task.FromResult(false);
+        }
+
+        var input = prompt.Trim();
+        var session = _getSession!();
+        var imageAttachments = Array.Empty<ImageAttachment>();
+        _syncWorkspaceContext!();
+
+        var ui = _sessionTurns.GetOrCreateUi(
+            displayedSessionId,
+            RequestScrollToBottom,
+            RequestScrollToBottomImmediate);
+        ui.AddUserMessage(input, imageAttachments);
+        var error = _sessionTurns.TryStartTurn(
+            displayedSessionId,
+            session,
+            input,
+            imageAttachments,
+            ui,
+            computerUseActive: true);
+        if (error is not null)
+        {
+            _setSettingsStatus!(error);
+            _notifyCommandStatesChanged!();
+            return Task.FromResult(false);
+        }
+
+        ComposerText = string.Empty;
+        UpdateDisplayedBusyState();
+        _notifyCommandStatesChanged!();
+        return Task.FromResult(true);
+    }
+
     [RelayCommand]
     private void RemoveQueuedTurn(QueuedTurnViewModel? item)
     {

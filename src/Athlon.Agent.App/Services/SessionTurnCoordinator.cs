@@ -56,9 +56,17 @@ public sealed class SessionTurnCoordinator
         AgentSession session,
         string input,
         ImageAttachment[] imageAttachments,
-        SessionTurnUiController ui)
+        SessionTurnUiController ui,
+        bool computerUseActive = false)
     {
-        var request = new SessionTurnRequest(sessionId, session, input, imageAttachments, ui, IsAutoContinue: false);
+        var request = new SessionTurnRequest(
+            sessionId,
+            session,
+            input,
+            imageAttachments,
+            ui,
+            IsAutoContinue: false,
+            ComputerUseActive: computerUseActive);
         return _turnHost.TryStart(request, out var error) ? null : error ?? "无法开始生成。";
     }
 

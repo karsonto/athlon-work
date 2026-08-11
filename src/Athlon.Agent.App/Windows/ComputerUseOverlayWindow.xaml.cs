@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 
 namespace Athlon.Agent.App.Windows;
 
@@ -28,6 +29,7 @@ public partial class ComputerUseOverlayWindow : Window
 
     public void FocusComposer()
     {
+        Activate();
         PromptBox.Focus();
         Keyboard.Focus(PromptBox);
         PromptBox.CaretIndex = PromptBox.Text.Length;
@@ -91,25 +93,47 @@ public partial class ComputerUseOverlayWindow : Window
 
     private void PositionFloatingComposer()
     {
-        if (!TryGetCursorWorkArea(out var workArea))
+        if (!TryGetCursorWorkArea(out var workArea, out var dpiScale))
         {
-            workArea = new Rect(
-                SystemParameters.WorkArea.Left,
-                SystemParameters.WorkArea.Top,
-                SystemParameters.WorkArea.Width,
-                SystemParameters.WorkArea.Height);
+            var fallback = SystemParameters.WorkArea;
+            var fallbackWidth = Math.Min(
+                DefaultWidth,
+                Math.Max(420, fallback.Width - (MinSideMargin * 2)));
+            Width = fallbackWidth;
+            Left = fallback.Left + ((fallback.Width - fallbackWidth) / 2);
+            Top = Math.Max(fallback.Top + 12, fallback.Bottom - ActualHeight - BottomMargin);
+            return;
         }
 
-        var targetWidth = Math.Min(DefaultWidth, Math.Max(420, workArea.Width - (MinSideMargin * 2)));
-        Width = targetWidth;
+        var availableWidthPixels = workArea.Right - workArea.Left;
+        var targetWidthPixels = (int)Math.Round(Math.Min(
+            DefaultWidth * dpiScale,
+            Math.Max(420 * dpiScale, availableWidthPixels - (MinSideMargin * 2 * dpiScale))));
+        Width = targetWidthPixels / dpiScale;
 
-        Left = workArea.Left + ((workArea.Width - targetWidth) / 2);
-        Top = Math.Max(workArea.Top + 12, workArea.Bottom - ActualHeight - BottomMargin);
+        var targetHeightPixels = Math.Max(1, (int)Math.Ceiling(ActualHeight * dpiScale));
+        var leftPixels = workArea.Left + ((availableWidthPixels - targetWidthPixels) / 2);
+        var topPixels = Math.Max(
+            workArea.Top + (int)Math.Round(12 * dpiScale),
+            workArea.Bottom - targetHeightPixels - (int)Math.Round(BottomMargin * dpiScale));
+        var handle = new WindowInteropHelper(this).Handle;
+        if (handle != IntPtr.Zero)
+        {
+            SetWindowPos(
+                handle,
+                IntPtr.Zero,
+                leftPixels,
+                topPixels,
+                targetWidthPixels,
+                targetHeightPixels,
+                SwpNoActivate | SwpNoZOrder);
+        }
     }
 
-    private static bool TryGetCursorWorkArea(out Rect workArea)
+    private static bool TryGetCursorWorkArea(out RectNative workArea, out double dpiScale)
     {
         workArea = default;
+        dpiScale = 1;
         if (!GetCursorPos(out var point))
         {
             return false;
@@ -128,8 +152,21 @@ public partial class ComputerUseOverlayWindow : Window
             return false;
         }
 
-        var area = info.WorkArea;
-        workArea = new Rect(area.Left, area.Top, area.Right - area.Left, area.Bottom - area.Top);
+        workArea = info.WorkArea;
+        try
+        {
+            if (GetDpiForMonitor(monitor, 0, out var dpiX, out _) == 0)
+            {
+                dpiScale = Math.Max(1, dpiX / 96d);
+            }
+        }
+        catch (DllNotFoundException)
+        {
+        }
+        catch (EntryPointNotFoundException)
+        {
+        }
+
         return true;
     }
 
@@ -149,6 +186,8 @@ public partial class ComputerUseOverlayWindow : Window
     }
 
     private const uint MonitorDefaultToNearest = 0x00000002;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Point
@@ -188,4 +227,22 @@ public partial class ComputerUseOverlayWindow : Window
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfoEx monitorInfo);
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(
+        IntPtr monitor,
+        int dpiType,
+        out uint dpiX,
+        out uint dpiY);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(
+        IntPtr window,
+        IntPtr insertAfter,
+        int x,
+        int y,
+        int width,
+        int height,
+        uint flags);
 }
