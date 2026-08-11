@@ -42,6 +42,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         _layoutBinder = new MainWindowLayoutBinder(_viewModel, new MainWindowLayoutElements
         {
             NavigationSidebarColumn = NavigationSidebarColumn,
+            MainContentColumn = MainContentColumn,
             NavigationSidebarPanel = NavigationSidebarPanel,
             NavigationSidebarSplitter = NavigationSidebarSplitter,
             NavigationSidebarCollapsedRail = NavigationSidebarCollapsedRail,
@@ -190,6 +191,19 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         if (e.PropertyName == nameof(MainShellViewModel.HasOpenEditorTabs))
         {
             ExecuteOnUiThread(_layoutBinder.ApplyEditorPane);
+        }
+
+        if (e.PropertyName == nameof(MainShellViewModel.IsWorkspaceMaximized))
+        {
+            ExecuteOnUiThread(() =>
+            {
+                _layoutBinder.ApplyContextSidebarImmediate();
+                if (_viewModel.IsWorkspaceMaximized
+                    && ContextSidebarPanel.Child is WorkspacePaneView workspacePane)
+                {
+                    workspacePane.FocusFollowUpComposer();
+                }
+            });
         }
 
         if (e.PropertyName == nameof(MainShellViewModel.IsBusy))

@@ -199,6 +199,12 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             return;
         }
 
+        if (viewModel.IsWorkspaceMaximized)
+        {
+            ApplyContextSidebarImmediate();
+            return;
+        }
+
         StopContextSidebarAnimation();
         ClearContextSidebarPropertyAnimations();
 
@@ -296,6 +302,12 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
 
     public void OnContextSidebarDragCompleted()
     {
+        if (viewModel.IsWorkspaceMaximized)
+        {
+            ApplyWorkspaceMaximizedLayout();
+            return;
+        }
+
         if (!viewModel.IsContextSidebarVisible || elements.ContextSidebarColumn is null)
         {
             return;
@@ -326,7 +338,14 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             return;
         }
 
+        if (viewModel.IsWorkspaceMaximized)
+        {
+            ApplyWorkspaceMaximizedLayout();
+            return;
+        }
+
         ClearContextSidebarPropertyAnimations();
+        RestoreMainContentColumn();
 
         elements.ContextSidebarColumn.MinWidth = UiLayoutConstraints.ContextSidebarMinWidth;
         elements.ContextSidebarColumn.MaxWidth = UiLayoutConstraints.ContextSidebarMaxWidth;
@@ -346,6 +365,57 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
         viewModel.SetContextSidebarEdgeGutterWidth(ContextSidebarEdgeGutterWidth);
     }
 
+    private void ApplyWorkspaceMaximizedLayout()
+    {
+        if (elements.ContextSidebarColumn is null || elements.ContextSidebarPanel is null || elements.ContextSidebarSplitter is null)
+        {
+            return;
+        }
+
+        ClearContextSidebarPropertyAnimations();
+        CollapseMainContentColumn();
+
+        elements.ContextSidebarColumn.MinWidth = 0;
+        elements.ContextSidebarColumn.MaxWidth = double.PositiveInfinity;
+        elements.ContextSidebarColumn.Width = new GridLength(1, GridUnitType.Star);
+        elements.ContextSidebarPanel.Visibility = Visibility.Visible;
+        elements.ContextSidebarPanel.Opacity = 1;
+        elements.ContextSidebarPanel.Margin = new Thickness(0);
+        elements.ContextSidebarSplitter.Visibility = Visibility.Collapsed;
+        elements.ContextSidebarSplitter.IsEnabled = false;
+        elements.ContextSidebarSplitter.IsHitTestVisible = false;
+        if (elements.ContextSidebarCollapsedRail is not null)
+        {
+            elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
+        }
+
+        viewModel.SetContextSidebarEdgeGutterWidth(0);
+    }
+
+    private void RestoreMainContentColumn()
+    {
+        if (elements.MainContentColumn is null)
+        {
+            return;
+        }
+
+        elements.MainContentColumn.MinWidth = 0;
+        elements.MainContentColumn.MaxWidth = double.PositiveInfinity;
+        elements.MainContentColumn.Width = new GridLength(1, GridUnitType.Star);
+    }
+
+    private void CollapseMainContentColumn()
+    {
+        if (elements.MainContentColumn is null)
+        {
+            return;
+        }
+
+        elements.MainContentColumn.MinWidth = 0;
+        elements.MainContentColumn.MaxWidth = double.PositiveInfinity;
+        elements.MainContentColumn.Width = new GridLength(0);
+    }
+
     private void ApplyContextSidebarClosedLayout()
     {
         if (elements.ContextSidebarColumn is null || elements.ContextSidebarPanel is null || elements.ContextSidebarSplitter is null)
@@ -354,6 +424,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
         }
 
         ClearContextSidebarPropertyAnimations();
+        RestoreMainContentColumn();
 
         elements.ContextSidebarColumn.MinWidth = 0;
         elements.ContextSidebarColumn.MaxWidth = double.PositiveInfinity;
@@ -426,6 +497,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
 public sealed class MainWindowLayoutElements
 {
     public ColumnDefinition? NavigationSidebarColumn { get; init; }
+    public ColumnDefinition? MainContentColumn { get; init; }
     public ColumnDefinition? EditorPaneColumn { get; set; }
     public ColumnDefinition? ContextSidebarColumn { get; init; }
     public RowDefinition? ComposerRow { get; set; }

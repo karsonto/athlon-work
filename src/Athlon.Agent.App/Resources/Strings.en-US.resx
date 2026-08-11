@@ -458,6 +458,15 @@ Hold to talk</value>
   <data name="Workspace_AddTabTooltip" xml:space="preserve">
     <value>Add workspace tab</value>
   </data>
+  <data name="Workspace_Maximize" xml:space="preserve">
+    <value>Maximize workspace</value>
+  </data>
+  <data name="Workspace_Restore" xml:space="preserve">
+    <value>Restore workspace</value>
+  </data>
+  <data name="Workspace_FollowUpPlaceholder" xml:space="preserve">
+    <value>Send follow-up…</value>
+  </data>
   <data name="Workspace_BrowserBack" xml:space="preserve">
     <value>Back</value>
   </data>

@@ -28,6 +28,7 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(HasTabs));
             OnPropertyChanged(nameof(IsEmpty));
+            OnPropertyChanged(nameof(CanMaximizeActiveTab));
         };
     }
 
@@ -43,9 +44,13 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
 
     public bool IsEmpty => Tabs.Count == 0;
 
+    public bool CanMaximizeActiveTab =>
+        ActiveTab?.Kind is WorkspaceTabKind.Browser or WorkspaceTabKind.Terminal;
+
     partial void OnActiveTabChanged(WorkspaceTabViewModel? value)
     {
         IsAddMenuOpen = false;
+        OnPropertyChanged(nameof(CanMaximizeActiveTab));
     }
 
     [RelayCommand]

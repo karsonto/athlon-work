@@ -67,6 +67,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Tab strip (hidden when empty) -->
@@ -94,175 +95,40 @@
                 <ScrollViewer HorizontalScrollBarVisibility="Auto"
                               VerticalScrollBarVisibility="Disabled"
                               VerticalAlignment="Center">
-                    <ListBox ItemsSource="{Binding WorkspacePane.Tabs}"
-                             SelectedItem="{Binding WorkspacePane.ActiveTab, Mode=TwoWay}"
-                             BorderThickness="0"
-                             Background="Transparent"
-                             Style="{StaticResource EditorTabListStyle}"
-                             ItemContainerStyle="{StaticResource WorkspaceTabItemStyle}">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid MinHeight="28">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <ListBox ItemsSource="{Binding WorkspacePane.Tabs}"
+                                 SelectedItem="{Binding WorkspacePane.ActiveTab, Mode=TwoWay}"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 HorizontalAlignment="Left"
+                                 Style="{StaticResource EditorTabListStyle}"
+                                 ItemContainerStyle="{StaticResource WorkspaceTabItemStyle}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid MinHeight="28">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
 
-                                    <!-- Kind icon (Codex-style monoline) -->
-                                    <Grid Grid.Column="0"
-                                          Width="16"
-                                          Height="16"
-                                          Margin="10,0,0,0"
-                                          VerticalAlignment="Center">
-                                        <Viewbox Width="15" Height="15">
-                                            <Viewbox.Style>
-                                                <Style TargetType="Viewbox">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Kind}" Value="Browser">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Viewbox.Style>
-                                            <Canvas Width="16" Height="16">
-                                                <Ellipse Canvas.Left="1.5" Canvas.Top="1.5" Width="13" Height="13"
-                                                         Style="{StaticResource WorkspaceIconStroke}" />
-                                                <Ellipse Canvas.Left="5.25" Canvas.Top="1.5" Width="5.5" Height="13"
-                                                         Style="{StaticResource WorkspaceIconStroke}" />
-                                                <Line X1="1.5" Y1="8" X2="14.5" Y2="8"
-                                                      Style="{StaticResource WorkspaceIconStroke}" />
-                                            </Canvas>
-                                        </Viewbox>
-                                        <Viewbox Width="14" Height="14">
-                                            <Viewbox.Style>
-                                                <Style TargetType="Viewbox">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Kind}" Value="Terminal">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Viewbox.Style>
-                                            <Canvas Width="16" Height="16">
-                                                <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="12"
-                                                           RadiusX="2" RadiusY="2"
-                                                           Style="{StaticResource WorkspaceIconStroke}" />
-                                                <Polyline Points="4.5,6 6.5,8 4.5,10"
-                                                          Style="{StaticResource WorkspaceIconStroke}" />
-                                                <Line X1="8" Y1="10.5" X2="11.5" Y2="10.5"
-                                                      Style="{StaticResource WorkspaceIconStroke}" />
-                                            </Canvas>
-                                        </Viewbox>
-                                        <Viewbox Width="14" Height="14">
-                                            <Viewbox.Style>
-                                                <Style TargetType="Viewbox">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Kind}" Value="Files">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Viewbox.Style>
-                                            <Canvas Width="16" Height="16">
-                                                <Path Data="M2,3.5 H6.2 L7.6,5.2 H14 V13.5 H2 Z"
-                                                      Style="{StaticResource WorkspaceIconStroke}" />
-                                            </Canvas>
-                                        </Viewbox>
-                                        <Viewbox Width="13" Height="13">
-                                            <Viewbox.Style>
-                                                <Style TargetType="Viewbox">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Kind}" Value="Skills">
-                                                            <Setter Property="Visibility" Value="Visible" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Viewbox.Style>
-                                            <Canvas Width="16" Height="16">
-                                                <Path Data="M8,1.5 L9.6,6.2 L14.5,6.2 L10.5,9.1 L12.1,13.8 L8,11 L3.9,13.8 L5.5,9.1 L1.5,6.2 L6.4,6.2 Z"
-                                                      Style="{StaticResource WorkspaceIconStroke}" />
-                                            </Canvas>
-                                        </Viewbox>
-                                    </Grid>
-
-                                    <TextBlock Grid.Column="1"
-                                               Text="{Binding Title}"
-                                               VerticalAlignment="Center"
-                                               Margin="6,0,4,0"
-                                               MaxWidth="148"
-                                               TextTrimming="CharacterEllipsis"
-                                               Foreground="{DynamicResource Brush.Text}"
-                                               FontSize="12" />
-                                    <Button Grid.Column="2"
-                                            Content="×"
-                                            Margin="0,0,4,0"
-                                            VerticalAlignment="Center"
-                                            Command="{Binding DataContext.WorkspacePane.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                            CommandParameter="{Binding}"
-                                            ToolTip="{loc:Localize Key=Common_Close}">
-                                        <Button.Style>
-                                            <Style TargetType="Button" BasedOn="{StaticResource EditorTabCloseButtonStyle}">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding CanClose}" Value="False">
+                                        <!-- Kind icon (Codex-style monoline) -->
+                                        <Grid Grid.Column="0"
+                                              Width="16"
+                                              Height="16"
+                                              Margin="10,0,0,0"
+                                              VerticalAlignment="Center">
+                                            <Viewbox Width="15" Height="15">
+                                                <Viewbox.Style>
+                                                    <Style TargetType="Viewbox">
                                                         <Setter Property="Visibility" Value="Collapsed" />
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Button.Style>
-                                    </Button>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-                </ScrollViewer>
-                <Grid Grid.Column="1" VerticalAlignment="Center">
-                    <Button x:Name="AddTabButton"
-                            Command="{Binding WorkspacePane.ToggleAddMenuCommand}"
-                            Content="+"
-                            Width="28"
-                            Height="28"
-                            FontSize="16"
-                            Style="{StaticResource IconButtonStyle}"
-                            ToolTip="{loc:Localize Key=Workspace_AddTabTooltip}" />
-                    <Popup PlacementTarget="{Binding ElementName=AddTabButton}"
-                           Placement="Bottom"
-                           HorizontalOffset="-140"
-                           StaysOpen="False"
-                           AllowsTransparency="True"
-                           IsOpen="{Binding WorkspacePane.IsAddMenuOpen, Mode=TwoWay}">
-                        <Border Background="Transparent" Padding="12" Margin="-12">
-                            <Border.Effect>
-                                <DropShadowEffect BlurRadius="20"
-                                                  ShadowDepth="3"
-                                                  Direction="270"
-                                                  Opacity="0.18"
-                                                  Color="#FF000000" />
-                            </Border.Effect>
-                            <Border Background="{DynamicResource Brush.MenuBackground}"
-                                    BorderBrush="{DynamicResource Brush.Border}"
-                                    BorderThickness="1"
-                                    CornerRadius="12"
-                                    Padding="6"
-                                    MinWidth="220">
-                                <StackPanel>
-                                    <Button Command="{Binding WorkspacePane.AddBrowserTabCommand}"
-                                            Style="{StaticResource WorkspaceEmptyRowStyle}"
-                                            Padding="10,9"
-                                            MinHeight="38"
-                                            Margin="0,1">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="28" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <Viewbox Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Kind}" Value="Browser">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Viewbox.Style>
                                                 <Canvas Width="16" Height="16">
                                                     <Ellipse Canvas.Left="1.5" Canvas.Top="1.5" Width="13" Height="13"
                                                              Style="{StaticResource WorkspaceIconStroke}" />
@@ -272,28 +138,17 @@
                                                           Style="{StaticResource WorkspaceIconStroke}" />
                                                 </Canvas>
                                             </Viewbox>
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{loc:Localize Key=Workspace_Browser}"
-                                                       Style="{StaticResource WorkspaceEmptyLabelStyle}"
-                                                       FontSize="13" />
-                                            <Border Grid.Column="2"
-                                                    Style="{StaticResource WorkspaceShortcutPillStyle}"
-                                                    Margin="12,0,0,0">
-                                                <TextBlock Text="Ctrl+T" Style="{StaticResource WorkspaceShortcutTextStyle}" />
-                                            </Border>
-                                        </Grid>
-                                    </Button>
-                                    <Button Command="{Binding WorkspacePane.AddTerminalTabCommand}"
-                                            Style="{StaticResource WorkspaceEmptyRowStyle}"
-                                            Padding="10,9"
-                                            MinHeight="38"
-                                            Margin="0,1">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="28" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <Viewbox Width="15" Height="15" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                            <Viewbox Width="14" Height="14">
+                                                <Viewbox.Style>
+                                                    <Style TargetType="Viewbox">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Kind}" Value="Terminal">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Viewbox.Style>
                                                 <Canvas Width="16" Height="16">
                                                     <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="12"
                                                                RadiusX="2" RadiusY="2"
@@ -304,61 +159,232 @@
                                                           Style="{StaticResource WorkspaceIconStroke}" />
                                                 </Canvas>
                                             </Viewbox>
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{loc:Localize Key=Workspace_Terminal}"
-                                                       Style="{StaticResource WorkspaceEmptyLabelStyle}"
-                                                       FontSize="13" />
-                                        </Grid>
-                                    </Button>
-                                    <Button Command="{Binding WorkspacePane.AddFilesTabCommand}"
-                                            Style="{StaticResource WorkspaceEmptyRowStyle}"
-                                            Padding="10,9"
-                                            MinHeight="38"
-                                            Margin="0,1">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="28" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <Viewbox Width="15" Height="15" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                            <Viewbox Width="14" Height="14">
+                                                <Viewbox.Style>
+                                                    <Style TargetType="Viewbox">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Kind}" Value="Files">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Viewbox.Style>
                                                 <Canvas Width="16" Height="16">
                                                     <Path Data="M2,3.5 H6.2 L7.6,5.2 H14 V13.5 H2 Z"
                                                           Style="{StaticResource WorkspaceIconStroke}" />
                                                 </Canvas>
                                             </Viewbox>
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{loc:Localize Key=Context_TabFiles}"
-                                                       Style="{StaticResource WorkspaceEmptyLabelStyle}"
-                                                       FontSize="13" />
-                                        </Grid>
-                                    </Button>
-                                    <Button Command="{Binding WorkspacePane.AddSkillsTabCommand}"
-                                            Style="{StaticResource WorkspaceEmptyRowStyle}"
-                                            Padding="10,9"
-                                            MinHeight="38"
-                                            Margin="0,1">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="28" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <Viewbox Width="14" Height="14" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                            <Viewbox Width="13" Height="13">
+                                                <Viewbox.Style>
+                                                    <Style TargetType="Viewbox">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Kind}" Value="Skills">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Viewbox.Style>
                                                 <Canvas Width="16" Height="16">
                                                     <Path Data="M8,1.5 L9.6,6.2 L14.5,6.2 L10.5,9.1 L12.1,13.8 L8,11 L3.9,13.8 L5.5,9.1 L1.5,6.2 L6.4,6.2 Z"
                                                           Style="{StaticResource WorkspaceIconStroke}" />
                                                 </Canvas>
                                             </Viewbox>
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{loc:Localize Key=Context_TabSkills}"
-                                                       Style="{StaticResource WorkspaceEmptyLabelStyle}"
-                                                       FontSize="13" />
                                         </Grid>
-                                    </Button>
-                                </StackPanel>
-                            </Border>
-                        </Border>
-                    </Popup>
-                </Grid>
+
+                                        <TextBlock Grid.Column="1"
+                                                   Text="{Binding Title}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="6,0,4,0"
+                                                   MaxWidth="148"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource Brush.Text}"
+                                                   FontSize="12" />
+                                        <Button Grid.Column="2"
+                                                Content="×"
+                                                Margin="0,0,4,0"
+                                                VerticalAlignment="Center"
+                                                Command="{Binding DataContext.WorkspacePane.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{loc:Localize Key=Common_Close}">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource EditorTabCloseButtonStyle}">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding CanClose}" Value="False">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                        <Grid VerticalAlignment="Center" Margin="2,0,0,0">
+                            <Button x:Name="AddTabButton"
+                                    Command="{Binding WorkspacePane.ToggleAddMenuCommand}"
+                                    Content="+"
+                                    Width="28"
+                                    Height="28"
+                                    FontSize="16"
+                                    Style="{StaticResource IconButtonStyle}"
+                                    ToolTip="{loc:Localize Key=Workspace_AddTabTooltip}" />
+                            <Popup PlacementTarget="{Binding ElementName=AddTabButton}"
+                                   Placement="Bottom"
+                                   HorizontalOffset="-140"
+                                   StaysOpen="False"
+                                   AllowsTransparency="True"
+                                   IsOpen="{Binding WorkspacePane.IsAddMenuOpen, Mode=TwoWay}">
+                                <Border Background="Transparent" Padding="12" Margin="-12">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="20"
+                                                          ShadowDepth="3"
+                                                          Direction="270"
+                                                          Opacity="0.18"
+                                                          Color="#FF000000" />
+                                    </Border.Effect>
+                                    <Border Background="{DynamicResource Brush.MenuBackground}"
+                                            BorderBrush="{DynamicResource Brush.Border}"
+                                            BorderThickness="1"
+                                            CornerRadius="12"
+                                            Padding="6"
+                                            MinWidth="220">
+                                        <StackPanel>
+                                            <Button Command="{Binding WorkspacePane.AddBrowserTabCommand}"
+                                                    Style="{StaticResource WorkspaceEmptyRowStyle}"
+                                                    Padding="10,9"
+                                                    MinHeight="38"
+                                                    Margin="0,1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="28" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                        <Canvas Width="16" Height="16">
+                                                            <Ellipse Canvas.Left="1.5" Canvas.Top="1.5" Width="13" Height="13"
+                                                                     Style="{StaticResource WorkspaceIconStroke}" />
+                                                            <Ellipse Canvas.Left="5.25" Canvas.Top="1.5" Width="5.5" Height="13"
+                                                                     Style="{StaticResource WorkspaceIconStroke}" />
+                                                            <Line X1="1.5" Y1="8" X2="14.5" Y2="8"
+                                                                  Style="{StaticResource WorkspaceIconStroke}" />
+                                                        </Canvas>
+                                                    </Viewbox>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{loc:Localize Key=Workspace_Browser}"
+                                                               Style="{StaticResource WorkspaceEmptyLabelStyle}"
+                                                               FontSize="13" />
+                                                    <Border Grid.Column="2"
+                                                            Style="{StaticResource WorkspaceShortcutPillStyle}"
+                                                            Margin="12,0,0,0">
+                                                        <TextBlock Text="Ctrl+T" Style="{StaticResource WorkspaceShortcutTextStyle}" />
+                                                    </Border>
+                                                </Grid>
+                                            </Button>
+                                            <Button Command="{Binding WorkspacePane.AddTerminalTabCommand}"
+                                                    Style="{StaticResource WorkspaceEmptyRowStyle}"
+                                                    Padding="10,9"
+                                                    MinHeight="38"
+                                                    Margin="0,1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="28" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Viewbox Width="15" Height="15" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                        <Canvas Width="16" Height="16">
+                                                            <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="12"
+                                                                       RadiusX="2" RadiusY="2"
+                                                                       Style="{StaticResource WorkspaceIconStroke}" />
+                                                            <Polyline Points="4.5,6 6.5,8 4.5,10"
+                                                                      Style="{StaticResource WorkspaceIconStroke}" />
+                                                            <Line X1="8" Y1="10.5" X2="11.5" Y2="10.5"
+                                                                  Style="{StaticResource WorkspaceIconStroke}" />
+                                                        </Canvas>
+                                                    </Viewbox>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{loc:Localize Key=Workspace_Terminal}"
+                                                               Style="{StaticResource WorkspaceEmptyLabelStyle}"
+                                                               FontSize="13" />
+                                                </Grid>
+                                            </Button>
+                                            <Button Command="{Binding WorkspacePane.AddFilesTabCommand}"
+                                                    Style="{StaticResource WorkspaceEmptyRowStyle}"
+                                                    Padding="10,9"
+                                                    MinHeight="38"
+                                                    Margin="0,1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="28" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Viewbox Width="15" Height="15" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                        <Canvas Width="16" Height="16">
+                                                            <Path Data="M2,3.5 H6.2 L7.6,5.2 H14 V13.5 H2 Z"
+                                                                  Style="{StaticResource WorkspaceIconStroke}" />
+                                                        </Canvas>
+                                                    </Viewbox>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{loc:Localize Key=Context_TabFiles}"
+                                                               Style="{StaticResource WorkspaceEmptyLabelStyle}"
+                                                               FontSize="13" />
+                                                </Grid>
+                                            </Button>
+                                            <Button Command="{Binding WorkspacePane.AddSkillsTabCommand}"
+                                                    Style="{StaticResource WorkspaceEmptyRowStyle}"
+                                                    Padding="10,9"
+                                                    MinHeight="38"
+                                                    Margin="0,1">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="28" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Viewbox Width="14" Height="14" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                                        <Canvas Width="16" Height="16">
+                                                            <Path Data="M8,1.5 L9.6,6.2 L14.5,6.2 L10.5,9.1 L12.1,13.8 L8,11 L3.9,13.8 L5.5,9.1 L1.5,6.2 L6.4,6.2 Z"
+                                                                  Style="{StaticResource WorkspaceIconStroke}" />
+                                                        </Canvas>
+                                                    </Viewbox>
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{loc:Localize Key=Context_TabSkills}"
+                                                               Style="{StaticResource WorkspaceEmptyLabelStyle}"
+                                                               FontSize="13" />
+                                                </Grid>
+                                            </Button>
+                                        </StackPanel>
+                                    </Border>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
+                <Button Grid.Column="1"
+                        Command="{Binding ToggleWorkspaceMaximizedCommand}"
+                        ToolTip="{Binding WorkspaceMaximizeToolTip}"
+                        Width="28"
+                        Height="28"
+                        Margin="4,0,0,0"
+                        VerticalAlignment="Center">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource IconButtonStyle}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Setter Property="ContentTemplate" Value="{StaticResource WindowCaptionMaximizeIconTemplate}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding WorkspacePane.CanMaximizeActiveTab}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsWorkspaceMaximized}" Value="True">
+                                    <Setter Property="ContentTemplate" Value="{StaticResource WindowCaptionRestoreIconTemplate}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
             </Grid>
         </Border>
 
@@ -483,5 +509,86 @@
                 </Style>
             </ContentControl.Style>
         </ContentControl>
+
+        <!-- Maximized follow-up composer (same Shell send pipeline) -->
+        <Border Grid.Row="2"
+                Padding="20,8,20,16"
+                Background="{DynamicResource Brush.AppBackground}">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsWorkspaceMaximized}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Border MaxWidth="760"
+                    HorizontalAlignment="Center"
+                    Style="{StaticResource ComposerInputWrapperStyle}"
+                    AllowDrop="True">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <controls:ComposerAttachmentChipsControl Grid.Row="0" />
+                    <Grid Grid.Row="1" Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <controls:ComposerPlusMenuControl Grid.Column="0"
+                                                          VerticalAlignment="Center"
+                                                          Margin="0,0,4,0" />
+                        <controls:ComposerInputControl x:Name="FollowUpComposerInput"
+                                                       Grid.Column="1"
+                                                       VerticalAlignment="Center"
+                                                       Margin="0,0,8,0"
+                                                       Placeholder="{loc:Localize Key=Workspace_FollowUpPlaceholder}" />
+                        <StackPanel Grid.Column="2"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center">
+                            <controls:ComposerModePicker VerticalAlignment="Center" />
+                            <Button Command="{Binding StopCommand}"
+                                    ToolTip="{loc:Localize Key=Chat_PauseReplyTooltip}"
+                                    Margin="0,0,8,0">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource DangerCircleButtonStyle}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsComposerStopVisible}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="■" FontSize="12" />
+                            </Button>
+                            <Button Command="{Binding SendCommand}"
+                                    ToolTip="{Binding SendButtonToolTip}"
+                                    Content="➤">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource ComposerSendButtonStyle}">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsComposerSendVisible}" Value="False">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding IsReadingAttachments}" Value="True">
+                                                <Setter Property="Opacity" Value="0.45" />
+                                                <Setter Property="IsEnabled" Value="False" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Border>
     </Grid>
 </UserControl>

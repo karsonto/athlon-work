@@ -24,6 +24,7 @@ public partial class ComposerInputControl : UserControl
     {
         InitializeComponent();
         _pasteHandler = ComposerTextBox_OnPastePreviewExecuted;
+        ApplyPlaceholderText();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
         SizeChanged += (_, _) => AdjustComposerTextHeight();
@@ -37,6 +38,35 @@ public partial class ComposerInputControl : UserControl
     }
 
     public ClipboardImageAttachmentReader? ClipboardImageReader { get; set; }
+
+    public static readonly DependencyProperty PlaceholderProperty =
+        DependencyProperty.Register(
+            nameof(Placeholder),
+            typeof(string),
+            typeof(ComposerInputControl),
+            new PropertyMetadata(null, OnPlaceholderChanged));
+
+    public string? Placeholder
+    {
+        get => (string?)GetValue(PlaceholderProperty);
+        set => SetValue(PlaceholderProperty, value);
+    }
+
+    public void FocusInput()
+    {
+        ComposerTextBox.Focus();
+        Keyboard.Focus(ComposerTextBox);
+    }
+
+    private static void OnPlaceholderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
+        ((ComposerInputControl)d).ApplyPlaceholderText();
+
+    private void ApplyPlaceholderText()
+    {
+        PlaceholderText.Text = string.IsNullOrEmpty(Placeholder)
+            ? Localization.LocalizationHub.Instance["Chat_ComposerPlaceholder"]
+            : Placeholder!;
+    }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {

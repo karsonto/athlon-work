@@ -458,6 +458,15 @@
   <data name="Workspace_AddTabTooltip" xml:space="preserve">
     <value>添加工作区标签</value>
   </data>
+  <data name="Workspace_Maximize" xml:space="preserve">
+    <value>放大工作区</value>
+  </data>
+  <data name="Workspace_Restore" xml:space="preserve">
+    <value>还原工作区</value>
+  </data>
+  <data name="Workspace_FollowUpPlaceholder" xml:space="preserve">
+    <value>继续对话…</value>
+  </data>
   <data name="Workspace_BrowserBack" xml:space="preserve">
     <value>后退</value>
   </data>

@@ -15,7 +15,6 @@
                  TextChanged="ComposerTextBox_OnTextChanged"
                  PreviewKeyDown="ComposerTextBox_OnPreviewKeyDown" />
         <TextBlock x:Name="PlaceholderText"
-                   Text="{loc:Localize Key=Chat_ComposerPlaceholder}"
                    Foreground="{DynamicResource Brush.SubtleText}"
                    IsHitTestVisible="False"
                    FontSize="14"

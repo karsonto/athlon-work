@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -176,6 +177,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         Sidebar.Refresh(_appSettings);
         FileEditor = fileEditor;
         WorkspacePane = workspacePane;
+        WorkspacePane.PropertyChanged += OnWorkspacePanePropertyChanged;
         FileEditor.Tabs.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasOpenEditorTabs));
         FileEditor.PropertyChanged += (_, e) =>
         {
@@ -476,6 +478,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private double _contextSidebarEdgeGutterWidth = 12;
     private bool _contextSidebarLayoutAnimate;
+    private double _preMaximizeContextWidth = UiLayoutConstraints.ContextSidebarDefaultWidth;
+
+    [ObservableProperty]
+    private bool isWorkspaceMaximized;
 
     public bool IsContextSidebarVisible => _appSettings.Ui.ContextSidebarVisible;
 
@@ -489,6 +495,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public string ContextSidebarToggleToolTip =>
         IsContextSidebarVisible ? _loc["Shell_ContextSidebarClose"] : _loc["Shell_ContextSidebarOpen"];
+
+    public string WorkspaceMaximizeToolTip =>
+        IsWorkspaceMaximized ? _loc["Workspace_Restore"] : _loc["Workspace_Maximize"];
 
     public string NavigationSidebarToggleToolTip =>
         IsNavigationSidebarVisible ? _loc["Shell_NavigationSidebarClose"] : _loc["Shell_NavigationSidebarOpen"];
@@ -720,6 +729,62 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     }
 
     [RelayCommand]
+    private void ToggleWorkspaceMaximized()
+    {
+        if (IsWorkspaceMaximized)
+        {
+            RestoreWorkspaceMaximized();
+            return;
+        }
+
+        if (!WorkspacePane.CanMaximizeActiveTab)
+        {
+            return;
+        }
+
+        if (!IsContextSidebarVisible)
+        {
+            SetContextSidebarVisible(true, animate: false);
+        }
+
+        _preMaximizeContextWidth = ContextSidebarWidth;
+        IsWorkspaceMaximized = true;
+    }
+
+    public void RestoreWorkspaceMaximized()
+    {
+        if (!IsWorkspaceMaximized)
+        {
+            return;
+        }
+
+        IsWorkspaceMaximized = false;
+        if (_preMaximizeContextWidth >= ContextSidebarMinWidth)
+        {
+            UpdateContextSidebarWidth(_preMaximizeContextWidth);
+        }
+    }
+
+    private void OnWorkspacePanePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (
+            nameof(WorkspacePaneViewModel.ActiveTab)
+            or nameof(WorkspacePaneViewModel.CanMaximizeActiveTab)
+            or nameof(WorkspacePaneViewModel.IsEmpty)))
+        {
+            return;
+        }
+
+        if (IsWorkspaceMaximized && !WorkspacePane.CanMaximizeActiveTab)
+        {
+            RestoreWorkspaceMaximized();
+        }
+    }
+
+    partial void OnIsWorkspaceMaximizedChanged(bool value) =>
+        OnPropertyChanged(nameof(WorkspaceMaximizeToolTip));
+
+    [RelayCommand]
     private async Task OpenBrowserWorkspaceTabAsync()
     {
         if (!_appSettings.Ui.ContextSidebarVisible)
@@ -787,6 +852,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public void SetContextSidebarVisible(bool visible, bool animate = false)
     {
+        if (!visible && IsWorkspaceMaximized)
+        {
+            RestoreWorkspaceMaximized();
+        }
+
         _contextSidebarLayoutAnimate = animate;
         _layout.SetContextSidebarVisible(visible, NotifyContextSidebarLayoutChanged);
     }
@@ -2743,6 +2813,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         UnwireModifiedFilesUi(_activeUi);
+        WorkspacePane.PropertyChanged -= OnWorkspacePanePropertyChanged;
         _copyNoticeCts?.Cancel();
         _copyNoticeCts?.Dispose();
         _compactionCts?.Cancel();

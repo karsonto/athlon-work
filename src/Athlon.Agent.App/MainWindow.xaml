@@ -51,7 +51,8 @@
                               Width="280"
                               MinWidth="180"
                               MaxWidth="480" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition x:Name="MainContentColumn"
+                              Width="*" />
             <ColumnDefinition x:Name="ContextSidebarColumn"
                               Width="320"
                               MinWidth="220"
