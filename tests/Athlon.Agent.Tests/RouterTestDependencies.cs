@@ -3,6 +3,7 @@ using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.Terminal;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -11,6 +12,9 @@ internal static class RouterTestDependencies
 {
     public static IBrowserWorkspaceState CreateBrowserWorkspaceState(bool hasOpenBrowserTab = false) =>
         new StubBrowserWorkspaceState(hasOpenBrowserTab);
+
+    public static ITerminalWorkspaceState CreateTerminalWorkspaceState(bool hasOpenTerminalTab = false) =>
+        new StubTerminalWorkspaceState(hasOpenTerminalTab);
 
     public static ActiveAgentSessionContext CreateSessionContext()
     {
@@ -154,6 +158,11 @@ internal static class RouterTestDependencies
     private sealed class StubBrowserWorkspaceState(bool hasOpenBrowserTab) : IBrowserWorkspaceState
     {
         public bool HasOpenBrowserTab { get; } = hasOpenBrowserTab;
+    }
+
+    private sealed class StubTerminalWorkspaceState(bool hasOpenTerminalTab) : ITerminalWorkspaceState
+    {
+        public bool HasOpenTerminalTab { get; } = hasOpenTerminalTab;
     }
 
     private sealed class RouterTestPathProvider(string rootPath) : IAppPathProvider

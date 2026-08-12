@@ -90,7 +90,8 @@ public sealed class ComputerUseExclusiveToolRouterTests
             RouterTestDependencies.CreateSessionHarnessState(),
             RouterTestDependencies.CreateRunContextAccessor(computerUseActive: true),
             RouterTestDependencies.CreateWorkspaceGuard(),
-            RouterTestDependencies.CreateBrowserWorkspaceState());
+            RouterTestDependencies.CreateBrowserWorkspaceState(),
+            RouterTestDependencies.CreateTerminalWorkspaceState());
     }
 
     private sealed class StubComputerUseTool(string name) : IAgentTool, IComputerUseTool

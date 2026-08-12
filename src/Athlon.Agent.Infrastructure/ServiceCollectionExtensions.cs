@@ -91,6 +91,10 @@ public static class ServiceCollectionExtensions
             Athlon.Agent.Core.Browser.NullBrowserWorkspaceState.Instance);
         services.AddSingleton<Athlon.Agent.Core.Browser.IBrowserAutomationHost>(
             Athlon.Agent.Core.Browser.NullBrowserAutomationHost.Instance);
+        services.AddSingleton<Athlon.Agent.Core.Terminal.ITerminalWorkspaceState>(
+            Athlon.Agent.Core.Terminal.NullTerminalWorkspaceState.Instance);
+        services.AddSingleton<Athlon.Agent.Core.Terminal.ITerminalAutomationHost>(
+            Athlon.Agent.Core.Terminal.NullTerminalAutomationHost.Instance);
         services.AddSingleton<Athlon.Agent.Core.ComputerUse.IComputerUseAutomationHost>(
             Athlon.Agent.Core.ComputerUse.NullComputerUseAutomationHost.Instance);
         services.AddSingleton<WorkspaceGuard>();
@@ -139,6 +143,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserAriaInteractTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserWaitForAriaTool>();
         services.AddSingleton<IRuntimeContextContributor, Athlon.Agent.Infrastructure.Browser.BrowserToolsPromptContributor>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Terminal.TerminalOpenTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Terminal.TerminalSendInputTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Terminal.TerminalReadOutputTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Terminal.TerminalGetSessionInfoTool>();
+        services.AddSingleton<IRuntimeContextContributor, Athlon.Agent.Infrastructure.Terminal.TerminalToolsPromptContributor>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.ComputerUse.ComputerObserveTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.ComputerUse.ComputerInteractTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.ComputerUse.ComputerWaitTool>();
@@ -153,7 +162,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<ISessionHarnessState>(),
                 sp.GetRequiredService<IAgentRunContextAccessor>(),
                 sp.GetRequiredService<WorkspaceGuard>(),
-                sp.GetRequiredService<Athlon.Agent.Core.Browser.IBrowserWorkspaceState>())));
+                sp.GetRequiredService<Athlon.Agent.Core.Browser.IBrowserWorkspaceState>(),
+                sp.GetRequiredService<Athlon.Agent.Core.Terminal.ITerminalWorkspaceState>())));
         services.AddSingleton<SubAgentSystemPromptOrchestrator>();
         services.AddSingleton<ISubAgentSessionStore, FileSubAgentSessionStore>();
         services.AddSingleton<ISubAgentRegistry, FileSubAgentRegistry>();

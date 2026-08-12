@@ -195,7 +195,8 @@ public sealed class AgentRuntimeProgressTests
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(),
-            RouterTestDependencies.CreateBrowserWorkspaceState());
+            RouterTestDependencies.CreateBrowserWorkspaceState(),
+            RouterTestDependencies.CreateTerminalWorkspaceState());
         var mcpSettings = new AppSettings();
         var logger = new NoOpLogger();
         var (pipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(

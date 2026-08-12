@@ -2,6 +2,7 @@ using Athlon.Agent.Core;
 using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Terminal;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -14,7 +15,8 @@ public sealed class CompositeToolRouter(
     ISessionHarnessState sessionHarnessState,
     IAgentRunContextAccessor runContextAccessor,
     WorkspaceGuard workspaceGuard,
-    IBrowserWorkspaceState browserWorkspaceState) : IToolRouter
+    IBrowserWorkspaceState browserWorkspaceState,
+    ITerminalWorkspaceState terminalWorkspaceState) : IToolRouter
 {
     private readonly McpDelegatingToolRouter _inner = new(
         static tools => tools,
@@ -26,7 +28,8 @@ public sealed class CompositeToolRouter(
         sessionHarnessState,
         runContextAccessor,
         workspaceGuard,
-        browserWorkspaceState);
+        browserWorkspaceState,
+        terminalWorkspaceState);
 
     public IReadOnlyList<ToolDefinition> ListTools() => _inner.ListTools();
 

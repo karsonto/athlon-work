@@ -73,7 +73,8 @@ public sealed class SshWorkspaceGuardAndToolTests
             new StubHarnessState(),
             new AgentRunContextAccessor(),
             guard,
-            RouterTestDependencies.CreateBrowserWorkspaceState());
+            RouterTestDependencies.CreateBrowserWorkspaceState(),
+            RouterTestDependencies.CreateTerminalWorkspaceState());
 
         var names = router.ListTools().Select(tool => tool.Name).ToArray();
         Assert.Contains("remote_marker", names);

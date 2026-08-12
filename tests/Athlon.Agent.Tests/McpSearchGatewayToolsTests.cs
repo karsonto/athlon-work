@@ -39,7 +39,8 @@ public sealed class McpSearchGatewayToolsTests
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(),
-            RouterTestDependencies.CreateBrowserWorkspaceState());
+            RouterTestDependencies.CreateBrowserWorkspaceState(),
+            RouterTestDependencies.CreateTerminalWorkspaceState());
 
         var result = await router.InvokeAsync(new ToolInvocation(
             McpSearchGatewayTools.SearchToolName,

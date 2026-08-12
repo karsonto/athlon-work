@@ -185,7 +185,8 @@ public sealed class CompositeToolRouterHarnessTests
             RouterTestDependencies.CreateSessionHarnessState(mode),
             RouterTestDependencies.CreateRunContextAccessor(mode),
             RouterTestDependencies.CreateWorkspaceGuard(configured: workspaceConfigured),
-            RouterTestDependencies.CreateBrowserWorkspaceState());
+            RouterTestDependencies.CreateBrowserWorkspaceState(),
+            RouterTestDependencies.CreateTerminalWorkspaceState());
     }
 
     private sealed class StubNamedTool(string name) : IAgentTool

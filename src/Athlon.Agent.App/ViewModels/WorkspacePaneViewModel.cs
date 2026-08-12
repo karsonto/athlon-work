@@ -105,7 +105,10 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void AddTerminalTab()
+    private void AddTerminalTab() => AddTerminalTabAndActivate();
+
+    /// <summary>Creates a Terminal tab, activates it, and returns the view model (used by automation host).</summary>
+    public TerminalWorkspaceTabViewModel AddTerminalTabAndActivate()
     {
         _terminalSerial++;
         var title = _terminalSerial <= 1
@@ -120,6 +123,7 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
         Tabs.Add(tab);
         ActiveTab = tab;
         IsAddMenuOpen = false;
+        return tab;
     }
 
     [RelayCommand]

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.Terminal;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -14,6 +15,7 @@ public partial class TerminalWorkspaceView : UserControl
     private TerminalWorkspaceTabViewModel? _tab;
     private EasyTerminalControl? _control;
     private bool _attaching;
+    private TerminalSessionRegistry? _registry;
 
     public TerminalWorkspaceView()
     {
@@ -26,6 +28,7 @@ public partial class TerminalWorkspaceView : UserControl
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         AppThemeManager.ThemeChanged += OnAppThemeChanged;
+        _registry ??= TryResolveRegistry();
         AttachTerminal();
     }
 
@@ -112,6 +115,7 @@ public partial class TerminalWorkspaceView : UserControl
             TerminalHost.Children.Add(control);
             _control = control;
             _tab.Session = control.ConPTYTerm;
+            RegisterSession(_tab, control.ConPTYTerm);
             ShowError(null);
         }
         catch (Exception ex)
@@ -144,6 +148,11 @@ public partial class TerminalWorkspaceView : UserControl
 
         TerminalHost.Children.Clear();
         _control = null;
+
+        if (_tab is not null)
+        {
+            UnregisterSession(_tab);
+        }
 
         if (_tab is null || _tab.IsDisposed || !preserveSession)
         {
@@ -230,5 +239,35 @@ public partial class TerminalWorkspaceView : UserControl
         ErrorPanel.Visibility = hasError ? Visibility.Visible : Visibility.Collapsed;
         TerminalHost.Visibility = hasError ? Visibility.Collapsed : Visibility.Visible;
         ErrorDetail.Text = detail ?? string.Empty;
+    }
+
+    private void RegisterSession(TerminalWorkspaceTabViewModel tab, TermPTY session)
+    {
+        tab.OutputBuffer.Attach(session);
+        _registry ??= TryResolveRegistry();
+        _registry?.Register(tab.Id, session, tab.OutputBuffer);
+    }
+
+    private void UnregisterSession(TerminalWorkspaceTabViewModel tab)
+    {
+        tab.OutputBuffer.Detach();
+        _registry?.Unregister(tab.Id);
+    }
+
+    private static TerminalSessionRegistry? TryResolveRegistry()
+    {
+        try
+        {
+            if (Application.Current is App app)
+            {
+                return app.Services?.GetService<TerminalSessionRegistry>();
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return null;
     }
 }

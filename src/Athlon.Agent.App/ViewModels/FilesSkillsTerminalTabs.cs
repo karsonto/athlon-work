@@ -1,4 +1,5 @@
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.Terminal;
 using EasyWindowsTerminalControl;
 
 namespace Athlon.Agent.App.ViewModels;
@@ -32,6 +33,8 @@ public sealed class TerminalWorkspaceTabViewModel : WorkspaceTabViewModel, IDisp
     public string? WorkingDirectory { get; set; }
 
     internal TermPTY? Session { get; set; }
+
+    internal TerminalOutputBuffer OutputBuffer { get; } = new();
 
     public bool IsDisposed { get; private set; }
 

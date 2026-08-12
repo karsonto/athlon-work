@@ -6,6 +6,7 @@ using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.SubAgents;
+using Athlon.Agent.Core.Terminal;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -20,6 +21,7 @@ internal sealed class McpDelegatingToolRouter(
     IAgentRunContextAccessor runContextAccessor,
     WorkspaceGuard workspaceGuard,
     IBrowserWorkspaceState browserWorkspaceState,
+    ITerminalWorkspaceState terminalWorkspaceState,
     Func<Task>? refreshMcpCatalogAsync = null,
     IAppLogger? logger = null) : IToolRouter
 {
@@ -56,8 +58,18 @@ internal sealed class McpDelegatingToolRouter(
                 return true;
             }
 
+            if (string.Equals(tool.Definition.Name, "terminal_open", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
             // After navigate opens a Browser tab, expose page/ARIA tools even without a workspace.
             if (tool is IBrowserTool && browserWorkspaceState.HasOpenBrowserTab)
+            {
+                return true;
+            }
+
+            if (tool is ITerminalTool && terminalWorkspaceState.HasOpenTerminalTab)
             {
                 return true;
             }
@@ -87,6 +99,11 @@ internal sealed class McpDelegatingToolRouter(
         }
 
         if (tool is IBrowserTool && !browserWorkspaceState.HasOpenBrowserTab)
+        {
+            return false;
+        }
+
+        if (tool is ITerminalTool && !terminalWorkspaceState.HasOpenTerminalTab)
         {
             return false;
         }
@@ -139,6 +156,7 @@ internal sealed class McpDelegatingToolRouter(
         var ask = sessionHarnessState.IsAskModeForActiveRun(runContextAccessor);
         var plan = sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor);
         var browser = browserWorkspaceState.HasOpenBrowserTab;
+        var terminal = terminalWorkspaceState.HasOpenTerminalTab;
         var computerUse = IsComputerUseMode;
         return string.Join(
             '|',
@@ -150,6 +168,7 @@ internal sealed class McpDelegatingToolRouter(
             ask,
             plan,
             browser,
+            terminal,
             computerUse);
     }
 

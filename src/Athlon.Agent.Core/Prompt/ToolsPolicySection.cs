@@ -70,6 +70,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
             builder.AppendLine("  4. Shell: cmd.exe only, not PowerShell; quote paths with spaces or non-ASCII and source workspace paths from tool results.");
         }
         builder.AppendLine("- Skill scripts: use absolute paths from each skill's files-root; execute_command cwd defaults to workspace root.");
+        builder.AppendLine("- Interactive CLI agents in the workspace Terminal tab: use terminal_open / terminal_send_input / terminal_read_output (same ConPTY); use execute_command only for one-off non-interactive shell commands.");
         AppendMcpDecisionFlow(builder);
         builder.AppendLine("- If the same tool fails with the same error twice, stop repeating it; gather more context or switch tools.");
         builder.AppendLine();

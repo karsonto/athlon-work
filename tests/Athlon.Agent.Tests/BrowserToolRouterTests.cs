@@ -155,7 +155,8 @@ public sealed class BrowserToolRouterTests
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(configuredWorkspace),
-            browserWorkspaceState);
+            browserWorkspaceState,
+            RouterTestDependencies.CreateTerminalWorkspaceState());
     }
 
     private sealed class MutableBrowserWorkspaceState(bool hasOpenBrowserTab) : IBrowserWorkspaceState
