@@ -249,7 +249,7 @@
                                           IsChecked="{Binding Settings.ContextCompaction.ToolStorm.Enabled, UpdateSourceTrigger=PropertyChanged}"
                                           VerticalAlignment="Center" />
                             </Grid>
-                            <Grid>
+                            <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="160" />
                                     <ColumnDefinition Width="*" />
@@ -257,6 +257,17 @@
                                 <TextBlock Text="{loc:Localize Key=Settings_StormThreshold}" VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1"
                                          Text="{Binding Settings.ContextCompaction.ToolStorm.Threshold, UpdateSourceTrigger=PropertyChanged}" />
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Localize Key=Settings_MaxToolScreenshots}" VerticalAlignment="Center"
+                                           ToolTip="{loc:Localize Key=Settings_MaxToolScreenshotsTooltip}" />
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding MaxToolScreenshotsInModelContextText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="{loc:Localize Key=Settings_MaxToolScreenshotsTooltip}" />
                             </Grid>
                         </StackPanel>
                     </Border>

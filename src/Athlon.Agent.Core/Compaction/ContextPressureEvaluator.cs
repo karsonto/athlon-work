@@ -131,7 +131,10 @@ public static class ContextPressureEvaluator
 
         if (!settings.DynamicCompaction.Enabled)
         {
-            var estimated = ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
+            var estimated = ContextTokenEstimator.Estimate(
+                conversation,
+                settings.IncludeReasoningInModelContext,
+                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext);
             return ConversationCutoffPlanner.ShouldCompact(conversation, estimated, settings, force: false);
         }
 
@@ -144,7 +147,10 @@ public static class ContextPressureEvaluator
         int? knownRawHistoryEstimate = null)
     {
         var estimated = knownRawHistoryEstimate
-            ?? ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
+            ?? ContextTokenEstimator.Estimate(
+                conversation,
+                settings.IncludeReasoningInModelContext,
+                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext);
         return ConversationCutoffPlanner.ShouldTruncateArgs(
             conversation,
             estimated,
@@ -157,7 +163,10 @@ public static class ContextPressureEvaluator
         int? knownRawHistoryEstimate = null)
     {
         var estimated = knownRawHistoryEstimate
-            ?? ContextTokenEstimator.Estimate(conversation, settings.IncludeReasoningInModelContext);
+            ?? ContextTokenEstimator.Estimate(
+                conversation,
+                settings.IncludeReasoningInModelContext,
+                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext);
         return ConversationCutoffPlanner.ShouldCompact(conversation, estimated, settings, force: false);
     }
 
@@ -179,6 +188,7 @@ public static class ContextPressureEvaluator
         return ContextTokenEstimator.EstimateSuffix(
             conversation,
             tailStart,
-            settings.IncludeReasoningInModelContext);
+            settings.IncludeReasoningInModelContext,
+            settings.MaxToolScreenshotsInModelContext);
     }
 }

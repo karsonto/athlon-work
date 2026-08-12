@@ -1255,6 +1255,12 @@
   <data name="Settings_StormThreshold" xml:space="preserve">
     <value>Storm 阈值</value>
   </data>
+  <data name="Settings_MaxToolScreenshots" xml:space="preserve">
+    <value>工具截图保留数</value>
+  </data>
+  <data name="Settings_MaxToolScreenshotsTooltip" xml:space="preserve">
+    <value>发给模型的 Computer Use 工具截图最多保留几张（从新到旧）。用户上传的图片不受此限制；会话落盘仍保留全部截图。</value>
+  </data>
   <data name="Settings_Subtitle" xml:space="preserve">
     <value>配置模型、工作区、上下文压缩与工具权限。</value>
   </data>

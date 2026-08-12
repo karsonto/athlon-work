@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -204,13 +205,42 @@ public sealed class BuildModelMessagesTests
         AppendComputerObserveTurn(history, "call_2", "data:image/png;base64,AQ==");
         AppendComputerObserveTurn(history, "call_3", "data:image/png;base64,Ag==");
 
-        var messages = AgentRuntime.BuildModelMessages("system", history);
-        var imageUrls = CollectImageUrls(messages);
+        var result = ModelMessagesForApiBuilder.Build(
+            cache: null,
+            "system",
+            history,
+            new ContextCompactionSettings { MaxToolScreenshotsInModelContext = 2 });
+        var imageUrls = CollectImageUrls(result.Messages);
 
         Assert.Equal(2, imageUrls.Count);
         Assert.Contains("data:image/png;base64,AQ==", imageUrls);
         Assert.Contains("data:image/png;base64,Ag==", imageUrls);
         Assert.DoesNotContain("data:image/png;base64,AA==", imageUrls);
+    }
+
+    [Theory]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(4, 3)]
+    public void BuildModelMessages_RespectsConfiguredToolScreenshotCap(int maxScreenshots, int expectedCount)
+    {
+        var history = new List<ChatMessage>
+        {
+            ChatMessage.Create(MessageRole.User, "open browser")
+        };
+        AppendComputerObserveTurn(history, "call_1", "data:image/png;base64,AA==");
+        AppendComputerObserveTurn(history, "call_2", "data:image/png;base64,AQ==");
+        AppendComputerObserveTurn(history, "call_3", "data:image/png;base64,Ag==");
+
+        var result = ModelMessagesForApiBuilder.Build(
+            cache: null,
+            "system",
+            history,
+            new ContextCompactionSettings { MaxToolScreenshotsInModelContext = maxScreenshots });
+        var imageUrls = CollectImageUrls(result.Messages);
+
+        Assert.Equal(expectedCount, imageUrls.Count);
+        Assert.Contains("data:image/png;base64,Ag==", imageUrls);
     }
 
     [Fact]
@@ -230,8 +260,12 @@ public sealed class BuildModelMessagesTests
         AppendComputerObserveTurn(history, "call_2", "data:image/png;base64,AQ==");
         AppendComputerObserveTurn(history, "call_3", "data:image/png;base64,Ag==");
 
-        var messages = AgentRuntime.BuildModelMessages("system", history);
-        var imageUrls = CollectImageUrls(messages);
+        var result = ModelMessagesForApiBuilder.Build(
+            cache: null,
+            "system",
+            history,
+            new ContextCompactionSettings { MaxToolScreenshotsInModelContext = 2 });
+        var imageUrls = CollectImageUrls(result.Messages);
 
         Assert.Equal(3, imageUrls.Count);
         Assert.Contains("data:image/png;base64,USER", imageUrls);
@@ -249,12 +283,20 @@ public sealed class BuildModelMessagesTests
             ChatMessage.Create(MessageRole.User, "open browser")
         };
         AppendComputerObserveTurn(history, "call_1", "data:image/png;base64,AA==");
-        cache.Build("system", history, includeReasoningInModelContext: false);
+        ModelMessagesForApiBuilder.Build(
+            cache,
+            "system",
+            history,
+            new ContextCompactionSettings { MaxToolScreenshotsInModelContext = 2 });
 
         AppendComputerObserveTurn(history, "call_2", "data:image/png;base64,AQ==");
         AppendComputerObserveTurn(history, "call_3", "data:image/png;base64,Ag==");
-        var messages = cache.Build("system", history, includeReasoningInModelContext: false);
-        var imageUrls = CollectImageUrls(messages);
+        var result = ModelMessagesForApiBuilder.Build(
+            cache,
+            "system",
+            history,
+            new ContextCompactionSettings { MaxToolScreenshotsInModelContext = 2 });
+        var imageUrls = CollectImageUrls(result.Messages);
 
         Assert.Equal(2, imageUrls.Count);
         Assert.Contains("data:image/png;base64,AQ==", imageUrls);

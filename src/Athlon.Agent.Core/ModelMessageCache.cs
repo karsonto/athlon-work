@@ -120,7 +120,6 @@ public sealed class ModelMessageCache
             {
                 if (history.Count == _processedHistoryCount)
                 {
-                    ModelMessageBuilder.RetainLatestToolScreenshots(_messages);
                     return _messages;
                 }
 
@@ -134,7 +133,6 @@ public sealed class ModelMessageCache
                 }
 
                 _processedHistoryCount = history.Count;
-                ModelMessageBuilder.RetainLatestToolScreenshots(_messages);
                 return _messages;
             }
 

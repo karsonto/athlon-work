@@ -15,7 +15,11 @@ public static class SemanticCutoffPlanner
         }
 
         var protectedStart = FindProtectedTailStart(conversation);
-        var tokenKeepStart = FindTokenBasedTailStart(conversation, keepTokenBudget, settings.IncludeReasoningInModelContext);
+        var tokenKeepStart = FindTokenBasedTailStart(
+            conversation,
+            keepTokenBudget,
+            settings.IncludeReasoningInModelContext,
+            settings.MaxToolScreenshotsInModelContext);
         var rawCutoff = Math.Min(protectedStart, tokenKeepStart);
         return ConversationCutoffPlanner.FindSafeCutoffPoint(conversation, rawCutoff);
     }
@@ -78,12 +82,17 @@ public static class SemanticCutoffPlanner
     private static int FindTokenBasedTailStart(
         IReadOnlyList<ChatMessage> conversation,
         int keepTokenBudget,
-        bool includeReasoningInModelContext)
+        bool includeReasoningInModelContext,
+        int maxToolScreenshots)
     {
+        var remainingToolScreenshots = Math.Max(0, maxToolScreenshots);
         var tokensKept = 0;
         for (var index = conversation.Count - 1; index >= 0; index--)
         {
-            tokensKept += ContextTokenEstimator.EstimateMessage(conversation[index], includeReasoningInModelContext);
+            tokensKept += ContextTokenEstimator.EstimateMessage(
+                conversation[index],
+                includeReasoningInModelContext,
+                ref remainingToolScreenshots);
             if (tokensKept > keepTokenBudget)
             {
                 return Math.Min(conversation.Count, index + 1);

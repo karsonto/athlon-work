@@ -28,7 +28,8 @@ public static class ContextBudgetCalculator
         var estimatedHistory = ContextTokenEstimator.Estimate(
             conversation,
             compactionSettings.IncludeReasoningInModelContext,
-            calibrationMultiplier);
+            calibrationMultiplier,
+            compactionSettings.MaxToolScreenshotsInModelContext);
         var historyUtilization = historyBudget > 0 ? (double)estimatedHistory / historyBudget : 1.0;
 
         return new ContextBudgetSnapshot(
@@ -50,7 +51,8 @@ public static class ContextBudgetCalculator
         var estimatedHistory = ContextTokenEstimator.Estimate(
             conversation,
             compactionSettings.IncludeReasoningInModelContext,
-            calibrationMultiplier);
+            calibrationMultiplier,
+            compactionSettings.MaxToolScreenshotsInModelContext);
 
         return snapshot.WithHistoryEstimate(estimatedHistory, snapshot.HistoryBudget);
     }
@@ -61,7 +63,8 @@ public static class ContextBudgetCalculator
         ContextCompactionSettings compactionSettings) =>
         ContextTokenEstimator.Estimate(
             ConversationMessageFilters.WithoutCompactionAudits(messages),
-            compactionSettings.IncludeReasoningInModelContext);
+            compactionSettings.IncludeReasoningInModelContext,
+            maxToolScreenshots: compactionSettings.MaxToolScreenshotsInModelContext);
 
     private static int EstimateToolsTokens(IReadOnlyList<ToolDefinition> tools, double calibrationMultiplier)
     {

@@ -80,12 +80,18 @@ public static class ConversationCutoffPlanner
             var rawCutoff = DetermineTruncateArgsCutoffFromKeepBudget(
                 messages,
                 keepTokenBudgetOverride.Value,
-                settings.IncludeReasoningInModelContext);
+                settings.IncludeReasoningInModelContext,
+                settings.MaxToolScreenshotsInModelContext);
             return FindSafeCutoffPoint(messages, rawCutoff);
         }
 
         var rawCutoffIndex = settings.KeepTokens > 0
-            ? FindTokenBasedCutoff(messages, estimatedTokens, settings.KeepTokens, settings.IncludeReasoningInModelContext)
+            ? FindTokenBasedCutoff(
+                messages,
+                estimatedTokens,
+                settings.KeepTokens,
+                settings.IncludeReasoningInModelContext,
+                settings.MaxToolScreenshotsInModelContext)
             : FindMessageBasedCutoff(messages, settings.KeepMessages);
 
         return FindSafeCutoffPoint(messages, rawCutoffIndex);
@@ -94,11 +100,16 @@ public static class ConversationCutoffPlanner
     public static int DetermineTruncateArgsCutoff(
         IReadOnlyList<ChatMessage> messages,
         TruncateArgsSettings settings,
-        bool includeReasoningInModelContext = false)
+        bool includeReasoningInModelContext = false,
+        int maxToolScreenshots = int.MaxValue)
     {
         if (settings.KeepTokens > 0)
         {
-            return DetermineTruncateArgsCutoffFromKeepBudget(messages, settings.KeepTokens, includeReasoningInModelContext);
+            return DetermineTruncateArgsCutoffFromKeepBudget(
+                messages,
+                settings.KeepTokens,
+                includeReasoningInModelContext,
+                maxToolScreenshots);
         }
 
         return Math.Max(0, messages.Count - settings.KeepMessages);
@@ -107,17 +118,22 @@ public static class ConversationCutoffPlanner
     public static int DetermineTruncateArgsCutoffFromKeepBudget(
         IReadOnlyList<ChatMessage> messages,
         int keepTokenBudget,
-        bool includeReasoningInModelContext = false)
+        bool includeReasoningInModelContext = false,
+        int maxToolScreenshots = int.MaxValue)
     {
         if (keepTokenBudget <= 0 || messages.Count == 0)
         {
             return messages.Count;
         }
 
+        var remainingToolScreenshots = Math.Max(0, maxToolScreenshots);
         var tokensKept = 0;
         for (var index = messages.Count - 1; index >= 0; index--)
         {
-            var messageTokens = ContextTokenEstimator.EstimateMessage(messages[index], includeReasoningInModelContext);
+            var messageTokens = ContextTokenEstimator.EstimateMessage(
+                messages[index],
+                includeReasoningInModelContext,
+                ref remainingToolScreenshots);
             if (tokensKept + messageTokens > keepTokenBudget)
             {
                 return index + 1;
@@ -198,7 +214,8 @@ public static class ConversationCutoffPlanner
         IReadOnlyList<ChatMessage> messages,
         int totalTokens,
         int keepTokens,
-        bool includeReasoningInModelContext)
+        bool includeReasoningInModelContext,
+        int maxToolScreenshots)
     {
         if (totalTokens <= keepTokens)
         {
@@ -215,7 +232,11 @@ public static class ConversationCutoffPlanner
         for (var iteration = 0; iteration < maxIter && left < right; iteration++)
         {
             var mid = (left + right) / 2;
-            if (ContextTokenEstimator.EstimateSuffix(messages, mid, includeReasoningInModelContext) <= keepTokens)
+            if (ContextTokenEstimator.EstimateSuffix(
+                    messages,
+                    mid,
+                    includeReasoningInModelContext,
+                    maxToolScreenshots) <= keepTokens)
             {
                 candidate = mid;
                 right = mid;

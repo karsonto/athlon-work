@@ -111,7 +111,8 @@ public sealed class PreCompletionPipeline(
             var prefixCutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoffFromKeepBudget(
                 conversation,
                 plan.KeepTokenBudget,
-                cfg.IncludeReasoningInModelContext);
+                cfg.IncludeReasoningInModelContext,
+                cfg.MaxToolScreenshotsInModelContext);
             var (updatedMessages, changed) = PrefixToolResultReEvictor.Apply(
                 session.Messages,
                 cfg,
@@ -204,7 +205,8 @@ public sealed class PreCompletionPipeline(
             var cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoff(
                 conversation,
                 cfg.TruncateArgs,
-                cfg.IncludeReasoningInModelContext);
+                cfg.IncludeReasoningInModelContext,
+                cfg.MaxToolScreenshotsInModelContext);
             var (updatedMessages, changed) = PrefixToolResultReEvictor.Apply(
                 session.Messages,
                 cfg,

@@ -35,7 +35,8 @@ public sealed class TruncateArgsService
         {
             var estimatedTokens = ContextTokenEstimator.Estimate(
                 conversation,
-                settings.IncludeReasoningInModelContext);
+                settings.IncludeReasoningInModelContext,
+                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext);
             if (!ConversationCutoffPlanner.ShouldTruncateArgs(conversation, estimatedTokens, truncateSettings))
             {
                 return messages;
@@ -50,7 +51,8 @@ public sealed class TruncateArgsService
             cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoff(
                 conversation,
                 truncateSettings,
-                settings.IncludeReasoningInModelContext);
+                settings.IncludeReasoningInModelContext,
+                settings.MaxToolScreenshotsInModelContext);
             if (cutoff >= conversation.Count)
             {
                 return messages;
@@ -65,7 +67,8 @@ public sealed class TruncateArgsService
             cutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoffFromKeepBudget(
                 conversation,
                 keepTokenBudgetOverride.Value,
-                settings.IncludeReasoningInModelContext);
+                settings.IncludeReasoningInModelContext,
+                settings.MaxToolScreenshotsInModelContext);
             if (cutoff >= conversation.Count)
             {
                 return messages;

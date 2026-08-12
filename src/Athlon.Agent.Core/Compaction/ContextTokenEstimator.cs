@@ -82,7 +82,10 @@ public static class ContextTokenEstimator
         int? knownRawHistoryEstimate = null)
     {
         var estimated = knownRawHistoryEstimate
-            ?? Estimate(messages, settings.IncludeReasoningInModelContext);
+            ?? Estimate(
+                messages,
+                settings.IncludeReasoningInModelContext,
+                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext);
         if (budget is null)
         {
             return estimated;
@@ -94,22 +97,26 @@ public static class ContextTokenEstimator
     public static int Estimate(
         IReadOnlyList<ChatMessage> messages,
         bool includeReasoningInModelContext = false,
-        double calibrationMultiplier = 1.0)
+        double calibrationMultiplier = 1.0,
+        int maxToolScreenshots = int.MaxValue)
     {
         if (messages.Count == 0)
         {
             return 0;
         }
 
+        var remainingToolScreenshots = Math.Max(0, maxToolScreenshots);
         var total = 0;
-        foreach (var message in messages)
+        // Newest-first allocation for Tool screenshots (matches RetainLatestToolScreenshots).
+        for (var index = messages.Count - 1; index >= 0; index--)
         {
+            var message = messages[index];
             if (message.Role == MessageRole.Compaction)
             {
                 continue;
             }
 
-            total += EstimateMessage(message, includeReasoningInModelContext);
+            total += EstimateMessage(message, includeReasoningInModelContext, ref remainingToolScreenshots);
         }
 
         return calibrationMultiplier <= 0 || Math.Abs(calibrationMultiplier - 1.0) < 0.001
@@ -118,6 +125,15 @@ public static class ContextTokenEstimator
     }
 
     public static int EstimateMessage(ChatMessage message, bool includeReasoningInModelContext = false)
+    {
+        var unlimited = int.MaxValue;
+        return EstimateMessage(message, includeReasoningInModelContext, ref unlimited);
+    }
+
+    public static int EstimateMessage(
+        ChatMessage message,
+        bool includeReasoningInModelContext,
+        ref int remainingToolScreenshots)
     {
         if (message.Role == MessageRole.Compaction)
         {
@@ -150,9 +166,17 @@ public static class ContextTokenEstimator
                 break;
         }
 
-        if (message.ImageAttachments is { Count: > 0 })
+        if (message.ImageAttachments is { Count: > 0 } images)
         {
-            tokens += message.ImageAttachments.Count * ImageAttachmentEstimate;
+            var imageCount = message.Role == MessageRole.Tool
+                ? Math.Min(images.Count, Math.Max(0, remainingToolScreenshots))
+                : images.Count;
+            if (message.Role == MessageRole.Tool)
+            {
+                remainingToolScreenshots -= imageCount;
+            }
+
+            tokens += imageCount * ImageAttachmentEstimate;
         }
 
         return tokens;
@@ -161,17 +185,25 @@ public static class ContextTokenEstimator
     public static int EstimateSuffix(
         IReadOnlyList<ChatMessage> messages,
         int startIndex,
-        bool includeReasoningInModelContext = false)
+        bool includeReasoningInModelContext = false,
+        int maxToolScreenshots = int.MaxValue)
     {
         if (startIndex < 0 || startIndex >= messages.Count)
         {
             return 0;
         }
 
+        var remainingToolScreenshots = Math.Max(0, maxToolScreenshots);
         var total = 0;
-        for (var i = startIndex; i < messages.Count; i++)
+        for (var i = messages.Count - 1; i >= startIndex; i--)
         {
-            total += EstimateMessage(messages[i], includeReasoningInModelContext);
+            var message = messages[i];
+            if (message.Role == MessageRole.Compaction)
+            {
+                continue;
+            }
+
+            total += EstimateMessage(message, includeReasoningInModelContext, ref remainingToolScreenshots);
         }
 
         return total;

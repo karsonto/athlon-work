@@ -403,6 +403,13 @@ public sealed partial class SettingsViewModel : ObservableObject
             ParsePercent(value, Settings.ContextCompaction.DynamicCompaction.TargetUtilization);
     }
 
+    public string MaxToolScreenshotsInModelContextText
+    {
+        get => Settings.ContextCompaction.MaxToolScreenshotsInModelContext.ToString();
+        set => Settings.ContextCompaction.MaxToolScreenshotsInModelContext =
+            ParseNonNegativeInt(value, Settings.ContextCompaction.MaxToolScreenshotsInModelContext);
+    }
+
     private static int? ParseOptionalPositiveInt(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))

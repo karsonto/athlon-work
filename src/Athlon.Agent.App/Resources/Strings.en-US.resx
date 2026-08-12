@@ -1234,6 +1234,12 @@ Save anyway?</value>
   <data name="Settings_StormThreshold" xml:space="preserve">
     <value>Storm threshold</value>
   </data>
+  <data name="Settings_MaxToolScreenshots" xml:space="preserve">
+    <value>Tool screenshots kept</value>
+  </data>
+  <data name="Settings_MaxToolScreenshotsTooltip" xml:space="preserve">
+    <value>Maximum Computer Use tool screenshots sent to the model (newest first). User-uploaded images are not capped; all screenshots remain stored in the session.</value>
+  </data>
   <data name="Settings_Subtitle" xml:space="preserve">
     <value>Configure model, workspaces, context compaction, and tool permissions.</value>
   </data>

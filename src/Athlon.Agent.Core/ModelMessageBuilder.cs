@@ -2,7 +2,8 @@ namespace Athlon.Agent.Core;
 
 internal static class ModelMessageBuilder
 {
-    internal const int MaxToolScreenshotsInModelContext = 2;
+    /// <summary>Default matching <see cref="Compaction.ContextCompactionSettings.MaxToolScreenshotsInModelContext"/>.</summary>
+    internal const int DefaultMaxToolScreenshotsInModelContext = 2;
     internal const string ToolScreenshotCaption =
         "[Computer Use screenshot returned by the preceding tool result.]";
 
@@ -23,24 +24,24 @@ internal static class ModelMessageBuilder
         };
 
         AppendHistoryRange(messages, history, 0, includeReasoningInModelContext);
-        RetainLatestToolScreenshots(messages, MaxToolScreenshotsInModelContext);
         return messages;
     }
 
     /// <summary>
     /// Keeps at most <paramref name="maxImages"/> Computer Use tool screenshots in the API
     /// payload (newest first). Older tool-screenshot user messages are removed; user-uploaded
-    /// images are left untouched.
+    /// images are left untouched. Values below 0 are treated as 0.
     /// </summary>
     public static void RetainLatestToolScreenshots(
         List<AgentModelMessage> messages,
-        int maxImages = MaxToolScreenshotsInModelContext)
+        int maxImages = DefaultMaxToolScreenshotsInModelContext)
     {
-        if (messages.Count == 0 || maxImages < 0)
+        if (messages.Count == 0)
         {
             return;
         }
 
+        maxImages = Math.Max(0, maxImages);
         var keptImages = 0;
         for (var index = messages.Count - 1; index >= 0; index--)
         {

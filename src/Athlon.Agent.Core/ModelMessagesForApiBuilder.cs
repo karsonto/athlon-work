@@ -13,17 +13,26 @@ public static class ModelMessagesForApiBuilder
         string? runtimeContext = null,
         RuntimeContextInjectionState? runtimeContextState = null)
     {
-        RequestHistoryHygiene.ApplyResult result;
+        List<AgentModelMessage> messages;
         if (cache is not null)
         {
-            cache.Build(environmentPrompt, history, compaction.IncludeReasoningInModelContext);
-            result = cache.ApplyHygiene(compaction.RequestHistoryHygiene);
+            messages = cache.Build(environmentPrompt, history, compaction.IncludeReasoningInModelContext);
         }
         else
         {
-            var messages = ModelMessageBuilder.BuildForSession(environmentPrompt, history, compaction.IncludeReasoningInModelContext);
-            result = RequestHistoryHygiene.ApplyToModelMessages(messages, compaction.RequestHistoryHygiene);
+            messages = ModelMessageBuilder.BuildForSession(
+                environmentPrompt,
+                history,
+                compaction.IncludeReasoningInModelContext);
         }
+
+        ModelMessageBuilder.RetainLatestToolScreenshots(
+            messages,
+            compaction.MaxToolScreenshotsInModelContext);
+
+        var result = cache is not null
+            ? cache.ApplyHygiene(compaction.RequestHistoryHygiene)
+            : RequestHistoryHygiene.ApplyToModelMessages(messages, compaction.RequestHistoryHygiene);
 
         var contextToInject = runtimeContextState is null
             ? runtimeContext

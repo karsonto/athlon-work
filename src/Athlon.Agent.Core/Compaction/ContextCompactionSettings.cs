@@ -29,6 +29,13 @@ public sealed class ContextCompactionSettings
     /// </summary>
     public bool IncludeReasoningInModelContext { get; set; }
 
+    /// <summary>
+    /// Max Computer Use tool screenshots kept in the model API payload (newest first).
+    /// User-uploaded images are not capped. Also used by history token pressure estimates.
+    /// Values below 0 are treated as 0.
+    /// </summary>
+    public int MaxToolScreenshotsInModelContext { get; set; } = 2;
+
     public string SummaryPrompt { get; set; } = ConversationCompactionDefaults.DefaultSummaryPrompt;
 
     public int MaxConversationCharsForSummary { get; set; } = 200_000;
