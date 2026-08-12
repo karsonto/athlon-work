@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media;
 using Athlon.Agent.App.Themes;
@@ -87,16 +89,26 @@ public static class EditorSyntaxHighlighting
 
     private sealed class ThemedHighlightingDefinition(IHighlightingDefinition inner) : IHighlightingDefinition
     {
+        private readonly Dictionary<HighlightingColor, HighlightingColor> _colorCache =
+            new(ReferenceEqualityComparer<HighlightingColor>.Instance);
+        private readonly Dictionary<HighlightingRuleSet, HighlightingRuleSet> _ruleSetCache =
+            new(ReferenceEqualityComparer<HighlightingRuleSet>.Instance);
         private readonly IReadOnlyList<HighlightingColor> _namedColors =
             inner.NamedHighlightingColors.Select(RemapColor).ToArray();
+        private HighlightingRuleSet? _mainRuleSet;
 
         public string Name => inner.Name;
 
-        public HighlightingRuleSet MainRuleSet => inner.MainRuleSet;
+        public HighlightingRuleSet MainRuleSet =>
+            _mainRuleSet ??= RemapRuleSet(inner.MainRuleSet, _colorCache, _ruleSetCache);
 
         public IEnumerable<HighlightingColor> NamedHighlightingColors => _namedColors;
 
-        public HighlightingRuleSet? GetNamedRuleSet(string name) => inner.GetNamedRuleSet(name);
+        public HighlightingRuleSet? GetNamedRuleSet(string name)
+        {
+            var ruleSet = inner.GetNamedRuleSet(name);
+            return ruleSet is null ? null : RemapRuleSet(ruleSet, _colorCache, _ruleSetCache);
+        }
 
         public HighlightingColor? GetNamedColor(string name)
         {
@@ -106,6 +118,66 @@ public static class EditorSyntaxHighlighting
         }
 
         public IDictionary<string, string>? Properties => inner.Properties;
+    }
+
+    private static HighlightingRuleSet RemapRuleSet(
+        HighlightingRuleSet source,
+        Dictionary<HighlightingColor, HighlightingColor> colorCache,
+        Dictionary<HighlightingRuleSet, HighlightingRuleSet> ruleSetCache)
+    {
+        if (ruleSetCache.TryGetValue(source, out var cached))
+        {
+            return cached;
+        }
+
+        var clone = new HighlightingRuleSet { Name = source.Name };
+        ruleSetCache[source] = clone;
+
+        foreach (var rule in source.Rules)
+        {
+            clone.Rules.Add(new HighlightingRule
+            {
+                Regex = rule.Regex,
+                Color = RemapColorCached(rule.Color, colorCache),
+            });
+        }
+
+        foreach (var span in source.Spans)
+        {
+            clone.Spans.Add(new HighlightingSpan
+            {
+                StartExpression = span.StartExpression,
+                EndExpression = span.EndExpression,
+                RuleSet = span.RuleSet is null
+                    ? null!
+                    : RemapRuleSet(span.RuleSet, colorCache, ruleSetCache),
+                StartColor = RemapColorCached(span.StartColor, colorCache),
+                SpanColor = RemapColorCached(span.SpanColor, colorCache),
+                EndColor = RemapColorCached(span.EndColor, colorCache),
+                SpanColorIncludesStart = span.SpanColorIncludesStart,
+                SpanColorIncludesEnd = span.SpanColorIncludesEnd,
+            });
+        }
+
+        return clone;
+    }
+
+    private static HighlightingColor RemapColorCached(
+        HighlightingColor? color,
+        Dictionary<HighlightingColor, HighlightingColor> cache)
+    {
+        if (color is null)
+        {
+            return new HighlightingColor();
+        }
+
+        if (!cache.TryGetValue(color, out var mapped))
+        {
+            mapped = RemapColor(color);
+            cache[color] = mapped;
+        }
+
+        return mapped;
     }
 
     private static HighlightingColor RemapColor(HighlightingColor? color)
@@ -159,5 +231,15 @@ public static class EditorSyntaxHighlighting
     }
 
     private static HighlightingBrush ToHighlightingBrush(Color color) => new SimpleHighlightingBrush(color);
+
+    private sealed class ReferenceEqualityComparer<T> : IEqualityComparer<T>
+        where T : class
+    {
+        public static ReferenceEqualityComparer<T> Instance { get; } = new();
+
+        public bool Equals(T? x, T? y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(T obj) => RuntimeHelpers.GetHashCode(obj);
+    }
 }
-
+
