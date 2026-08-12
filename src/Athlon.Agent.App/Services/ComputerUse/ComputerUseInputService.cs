@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Athlon.Agent.Core.ComputerUse;
 
 namespace Athlon.Agent.App.Services.ComputerUse;
 
@@ -52,26 +53,39 @@ public sealed class ComputerUseInputService
                 {
                     throw new ArgumentException("drag requires end_x and end_y.");
                 }
-                MoveCursor(x, y);
-                var mouseDown = false;
-                try
-                {
-                    SendMouse(MouseLeftDown, 0);
-                    mouseDown = true;
-                    await Task.Delay(80, CancellationToken.None).ConfigureAwait(false);
-                    MoveCursor(endX.Value, endY.Value);
-                    await Task.Delay(80, CancellationToken.None).ConfigureAwait(false);
-                }
-                finally
-                {
-                    if (mouseDown)
-                    {
-                        TrySendMouseUp(MouseLeftUp);
-                    }
-                }
+                await DragAsync(x, y, endX.Value, endY.Value).ConfigureAwait(false);
                 break;
             default:
                 throw new ArgumentException($"Unsupported Computer Use action '{action}'.");
+        }
+    }
+
+    private static async Task DragAsync(int startX, int startY, int endX, int endY)
+    {
+        MoveCursor(startX, startY);
+        var mouseDown = false;
+        try
+        {
+            SendMouse(MouseLeftDown, 0);
+            mouseDown = true;
+            // Give the target time to arm press-and-drag before movement starts.
+            await Task.Delay(120, CancellationToken.None).ConfigureAwait(false);
+
+            var path = ComputerUseDragPath.Build(startX, startY, endX, endY);
+            foreach (var (pointX, pointY) in path)
+            {
+                MoveCursor(pointX, pointY);
+                await Task.Delay(16, CancellationToken.None).ConfigureAwait(false);
+            }
+
+            await Task.Delay(80, CancellationToken.None).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (mouseDown)
+            {
+                TrySendMouseUp(MouseLeftUp);
+            }
         }
     }
 

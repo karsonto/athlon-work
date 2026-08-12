@@ -139,8 +139,8 @@ public sealed class ComputerUseAutomationHost(
 
                 var x = 0;
                 var y = 0;
-                var endX = request.EndX;
-                var endY = request.EndY;
+                int? endX = null;
+                int? endY = null;
                 if (target is not null
                     && request.Action is ("click" or "double_click" or "right_click" or "scroll" or "drag"
                         or "type_text" or "key" or "hotkey"))
@@ -193,21 +193,6 @@ public sealed class ComputerUseAutomationHost(
                         y = request.Y!.Value;
                     }
 
-                    if (request.Action == "drag"
-                        && request.EndImageX is int endImageX
-                        && request.EndImageY is int endImageY)
-                    {
-                        (endX, endY) = ComputerUseCoordinateMapper.ImageToPhysical(
-                            endImageX,
-                            endImageY,
-                            frame.Left,
-                            frame.Top,
-                            frame.CaptureWidth,
-                            frame.CaptureHeight,
-                            frame.ImageWidth,
-                            frame.ImageHeight);
-                    }
-
                     if (!ComputerUseFrameFreshness.ContainsPoint(
                             frame.Left,
                             frame.Top,
@@ -221,16 +206,18 @@ public sealed class ComputerUseAutomationHost(
                             "off_monitor",
                             "Coordinates are outside the observed monitor.");
                     }
+                }
 
-                    if (endX is int dragEndX
-                        && endY is int dragEndY
-                        && !ComputerUseFrameFreshness.ContainsPoint(
+                if (request.Action == "drag")
+                {
+                    (endX, endY) = ResolveDragEnd(request, frame);
+                    if (!ComputerUseFrameFreshness.ContainsPoint(
                             frame.Left,
                             frame.Top,
                             frame.Width,
                             frame.Height,
-                            dragEndX,
-                            dragEndY))
+                            endX.Value,
+                            endY.Value))
                     {
                         _latestFrame = null;
                         throw new ComputerUseException(
@@ -590,6 +577,33 @@ public sealed class ComputerUseAutomationHost(
         }
 
         return expectAvailable ? available : !available;
+    }
+
+    private static (int EndX, int EndY) ResolveDragEnd(
+        ComputerUseInteractRequest request,
+        FrameState frame)
+    {
+        if (request.EndImageX is int endImageX && request.EndImageY is int endImageY)
+        {
+            return ComputerUseCoordinateMapper.ImageToPhysical(
+                endImageX,
+                endImageY,
+                frame.Left,
+                frame.Top,
+                frame.CaptureWidth,
+                frame.CaptureHeight,
+                frame.ImageWidth,
+                frame.ImageHeight);
+        }
+
+        if (request.EndX is int endX && request.EndY is int endY)
+        {
+            return (endX, endY);
+        }
+
+        throw new ComputerUseException(
+            "invalid_args",
+            "drag requires end_image_x/end_image_y or physical end_x/end_y.");
     }
 
     private static void ValidateWaitRequest(ComputerUseWaitRequest request)

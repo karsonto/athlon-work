@@ -155,6 +155,24 @@ public sealed class ComputerUseWave1OptimizationTests
         Assert.True(request.IncludeUiTree);
     }
 
+    [Fact]
+    public void DragPath_InterpolatesAndEndsExactly()
+    {
+        var path = ComputerUseDragPath.Build(0, 0, 100, 50, steps: 4);
+        Assert.Equal(4, path.Count);
+        Assert.Equal((25, 12), path[0]);
+        Assert.Equal((50, 25), path[1]);
+        Assert.Equal((75, 38), path[2]);
+        Assert.Equal((100, 50), path[^1]);
+    }
+
+    [Fact]
+    public void DragPath_SamePointReturnsSingleEnd()
+    {
+        var path = ComputerUseDragPath.Build(10, 20, 10, 20);
+        Assert.Equal([(10, 20)], path);
+    }
+
     private static BitmapSource CreateSolidBitmap(int width, int height, Color color)
     {
         var pixels = new byte[width * height * 4];
