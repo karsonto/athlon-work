@@ -28,6 +28,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     private Windows.ComputerUseOverlayWindow? _computerUseOverlayWindow;
     private Windows.WorkspaceComposerOverlayWindow? _workspaceComposerOverlayWindow;
     private bool _workspaceComposerPositionPending;
+    private WindowState? _preComputerUseWindowState;
 
     private const double WorkspaceComposerMaxWidth = 784;
     private const double WorkspaceComposerSideMargin = 12;
@@ -394,6 +395,10 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             return;
         }
 
+        // Remember Normal/Maximized so ending CU restores the pre-minimize state.
+        _preComputerUseWindowState = WindowState == WindowState.Minimized
+            ? WindowState.Normal
+            : WindowState;
         WindowState = WindowState.Minimized;
         var overlay = new Windows.ComputerUseOverlayWindow(_viewModel);
         overlay.PromptSubmitted += OnComputerUsePromptSubmitted;
@@ -429,22 +434,18 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         {
             _viewModel.StopCommand.Execute(null);
         }
-        if (!_shutdownInProgress)
-        {
-            WindowState = WindowState.Normal;
-            Activate();
-        }
+
+        RestoreMainWindowAfterComputerUse();
     }
 
     private void CloseComputerUseOverlay(bool restoreMainWindow)
     {
         if (_computerUseOverlayWindow is null)
         {
-            if (restoreMainWindow && !_shutdownInProgress)
+            if (restoreMainWindow)
             {
                 _viewModel.EndComputerUseOverlay();
-                WindowState = WindowState.Normal;
-                Activate();
+                RestoreMainWindowAfterComputerUse();
             }
             return;
         }
@@ -455,12 +456,30 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         window.Closed -= OnComputerUseOverlayClosed;
         _computerUseOverlayWindow = null;
         window.Close();
-        if (restoreMainWindow && !_shutdownInProgress)
+        if (restoreMainWindow)
         {
             _viewModel.EndComputerUseOverlay();
-            WindowState = WindowState.Normal;
-            Activate();
+            RestoreMainWindowAfterComputerUse();
         }
+        else
+        {
+            _preComputerUseWindowState = null;
+        }
+    }
+
+    private void RestoreMainWindowAfterComputerUse()
+    {
+        if (_shutdownInProgress)
+        {
+            _preComputerUseWindowState = null;
+            return;
+        }
+
+        var restore = _preComputerUseWindowState ?? WindowState.Normal;
+        _preComputerUseWindowState = null;
+        // Never leave the shell minimized after CU; treat Minimized as Normal.
+        WindowState = restore == WindowState.Minimized ? WindowState.Normal : restore;
+        Activate();
     }
 
     private void HelpAboutMenuItem_OnClick(object sender, RoutedEventArgs e)

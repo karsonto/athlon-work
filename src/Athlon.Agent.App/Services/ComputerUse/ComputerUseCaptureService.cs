@@ -1,4 +1,3 @@
-using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
@@ -7,14 +6,17 @@ using System.Windows.Media.Imaging;
 namespace Athlon.Agent.App.Services.ComputerUse;
 
 public sealed record ComputerUseCapturedDesktop(
-    byte[] PngBytes,
+    byte[] ImageBytes,
     int Left,
     int Top,
     int Width,
     int Height,
     double DpiScale,
     int CursorX,
-    int CursorY);
+    int CursorY,
+    int ImageWidth,
+    int ImageHeight,
+    string MimeType);
 
 public sealed class ComputerUseCaptureService
 {
@@ -101,20 +103,19 @@ public sealed class ComputerUseCaptureService
                 BitmapSizeOptions.FromEmptyOptions());
             source.Freeze();
 
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(source));
-            using var stream = new MemoryStream();
-            encoder.Save(stream);
-
+            var encoded = ComputerUseScreenshotEncoder.Encode(source, width, height);
             return new ComputerUseCapturedDesktop(
-                stream.ToArray(),
+                encoded.Bytes,
                 bounds.Left,
                 bounds.Top,
                 width,
                 height,
                 ResolveDpiScale(monitor),
                 cursor.X,
-                cursor.Y);
+                cursor.Y,
+                encoded.ImageWidth,
+                encoded.ImageHeight,
+                encoded.MimeType);
         }
         finally
         {

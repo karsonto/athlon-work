@@ -2,8 +2,8 @@ namespace Athlon.Agent.Core.ComputerUse;
 
 public sealed record ComputerUseObserveRequest(
     bool IncludeUiTree = true,
-    int MaxTreeDepth = 6,
-    int MaxNodes = 300);
+    int MaxTreeDepth = 4,
+    int MaxNodes = 80);
 
 public sealed record ComputerUseObservation(
     string FrameId,
@@ -17,7 +17,13 @@ public sealed record ComputerUseObservation(
     int CursorY,
     string ForegroundWindowTitle,
     string ForegroundProcessName,
-    string UiTreeJson);
+    string UiTreeJson,
+    int ImageWidth = 0,
+    int ImageHeight = 0,
+    string? AppliedAction = null,
+    string? UsedElementId = null,
+    int? ResolvedX = null,
+    int? ResolvedY = null);
 
 public sealed record ComputerUseInteractRequest(
     string FrameId,
@@ -29,7 +35,11 @@ public sealed record ComputerUseInteractRequest(
     int? EndY = null,
     string? Text = null,
     string? Key = null,
-    int ScrollDelta = 0);
+    int ScrollDelta = 0,
+    int? ImageX = null,
+    int? ImageY = null,
+    int? EndImageX = null,
+    int? EndImageY = null);
 
 public sealed record ComputerUseWaitRequest(
     string Condition,

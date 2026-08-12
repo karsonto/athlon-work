@@ -36,6 +36,8 @@ public sealed class ComputerUseAutomationHost(
                     observation.Top,
                     observation.Width,
                     observation.Height,
+                    observation.ImageWidth,
+                    observation.ImageHeight,
                     observation.ForegroundWindowTitle,
                     observation.ForegroundProcessName
                 },
@@ -56,22 +58,26 @@ public sealed class ComputerUseAutomationHost(
         try
         {
             var run = runContextAccessor.Current
-                ?? throw new InvalidOperationException("Computer Use requires an active agent run context.");
+                ?? throw new ComputerUseException(
+                    "invalid_args",
+                    "Computer Use requires an active agent run context.");
             var frame = _latestFrame;
             if (frame is null
                 || !string.Equals(request.FrameId, frame.FrameId, StringComparison.Ordinal)
                 || !string.Equals(run.SessionId, frame.SessionId, StringComparison.Ordinal)
                 || !string.Equals(run.RunId, frame.RunId, StringComparison.Ordinal))
             {
-                throw new InvalidOperationException(
-                    "stale_frame: the desktop changed or this frame is not current; call computer_observe again.");
+                throw new ComputerUseException(
+                    "stale_frame",
+                    "The desktop changed or this frame is not current.");
             }
 
             if (!ComputerUseFrameFreshness.IsWithinAge(frame.CreatedAt, DateTimeOffset.UtcNow))
             {
                 _latestFrame = null;
-                throw new InvalidOperationException(
-                    "stale_frame: the observation expired; call computer_observe again.");
+                throw new ComputerUseException(
+                    "stale_frame",
+                    "The observation expired.");
             }
 
             AutomationElement? target = null;
@@ -79,18 +85,28 @@ public sealed class ComputerUseAutomationHost(
             {
                 if (!frame.Elements.TryGetValue(request.ElementId, out target))
                 {
-                    throw new InvalidOperationException(
+                    throw new ComputerUseException(
+                        "unknown_element",
                         $"Unknown element_id '{request.ElementId}' for frame '{request.FrameId}'.");
                 }
             }
 
+            var hasImagePoint = request.ImageX is not null && request.ImageY is not null;
+            var hasPhysicalPoint = request.X is not null && request.Y is not null;
             if (request.Action is ("click" or "double_click" or "right_click" or "scroll" or "drag")
                 && target is null
-                && (request.X is null || request.Y is null))
+                && !hasImagePoint
+                && !hasPhysicalPoint)
             {
-                throw new ArgumentException(
-                    $"{request.Action} requires element_id or physical x/y coordinates.");
+                throw new ComputerUseException(
+                    "invalid_args",
+                    $"{request.Action} requires element_id, image_x/image_y, or physical x/y coordinates.");
             }
+
+            int resolvedX = 0;
+            int resolvedY = 0;
+            int? resolvedEndX = request.EndX;
+            int? resolvedEndY = request.EndY;
 
             var result = await overlayRegistry.RunWithOverlayHiddenAsync(async ct =>
             {
@@ -116,12 +132,15 @@ public sealed class ComputerUseAutomationHost(
                         currentDesktop.Desktop.Height))
                 {
                     _latestFrame = null;
-                    throw new InvalidOperationException(
-                        "stale_frame: the visible desktop changed since observation; call computer_observe again.");
+                    throw new ComputerUseException(
+                        "stale_frame",
+                        "The visible desktop changed since observation.");
                 }
 
-                var x = request.X ?? 0;
-                var y = request.Y ?? 0;
+                var x = 0;
+                var y = 0;
+                var endX = request.EndX;
+                var endY = request.EndY;
                 if (target is not null
                     && request.Action is ("click" or "double_click" or "right_click" or "scroll" or "drag"
                         or "type_text" or "key" or "hotkey"))
@@ -135,8 +154,9 @@ public sealed class ComputerUseAutomationHost(
                     if (point is null)
                     {
                         _latestFrame = null;
-                        throw new InvalidOperationException(
-                            $"Element '{request.ElementId}' no longer has a clickable point; call computer_observe again.");
+                        throw new ComputerUseException(
+                            "element_gone",
+                            $"Element '{request.ElementId}' no longer has a clickable point.");
                     }
 
                     x = point.X;
@@ -150,8 +170,42 @@ public sealed class ComputerUseAutomationHost(
                             currentDesktop.Ui.ForegroundProcessName))
                     {
                         _latestFrame = null;
-                        throw new InvalidOperationException(
-                            "stale_frame: the visible desktop changed since observation; call computer_observe again.");
+                        throw new ComputerUseException(
+                            "stale_frame",
+                            "The visible desktop changed since observation.");
+                    }
+
+                    if (hasImagePoint)
+                    {
+                        (x, y) = ComputerUseCoordinateMapper.ImageToPhysical(
+                            request.ImageX!.Value,
+                            request.ImageY!.Value,
+                            frame.Left,
+                            frame.Top,
+                            frame.CaptureWidth,
+                            frame.CaptureHeight,
+                            frame.ImageWidth,
+                            frame.ImageHeight);
+                    }
+                    else
+                    {
+                        x = request.X!.Value;
+                        y = request.Y!.Value;
+                    }
+
+                    if (request.Action == "drag"
+                        && request.EndImageX is int endImageX
+                        && request.EndImageY is int endImageY)
+                    {
+                        (endX, endY) = ComputerUseCoordinateMapper.ImageToPhysical(
+                            endImageX,
+                            endImageY,
+                            frame.Left,
+                            frame.Top,
+                            frame.CaptureWidth,
+                            frame.CaptureHeight,
+                            frame.ImageWidth,
+                            frame.ImageHeight);
                     }
 
                     if (!ComputerUseFrameFreshness.ContainsPoint(
@@ -163,10 +217,32 @@ public sealed class ComputerUseAutomationHost(
                             y))
                     {
                         _latestFrame = null;
-                        throw new InvalidOperationException(
-                            "Coordinates are outside the observed monitor; call computer_observe again.");
+                        throw new ComputerUseException(
+                            "off_monitor",
+                            "Coordinates are outside the observed monitor.");
+                    }
+
+                    if (endX is int dragEndX
+                        && endY is int dragEndY
+                        && !ComputerUseFrameFreshness.ContainsPoint(
+                            frame.Left,
+                            frame.Top,
+                            frame.Width,
+                            frame.Height,
+                            dragEndX,
+                            dragEndY))
+                    {
+                        _latestFrame = null;
+                        throw new ComputerUseException(
+                            "off_monitor",
+                            "Drag destination coordinates are outside the observed monitor.");
                     }
                 }
+
+                resolvedX = x;
+                resolvedY = y;
+                resolvedEndX = endX;
+                resolvedEndY = endY;
 
                 // Burn the frame only after freshness checks pass so false stale checks can retry.
                 _latestFrame = null;
@@ -190,8 +266,8 @@ public sealed class ComputerUseAutomationHost(
                     request.Action,
                     x,
                     y,
-                    request.EndX,
-                    request.EndY,
+                    endX,
+                    endY,
                     request.Text,
                     request.Key,
                     request.ScrollDelta,
@@ -200,10 +276,12 @@ public sealed class ComputerUseAutomationHost(
                 // cancellable half-action that could be retried against the same frame.
                 await Task.Delay(250, CancellationToken.None).ConfigureAwait(false);
                 return await CaptureStateAsync(
-                    includeUiTree: true,
-                    maxDepth: 6,
-                    maxNodes: 300,
-                    CancellationToken.None).ConfigureAwait(false);
+                    includeUiTree: false,
+                    maxDepth: 1,
+                    maxNodes: 20,
+                    CancellationToken.None,
+                    monitorX,
+                    monitorY).ConfigureAwait(false);
             }, cancellationToken).ConfigureAwait(false);
 
             await auditLog.WriteAsync(
@@ -213,15 +291,20 @@ public sealed class ComputerUseAutomationHost(
                     request.Action,
                     request.FrameId,
                     request.ElementId,
-                    result.Desktop.CursorX,
-                    result.Desktop.CursorY,
-                    request.EndX,
-                    request.EndY,
+                    resolved_x = resolvedX,
+                    resolved_y = resolvedY,
+                    end_x = resolvedEndX,
+                    end_y = resolvedEndY,
                     foreground_window = result.Ui.ForegroundWindowTitle
                 },
                 CancellationToken.None).ConfigureAwait(false);
 
-            return BuildObservation(result);
+            return BuildObservation(
+                result,
+                appliedAction: request.Action,
+                usedElementId: request.ElementId,
+                resolvedX: resolvedX,
+                resolvedY: resolvedY);
         }
         finally
         {
@@ -311,7 +394,11 @@ public sealed class ComputerUseAutomationHost(
             : captureService.CaptureCursorMonitor();
         var foreground = uiAutomationService.Capture(
             includeUiTree ? maxDepth : 1,
-            includeUiTree ? maxNodes : 1);
+            includeUiTree ? maxNodes : 1,
+            desktop.Left,
+            desktop.Top,
+            desktop.Width,
+            desktop.Height);
         var ui = includeUiTree
             ? foreground
             : foreground with
@@ -339,7 +426,8 @@ public sealed class ComputerUseAutomationHost(
     {
         if (!await _uiaSlots.WaitAsync(0, cancellationToken).ConfigureAwait(false))
         {
-            throw new InvalidOperationException(
+            throw new ComputerUseException(
+                "uia_timeout",
                 "Windows UI Automation is unavailable because prior providers are still unresponsive.");
         }
 
@@ -355,29 +443,39 @@ public sealed class ComputerUseAutomationHost(
                 .WaitAsync(TimeSpan.FromSeconds(5), cancellationToken)
                 .ConfigureAwait(false);
         }
-        catch (TimeoutException exception)
+        catch (TimeoutException)
         {
-            throw new TimeoutException(
-                "Windows UI Automation did not respond within 5 seconds.",
-                exception);
+            throw new ComputerUseException(
+                "uia_timeout",
+                "Windows UI Automation did not respond within 5 seconds.");
         }
     }
 
-    private ComputerUseObservation BuildObservation(CapturedState state)
+    private ComputerUseObservation BuildObservation(
+        CapturedState state,
+        string? appliedAction = null,
+        string? usedElementId = null,
+        int? resolvedX = null,
+        int? resolvedY = null)
     {
         var sessionId = runContextAccessor.Current?.SessionId;
         var runId = runContextAccessor.Current?.RunId;
         if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(runId))
         {
-            throw new InvalidOperationException("Computer Use requires an active agent run context.");
+            throw new ComputerUseException(
+                "invalid_args",
+                "Computer Use requires an active agent run context.");
         }
 
         var frameId = $"frame_{Guid.NewGuid():N}";
+        var extension = state.Desktop.MimeType.Equals("image/jpeg", StringComparison.OrdinalIgnoreCase)
+            ? ".jpg"
+            : ".png";
         var screenshot = imageAttachmentStore.SaveBytes(
             sessionId,
-            $"{frameId}.png",
-            "image/png",
-            state.Desktop.PngBytes);
+            $"{frameId}{extension}",
+            state.Desktop.MimeType,
+            state.Desktop.ImageBytes);
         _latestFrame = new FrameState(
             frameId,
             sessionId,
@@ -386,6 +484,10 @@ public sealed class ComputerUseAutomationHost(
             state.Desktop.Top,
             state.Desktop.Width,
             state.Desktop.Height,
+            state.Desktop.Width,
+            state.Desktop.Height,
+            state.Desktop.ImageWidth,
+            state.Desktop.ImageHeight,
             state.Ui.ForegroundWindowTitle,
             state.Ui.ForegroundProcessName,
             DateTimeOffset.UtcNow,
@@ -403,12 +505,18 @@ public sealed class ComputerUseAutomationHost(
             state.Desktop.CursorY,
             state.Ui.ForegroundWindowTitle,
             state.Ui.ForegroundProcessName,
-            state.Ui.Json);
+            state.Ui.Json,
+            state.Desktop.ImageWidth,
+            state.Desktop.ImageHeight,
+            appliedAction,
+            usedElementId,
+            resolvedX,
+            resolvedY);
     }
 
     private bool IsScreenStable(ref string? previousHash, ref int stableSamples)
     {
-        var bytes = captureService.CaptureCursorMonitor().PngBytes;
+        var bytes = captureService.CaptureCursorMonitor().ImageBytes;
         var hash = Convert.ToHexString(SHA256.HashData(bytes));
         if (string.Equals(previousHash, hash, StringComparison.Ordinal))
         {
@@ -449,7 +557,8 @@ public sealed class ComputerUseAutomationHost(
                         request.WindowTitle!,
                         StringComparison.OrdinalIgnoreCase),
                 cancellationToken).ConfigureAwait(false),
-            _ => throw new ArgumentException(
+            _ => throw new ComputerUseException(
+                "invalid_args",
                 $"Unsupported wait condition '{request.Condition}'.")
         };
         return new WaitEvaluation(matched, previousHash, stableSamples);
@@ -468,7 +577,8 @@ public sealed class ComputerUseAutomationHost(
                 || !string.Equals(run.RunId, frame.RunId, StringComparison.Ordinal)
                 || !frame.Elements.TryGetValue(request.ElementId, out var element))
             {
-                throw new InvalidOperationException(
+                throw new ComputerUseException(
+                    "unknown_element",
                     $"Element_id '{request.ElementId}' is not available for the current Computer Use turn.");
             }
 
@@ -491,20 +601,24 @@ public sealed class ComputerUseAutomationHost(
                 if (string.IsNullOrWhiteSpace(request.ElementId)
                     && string.IsNullOrWhiteSpace(request.Name))
                 {
-                    throw new ArgumentException(
+                    throw new ComputerUseException(
+                        "invalid_args",
                         $"{request.Condition} requires element_id or name.");
                 }
                 break;
             case "window_title":
                 if (string.IsNullOrWhiteSpace(request.WindowTitle))
                 {
-                    throw new ArgumentException("window_title requires a non-empty window_title.");
+                    throw new ComputerUseException(
+                        "invalid_args",
+                        "window_title requires a non-empty window_title.");
                 }
                 break;
             case "screen_stable":
                 break;
             default:
-                throw new ArgumentException(
+                throw new ComputerUseException(
+                    "invalid_args",
                     $"Unsupported wait condition '{request.Condition}'.");
         }
     }
@@ -521,6 +635,10 @@ public sealed class ComputerUseAutomationHost(
         int Top,
         int Width,
         int Height,
+        int CaptureWidth,
+        int CaptureHeight,
+        int ImageWidth,
+        int ImageHeight,
         string ForegroundWindowTitle,
         string ForegroundProcessName,
         DateTimeOffset CreatedAt,

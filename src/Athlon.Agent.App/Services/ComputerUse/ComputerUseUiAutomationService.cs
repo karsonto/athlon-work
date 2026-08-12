@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows.Automation;
+using Athlon.Agent.Core.ComputerUse;
 
 namespace Athlon.Agent.App.Services.ComputerUse;
 
@@ -13,7 +14,13 @@ public sealed record ComputerUseUiSnapshot(
 
 public sealed class ComputerUseUiAutomationService
 {
-    public ComputerUseUiSnapshot Capture(int maxDepth, int maxNodes)
+    public ComputerUseUiSnapshot Capture(
+        int maxDepth,
+        int maxNodes,
+        int? monitorLeft = null,
+        int? monitorTop = null,
+        int? monitorWidth = null,
+        int? monitorHeight = null)
     {
         var foreground = GetForegroundWindow();
         if (foreground == IntPtr.Zero)
@@ -51,35 +58,54 @@ public sealed class ComputerUseUiAutomationService
             try
             {
                 var current = element.Current;
-                var id = $"ui_{nextId++}";
-                elements[id] = element;
                 var bounds = current.BoundingRectangle;
-                nodes.Add(new
-                {
-                    element_id = id,
-                    parent_id = parentId,
-                    depth,
-                    name = current.Name,
-                    control_type = NormalizeControlType(current.ControlType),
-                    automation_id = current.AutomationId,
-                    enabled = current.IsEnabled,
-                    offscreen = current.IsOffscreen,
-                    focusable = current.IsKeyboardFocusable,
-                    bounds = bounds.IsEmpty
-                        ? null
-                        : new
-                        {
-                            x = (int)Math.Round(bounds.Left),
-                            y = (int)Math.Round(bounds.Top),
-                            width = (int)Math.Round(bounds.Width),
-                            height = (int)Math.Round(bounds.Height)
-                        }
-                });
+                var include = ComputerUseUiNodeFilter.ShouldInclude(
+                    isRoot: depth == 0,
+                    isOffscreen: current.IsOffscreen,
+                    boundsWidth: bounds.IsEmpty ? 0 : bounds.Width,
+                    boundsHeight: bounds.IsEmpty ? 0 : bounds.Height,
+                    monitorLeft,
+                    monitorTop,
+                    monitorWidth,
+                    monitorHeight,
+                    bounds.IsEmpty ? null : bounds.Left,
+                    bounds.IsEmpty ? null : bounds.Top);
 
+                string? id = null;
+                if (include)
+                {
+                    id = $"ui_{nextId++}";
+                    elements[id] = element;
+                    nodes.Add(new
+                    {
+                        element_id = id,
+                        parent_id = parentId,
+                        depth,
+                        name = current.Name,
+                        control_type = NormalizeControlType(current.ControlType),
+                        automation_id = current.AutomationId,
+                        enabled = current.IsEnabled,
+                        offscreen = current.IsOffscreen,
+                        focusable = current.IsKeyboardFocusable,
+                        bounds = bounds.IsEmpty
+                            ? null
+                            : new
+                            {
+                                x = (int)Math.Round(bounds.Left),
+                                y = (int)Math.Round(bounds.Top),
+                                width = (int)Math.Round(bounds.Width),
+                                height = (int)Math.Round(bounds.Height)
+                            }
+                    });
+                }
+
+                // Continue walking children even when the parent was filtered so nested
+                // on-screen controls remain reachable under a later included ancestor.
+                var childParentId = id ?? parentId;
                 var child = walker.GetFirstChild(element);
                 while (child is not null && nodes.Count < maxNodes)
                 {
-                    Visit(child, id, depth + 1);
+                    Visit(child, childParentId, depth + 1);
                     child = walker.GetNextSibling(child);
                 }
             }
