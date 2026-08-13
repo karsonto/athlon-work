@@ -84,7 +84,6 @@ public sealed class SessionCompactionServiceTests
         var orchestrator = PromptTestHelpers.CreateStaticOrchestrator();
         return new SessionCompactionService(
             compactionMiddleware,
-            new EnvironmentPromptBuilderAdapter(orchestrator),
             new NoOpToolRouter(),
             orchestrator,
             settings);

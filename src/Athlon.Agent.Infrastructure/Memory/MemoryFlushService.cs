@@ -19,9 +19,7 @@ public sealed class MemoryFlushService(
     AppSettings settings,
     IAppLogger logger)
 {
-    internal const string FlushSystemPrompt = """
-You are a memory extraction assistant. Analyze the conversation below and extract important facts, decisions, preferences, and contextual information that should be remembered for future conversations.
-
+    internal const string FlushGuidelines = """
 Output ONLY the extracted memories as a markdown bullet list. Each item should be a concise, self-contained fact. Include dates, names, and specifics when available.
 
 If there is nothing worth remembering, respond with exactly: NO_REPLY
@@ -38,25 +36,11 @@ IMPORTANT:
 - Keep each bullet point independent and self-contained.
 """;
 
-    internal const string FlushInstruction = """
-Analyze the preceding conversation and extract important facts, decisions, preferences, and contextual information that should be remembered for future conversations.
+    internal static readonly string FlushSystemPrompt =
+        "You are a memory extraction assistant. Analyze the conversation below and extract important facts, decisions, preferences, and contextual information that should be remembered for future conversations.\n\n" + FlushGuidelines;
 
-Output ONLY the extracted memories as a markdown bullet list. Each item should be a concise, self-contained fact. Include dates, names, and specifics when available.
-
-If there is nothing worth remembering, respond with exactly: NO_REPLY
-
-Guidelines:
-- Extract user preferences, personal information, project decisions
-- Capture important technical decisions and their rationale
-- Note any commitments, deadlines, or action items
-- Ignore routine greetings, tool invocations, and ephemeral status updates
-
-IMPORTANT:
-- You are writing to TODAY's daily memory ledger (memory/YYYY-MM-DD.md), NOT to MEMORY.md.
-- MEMORY.md is the curated long-term memory and is shown ONLY as read-only context below. Do NOT restate facts already covered by MEMORY.md or by today's earlier entries.
-- Keep each bullet point independent and self-contained.
-- The conversation to extract from is in the preceding messages.
-""";
+    internal static readonly string FlushInstruction =
+        "Analyze the preceding conversation and extract important facts, decisions, preferences, and contextual information that should be remembered for future conversations.\n\n" + FlushGuidelines + "\n- The conversation to extract from is in the preceding messages.";
 
     private readonly IAppLogger _logger = logger.ForContext("MemoryFlushService");
     private readonly MemorySettings _cfg = settings.Memory;

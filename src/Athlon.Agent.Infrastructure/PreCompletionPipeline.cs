@@ -3,6 +3,13 @@ using Athlon.Agent.Core.Compaction;
 
 namespace Athlon.Agent.Infrastructure;
 
+/// <summary>
+/// Turn-prep orchestration: truncate args, re-evict tool results, then compact.
+/// Called from <see cref="Athlon.Agent.Core.Middleware.CompactionTurnMiddleware"/> via
+/// <see cref="IPreCompletionPipeline"/>. When DynamicCompaction is off, <c>RunLegacyAsync</c>
+/// uses message-count triggers; otherwise prune first and skip the compact LLM call if
+/// utilization already dropped.
+/// </summary>
 public sealed class PreCompletionPipeline(
     IConversationCompactor conversationCompactor,
     TruncateArgsService truncateArgsService,

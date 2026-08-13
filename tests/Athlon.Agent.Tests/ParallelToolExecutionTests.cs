@@ -393,19 +393,16 @@ public sealed class ParallelToolExecutionTests
             storage,
             toolRouter,
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
-            new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
-            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             pipeline,
             compaction,
             settings,
-            logger,
-            new NoOpPostTurnMemoryProcessor());
+            logger);
     }
 
     private static string FileReadToolName() =>

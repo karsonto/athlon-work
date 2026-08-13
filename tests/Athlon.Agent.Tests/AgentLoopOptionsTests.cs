@@ -13,7 +13,7 @@ public sealed class AgentLoopOptionsTests
         var model = new LoopTestModelClient();
         var toolRouter = new LoopTestToolRouter();
         var settings = new AppSettings();
-        var logger = new LoopNoOpAppLogger();
+        var logger = new NoOpLogger();
         var (pipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
             new NoOpPreCompletionPipeline(),
             storage,
@@ -25,25 +25,22 @@ public sealed class AgentLoopOptionsTests
             storage,
             toolRouter,
             new LoopTestPrompt(),
-            new NoOpPreCompletionPipeline(),
             new NoOpToolResultEvictor(),
             new NoOpTokenEstimator(),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
-            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             pipeline,
             compaction,
             settings,
-            logger,
-            new NoOpPostTurnMemoryProcessor());
+            logger);
 
         var session = AgentSession.Create("loop-test");
-        using (AgentLoopOptionsScope.Enter(new AgentLoopOptions { MaxModelToolRounds = 1 }))
-        {
-            session = await runtime.SendAsync(session, "hi");
-        }
+        session = await runtime.SendAsync(
+            session,
+            "hi",
+            loopOptions: new AgentLoopOptions { MaxModelToolRounds = 1 });
 
         Assert.Equal(1, model.CompleteCount);
         Assert.Equal(0, toolRouter.InvokeCount);
@@ -102,41 +99,5 @@ public sealed class AgentLoopOptionsTests
             Athlon.Agent.Core.Prompt.FrozenSystemPrompt frozen,
             AgentSession session,
             IReadOnlyList<ToolDefinition> tools) => frozen.Text;
-    }
-
-    private sealed class NoOpPreCompletionPipeline : IPreCompletionPipeline
-    {
-        public Task<AgentSession> RunAsync(
-            AgentSession session,
-            PreCompletionOptions? options = null,
-            CompactionRuntimeContext? runtimeContext = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(session);
-    }
-
-    private sealed class NoOpToolResultEvictor : IToolResultEvictor
-    {
-        public Task<string> EvictIfNeededAsync(
-            string sessionId,
-            AgentToolCall toolCall,
-            ToolResult result,
-            string content,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(content);
-    }
-
-    private sealed class NoOpTokenEstimator : ITokenEstimatorCalibrator
-    {
-        public double GetMultiplier(string sessionId) => 1;
-        public void Observe(string sessionId, int estimatedPromptTokens, int? actualPromptTokens) { }
-    }
-
-    private sealed class LoopNoOpAppLogger : IAppLogger
-    {
-        public void Debug(string messageTemplate, params object[] values) { }
-        public void Information(string messageTemplate, params object[] values) { }
-        public void Warning(string messageTemplate, params object[] values) { }
-        public void Error(Exception exception, string messageTemplate, params object[] values) { }
-        public IAppLogger ForContext(string sourceContext) => this;
     }
 }

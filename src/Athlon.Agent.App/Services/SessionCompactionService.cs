@@ -14,7 +14,6 @@ public sealed record ManualCompactionResult(
 
 public sealed class SessionCompactionService(
     CompactionTurnMiddleware compactionMiddleware,
-    IAgentEnvironmentPromptBuilder environmentPromptBuilder,
     IToolRouter toolRouter,
     ISystemPromptOrchestrator promptOrchestrator,
     AppSettings settings)
@@ -36,7 +35,7 @@ public sealed class SessionCompactionService(
             .ToHashSet(StringComparer.Ordinal);
 
         var tools = toolRouter.ListTools();
-        var environmentPrompt = environmentPromptBuilder.Build(session, tools);
+        var environmentPrompt = promptOrchestrator.PrepareForTurn(session, tools).Text;
         var runContext = AgentRunContext.CreateRoot(
             session,
             Guid.NewGuid().ToString("N"),

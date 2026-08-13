@@ -34,19 +34,16 @@ internal static class AgentRuntimeTestFactory
             storage,
             toolRouter,
             systemPromptOrchestrator,
-            preCompletionPipeline,
             toolResultEvictor,
             tokenEstimatorCalibrator,
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
-            new SessionToolStormStore(),
             activeSessionContext,
             runContextAccessor,
             pipeline,
             compaction,
             settings,
-            logger,
-            memoryProcessor ?? new NoOpPostTurnMemoryProcessor());
+            logger);
     }
 
     public static (AgentTurnMiddlewarePipeline Pipeline, CompactionTurnMiddleware Compaction) CreateMiddleware(

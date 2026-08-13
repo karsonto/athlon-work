@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 
 namespace Athlon.Agent.Tests;
 
@@ -81,4 +82,32 @@ internal sealed class NoOpActiveAgentSessionContext : IActiveAgentSessionContext
     {
         public void Dispose() => AmbientSessionId.Value = previous;
     }
+}
+
+internal sealed class NoOpPreCompletionPipeline : IPreCompletionPipeline
+{
+    public Task<AgentSession> RunAsync(
+        AgentSession session,
+        PreCompletionOptions? options = null,
+        CompactionRuntimeContext? runtimeContext = null,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(session);
+}
+
+internal sealed class NoOpToolResultEvictor : IToolResultEvictor
+{
+    public Task<string> EvictIfNeededAsync(
+        string sessionId,
+        AgentToolCall toolCall,
+        ToolResult result,
+        string formattedToolContent,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(formattedToolContent);
+}
+
+internal sealed class NoOpTokenEstimator : ITokenEstimatorCalibrator
+{
+    public double GetMultiplier(string sessionId) => 1;
+
+    public void Observe(string sessionId, int estimatedPromptTokens, int? actualPromptTokens) { }
 }

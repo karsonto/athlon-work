@@ -25,19 +25,16 @@ public sealed class AgentRuntimeToolFailureTests
             storage,
             new ThrowingToolRouter(),
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
-            new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
-            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             pipeline,
             compaction,
             settings,
-            logger,
-            new NoOpPostTurnMemoryProcessor());
+            logger);
 
         var session = AgentSession.Create("tool-failure-test");
         var result = await runtime.SendAsync(session, "run tool", null);

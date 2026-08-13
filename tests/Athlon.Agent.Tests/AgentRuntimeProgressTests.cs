@@ -30,19 +30,16 @@ public sealed class AgentRuntimeProgressTests
             storage,
             toolRouter,
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
-            new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
-            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             pipeline,
             compaction,
             settings,
-            logger,
-            new NoOpPostTurnMemoryProcessor());
+            logger);
 
         var events = new List<string>();
         var session = AgentSession.Create("progress-test");
@@ -98,19 +95,16 @@ public sealed class AgentRuntimeProgressTests
             storage,
             new ScriptedToolRouter(),
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
-            new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
-            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             pipeline,
             compaction,
             settings,
-            logger,
-            new NoOpPostTurnMemoryProcessor());
+            logger);
 
         var tokens = new List<string>();
         var session = AgentSession.Create("delta-test");
@@ -155,19 +149,16 @@ public sealed class AgentRuntimeProgressTests
             storage,
             toolRouter,
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
-            new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
-            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             pipeline,
             compaction,
             settings,
-            logger,
-            new NoOpPostTurnMemoryProcessor());
+            logger);
 
         await runtime.SendAsync(AgentSession.Create("thread-test"), "run tool");
 
@@ -206,19 +197,16 @@ public sealed class AgentRuntimeProgressTests
             storage,
             composite,
             PromptTestHelpers.CreateStaticOrchestrator("test prompt"),
-            new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(mcpSettings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
-            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             pipeline,
             compaction,
             mcpSettings,
-            logger,
-            new NoOpPostTurnMemoryProcessor());
+            logger);
 
         await runtime.SendAsync(AgentSession.Create("mcp-route-test"), "call mcp");
 

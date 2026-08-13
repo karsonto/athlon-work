@@ -1,6 +1,5 @@
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
-using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Streaming;
 using Athlon.Agent.Core.Events;
@@ -14,19 +13,16 @@ public sealed class AgentRuntime(
     IFileStorageService storage,
     IToolRouter toolRouter,
     ISystemPromptOrchestrator systemPromptOrchestrator,
-    IPreCompletionPipeline preCompletionPipeline,
     IToolResultEvictor toolResultEvictor,
     ITokenEstimatorCalibrator tokenEstimatorCalibrator,
     ISessionUsageAccumulator sessionUsageAccumulator,
     IPromptPressureStore promptPressureStore,
-    ISessionToolStormStore sessionToolStormStore,
     IActiveAgentSessionContext activeSessionContext,
     IAgentRunContextAccessor runContextAccessor,
     AgentTurnMiddlewarePipeline turnPipeline,
     CompactionTurnMiddleware compactionMiddleware,
     AppSettings settings,
     IAppLogger logger,
-    IPostTurnMemoryProcessor memoryProcessor,
     IEventManager? eventManager = null) : IAgentRuntime
 {
     private readonly IAppLogger _logger = logger.ForContext("AgentRuntime");
@@ -71,7 +67,8 @@ public sealed class AgentRuntime(
         IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
         CancellationToken cancellationToken = default,
-        bool computerUseActive = false)
+        bool computerUseActive = false,
+        AgentLoopOptions? loopOptions = null)
     {
         var existing = runContextAccessor.Current;
         AgentRunContext runContext;
@@ -79,9 +76,9 @@ public sealed class AgentRuntime(
             && string.Equals(existing.SessionId, session.Id, StringComparison.Ordinal))
         {
             runContext = existing;
-            if (runContext.LoopOptions is null && AgentLoopOptionsScope.Current is { } ambientLoopOptions)
+            if (runContext.LoopOptions is null && loopOptions is not null)
             {
-                runContext = runContext with { LoopOptions = ambientLoopOptions };
+                runContext = runContext with { LoopOptions = loopOptions };
             }
         }
         else
@@ -97,7 +94,7 @@ public sealed class AgentRuntime(
                 ignorePatterns,
                 workspaceKind,
                 computerUseActive);
-            if (AgentLoopOptionsScope.Current is { } loopOptions)
+            if (loopOptions is not null)
             {
                 runContext = runContext with { LoopOptions = loopOptions };
             }

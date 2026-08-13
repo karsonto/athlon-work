@@ -30,19 +30,16 @@ public sealed class AgentRuntimeSubAgentContextTests
             storage,
             rootRouter,
             rootPrompt,
-            new NoOpPreCompletionPipeline(),
             new NoOpToolResultEvictor(),
             new NoOpTokenEstimator(),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
-            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             accessor,
             pipeline,
             compaction,
             settings,
-            logger,
-            new NoOpPostTurnMemoryProcessor());
+            logger);
 
         var session = AgentSession.Create("sub-1");
         var child = AgentRunContext.CreateRoot(

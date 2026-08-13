@@ -26,7 +26,6 @@ public static class PromptServiceCollectionExtensions
         services.AddSingleton<IEnvironmentPromptSection, SubAgentPersonaSection>();
         services.AddSingleton<RuntimeContextAssembler>();
         services.AddSingleton<ISystemPromptOrchestrator, SystemPromptOrchestrator>();
-        services.AddSingleton<IAgentEnvironmentPromptBuilder, EnvironmentPromptBuilderAdapter>();
         return services;
     }
 }

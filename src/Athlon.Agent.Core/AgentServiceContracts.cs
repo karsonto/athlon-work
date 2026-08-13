@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Core;
 
@@ -55,7 +56,8 @@ public interface IAgentRuntime
         IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
         CancellationToken cancellationToken = default,
-        bool computerUseActive = false);
+        bool computerUseActive = false,
+        AgentLoopOptions? loopOptions = null);
 }
 public interface IFileStorageService
 {

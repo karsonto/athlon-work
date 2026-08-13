@@ -119,19 +119,16 @@ public sealed class AgentRuntimeOverflowTests
             storage,
             new NoOpToolRouter(),
             PromptTestHelpers.CreateStaticOrchestrator(),
-            pipeline,
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
-            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             turnPipeline,
             compaction,
             settings,
-            logger,
-            new NoOpPostTurnMemoryProcessor());
+            logger);
     }
 
     private sealed class OverflowThenSuccessModelClient : IAgentModelClient

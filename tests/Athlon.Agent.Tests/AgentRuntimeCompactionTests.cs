@@ -40,8 +40,6 @@ public sealed class AgentRuntimeCompactionTests
 
             PromptTestHelpers.CreateStaticOrchestrator(),
 
-            pipeline,
-
             new PassThroughToolResultEvictor(),
 
             new TokenEstimatorCalibrator(settings),
@@ -50,16 +48,13 @@ public sealed class AgentRuntimeCompactionTests
 
             new PromptPressureStore(),
 
-            new SessionToolStormStore(),
-
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             turnPipeline,
             compaction,
             settings,
 
-            logger,
-            new NoOpPostTurnMemoryProcessor());
+            logger);
 
         ChatMessage? notified = null;
         AgentSession? sessionAfterCompact = null;

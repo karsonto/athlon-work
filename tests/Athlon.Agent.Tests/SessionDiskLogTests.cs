@@ -270,19 +270,16 @@ public sealed class SessionDiskLogTests
             storage,
             new EmptyToolRouter(),
             PromptTestHelpers.CreateStaticOrchestrator(),
-            new NoOpPreCompletionPipeline(),
             new PassThroughToolResultEvictor(),
             new TokenEstimatorCalibrator(settings),
             new SessionUsageAccumulator(),
             new PromptPressureStore(),
-            new SessionToolStormStore(),
             new NoOpActiveAgentSessionContext(),
             new AgentRunContextAccessor(),
             turnPipeline,
             compaction,
             settings,
-            runtimeLogger,
-            new NoOpPostTurnMemoryProcessor());
+            runtimeLogger);
 
         var session = AgentSession.Create("cancel-persist");
 
