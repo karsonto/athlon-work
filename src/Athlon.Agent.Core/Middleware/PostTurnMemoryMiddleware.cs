@@ -18,16 +18,20 @@ public sealed class PostTurnMemoryMiddleware(
             return ValueTask.CompletedTask;
         }
 
-        var capturedSession = invocation.Session;
+        var captured = new MemoryTurnContext(
+            invocation.Session.Messages,
+            invocation.EnvironmentPrompt,
+            invocation.Tools);
+        var sessionId = invocation.Session.Id;
         _ = Task.Run(async () =>
         {
             try
             {
-                await memoryProcessor.ProcessAsync(capturedSession.Messages, cancellationToken).ConfigureAwait(false);
+                await memoryProcessor.ProcessAsync(captured, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
-                _logger.Debug("Post-turn memory flush cancelled for session {SessionId}", capturedSession.Id);
+                _logger.Debug("Post-turn memory flush cancelled for session {SessionId}", sessionId);
             }
             catch (Exception ex)
             {

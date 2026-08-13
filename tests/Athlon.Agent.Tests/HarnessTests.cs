@@ -152,6 +152,12 @@ public sealed class HarnessTests
         await processor.WaitForCallAsync(cts.Token);
 
         Assert.Equal(1, processor.CallCount);
+        Assert.NotNull(processor.LastContext);
+        Assert.Equal("You are Athlon.", processor.LastContext!.EnvironmentPrompt);
+        Assert.Equal("file_read", Assert.Single(processor.LastContext.Tools!).Name);
+        Assert.Contains(
+            processor.LastContext.Messages,
+            message => message.Content.Contains("prefer tabs", StringComparison.Ordinal));
     }
 
     private static AgentTurnInvocation CreateTurnInvocation(bool hasWorkspace)
@@ -161,6 +167,14 @@ public sealed class HarnessTests
             Id = "test-session",
             ActiveWorkspace = hasWorkspace ? @"C:\work\demo" : null
         };
+        if (hasWorkspace)
+        {
+            session = session.WithMessages(
+            [
+                ChatMessage.Create(MessageRole.User, "I prefer tabs over spaces")
+            ]);
+        }
+
         return new AgentTurnInvocation
         {
             RunContext = AgentRunContext.CreateRoot(
@@ -170,7 +184,17 @@ public sealed class HarnessTests
                 PromptTestHelpers.CreateStaticOrchestrator(),
                 []),
             Session = session,
-            StreamAdapter = new AgentStreamAdapter(session.Id, "run-1")
+            StreamAdapter = new AgentStreamAdapter(session.Id, "run-1"),
+            EnvironmentPrompt = hasWorkspace ? "You are Athlon." : null,
+            Tools = hasWorkspace
+                ?
+                [
+                    new ToolDefinition(
+                        "file_read",
+                        "Read files",
+                        ToolSchema.Object().String("path", "path", required: true).Build())
+                ]
+                : null
         };
     }
 
@@ -280,9 +304,12 @@ public sealed class HarnessTests
         public Task WaitForCallAsync(CancellationToken cancellationToken = default) =>
             _called.Task.WaitAsync(cancellationToken);
 
-        public Task ProcessAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+        public MemoryTurnContext? LastContext { get; private set; }
+
+        public Task ProcessAsync(MemoryTurnContext context, CancellationToken cancellationToken = default)
         {
             CallCount++;
+            LastContext = context;
             _called.TrySetResult();
             return Task.CompletedTask;
         }

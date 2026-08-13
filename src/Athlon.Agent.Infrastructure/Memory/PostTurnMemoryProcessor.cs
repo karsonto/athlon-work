@@ -12,9 +12,9 @@ public sealed class PostTurnMemoryProcessor(
     private readonly IAppLogger _logger = logger.ForContext("PostTurnMemoryProcessor");
     private DateTime _lastConsolidation = DateTime.MinValue;
 
-    public async Task ProcessAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default)
+    public async Task ProcessAsync(MemoryTurnContext context, CancellationToken cancellationToken = default)
     {
-        await flushService.FlushAsync(messages, cancellationToken);
+        await flushService.FlushAsync(context, cancellationToken);
 
         var now = DateTime.UtcNow;
         var gap = settings.Memory.ConsolidationMinGap;

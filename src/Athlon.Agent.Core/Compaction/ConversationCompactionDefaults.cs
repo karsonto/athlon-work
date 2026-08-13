@@ -4,6 +4,9 @@ public static class ConversationCompactionDefaults
 {
     public const string SummaryMessageMarker = "__compaction_summary__";
 
+    public const string PrecedingMessagesPlaceholder =
+        "The conversation to summarize is in the preceding messages.";
+
     public const string DefaultSummaryPrompt =
         """
         <role>

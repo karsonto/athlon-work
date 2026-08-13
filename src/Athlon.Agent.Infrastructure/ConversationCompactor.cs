@@ -106,36 +106,17 @@ public sealed class ConversationCompactor(
             transcriptPath = await storage.SaveTranscriptAsync(session.Id, session.Messages, cancellationToken);
         }
 
-        var formatted = ConversationSummaryFormatter.FormatMessages(prefix);
-        int? summaryInputCharsBefore = formatted.Length;
-        int? summaryInputCharsAfter = formatted.Length;
-        int? hygieneSavingsEstimate = null;
-        var calibrationMultiplier = request.RuntimeContext?.CalibrationMultiplier ?? 1.0;
-        if (formatted.Length > cfg.MaxConversationCharsForSummary
-            || ContextTokenEstimator.EstimateTextTokens(formatted, calibrationMultiplier) > cfg.RequestHistoryHygiene.MaxToolResultTokens)
-        {
-            var compacted = RequestHistoryHygiene.CompactTextForSummary(formatted, cfg.RequestHistoryHygiene);
-            formatted = compacted.Text;
-            summaryInputCharsBefore = compacted.CharsBefore;
-            summaryInputCharsAfter = compacted.CharsAfter;
-            hygieneSavingsEstimate = compacted.EstimatedSavingsTokens;
-        }
-
-        if (formatted.Length > cfg.MaxConversationCharsForSummary)
-        {
-            formatted = ConversationSummaryFormatter.FitToMaxChars(formatted, cfg.MaxConversationCharsForSummary);
-            summaryInputCharsAfter = formatted.Length;
-        }
-
         var mustPreserve = request.Plan?.MustPreserveAppendix;
-        var promptBody = BuildSummaryPrompt(cfg.SummaryPrompt, formatted, mustPreserve);
+        var summaryRequest = BuildSummaryRequest(
+            prefix,
+            cfg,
+            request,
+            mustPreserve,
+            out var summaryInputCharsBefore,
+            out var summaryInputCharsAfter,
+            out var hygieneSavingsEstimate);
         string summary;
         var summaryAttemptId = Guid.NewGuid().ToString("N");
-        var summaryRequest = new AgentModelRequest(
-            new[] { new AgentModelMessage("user", promptBody) },
-            Array.Empty<ToolDefinition>(),
-            AllowToolCalls: false,
-            MaxTokens: cfg.SummaryMaxTokens);
         var summaryStopwatch = Stopwatch.StartNew();
         try
         {
@@ -294,6 +275,68 @@ public sealed class ConversationCompactor(
             : 1;
         keepCount = Math.Max(1, Math.Min(keepCount, conversation.Count - 1));
         return ConversationCutoffPlanner.FindSafeCutoffPoint(conversation, conversation.Count - keepCount);
+    }
+
+    private static AgentModelRequest BuildSummaryRequest(
+        IReadOnlyList<ChatMessage> prefix,
+        ContextCompactionSettings cfg,
+        CompactionExecutionRequest request,
+        string? mustPreserve,
+        out int? summaryInputCharsBefore,
+        out int? summaryInputCharsAfter,
+        out int? hygieneSavingsEstimate)
+    {
+        var environmentPrompt = request.RuntimeContext?.EnvironmentPrompt;
+        if (!string.IsNullOrWhiteSpace(environmentPrompt) && request.RuntimeContext is { } runtime)
+        {
+            var built = ModelMessagesForApiBuilder.Build(
+                cache: null,
+                environmentPrompt,
+                prefix,
+                cfg);
+            var messages = built.Messages.ToList();
+            summaryInputCharsBefore = ConversationSummaryFormatter.FormatMessages(prefix).Length;
+            summaryInputCharsAfter = summaryInputCharsBefore;
+            hygieneSavingsEstimate = built.EstimatedSavingsTokens > 0 ? built.EstimatedSavingsTokens : null;
+            messages.Add(new AgentModelMessage(
+                "user",
+                BuildSummaryPrompt(
+                    cfg.SummaryPrompt,
+                    ConversationCompactionDefaults.PrecedingMessagesPlaceholder,
+                    mustPreserve)));
+            return new AgentModelRequest(
+                messages,
+                runtime.Tools,
+                AllowToolCalls: false,
+                MaxTokens: cfg.SummaryMaxTokens);
+        }
+
+        var formatted = ConversationSummaryFormatter.FormatMessages(prefix);
+        summaryInputCharsBefore = formatted.Length;
+        summaryInputCharsAfter = formatted.Length;
+        hygieneSavingsEstimate = null;
+        var calibrationMultiplier = request.RuntimeContext?.CalibrationMultiplier ?? 1.0;
+        if (formatted.Length > cfg.MaxConversationCharsForSummary
+            || ContextTokenEstimator.EstimateTextTokens(formatted, calibrationMultiplier) > cfg.RequestHistoryHygiene.MaxToolResultTokens)
+        {
+            var compacted = RequestHistoryHygiene.CompactTextForSummary(formatted, cfg.RequestHistoryHygiene);
+            formatted = compacted.Text;
+            summaryInputCharsBefore = compacted.CharsBefore;
+            summaryInputCharsAfter = compacted.CharsAfter;
+            hygieneSavingsEstimate = compacted.EstimatedSavingsTokens;
+        }
+
+        if (formatted.Length > cfg.MaxConversationCharsForSummary)
+        {
+            formatted = ConversationSummaryFormatter.FitToMaxChars(formatted, cfg.MaxConversationCharsForSummary);
+            summaryInputCharsAfter = formatted.Length;
+        }
+
+        return new AgentModelRequest(
+            [new AgentModelMessage("user", BuildSummaryPrompt(cfg.SummaryPrompt, formatted, mustPreserve))],
+            Array.Empty<ToolDefinition>(),
+            AllowToolCalls: false,
+            MaxTokens: cfg.SummaryMaxTokens);
     }
 
     private static string BuildSummaryPrompt(string template, string formattedMessages, string? mustPreserveAppendix)

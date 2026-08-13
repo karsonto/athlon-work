@@ -1465,6 +1465,309 @@ public sealed class CompactionTests
         }
     }
 
+    [Fact]
+    public async Task PreCompletionPipeline_AfterPrune_SkipsCompactWhenUtilizationDrops()
+    {
+        var (settings, session, runtime) = CreatePruneBelowCompactThresholdFixture();
+        var compactor = new CountingConversationCompactor();
+        var pipeline = new PreCompletionPipeline(
+            compactor,
+            new TruncateArgsService(),
+            settings,
+            new NoOpLogger());
+
+        var result = await pipeline.RunAsync(session, PreCompletionOptions.AgentLoop, runtime);
+
+        Assert.Equal(0, compactor.CallCount);
+        Assert.Contains(
+            result.Messages,
+            message => message.ToolCallsJson?.Contains("truncated", StringComparison.OrdinalIgnoreCase) == true);
+        var after = ContextBudgetCalculator.RecomputeHistory(runtime.Budget, result.Messages, settings.ContextCompaction);
+        Assert.True(after.TotalUtilization < settings.ContextCompaction.DynamicCompaction.TargetUtilization);
+    }
+
+    [Fact]
+    public async Task PreCompletionPipeline_AfterPrune_SkipsCompactOnOverflowWhenUtilizationDrops()
+    {
+        var (settings, session, runtime) = CreatePruneBelowCompactThresholdFixture(ContextPressureLevel.Overflow);
+        var compactor = new CountingConversationCompactor();
+        var pipeline = new PreCompletionPipeline(
+            compactor,
+            new TruncateArgsService(),
+            settings,
+            new NoOpLogger());
+
+        var result = await pipeline.RunAsync(session, PreCompletionOptions.ForceCompact, runtime);
+
+        Assert.Equal(0, compactor.CallCount);
+        Assert.Contains(
+            result.Messages,
+            message => message.ToolCallsJson?.Contains("truncated", StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    [Fact]
+    public async Task PreCompletionPipeline_AfterPrune_ManualCompactStillRuns()
+    {
+        var (settings, session, runtime) = CreatePruneBelowCompactThresholdFixture();
+        var compactor = new CountingConversationCompactor();
+        var pipeline = new PreCompletionPipeline(
+            compactor,
+            new TruncateArgsService(),
+            settings,
+            new NoOpLogger());
+
+        await pipeline.RunAsync(session, PreCompletionOptions.ManualCompact, runtime);
+
+        Assert.Equal(1, compactor.CallCount);
+    }
+
+    [Fact]
+    public async Task ConversationCompactor_PrefixReplay_ReusesEnvironmentPromptAndTools()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var tools = new[]
+            {
+                new ToolDefinition("file_read", "Read files", ToolSchema.Object().String("path", "path", required: true).Build())
+            };
+            var settings = new AppSettings
+            {
+                ContextCompaction = new ContextCompactionSettings
+                {
+                    TriggerMessages = 2,
+                    KeepMessages = 1,
+                    SummaryMaxTokens = 512,
+                    MaxConversationCharsForSummary = 10_000,
+                    OffloadBeforeCompact = false
+                }
+            };
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+            var capturing = new CapturingModelClient("summary text");
+            var session = AgentSession.Create("prefix-replay")
+                .WithMessages(
+                [
+                    ChatMessage.Create(MessageRole.User, "implement Foo.cs"),
+                    ChatMessage.Create(MessageRole.Assistant, "done"),
+                    ChatMessage.Create(MessageRole.User, "continue"),
+                    ChatMessage.Create(MessageRole.Assistant, "ok")
+                ]);
+            const string environmentPrompt = "You are Athlon.";
+            var runtime = new CompactionRuntimeContext(
+                new ContextBudgetSnapshot(100_000, 1_000, 1_000, 90_000, 50_000, 0.5),
+                environmentPrompt,
+                tools);
+
+            var result = await new ConversationCompactor(
+                settings,
+                capturing,
+                storage,
+                new TruncateArgsService(),
+                new SessionUsageAccumulator(),
+                new NoOpLogger()).CompactIfNeededAsync(
+                session,
+                new CompactionExecutionRequest(
+                    CompactionKind.ConversationCompact,
+                    Force: true,
+                    EmitAudit: true,
+                    RuntimeContext: runtime));
+
+            Assert.True(result.Compacted);
+            Assert.NotNull(capturing.LastRequest);
+            var request = capturing.LastRequest!;
+            Assert.Equal("system", request.Messages[0].Role);
+            Assert.Equal(environmentPrompt, request.Messages[0].Content as string);
+            Assert.Equal("file_read", Assert.Single(request.Tools).Name);
+            Assert.False(request.AllowToolCalls);
+            var instruction = request.Messages[^1];
+            Assert.Equal("user", instruction.Role);
+            Assert.Contains(
+                ConversationCompactionDefaults.PrecedingMessagesPlaceholder,
+                instruction.Content as string,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("implement Foo.cs", instruction.Content as string, StringComparison.Ordinal);
+            Assert.Contains("implement Foo.cs", capturing.LastPrompt, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ConversationCompactor_SecondCompact_IncludesPriorSummaryInPrefixReplay()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var tools = new[]
+            {
+                new ToolDefinition("file_read", "Read files", ToolSchema.Object().Build())
+            };
+            var settings = new AppSettings
+            {
+                ContextCompaction = new ContextCompactionSettings
+                {
+                    TriggerMessages = 2,
+                    KeepMessages = 1,
+                    SummaryMaxTokens = 512,
+                    MaxConversationCharsForSummary = 10_000,
+                    OffloadBeforeCompact = false
+                }
+            };
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+            var capturing = new CapturingModelClient("first condensed summary about Foo.cs");
+            var session = AgentSession.Create("second-compact-replay")
+                .WithMessages(
+                [
+                    ChatMessage.Create(MessageRole.User, "implement Foo.cs"),
+                    ChatMessage.Create(MessageRole.Assistant, "done"),
+                    ChatMessage.Create(MessageRole.User, "continue"),
+                    ChatMessage.Create(MessageRole.Assistant, "ok")
+                ]);
+            var runtime = new CompactionRuntimeContext(
+                new ContextBudgetSnapshot(100_000, 1_000, 1_000, 90_000, 50_000, 0.5),
+                "You are Athlon.",
+                tools);
+
+            var first = await new ConversationCompactor(
+                settings,
+                capturing,
+                storage,
+                new TruncateArgsService(),
+                new SessionUsageAccumulator(),
+                new NoOpLogger()).CompactIfNeededAsync(
+                session,
+                new CompactionExecutionRequest(
+                    CompactionKind.ConversationCompact,
+                    Force: true,
+                    EmitAudit: true,
+                    Strategy: CompactionStrategy.ManualCompact,
+                    RuntimeContext: runtime));
+
+            Assert.True(first.Compacted);
+            var grown = first.Session.WithMessages(
+                first.Session.Messages
+                    .Concat(
+                    [
+                        ChatMessage.Create(MessageRole.User, "more work"),
+                        ChatMessage.Create(MessageRole.Assistant, "working"),
+                        ChatMessage.Create(MessageRole.User, "even more"),
+                        ChatMessage.Create(MessageRole.Assistant, "still working")
+                    ])
+                    .ToList());
+
+            capturing.Content = "second summary";
+            capturing.ClearCaptured();
+
+            var second = await new ConversationCompactor(
+                settings,
+                capturing,
+                storage,
+                new TruncateArgsService(),
+                new SessionUsageAccumulator(),
+                new NoOpLogger()).CompactIfNeededAsync(
+                grown,
+                new CompactionExecutionRequest(
+                    CompactionKind.ConversationCompact,
+                    Force: true,
+                    EmitAudit: true,
+                    Strategy: CompactionStrategy.ManualCompact,
+                    RuntimeContext: runtime));
+
+            Assert.True(second.Compacted);
+            Assert.NotNull(capturing.LastPrompt);
+            Assert.Contains("first condensed summary about Foo.cs", capturing.LastPrompt, StringComparison.Ordinal);
+            Assert.Contains(
+                ConversationCompactionDefaults.SummaryMessageMarker,
+                capturing.LastPrompt,
+                StringComparison.Ordinal);
+            Assert.Equal("system", capturing.LastRequest!.Messages[0].Role);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    private static (AppSettings Settings, AgentSession Session, CompactionRuntimeContext Runtime) CreatePruneBelowCompactThresholdFixture(
+        ContextPressureLevel pressureOverride = ContextPressureLevel.Normal)
+    {
+        var compaction = CreateDynamicCompactionSettings(s =>
+        {
+            s.Enabled = true;
+            s.ContextWindowTokens = 12_000;
+            s.KeepMessages = 1;
+            s.TriggerMessages = 1_000;
+            s.TriggerTokens = 1_000_000;
+        });
+        var settings = new AppSettings
+        {
+            ContextCompaction = compaction,
+            Model = new ModelSettings { MaxTokens = 1_000 }
+        };
+        var toolCall = new AgentToolCall(
+            "c1",
+            "file_write",
+            new Dictionary<string, string> { ["content"] = new string('x', 50_000) });
+        var recentCall = new AgentToolCall(
+            "c2",
+            "file_write",
+            new Dictionary<string, string> { ["content"] = "ok" });
+        var session = AgentSession.Create("prune-skip").WithMessages(
+        [
+            ChatMessage.Create(MessageRole.User, "write a file"),
+            ChatMessage.Create(MessageRole.Assistant, "ok", toolCalls: [toolCall]),
+            ChatMessage.Create(MessageRole.Tool, "ToolCallId: c1\nok"),
+            ChatMessage.Create(MessageRole.User, "write a small file " + new string('y', 12_000)),
+            ChatMessage.Create(MessageRole.Assistant, "ok", toolCalls: [recentCall]),
+            ChatMessage.Create(MessageRole.Tool, "ToolCallId: c2\nok"),
+            ChatMessage.Create(MessageRole.User, "thanks")
+        ]);
+        var budget = ContextBudgetCalculator.Compute(
+            "system",
+            [],
+            session.Messages,
+            compaction,
+            settings.Model);
+        Assert.True(budget.TotalUtilization >= compaction.DynamicCompaction.TargetUtilization);
+
+        return (
+            settings,
+            session,
+            new CompactionRuntimeContext(
+                budget,
+                "system",
+                Array.Empty<ToolDefinition>(),
+                PressureOverride: pressureOverride));
+    }
+
+    private sealed class CountingConversationCompactor : IConversationCompactor
+    {
+        public int CallCount { get; private set; }
+
+        public Task<ConversationCompactResult> CompactIfNeededAsync(
+            AgentSession session,
+            CompactionExecutionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            return Task.FromResult(new ConversationCompactResult(session, false));
+        }
+    }
+
     private sealed class FakeConversationCompactor(AppSettings settings) : IConversationCompactor
     {
         public int CallCount { get; private set; }
@@ -1525,9 +1828,15 @@ public sealed class CompactionTests
     {
         public string Content { get; set; } = content;
 
+        public AgentModelRequest? LastRequest { get; private set; }
+
         public string? LastPrompt { get; private set; }
 
-        public void ClearCaptured() => LastPrompt = null;
+        public void ClearCaptured()
+        {
+            LastPrompt = null;
+            LastRequest = null;
+        }
 
         public Task<AgentModelResponse> CompleteAsync(
             AgentModelRequest request,
@@ -1536,8 +1845,10 @@ public sealed class CompactionTests
             Func<StreamingToolCallDelta, Task>? onToolCallDelta = null,
             CancellationToken cancellationToken = default)
         {
-            LastPrompt = request.Messages.FirstOrDefault()?.Content as string
-                ?? request.Messages.FirstOrDefault()?.Content?.ToString();
+            LastRequest = request;
+            LastPrompt = string.Join(
+                "\n",
+                request.Messages.Select(message => message.Content as string ?? message.Content?.ToString() ?? string.Empty));
             return Task.FromResult(new AgentModelResponse(Content, Array.Empty<AgentToolCall>()));
         }
     }

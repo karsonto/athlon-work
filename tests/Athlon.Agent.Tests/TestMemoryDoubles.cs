@@ -5,6 +5,6 @@ namespace Athlon.Agent.Tests;
 
 internal sealed class NoOpPostTurnMemoryProcessor : IPostTurnMemoryProcessor
 {
-    public Task ProcessAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default) =>
+    public Task ProcessAsync(MemoryTurnContext context, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
 }

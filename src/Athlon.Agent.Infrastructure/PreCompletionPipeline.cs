@@ -138,18 +138,33 @@ public sealed class PreCompletionPipeline(
             }
         }
 
-        if (!plan.ApplyConversationCompact && !isManualCompact)
+        pressure = ContextPressureEvaluator.Evaluate(budget, cfg.DynamicCompaction, forceOverflow: false);
+        var stillNeedsCompact = isManualCompact
+            || ContextPressureEvaluator.ShouldCompact(
+                budget,
+                conversation,
+                cfg,
+                pressure,
+                force: false);
+
+        if (!stillNeedsCompact)
         {
+            if (plan.ApplyConversationCompact)
+            {
+                _logger.Information(
+                    "Skipped conversation compact for session {SessionId} after prune (utilization {Utilization:P0})",
+                    session.Id,
+                    budget.TotalUtilization);
+            }
+
             return session;
         }
 
-        if (isManualCompact)
+        plan = plan with
         {
-            plan = plan with { ApplyConversationCompact = true };
-        }
-
-        pressure = ContextPressureEvaluator.Evaluate(budget, cfg.DynamicCompaction, runtimeContext.ForceOverflow);
-        plan = plan with { Pressure = pressure };
+            Pressure = pressure,
+            ApplyConversationCompact = true
+        };
 
         var compactResult = await conversationCompactor.CompactIfNeededAsync(
             session,
