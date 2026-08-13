@@ -1418,15 +1418,30 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private void WireSessionUsageUi(SessionTurnUiController ui)
     {
-        ui.OnUsageRecorded = snapshot => SessionUsageLine = SessionUsageFormatter.Format(snapshot);
-        ui.OnContextBudgetUpdated = (budget, pressure) => ContextOccupancy.Apply(budget, pressure);
+        ui.OnUsageRecorded = snapshot =>
+            RunOnUi(() => SessionUsageLine = SessionUsageFormatter.Format(snapshot));
+        ui.OnContextBudgetUpdated = (budget, pressure) =>
+            RunOnUi(() => ContextOccupancy.Apply(budget, pressure));
         ui.OnOverflowRetrySkipped = () =>
-        {
-            ContextOccupancy.ApplyOverflow();
-            Settings.SettingsStatus = _loc["Chat_OverflowRetrySkipped"];
-        };
+            RunOnUi(() =>
+            {
+                ContextOccupancy.ApplyOverflow();
+                Settings.SettingsStatus = _loc["Chat_OverflowRetrySkipped"];
+            });
         SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
         RefreshContextOccupancy();
+    }
+
+    private static void RunOnUi(Action action)
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            action();
+            return;
+        }
+
+        _ = dispatcher.InvokeAsync(action);
     }
 
     private void RefreshContextOccupancy()

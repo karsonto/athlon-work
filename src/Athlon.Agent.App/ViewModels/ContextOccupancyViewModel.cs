@@ -26,7 +26,7 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
     private string usedCapacityLabel = string.Empty;
 
     [ObservableProperty]
-    private DoubleCollection ringDashArray = new() { 0, RingCircumference };
+    private DoubleCollection ringDashArray = FrozenDash(0);
 
     [ObservableProperty]
     private ContextPressureLevel pressure = ContextPressureLevel.Normal;
@@ -85,7 +85,7 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
             TokenCountDisplay.FormatCompact(budget.EstimatedTotalPrompt),
             TokenCountDisplay.FormatCompact(budget.UsablePromptWindow));
         var dash = Math.Clamp(budget.TotalUtilization, 0, 1) * RingCircumference;
-        RingDashArray = new DoubleCollection { dash, RingCircumference };
+        RingDashArray = FrozenDash(dash);
 
         var total = Math.Max(1, budget.EstimatedTotalPrompt);
         HistoryShare = (double)budget.EstimatedHistory / total;
@@ -109,7 +109,14 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
         {
             PercentUsed = Math.Max(PercentUsed, 100);
             PercentLabel = Strings.Format("Chat_ContextMeterPercent", PercentUsed);
-            RingDashArray = new DoubleCollection { RingCircumference, RingCircumference };
+            RingDashArray = FrozenDash(RingCircumference);
         }
+    }
+
+    private static DoubleCollection FrozenDash(double dash)
+    {
+        var collection = new DoubleCollection { dash, RingCircumference };
+        collection.Freeze();
+        return collection;
     }
 }
