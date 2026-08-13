@@ -38,7 +38,10 @@ public static class ContextBudgetCalculator
             fixedOverhead,
             historyBudget,
             estimatedHistory,
-            historyUtilization);
+            historyUtilization,
+            systemTokens,
+            toolsTokens,
+            margin);
     }
 
     public static ContextBudgetSnapshot RecomputeHistory(

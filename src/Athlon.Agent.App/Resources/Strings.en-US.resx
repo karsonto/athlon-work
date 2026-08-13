@@ -88,6 +88,45 @@
   <data name="Chat_CompactionRunning" xml:space="preserve">
     <value>Compacting context…</value>
   </data>
+  <data name="Chat_CompactionCollapsedTitle" xml:space="preserve">
+    <value>Compacted</value>
+  </data>
+  <data name="Chat_CompactionCollapsedTitleWithTokens" xml:space="preserve">
+    <value>Compacted · ~{0} tokens</value>
+  </data>
+  <data name="Chat_CompactionForceTitle" xml:space="preserve">
+    <value>Context full — compacted and continued</value>
+  </data>
+  <data name="Chat_CompactionForceTitleWithTokens" xml:space="preserve">
+    <value>Context full — compacted and continued · ~{0}</value>
+  </data>
+  <data name="Chat_CompactionDetails" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="Chat_ContextMeterTooltip" xml:space="preserve">
+    <value>Context occupancy</value>
+  </data>
+  <data name="Chat_ContextMeterPercent" xml:space="preserve">
+    <value>{0}% used</value>
+  </data>
+  <data name="Chat_ContextMeterCapacity" xml:space="preserve">
+    <value>~{0} / {1}</value>
+  </data>
+  <data name="Chat_ContextMeterMessages" xml:space="preserve">
+    <value>messages  ~{0}</value>
+  </data>
+  <data name="Chat_ContextMeterSystem" xml:space="preserve">
+    <value>system  ~{0}</value>
+  </data>
+  <data name="Chat_ContextMeterTools" xml:space="preserve">
+    <value>tools  ~{0}</value>
+  </data>
+  <data name="Chat_ContextMeterMargin" xml:space="preserve">
+    <value>margin  ~{0}</value>
+  </data>
+  <data name="Chat_OverflowRetrySkipped" xml:space="preserve">
+    <value>Context is full and compaction did not shrink the request, so the retry was skipped.</value>
+  </data>
   <data name="Chat_ComposerHint" xml:space="preserve">
     <value>Press Enter to send, Shift+Enter for a new line</value>
   </data>

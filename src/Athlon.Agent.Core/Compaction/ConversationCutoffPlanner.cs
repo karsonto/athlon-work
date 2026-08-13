@@ -103,16 +103,21 @@ public static class ConversationCutoffPlanner
         bool includeReasoningInModelContext = false,
         int maxToolScreenshots = int.MaxValue)
     {
+        int cutoff;
         if (settings.KeepTokens > 0)
         {
-            return DetermineTruncateArgsCutoffFromKeepBudget(
+            cutoff = DetermineTruncateArgsCutoffFromKeepBudget(
                 messages,
                 settings.KeepTokens,
                 includeReasoningInModelContext,
                 maxToolScreenshots);
         }
+        else
+        {
+            cutoff = Math.Max(0, messages.Count - settings.KeepMessages);
+        }
 
-        return Math.Max(0, messages.Count - settings.KeepMessages);
+        return FindSafeCutoffPoint(messages, cutoff);
     }
 
     public static int DetermineTruncateArgsCutoffFromKeepBudget(
@@ -128,6 +133,7 @@ public static class ConversationCutoffPlanner
 
         var remainingToolScreenshots = Math.Max(0, maxToolScreenshots);
         var tokensKept = 0;
+        var rawCutoff = 0;
         for (var index = messages.Count - 1; index >= 0; index--)
         {
             var messageTokens = ContextTokenEstimator.EstimateMessage(
@@ -136,65 +142,96 @@ public static class ConversationCutoffPlanner
                 ref remainingToolScreenshots);
             if (tokensKept + messageTokens > keepTokenBudget)
             {
-                return index + 1;
+                rawCutoff = index + 1;
+                break;
             }
 
             tokensKept += messageTokens;
         }
 
-        return 0;
+        return FindSafeCutoffPoint(messages, rawCutoff);
     }
 
+    /// <summary>
+    /// True when every assistant tool_call in <c>[0, index)</c> has a matching tool result
+    /// in that same prefix (open-set empty). Aligns with DSH <c>toolPairingBalancedBefore</c>.
+    /// </summary>
+    public static bool IsPairingBalancedBefore(IReadOnlyList<ChatMessage> messages, int index)
+    {
+        if (index <= 0)
+        {
+            return true;
+        }
+
+        var open = new HashSet<string>(StringComparer.Ordinal);
+        var limit = Math.Min(index, messages.Count);
+        for (var i = 0; i < limit; i++)
+        {
+            ApplyPairing(messages[i], open);
+        }
+
+        return open.Count == 0;
+    }
+
+    /// <summary>
+    /// Walks <paramref name="cutoffIndex"/> back until the kept tail starts on a pairing-balanced
+    /// boundary. Returns 0 when no earlier split is safe (caller should skip compact).
+    /// </summary>
     public static int FindSafeCutoffPoint(IReadOnlyList<ChatMessage> messages, int cutoffIndex)
     {
-        if (cutoffIndex <= 0 || cutoffIndex >= messages.Count)
+        if (cutoffIndex <= 0)
+        {
+            return 0;
+        }
+
+        if (cutoffIndex >= messages.Count)
         {
             return cutoffIndex;
         }
 
-        if (messages[cutoffIndex].Role != MessageRole.Tool)
+        var open = new HashSet<string>(StringComparer.Ordinal);
+        var lastBalanced = 0;
+        for (var i = 0; i < cutoffIndex; i++)
         {
-            return cutoffIndex;
-        }
-
-        var toolCallIds = new List<string>();
-        var scanIndex = cutoffIndex;
-        while (scanIndex < messages.Count && messages[scanIndex].Role == MessageRole.Tool)
-        {
-            var toolCallId = ModelMessageBuilder.ExtractToolCallId(messages[scanIndex].Content);
-            if (!string.IsNullOrWhiteSpace(toolCallId))
+            ApplyPairing(messages[i], open);
+            if (open.Count == 0)
             {
-                toolCallIds.Add(toolCallId);
-            }
-
-            scanIndex++;
-        }
-
-        if (toolCallIds.Count == 0)
-        {
-            return scanIndex;
-        }
-
-        for (var i = cutoffIndex - 1; i >= 0; i--)
-        {
-            if (messages[i].Role != MessageRole.Assistant)
-            {
-                continue;
-            }
-
-            var calls = AssistantToolCallsCodec.Deserialize(messages[i].ToolCallsJson);
-            if (calls is not { Count: > 0 })
-            {
-                continue;
-            }
-
-            if (calls.Any(call => toolCallIds.Contains(call.Id, StringComparer.Ordinal)))
-            {
-                return i;
+                lastBalanced = i + 1;
             }
         }
 
-        return scanIndex;
+        return open.Count == 0 ? cutoffIndex : lastBalanced;
+    }
+
+    private static void ApplyPairing(ChatMessage message, HashSet<string> open)
+    {
+        if (message.Role == MessageRole.Assistant)
+        {
+            var calls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
+            if (calls is { Count: > 0 })
+            {
+                foreach (var call in calls)
+                {
+                    if (!string.IsNullOrWhiteSpace(call.Id))
+                    {
+                        open.Add(call.Id);
+                    }
+                }
+            }
+
+            return;
+        }
+
+        if (message.Role != MessageRole.Tool)
+        {
+            return;
+        }
+
+        var toolCallId = ModelMessageBuilder.ExtractToolCallId(message.Content);
+        if (!string.IsNullOrWhiteSpace(toolCallId))
+        {
+            open.Remove(toolCallId);
+        }
     }
 
     private static int FindMessageBasedCutoff(IReadOnlyList<ChatMessage> messages, int keepMessages)

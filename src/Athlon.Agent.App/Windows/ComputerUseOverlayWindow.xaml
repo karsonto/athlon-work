@@ -1,6 +1,7 @@
 <Window x:Class="Athlon.Agent.App.Windows.ComputerUseOverlayWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
         xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
         Title="{loc:Localize Key=ComputerUse_MenuStart}"
         WindowStyle="None"
@@ -100,6 +101,8 @@
                                 Orientation="Horizontal"
                                 VerticalAlignment="Center"
                                 Margin="8,0,0,0">
+                        <controls:ComposerContextMeterControl DataContext="{Binding ContextOccupancy}"
+                                                              VerticalAlignment="Center" />
                         <Button Command="{Binding StopCommand}"
                                 ToolTip="{loc:Localize Key=Chat_PauseReplyTooltip}">
                             <Button.Style>

@@ -39,24 +39,29 @@ public sealed class CompactionTurnMiddleware(
     {
         CompactionRuntimeContext? runtimeContext = null;
         var compaction = settings.ContextCompaction;
+        var multiplier = tokenEstimatorCalibrator.GetMultiplier(invocation.Session.Id);
+        var budget = ContextBudgetCalculator.Compute(
+            environmentPrompt,
+            tools,
+            invocation.Session.Messages,
+            settings.ContextCompaction,
+            settings.Model,
+            multiplier,
+            invocation.RuntimeContext);
+        var rawHistoryEstimate = Math.Abs(multiplier - 1.0) < 0.001
+            ? budget.EstimatedHistory
+            : ContextBudgetCalculator.EstimateRawHistory(
+                invocation.Session.Messages,
+                settings.ContextCompaction);
+        budget = ApplyPromptPressure(budget, invocation.Session.Id);
+        var pressure = ContextPressureEvaluator.Evaluate(
+            budget,
+            compaction.DynamicCompaction,
+            forceOverflow: pressureOverride == ContextPressureLevel.Overflow);
+        await PublishBudgetAsync(invocation, budget, pressure).ConfigureAwait(false);
+
         if (compaction.Enabled || options.ForceConversationCompact)
         {
-            var multiplier = tokenEstimatorCalibrator.GetMultiplier(invocation.Session.Id);
-            var budget = ContextBudgetCalculator.Compute(
-                environmentPrompt,
-                tools,
-                invocation.Session.Messages,
-                settings.ContextCompaction,
-                settings.Model,
-                multiplier,
-                invocation.RuntimeContext);
-            // Capture raw (uncalibrated) history before prompt-pressure may raise EstimatedHistory.
-            var rawHistoryEstimate = Math.Abs(multiplier - 1.0) < 0.001
-                ? budget.EstimatedHistory
-                : ContextBudgetCalculator.EstimateRawHistory(
-                    invocation.Session.Messages,
-                    settings.ContextCompaction);
-            budget = ApplyPromptPressure(budget, invocation.Session.Id);
             runtimeContext = new CompactionRuntimeContext(
                 budget,
                 environmentPrompt,
@@ -75,8 +80,33 @@ public sealed class CompactionTurnMiddleware(
             options,
             runtimeContext,
             cancellationToken).ConfigureAwait(false);
-        return await PersistCompactionAuditsAsync(invocation, messageIdsBefore, cancellationToken).ConfigureAwait(false);
+        invocation.Session = await PersistCompactionAuditsAsync(invocation, messageIdsBefore, cancellationToken)
+            .ConfigureAwait(false);
+
+        var afterBudget = ContextBudgetCalculator.Compute(
+            environmentPrompt,
+            tools,
+            invocation.Session.Messages,
+            settings.ContextCompaction,
+            settings.Model,
+            multiplier,
+            invocation.RuntimeContext);
+        afterBudget = ApplyPromptPressure(afterBudget, invocation.Session.Id);
+        var afterPressure = ContextPressureEvaluator.Evaluate(
+            afterBudget,
+            compaction.DynamicCompaction,
+            forceOverflow: pressureOverride == ContextPressureLevel.Overflow);
+        await PublishBudgetAsync(invocation, afterBudget, afterPressure).ConfigureAwait(false);
+        return invocation.Session;
     }
+
+    private static Task PublishBudgetAsync(
+        AgentTurnInvocation invocation,
+        ContextBudgetSnapshot budget,
+        ContextPressureLevel pressure) =>
+        AgentRuntime.PublishStreamEventsAsync(
+            invocation.Callbacks,
+            [new AgentStreamEvent.ContextBudgetUpdated(budget, pressure)]);
 
     private ContextBudgetSnapshot ApplyPromptPressure(ContextBudgetSnapshot budget, string sessionId)
     {

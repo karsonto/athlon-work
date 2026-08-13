@@ -120,7 +120,7 @@ public sealed class CompactionTests
                 MessageRole.Assistant,
                 $"step-{i}",
                 toolCalls: new[] { new AgentToolCall($"c{i}", "file_read", new Dictionary<string, string>()) }));
-            messages.Add(ChatMessage.Create(MessageRole.Tool, $"output-{i}"));
+            messages.Add(ChatMessage.Create(MessageRole.Tool, $"ToolCallId: c{i}\noutput-{i}"));
         }
 
         var settings = new ContextCompactionSettings { TriggerMessages = 5, KeepMessages = 2 };
@@ -167,6 +167,92 @@ public sealed class CompactionTests
 
         var cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(messages, 1);
         Assert.Equal(0, cutoff);
+        Assert.False(ConversationCutoffPlanner.IsPairingBalancedBefore(messages, 1));
+        Assert.True(ConversationCutoffPlanner.IsPairingBalancedBefore(messages, 0));
+        Assert.True(ConversationCutoffPlanner.IsPairingBalancedBefore(messages, 2));
+    }
+
+    [Fact]
+    public void ConversationCutoffPlanner_FindSafeCutoff_KeepsAssistantWithToolCallsInTail()
+    {
+        var prior = ChatMessage.Create(MessageRole.User, "old");
+        var assistant = ChatMessage.Create(
+            MessageRole.Assistant,
+            string.Empty,
+            toolCalls: new[] { new AgentToolCall("call-1", "file_read", new Dictionary<string, string>()) });
+        var tool = ChatMessage.Create(MessageRole.Tool, "ToolCallId: call-1\noutput");
+        var messages = new[] { prior, assistant, tool };
+
+        var cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(messages, 1);
+        Assert.Equal(1, cutoff);
+        var tail = messages.Skip(cutoff).ToArray();
+        Assert.Equal(MessageRole.Assistant, tail[0].Role);
+        Assert.Contains(tail, message => message.Role == MessageRole.Tool);
+    }
+
+    [Fact]
+    public void ConversationCutoffPlanner_FindSafeCutoff_DoesNotSplitParallelToolBatch()
+    {
+        var prior = ChatMessage.Create(MessageRole.User, "old");
+        var assistant = ChatMessage.Create(
+            MessageRole.Assistant,
+            string.Empty,
+            toolCalls:
+            [
+                new AgentToolCall("c1", "file_read", new Dictionary<string, string>()),
+                new AgentToolCall("c2", "file_read", new Dictionary<string, string>()),
+                new AgentToolCall("c3", "grep_files", new Dictionary<string, string>())
+            ]);
+        var tool1 = ChatMessage.Create(MessageRole.Tool, "ToolCallId: c1\na");
+        var tool2 = ChatMessage.Create(MessageRole.Tool, "ToolCallId: c2\nb");
+        var tool3 = ChatMessage.Create(MessageRole.Tool, "ToolCallId: c3\nc");
+        var messages = new[] { prior, assistant, tool1, tool2, tool3 };
+
+        Assert.False(ConversationCutoffPlanner.IsPairingBalancedBefore(messages, 3));
+        Assert.True(ConversationCutoffPlanner.IsPairingBalancedBefore(messages, 5));
+        var cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(messages, 3);
+        Assert.Equal(1, cutoff);
+        var tail = messages.Skip(cutoff).ToArray();
+        Assert.Equal(4, tail.Length);
+        Assert.Equal(MessageRole.Assistant, tail[0].Role);
+        Assert.Equal(3, tail.Count(message => message.Role == MessageRole.Tool));
+    }
+
+    [Fact]
+    public void TruncateArgsCutoff_DoesNotTruncateKeptToolBatch()
+    {
+        var longArg = new string('x', 80);
+        var first = ChatMessage.Create(
+            MessageRole.Assistant,
+            string.Empty,
+            toolCalls: [new AgentToolCall("a", "file_read", new Dictionary<string, string> { ["path"] = longArg })]);
+        var firstResult = ChatMessage.Create(MessageRole.Tool, "ToolCallId: a\nok");
+        var second = ChatMessage.Create(
+            MessageRole.Assistant,
+            string.Empty,
+            toolCalls: [new AgentToolCall("b", "file_read", new Dictionary<string, string> { ["path"] = longArg })]);
+        var secondResult = ChatMessage.Create(MessageRole.Tool, "ToolCallId: b\nok");
+        var messages = new[] { first, firstResult, second, secondResult };
+
+        var settings = new ContextCompactionSettings
+        {
+            TruncateArgs = new TruncateArgsSettings
+            {
+                Enabled = true,
+                MaxArgLength = 8,
+                TruncationText = "...(truncated)",
+                TriggerMessages = 1,
+                KeepMessages = 1
+            }
+        };
+
+        var updated = new TruncateArgsService().ApplyToMessages(messages, settings, out var changed);
+
+        Assert.True(changed);
+        var firstCalls = AssistantToolCallsCodec.Deserialize(updated[0].ToolCallsJson);
+        var secondCalls = AssistantToolCallsCodec.Deserialize(updated[2].ToolCallsJson);
+        Assert.Contains("...(truncated)", firstCalls![0].Arguments.GetString("path"));
+        Assert.Equal(longArg, secondCalls![0].Arguments.GetString("path"));
     }
 
     [Fact]
@@ -668,6 +754,8 @@ public sealed class CompactionTests
             model);
 
         Assert.True(budget.FixedOverhead > 0);
+        Assert.Equal(budget.SystemTokens + budget.ToolsTokens + budget.MarginTokens, budget.FixedOverhead);
+        Assert.Equal(budget.FixedOverhead + budget.EstimatedHistory, budget.EstimatedTotalPrompt);
         Assert.True(budget.HistoryBudget < budget.TotalWindow - budget.ReservedOutput);
         Assert.True(budget.HistoryUtilization > 0);
     }

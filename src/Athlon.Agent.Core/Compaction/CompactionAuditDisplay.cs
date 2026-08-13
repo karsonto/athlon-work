@@ -4,7 +4,11 @@ public sealed record CompactionAuditDisplayInfo(
     string CardTitle,
     string StrategySubtitle,
     string Summary,
-    string Detail);
+    string Detail,
+    CompactionStrategy Strategy,
+    int? TokensBefore = null,
+    int? TokensAfter = null,
+    int? OriginalMessageCount = null);
 
 public static class CompactionAuditDisplay
 {
@@ -20,6 +24,9 @@ public static class CompactionAuditDisplay
         var summaryInputAfterToken = string.Empty;
         var hygieneSavingsToken = string.Empty;
         var summary = string.Empty;
+        int? tokensBefore = null;
+        int? tokensAfter = null;
+        int? originalMessageCount = null;
 
         foreach (var line in lines)
         {
@@ -71,6 +78,24 @@ public static class CompactionAuditDisplay
                 continue;
             }
 
+            if (line.StartsWith("TokensBefore:", StringComparison.OrdinalIgnoreCase))
+            {
+                tokensBefore = TryParseInt(line["TokensBefore:".Length..]);
+                continue;
+            }
+
+            if (line.StartsWith("TokensAfter:", StringComparison.OrdinalIgnoreCase))
+            {
+                tokensAfter = TryParseInt(line["TokensAfter:".Length..]);
+                continue;
+            }
+
+            if (line.StartsWith("OriginalMessageCount:", StringComparison.OrdinalIgnoreCase))
+            {
+                originalMessageCount = TryParseInt(line["OriginalMessageCount:".Length..]);
+                continue;
+            }
+
             if (line.StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
             {
                 summary = line["Summary:".Length..].Trim();
@@ -93,7 +118,11 @@ public static class CompactionAuditDisplay
             cardTitle,
             subtitle,
             summary,
-            content.Trim());
+            content.Trim(),
+            strategy,
+            tokensBefore,
+            tokensAfter,
+            originalMessageCount);
     }
 
     public static string FormatStrategy(CompactionStrategy strategy) =>
@@ -217,4 +246,7 @@ public static class CompactionAuditDisplay
             CompactionLayer.ToolResultEviction => "① 工具结果归档",
             _ => "③ LLM 对话摘要",
         };
+
+    private static int? TryParseInt(string text) =>
+        int.TryParse(text.Trim(), out var value) ? value : null;
 }

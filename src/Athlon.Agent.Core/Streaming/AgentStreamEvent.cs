@@ -1,3 +1,5 @@
+using Athlon.Agent.Core.Compaction;
+
 namespace Athlon.Agent.Core.Streaming;
 
 /// <summary>AG-UI-aligned stream events emitted by <see cref="AgentStreamAdapter"/>.</summary>
@@ -38,4 +40,10 @@ public abstract record AgentStreamEvent
     public sealed record UsageRecorded(SessionUsageSnapshot Snapshot) : AgentStreamEvent;
 
     public sealed record ContextHygieneApplied(int EstimatedSavingsTokens) : AgentStreamEvent;
+
+    public sealed record ContextBudgetUpdated(
+        ContextBudgetSnapshot Budget,
+        ContextPressureLevel Pressure) : AgentStreamEvent;
+
+    public sealed record OverflowRetrySkipped(int FailedTokens, int RetryTokens, string Reason) : AgentStreamEvent;
 }

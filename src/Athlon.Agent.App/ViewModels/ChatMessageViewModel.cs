@@ -72,8 +72,8 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         else if (IsCompaction)
         {
             var display = CompactionAuditDisplay.Parse(message.Content);
-            ToolCallId = null;
-            CompactionCardTitle = display.CardTitle;
+            ToolCallId = message.Id;
+            CompactionCardTitle = CompactionCheckpointCopy.FormatTitle(display, running: false);
             ToolHeader = display.StrategySubtitle;
             ToolSummary = AppendCompactionDisplayNotice(display.Summary);
             AssignToolDetail(display.Detail);
@@ -104,7 +104,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsCompaction = true;
         IsHiddenPlaceholder = false;
         DisplayRole = Strings.Get("Chat_RoleContext");
-        CompactionCardTitle = CompactionAuditDisplay.GetCardTitle(CompactionStrategy.ManualCompact);
+        CompactionCardTitle = Strings.Get("Chat_CompactionRunning");
         ToolHeader = Strings.Get("Chat_CompactionManualLayersSubtitle");
         ToolSummary = Strings.Get("Chat_CompactionRunning");
         ToolDetail = string.Empty;
@@ -185,7 +185,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public bool IsCollapsibleCard => IsTool || IsCompaction || _isFoldedHistoryPlaceholder;
     public bool IsHiddenPlaceholder { get; }
     public bool AssistantTone => !IsUser;
-    public string CompactionCardTitle { get; } = string.Empty;
+    public string CompactionCardTitle { get; private set; } = string.Empty;
     public string CardTitle => IsCompaction
         ? (string.IsNullOrWhiteSpace(CompactionCardTitle) ? Strings.Get("Chat_CompactionDefault") : CompactionCardTitle)
         : Strings.Get("Chat_ToolCallTitle");
@@ -616,6 +616,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         }
 
         var display = CompactionAuditDisplay.Parse(auditMessage.Content);
+        CompactionCardTitle = CompactionCheckpointCopy.FormatTitle(display, running: false);
         ToolHeader = display.StrategySubtitle;
         ToolSummary = AppendCompactionDisplayNotice(display.Summary);
         AssignToolDetail(display.Detail);

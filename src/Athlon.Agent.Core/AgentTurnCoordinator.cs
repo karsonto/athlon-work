@@ -49,7 +49,8 @@ internal sealed class AgentTurnCoordinator(
         }
         catch (HttpRequestException ex) when (AgentRuntime.IsContextLengthError(ex))
         {
-            _logger.Warning("Context length exceeded for session {SessionId}; forcing compact and retrying once", session.Id);
+            var failedTokens = RequestHistoryHygiene.EstimatePayloadTokens(modelMessages);
+            _logger.Warning("Context length exceeded for session {SessionId}; forcing compact before retry", session.Id);
             _eventManager.Record(
                 BehaviorEventIds.Context,
                 BehaviorEventTypes.Event,
@@ -57,7 +58,8 @@ internal sealed class AgentTurnCoordinator(
                 new Dictionary<string, object?>
                 {
                     ["action"] = "overflow_retry",
-                    ["session_id"] = session.Id
+                    ["session_id"] = session.Id,
+                    ["failed_tokens"] = failedTokens
                 });
 
             session = await runPreCompletionPipelineAsync(
@@ -77,6 +79,44 @@ internal sealed class AgentTurnCoordinator(
                 session.Messages,
                 settings.ContextCompaction,
                 runtimeContext);
+            var retryTokens = RequestHistoryHygiene.EstimatePayloadTokens(retryResult.Messages);
+            if (retryTokens >= failedTokens)
+            {
+                _logger.Warning(
+                    "Overflow compact did not reduce payload for session {SessionId} (failed={FailedTokens}, retry={RetryTokens}); skipping retry",
+                    session.Id,
+                    failedTokens,
+                    retryTokens);
+                _eventManager.Record(
+                    BehaviorEventIds.Context,
+                    BehaviorEventTypes.Event,
+                    BehaviorEventIds.Context,
+                    new Dictionary<string, object?>
+                    {
+                        ["action"] = "overflow_retry_skipped",
+                        ["reason"] = "payload_not_reduced",
+                        ["session_id"] = session.Id,
+                        ["failed_tokens"] = failedTokens,
+                        ["retry_tokens"] = retryTokens
+                    });
+                var skipMultiplier = tokenEstimatorCalibrator.GetMultiplier(session.Id);
+                var skipBudget = ContextBudgetCalculator.Compute(
+                    environmentPrompt,
+                    tools,
+                    session.Messages,
+                    settings.ContextCompaction,
+                    settings.Model,
+                    skipMultiplier,
+                    runtimeContext);
+                await AgentRuntime.PublishStreamEventsAsync(
+                    callbacks,
+                    [
+                        new AgentStreamEvent.OverflowRetrySkipped(failedTokens, retryTokens, "payload_not_reduced"),
+                        new AgentStreamEvent.ContextBudgetUpdated(skipBudget, ContextPressureLevel.Overflow)
+                    ]).ConfigureAwait(false);
+                throw;
+            }
+
             var allowToolCalls = ScheduleTurnScope.Current?.AllowToolCalls ?? true;
             var request = new AgentModelRequest(retryResult.Messages, tools, AllowToolCalls: allowToolCalls);
             var response = await CompleteRecordedAsync(

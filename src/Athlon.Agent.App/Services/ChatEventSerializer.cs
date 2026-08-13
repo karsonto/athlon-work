@@ -40,6 +40,13 @@ internal static class ChatEventSerializer
                 status = ParseToolStatusFromContent(e.Content)
             }),
             AgentStreamEvent.ToolCallOutput e => SerializeAgui("TOOL_CALL_OUTPUT", new { toolCallId = e.ToolCallId, delta = e.Delta }),
+            AgentStreamEvent.OverflowRetrySkipped e => SerializeAgui("OVERFLOW_RETRY_SKIPPED", new
+            {
+                failedTokens = e.FailedTokens,
+                retryTokens = e.RetryTokens,
+                reason = e.Reason,
+                message = Strings.Get("Chat_OverflowRetrySkipped")
+            }),
             _ => "{}"
         };
 
@@ -186,8 +193,32 @@ internal static class ChatEventSerializer
             streaming
         });
 
+    public static string SerializeCompactionCheckpoint(ChatMessageViewModel message)
+    {
+        var id = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;
+
+        return SerializeAgui("COMPACTION_CHECKPOINT", new
+        {
+            id,
+            title = string.IsNullOrWhiteSpace(message.CompactionCardTitle)
+                ? Strings.Get("Chat_CompactionDefault")
+                : message.CompactionCardTitle,
+            summary = message.ToolSummary,
+            header = message.ToolHeader,
+            detail = message.IsToolRunning ? string.Empty : message.ToolDetail,
+            detailsLabel = Strings.Get("Chat_CompactionDetails"),
+            status = SerializeToolStatus(message.ToolCallStatus, message.ToolApprovalState),
+            running = message.IsToolRunning
+        });
+    }
+
     public static string SerializeToolResultMarkdown(ChatMessageViewModel message)
     {
+        if (message.IsCompaction)
+        {
+            return SerializeCompactionCheckpoint(message);
+        }
+
         var toolCallId = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;
         var detail = ResolveToolResultDetail(message);
         if (string.IsNullOrWhiteSpace(detail))
@@ -344,17 +375,23 @@ internal static class ChatEventSerializer
                 continue;
             }
 
-            if (message.IsTool || message.IsCompaction)
+            if (message.IsCompaction)
             {
-                if (TurnActivityClassifier.IsActivityTool(message.ToolName))
-                {
-                    segment.Add(message);
-                    continue;
-                }
+                events.Add(SerializeCompactionCheckpoint(message));
+                continue;
+            }
 
+            if (message.IsTool)
+            {
                 if (ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls, message))
                 {
                     events.AddRange(BuildReplayEventsForMessage(message));
+                    continue;
+                }
+
+                if (TurnActivityClassifier.IsActivityTool(message.ToolName))
+                {
+                    segment.Add(message);
                 }
 
                 continue;
@@ -394,7 +431,13 @@ internal static class ChatEventSerializer
             yield break;
         }
 
-        if (message.IsTool || message.IsCompaction)
+        if (message.IsCompaction)
+        {
+            yield return SerializeCompactionCheckpoint(message);
+            yield break;
+        }
+
+        if (message.IsTool)
         {
             foreach (var evt in BuildToolReplayEvents(message))
             {
@@ -421,9 +464,7 @@ internal static class ChatEventSerializer
     private static IEnumerable<string> BuildToolReplayEvents(ChatMessageViewModel message)
     {
         var toolCallId = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;
-        var toolName = message.IsCompaction
-            ? (string.IsNullOrWhiteSpace(message.CompactionCardTitle) ? Strings.Get("Chat_CompactionDefault") : message.CompactionCardTitle)
-            : string.IsNullOrWhiteSpace(message.ToolName) ? "tool" : message.ToolName;
+        var toolName = string.IsNullOrWhiteSpace(message.ToolName) ? "tool" : message.ToolName;
 
         yield return SerializeAgui("TOOL_CALL_START", new { toolCallId, toolCallName = toolName });
 

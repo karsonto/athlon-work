@@ -608,6 +608,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public ComposerHarnessViewModel ComposerHarness { get; }
 
+    public ContextOccupancyViewModel ContextOccupancy { get; } = new();
+
     public ChatPageViewModel ChatPage { get; }
 
     public string ComposerText
@@ -1125,6 +1127,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
 
             SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
+            RefreshContextOccupancy();
             Settings.SettingsStatus = _loc["Shell_CompactContextDone"];
             await RefreshSessionHistoryAsync().ConfigureAwait(true);
         }
@@ -1414,7 +1417,28 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private void WireSessionUsageUi(SessionTurnUiController ui)
     {
         ui.OnUsageRecorded = snapshot => SessionUsageLine = SessionUsageFormatter.Format(snapshot);
+        ui.OnContextBudgetUpdated = (budget, pressure) => ContextOccupancy.Apply(budget, pressure);
+        ui.OnOverflowRetrySkipped = () =>
+        {
+            ContextOccupancy.ApplyOverflow();
+            Settings.SettingsStatus = _loc["Chat_OverflowRetrySkipped"];
+        };
         SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
+        RefreshContextOccupancy();
+    }
+
+    private void RefreshContextOccupancy()
+    {
+        var budget = ContextBudgetCalculator.Compute(
+            string.Empty,
+            Array.Empty<ToolDefinition>(),
+            _session.Messages,
+            _appSettings.ContextCompaction,
+            _appSettings.Model);
+        var pressure = ContextPressureEvaluator.Evaluate(
+            budget,
+            _appSettings.ContextCompaction.DynamicCompaction);
+        ContextOccupancy.Apply(budget, pressure);
     }
 
     private void SwitchDisplayedSession(AgentSession session, bool renderExistingMessages = true)

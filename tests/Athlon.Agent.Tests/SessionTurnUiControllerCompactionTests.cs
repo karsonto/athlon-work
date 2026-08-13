@@ -60,7 +60,7 @@ public sealed class SessionTurnUiControllerCompactionTests
             var pending = Assert.Single(ui.Messages, message => message.IsCompaction);
             Assert.True(pending.IsToolRunning);
             Assert.Equal(ChatMessageViewModel.PendingManualCompactionMessageId, pending.MessageId);
-            Assert.Equal(CompactionAuditDisplay.GetCardTitle(CompactionStrategy.ManualCompact), pending.CompactionCardTitle);
+            Assert.Equal(Athlon.Agent.App.Resources.Strings.Get("Chat_CompactionRunning"), pending.CompactionCardTitle);
         });
     }
 
@@ -100,6 +100,54 @@ public sealed class SessionTurnUiControllerCompactionTests
         {
             Assert.Empty(ui.Messages);
         });
+    }
+
+    [Fact]
+    public async Task OverflowRetrySkipped_InvokesCallbackAndKeepsTimeline()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        var overflowInvoked = false;
+        ui.OnOverflowRetrySkipped = () => overflowInvoked = true;
+
+        await dispatcher.InvokeAsync(() =>
+            ui.Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "hello"))));
+
+        ui.SetDisplayed(true);
+        var callbacks = ui.BuildCallbacks();
+        await callbacks.OnStreamEvent!(
+            new AgentStreamEvent.OverflowRetrySkipped(8000, 8000, "payload_not_reduced"));
+
+        Assert.True(overflowInvoked);
+        await dispatcher.InvokeAsync(() =>
+        {
+            Assert.Single(ui.Messages);
+            Assert.Equal("hello", ui.Messages[0].Content);
+        });
+    }
+
+    [Fact]
+    public async Task ContextBudgetUpdated_InvokesCallbackWithoutAddingMessages()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ContextBudgetSnapshot? received = null;
+        ContextPressureLevel? pressure = null;
+        ui.OnContextBudgetUpdated = (budget, level) =>
+        {
+            received = budget;
+            pressure = level;
+        };
+
+        ui.SetDisplayed(true);
+        var callbacks = ui.BuildCallbacks();
+        var snapshot = new ContextBudgetSnapshot(100_000, 8192, 1000, 90_000, 2000, 0.02, 400, 200, 400);
+        await callbacks.OnStreamEvent!(
+            new AgentStreamEvent.ContextBudgetUpdated(snapshot, ContextPressureLevel.Elevated));
+
+        Assert.Same(snapshot, received);
+        Assert.Equal(ContextPressureLevel.Elevated, pressure);
+        await dispatcher.InvokeAsync(() => Assert.Empty(ui.Messages));
     }
 
     private static Task<Dispatcher> StartStaDispatcherAsync()

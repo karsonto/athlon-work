@@ -7,7 +7,10 @@ public sealed record ContextBudgetSnapshot(
     int HistoryBudget,
     int EstimatedHistory,
     /// <summary>estimatedHistory / historyBudget — informational only; not used for pressure triggers.</summary>
-    double HistoryUtilization)
+    double HistoryUtilization,
+    int SystemTokens = 0,
+    int ToolsTokens = 0,
+    int MarginTokens = 0)
 {
     /// <summary>Estimated history + system/tools/margin — approximates total prompt tokens.</summary>
     public int EstimatedTotalPrompt => FixedOverhead + EstimatedHistory;
@@ -22,6 +25,8 @@ public sealed record ContextBudgetSnapshot(
     public double TotalUtilization => (double)EstimatedTotalPrompt / UsablePromptWindow;
 
     public int AvailableHistory => Math.Max(0, HistoryBudget - EstimatedHistory);
+
+    public bool HasOccupancy => TotalWindow > 1 && UsablePromptWindow > 0;
 
     public ContextBudgetSnapshot WithHistoryEstimate(int estimatedHistory, int historyBudget)
     {

@@ -1,6 +1,7 @@
 using System.Net.Http;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Streaming;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -10,49 +11,14 @@ public sealed class AgentRuntimeOverflowTests
     [Fact]
     public async Task SendAsync_ContextOverflow_RetryUsesRequestHistoryHygiene()
     {
-        var compactor = new CountingConversationCompactor();
+        var compactor = new PrefixDroppingConversationCompactor();
         var huge = new string('y', 50_000);
-        var settings = new AppSettings
-        {
-            ContextCompaction = new ContextCompactionSettings
-            {
-                TriggerMessages = 100,
-                TriggerTokens = 1_000_000
-            }
-        };
-
-        var pipeline = new PreCompletionPipeline(
-            compactor,
-            new TruncateArgsService(),
-            settings,
-            new NoOpLogger());
-
+        var settings = CreateOverflowSettings();
         var modelClient = new OverflowCapturingModelClient();
-        var storage = new NoOpStorage();
-        var logger = new NoOpLogger();
-        var (turnPipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
-            pipeline, storage, new TokenEstimatorCalibrator(settings), settings, logger);
-        var runtime = new AgentRuntime(
-            modelClient,
-            storage,
-            new NoOpToolRouter(),
-            PromptTestHelpers.CreateStaticOrchestrator(),
-            pipeline,
-            new PassThroughToolResultEvictor(),
-            new TokenEstimatorCalibrator(settings),
-            new SessionUsageAccumulator(),
-            new PromptPressureStore(),
-            new SessionToolStormStore(),
-            new NoOpActiveAgentSessionContext(),
-            new AgentRunContextAccessor(),
-            turnPipeline,
-            compaction,
-            settings,
-            logger,
-            new NoOpPostTurnMemoryProcessor());
+        var runtime = CreateRuntime(compactor, modelClient, settings);
 
         var session = AgentSession.Create("overflow-hygiene");
-        session = session.WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
+        session = session.WithMessage(ChatMessage.Create(MessageRole.User, new string('x', 50_000)));
         session = session.WithMessage(ChatMessage.CreateWithId(
             "a1",
             MessageRole.Assistant,
@@ -67,6 +33,7 @@ public sealed class AgentRuntimeOverflowTests
 
         await runtime.SendAsync(session, "continue");
 
+        Assert.Equal(1, compactor.ForceCallCount);
         Assert.Equal(2, modelClient.CallCount);
         Assert.NotNull(modelClient.RetryRequest);
         Assert.Contains(
@@ -79,8 +46,52 @@ public sealed class AgentRuntimeOverflowTests
     [Fact]
     public async Task SendAsync_ContextOverflow_ForcesCompactAndRetriesOnce()
     {
-        var compactor = new CountingConversationCompactor();
-        var settings = new AppSettings
+        var compactor = new PrefixDroppingConversationCompactor();
+        var settings = CreateOverflowSettings();
+        var modelClient = new OverflowThenSuccessModelClient();
+        var runtime = CreateRuntime(compactor, modelClient, settings);
+
+        var session = AgentSession.Create("overflow");
+        session = session.WithMessage(ChatMessage.Create(MessageRole.User, new string('x', 50_000)));
+        var result = await runtime.SendAsync(session, "hello");
+
+        Assert.Equal(1, compactor.ForceCallCount);
+        Assert.Equal(2, modelClient.CallCount);
+        Assert.Contains(result.Messages, message => message.Role == MessageRole.Assistant);
+    }
+
+    [Fact]
+    public async Task SendAsync_ContextOverflow_SkipsRetryWhenPayloadNotReduced()
+    {
+        var compactor = new NonReducingConversationCompactor();
+        var settings = CreateOverflowSettings();
+        var modelClient = new OverflowThenSuccessModelClient();
+        var runtime = CreateRuntime(compactor, modelClient, settings);
+
+        var skipped = new List<AgentStreamEvent>();
+        var session = AgentSession.Create("overflow-skip");
+        var error = await Assert.ThrowsAsync<HttpRequestException>(() => runtime.SendAsync(
+            session,
+            "hello",
+            callbacks: new AgentTurnCallbacks
+            {
+                OnStreamEvent = streamEvent =>
+                {
+                    skipped.Add(streamEvent);
+                    return Task.CompletedTask;
+                }
+            }));
+
+        Assert.Equal(1, compactor.ForceCallCount);
+        Assert.Equal(1, modelClient.CallCount);
+        Assert.Contains("context_length", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(skipped, item => item is AgentStreamEvent.OverflowRetrySkipped);
+        Assert.Contains(skipped, item => item is AgentStreamEvent.ContextBudgetUpdated updated
+            && updated.Pressure == ContextPressureLevel.Overflow);
+    }
+
+    private static AppSettings CreateOverflowSettings() =>
+        new()
         {
             ContextCompaction = new ContextCompactionSettings
             {
@@ -89,18 +100,21 @@ public sealed class AgentRuntimeOverflowTests
             }
         };
 
+    private static AgentRuntime CreateRuntime(
+        IConversationCompactor compactor,
+        IAgentModelClient modelClient,
+        AppSettings settings)
+    {
         var pipeline = new PreCompletionPipeline(
             compactor,
             new TruncateArgsService(),
             settings,
             new NoOpLogger());
-
-        var modelClient = new OverflowThenSuccessModelClient();
         var storage = new NoOpStorage();
         var logger = new NoOpLogger();
         var (turnPipeline, compaction) = AgentRuntimeTestFactory.CreateMiddleware(
             pipeline, storage, new TokenEstimatorCalibrator(settings), settings, logger);
-        var runtime = new AgentRuntime(
+        return new AgentRuntime(
             modelClient,
             storage,
             new NoOpToolRouter(),
@@ -118,13 +132,6 @@ public sealed class AgentRuntimeOverflowTests
             settings,
             logger,
             new NoOpPostTurnMemoryProcessor());
-
-        var session = AgentSession.Create("overflow");
-        var result = await runtime.SendAsync(session, "hello");
-
-        Assert.Equal(1, compactor.ForceCallCount);
-        Assert.Equal(2, modelClient.CallCount);
-        Assert.Contains(result.Messages, message => message.Role == MessageRole.Assistant);
     }
 
     private sealed class OverflowThenSuccessModelClient : IAgentModelClient
@@ -171,7 +178,52 @@ public sealed class AgentRuntimeOverflowTests
         }
     }
 
-    private sealed class CountingConversationCompactor : IConversationCompactor
+    /// <summary>
+    /// Drops history before the last user turn (and its preceding tool batch) so overflow retry
+    /// payload is strictly smaller than the failed request.
+    /// </summary>
+    private sealed class PrefixDroppingConversationCompactor : IConversationCompactor
+    {
+        public int ForceCallCount { get; private set; }
+
+        public Task<ConversationCompactResult> CompactIfNeededAsync(
+            AgentSession session,
+            CompactionExecutionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            if (!request.Force)
+            {
+                return Task.FromResult(new ConversationCompactResult(session, false));
+            }
+
+            ForceCallCount++;
+            var messages = session.Messages;
+            if (messages.Count == 0)
+            {
+                return Task.FromResult(new ConversationCompactResult(session, false));
+            }
+
+            var keepStart = messages.Count - 1;
+            while (keepStart > 0 && messages[keepStart - 1].Role == MessageRole.Tool)
+            {
+                keepStart--;
+            }
+
+            if (keepStart > 0
+                && messages[keepStart - 1].Role == MessageRole.Assistant
+                && !string.IsNullOrWhiteSpace(messages[keepStart - 1].ToolCallsJson))
+            {
+                keepStart--;
+            }
+
+            var summary = SummaryMessageBuilder.CreateSummaryPlaceholder("forced summary", null);
+            var kept = new List<ChatMessage> { summary };
+            kept.AddRange(messages.Skip(keepStart));
+            return Task.FromResult(new ConversationCompactResult(session.WithMessages(kept), true));
+        }
+    }
+
+    private sealed class NonReducingConversationCompactor : IConversationCompactor
     {
         public int ForceCallCount { get; private set; }
 
@@ -185,13 +237,7 @@ public sealed class AgentRuntimeOverflowTests
                 ForceCallCount++;
             }
 
-            if (!request.Force)
-            {
-                return Task.FromResult(new ConversationCompactResult(session, false));
-            }
-
-            var summary = SummaryMessageBuilder.CreateSummaryPlaceholder("forced summary", null);
-            return Task.FromResult(new ConversationCompactResult(session.WithMessage(summary), true));
+            return Task.FromResult(new ConversationCompactResult(session, false));
         }
     }
 

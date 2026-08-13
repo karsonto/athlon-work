@@ -88,6 +88,45 @@
   <data name="Chat_CompactionRunning" xml:space="preserve">
     <value>正在压缩上下文…</value>
   </data>
+  <data name="Chat_CompactionCollapsedTitle" xml:space="preserve">
+    <value>已压缩</value>
+  </data>
+  <data name="Chat_CompactionCollapsedTitleWithTokens" xml:space="preserve">
+    <value>已压缩 · 约 {0} tokens</value>
+  </data>
+  <data name="Chat_CompactionForceTitle" xml:space="preserve">
+    <value>上下文已满，已压缩后继续</value>
+  </data>
+  <data name="Chat_CompactionForceTitleWithTokens" xml:space="preserve">
+    <value>上下文已满，已压缩后继续 · 约 {0}</value>
+  </data>
+  <data name="Chat_CompactionDetails" xml:space="preserve">
+    <value>详情</value>
+  </data>
+  <data name="Chat_ContextMeterTooltip" xml:space="preserve">
+    <value>上下文占用</value>
+  </data>
+  <data name="Chat_ContextMeterPercent" xml:space="preserve">
+    <value>{0}% 已用</value>
+  </data>
+  <data name="Chat_ContextMeterCapacity" xml:space="preserve">
+    <value>~{0} / {1}</value>
+  </data>
+  <data name="Chat_ContextMeterMessages" xml:space="preserve">
+    <value>对话历史  ~{0}</value>
+  </data>
+  <data name="Chat_ContextMeterSystem" xml:space="preserve">
+    <value>系统提示  ~{0}</value>
+  </data>
+  <data name="Chat_ContextMeterTools" xml:space="preserve">
+    <value>工具定义  ~{0}</value>
+  </data>
+  <data name="Chat_ContextMeterMargin" xml:space="preserve">
+    <value>安全余量  ~{0}</value>
+  </data>
+  <data name="Chat_OverflowRetrySkipped" xml:space="preserve">
+    <value>上下文已满，压缩未能缩短请求，已停止以免再次失败。</value>
+  </data>
   <data name="Chat_ComposerHint" xml:space="preserve">
     <value>按 Enter 发送消息，Shift+Enter 换行</value>
   </data>

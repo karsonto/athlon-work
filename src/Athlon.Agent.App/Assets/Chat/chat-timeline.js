@@ -967,6 +967,62 @@ function appendTurnActivityCard(event) {
   scrollToBottom();
 }
 
+function upsertCompactionCheckpoint(event) {
+  const id = event.id || 'compaction';
+  let details = document.querySelector('[data-compaction-id="' + id + '"]');
+  if (!details) {
+    state.currentAssistantEl = null;
+    state.currentReasoningEl = null;
+    const row = document.createElement('div');
+    row.className = 'message-row assistant compaction-row';
+    details = document.createElement('details');
+    details.className = 'compaction-checkpoint';
+    details.dataset.compactionId = id;
+    details.innerHTML =
+      '<summary><span class="compaction-title"></span><span class="tool-status"></span></summary>' +
+      '<div class="compaction-body">' +
+      '<div class="compaction-summary"></div>' +
+      '<details class="compaction-tech"><summary class="compaction-tech-label"></summary>' +
+      '<pre class="compaction-detail"></pre></details>' +
+      '</div>';
+    row.appendChild(details);
+    getMessageRoot().appendChild(row);
+    updateEmptyStateVisibility();
+  }
+  const title = details.querySelector('.compaction-title');
+  if (title) title.textContent = event.title || '';
+  applyToolStatusBadge(
+    details.querySelector('.tool-status'),
+    event.running ? 'running' : (event.status || 'succeeded'));
+  const summary = details.querySelector('.compaction-summary');
+  if (summary) {
+    summary.textContent = event.summary || '';
+    summary.style.display = event.summary ? 'block' : 'none';
+  }
+  const tech = details.querySelector('.compaction-tech');
+  const techLabel = details.querySelector('.compaction-tech-label');
+  const detail = details.querySelector('.compaction-detail');
+  if (techLabel) techLabel.textContent = event.detailsLabel || '';
+  const techText = [event.header, event.detail].filter(Boolean).join('\n\n');
+  if (detail) detail.textContent = techText;
+  if (tech) tech.style.display = techText && !event.running ? 'block' : 'none';
+  scrollToBottom();
+}
+
+function appendOverflowSkipped(event) {
+  state.currentAssistantEl = null;
+  state.currentReasoningEl = null;
+  const row = document.createElement('div');
+  row.className = 'message-row assistant status-row';
+  const el = document.createElement('div');
+  el.className = 'overflow-skipped';
+  el.textContent = event.message || '';
+  row.appendChild(el);
+  getMessageRoot().appendChild(row);
+  updateEmptyStateVisibility();
+  scrollToBottom();
+}
+
 function handleEvent(event) {
   if (!event || !event.type) return;
   switch (event.type) {
@@ -988,6 +1044,12 @@ function handleEvent(event) {
       break;
     case 'TURN_ACTIVITY':
       appendTurnActivityCard(event);
+      break;
+    case 'COMPACTION_CHECKPOINT':
+      upsertCompactionCheckpoint(event);
+      break;
+    case 'OVERFLOW_RETRY_SKIPPED':
+      appendOverflowSkipped(event);
       break;
     case 'RUN_STARTED':
       state.currentAssistantEl = null;

@@ -316,6 +316,8 @@
                                             </Style.Triggers>
                                         </Style>
                                     </StackPanel.Style>
+                                    <controls:ComposerContextMeterControl DataContext="{Binding ContextOccupancy}"
+                                                                          VerticalAlignment="Center" />
                                     <controls:ComposerModePicker VerticalAlignment="Center" />
                                     <Button x:Name="RunOnButton"
                                             Click="RunOnButton_OnClick"

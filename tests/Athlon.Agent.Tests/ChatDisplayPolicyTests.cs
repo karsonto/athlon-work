@@ -109,11 +109,13 @@ public sealed class ChatDisplayPolicyTests
 
         var hidden = ChatEventSerializer.BuildReplayEvents(messages, showToolCalls: false);
         Assert.DoesNotContain(hidden, json => json.Contains("read_file", StringComparison.Ordinal));
-        Assert.Equal(1, hidden.Count(json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal)));
+        Assert.Equal(0, hidden.Count(json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal)));
+        Assert.Contains(hidden, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
 
         var shown = ChatEventSerializer.BuildReplayEvents(messages, showToolCalls: true);
         Assert.Contains(shown, json => json.Contains("read_file", StringComparison.Ordinal));
-        Assert.Equal(2, shown.Count(json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal)));
+        Assert.Equal(1, shown.Count(json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal)));
+        Assert.Contains(shown, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -143,9 +145,9 @@ public sealed class ChatDisplayPolicyTests
         var pending = ChatMessageViewModel.CreatePendingManualCompaction();
         var events = ChatEventSerializer.BuildReplayEvents([pending], showToolCalls: false);
 
-        Assert.Contains(events, json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal));
+        Assert.Contains(events, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
         Assert.Contains(events, json => json.Contains(ChatMessageViewModel.PendingManualCompactionMessageId, StringComparison.Ordinal));
-        Assert.Contains(events, json => json.Contains("TOOL_CALL_END", StringComparison.Ordinal));
+        Assert.DoesNotContain(events, json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal));
         Assert.DoesNotContain(events, json => json.Contains("TOOL_CALL_RESULT", StringComparison.Ordinal));
     }
 
@@ -258,5 +260,32 @@ public sealed class ChatDisplayPolicyTests
         Assert.True(ChatDisplayPolicy.IsToolStreamEvent(new AgentStreamEvent.ToolCallStart("id", "tool", 0)));
         Assert.True(ChatDisplayPolicy.IsToolStreamEvent(new AgentStreamEvent.ToolCallArgs("id", "{}")));
         Assert.False(ChatDisplayPolicy.IsToolStreamEvent(new AgentStreamEvent.TextMessageContent("id", "hi")));
+    }
+
+    [Fact]
+    public void Serialize_compaction_uses_checkpoint_event_not_tool_call()
+    {
+        var vm = new ChatMessageViewModel(
+            CompactionMessageContent.CreateCompactionMessage(
+                CompactionMessageContent.CreateConversationCompact(1000, 500, 3, null, "summary")));
+
+        var json = ChatEventSerializer.SerializeCompactionCheckpoint(vm);
+
+        Assert.Contains("COMPACTION_CHECKPOINT", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("TOOL_CALL_START", json, StringComparison.Ordinal);
+        Assert.Contains("1.0K", json, StringComparison.Ordinal);
+        Assert.Contains("500", json, StringComparison.Ordinal);
+        Assert.Contains("summary", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Serialize_overflow_retry_skipped_includes_localized_message()
+    {
+        var json = ChatEventSerializer.Serialize(
+            new AgentStreamEvent.OverflowRetrySkipped(8000, 8000, "payload_not_reduced"));
+
+        Assert.Contains("OVERFLOW_RETRY_SKIPPED", json, StringComparison.Ordinal);
+        Assert.Contains("payload_not_reduced", json, StringComparison.Ordinal);
+        Assert.Contains("\"failedTokens\":8000", json, StringComparison.Ordinal);
     }
 }

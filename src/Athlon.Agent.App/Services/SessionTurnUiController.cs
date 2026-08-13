@@ -182,6 +182,10 @@ public sealed class SessionTurnUiController
 
     public Action<SessionUsageSnapshot>? OnUsageRecorded { get; set; }
 
+    public Action<ContextBudgetSnapshot, ContextPressureLevel>? OnContextBudgetUpdated { get; set; }
+
+    public Action? OnOverflowRetrySkipped { get; set; }
+
     public AgentTurnCallbacks BuildCallbacks(LiveAgentSession? liveSession = null) => new()
     {
         OnSessionUpdated = session =>
@@ -205,6 +209,17 @@ public sealed class SessionTurnUiController
             {
                 OnUsageRecorded?.Invoke(snapshot);
                 return Task.CompletedTask;
+            }
+
+            if (streamEvent is AgentStreamEvent.ContextBudgetUpdated(var budget, var pressure))
+            {
+                OnContextBudgetUpdated?.Invoke(budget, pressure);
+                return Task.CompletedTask;
+            }
+
+            if (streamEvent is AgentStreamEvent.OverflowRetrySkipped)
+            {
+                OnOverflowRetrySkipped?.Invoke();
             }
 
             switch (streamEvent)
@@ -992,9 +1007,6 @@ public sealed class SessionTurnUiController
             return;
         }
 
-        var toolCallId = bubble.ToolCallId ?? bubble.MessageId;
-        _ = ChatView.DispatchEventAsync(new AgentStreamEvent.ToolCallStart(toolCallId, bubble.CardTitle, null));
-        _ = ChatView.DispatchEventAsync(new AgentStreamEvent.ToolCallEnd(toolCallId));
         _ = ChatView.ApplyToolResultMarkdownAsync(bubble);
     }
 
@@ -1139,6 +1151,7 @@ public sealed class SessionTurnUiController
     private bool ShouldDispatchToChatView(AgentStreamEvent streamEvent) =>
         streamEvent is not AgentStreamEvent.UsageRecorded
             and not AgentStreamEvent.ContextHygieneApplied
+            and not AgentStreamEvent.ContextBudgetUpdated
             and not AgentStreamEvent.ChatMessageAppended
             and not AgentStreamEvent.ClearEmptyAssistantPlaceholder
             and not AgentStreamEvent.ReasoningMessageStart

@@ -420,6 +420,68 @@ html.replaying .message-row { animation: none; }
 .tool-status.success { background: var(--tool-success-bg); color: var(--tool-success-text); }
 .tool-status.failed { background: var(--tool-failure-bg); color: var(--tool-failure-text); }
 .tool-status.cancelled { background: var(--panel); color: var(--subtle-text); }
+.compaction-checkpoint {
+  max-width: 85%;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+.compaction-checkpoint > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--subtle-text);
+}
+.compaction-checkpoint > summary::-webkit-details-marker { display: none; }
+.compaction-checkpoint > summary::before {
+  content: "›";
+  font-size: 14px;
+  color: var(--subtle-text);
+  margin-right: 2px;
+  transition: transform 0.15s ease;
+}
+.compaction-checkpoint[open] > summary::before { transform: rotate(90deg); }
+.compaction-title { color: var(--assistant-text); font-weight: 500; }
+.compaction-body { padding: 0 12px 10px 28px; }
+.compaction-summary {
+  font-size: 13px;
+  color: var(--subtle-text);
+  white-space: pre-wrap;
+  margin-bottom: 8px;
+}
+.compaction-tech {
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.compaction-tech > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+  color: var(--subtle-text);
+}
+.compaction-tech > summary::-webkit-details-marker { display: none; }
+.compaction-detail {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--subtle-text);
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+.overflow-skipped {
+  max-width: 85%;
+  margin: 6px 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--subtle-text);
+  border-left: 2px solid var(--border);
+}
 .files-changed-card {
   max-width: 92%;
   margin: 8px 0;

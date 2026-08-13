@@ -57,7 +57,7 @@ public static partial class RequestHistoryHygiene
             return new ApplyResult(messages, 0);
         }
 
-        var beforeTokens = EstimateMessagesTokens(messages);
+        var beforeTokens = EstimatePayloadTokens(messages);
         var pairedToolCallIds = messages
             .Where(message => string.Equals(message.Role, "tool", StringComparison.Ordinal) && !string.IsNullOrWhiteSpace(message.ToolCallId))
             .Select(message => message.ToolCallId!)
@@ -97,7 +97,7 @@ public static partial class RequestHistoryHygiene
             return new ApplyResult(messages, 0);
         }
 
-        var afterTokens = EstimateMessagesTokens(output);
+        var afterTokens = EstimatePayloadTokens(output);
         return new ApplyResult(output, Math.Max(0, beforeTokens - afterTokens));
     }
 
@@ -363,7 +363,7 @@ public static partial class RequestHistoryHygiene
         return $"{line[..head].TrimEnd()} ... {line[^tail..].TrimStart()}";
     }
 
-    private static int EstimateMessagesTokens(IReadOnlyList<AgentModelMessage> messages)
+    internal static int EstimatePayloadTokens(IReadOnlyList<AgentModelMessage> messages)
     {
         var total = 0;
         foreach (var message in messages)
