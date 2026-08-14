@@ -24,7 +24,7 @@ if %errorlevel% neq 0 (
  pause
  exit /b 1
 )
-dotnet publish "%SCRIPT_DIR%src\Athlon.Agent.Cli\Athlon.Agent.Cli.csproj" -c Release -r win-x64 --self-contained false -o "%SCRIPT_DIR%publish" -p:Version=%VERSION%
+dotnet publish "%SCRIPT_DIR%src\Athlon.Agent.Cli\Athlon.Agent.Cli.csproj" -c Release -r win-x64 --self-contained true -o "%SCRIPT_DIR%publish" -p:Version=%VERSION%
 if %errorlevel% neq 0 (
  echo CLI 发布失败！
  pause

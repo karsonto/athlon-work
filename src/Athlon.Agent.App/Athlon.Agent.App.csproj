@@ -42,8 +42,8 @@
     <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <StartupObject>Athlon.Agent.App.Program</StartupObject>
-    <Version>3.0.0</Version>
-    <AssemblyVersion>3.0.0.0</AssemblyVersion>
+    <Version>3.0.1</Version>
+    <AssemblyVersion>3.0.1.0</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -92,7 +92,7 @@
     <MSBuild
       Projects="$(MSBuildThisFileDirectory)..\Athlon.Agent.Cli\Athlon.Agent.Cli.csproj"
       Targets="Publish"
-      Properties="Configuration=$(Configuration);RuntimeIdentifier=$(_CliPublishRid);SelfContained=false;PublishDir=$(_CliPublishDir)" />
+      Properties="Configuration=$(Configuration);RuntimeIdentifier=$(_CliPublishRid);SelfContained=true;PublishDir=$(_CliPublishDir)" />
   </Target>
 
 </Project>
