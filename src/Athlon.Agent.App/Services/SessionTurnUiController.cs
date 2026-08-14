@@ -949,7 +949,11 @@ public sealed partial class SessionTurnUiController
         {
             if (message.Role == MessageRole.Compaction)
             {
-                AppendCompactionNotice(message);
+                if (ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(message))
+                {
+                    AppendCompactionNotice(message);
+                }
+
                 continue;
             }
 

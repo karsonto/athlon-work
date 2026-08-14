@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Athlon.Agent.App.ViewModels;
+using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Streaming;
@@ -217,7 +218,8 @@ public sealed class SessionStreamingUiContext
         if (message.Role == MessageRole.Compaction)
         {
             RemoveEmptyActiveAssistantBubble(messages);
-            if (!ContainsMessageId(messages, message.Id))
+            if (ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(message)
+                && !ContainsMessageId(messages, message.Id))
             {
                 messages.Add(new ChatMessageViewModel(message));
                 RequestScroll();

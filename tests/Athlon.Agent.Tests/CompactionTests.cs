@@ -785,6 +785,41 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public void ContextBudgetCalculator_SplitsToolsAndPromptOccupancy()
+    {
+        var settings = new ContextCompactionSettings { ContextWindowTokens = 100_000 };
+        var model = new ModelSettings { MaxTokens = 8192 };
+        var tools = new[]
+        {
+            new ToolDefinition("file_read", "Read files", ToolSchema.Object().Build()),
+            new ToolDefinition("mcp_tool", "MCP", ToolSchema.Object().Build(), Source: "mcp"),
+            new ToolDefinition("sessions_spawn", "Spawn", ToolSchema.Object().Build(), Group: ToolGroup.SubAgent)
+        };
+        var promptOccupancy = new Athlon.Agent.Core.Prompt.PromptOccupancyTokens(
+            SystemPrompt: 100,
+            Rules: 40,
+            Skills: 30,
+            Subagent: 20);
+
+        var budget = ContextBudgetCalculator.Compute(
+            environmentPrompt: new string('s', 1_000),
+            tools,
+            [ChatMessage.Create(MessageRole.User, "hello")],
+            settings,
+            model,
+            promptOccupancy: promptOccupancy);
+
+        Assert.True(budget.Occupancy.ToolDefinitions > 0);
+        Assert.True(budget.Occupancy.McpTools > 0);
+        Assert.True(budget.Occupancy.SubagentDefinitions > 0);
+        Assert.True(budget.Occupancy.Rules > 0);
+        Assert.True(budget.Occupancy.Skills > 0);
+        Assert.Equal(
+            budget.SystemTokens + budget.ToolsTokens + budget.MarginTokens,
+            budget.FixedOverhead);
+    }
+
+    [Fact]
     public void ContextBudgetCalculator_DoesNotAllocateHistoryWhenFixedContextExceedsWindow()
     {
         var settings = new ContextCompactionSettings

@@ -1,5 +1,6 @@
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.App.Services;
@@ -23,14 +24,41 @@ internal static class ChatDisplayPolicy
         return showToolCalls;
     }
 
+    public static bool ShouldDisplayCompactionCheckpoint(ChatMessage message) =>
+        message.Role == MessageRole.Compaction
+        && CompactionAuditDisplay.Parse(message.Content).Strategy == CompactionStrategy.ManualCompact;
+
+    public static bool ShouldDisplayCompactionCheckpoint(ChatMessageViewModel vm)
+    {
+        if (!vm.IsCompaction)
+        {
+            return false;
+        }
+
+        if (string.Equals(
+                vm.MessageId,
+                ChatMessageViewModel.PendingManualCompactionMessageId,
+                StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return CompactionAuditDisplay.Parse(vm.Content).Strategy == CompactionStrategy.ManualCompact;
+    }
+
     public static bool ShouldIncludeToolViewModel(bool showToolCalls, ChatMessageViewModel vm)
     {
+        if (vm.IsCompaction)
+        {
+            return ShouldDisplayCompactionCheckpoint(vm);
+        }
+
         if (!vm.IsTool)
         {
             return true;
         }
 
-        if (vm.IsCompaction || vm.ToolApprovalState == ToolApprovalState.Pending)
+        if (vm.ToolApprovalState == ToolApprovalState.Pending)
         {
             return true;
         }

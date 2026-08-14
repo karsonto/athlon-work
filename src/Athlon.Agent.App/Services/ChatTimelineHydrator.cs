@@ -19,7 +19,8 @@ internal static class ChatTimelineHydrator
 
         foreach (var message in ChatTimelineOrder.OrderForDisplay(displayMessages))
         {
-            if (!ChatDisplayPolicy.ShouldIncludeToolMessage(showToolCalls, message))
+            if (ShouldHideMessageFromChat(message)
+                || !ChatDisplayPolicy.ShouldIncludeToolMessage(showToolCalls, message))
             {
                 continue;
             }
@@ -128,5 +129,7 @@ internal static class ChatTimelineHydrator
     public static bool ShouldHideMessageFromChat(ChatMessage message) =>
         SummaryMessageBuilder.IsSummaryMessage(message)
         || message.Role == MessageRole.User && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
-        || ChatMessageViewModel.IsAssistantToolCallsOnly(message);
+        || ChatMessageViewModel.IsAssistantToolCallsOnly(message)
+        || message.Role == MessageRole.Compaction
+            && !ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(message);
 }

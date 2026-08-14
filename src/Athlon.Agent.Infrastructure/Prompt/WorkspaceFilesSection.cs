@@ -10,6 +10,8 @@ public sealed class WorkspaceFilesSection(ISshWorkspaceClient? sshClient = null)
 
     public PromptSectionPlacement Placement => PromptSectionPlacement.PreCall;
 
+    public PromptOccupancyKind OccupancyKind => PromptOccupancyKind.Rules;
+
     public void Append(StringBuilder builder, EnvironmentPromptContext context) =>
         WorkspacePromptLoader.AppendWorkspaceFiles(builder, context, sshClient);
 }

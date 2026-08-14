@@ -332,7 +332,10 @@ internal static class ChatEventSerializer
 
         var timeline = activitySourceMessages is { Count: > 0 }
             ? activitySourceMessages
-                .Where(message => message.Role is MessageRole.User or MessageRole.Tool or MessageRole.Assistant)
+                .Where(message => message.Role is MessageRole.User
+                    or MessageRole.Tool
+                    or MessageRole.Assistant
+                    or MessageRole.Compaction)
                 .Select(message => new ChatMessageViewModel(message))
                 .ToList()
             : messages.ToList();
@@ -377,7 +380,11 @@ internal static class ChatEventSerializer
 
             if (message.IsCompaction)
             {
-                events.Add(SerializeCompactionCheckpoint(message));
+                if (ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(message))
+                {
+                    events.Add(SerializeCompactionCheckpoint(message));
+                }
+
                 continue;
             }
 
@@ -433,7 +440,11 @@ internal static class ChatEventSerializer
 
         if (message.IsCompaction)
         {
-            yield return SerializeCompactionCheckpoint(message);
+            if (ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(message))
+            {
+                yield return SerializeCompactionCheckpoint(message);
+            }
+
             yield break;
         }
 

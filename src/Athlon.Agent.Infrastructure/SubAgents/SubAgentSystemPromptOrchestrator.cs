@@ -33,9 +33,9 @@ public sealed class SubAgentSystemPromptOrchestrator(
     {
         var context = CreateContext(session, tools);
         var builder = new StringBuilder();
-        AppendSections(builder, context, _staticSections);
-        AppendSections(builder, context, _preCallSections);
-        return new FrozenSystemPrompt(FormatPrompt(builder));
+        var occupancy = EnvironmentPromptOccupancy.AppendSections(builder, context, _staticSections)
+            .Combine(EnvironmentPromptOccupancy.AppendSections(builder, context, _preCallSections));
+        return new FrozenSystemPrompt(FormatPrompt(builder), occupancy);
     }
 
     public string BuildForReasoningIteration(
@@ -73,17 +73,6 @@ public sealed class SubAgentSystemPromptOrchestrator(
             SsoUserDisplayName = ssoUserContext.DisplayName,
             AgentMode = harnessState.GetMode(session.Id),
         };
-    }
-
-    private static void AppendSections(
-        StringBuilder builder,
-        EnvironmentPromptContext context,
-        IReadOnlyList<IEnvironmentPromptSection> sections)
-    {
-        foreach (var section in sections)
-        {
-            section.Append(builder, context);
-        }
     }
 
     private static string FormatPrompt(StringBuilder builder) =>

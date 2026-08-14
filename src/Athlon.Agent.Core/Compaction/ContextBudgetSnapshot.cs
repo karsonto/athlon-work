@@ -10,7 +10,8 @@ public sealed record ContextBudgetSnapshot(
     double HistoryUtilization,
     int SystemTokens = 0,
     int ToolsTokens = 0,
-    int MarginTokens = 0)
+    int MarginTokens = 0,
+    ContextOccupancyBreakdown Occupancy = null!)
 {
     /// <summary>Estimated history + system/tools/margin — approximates total prompt tokens.</summary>
     public int EstimatedTotalPrompt => FixedOverhead + EstimatedHistory;
@@ -28,15 +29,44 @@ public sealed record ContextBudgetSnapshot(
 
     public bool HasOccupancy => TotalWindow > 1 && UsablePromptWindow > 0;
 
+    public ContextOccupancyBreakdown DisplayOccupancy
+    {
+        get
+        {
+            if (Occupancy is { ContentTokens: > 0 })
+            {
+                return Occupancy;
+            }
+
+            return new ContextOccupancyBreakdown(
+                SystemPrompt: SystemTokens,
+                ToolDefinitions: ToolsTokens,
+                Conversation: EstimatedHistory);
+        }
+    }
+
+    public int DisplayedContentTokens
+    {
+        get
+        {
+            var occupancy = DisplayOccupancy;
+            return occupancy.ContentTokens > 0
+                ? occupancy.ContentTokens
+                : Math.Max(0, EstimatedTotalPrompt - MarginTokens);
+        }
+    }
+
     public ContextBudgetSnapshot WithHistoryEstimate(int estimatedHistory, int historyBudget)
     {
         var budget = historyBudget > 0 ? historyBudget : HistoryBudget;
         var historyUtilization = budget > 0 ? (double)estimatedHistory / budget : 1.0;
+        var occupancy = DisplayOccupancy with { Conversation = estimatedHistory };
         return this with
         {
             HistoryBudget = budget,
             EstimatedHistory = estimatedHistory,
-            HistoryUtilization = historyUtilization
+            HistoryUtilization = historyUtilization,
+            Occupancy = occupancy
         };
     }
 }

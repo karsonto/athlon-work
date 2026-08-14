@@ -40,6 +40,7 @@ public sealed class CompactionTurnMiddleware(
         CompactionRuntimeContext? runtimeContext = null;
         var compaction = settings.ContextCompaction;
         var multiplier = tokenEstimatorCalibrator.GetMultiplier(invocation.Session.Id);
+        var promptOccupancy = invocation.FrozenPrompt?.Occupancy;
         var budget = ContextBudgetCalculator.Compute(
             environmentPrompt,
             tools,
@@ -47,7 +48,8 @@ public sealed class CompactionTurnMiddleware(
             settings.ContextCompaction,
             settings.Model,
             multiplier,
-            invocation.RuntimeContext);
+            invocation.RuntimeContext,
+            promptOccupancy);
         var rawHistoryEstimate = Math.Abs(multiplier - 1.0) < 0.001
             ? budget.EstimatedHistory
             : ContextBudgetCalculator.EstimateRawHistory(
@@ -90,7 +92,8 @@ public sealed class CompactionTurnMiddleware(
             settings.ContextCompaction,
             settings.Model,
             multiplier,
-            invocation.RuntimeContext);
+            invocation.RuntimeContext,
+            promptOccupancy);
         afterBudget = ApplyPromptPressure(afterBudget, invocation.Session.Id);
         var afterPressure = ContextPressureEvaluator.Evaluate(
             afterBudget,

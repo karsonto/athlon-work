@@ -7,6 +7,8 @@ public sealed class SubAgentDelegationSection(AppSettings settings) : IEnvironme
 {
     public int Order => 550;
 
+    public PromptOccupancyKind OccupancyKind => PromptOccupancyKind.Subagent;
+
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
         if (!settings.SubAgent.Enabled || PromptModeHelper.IsChatOnly(context) || PromptModeHelper.IsAskMode(context)

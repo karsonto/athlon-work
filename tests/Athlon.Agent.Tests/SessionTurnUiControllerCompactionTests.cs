@@ -37,9 +37,31 @@ public sealed class SessionTurnUiControllerCompactionTests
         var callbacks = ui.BuildCallbacks(new LiveAgentSession(compactedSession));
         await callbacks.OnStreamEvent!(new AgentStreamEvent.ChatMessageAppended(compactionMessage));
 
-        Assert.Equal(4, ui.Messages.Count);
-        Assert.Equal(3, ui.Messages.Count(message => !message.IsCompaction));
-        Assert.Single(ui.Messages, message => message.IsCompaction);
+        Assert.Equal(3, ui.Messages.Count);
+        Assert.DoesNotContain(ui.Messages, message => message.IsCompaction);
+    }
+
+    [Fact]
+    public async Task ManualCompaction_AppendsDisplayCheckpoint()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+
+        await dispatcher.InvokeAsync(() =>
+            ui.Messages.Add(new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "one"))));
+
+        var manual = CompactionMessageContent.CreateCompactionMessage(
+            CompactionMessageContent.CreateConversationCompact(
+                1000, 500, 3, null, "summary", CompactionStrategy.ManualCompact));
+        ui.SetDisplayed(true);
+        var callbacks = ui.BuildCallbacks();
+        await callbacks.OnStreamEvent!(new AgentStreamEvent.ChatMessageAppended(manual));
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            Assert.Equal(2, ui.Messages.Count);
+            Assert.Single(ui.Messages, message => message.IsCompaction);
+        });
     }
 
     [Fact]

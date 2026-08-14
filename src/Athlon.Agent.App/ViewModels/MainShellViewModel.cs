@@ -1446,12 +1446,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private void RefreshContextOccupancy()
     {
-        var budget = ContextBudgetCalculator.Compute(
-            string.Empty,
-            Array.Empty<ToolDefinition>(),
-            _session.Messages,
-            _appSettings.ContextCompaction,
-            _appSettings.Model);
+        var budget = _compactionService.ComputeBudget(_session);
         var pressure = ContextPressureEvaluator.Evaluate(
             budget,
             _appSettings.ContextCompaction.DynamicCompaction);

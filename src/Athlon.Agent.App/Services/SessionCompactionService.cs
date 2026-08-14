@@ -35,7 +35,8 @@ public sealed class SessionCompactionService(
             .ToHashSet(StringComparer.Ordinal);
 
         var tools = toolRouter.ListTools();
-        var environmentPrompt = promptOrchestrator.PrepareForTurn(session, tools).Text;
+        var frozen = promptOrchestrator.PrepareForTurn(session, tools);
+        var environmentPrompt = frozen.Text;
         var runContext = AgentRunContext.CreateRoot(
             session,
             Guid.NewGuid().ToString("N"),
@@ -49,6 +50,7 @@ public sealed class SessionCompactionService(
             RunContext = runContext,
             Session = session,
             StreamAdapter = new AgentStreamAdapter(session.Id, runContext.RunId),
+            FrozenPrompt = frozen,
             EnvironmentPrompt = environmentPrompt,
             Tools = tools
         };
@@ -63,6 +65,21 @@ public sealed class SessionCompactionService(
 
         var compacted = HasCompactionStructureChange(compactedSession, messageIdsBefore);
         return new ManualCompactionResult(compactedSession, compacted);
+    }
+
+    public ContextBudgetSnapshot ComputeBudget(AgentSession session)
+    {
+        var tools = toolRouter.ListTools();
+        var frozen = promptOrchestrator.PrepareForTurn(session, tools);
+        var runtimeContext = promptOrchestrator.BuildRuntimeContext(session, tools);
+        return ContextBudgetCalculator.Compute(
+            frozen.Text,
+            tools,
+            session.Messages,
+            settings.ContextCompaction,
+            settings.Model,
+            runtimeContext: runtimeContext,
+            promptOccupancy: frozen.Occupancy);
     }
 
     private static bool HasCompactionStructureChange(AgentSession session, HashSet<string> messageIdsBefore)

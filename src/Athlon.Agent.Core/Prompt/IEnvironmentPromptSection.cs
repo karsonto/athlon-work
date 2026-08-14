@@ -8,5 +8,7 @@ public interface IEnvironmentPromptSection
 
     PromptSectionPlacement Placement => PromptSectionPlacement.Static;
 
+    PromptOccupancyKind OccupancyKind => PromptOccupancyKind.System;
+
     void Append(StringBuilder builder, EnvironmentPromptContext context);
 }

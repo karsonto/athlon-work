@@ -6,6 +6,8 @@ public sealed class SubAgentPersonaSection(IAgentRunContextAccessor runContextAc
 {
     public int Order => 50;
 
+    public PromptOccupancyKind OccupancyKind => PromptOccupancyKind.Subagent;
+
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
         var role = runContextAccessor.Current?.SubAgentRole;
