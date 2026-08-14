@@ -8,10 +8,12 @@ using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Cli;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.BehaviorReport;
+using Athlon.Agent.Infrastructure.Cli;
 using Athlon.Agent.Infrastructure.Sso;
 using Athlon.Agent.Infrastructure.SubAgents;
 using Athlon.Agent.Mcp;
@@ -69,6 +71,8 @@ public partial class App : Application
                 System.Windows.Threading.Dispatcher.CurrentDispatcher,
                 sp.GetRequiredService<AppSettings>()));
             services.AddSingleton<SessionTurnHost>();
+            services.AddSingleton<IDesktopSessionRunProbe>(sp =>
+                new SessionTurnHostRunProbe(sp.GetRequiredService<SessionTurnHost>()));
             services.AddSingleton<QueuedTurnPresenter>();
             services.AddSingleton<ComposerAtCompletionService>();
             services.AddSingleton<IComposerSlashCommandRegistry>(sp =>
@@ -101,6 +105,7 @@ public partial class App : Application
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             StartupTrace("MainWindow shown");
 
+            StartCliIpc(_services);
             StartBehaviorReporting(_services);
         }
         catch (Exception exception)
@@ -154,6 +159,19 @@ public partial class App : Application
         var paths = new AppPathProvider();
         paths.EnsureCreated();
         File.AppendAllText(Path.Combine(paths.LogsPath, "startup.log"), $"{AppTimeZone.Now:O} {message}{Environment.NewLine}");
+    }
+
+    private static void StartCliIpc(ServiceProvider services)
+    {
+        try
+        {
+            services.GetRequiredService<CliIpcServer>().StartAsync().GetAwaiter().GetResult();
+            StartupTrace("CLI IPC started");
+        }
+        catch (Exception ex)
+        {
+            StartupTrace($"CLI IPC start failed: {ex}");
+        }
     }
 
     private static void StartBehaviorReporting(ServiceProvider services)

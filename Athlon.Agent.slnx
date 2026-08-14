@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Athlon.Agent.App/Athlon.Agent.App.csproj" />
+    <Project Path="src/Athlon.Agent.Cli/Athlon.Agent.Cli.csproj" />
     <Project Path="src/Athlon.Agent.Core/Athlon.Agent.Core.csproj" />
     <Project Path="src/Athlon.Agent.Infrastructure/Athlon.Agent.Infrastructure.csproj" />
     <Project Path="src/Athlon.Agent.Mcp/Athlon.Agent.Mcp.csproj" />

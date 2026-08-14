@@ -22,8 +22,10 @@ using Athlon.Agent.Infrastructure.Knowledge;
 using Athlon.Agent.Infrastructure.Licensing;
 using Athlon.Agent.Infrastructure.Prompt;
 using Athlon.Agent.Infrastructure.Sso;
+using Athlon.Agent.Infrastructure.Cli;
 using Athlon.Agent.Infrastructure.Ssh;
 using Athlon.Agent.Infrastructure.SubAgents;
+using Athlon.Agent.Core.Cli;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -74,6 +76,9 @@ public static class ServiceCollectionExtensions
             return BehaviorEventManager.Instance;
         });
         services.AddSingleton<IFileStorageService, FileStorageService>();
+        services.AddSingleton<IDesktopSessionRunProbe>(_ => NullDesktopSessionRunProbe.Instance);
+        services.AddSingleton<CliSessionMap>();
+        services.AddSingleton<CliIpcServer>();
         services.AddHttpClient<IAgentModelClient, OpenAiCompatibleChatModelClient>(
             static client => client.Timeout = Timeout.InfiniteTimeSpan);
         services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();

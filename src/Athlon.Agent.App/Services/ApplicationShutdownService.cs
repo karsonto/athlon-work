@@ -4,6 +4,7 @@ using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.Cli;
 using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Mcp;
 using Serilog;
@@ -12,6 +13,7 @@ namespace Athlon.Agent.App.Services;
 
 public sealed class ApplicationShutdownService(
     SessionTurnHost turnHost,
+    CliIpcServer cliIpcServer,
     SchedulerService scheduler,
     ExecuteCommandProcessRegistry processRegistry,
     IMcpRegistry mcpRegistry,
@@ -62,6 +64,7 @@ public sealed class ApplicationShutdownService(
         scheduler.Stop();
 
         progress?.Report(Strings.Get("Shutdown_StoppingTurns"));
+        await cliIpcServer.StopAsync().ConfigureAwait(false);
         await turnHost
             .ShutdownAsync(turnWaitTimeout ?? DefaultTurnWaitTimeout, cancellationToken)
             .ConfigureAwait(false);
