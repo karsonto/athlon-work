@@ -7,8 +7,19 @@ namespace Athlon.Agent.Tests;
 
 public sealed class FileToolsPolicySectionTests
 {
+    private static readonly ToolDefinition[] WorkspaceFileTools =
+    [
+        new("file_read", "r", ToolSchema.Object().Build()),
+        new("file_write", "w", ToolSchema.Object().Build()),
+        new("file_edit", "e", ToolSchema.Object().Build()),
+        new("apply_patch", "p", ToolSchema.Object().Build()),
+        new("grep_files", "g", ToolSchema.Object().Build()),
+        new("glob_files", "gl", ToolSchema.Object().Build()),
+        new("file_list", "l", ToolSchema.Object().Build()),
+    ];
+
     [Fact]
-    public void Append_WorkspaceMode_IncludesFileToolRules()
+    public void Append_WorkspaceMode_IncludesCrossToolFileHabits()
     {
         var builder = new StringBuilder();
         new FileToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true));
@@ -16,12 +27,12 @@ public sealed class FileToolsPolicySectionTests
         var text = builder.ToString();
         Assert.Contains("File tools:", text, StringComparison.Ordinal);
         Assert.Contains("grep_files", text, StringComparison.Ordinal);
-        Assert.Contains("N| prefixes", text, StringComparison.Ordinal);
-        Assert.Contains("file_write requires non-empty", text, StringComparison.Ordinal);
-        Assert.Contains("path` before `content", text, StringComparison.Ordinal);
-        Assert.Contains("short skeleton", text, StringComparison.Ordinal);
+        Assert.Contains("prefer apply_patch", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("character-for-character", text, StringComparison.Ordinal);
         Assert.Contains("CJK characters", text, StringComparison.Ordinal);
+        // Per-tool contracts live in ToolDefinition.Description, not this section.
+        Assert.DoesNotContain("file_write requires non-empty", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("N| prefixes", text, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -40,11 +51,10 @@ public sealed class FileToolsPolicySectionTests
         new FileToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, mode: SessionAgentMode.Ask));
 
         var text = builder.ToString();
-        Assert.Contains("start_line", text, StringComparison.Ordinal);
-        Assert.Contains("end_line", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("read-only", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("character-for-character", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("read-only", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Editing:", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("prefer apply_patch", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("file_edit", text, StringComparison.Ordinal);
         Assert.DoesNotContain("N| prefixes", text, StringComparison.Ordinal);
     }
@@ -58,7 +68,7 @@ public sealed class FileToolsPolicySectionTests
             WorkspaceRoot = hasWorkspace && !chatOnly ? @"C:\work\demo" : null,
             Tools = chatOnly
                 ? [new ToolDefinition("knowledge_search", "Search knowledge", ToolSchema.Object().Build())]
-                : [],
+                : WorkspaceFileTools,
             SkillsDirectory = @"C:\Users\test\.athlon-agent\skills",
             Host = new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
             PromptSettings = new PromptSettings(),

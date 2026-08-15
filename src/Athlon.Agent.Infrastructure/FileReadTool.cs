@@ -6,8 +6,10 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, Ap
 {
     public ToolDefinition Definition { get; } = new(
         "file_read",
-        "Read file content with line numbers (N|line) for display. Use 1-based start_line/end_line ranges for large files; "
-            + "use grep_files to locate content first. Do not use N| prefixes in file_edit old_text.",
+        "Read file content with line numbers (N|line) for display only. Use 1-based start_line/end_line to read in chunks; "
+            + "do not assume a single read covers the whole file. When the result has truncated:true or next_start_line, "
+            + "continue from that 1-based line. Prefer grep_files/glob_files to locate content in large files first. "
+            + "Do not use N| prefixes in file_edit old_text.",
         ToolSchema.Object()
             .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true, minLength: 1)
             .Integer("start_line", "1-based start line (default 1)", defaultValue: 1, minimum: 1)

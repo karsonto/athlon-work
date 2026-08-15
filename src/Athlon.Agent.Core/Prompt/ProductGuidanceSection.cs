@@ -4,7 +4,9 @@ namespace Athlon.Agent.Core.Prompt;
 
 public sealed class ProductGuidanceSection : IEnvironmentPromptSection
 {
-    public int Order => 700;
+    public string Name => "product:guidance";
+
+    public int Order => PromptSectionBands.Product;
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {

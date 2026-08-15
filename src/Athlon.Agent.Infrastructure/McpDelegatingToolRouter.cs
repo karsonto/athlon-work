@@ -177,25 +177,28 @@ internal sealed class McpDelegatingToolRouter(
         var local = GetOrCreateLocalRouter().ListTools();
         if (IsComputerUseMode || IsChatOnlyMode)
         {
-            return local;
+            return Canonicalize(local);
         }
 
         var useSearch = ShouldUseMcpSearch();
         if (!useSearch)
         {
             var mcp = mcpRegistry.ListToolDefinitions();
-            return local.Concat(mcp).OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+            return Canonicalize(local.Concat(mcp).ToArray());
         }
 
         var gateway = _searchGatewayTools.Value.Select(tool => tool.Definition);
-        var tools = local.Concat(gateway).OrderBy(tool => tool.Name, StringComparer.OrdinalIgnoreCase).ToArray();
+        var tools = local.Concat(gateway).ToArray();
         _logger.Information(
             "MCP tool advertisement mode=search tools={ToolCount} catalog={CatalogCount} schemaChars={SchemaChars}",
             tools.Length,
             mcpRegistry.CatalogCount,
             mcpRegistry.CatalogSchemaCharCount);
-        return tools;
+        return Canonicalize(tools);
     }
+
+    private IReadOnlyList<ToolDefinition> Canonicalize(IReadOnlyList<ToolDefinition> tools) =>
+        Athlon.Agent.Core.Prompt.ToolOrderCanonicalizer.Apply(tools, settings.Prompt.ToolOrder);
 
     public ToolDefinition? FindDefinition(string name)
     {

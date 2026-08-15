@@ -5,7 +5,9 @@ namespace Athlon.Agent.Core.Prompt;
 
 public sealed class AgentModeSection : IEnvironmentPromptSection
 {
-    public int Order => 105;
+    public string Name => "session:mode";
+
+    public int Order => PromptSectionBands.Mode;
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
@@ -19,14 +21,37 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
         {
             case SessionAgentMode.Plan:
                 builder.AppendLine("- The user selected Session Plan mode for this session.");
-                builder.AppendLine("- Read-only exploration only: use file_read, grep_files, glob_files, file_list, memory_*, knowledge_*.");
-                builder.AppendLine("- Produce a detailed plan via create_plan / update_plan (mermaid flowcharts for multi-step work).");
+                builder.AppendLine("- Read-only exploration only.");
+                if (PromptModeHelper.HasAny(context, "file_read", "grep_files", "glob_files", "file_list"))
+                {
+                    builder.AppendLine("- Prefer file_read, grep_files, glob_files, and file_list when advertised.");
+                }
+
+                if (PromptModeHelper.HasAny(context, "memory_search", "memory_get"))
+                {
+                    builder.AppendLine("- Use memory_* tools when advertised for prior session knowledge.");
+                }
+
+                if (PromptModeHelper.HasKnowledgeTool(context))
+                {
+                    builder.AppendLine("- Use knowledge_* when advertised for uploaded documents.");
+                }
+
+                if (PromptModeHelper.HasAny(context, "create_plan", "update_plan"))
+                {
+                    builder.AppendLine("- Produce a detailed plan via create_plan / update_plan (mermaid flowcharts for multi-step work).");
+                }
+
                 builder.AppendLine("- After publishing or updating the plan, stop and wait for the user to confirm or revise — do not edit code or run shell.");
                 break;
             case SessionAgentMode.Coding:
                 builder.AppendLine("- The user selected Coding mode for this session.");
-                builder.AppendLine("- You have full workspace tools (read, write, shell) plus long-term memory and task planning (todo_write).");
-                builder.AppendLine("- For multi-step or multi-file work: maintain todos with todo_write; if an approved Session Plan is injected, follow it.");
+                builder.AppendLine("- You have full workspace tools (read, write, shell) as advertised, plus long-term memory and task planning when those tools are present.");
+                if (PromptModeHelper.HasTool(context, "todo_write"))
+                {
+                    builder.AppendLine("- For multi-step or multi-file work: maintain todos with todo_write; if an approved Session Plan is injected, follow it.");
+                }
+
                 builder.AppendLine("- Direct Coding without a prior Plan is allowed — explore, write todos, implement, and verify.");
                 break;
             case SessionAgentMode.Ask:
@@ -35,7 +60,7 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
                 break;
             default:
                 builder.AppendLine("- The user selected Agent mode for this session.");
-                builder.AppendLine("- You have full workspace tools (read, write, shell). Long-term memory and todo_write are disabled.");
+                builder.AppendLine("- You have full workspace tools (read, write, shell) as advertised. Long-term memory and todo_write are disabled unless advertised.");
                 break;
         }
 

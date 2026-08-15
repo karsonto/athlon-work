@@ -9,9 +9,10 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
 
     public ToolDefinition Definition { get; } = new(
         "file_edit",
-        "Replace exact text in a file. old_text must match disk content exactly — not file_read's N|line prefixes. "
-            + "For multi-line or long (>= 5 lines) old_text, use apply_patch instead — exact text matching is fragile for large blocks. "
-            + "If matching fails, use apply_patch with a unified diff instead. "
+        "Replace exact text in a file. old_text must match disk content exactly — not file_read's N| line prefixes. "
+            + "For multi-line or long (>= 5 lines) old_text, prefer apply_patch — exact matching is fragile for large blocks. "
+            + "If matching fails: re-read the file, retry once with corrected old_text; after two failures switch to apply_patch "
+            + "(or file_write for small files only). Never retry the same old_text a third time. "
             + $"For files larger than {MaxFileEditBytes / 1024} KiB, use apply_patch.",
         ToolSchema.Object()
             .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true, minLength: 1)

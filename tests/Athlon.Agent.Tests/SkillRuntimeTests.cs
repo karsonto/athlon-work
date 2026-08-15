@@ -187,7 +187,10 @@ public sealed class SkillRuntimeTests
 
             var prompt = builder.Build(
                 AgentSession.Create("skill-prompt").WithWorkspace(workspaceRoot),
-                Array.Empty<ToolDefinition>());
+                [
+                    new ToolDefinition("execute_command", "x", ToolSchema.Object().Build()),
+                    new ToolDefinition("load_skill_through_path", "s", ToolSchema.Object().Build()),
+                ]);
 
             Assert.Contains("## Available Skills", prompt, StringComparison.Ordinal);
             Assert.Contains("<available_skills>", prompt, StringComparison.Ordinal);

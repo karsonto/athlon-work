@@ -21,10 +21,16 @@ public sealed class RuntimeContextAssembler
 
     public RuntimeContextSnapshot? BuildSnapshot(EnvironmentPromptContext context)
     {
+        var run = _runContextAccessor?.Current;
+        if (run?.SuppressRuntimeContext == true && run.ComputerUseActive != true)
+        {
+            return null;
+        }
+
         var content = new StringBuilder();
         foreach (var contributor in _contributors)
         {
-            if (_runContextAccessor?.Current?.ComputerUseActive == true
+            if (run?.ComputerUseActive == true
                 && contributor is not IComputerUseRuntimeContextContributor)
             {
                 continue;

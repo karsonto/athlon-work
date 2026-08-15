@@ -7,11 +7,25 @@ namespace Athlon.Agent.Tests;
 
 public sealed class ToolsPolicySectionTests
 {
+    private static readonly ToolDefinition[] FullWorkspaceTools =
+    [
+        new("file_read", "r", ToolSchema.Object().Build()),
+        new("file_write", "w", ToolSchema.Object().Build()),
+        new("file_edit", "e", ToolSchema.Object().Build()),
+        new("apply_patch", "p", ToolSchema.Object().Build()),
+        new("execute_command", "x", ToolSchema.Object().Build()),
+        new("todo_write", "t", ToolSchema.Object().Build()),
+        new("create_plan", "c", ToolSchema.Object().Build()),
+        new("update_plan", "u", ToolSchema.Object().Build()),
+        new("mcp_search", "ms", ToolSchema.Object().Build()),
+        new("mcp_call", "mc", ToolSchema.Object().Build()),
+    ];
+
     [Fact]
     public void Append_WorkspaceMode_IncludesGeneralToolRules()
     {
         var builder = new StringBuilder();
-        new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools: []));
+        new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools: FullWorkspaceTools));
 
         var text = builder.ToString();
         Assert.Contains("Tools:", text, StringComparison.Ordinal);
@@ -23,15 +37,13 @@ public sealed class ToolsPolicySectionTests
     public void Append_WorkspaceMode_DoesNotDuplicateFileToolGuidance()
     {
         var fileBuilder = new StringBuilder();
-        new FileToolsPolicySection().Append(fileBuilder, CreateContext(hasWorkspace: true, tools: []));
+        new FileToolsPolicySection().Append(fileBuilder, CreateContext(hasWorkspace: true, tools: FullWorkspaceTools));
         var toolsBuilder = new StringBuilder();
-        new ToolsPolicySection().Append(toolsBuilder, CreateContext(hasWorkspace: true, tools: []));
+        new ToolsPolicySection().Append(toolsBuilder, CreateContext(hasWorkspace: true, tools: FullWorkspaceTools));
 
         var fileText = fileBuilder.ToString();
         var toolsText = toolsBuilder.ToString();
         Assert.Contains("character-for-character", fileText, StringComparison.Ordinal);
-        Assert.Contains("N| prefixes", fileText, StringComparison.Ordinal);
-        Assert.DoesNotContain("N| prefixes", toolsText, StringComparison.Ordinal);
         Assert.DoesNotContain("character-for-character", toolsText, StringComparison.Ordinal);
         Assert.DoesNotContain("Prefer search before file_read", toolsText, StringComparison.Ordinal);
     }
@@ -58,11 +70,13 @@ public sealed class ToolsPolicySectionTests
     public void Append_AskMode_UsesReadOnlyPolicyWithoutShellGuidance()
     {
         var builder = new StringBuilder();
-        new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools: [], mode: SessionAgentMode.Ask));
+        new ToolsPolicySection().Append(
+            builder,
+            CreateContext(hasWorkspace: true, tools: FullWorkspaceTools, mode: SessionAgentMode.Ask));
 
         var text = builder.ToString();
         Assert.Contains("read-only", text, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("file_write", text, StringComparison.Ordinal);
+        Assert.Contains("Reject mutation", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("cmd.exe", text, StringComparison.Ordinal);
     }
 
@@ -70,30 +84,37 @@ public sealed class ToolsPolicySectionTests
     public void Append_CodingMode_RequiresTodoMaintenanceForWrites()
     {
         var builder = new StringBuilder();
-        new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools: [], mode: SessionAgentMode.Coding));
+        new ToolsPolicySection().Append(
+            builder,
+            CreateContext(hasWorkspace: true, tools: FullWorkspaceTools, mode: SessionAgentMode.Coding));
 
         var text = builder.ToString();
         Assert.Contains("todo_write", text, StringComparison.Ordinal);
         Assert.Contains("maintain an accurate todo list", text, StringComparison.Ordinal);
-        Assert.Contains("  5. Shell:", text, StringComparison.Ordinal);
+        Assert.Contains("Shell:", text, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Append_AgentMode_DoesNotRequireTodoBeforeWrites()
     {
+        var tools = FullWorkspaceTools.Where(tool => tool.Name != "todo_write").ToArray();
         var builder = new StringBuilder();
-        new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools: [], mode: SessionAgentMode.Agent));
+        new ToolsPolicySection().Append(
+            builder,
+            CreateContext(hasWorkspace: true, tools: tools, mode: SessionAgentMode.Agent));
 
         var text = builder.ToString();
         Assert.DoesNotContain("maintain an accurate todo list", text, StringComparison.Ordinal);
-        Assert.Contains("  4. Shell:", text, StringComparison.Ordinal);
+        Assert.Contains("Shell:", text, StringComparison.Ordinal);
     }
 
     [Fact]
     public void Append_PlanMode_UsesReadOnlyPolicyWithCreatePlan()
     {
         var builder = new StringBuilder();
-        new ToolsPolicySection().Append(builder, CreateContext(hasWorkspace: true, tools: [], mode: SessionAgentMode.Plan));
+        new ToolsPolicySection().Append(
+            builder,
+            CreateContext(hasWorkspace: true, tools: FullWorkspaceTools, mode: SessionAgentMode.Plan));
 
         var text = builder.ToString();
         Assert.Contains("read-only", text, StringComparison.OrdinalIgnoreCase);

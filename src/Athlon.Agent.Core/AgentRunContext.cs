@@ -23,6 +23,16 @@ public sealed record AgentRunContext
 
     public string? SubAgentRole { get; init; }
 
+    /// <summary>
+    /// When non-empty, sub-agent prompt assembly uses this as the sole complete system prompt.
+    /// </summary>
+    public string? CompleteSystemPrompt { get; init; }
+
+    /// <summary>
+    /// When true, <see cref="Prompt.RuntimeContextAssembler"/> returns no runtime context for this run.
+    /// </summary>
+    public bool SuppressRuntimeContext { get; init; }
+
     public AgentLoopOptions? LoopOptions { get; init; }
 
     public AgentRunKind Kind { get; init; } = AgentRunKind.Root;
@@ -51,7 +61,8 @@ public sealed record AgentRunContext
             ToolRouter = toolRouter,
             PromptOrchestrator = promptOrchestrator,
             Kind = AgentRunKind.Root,
-            ComputerUseActive = computerUseActive
+            ComputerUseActive = computerUseActive,
+            SuppressRuntimeContext = computerUseActive
         };
 
     public AgentRunContext CreateChild(
@@ -61,7 +72,8 @@ public sealed record AgentRunContext
         string role,
         AgentLoopOptions? loopOptions,
         string? workspaceRoot,
-        IReadOnlyList<string> ignorePatterns) =>
+        IReadOnlyList<string> ignorePatterns,
+        string? completeSystemPrompt = null) =>
         new()
         {
             SessionId = subSessionId,
@@ -75,6 +87,8 @@ public sealed record AgentRunContext
             ToolRouter = childRouter,
             PromptOrchestrator = childPrompt,
             SubAgentRole = role,
+            CompleteSystemPrompt = completeSystemPrompt,
+            SuppressRuntimeContext = SuppressRuntimeContext,
             LoopOptions = loopOptions,
             Kind = AgentRunKind.SubAgent,
             ComputerUseActive = ComputerUseActive

@@ -4,7 +4,9 @@ namespace Athlon.Agent.Core.Prompt;
 
 public sealed class WorkspacePolicySection : IEnvironmentPromptSection
 {
-    public int Order => 300;
+    public string Name => "workspace:policy";
+
+    public int Order => PromptSectionBands.Workspace;
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
@@ -34,7 +36,11 @@ public sealed class WorkspacePolicySection : IEnvironmentPromptSection
         builder.AppendLine("When using relative paths, use src/foo.cs. Avoid prefixing with the workspace label/.");
         builder.AppendLine("The workspace label is informational, not a path prefix. Exact root/name are in runtime context.");
         builder.AppendLine("Workspace contents are intentionally not embedded in this prompt because they change often.");
-        builder.AppendLine("Use file_list to fetch a live directory listing when needed.");
+        if (PromptModeHelper.HasTool(context, "file_list"))
+        {
+            builder.AppendLine("Use file_list to fetch a live directory listing when needed.");
+        }
+
         builder.AppendLine();
     }
 }

@@ -6,7 +6,9 @@ namespace Athlon.Agent.Infrastructure.Prompt;
 
 public sealed class WorkspaceFilesSection(ISshWorkspaceClient? sshClient = null) : IEnvironmentPromptSection
 {
-    public int Order => 400;
+    public string Name => "workspace:files";
+
+    public int Order => PromptSectionBands.WorkflowStart + 1;
 
     public PromptSectionPlacement Placement => PromptSectionPlacement.PreCall;
 

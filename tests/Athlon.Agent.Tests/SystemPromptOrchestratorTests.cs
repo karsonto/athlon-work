@@ -97,7 +97,17 @@ public sealed class SystemPromptOrchestratorTests
             new PromptTestHelpers.FakeHostEnvironment(@"C:\Users\test\.athlon-agent\skills", @"C:\Users\test\.athlon-agent"),
             settings);
         var session = AgentSession.Create("coding-workflow") with { ActiveWorkspace = @"C:\work\demo" };
-        var prompt = orchestrator.PrepareForTurn(session, Array.Empty<ToolDefinition>()).Text;
+        var tools = new[]
+        {
+            new ToolDefinition("file_read", "r", ToolSchema.Object().Build()),
+            new ToolDefinition("file_write", "w", ToolSchema.Object().Build()),
+            new ToolDefinition("file_edit", "e", ToolSchema.Object().Build()),
+            new ToolDefinition("apply_patch", "p", ToolSchema.Object().Build()),
+            new ToolDefinition("grep_files", "g", ToolSchema.Object().Build()),
+            new ToolDefinition("glob_files", "gl", ToolSchema.Object().Build()),
+            new ToolDefinition("execute_command", "x", ToolSchema.Object().Build()),
+        };
+        var prompt = orchestrator.PrepareForTurn(session, tools).Text;
 
         Assert.Contains("Coding workflow:", prompt, StringComparison.Ordinal);
         Assert.Contains("mvn -q -pl", prompt, StringComparison.Ordinal);

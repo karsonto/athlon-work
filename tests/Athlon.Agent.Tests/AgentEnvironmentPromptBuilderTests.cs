@@ -26,8 +26,18 @@ public sealed class AgentEnvironmentPromptBuilderTests
                 new PromptTestHelpers.FakeHostEnvironment(skillsPath, appDataPath),
                 settings);
             var session = AgentSession.Create("prompt-test").WithWorkspace(workspaceRoot);
+            var tools = new[]
+            {
+                new ToolDefinition("file_read", "r", ToolSchema.Object().Build()),
+                new ToolDefinition("file_write", "w", ToolSchema.Object().Build()),
+                new ToolDefinition("file_edit", "e", ToolSchema.Object().Build()),
+                new ToolDefinition("grep_files", "g", ToolSchema.Object().Build()),
+                new ToolDefinition("glob_files", "gl", ToolSchema.Object().Build()),
+                new ToolDefinition("file_list", "l", ToolSchema.Object().Build()),
+                new ToolDefinition("execute_command", "x", ToolSchema.Object().Build()),
+            };
 
-            var prompt = builder.Build(session, Array.Empty<ToolDefinition>());
+            var prompt = builder.Build(session, tools);
 
             Assert.Contains("Host: Win", prompt, StringComparison.Ordinal);
             Assert.Contains("tz=UTC+8", prompt, StringComparison.Ordinal);

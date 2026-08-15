@@ -7,7 +7,10 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
 {
     public ToolDefinition Definition { get; } = new(
         "file_write",
-        "Create or overwrite a file. `content` must be a non-empty string with the full file body.",
+        "Create or overwrite a file. `content` must be a non-empty JSON string with the full file body "
+            + "(do not omit, null, or empty). Put `path` before `content` in the arguments object so streaming "
+            + "truncation still preserves the path. Do not write large HTML/JS in one shot — write a short skeleton "
+            + "then extend with file_edit or apply_patch; keep each content payload small so the JSON closes completely.",
         ToolSchema.Object()
             .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true, minLength: 1)
             .String(

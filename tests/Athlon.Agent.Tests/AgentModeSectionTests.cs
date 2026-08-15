@@ -55,15 +55,33 @@ public sealed class AgentModeSectionTests
         Assert.DoesNotContain("sessions_", text, StringComparison.Ordinal);
     }
 
-    private static EnvironmentPromptContext CreateContext(SessionAgentMode mode, bool hasWorkspace = true) =>
-        new()
+    private static EnvironmentPromptContext CreateContext(SessionAgentMode mode, bool hasWorkspace = true)
+    {
+        var tools = new List<ToolDefinition>
+        {
+            new("file_read", "r", ToolSchema.Object().Build()),
+            new("grep_files", "g", ToolSchema.Object().Build()),
+        };
+        if (mode == SessionAgentMode.Coding)
+        {
+            tools.Add(new ToolDefinition("todo_write", "t", ToolSchema.Object().Build()));
+        }
+
+        if (mode == SessionAgentMode.Plan)
+        {
+            tools.Add(new ToolDefinition("create_plan", "c", ToolSchema.Object().Build()));
+            tools.Add(new ToolDefinition("update_plan", "u", ToolSchema.Object().Build()));
+        }
+
+        return new EnvironmentPromptContext
         {
             Session = AgentSession.Create("agent-mode-test"),
             WorkspaceRoot = hasWorkspace ? @"C:\work\demo" : null,
-            Tools = [],
+            Tools = tools,
             SkillsDirectory = @"C:\skills",
             Host = new PromptTestHelpers.FakeHostEnvironment(@"C:\skills", @"C:\app"),
             PromptSettings = new PromptSettings(),
             AgentMode = mode,
         };
+    }
 }

@@ -34,16 +34,26 @@ public static class ModelMessagesForApiBuilder
             ? cache.ApplyHygiene(compaction.RequestHistoryHygiene)
             : RequestHistoryHygiene.ApplyToModelMessages(messages, compaction.RequestHistoryHygiene);
 
-        var contextToInject = runtimeContextState is null
-            ? runtimeContext
-            : runtimeContextState.SelectForInjection(runtimeContext);
-        if (string.IsNullOrWhiteSpace(contextToInject))
+        if (runtimeContextState is null)
+        {
+            if (string.IsNullOrWhiteSpace(runtimeContext))
+            {
+                return result;
+            }
+
+            var withContext = result.Messages.ToList();
+            withContext.Add(new AgentModelMessage("user", runtimeContext));
+            return new RequestHistoryHygiene.ApplyResult(withContext, result.EstimatedSavingsTokens);
+        }
+
+        var injection = runtimeContextState.SelectForInjection(runtimeContext);
+        if (injection.Messages.Count == 0)
         {
             return result;
         }
 
         var messagesWithRuntimeContext = result.Messages.ToList();
-        messagesWithRuntimeContext.Add(new AgentModelMessage("user", contextToInject));
+        messagesWithRuntimeContext.AddRange(injection.Messages);
         return new RequestHistoryHygiene.ApplyResult(messagesWithRuntimeContext, result.EstimatedSavingsTokens);
     }
 }
@@ -51,16 +61,51 @@ public static class ModelMessagesForApiBuilder
 public sealed class RuntimeContextInjectionState
 {
     private string? _lastFingerprint;
+    private string? _previousContext;
 
     public string? LastSelectedContext { get; private set; }
+
     public bool FingerprintChanged { get; private set; }
 
-    public string? SelectForInjection(string? runtimeContext)
+    public RuntimeContextInjection SelectForInjection(string? runtimeContext)
     {
         var fingerprint = RuntimeContextSnapshot.ComputeFingerprint(runtimeContext);
         FingerprintChanged = !string.Equals(_lastFingerprint, fingerprint, StringComparison.Ordinal);
+
+        if (string.IsNullOrWhiteSpace(runtimeContext))
+        {
+            _lastFingerprint = fingerprint;
+            LastSelectedContext = null;
+            _previousContext = null;
+            return RuntimeContextInjection.Empty;
+        }
+
+        List<AgentModelMessage> messages;
+        if (FingerprintChanged && !string.IsNullOrWhiteSpace(_previousContext))
+        {
+            var superseded = _previousContext
+                + Environment.NewLine
+                + Environment.NewLine
+                + "(superseded by newer runtime context)";
+            messages =
+            [
+                new AgentModelMessage("user", superseded),
+                new AgentModelMessage("user", runtimeContext)
+            ];
+        }
+        else
+        {
+            messages = [new AgentModelMessage("user", runtimeContext)];
+        }
+
+        _previousContext = runtimeContext;
         _lastFingerprint = fingerprint;
-        LastSelectedContext = string.IsNullOrWhiteSpace(runtimeContext) ? null : runtimeContext;
-        return LastSelectedContext;
+        LastSelectedContext = runtimeContext;
+        return new RuntimeContextInjection(messages);
     }
+}
+
+public sealed record RuntimeContextInjection(IReadOnlyList<AgentModelMessage> Messages)
+{
+    public static RuntimeContextInjection Empty { get; } = new([]);
 }

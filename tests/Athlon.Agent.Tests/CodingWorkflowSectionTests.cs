@@ -60,6 +60,11 @@ public sealed class CodingWorkflowSectionTests
             Tools =
             [
                 new ToolDefinition("file_read", "Read", ToolSchema.Object().Build()),
+                new ToolDefinition("file_write", "Write", ToolSchema.Object().Build()),
+                new ToolDefinition("file_edit", "Edit", ToolSchema.Object().Build()),
+                new ToolDefinition("apply_patch", "Patch", ToolSchema.Object().Build()),
+                new ToolDefinition("grep_files", "Grep", ToolSchema.Object().Build()),
+                new ToolDefinition("todo_write", "Todo", ToolSchema.Object().Build()),
                 new ToolDefinition("execute_command", "Run", ToolSchema.Object().Build())
             ],
             SkillsDirectory = @"C:\Users\test\.athlon-agent\skills",

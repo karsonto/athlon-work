@@ -17,8 +17,9 @@ public sealed class SshGrepFilesTool(
 
     public ToolDefinition Definition { get; } = new(
         "grep_files",
-        "Search file contents for a text pattern (literal by default; set regex to true for .NET regular expressions). "
-            + $"Search is case-insensitive by default. Scans up to {MaxFilesToScan} files, returns up to {MaxMatches} matches.",
+        "Search file contents. Literal matching by default (case-insensitive); set regex true for .NET regular expressions. "
+            + "Use for simple strings or patterns/class names before file_read on large files. "
+            + $"Scans up to {MaxFilesToScan} files, returns up to {MaxMatches} matches.",
         ToolSchema.Object()
             .String("pattern", "Text pattern (literal or regex). Regex example with regex true: class\\s+\\w+", required: true, minLength: 1)
             .String("path", ToolPathDescriptions.OptionalWorkspaceRelativeDirectory)

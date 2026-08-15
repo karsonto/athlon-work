@@ -105,6 +105,12 @@ public sealed class PromptSettings
     public int MaxContributingMdChars { get; set; } = 4000;
     public int MaxKnowledgeMdChars { get; set; } = 1500;
     public int MaxKnowledgeCatalogEntries { get; set; } = 50;
+
+    /// <summary>
+    /// Explicit model-facing tool order. When set, must contain exactly one
+    /// <c>&lt;unlisted-tools&gt;</c> rest entry. Null keeps lexicographic name order.
+    /// </summary>
+    public List<string>? ToolOrder { get; set; }
 }
 public sealed class ModelSettings
 {

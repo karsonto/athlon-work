@@ -4,10 +4,23 @@ namespace Athlon.Agent.Core.Prompt;
 
 public sealed class SubAgentPersonaSection(IAgentRunContextAccessor runContextAccessor) : IEnvironmentPromptSection
 {
-    public int Order => 50;
+    public string Name => "subagent:persona";
+
+    public int Order => PromptSectionBands.SubAgentPersona;
+
+    public bool IsComplete =>
+        !string.IsNullOrWhiteSpace(runContextAccessor.Current?.CompleteSystemPrompt);
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
+        var complete = runContextAccessor.Current?.CompleteSystemPrompt;
+        if (!string.IsNullOrWhiteSpace(complete))
+        {
+            builder.AppendLine(complete.Trim());
+            builder.AppendLine();
+            return;
+        }
+
         var role = runContextAccessor.Current?.SubAgentRole;
         if (string.IsNullOrWhiteSpace(role))
         {

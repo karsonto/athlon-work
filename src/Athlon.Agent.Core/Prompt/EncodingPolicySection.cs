@@ -4,7 +4,9 @@ namespace Athlon.Agent.Core.Prompt;
 
 public sealed class EncodingPolicySection : IEnvironmentPromptSection
 {
-    public int Order => 210;
+    public string Name => "host:encoding";
+
+    public int Order => PromptSectionBands.Encoding;
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {

@@ -7,7 +7,9 @@ namespace Athlon.Agent.Infrastructure.Prompt;
 
 public sealed class SkillsSection(AppSettings settings, IAgentSkillCatalog catalog) : IEnvironmentPromptSection
 {
-    public int Order => 600;
+    public string Name => "skills:catalog";
+
+    public int Order => PromptSectionBands.Skills;
 
     public PromptSectionPlacement Placement => PromptSectionPlacement.PreCall;
 
@@ -19,13 +21,12 @@ public sealed class SkillsSection(AppSettings settings, IAgentSkillCatalog catal
         }
 
         var skills = SkillFilter.GetEnabledSkills(catalog, settings);
-        builder.AppendLine();
-
         if (skills.Count == 0)
         {
             return;
         }
 
+        builder.AppendLine();
         SkillXmlPromptRenderer.AppendSkillPrompt(builder, skills);
     }
 }

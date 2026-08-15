@@ -6,7 +6,7 @@ public sealed class ApplyPatchTool(WorkspaceGuard guard, AuditLogService audit) 
 {
     public ToolDefinition Definition { get; } = new(
         "apply_patch",
-        "Apply a unified diff patch to workspace files. Use when file_edit fails due to exact-match errors. "
+        "Apply a unified diff patch to workspace files. Prefer for multi-line or fragile exact-match edits when file_edit fails. "
             + "Patch must use standard --- / +++ / @@ headers.",
         ToolSchema.Object()
             .String("patch", "Unified diff text (--- / +++ / @@ hunks)", required: true, pattern: @"(?s)^.*(?:--- |\*\*\* Begin Patch).*")
