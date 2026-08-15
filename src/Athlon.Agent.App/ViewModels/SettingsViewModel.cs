@@ -72,16 +72,44 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string terminalShell = WorkspaceTerminalBootstrap.ShellCmd;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowApiKeyMask))]
     private string apiKey = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowApiKeyMask))]
     private bool hasStoredApiKey;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowApiKeyMask))]
+    [NotifyPropertyChangedFor(nameof(ApiKeyRevealGlyph))]
+    private bool isApiKeyRevealed;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowKnowledgeEmbeddingApiKeyMask))]
     private string knowledgeEmbeddingApiKey = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowKnowledgeEmbeddingApiKeyMask))]
     private bool hasStoredKnowledgeEmbeddingApiKey;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowKnowledgeEmbeddingApiKeyMask))]
+    [NotifyPropertyChangedFor(nameof(KnowledgeEmbeddingApiKeyRevealGlyph))]
+    private bool isKnowledgeEmbeddingApiKeyRevealed;
+
+    public bool ShowApiKeyMask =>
+        HasStoredApiKey && !IsApiKeyRevealed && string.IsNullOrWhiteSpace(ApiKey);
+
+    public bool ShowKnowledgeEmbeddingApiKeyMask =>
+        HasStoredKnowledgeEmbeddingApiKey
+        && !IsKnowledgeEmbeddingApiKeyRevealed
+        && string.IsNullOrWhiteSpace(KnowledgeEmbeddingApiKey);
+
+    /// <summary>Segoe MDL2: RedEye when masked, Hide when revealed.</summary>
+    public string ApiKeyRevealGlyph => IsApiKeyRevealed ? "\uE8F5" : "\uE890";
+
+    public string KnowledgeEmbeddingApiKeyRevealGlyph =>
+        IsKnowledgeEmbeddingApiKeyRevealed ? "\uE8F5" : "\uE890";
 
     public string McpConfigPath => SettingsConfigPath;
 
@@ -97,6 +125,52 @@ public sealed partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private async Task ToggleApiKeyRevealAsync()
+    {
+        if (IsApiKeyRevealed)
+        {
+            IsApiKeyRevealed = false;
+            ApiKey = string.Empty;
+            OnPropertyChanged(nameof(ApiKey));
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(ApiKey) && HasStoredApiKey)
+        {
+            var secret = await _credentialStore
+                .GetSecretAsync(ModelSettings.ApiKeySecretName)
+                .ConfigureAwait(true);
+            ApiKey = secret ?? string.Empty;
+            OnPropertyChanged(nameof(ApiKey));
+        }
+
+        IsApiKeyRevealed = true;
+    }
+
+    [RelayCommand]
+    private async Task ToggleKnowledgeEmbeddingApiKeyRevealAsync()
+    {
+        if (IsKnowledgeEmbeddingApiKeyRevealed)
+        {
+            IsKnowledgeEmbeddingApiKeyRevealed = false;
+            KnowledgeEmbeddingApiKey = string.Empty;
+            OnPropertyChanged(nameof(KnowledgeEmbeddingApiKey));
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(KnowledgeEmbeddingApiKey) && HasStoredKnowledgeEmbeddingApiKey)
+        {
+            var secret = await _credentialStore
+                .GetSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName)
+                .ConfigureAwait(true);
+            KnowledgeEmbeddingApiKey = secret ?? string.Empty;
+            OnPropertyChanged(nameof(KnowledgeEmbeddingApiKey));
+        }
+
+        IsKnowledgeEmbeddingApiKeyRevealed = true;
+    }
+
+    [RelayCommand]
     private async Task SaveSettingsAsync()
     {
         SyncPendingSecrets?.Invoke();
@@ -108,6 +182,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 .SaveSecretAsync(ModelSettings.ApiKeySecretName, ApiKey.Trim())
                 .ConfigureAwait(true);
             ApiKey = string.Empty;
+            IsApiKeyRevealed = false;
             HasStoredApiKey = true;
             OnPropertyChanged(nameof(ApiKey));
             modelKeySaved = true;
@@ -120,6 +195,7 @@ public sealed partial class SettingsViewModel : ObservableObject
                 .SaveSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName, KnowledgeEmbeddingApiKey.Trim())
                 .ConfigureAwait(true);
             KnowledgeEmbeddingApiKey = string.Empty;
+            IsKnowledgeEmbeddingApiKeyRevealed = false;
             HasStoredKnowledgeEmbeddingApiKey = true;
             OnPropertyChanged(nameof(KnowledgeEmbeddingApiKey));
             EmbeddingApiKeyAvailabilityChanged?.Invoke(this, true);

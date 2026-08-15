@@ -47,9 +47,69 @@
                                           VerticalAlignment="Center" />
                             </Grid>
                             <TextBlock Text="{loc:Localize Key=Settings_ApiKeyLabel}" Foreground="{DynamicResource Brush.SubtleText}" />
-                            <PasswordBox x:Name="ApiKeyPasswordBox"
-                                         behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
-                                         Margin="0,6,0,6" />
+                            <Grid Margin="0,6,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <PasswordBox x:Name="ApiKeyPasswordBox"
+                                                 behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}">
+                                        <PasswordBox.Style>
+                                            <Style TargetType="PasswordBox" BasedOn="{StaticResource {x:Type PasswordBox}}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsApiKeyRevealed}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </PasswordBox.Style>
+                                    </PasswordBox>
+                                    <TextBox Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
+                                             VerticalContentAlignment="Center">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsApiKeyRevealed}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
+                                    <TextBlock Text="*****"
+                                               IsHitTestVisible="False"
+                                               VerticalAlignment="Center"
+                                               Margin="12,0,0,0"
+                                               Foreground="{DynamicResource Brush.SubtleText}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ShowApiKeyMask}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                                <Button Grid.Column="1"
+                                        Command="{Binding ToggleApiKeyRevealCommand}"
+                                        ToolTip="{loc:Localize Key=Settings_ToggleApiKeyVisibility}"
+                                        Margin="8,0,0,0"
+                                        Width="36"
+                                        Height="36"
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource GhostIconButtonStyle}">
+                                    <TextBlock Text="{Binding ApiKeyRevealGlyph}"
+                                               FontFamily="Segoe MDL2 Assets"
+                                               FontSize="14"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Button>
+                            </Grid>
                             <TextBlock Text="{Binding HasStoredApiKey, StringFormat=已保存 Model API Key：{0}}"
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        FontSize="12"
@@ -186,9 +246,70 @@
                                 </StackPanel>
                             </Grid>
                             <TextBlock Text="{loc:Localize Key=Settings_EmbeddingApiKey}" Foreground="{DynamicResource Brush.SubtleText}" />
-                            <PasswordBox x:Name="KnowledgeEmbeddingApiKeyPasswordBox"
-                                         behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding KnowledgeEmbeddingApiKey, UpdateSourceTrigger=PropertyChanged}"
-                                         Margin="0,6,0,6" />
+                            <Grid Margin="0,6,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <PasswordBox x:Name="KnowledgeEmbeddingApiKeyPasswordBox"
+                                                 behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding KnowledgeEmbeddingApiKey, UpdateSourceTrigger=PropertyChanged}">
+                                        <PasswordBox.Style>
+                                            <Style TargetType="PasswordBox" BasedOn="{StaticResource {x:Type PasswordBox}}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsKnowledgeEmbeddingApiKeyRevealed}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </PasswordBox.Style>
+                                    </PasswordBox>
+                                    <TextBox Text="{Binding KnowledgeEmbeddingApiKey, UpdateSourceTrigger=PropertyChanged}"
+                                             VerticalContentAlignment="Center">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsKnowledgeEmbeddingApiKeyRevealed}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
+                                    <TextBlock Text="*****"
+                                               IsHitTestVisible="False"
+                                               VerticalAlignment="Center"
+                                               Margin="12,0,0,0"
+                                               Foreground="{DynamicResource Brush.SubtleText}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ShowKnowledgeEmbeddingApiKeyMask}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                                <Button Grid.Column="1"
+                                        Command="{Binding ToggleKnowledgeEmbeddingApiKeyRevealCommand}"
+                                        ToolTip="{loc:Localize Key=Settings_ToggleApiKeyVisibility}"
+                                        Width="36"
+                                        Height="36"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource GhostIconButtonStyle}">
+                                    <TextBlock Text="{Binding KnowledgeEmbeddingApiKeyRevealGlyph}"
+                                               FontFamily="Segoe MDL2 Assets"
+                                               FontSize="14"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center" />
+                                </Button>
+                            </Grid>
                             <TextBlock Text="{Binding HasStoredKnowledgeEmbeddingApiKey, StringFormat=已保存知识库 Embedding API Key：{0}}"
                                        Foreground="{DynamicResource Brush.SubtleText}"
                                        FontSize="12" />

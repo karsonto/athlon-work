@@ -26,8 +26,15 @@ public partial class SettingsPageView : UserControl
 
         settings.SyncPendingSecrets = () =>
         {
-            PasswordBoxBindingBehavior.SyncBoundPassword(ApiKeyPasswordBox);
-            PasswordBoxBindingBehavior.SyncBoundPassword(KnowledgeEmbeddingApiKeyPasswordBox);
+            if (!settings.IsApiKeyRevealed)
+            {
+                PasswordBoxBindingBehavior.SyncBoundPassword(ApiKeyPasswordBox);
+            }
+
+            if (!settings.IsKnowledgeEmbeddingApiKeyRevealed)
+            {
+                PasswordBoxBindingBehavior.SyncBoundPassword(KnowledgeEmbeddingApiKeyPasswordBox);
+            }
         };
     }
 }

@@ -1148,13 +1148,16 @@
     <value>请输入工作目录。</value>
   </data>
   <data name="Settings_ApiKeyDpapiHint" xml:space="preserve">
-    <value>API Key 使用 Windows DPAPI 加密保存在用户目录。PasswordBox 不会显示已保存的 Key；更换 Provider 后请重新粘贴并点「保存设置」。留空时不发送 Authorization 请求头。</value>
+    <value>API Key 使用 Windows DPAPI 加密保存在用户目录。已保存时显示 *****，可点右侧眼睛查看；更换 Provider 后请重新粘贴并点「保存设置」。留空时不发送 Authorization 请求头。</value>
   </data>
   <data name="Settings_ApiKeyLabel" xml:space="preserve">
     <value>API Key</value>
   </data>
   <data name="Settings_ApiKeySaved" xml:space="preserve">
     <value>已保存 Model API Key：{0}</value>
+  </data>
+  <data name="Settings_ToggleApiKeyVisibility" xml:space="preserve">
+    <value>显示 / 隐藏 API Key</value>
   </data>
   <data name="Settings_BatchSize" xml:space="preserve">
     <value>Batch Size</value>

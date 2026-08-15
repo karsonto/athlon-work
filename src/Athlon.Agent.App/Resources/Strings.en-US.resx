@@ -1127,13 +1127,16 @@ Save anyway?</value>
     <value>Enter a working directory.</value>
   </data>
   <data name="Settings_ApiKeyDpapiHint" xml:space="preserve">
-    <value>API keys are encrypted with Windows DPAPI in your user profile. The password box does not show saved keys; paste again after changing provider and click Save settings. Leave blank to omit the Authorization header.</value>
+    <value>API keys are encrypted with Windows DPAPI in your user profile. Saved keys show as *****; use the eye icon to reveal. After changing provider, paste again and click Save settings. Leave blank to omit the Authorization header.</value>
   </data>
   <data name="Settings_ApiKeyLabel" xml:space="preserve">
     <value>API Key</value>
   </data>
   <data name="Settings_ApiKeySaved" xml:space="preserve">
     <value>Saved model API key: {0}</value>
+  </data>
+  <data name="Settings_ToggleApiKeyVisibility" xml:space="preserve">
+    <value>Show / hide API key</value>
   </data>
   <data name="Settings_BatchSize" xml:space="preserve">
     <value>Batch Size</value>
