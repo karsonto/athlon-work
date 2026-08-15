@@ -47,6 +47,7 @@ public partial class WebChatView : UserControl
 
     public event EventHandler<string>? InitializationFailed;
     public event EventHandler? OlderMessagesRequested;
+    public event EventHandler<string>? ExternalLinkRequested;
     public event EventHandler<ToolApprovalDecisionEventArgs>? ToolApprovalDecisionReceived;
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -364,6 +365,8 @@ public partial class WebChatView : UserControl
             ChatWebView.CoreWebView2.Settings.IsWebMessageEnabled = true;
             ChatWebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             ChatWebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+            ChatWebView.CoreWebView2.NavigationStarting += OnNavigationStarting;
+            ChatWebView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
             var assetsDir = ChatMarkdownAssets.AssetsDirectory;
             if (Directory.Exists(assetsDir))
             {
@@ -447,6 +450,12 @@ public partial class WebChatView : UserControl
                     case "loadOlder":
                         OlderMessagesRequested?.Invoke(this, EventArgs.Empty);
                         break;
+                    case "openUrl":
+                        var openUrl = root.TryGetProperty("url", out var openUrlElement)
+                            ? openUrlElement.GetString()
+                            : null;
+                        RequestOpenExternalLink(openUrl);
+                        break;
                     case "toolApproval":
                         var toolCallId = root.TryGetProperty("toolCallId", out var toolCallIdElement)
                             ? toolCallIdElement.GetString()
@@ -471,6 +480,77 @@ public partial class WebChatView : UserControl
         {
             App.StartupTrace($"WebChatView copy message failed: {ex.Message}");
         }
+    }
+
+    private void OnNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs e)
+    {
+        if (IsChatShellNavigation(e.Uri))
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        RequestOpenExternalLink(e.Uri);
+    }
+
+    private void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+    {
+        e.Handled = true;
+        RequestOpenExternalLink(e.Uri);
+    }
+
+    private void RequestOpenExternalLink(string? uri)
+    {
+        if (!TryGetHttpUrl(uri, out var httpUrl))
+        {
+            return;
+        }
+
+        if (Dispatcher.CheckAccess())
+        {
+            ExternalLinkRequested?.Invoke(this, httpUrl);
+            return;
+        }
+
+        Dispatcher.BeginInvoke(() => ExternalLinkRequested?.Invoke(this, httpUrl));
+    }
+
+    private static bool IsChatShellNavigation(string? uri)
+    {
+        if (string.IsNullOrWhiteSpace(uri))
+        {
+            return true;
+        }
+
+        if (uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase)
+            || uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return uri.StartsWith(ChatMarkdownAssets.VirtualBaseUrl, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryGetHttpUrl(string? uri, out string httpUrl)
+    {
+        httpUrl = string.Empty;
+        if (string.IsNullOrWhiteSpace(uri))
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(uri.Trim(), UriKind.Absolute, out var absolute))
+        {
+            return false;
+        }
+
+        if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
+        {
+            return false;
+        }
+
+        httpUrl = absolute.AbsoluteUri;
+        return true;
     }
 
     private void ApplyThemeBackground()

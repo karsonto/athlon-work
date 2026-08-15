@@ -1364,6 +1364,22 @@ document.addEventListener('selectionchange', function () {
   else if (isNearBottom()) state.autoScrollEnabled = true;
 });
 
+(function bindExternalLinks() {
+  var root = document.getElementById('messages');
+  if (!root) return;
+  root.addEventListener('click', function (e) {
+    var target = e.target;
+    if (!target || typeof target.closest !== 'function') return;
+    var anchor = target.closest('a[href]');
+    if (!anchor) return;
+    var href = anchor.getAttribute('href');
+    if (!href || href.charAt(0) === '#') return;
+    e.preventDefault();
+    e.stopPropagation();
+    post({ type: 'openUrl', url: anchor.href });
+  });
+})();
+
 (function bindImageLightbox() {
   var lightbox = document.getElementById('image-lightbox');
   if (!lightbox) return;

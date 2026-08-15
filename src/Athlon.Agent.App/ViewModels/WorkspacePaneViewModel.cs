@@ -87,6 +87,26 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
         IsAddMenuOpen = false;
     }
 
+    /// <summary>Creates a Browser tab for <paramref name="url"/>, activates it, and returns the view model.</summary>
+    public BrowserWorkspaceTabViewModel OpenUrlInBrowserTab(string url)
+    {
+        var normalized = BrowserWorkspaceTabViewModel.NormalizeUrl(url);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new ArgumentException("A valid http(s) URL is required.", nameof(url));
+        }
+
+        _browserSerial++;
+        var title = _browserSerial <= 1
+            ? _loc["Workspace_Browser"]
+            : string.Format(_loc["Workspace_BrowserN"], _browserSerial);
+        var tab = new BrowserWorkspaceTabViewModel(title, normalized);
+        Tabs.Add(tab);
+        ActiveTab = tab;
+        IsAddMenuOpen = false;
+        return tab;
+    }
+
     [RelayCommand]
     private void AddBrowserTab() => AddBrowserTabAndActivate();
 

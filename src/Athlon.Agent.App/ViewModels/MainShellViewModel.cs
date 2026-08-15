@@ -857,6 +857,24 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         WorkspacePane.AddBrowserTabCommand.Execute(null);
     }
 
+    /// <summary>Opens an http(s) URL from chat markdown links in a right-side Browser workspace tab.</summary>
+    public async Task OpenChatLinkInBrowserAsync(string url)
+    {
+        var normalized = BrowserWorkspaceTabViewModel.NormalizeUrl(url);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return;
+        }
+
+        if (!_appSettings.Ui.ContextSidebarVisible)
+        {
+            SetContextSidebarVisible(true, animate: true);
+            await _layout.PersistNowAsync().ConfigureAwait(true);
+        }
+
+        WorkspacePane.OpenUrlInBrowserTab(normalized);
+    }
+
     [RelayCommand]
     private async Task ToggleNavigationSidebarAsync()
     {
@@ -956,14 +974,29 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         if (_savedChatView is not null)
         {
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
+            _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
         }
 
         _savedChatView = chatView;
         chatView.OlderMessagesRequested += OnOlderMessagesRequested;
+        chatView.ExternalLinkRequested += OnChatExternalLinkRequested;
         _uiCache.AttachChatViewToAll(chatView);
         _activeUi.ChatView = chatView;
         _ = _activeUi.ReloadChatViewAsync();
         _ = chatView.SetOlderMessagesAvailableAsync(_olderDisplayCursor is not null);
+    }
+
+    private async void OnChatExternalLinkRequested(object? sender, string url)
+    {
+        try
+        {
+            await OpenChatLinkInBrowserAsync(url).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Open chat link in browser failed: {ex.Message}");
+            ShowShellToast(ex.Message, ShellToastKind.Error);
+        }
     }
 
     private void NotifyContextSidebarLayoutChanged()
@@ -2597,6 +2630,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         if (_savedChatView is not null)
         {
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
+            _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
         }
 
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
