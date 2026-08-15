@@ -48,7 +48,7 @@ public partial class ChatPageView : UserControl, IChatLayoutSurface
 
         var menu = shell.BuildRunOnMenu();
         menu.PlacementTarget = RunOnButton;
-        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Top;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
         menu.IsOpen = true;
     }
 

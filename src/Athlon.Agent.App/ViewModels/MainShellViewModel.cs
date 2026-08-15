@@ -579,10 +579,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         get
         {
-            if (!HasSessionWorkspace)
-            {
-                return _loc["Shell_RunOnThisPc"];
-            }
+                if (!HasSessionWorkspace)
+                {
+                    return _loc["Shell_ChooseWorkspace"];
+                }
 
             if (_workspaceContext.Kind == WorkspaceKind.Ssh)
             {

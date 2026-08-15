@@ -193,6 +193,9 @@
   <data name="Chat_ActivityVerbThought" xml:space="preserve">
     <value>思考</value>
   </data>
+  <data name="Chat_ActivityVerbNarration" xml:space="preserve">
+    <value>说过</value>
+  </data>
   <data name="Chat_CommandsOne" xml:space="preserve">
     <value>运行了 1 条命令</value>
   </data>
@@ -204,6 +207,9 @@
   </data>
   <data name="Chat_ThoughtsMany" xml:space="preserve">
     <value>思考了 {0} 次</value>
+  </data>
+  <data name="Chat_WorkedFor" xml:space="preserve">
+    <value>工作了 {0}</value>
   </data>
   <data name="Chat_UnmodifiedLines" xml:space="preserve">
     <value>{0} 行未修改</value>
@@ -1522,6 +1528,9 @@
   </data>
   <data name="Shell_SelectWorkspace" xml:space="preserve">
     <value>选择 Agent 工作区</value>
+  </data>
+  <data name="Shell_ChooseWorkspace" xml:space="preserve">
+    <value>选择工作区</value>
   </data>
   <data name="Shell_RunOn" xml:space="preserve">
     <value>工作区</value>

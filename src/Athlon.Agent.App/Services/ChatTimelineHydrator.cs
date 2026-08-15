@@ -110,6 +110,12 @@ internal static class ChatTimelineHydrator
                 continue;
             }
 
+            // Folded tools are reconstructed via TURN_ACTIVITY from session source messages.
+            if (TurnActivityClassifier.IsActivityTool(toolCall.Name))
+            {
+                continue;
+            }
+
             var orphanResult = AgentRuntime.FormatToolResult(
                 toolCall,
                 ToolResult.Failure(

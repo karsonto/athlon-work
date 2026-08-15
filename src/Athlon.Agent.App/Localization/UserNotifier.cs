@@ -1,4 +1,5 @@
 using System.Windows;
+using Athlon.Agent.App.Windows;
 
 namespace Athlon.Agent.App.Localization;
 
@@ -11,10 +12,10 @@ public sealed class UserNotifier(ILocalizationService localization) : IUserNotif
         Show(titleKey, messageKey, MessageBoxButton.OK, MessageBoxImage.Warning, messageArgs);
 
     public void InfoText(string titleKey, string messageText) =>
-        MessageBox.Show(messageText, localization[titleKey], MessageBoxButton.OK, MessageBoxImage.Information);
+        ShowText(localization[titleKey], messageText, MessageBoxButton.OK, MessageBoxImage.Information);
 
     public void WarningText(string titleKey, string messageText) =>
-        MessageBox.Show(messageText, localization[titleKey], MessageBoxButton.OK, MessageBoxImage.Warning);
+        ShowText(localization[titleKey], messageText, MessageBoxButton.OK, MessageBoxImage.Warning);
 
     public bool Confirm(string titleKey, string messageKey, params object[] messageArgs) =>
         Show(titleKey, messageKey, MessageBoxButton.OKCancel, MessageBoxImage.Question, messageArgs)
@@ -38,6 +39,22 @@ public sealed class UserNotifier(ILocalizationService localization) : IUserNotif
         var message = messageArgs.Length == 0
             ? localization[messageKey]
             : localization.Format(messageKey, messageArgs);
-        return MessageBox.Show(message, title, button, image);
+        return ShowText(title, message, button, image);
+    }
+
+    private static MessageBoxResult ShowText(
+        string title,
+        string message,
+        MessageBoxButton button,
+        MessageBoxImage image)
+    {
+        Window? owner = null;
+        if (Application.Current?.Dispatcher.CheckAccess() == true)
+        {
+            owner = Application.Current.Windows.OfType<Window>().FirstOrDefault(static w => w.IsActive)
+                ?? Application.Current.MainWindow;
+        }
+
+        return ThemedMessageWindow.Show(owner, title, message, button, image);
     }
 }

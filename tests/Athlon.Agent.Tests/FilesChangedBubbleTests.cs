@@ -106,7 +106,7 @@ public sealed class FilesChangedBubbleTests
     }
 
     [Fact]
-    public void BuildReplayEvents_emits_activity_bubble_above_each_model_output()
+    public void BuildReplayEvents_emits_single_activity_fold_for_whole_turn()
     {
         var user = ChatMessage.Create(MessageRole.User, "analyze");
         var read1 = ChatMessage.Create(
@@ -139,11 +139,16 @@ public sealed class FilesChangedBubbleTests
 
         var activities = events.Where(json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal)).ToList();
         var texts = events.Where(json => json.Contains("STATIC_ASSISTANT_HTML", StringComparison.Ordinal)).ToList();
-        Assert.Equal(2, activities.Count);
-        Assert.Equal(2, texts.Count);
+        Assert.Single(activities);
+        Assert.Equal(1, texts.Count);
         Assert.True(events.IndexOf(activities[0]) < events.IndexOf(texts[0]));
-        Assert.True(events.IndexOf(texts[0]) < events.IndexOf(activities[1]));
-        Assert.True(events.IndexOf(activities[1]) < events.IndexOf(texts[1]));
+        using var doc = JsonDocument.Parse(activities[0]);
+        Assert.Equal(2, doc.RootElement.GetProperty("exploredFileCount").GetInt32());
+        var kinds = doc.RootElement.GetProperty("items").EnumerateArray()
+            .Select(item => item.GetProperty("kind").GetString())
+            .ToList();
+        // Timeline order: read a.ts → narration「第一步」→ read b.ts (final「第二步」is bubble).
+        Assert.Equal(["read", "narration", "read"], kinds);
     }
 
     [Fact]
@@ -420,6 +425,56 @@ public sealed class FilesChangedBubbleTests
         Assert.NotNull(summary);
         Assert.Equal(1, summary!.ThoughtCount);
         Assert.Equal("分析路径", Assert.Single(summary.Items).Body);
+        Assert.True(summary.DurationMs >= 0);
+    }
+
+    [Fact]
+    public async Task SessionTurnActivityTracker_DurationMs_grows_until_BeginSegment_resets()
+    {
+        var tracker = new SessionTurnActivityTracker();
+        tracker.BeginTurn();
+        tracker.Process(new AgentStreamEvent.ReasoningMessageStart("r1", "reasoning"));
+        tracker.Process(new AgentStreamEvent.ReasoningMessageContent("r1", "hello"));
+        tracker.Process(new AgentStreamEvent.ReasoningMessageEnd("r1"));
+
+        await Task.Delay(30);
+        var first = tracker.Snapshot();
+        Assert.NotNull(first);
+        Assert.True(first!.DurationMs >= 20, $"expected DurationMs >= 20, got {first.DurationMs}");
+
+        tracker.BeginSegment();
+        tracker.Process(new AgentStreamEvent.ReasoningMessageStart("r2", "reasoning"));
+        tracker.Process(new AgentStreamEvent.ReasoningMessageContent("r2", "next"));
+        tracker.Process(new AgentStreamEvent.ReasoningMessageEnd("r2"));
+
+        var second = tracker.Snapshot();
+        Assert.NotNull(second);
+        Assert.True(second!.DurationMs < first.DurationMs + 15, $"segment reset expected; first={first.DurationMs}, second={second.DurationMs}");
+    }
+
+    [Fact]
+    public void SerializeTurnActivity_includes_durationMs()
+    {
+        var summary = new TurnActivitySummary
+        {
+            EditedFileCount = 0,
+            ExploredFileCount = 1,
+            SearchCount = 0,
+            CommandCount = 0,
+            ThoughtCount = 0,
+            TotalAdded = 0,
+            TotalRemoved = 0,
+            DurationMs = 1500,
+            Items =
+            [
+                new TurnActivityItem(TurnActivityKind.Read, "Read", "a.ts", "a.ts", Status: "succeeded")
+            ]
+        };
+
+        var json = ChatEventSerializer.SerializeTurnActivity(summary, upsert: false);
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal(1500, doc.RootElement.GetProperty("durationMs").GetInt32());
+        Assert.False(doc.RootElement.GetProperty("upsert").GetBoolean());
     }
 
     [Fact]

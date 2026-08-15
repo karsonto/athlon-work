@@ -10,7 +10,11 @@ public enum TurnActivityKind
     Searched,
     Explored,
     Command,
-    Thought
+    Thought,
+    /// <summary>Generic folded tool (memory_search, mcp_*, etc.).</summary>
+    Tool,
+    /// <summary>Intermediate model text folded into the turn activity.</summary>
+    Narration
 }
 
 public sealed record TurnActivityDiffLine(string Kind, string Text, int? Count = null);
@@ -26,16 +30,26 @@ public sealed record TurnActivityItem(
     string? Body = null,
     string? Status = null);
 
-public sealed class TurnActivitySummary
+public sealed record TurnActivitySummary
 {
     public required int EditedFileCount { get; init; }
+
     public required int ExploredFileCount { get; init; }
+
     public required int SearchCount { get; init; }
+
     public required int CommandCount { get; init; }
+
     public required int ThoughtCount { get; init; }
+
     public required int TotalAdded { get; init; }
+
     public required int TotalRemoved { get; init; }
+
     public required IReadOnlyList<TurnActivityItem> Items { get; init; }
+
+    /// <summary>Wall-clock ms for the sealed/live segment; 0 when unknown (e.g. history rebuild).</summary>
+    public int DurationMs { get; init; }
 
     public bool HasContent =>
         Items.Count > 0
@@ -134,10 +148,25 @@ public static class TurnActivitySummaryBuilder
             {
                 items.Add(CreateThoughtItem(message.ReasoningContent));
                 thoughtCount++;
+                if (!string.IsNullOrWhiteSpace(message.Content))
+                {
+                    items.Add(CreateNarrationItem(message.Content));
+                }
+
                 continue;
             }
 
-            if (!message.IsTool || string.IsNullOrWhiteSpace(message.ToolName))
+            if (!message.IsTool)
+            {
+                if (!string.IsNullOrWhiteSpace(message.Content))
+                {
+                    items.Add(CreateNarrationItem(message.Content));
+                }
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(message.ToolName))
             {
                 continue;
             }
@@ -253,7 +282,23 @@ public static class TurnActivitySummaryBuilder
                     detail,
                     Body: body,
                     Status: statusKey));
+                continue;
             }
+
+            // Any other folded tool (memory_*, mcp_*, etc.)
+            var genericDetail = !string.IsNullOrWhiteSpace(message.ToolSummary)
+                ? Truncate(FlattenWhitespace(message.ToolSummary), 72)
+                : Truncate(FlattenWhitespace(args), 72);
+            if (string.IsNullOrWhiteSpace(genericDetail))
+            {
+                genericDetail = inFlight ? "…" : toolName;
+            }
+
+            items.Add(new TurnActivityItem(
+                TurnActivityKind.Tool,
+                toolName,
+                genericDetail,
+                Status: statusKey));
         }
 
         if (items.Count == 0)
@@ -293,6 +338,17 @@ public static class TurnActivitySummaryBuilder
         return new TurnActivityItem(
             TurnActivityKind.Thought,
             "Thought",
+            preview,
+            Body: trimmed);
+    }
+
+    private static TurnActivityItem CreateNarrationItem(string content)
+    {
+        var trimmed = content.Trim();
+        var preview = Truncate(FirstLine(trimmed), 72);
+        return new TurnActivityItem(
+            TurnActivityKind.Narration,
+            "Said",
             preview,
             Body: trimmed);
     }

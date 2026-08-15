@@ -20,7 +20,8 @@ public sealed class ChatDisplayPolicyTests
         Assert.False(ChatDisplayPolicy.ShouldIncludeToolMessage(showToolCalls: false, tool));
         Assert.True(ChatDisplayPolicy.ShouldIncludeToolMessage(showToolCalls: false, user));
         Assert.True(ChatDisplayPolicy.ShouldIncludeToolMessage(showToolCalls: false, compaction));
-        Assert.True(ChatDisplayPolicy.ShouldIncludeToolMessage(showToolCalls: true, tool));
+        // Folded activity tools stay out of the tool-card stream even when ShowToolCalls is on.
+        Assert.False(ChatDisplayPolicy.ShouldIncludeToolMessage(showToolCalls: true, tool));
     }
 
     [Fact]
@@ -43,7 +44,7 @@ public sealed class ChatDisplayPolicyTests
         Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, manualCompactionVm));
         Assert.False(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, toolVm));
         Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, pendingApprovalVm));
-        Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: true, toolVm));
+        Assert.False(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: true, toolVm));
     }
 
     [Fact]
@@ -94,10 +95,11 @@ public sealed class ChatDisplayPolicyTests
         Assert.DoesNotContain(hidden, vm => vm.IsCompaction);
         Assert.Equal(2, hidden.Count);
 
+        // Activity tools are folded into TURN_ACTIVITY, not kept as tool view-models.
         var shown = ChatTimelineHydrator.BuildDisplayMessages(displayMessages, showToolCalls: true);
-        Assert.Contains(shown, vm => vm.IsTool && !vm.IsCompaction);
+        Assert.DoesNotContain(shown, vm => vm.IsTool && !vm.IsCompaction);
         Assert.DoesNotContain(shown, vm => vm.IsCompaction);
-        Assert.Equal(3, shown.Count);
+        Assert.Equal(2, shown.Count);
     }
 
     [Fact]
@@ -114,13 +116,15 @@ public sealed class ChatDisplayPolicyTests
         };
 
         var hidden = ChatEventSerializer.BuildReplayEvents(messages, showToolCalls: false);
-        Assert.DoesNotContain(hidden, json => json.Contains("read_file", StringComparison.Ordinal));
         Assert.Equal(0, hidden.Count(json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal)));
         Assert.DoesNotContain(hidden, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
+        // Folded into the single turn-activity summary instead of a tool card.
+        Assert.Contains(hidden, json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal));
 
         var shown = ChatEventSerializer.BuildReplayEvents(messages, showToolCalls: true);
+        Assert.Equal(0, shown.Count(json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal)));
+        Assert.Contains(shown, json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal));
         Assert.Contains(shown, json => json.Contains("read_file", StringComparison.Ordinal));
-        Assert.Equal(1, shown.Count(json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal)));
         Assert.DoesNotContain(shown, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
     }
 
@@ -141,7 +145,8 @@ public sealed class ChatDisplayPolicyTests
             showToolCalls: true,
             synthesizeInterruptedToolResults: false);
 
-        Assert.Contains(full, message => message.IsTool);
+        // Orphan tool synthesis still skipped for folded activity tools.
+        Assert.DoesNotContain(full, message => message.IsTool);
         Assert.DoesNotContain(paged, message => message.IsTool);
     }
 
@@ -189,8 +194,9 @@ public sealed class ChatDisplayPolicyTests
         };
 
         var events = ChatEventSerializer.BuildReplayEvents(messages, showToolCalls: true);
-        var resultEvent = Assert.Single(events, json => json.Contains("TOOL_CALL_RESULT", StringComparison.Ordinal));
-        Assert.Contains("\"status\":\"failed\"", resultEvent, StringComparison.Ordinal);
+        var activity = Assert.Single(events, json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal));
+        Assert.Contains("\"status\":\"failed\"", activity, StringComparison.Ordinal);
+        Assert.DoesNotContain(events, json => json.Contains("TOOL_CALL_RESULT", StringComparison.Ordinal));
     }
 
     [Fact]

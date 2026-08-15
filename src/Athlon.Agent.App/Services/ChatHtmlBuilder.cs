@@ -14,13 +14,14 @@ public sealed class ChatHtmlBuilder
     public string BuildShellHtml(string? ssoDisplayName = null)
     {
         var assets = ChatMarkdownAssets.VirtualBaseUrl;
+        var cache = ChatMarkdownAssets.AssetCacheQuery;
         return "<!DOCTYPE html><html><head>" +
             "<meta charset=\"utf-8\"/>" +
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\"/>" +
-            $"<link rel=\"stylesheet\" href=\"{assets}{ChatMarkdownAssets.GetHighlightStylesheet()}\"/>" +
+            $"<link rel=\"stylesheet\" href=\"{assets}{ChatMarkdownAssets.GetHighlightStylesheet()}{cache}\"/>" +
             "<style id=\"chat-theme-tokens\">" + GetThemeTokenStyles() + "</style>" +
             "<style id=\"chat-code-syntax\">" + GetCodeSyntaxOverrideStyles() + "</style>" +
-            $"<link rel=\"stylesheet\" href=\"{assets}chat-shell.css\"/>" +
+            $"<link rel=\"stylesheet\" href=\"{assets}chat-shell.css{cache}\"/>" +
             "</head><body><div id=\"chat-scroll\">" + BuildEmptyStateHtml(ssoDisplayName) +
             "<button id=\"load-older\" type=\"button\" hidden></button>" +
             "<div id=\"messages\"></div></div>" +
@@ -29,9 +30,9 @@ public sealed class ChatHtmlBuilder
             "<img class=\"image-lightbox-img\" alt=\"\"/>" +
             "<button type=\"button\" class=\"image-lightbox-close\" aria-label=\"Close\">×</button>" +
             "</div>" +
-            $"<script src=\"{assets}highlight.min.js\"></script>" +
+            $"<script src=\"{assets}highlight.min.js{cache}\"></script>" +
             "<script>" + BuildI18nBootstrapScript() + "</script>" +
-            $"<script src=\"{assets}chat-timeline.js\"></script>" +
+            $"<script src=\"{assets}chat-timeline.js{cache}\"></script>" +
             "</body></html>";
     }
 
@@ -41,7 +42,7 @@ public sealed class ChatHtmlBuilder
     /// <summary>Updates chat theme tokens in-place so theme switches do not reload the timeline.</summary>
     public string BuildThemeUpdateScript()
     {
-        var highlightHref = $"{ChatMarkdownAssets.VirtualBaseUrl}{ChatMarkdownAssets.GetHighlightStylesheet()}";
+        var highlightHref = $"{ChatMarkdownAssets.VirtualBaseUrl}{ChatMarkdownAssets.GetHighlightStylesheet()}{ChatMarkdownAssets.AssetCacheQuery}";
         var tokensB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(GetThemeTokenStyles()));
         var syntaxB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(GetCodeSyntaxOverrideStyles()));
         return
@@ -131,6 +132,8 @@ public sealed class ChatHtmlBuilder
             ["commandsMany"] = Strings.Get("Chat_CommandsMany"),
             ["thoughtsOne"] = Strings.Get("Chat_ThoughtsOne"),
             ["thoughtsMany"] = Strings.Get("Chat_ThoughtsMany"),
+            ["workedFor"] = Strings.Get("Chat_WorkedFor"),
+            ["said"] = Strings.Get("Chat_ActivityVerbNarration"),
             ["unmodifiedLines"] = Strings.Get("Chat_UnmodifiedLines"),
             ["noDiffAvailable"] = Strings.Get("Chat_NoDiffAvailable"),
         };

@@ -13,6 +13,7 @@ public sealed class SessionTurnActivityTracker
     private readonly List<ChatMessageViewModel> _turnMessages = new();
     private readonly StringBuilder _activeThought = new();
     private bool _hasActiveThought;
+    private DateTime _segmentStartedUtc = DateTime.UtcNow;
 
     public void BeginTurn()
     {
@@ -27,11 +28,25 @@ public sealed class SessionTurnActivityTracker
         _turnMessages.Clear();
         _activeThought.Clear();
         _hasActiveThought = false;
+        _segmentStartedUtc = DateTime.UtcNow;
     }
 
     public void Clear() => BeginTurn();
 
     public void FinishPendingThought() => FinishActiveThought();
+
+    public void AddNarration(string text)
+    {
+        var trimmed = text.Trim();
+        if (trimmed.Length == 0)
+        {
+            return;
+        }
+
+        FinishActiveThought();
+        _turnMessages.Add(new ChatMessageViewModel(
+            ChatMessage.Create(MessageRole.Assistant, trimmed)));
+    }
 
     public string? ResolveToolName(string toolCallId) =>
         _toolCallIdToName.TryGetValue(toolCallId, out var name) ? name : null;
@@ -85,20 +100,31 @@ public sealed class SessionTurnActivityTracker
             return null;
         }
 
+        TurnActivitySummary? built;
         if (!_hasActiveThought || _activeThought.Length == 0)
         {
-            return TurnActivitySummaryBuilder.Build(_turnMessages);
+            built = TurnActivitySummaryBuilder.Build(_turnMessages);
+        }
+        else
+        {
+            // Include in-progress thought without mutating the committed list.
+            var provisional = new List<ChatMessageViewModel>(_turnMessages)
+            {
+                new(ChatMessage.Create(
+                    MessageRole.Assistant,
+                    string.Empty,
+                    reasoningContent: _activeThought.ToString()))
+            };
+            built = TurnActivitySummaryBuilder.Build(provisional);
         }
 
-        // Include in-progress thought without mutating the committed list.
-        var provisional = new List<ChatMessageViewModel>(_turnMessages)
-        {
-            new(ChatMessage.Create(
-                MessageRole.Assistant,
-                string.Empty,
-                reasoningContent: _activeThought.ToString()))
-        };
-        return TurnActivitySummaryBuilder.Build(provisional);
+        return built is null ? null : built with { DurationMs = GetSegmentDurationMs() };
+    }
+
+    private int GetSegmentDurationMs()
+    {
+        var ms = (int)Math.Round((DateTime.UtcNow - _segmentStartedUtc).TotalMilliseconds);
+        return Math.Max(0, ms);
     }
 
     private void FinishActiveThought()

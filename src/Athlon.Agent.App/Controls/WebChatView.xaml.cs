@@ -213,6 +213,17 @@ public partial class WebChatView : UserControl
             $"handleEvent({ChatEventSerializer.SerializeTurnActivity(summary, upsert)});");
     }
 
+    public Task RemoveAssistantBubblesAsync(IReadOnlyList<string> messageIds)
+    {
+        if (messageIds.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        return ExecuteScriptWhenReadyAsync(
+            $"handleEvent({ChatEventSerializer.SerializeRemoveAssistantBubbles(messageIds)});");
+    }
+
     public Task DispatchEventAsync(AgentStreamEvent streamEvent) =>
         ExecuteScriptWhenReadyAsync(_htmlBuilder.BuildDispatchScript(streamEvent));
 

@@ -4,23 +4,21 @@ using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.App.Services;
 
-/// <summary>Classifies workspace activity tools that fold into the turn-activity summary bubble.</summary>
+/// <summary>
+/// Classifies tools that fold into the single per-turn activity summary.
+/// Computer Use keeps full tool cards (screenshots); everything else folds.
+/// </summary>
 internal static class TurnActivityClassifier
 {
-    private static readonly HashSet<string> ActivityTools = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> KeepAsToolCard = new(StringComparer.Ordinal)
     {
-        "file_edit",
-        "file_write",
-        "apply_patch",
-        "file_read",
-        "grep_files",
-        "glob_files",
-        "file_list",
-        "execute_command"
+        "computer_observe",
+        "computer_interact",
+        "computer_wait"
     };
 
     public static bool IsActivityTool(string? toolName) =>
-        !string.IsNullOrWhiteSpace(toolName) && ActivityTools.Contains(toolName);
+        !string.IsNullOrWhiteSpace(toolName) && !KeepAsToolCard.Contains(toolName);
 
     public static bool IsActivityToolStreamEvent(AgentStreamEvent streamEvent, Func<string, string?>? resolveToolName = null) =>
         streamEvent switch

@@ -96,7 +96,9 @@ internal static class ChatEventSerializer
         var items = summary.Items.Select(item => new
         {
             kind = item.Kind.ToString().ToLowerInvariant(),
-            verb = LocalizeActivityVerb(item.Kind),
+            verb = item.Kind == TurnActivityKind.Tool
+                ? item.Verb
+                : LocalizeActivityVerb(item.Kind),
             detail = item.Detail,
             path = item.Path,
             added = item.Added,
@@ -122,9 +124,13 @@ internal static class ChatEventSerializer
             thoughtCount = summary.ThoughtCount,
             totalAdded = summary.TotalAdded,
             totalRemoved = summary.TotalRemoved,
+            durationMs = summary.DurationMs,
             items
         });
     }
+
+    public static string SerializeRemoveAssistantBubbles(IReadOnlyList<string> messageIds) =>
+        SerializeAgui("REMOVE_ASSISTANT_BUBBLES", new { messageIds });
 
     private static string LocalizeActivityVerb(TurnActivityKind kind) => kind switch
     {
@@ -134,6 +140,7 @@ internal static class ChatEventSerializer
         TurnActivityKind.Explored => Strings.Get("Chat_ActivityVerbExplored"),
         TurnActivityKind.Command => Strings.Get("Chat_ActivityVerbCommand"),
         TurnActivityKind.Thought => Strings.Get("Chat_ActivityVerbThought"),
+        TurnActivityKind.Narration => Strings.Get("Chat_ActivityVerbNarration"),
         _ => kind.ToString()
     };
 
@@ -340,28 +347,47 @@ internal static class ChatEventSerializer
                 .ToList()
             : messages.ToList();
 
-        var segment = new List<ChatMessageViewModel>();
+        // One turn = one activity fold (tools + reasoning + intermediate text in timeline order),
+        // then the final assistant bubble.
+        var activitySegment = new List<ChatMessageViewModel>();
+        var pendingToolCards = new List<string>();
+        var pendingAssistants = new List<ChatMessageViewModel>();
+        var finalAssistantMessageIds = FindFinalAssistantMessageIds(timeline);
 
-        void EmitSegmentBubbles()
+        void FlushTurnIntermediate()
         {
-            if (segment.Count == 0)
+            if (activitySegment.Count > 0)
             {
-                return;
+                var activity = TurnActivitySummaryBuilder.Build(activitySegment);
+                if (activity is { HasContent: true })
+                {
+                    events.Add(SerializeTurnActivity(activity));
+                }
+
+                var files = SessionModifiedFilesTracker.BuildTurnFileGroups(activitySegment);
+                if (files is { Count: > 0 } && files[0].Count > 0)
+                {
+                    events.Add(SerializeFilesChanged(files[0]));
+                }
+
+                activitySegment.Clear();
             }
 
-            var activity = TurnActivitySummaryBuilder.Build(segment);
-            if (activity is { HasContent: true })
+            if (pendingToolCards.Count > 0)
             {
-                events.Add(SerializeTurnActivity(activity));
+                events.AddRange(pendingToolCards);
+                pendingToolCards.Clear();
             }
 
-            var files = SessionModifiedFilesTracker.BuildTurnFileGroups(segment);
-            if (files is { Count: > 0 } && files[0].Count > 0)
+            if (pendingAssistants.Count > 0)
             {
-                events.Add(SerializeFilesChanged(files[0]));
-            }
+                foreach (var assistant in pendingAssistants)
+                {
+                    events.AddRange(BuildReplayEventsForMessage(assistant));
+                }
 
-            segment.Clear();
+                pendingAssistants.Clear();
+            }
         }
 
         foreach (var message in timeline)
@@ -373,7 +399,7 @@ internal static class ChatEventSerializer
 
             if (message.IsUser)
             {
-                EmitSegmentBubbles();
+                FlushTurnIntermediate();
                 events.AddRange(BuildReplayEventsForMessage(message));
                 continue;
             }
@@ -382,6 +408,7 @@ internal static class ChatEventSerializer
             {
                 if (ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(message))
                 {
+                    FlushTurnIntermediate();
                     events.Add(SerializeCompactionCheckpoint(message));
                 }
 
@@ -392,22 +419,22 @@ internal static class ChatEventSerializer
             {
                 if (ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls, message))
                 {
-                    events.AddRange(BuildReplayEventsForMessage(message));
+                    pendingToolCards.AddRange(BuildReplayEventsForMessage(message));
                     continue;
                 }
 
                 if (TurnActivityClassifier.IsActivityTool(message.ToolName))
                 {
-                    segment.Add(message);
+                    activitySegment.Add(message);
                 }
 
                 continue;
             }
 
-            // Assistant: fold reasoning into the bubble that sits above this text output.
+            // Assistant: keep chronological order inside the fold; only the turn's final text is a bubble.
             if (message.HasReasoning)
             {
-                segment.Add(new ChatMessageViewModel(
+                activitySegment.Add(new ChatMessageViewModel(
                     ChatMessage.Create(
                         MessageRole.Assistant,
                         string.Empty,
@@ -416,18 +443,88 @@ internal static class ChatEventSerializer
 
             if (!string.IsNullOrWhiteSpace(message.Content))
             {
-                EmitSegmentBubbles();
-                events.AddRange(BuildReplayEventsForMessage(
-                    new ChatMessageViewModel(
-                        ChatMessage.CreateWithId(
-                            message.MessageId,
-                            MessageRole.Assistant,
-                            message.Content))));
+                var assistantVm = new ChatMessageViewModel(
+                    ChatMessage.CreateWithId(
+                        message.MessageId,
+                        MessageRole.Assistant,
+                        message.Content));
+                if (finalAssistantMessageIds.Contains(message.MessageId))
+                {
+                    pendingAssistants.Add(assistantVm);
+                }
+                else
+                {
+                    activitySegment.Add(assistantVm);
+                }
             }
         }
 
-        EmitSegmentBubbles();
+        FlushTurnIntermediate();
         return events;
+    }
+
+    /// <summary>
+    /// Per user turn: assistants that should remain bubbles (not folded into activity).
+    /// Turns with tools/reasoning keep only the last assistant text as the final bubble;
+    /// chat-only turns keep every assistant text as bubbles.
+    /// </summary>
+    private static HashSet<string> FindFinalAssistantMessageIds(IReadOnlyList<ChatMessageViewModel> timeline)
+    {
+        var finals = new HashSet<string>(StringComparer.Ordinal);
+        var turnHasActivity = false;
+        var turnAssistantIds = new List<string>();
+
+        void CloseTurn()
+        {
+            if (turnAssistantIds.Count > 0)
+            {
+                if (turnHasActivity)
+                {
+                    finals.Add(turnAssistantIds[^1]);
+                }
+                else
+                {
+                    foreach (var id in turnAssistantIds)
+                    {
+                        finals.Add(id);
+                    }
+                }
+            }
+
+            turnHasActivity = false;
+            turnAssistantIds.Clear();
+        }
+
+        foreach (var message in timeline)
+        {
+            if (message.IsHiddenPlaceholder)
+            {
+                continue;
+            }
+
+            if (message.IsUser || message.IsCompaction)
+            {
+                CloseTurn();
+                continue;
+            }
+
+            if (message.IsTool && TurnActivityClassifier.IsActivityTool(message.ToolName))
+            {
+                turnHasActivity = true;
+            }
+            else if (!message.IsTool && message.HasReasoning)
+            {
+                turnHasActivity = true;
+            }
+
+            if (!message.IsTool && !string.IsNullOrWhiteSpace(message.Content))
+            {
+                turnAssistantIds.Add(message.MessageId);
+            }
+        }
+
+        CloseTurn();
+        return finals;
     }
 
     private static IEnumerable<string> BuildReplayEventsForMessage(ChatMessageViewModel message)

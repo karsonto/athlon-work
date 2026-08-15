@@ -1,0 +1,84 @@
+<Window x:Class="Athlon.Agent.App.Windows.ThemedMessageWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+        Title="{Binding Title, RelativeSource={RelativeSource Self}}"
+        Icon="/Assets/app-icon.ico"
+        Width="460"
+        MinWidth="360"
+        SizeToContent="Height"
+        MaxHeight="560"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{DynamicResource Brush.AppBackground}"
+        WindowStyle="None"
+        ShowInTaskbar="False">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="0"
+                            CornerRadius="0"
+                            GlassFrameThickness="0"
+                            ResizeBorderThickness="0"
+                            UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
+    <Border BorderBrush="{DynamicResource Brush.Border}"
+            BorderThickness="1"
+            Background="{DynamicResource Brush.AppBackground}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="32" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Background="{DynamicResource Brush.Chrome}"
+                    BorderBrush="{DynamicResource Brush.Border}"
+                    BorderThickness="0,0,0,1"
+                    MouseLeftButtonDown="TitleBar_OnMouseLeftButtonDown">
+                <Grid Margin="12,0">
+                    <StackPanel Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Ellipse x:Name="KindDot"
+                                 Width="8"
+                                 Height="8"
+                                 Margin="0,0,8,0"
+                                 VerticalAlignment="Center"
+                                 Fill="{DynamicResource Brush.Accent}" />
+                        <TextBlock x:Name="TitleText"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                    <Button HorizontalAlignment="Right"
+                            ToolTip="{loc:Localize Key=Common_Close}"
+                            Click="CloseButton_OnClick"
+                            ContentTemplate="{StaticResource WindowCaptionCloseIconTemplate}"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                            Style="{StaticResource WindowCloseCaptionButtonStyle}" />
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Row="1"
+                          VerticalScrollBarVisibility="Auto"
+                          Padding="20,18">
+                <TextBlock x:Name="MessageText"
+                           FontSize="13"
+                           LineHeight="20"
+                           Foreground="{DynamicResource Brush.Text}"
+                           TextWrapping="Wrap" />
+            </ScrollViewer>
+
+            <Border Grid.Row="2"
+                    Background="{DynamicResource Brush.AppBackground}"
+                    BorderBrush="{DynamicResource Brush.Border}"
+                    BorderThickness="0,1,0,0"
+                    Padding="16,12">
+                <StackPanel x:Name="ButtonPanel"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right" />
+            </Border>
+        </Grid>
+    </Border>
+</Window>

@@ -55,6 +55,7 @@ public sealed partial class SessionTurnUiController
     /// Empty TextMessageStart/End between tool rounds must not seal (keeps one summary bubble).
     /// </summary>
     private bool _activitySealedForCurrentText;
+    private readonly HashSet<string> _foldedAssistantMessageIds = new(StringComparer.Ordinal);
 
     private Action _requestScroll = NoOpScroll;
     private Action _requestScrollImmediate = NoOpScroll;
@@ -290,6 +291,7 @@ public sealed partial class SessionTurnUiController
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
             _activitySealedForCurrentText = false;
+            _foldedAssistantMessageIds.Clear();
             var vm = new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments));
             Messages.Add(vm);
             TrimMessagesIfNeeded();
@@ -304,6 +306,7 @@ public sealed partial class SessionTurnUiController
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
             _activitySealedForCurrentText = false;
+            _foldedAssistantMessageIds.Clear();
             _tokenBuffer.ClearBuffers();
             _tokenBuffer.StopFlushTimer();
             _streaming.Reset();
@@ -418,6 +421,9 @@ public sealed partial class SessionTurnUiController
                 {
                     message.MarkStreamingToolCancelled();
                 }
+
+                // Stopped mid-turn: fold remaining progress text into the activity (no orphan bubbles).
+                FoldTurnAssistantNarrations(includeAll: true);
             }
             else if (!string.IsNullOrWhiteSpace(errorMessage))
             {
@@ -426,6 +432,8 @@ public sealed partial class SessionTurnUiController
                 {
                     message.MarkStreamingToolCancelled();
                 }
+
+                FoldTurnAssistantNarrations(includeAll: true);
             }
 
             _streaming.Reset();
@@ -451,8 +459,8 @@ public sealed partial class SessionTurnUiController
     private void DispatchCurrentTurnActivity() => SealCurrentSegment();
 
     /// <summary>
-    /// Finalizes the live activity / files bubbles above the next model text output,
-    /// then starts a fresh segment accumulator.
+    /// Finalizes the live activity / files bubbles for the whole turn (once),
+    /// then starts a fresh accumulator for the next turn.
     /// </summary>
     private void SealCurrentSegment()
     {
@@ -476,21 +484,6 @@ public sealed partial class SessionTurnUiController
         }
 
         _turnActivityTracker.BeginSegment();
-    }
-
-    /// <summary>
-    /// Seal once before the first non-empty assistant text of this message so the activity
-    /// card sits above the bubble; empty TextMessageStart/End must not create new cards.
-    /// </summary>
-    private void SealActivityAboveAssistantTextIfNeeded()
-    {
-        if (_activitySealedForCurrentText)
-        {
-            return;
-        }
-
-        SealCurrentSegment();
-        _activitySealedForCurrentText = true;
     }
 
     private void PublishTurnActivity(bool upsert = true)
@@ -529,11 +522,18 @@ public sealed partial class SessionTurnUiController
 
     private void ProcessUiStreamEvents(AgentStreamEvent streamEvent, bool notifyTracker)
     {
-        // Do not seal on TextMessageStart: models often emit empty text frames between tool
-        // rounds. Sealing is deferred until real assistant content arrives.
+        // Do not seal on TextMessageStart: one activity fold spans the whole turn until FinalizeTurn.
         if (streamEvent is AgentStreamEvent.TextMessageStart)
         {
             _activitySealedForCurrentText = false;
+        }
+
+        // Fold provisional assistant text before the next tool is appended to the activity list,
+        // so narrations keep timeline order (text → tool → text → tool).
+        if (streamEvent is AgentStreamEvent.ToolCallStart(_, var startingToolName, _)
+            && TurnActivityClassifier.IsActivityTool(startingToolName))
+        {
+            FoldTurnAssistantNarrations(includeAll: true);
         }
 
         if (notifyTracker)
@@ -562,6 +562,67 @@ public sealed partial class SessionTurnUiController
                 PublishFilesChanged(upsert: true);
             }
         }
+    }
+
+    /// <summary>
+    /// Moves assistant text bubbles from the current turn into the turn-activity fold.
+    /// When <paramref name="includeAll"/> is false, keeps the last assistant bubble as the final reply.
+    /// </summary>
+    private void FoldTurnAssistantNarrations(bool includeAll)
+    {
+        var lastUserIndex = -1;
+        for (var i = Messages.Count - 1; i >= 0; i--)
+        {
+            if (Messages[i].IsUser)
+            {
+                lastUserIndex = i;
+                break;
+            }
+        }
+
+        var assistants = new List<ChatMessageViewModel>();
+        for (var i = lastUserIndex + 1; i < Messages.Count; i++)
+        {
+            var message = Messages[i];
+            if (message.IsUser
+                || message.IsTool
+                || message.IsCompaction
+                || message.IsHiddenPlaceholder
+                || string.IsNullOrWhiteSpace(message.Content)
+                || _foldedAssistantMessageIds.Contains(message.MessageId))
+            {
+                continue;
+            }
+
+            assistants.Add(message);
+        }
+
+        if (assistants.Count == 0)
+        {
+            return;
+        }
+
+        var foldCount = includeAll ? assistants.Count : Math.Max(0, assistants.Count - 1);
+        if (foldCount == 0)
+        {
+            return;
+        }
+
+        var removedIds = new List<string>(foldCount);
+        for (var i = 0; i < foldCount; i++)
+        {
+            var message = assistants[i];
+            _turnActivityTracker.AddNarration(message.Content);
+            _foldedAssistantMessageIds.Add(message.MessageId);
+            removedIds.Add(message.MessageId);
+        }
+
+        if (CanTouchChatView && removedIds.Count > 0)
+        {
+            _ = ChatView!.RemoveAssistantBubblesAsync(removedIds);
+        }
+
+        PublishTurnActivity(upsert: true);
     }
 
     public void HydrateFromSession(AgentSession session) =>
@@ -721,7 +782,8 @@ public sealed partial class SessionTurnUiController
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(message.Content))
+            if (!string.IsNullOrWhiteSpace(message.Content)
+                && !_foldedAssistantMessageIds.Contains(message.MessageId))
             {
                 _ = ChatView.ApplyAssistantMarkdownAsync(message);
             }
@@ -809,9 +871,10 @@ public sealed partial class SessionTurnUiController
         {
             var assistant = Messages.LastOrDefault(message =>
                 string.Equals(message.MessageId, endMessageId, StringComparison.Ordinal));
-            if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
+            if (assistant is not null
+                && !string.IsNullOrWhiteSpace(assistant.Content)
+                && !_foldedAssistantMessageIds.Contains(assistant.MessageId))
             {
-                SealActivityAboveAssistantTextIfNeeded();
                 _ = ChatView.ApplyAssistantMarkdownAsync(assistant);
             }
 
@@ -851,9 +914,10 @@ public sealed partial class SessionTurnUiController
         {
             // Live-render Markdown from the accumulated assistant content (C# Markdig → HTML).
             var assistant = FindAssistantMessage(textMessageId);
-            if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
+            if (assistant is not null
+                && !string.IsNullOrWhiteSpace(assistant.Content)
+                && !_foldedAssistantMessageIds.Contains(assistant.MessageId))
             {
-                SealActivityAboveAssistantTextIfNeeded();
                 _ = ChatView.ApplyAssistantMarkdownAsync(assistant, streaming: true);
             }
         }

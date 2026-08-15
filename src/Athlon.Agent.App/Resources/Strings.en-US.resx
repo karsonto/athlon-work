@@ -193,6 +193,9 @@
   <data name="Chat_ActivityVerbThought" xml:space="preserve">
     <value>Thought</value>
   </data>
+  <data name="Chat_ActivityVerbNarration" xml:space="preserve">
+    <value>Said</value>
+  </data>
   <data name="Chat_CommandsOne" xml:space="preserve">
     <value>ran 1 command</value>
   </data>
@@ -204,6 +207,9 @@
   </data>
   <data name="Chat_ThoughtsMany" xml:space="preserve">
     <value>{0} thoughts</value>
+  </data>
+  <data name="Chat_WorkedFor" xml:space="preserve">
+    <value>Worked for {0}</value>
   </data>
   <data name="Chat_UnmodifiedLines" xml:space="preserve">
     <value>{0} unmodified lines</value>
@@ -1501,6 +1507,9 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   </data>
   <data name="Shell_SelectWorkspace" xml:space="preserve">
     <value>Select agent workspace</value>
+  </data>
+  <data name="Shell_ChooseWorkspace" xml:space="preserve">
+    <value>Select workspace</value>
   </data>
   <data name="Shell_RunOn" xml:space="preserve">
     <value>Workspace</value>
