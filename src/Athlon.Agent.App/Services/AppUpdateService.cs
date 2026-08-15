@@ -18,31 +18,74 @@ public sealed class AppUpdateService
         _notifier = notifier;
     }
 
-    public async Task<AppUpdateCheckResult> CheckAndPromptAsync()
+    /// <summary>
+    /// Silent check for the bottom-left update banner. Returns null when there is no update,
+    /// updates are disabled/unconfigured, the app is not an installed package, or any error occurs.
+    /// </summary>
+    public async Task<AppUpdateQuietResult?> CheckQuietAsync(CancellationToken cancellationToken = default)
     {
         if (!AppUpdateCoordinator.TryResolveUpdateBaseUrl(_settings, out var baseUrl, out var skipReason))
         {
+            App.StartupTrace($"Update quiet check skipped: {skipReason}");
             RecordUpdateCheck(hasUpdate: false, version: null);
-            return AppUpdateCheckResult.Skipped(skipReason);
+            return null;
         }
 
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var updateInfo = await AppUpdateCoordinator.CheckForUpdatesAsync(baseUrl).ConfigureAwait(false);
             if (updateInfo is null)
             {
                 RecordUpdateCheck(hasUpdate: false, version: null);
-                return AppUpdateCheckResult.UpToDate();
+                return null;
             }
 
             var version = updateInfo.TargetFullRelease.Version.ToString();
             RecordUpdateCheck(hasUpdate: true, version: version);
-            if (!_notifier.ConfirmYesNo("Update_AvailableTitle", "Update_AvailableMessage", version))
+            return new AppUpdateQuietResult(updateInfo, version, baseUrl);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Update quiet check failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    public async Task ApplyAsync(AppUpdateQuietResult pending, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(pending);
+        cancellationToken.ThrowIfCancellationRequested();
+        await AppUpdateCoordinator.DownloadAndApplyAsync(pending.BaseUrl, pending.UpdateInfo)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<AppUpdateCheckResult> CheckAndPromptAsync()
+    {
+        var quiet = await CheckQuietAsync().ConfigureAwait(false);
+        if (quiet is null)
+        {
+            if (!AppUpdateCoordinator.TryResolveUpdateBaseUrl(_settings, out _, out var skipReason)
+                && !string.IsNullOrWhiteSpace(skipReason))
             {
-                return AppUpdateCheckResult.UpdateAvailableNotApplied(version);
+                return AppUpdateCheckResult.Skipped(skipReason);
             }
 
-            await AppUpdateCoordinator.DownloadAndApplyAsync(baseUrl, updateInfo).ConfigureAwait(false);
+            return AppUpdateCheckResult.UpToDate();
+        }
+
+        if (!_notifier.ConfirmYesNo("Update_AvailableTitle", "Update_AvailableMessage", quiet.Version))
+        {
+            return AppUpdateCheckResult.UpdateAvailableNotApplied(quiet.Version);
+        }
+
+        try
+        {
+            await ApplyAsync(quiet).ConfigureAwait(false);
             return AppUpdateCheckResult.UpdateApplied();
         }
         catch (Exception ex)
@@ -71,6 +114,8 @@ public sealed class AppUpdateService
         }
     }
 }
+
+public sealed record AppUpdateQuietResult(UpdateInfo UpdateInfo, string Version, string BaseUrl);
 
 public sealed record AppUpdateCheckResult(AppUpdateCheckStatus Status, string Message)
 {

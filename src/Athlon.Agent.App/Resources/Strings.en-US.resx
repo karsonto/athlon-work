@@ -1778,8 +1778,26 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   <data name="Update_AvailableTitle" xml:space="preserve">
     <value>Update available</value>
   </data>
+  <data name="Update_BannerTitle" xml:space="preserve">
+    <value>Update available</value>
+  </data>
+  <data name="Update_BannerTitleWithVersion" xml:space="preserve">
+    <value>Update available · {0}</value>
+  </data>
   <data name="Update_Cancelled" xml:space="preserve">
     <value>Version {0} found. Installation cancelled.</value>
+  </data>
+  <data name="Update_InstallFailed" xml:space="preserve">
+    <value>Failed to install update: {0}</value>
+  </data>
+  <data name="Update_InstallMenu" xml:space="preserve">
+    <value>Install Update...</value>
+  </data>
+  <data name="Update_InstallNow" xml:space="preserve">
+    <value>Install now</value>
+  </data>
+  <data name="Update_Later" xml:space="preserve">
+    <value>Later</value>
   </data>
   <data name="Update_UpToDate" xml:space="preserve">
     <value>You are on the latest version.</value>

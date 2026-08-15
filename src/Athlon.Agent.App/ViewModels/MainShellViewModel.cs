@@ -112,7 +112,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         SshWorkspaceConnectionService sshConnection,
         ICredentialStore credentialStore,
         ISshWorkspaceClient sshClient,
-        ILongTermMemory longTermMemory)
+        ILongTermMemory longTermMemory,
+        AppUpdateService updateService)
     {
         _storage = storage;
         _workspaceContext = workspaceContext;
@@ -192,6 +193,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
         };
         _layout.ClampInitialLayout();
+
+        UpdateBanner = new AppUpdateBannerViewModel(updateService, localization, ShowShellToast);
 
         LogsPath = paths.LogsPath;
         KnowledgePageVm.SetSession(_displayedSessionId);
@@ -526,6 +529,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public const double ContextSidebarCollapseDragThreshold = UiLayoutConstraints.ContextSidebarCollapseDragThreshold;
 
     public ShellStatusFeedback StatusFeedback { get; } = new();
+
+    public AppUpdateBannerViewModel UpdateBanner { get; }
 
     private CancellationTokenSource? _compactionCts;
 
@@ -2598,6 +2603,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         UnwireModifiedFilesUi(_activeUi);
         WorkspacePane.PropertyChanged -= OnWorkspacePanePropertyChanged;
         StatusFeedback.CancelPendingHide();
+        UpdateBanner.Dispose();
         _compactionCts?.Cancel();
         _compactionCts?.Dispose();
         _layout.Dispose();
@@ -2748,6 +2754,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public void ShowShellToast(string message, ShellToastKind kind = ShellToastKind.Info) =>
         StatusFeedback.ShowToast(message, kind);
+
+    public void StartUpdatePolling() => UpdateBanner.Start();
+
+    public void StopUpdatePolling() => UpdateBanner.Stop();
 
     public void SetComposerStatus(string? message) =>
         StatusFeedback.SetComposerStatus(message);

@@ -15,7 +15,6 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 {
     private readonly MainShellViewModel _viewModel;
     private readonly ClipboardImageAttachmentReader _clipboardImageReader;
-    private readonly AppUpdateService _updateService;
     private readonly MainWindowLayoutBinder _layoutBinder;
     private readonly MainWindowShutdownCoordinator _shutdownCoordinator;
     private readonly PageViewFactory _pageViewFactory;
@@ -37,7 +36,6 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     public MainWindow(
         MainShellViewModel viewModel,
         ClipboardImageAttachmentReader clipboardImageReader,
-        AppUpdateService updateService,
         PageViewFactory pageViewFactory,
         MainWindowShutdownCoordinator shutdownCoordinator,
         Services.ComputerUse.ComputerUseOverlayRegistry computerUseOverlayRegistry)
@@ -48,7 +46,6 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         Behaviors.MaximizedWindowWorkArea.Attach(this);
         _viewModel = viewModel;
         _clipboardImageReader = clipboardImageReader;
-        _updateService = updateService;
         _pageViewFactory = pageViewFactory;
         _shutdownCoordinator = shutdownCoordinator;
         _computerUseOverlayRegistry = computerUseOverlayRegistry;
@@ -116,6 +113,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         }
 
         SyncWorkspaceComposerOverlay();
+        _viewModel.StartUpdatePolling();
         App.StartupTrace("MainWindow page host ready");
     }
 
@@ -143,6 +141,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 
     private void OnMainWindowClosed(object? sender, EventArgs e)
     {
+        _viewModel.StopUpdatePolling();
         CloseWorkspaceComposerOverlay();
         CloseComputerUseOverlay(restoreMainWindow: false);
         if (_viewModel.CurrentPageView is ChatPageView chatPage)
@@ -484,7 +483,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 
     private void HelpAboutMenuItem_OnClick(object sender, RoutedEventArgs e)
     {
-        var about = new Windows.AboutWindow(_updateService)
+        var about = new Windows.AboutWindow
         {
             Owner = this
         };

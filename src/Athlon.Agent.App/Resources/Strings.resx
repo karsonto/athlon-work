@@ -1799,8 +1799,26 @@
   <data name="Update_AvailableTitle" xml:space="preserve">
     <value>发现更新</value>
   </data>
+  <data name="Update_BannerTitle" xml:space="preserve">
+    <value>有可用更新</value>
+  </data>
+  <data name="Update_BannerTitleWithVersion" xml:space="preserve">
+    <value>有可用更新 · {0}</value>
+  </data>
   <data name="Update_Cancelled" xml:space="preserve">
     <value>发现新版本 {0}，已取消安装。</value>
+  </data>
+  <data name="Update_InstallFailed" xml:space="preserve">
+    <value>安装更新失败：{0}</value>
+  </data>
+  <data name="Update_InstallMenu" xml:space="preserve">
+    <value>安装更新...</value>
+  </data>
+  <data name="Update_InstallNow" xml:space="preserve">
+    <value>立即安装</value>
+  </data>
+  <data name="Update_Later" xml:space="preserve">
+    <value>稍后</value>
   </data>
   <data name="Update_UpToDate" xml:space="preserve">
     <value>当前已是最新版本。</value>

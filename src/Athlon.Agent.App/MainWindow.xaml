@@ -84,6 +84,9 @@
                           VerticalAlignment="Stretch">
                         <MenuItem Header="{loc:Localize Key=Common_Help}"
                                   Style="{StaticResource TitleBarTopMenuItemStyle}">
+                            <MenuItem Header="{loc:Localize Key=Update_InstallMenu}"
+                                      Command="{Binding UpdateBanner.InstallUpdateFromMenuCommand}" />
+                            <Separator Style="{StaticResource TitleBarMenuSeparatorStyle}" />
                             <MenuItem Header="{loc:Localize Key=Common_About}"
                                       Click="HelpAboutMenuItem_OnClick" />
                         </MenuItem>
@@ -323,6 +326,115 @@
                 </Border.Style>
                 <TextBlock Text="{Binding StatusFeedback.ToastMessage}"
                            Style="{StaticResource ToastNoticeTextStyle}" />
+            </Border>
+        </Border>
+
+        <Border Panel.ZIndex="110"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Bottom"
+                Margin="12,0,0,12"
+                MaxWidth="420">
+            <Border.Effect>
+                <DropShadowEffect Color="#000000"
+                                  Opacity="0.35"
+                                  BlurRadius="18"
+                                  ShadowDepth="3"
+                                  Direction="270" />
+            </Border.Effect>
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding UpdateBanner.IsUpdateBannerVisible}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Border Padding="14,12"
+                    CornerRadius="12"
+                    Background="{DynamicResource Brush.Chrome}"
+                    BorderBrush="{DynamicResource Brush.Border}"
+                    BorderThickness="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Border Width="28"
+                            Height="28"
+                            CornerRadius="8"
+                            Background="{DynamicResource Brush.AccentSubtle}"
+                            VerticalAlignment="Center"
+                            Margin="0,0,10,0">
+                        <Path Data="M12,2 L14.2,8.2 L21,9 L16,13.5 L17.4,20.2 L12,16.8 L6.6,20.2 L8,13.5 L3,9 L9.8,8.2 Z"
+                              Stretch="Uniform"
+                              Width="14"
+                              Height="14"
+                              Fill="{DynamicResource Brush.Accent}"
+                              HorizontalAlignment="Center"
+                              VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding UpdateBanner.UpdateBannerText}"
+                               VerticalAlignment="Center"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.Text}"
+                               TextWrapping="Wrap"
+                               Margin="0,0,12,0" />
+                    <StackPanel Grid.Column="2"
+                                Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Button Content="{loc:Localize Key=Update_Later}"
+                                Command="{Binding UpdateBanner.DismissUpdateBannerCommand}"
+                                MinWidth="64"
+                                Padding="10,6"
+                                Margin="0,0,8,0">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding UpdateBanner.IsInstallingUpdate}" Value="True">
+                                            <Setter Property="IsEnabled" Value="False" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                        <Button Content="{loc:Localize Key=Update_InstallNow}"
+                                Command="{Binding UpdateBanner.InstallUpdateCommand}"
+                                MinWidth="88"
+                                Padding="12,6"
+                                FontSize="13"
+                                FontWeight="SemiBold"
+                                Foreground="White"
+                                Cursor="Hand">
+                            <Button.Template>
+                                <ControlTemplate TargetType="Button">
+                                    <Border x:Name="Root"
+                                            Background="{DynamicResource Brush.Accent}"
+                                            CornerRadius="8"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.AccentHover}" />
+                                        </Trigger>
+                                        <Trigger Property="IsPressed" Value="True">
+                                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.AccentActive}" />
+                                        </Trigger>
+                                        <Trigger Property="IsEnabled" Value="False">
+                                            <Setter TargetName="Root" Property="Background" Value="{DynamicResource Brush.DisabledBackground}" />
+                                            <Setter Property="Foreground" Value="{DynamicResource Brush.DisabledText}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Button.Template>
+                        </Button>
+                    </StackPanel>
+                </Grid>
             </Border>
         </Border>
 

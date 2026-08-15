@@ -85,15 +85,6 @@
                            MaxWidth="320"
                            HorizontalAlignment="Center"
                            Margin="0,12,0,0" />
-                <TextBlock x:Name="UpdateStatusText"
-                           FontSize="12"
-                           Foreground="{DynamicResource Brush.SubtleText}"
-                           TextAlignment="Center"
-                           TextWrapping="Wrap"
-                           MaxWidth="320"
-                           HorizontalAlignment="Center"
-                           Margin="0,12,0,0"
-                           Visibility="Collapsed" />
             </StackPanel>
 
             <Border Grid.Row="2"
@@ -101,19 +92,12 @@
                     BorderBrush="{DynamicResource Brush.Border}"
                     BorderThickness="0,1,0,0"
                     Padding="16,12">
-                <Grid>
-                    <Button Content="{loc:Localize Key=About_CheckUpdate}"
-                            HorizontalAlignment="Left"
-                            MinWidth="96"
-                            Click="CheckUpdateButton_OnClick"
-                            Style="{StaticResource GhostButtonStyle}" />
-                    <Button Content="{loc:Localize Key=Common_OK}"
-                            HorizontalAlignment="Right"
-                            MinWidth="88"
-                            IsDefault="True"
-                            Click="CloseButton_OnClick"
-                            Style="{StaticResource GhostButtonStyle}" />
-                </Grid>
+                <Button Content="{loc:Localize Key=Common_OK}"
+                        HorizontalAlignment="Right"
+                        MinWidth="88"
+                        IsDefault="True"
+                        Click="CloseButton_OnClick"
+                        Style="{StaticResource GhostButtonStyle}" />
             </Border>
         </Grid>
     </Border>
