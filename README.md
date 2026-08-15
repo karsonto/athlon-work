@@ -30,6 +30,7 @@ Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is
 | **Agent loop built-in** | Multi-step tool calling with filesystem, grep, glob, shell |
 | **Token-smart** | Dynamic context compaction pipeline, hygiene, eviction, and MCP tool search |
 | **Extensible** | Skills (YAML + Handlebars), MCP servers, sub-agent delegation |
+| **Desktop automation** | Browser (ARIA), Computer Use, and ConPTY Terminal automation hosts |
 | **Private by default** | Settings, sessions, and API keys stay under your user profile (DPAPI) |
 
 ---
@@ -51,6 +52,10 @@ Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is
 - **Sub-agent delegation** (`sessions_spawn` / `sessions_send` / `sessions_list` / `sessions_history` / `sessions_pending_completions` / `task_output`) with configurable nesting depth and background execution
 - **Long-term memory**: search, get, and consolidating memory via `ILongTermMemory` with periodic flush
 - **Knowledge RAG**: SQLite vector store with OpenAI-compatible embeddings, document ingestion (PDF, text, Markdown), and turn-scoped knowledge search
+- **Browser automation**: WebView2-hosted Browser tab with ARIA page tools (`browser_navigate`, `computer_interact`, `computer_observe`) for exploring and driving web pages
+- **Computer Use**: desktop automation (observe/interact) with coordinate mapping and UI Automation tree
+- **ConPTY Terminal**: workspace Terminal tab with `terminal_open` / `terminal_send_input` / `terminal_read_output`
+- **SSH workspaces**: connect to remote hosts, browse remote file trees, and run file tools over SSH
 
 ### Context Management
 - **Dynamic compaction**: budget-aware multi-level compaction (normal → elevated → high → critical → overflow)
@@ -184,12 +189,13 @@ flowchart TB
 ```
 src/
   Athlon.Agent.App/             WPF UI, view models, scheduler, themes
+  Athlon.Agent.Cli/             Command-line REPL over the running desktop app (IPC)
   Athlon.Agent.Core/            Agent runtime, compaction, memory, middleware, training data
   Athlon.Agent.Infrastructure/  LLM client, tools, knowledge RAG, licensing, SSO, sub-agents
   Athlon.Agent.Mcp/             MCP client foundation (ModelContextProtocol.Core)
   Athlon.Agent.Skills/          Skill loading and Handlebars rendering
 tests/
-  Athlon.Agent.Tests/           xUnit tests (140+ test files)
+  Athlon.Agent.Tests/           xUnit tests (190+ test files)
 ```
 
 ### Key Dependencies
@@ -208,6 +214,10 @@ tests/
 | Velopack | 0.0.1298 |
 | UglyToad.PdfPig | 1.7.0-custom-5 |
 | YamlDotNet | 18.0.0 |
+| SSH.NET | 2026.0.0 |
+| EasyWindowsTerminalControl | 1.0.38 |
+| Microsoft.Windows.Console.ConPTY | 1.24.260710001 |
+| SkiaSharp | 3.119.0 |
 
 ---
 
@@ -264,7 +274,7 @@ Runtime data lives under `%USERPROFILE%\.athlon-agent\`:
 
 | Tool | Purpose |
 |------|---------|
-| `file_list` / `glob_files` / `grep_files` | Discover and search workspace |
+| `file_list` / `glob_files` / `grep_files` | Discover and search workspace (local or SSH) |
 | `file_read` | Stream-read with line limits and offset |
 | `file_write` / `file_edit` / `apply_patch` | Create or patch files (with backup) |
 | `execute_command` | Shell via `cmd.exe /c` (allow/deny lists + approval) |
@@ -273,6 +283,9 @@ Runtime data lives under `%USERPROFILE%\.athlon-agent\`:
 | `load_skill_through_path` | Load skill instructions at runtime |
 | `sessions_spawn` / `sessions_send` / … | Sub-agent delegation (when enabled) |
 | `todo_write` | Task plan management |
+| `browser_navigate` / ARIA tools | Explore and drive the built-in Browser tab (WebView2) |
+| `computer_observe` / `computer_interact` | Desktop automation (Computer Use, when active) |
+| `terminal_open` / `terminal_send_input` / `terminal_read_output` | Interactive workspace Terminal (ConPTY) |
 | MCP tools | Dynamic tool discovery via configured MCP servers |
 
 Details: workspace guard, timeouts, compaction, and tool permission policies → [Context compaction](docs/features/context-compaction.md).
@@ -316,6 +329,31 @@ git push origin v1.0.0
 
 ---
 
+## 💻 Command-Line Interface
+
+The app ships a small CLI (`athlon`) that connects to a **running** desktop instance over IPC. Launch the app first, then:
+
+```powershell
+# One-shot prompt (prints the final reply and exits)
+athlon "summarize this repo"
+
+# Start an interactive REPL
+athlon
+
+# Keep the session and continue later
+athlon --session <session-id> "continue with the plan"
+```
+
+| Flag | Description |
+|------|-------------|
+| `--once` | Run a single turn and exit (useful for scripts / pipes) |
+| `-y` / `--yes` | Auto-approve tool approvals |
+| `--session <id>` / `--session=<id>` | Continue an existing session (defaults to a new one) |
+
+REPL commands: `/exit` quit · `/new` start a new conversation · `Ctrl+C` stop the current turn · `Ctrl+D` exit.
+
+---
+
 ## 📚 Documentation
 
 | Doc | Description |
@@ -345,8 +383,8 @@ Quick summary:
 
 ### Good first issues
 
-- Add tests for `AppPathProvider`, workspace guard, filesystem tools
-- MCP server lifecycle: connect, `tools/list`, `tools/call`, status UI
+- ~~Add tests for `AppPathProvider`, workspace guard, filesystem tools~~ (done — `AppPathProviderTests`, `WorkspaceGuardTests`, `FileListToolTests`, …)
+- ~~MCP server lifecycle: connect, `tools/list`, `tools/call`, status UI~~ (done — status sidebar with reconnect, per-server tool list)
 - Command execution confirmation dialog
 - Session branch management
 - Screenshots for the README
@@ -384,12 +422,12 @@ This is offline signature validation for internal compliance — not DRM. The **
 
 ## 🗺 Roadmap
 
-- [ ] Full MCP server lifecycle UI (connect, list tools, call, reconnect, status indicators)
 - [ ] Command execution confirmation dialog
 - [ ] Session branching
 - [ ] Richer code-block actions (diff, run)
 - [ ] Optional code signing in release pipeline
 - [ ] README screenshots & demo GIF
+- [ ] Full MCP server lifecycle UI polish (reconnect status, per-server tool inspection)
 
 ---
 
