@@ -110,19 +110,31 @@
     <value>{0}% 已用</value>
   </data>
   <data name="Chat_ContextMeterCapacity" xml:space="preserve">
-    <value>~{0} / {1}</value>
+    <value>~{0} / {1} Tokens</value>
   </data>
   <data name="Chat_ContextMeterMessages" xml:space="preserve">
-    <value>对话历史  ~{0}</value>
+    <value>对话历史</value>
   </data>
   <data name="Chat_ContextMeterSystem" xml:space="preserve">
-    <value>系统提示  ~{0}</value>
+    <value>系统提示</value>
   </data>
   <data name="Chat_ContextMeterTools" xml:space="preserve">
-    <value>工具定义  ~{0}</value>
+    <value>工具定义</value>
   </data>
   <data name="Chat_ContextMeterMargin" xml:space="preserve">
-    <value>安全余量  ~{0}</value>
+    <value>安全余量</value>
+  </data>
+  <data name="Chat_ContextMeterRules" xml:space="preserve">
+    <value>项目规则</value>
+  </data>
+  <data name="Chat_ContextMeterSkills" xml:space="preserve">
+    <value>Skills</value>
+  </data>
+  <data name="Chat_ContextMeterMcp" xml:space="preserve">
+    <value>MCP 与动态工具</value>
+  </data>
+  <data name="Chat_ContextMeterSubagent" xml:space="preserve">
+    <value>子代理定义</value>
   </data>
   <data name="Chat_OverflowRetrySkipped" xml:space="preserve">
     <value>上下文已满，压缩未能缩短请求，已停止以免再次失败。</value>

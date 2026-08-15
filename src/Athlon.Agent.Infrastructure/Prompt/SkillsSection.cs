@@ -13,6 +13,8 @@ public sealed class SkillsSection(AppSettings settings, IAgentSkillCatalog catal
 
     public PromptSectionPlacement Placement => PromptSectionPlacement.PreCall;
 
+    public PromptOccupancyKind OccupancyKind => PromptOccupancyKind.Skills;
+
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
         if (PromptModeHelper.IsChatOnly(context))

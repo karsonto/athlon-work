@@ -5,6 +5,11 @@
     <ProjectReference Include="..\Athlon.Agent.Infrastructure\Athlon.Agent.Infrastructure.csproj" />
     <ProjectReference Include="..\Athlon.Agent.Skills\Athlon.Agent.Skills.csproj" />
     <ProjectReference Include="..\Athlon.Agent.Mcp\Athlon.Agent.Mcp.csproj" />
+    <ProjectReference Include="..\Athlon.Agent.Cli\Athlon.Agent.Cli.csproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+      <GlobalPropertiesToRemove>TargetFramework</GlobalPropertiesToRemove>
+    </ProjectReference>
   </ItemGroup>
 
   <ItemGroup>
@@ -37,8 +42,8 @@
     <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <StartupObject>Athlon.Agent.App.Program</StartupObject>
-    <Version>1.0.0</Version>
-    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <Version>3.0.1</Version>
+    <AssemblyVersion>3.0.1.0</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -67,5 +72,27 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
+
+  <Target Name="CopyAthlonCli" AfterTargets="Build">
+    <PropertyGroup>
+      <_CliOutDir>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\Athlon.Agent.Cli\bin\$(Configuration)\net10.0\'))</_CliOutDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_CliFiles Include="$(_CliOutDir)athlon*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_CliFiles)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="'@(_CliFiles)' != ''" />
+  </Target>
+
+  <Target Name="PublishAthlonCli" AfterTargets="Publish">
+    <PropertyGroup>
+      <_CliPublishRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_CliPublishRid>
+      <_CliPublishRid Condition="'$(RuntimeIdentifier)' == ''">win-x64</_CliPublishRid>
+      <_CliPublishDir>$([System.IO.Path]::GetFullPath('$(PublishDir)'))</_CliPublishDir>
+    </PropertyGroup>
+    <MSBuild
+      Projects="$(MSBuildThisFileDirectory)..\Athlon.Agent.Cli\Athlon.Agent.Cli.csproj"
+      Targets="Publish"
+      Properties="Configuration=$(Configuration);RuntimeIdentifier=$(_CliPublishRid);SelfContained=true;PublishDir=$(_CliPublishDir)" />
+  </Target>
 
 </Project>

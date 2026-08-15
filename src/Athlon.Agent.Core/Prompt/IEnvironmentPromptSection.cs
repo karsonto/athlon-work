@@ -17,5 +17,7 @@ public interface IEnvironmentPromptSection
     /// </summary>
     bool IsComplete => false;
 
+    PromptOccupancyKind OccupancyKind => PromptOccupancyKind.System;
+
     void Append(StringBuilder builder, EnvironmentPromptContext context);
 }

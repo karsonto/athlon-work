@@ -11,6 +11,8 @@ public sealed class SubAgentPersonaSection(IAgentRunContextAccessor runContextAc
     public bool IsComplete =>
         !string.IsNullOrWhiteSpace(runContextAccessor.Current?.CompleteSystemPrompt);
 
+    public PromptOccupancyKind OccupancyKind => PromptOccupancyKind.Subagent;
+
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
         var complete = runContextAccessor.Current?.CompleteSystemPrompt;

@@ -9,6 +9,8 @@ public sealed class SubAgentDelegationSection(AppSettings settings) : IEnvironme
 
     public int Order => PromptSectionBands.ToolGuidanceStart + 100;
 
+    public PromptOccupancyKind OccupancyKind => PromptOccupancyKind.Subagent;
+
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
         if (!settings.SubAgent.Enabled

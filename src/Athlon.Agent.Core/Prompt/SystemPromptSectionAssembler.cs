@@ -1,9 +1,11 @@
 using System.Text;
+using Athlon.Agent.Core.Compaction;
 
 namespace Athlon.Agent.Core.Prompt;
 
 /// <summary>
-/// Shared section assembly: duplicate-name check, empty-section drop, complete-section override, variable interpolation.
+/// Shared section assembly: duplicate-name check, empty-section drop, complete-section override,
+/// variable interpolation, and occupancy accounting.
 /// </summary>
 public static class SystemPromptSectionAssembler
 {
@@ -35,7 +37,7 @@ public static class SystemPromptSectionAssembler
         return ordered;
     }
 
-    public static string Assemble(
+    public static (string Text, PromptOccupancyTokens Occupancy) Assemble(
         EnvironmentPromptContext context,
         IReadOnlyList<IEnvironmentPromptSection> staticSections,
         IReadOnlyList<IEnvironmentPromptSection> preCallSections)
@@ -52,28 +54,26 @@ public static class SystemPromptSectionAssembler
                 $"Multiple complete prompt sections rendered non-empty content: {names}.");
         }
 
-        string raw;
-        if (complete.Length == 1)
+        IReadOnlyList<(IEnvironmentPromptSection Section, string Text)> effective =
+            complete.Length == 1 ? complete : rendered;
+
+        var builder = new StringBuilder();
+        var occupancy = PromptOccupancyTokens.Empty;
+        foreach (var item in effective)
         {
-            raw = complete[0].Text;
-        }
-        else
-        {
-            var builder = new StringBuilder();
-            foreach (var item in rendered)
+            var text = PromptVariableInterpolator.Interpolate(item.Text, context.Variables);
+            if (!text.EndsWith('\n'))
             {
-                builder.Append(item.Text);
-                if (!item.Text.EndsWith('\n'))
-                {
-                    builder.AppendLine();
-                }
+                text += Environment.NewLine;
             }
 
-            raw = builder.ToString();
+            builder.Append(text);
+            occupancy = occupancy.Add(
+                item.Section.OccupancyKind,
+                ContextTokenEstimator.EstimateTextTokens(text));
         }
 
-        var interpolated = PromptVariableInterpolator.Interpolate(raw, context.Variables);
-        return interpolated.TrimEnd() + Environment.NewLine;
+        return (builder.ToString().TrimEnd() + Environment.NewLine, occupancy);
     }
 
     private static void RenderLayer(

@@ -110,19 +110,31 @@
     <value>{0}% used</value>
   </data>
   <data name="Chat_ContextMeterCapacity" xml:space="preserve">
-    <value>~{0} / {1}</value>
+    <value>~{0} / {1} Tokens</value>
   </data>
   <data name="Chat_ContextMeterMessages" xml:space="preserve">
-    <value>messages  ~{0}</value>
+    <value>Conversation</value>
   </data>
   <data name="Chat_ContextMeterSystem" xml:space="preserve">
-    <value>system  ~{0}</value>
+    <value>System prompt</value>
   </data>
   <data name="Chat_ContextMeterTools" xml:space="preserve">
-    <value>tools  ~{0}</value>
+    <value>Tool definitions</value>
   </data>
   <data name="Chat_ContextMeterMargin" xml:space="preserve">
-    <value>margin  ~{0}</value>
+    <value>Safety margin</value>
+  </data>
+  <data name="Chat_ContextMeterRules" xml:space="preserve">
+    <value>Rules</value>
+  </data>
+  <data name="Chat_ContextMeterSkills" xml:space="preserve">
+    <value>Skills</value>
+  </data>
+  <data name="Chat_ContextMeterMcp" xml:space="preserve">
+    <value>MCP &amp; dynamic tools</value>
+  </data>
+  <data name="Chat_ContextMeterSubagent" xml:space="preserve">
+    <value>Subagent definitions</value>
   </data>
   <data name="Chat_OverflowRetrySkipped" xml:space="preserve">
     <value>Context is full and compaction did not shrink the request, so the retry was skipped.</value>

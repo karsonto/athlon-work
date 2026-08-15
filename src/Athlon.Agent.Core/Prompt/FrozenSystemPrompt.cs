@@ -1,6 +1,14 @@
 namespace Athlon.Agent.Core.Prompt;
 
-public sealed class FrozenSystemPrompt(string text)
+public sealed class FrozenSystemPrompt
 {
-    public string Text { get; } = text;
+    public FrozenSystemPrompt(string text, PromptOccupancyTokens? occupancy = null)
+    {
+        Text = text;
+        Occupancy = occupancy ?? PromptOccupancyTokens.Empty;
+    }
+
+    public string Text { get; }
+
+    public PromptOccupancyTokens Occupancy { get; }
 }

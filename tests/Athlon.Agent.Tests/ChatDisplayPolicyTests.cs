@@ -24,18 +24,23 @@ public sealed class ChatDisplayPolicyTests
     }
 
     [Fact]
-    public void ShouldIncludeToolViewModel_keeps_compaction_when_tools_hidden()
+    public void ShouldIncludeToolViewModel_keeps_manual_compaction_when_tools_hidden()
     {
-        var compactionVm = new ChatMessageViewModel(
+        var autoCompactionVm = new ChatMessageViewModel(
             CompactionMessageContent.CreateCompactionMessage(
                 CompactionMessageContent.CreateConversationCompact(1000, 500, 3, null, "summary")));
+        var manualCompactionVm = new ChatMessageViewModel(
+            CompactionMessageContent.CreateCompactionMessage(
+                CompactionMessageContent.CreateConversationCompact(
+                    1000, 500, 3, null, "summary", CompactionStrategy.ManualCompact)));
         var toolVm = new ChatMessageViewModel(
             ChatMessage.Create(MessageRole.Tool, "ToolCallId: x\nTool `read_file` succeeded."));
         var pendingApprovalVm = ChatMessageViewModel.CreatePendingTool(
             new AgentToolCall("call-approval", "file_write", new Dictionary<string, string>()));
         pendingApprovalVm.MarkAwaitingApproval("""{"path":"a.txt"}""");
 
-        Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, compactionVm));
+        Assert.False(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, autoCompactionVm));
+        Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, manualCompactionVm));
         Assert.False(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, toolVm));
         Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, pendingApprovalVm));
         Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: true, toolVm));
@@ -86,12 +91,13 @@ public sealed class ChatDisplayPolicyTests
 
         var hidden = ChatTimelineHydrator.BuildDisplayMessages(displayMessages, showToolCalls: false);
         Assert.DoesNotContain(hidden, vm => vm.IsTool && !vm.IsCompaction);
-        Assert.Contains(hidden, vm => vm.IsCompaction);
-        Assert.Equal(3, hidden.Count);
+        Assert.DoesNotContain(hidden, vm => vm.IsCompaction);
+        Assert.Equal(2, hidden.Count);
 
         var shown = ChatTimelineHydrator.BuildDisplayMessages(displayMessages, showToolCalls: true);
         Assert.Contains(shown, vm => vm.IsTool && !vm.IsCompaction);
-        Assert.Equal(4, shown.Count);
+        Assert.DoesNotContain(shown, vm => vm.IsCompaction);
+        Assert.Equal(3, shown.Count);
     }
 
     [Fact]
@@ -110,12 +116,12 @@ public sealed class ChatDisplayPolicyTests
         var hidden = ChatEventSerializer.BuildReplayEvents(messages, showToolCalls: false);
         Assert.DoesNotContain(hidden, json => json.Contains("read_file", StringComparison.Ordinal));
         Assert.Equal(0, hidden.Count(json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal)));
-        Assert.Contains(hidden, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
+        Assert.DoesNotContain(hidden, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
 
         var shown = ChatEventSerializer.BuildReplayEvents(messages, showToolCalls: true);
         Assert.Contains(shown, json => json.Contains("read_file", StringComparison.Ordinal));
         Assert.Equal(1, shown.Count(json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal)));
-        Assert.Contains(shown, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
+        Assert.DoesNotContain(shown, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -149,6 +155,27 @@ public sealed class ChatDisplayPolicyTests
         Assert.Contains(events, json => json.Contains(ChatMessageViewModel.PendingManualCompactionMessageId, StringComparison.Ordinal));
         Assert.DoesNotContain(events, json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal));
         Assert.DoesNotContain(events, json => json.Contains("TOOL_CALL_RESULT", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void BuildDisplayMessages_keeps_manual_compaction_hides_auto()
+    {
+        var auto = CompactionMessageContent.CreateCompactionMessage(
+            CompactionMessageContent.CreateConversationCompact(1000, 500, 3, null, "auto"));
+        var manual = CompactionMessageContent.CreateCompactionMessage(
+            CompactionMessageContent.CreateConversationCompact(
+                1000, 500, 3, null, "manual", CompactionStrategy.ManualCompact));
+        var displayMessages = new List<ChatMessage>
+        {
+            ChatMessage.Create(MessageRole.User, "hello"),
+            auto,
+            manual,
+            ChatMessage.Create(MessageRole.Assistant, "done")
+        };
+
+        var shown = ChatTimelineHydrator.BuildDisplayMessages(displayMessages, showToolCalls: false);
+        Assert.DoesNotContain(shown, vm => vm.MessageId == auto.Id);
+        Assert.Contains(shown, vm => vm.IsCompaction && vm.MessageId == manual.Id);
     }
 
     [Fact]
