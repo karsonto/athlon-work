@@ -372,32 +372,68 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Knowledge navigation button -->
-                <Button Command="{Binding NavigateCommand}"
-                        CommandParameter="Knowledge"
-                        Style="{StaticResource NavBottomButtonStyle}"
-                        ToolTip="{loc:Localize Key=Nav_Knowledge}"
-                        Margin="0,0,0,8">
-                    <StackPanel Orientation="Horizontal">
-                        <ContentControl Style="{StaticResource KnowledgeNavIconStyle}"
-                                        Margin="0,0,10,0"
-                                        VerticalAlignment="Center" />
-                        <TextBlock Text="{loc:Localize Key=Nav_Knowledge}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
-                    </StackPanel>
+                <!-- More header on top; Knowledge + Schedule pop up below it -->
+                <Button Command="{Binding ToggleToolsNavExpandedCommand}"
+                        Style="{StaticResource AgentRecordGroupHeaderStyle}"
+                        Margin="0,0,0,4"
+                        ToolTip="{loc:Localize Key=Nav_More}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="ToolsNavChevron"
+                                   Grid.Column="0"
+                                   Text="▸"
+                                   FontSize="12"
+                                   Margin="0,0,8,0"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                   VerticalAlignment="Center"
+                                   RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <RotateTransform x:Name="ToolsNavChevronRotate" Angle="0" />
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                        <TextBlock Grid.Column="1"
+                                   Text="{loc:Localize Key=Nav_More}"
+                                   FontSize="12"
+                                   FontWeight="Medium"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                   VerticalAlignment="Center" />
+                    </Grid>
                 </Button>
-
-                <!-- Schedule navigation button -->
-                <Button Command="{Binding NavigateCommand}"
-                        CommandParameter="Schedule"
-                        Style="{StaticResource NavBottomButtonStyle}"
-                        ToolTip="{loc:Localize Key=Nav_Schedule}">
-                    <StackPanel Orientation="Horizontal">
-                        <ContentControl Style="{StaticResource ScheduleNavIconStyle}"
-                                        Margin="0,0,10,0"
-                                        VerticalAlignment="Center" />
-                        <TextBlock Text="{loc:Localize Key=Nav_Schedule}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                <Border x:Name="ToolsNavPanel"
+                        ClipToBounds="True"
+                        RenderTransformOrigin="0.5,0">
+                    <Border.RenderTransform>
+                        <TranslateTransform x:Name="ToolsNavTranslate" Y="18" />
+                    </Border.RenderTransform>
+                    <StackPanel>
+                        <Button Command="{Binding NavigateCommand}"
+                                CommandParameter="Knowledge"
+                                Style="{StaticResource NavBottomButtonStyle}"
+                                ToolTip="{loc:Localize Key=Nav_Knowledge}"
+                                Margin="0,0,0,8">
+                            <StackPanel Orientation="Horizontal">
+                                <ContentControl Style="{StaticResource KnowledgeNavIconStyle}"
+                                                Margin="0,0,10,0"
+                                                VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Nav_Knowledge}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding NavigateCommand}"
+                                CommandParameter="Schedule"
+                                Style="{StaticResource NavBottomButtonStyle}"
+                                ToolTip="{loc:Localize Key=Nav_Schedule}">
+                            <StackPanel Orientation="Horizontal">
+                                <ContentControl Style="{StaticResource ScheduleNavIconStyle}"
+                                                Margin="0,0,10,0"
+                                                VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Nav_Schedule}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
-                </Button>
+                </Border>
             </StackPanel>
 
             <!-- Account pinned at bottom so maximize / short heights keep login visible -->

@@ -22,6 +22,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     private bool _shutdownInProgress;
     private readonly PropertyChangedEventHandler _viewModelPropertyChangedHandler;
     private readonly EventHandler<ContextSidebarLayoutChangedEventArgs> _contextSidebarLayoutChangedHandler;
+    private readonly EventHandler<ContextSidebarLayoutChangedEventArgs> _navigationSidebarLayoutChangedHandler;
     private readonly RoutedEventHandler _loadedHandler;
     private readonly CancelEventHandler _closingHandler;
     private Windows.ComputerUseOverlayWindow? _computerUseOverlayWindow;
@@ -69,9 +70,12 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
                 _layoutBinder.ApplyContextSidebar(args);
                 ScheduleWorkspaceComposerPosition();
             });
+        _navigationSidebarLayoutChangedHandler = (_, args) =>
+            ExecuteOnUiThread(() => _layoutBinder.ApplyNavigationSidebar(args));
         _loadedHandler = OnMainWindowLoaded;
         _closingHandler = OnMainWindowClosing;
         _viewModel.ContextSidebarLayoutChanged += _contextSidebarLayoutChangedHandler;
+        _viewModel.NavigationSidebarLayoutChanged += _navigationSidebarLayoutChangedHandler;
         _viewModel.PropertyChanged += _viewModelPropertyChangedHandler;
         Loaded += _loadedHandler;
         Closing += _closingHandler;
@@ -149,6 +153,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             ((IChatLayoutSurface)chatPage).ChatWebView.InitializationFailed -= OnChatWebViewInitializationFailed;
         }
         _viewModel.ContextSidebarLayoutChanged -= _contextSidebarLayoutChangedHandler;
+        _viewModel.NavigationSidebarLayoutChanged -= _navigationSidebarLayoutChangedHandler;
         _viewModel.PropertyChanged -= _viewModelPropertyChangedHandler;
         Loaded -= _loadedHandler;
         Closing -= _closingHandler;
@@ -212,10 +217,9 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             ExecuteOnUiThread(() => _layoutBinder.ApplyContextSidebarImmediate());
         }
 
-        if (e.PropertyName == nameof(MainShellViewModel.IsNavigationSidebarVisible)
-            || e.PropertyName == nameof(MainShellViewModel.NavigationSidebarWidth))
+        if (e.PropertyName == nameof(MainShellViewModel.NavigationSidebarWidth))
         {
-            ExecuteOnUiThread(_layoutBinder.ApplyNavigationSidebar);
+            ExecuteOnUiThread(_layoutBinder.ApplyNavigationSidebarImmediate);
         }
 
         if (e.PropertyName == nameof(MainShellViewModel.HasOpenEditorTabs))

@@ -900,6 +900,9 @@
   <data name="Nav_Knowledge" xml:space="preserve">
     <value>知识库</value>
   </data>
+  <data name="Nav_More" xml:space="preserve">
+    <value>更多</value>
+  </data>
   <data name="Nav_NewAgent" xml:space="preserve">
     <value>New Agent</value>
   </data>

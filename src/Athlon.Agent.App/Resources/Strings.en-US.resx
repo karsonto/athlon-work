@@ -879,6 +879,9 @@ Error: {1}</value>
   <data name="Nav_Knowledge" xml:space="preserve">
     <value>Knowledge</value>
   </data>
+  <data name="Nav_More" xml:space="preserve">
+    <value>More</value>
+  </data>
   <data name="Nav_NewAgent" xml:space="preserve">
     <value>New Agent</value>
   </data>

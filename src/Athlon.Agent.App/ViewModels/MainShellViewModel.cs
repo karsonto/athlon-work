@@ -480,6 +480,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         Math.Clamp(_appSettings.Ui.EditorPaneWidth, EditorPaneMinWidth, EditorPaneMaxWidth);
 
     public event EventHandler<ContextSidebarLayoutChangedEventArgs>? ContextSidebarLayoutChanged;
+    public event EventHandler<ContextSidebarLayoutChangedEventArgs>? NavigationSidebarLayoutChanged;
 
     public double NavigationSidebarWidth =>
         Math.Clamp(_appSettings.Ui.NavigationSidebarWidth, NavigationSidebarMinWidth, NavigationSidebarMaxWidth);
@@ -489,6 +490,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private double _contextSidebarEdgeGutterWidth = 12;
     private bool _contextSidebarLayoutAnimate;
+    private bool _navigationSidebarLayoutAnimate;
     private double _preMaximizeContextWidth = UiLayoutConstraints.ContextSidebarDefaultWidth;
 
     [ObservableProperty]
@@ -525,6 +527,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public string NavigationSidebarToggleToolTip =>
         IsNavigationSidebarVisible ? _loc["Shell_NavigationSidebarClose"] : _loc["Shell_NavigationSidebarOpen"];
+
+    public bool IsToolsNavExpanded => _appSettings.Ui.ToolsNavExpanded;
+
+    public string ToolsNavExpandGlyph => IsToolsNavExpanded ? "▾" : "▸";
 
     public const double ContextSidebarCollapseDragThreshold = UiLayoutConstraints.ContextSidebarCollapseDragThreshold;
 
@@ -754,6 +760,15 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     }
 
     [RelayCommand]
+    private async Task ToggleToolsNavExpandedAsync()
+    {
+        _appSettings.Ui.ToolsNavExpanded = !_appSettings.Ui.ToolsNavExpanded;
+        OnPropertyChanged(nameof(IsToolsNavExpanded));
+        OnPropertyChanged(nameof(ToolsNavExpandGlyph));
+        await _layout.PersistNowAsync().ConfigureAwait(true);
+    }
+
+    [RelayCommand]
     private void ToggleWorkspaceMaximized()
     {
         if (IsWorkspaceMaximized)
@@ -878,7 +893,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [RelayCommand]
     private async Task ToggleNavigationSidebarAsync()
     {
-        SetNavigationSidebarVisible(!_appSettings.Ui.NavigationSidebarVisible);
+        SetNavigationSidebarVisible(!_appSettings.Ui.NavigationSidebarVisible, animate: true);
         await _layout.PersistNowAsync();
     }
 
@@ -940,8 +955,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _layout.SetContextSidebarVisible(visible, NotifyContextSidebarLayoutChanged);
     }
 
-    public void SetNavigationSidebarVisible(bool visible)
+    public void SetNavigationSidebarVisible(bool visible, bool animate = false)
     {
+        _navigationSidebarLayoutAnimate = animate;
         _layout.SetNavigationSidebarVisible(visible, NotifyNavigationSidebarLayoutChanged);
     }
 
@@ -1018,9 +1034,15 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private void NotifyNavigationSidebarLayoutChanged()
     {
+        var animate = _navigationSidebarLayoutAnimate;
+        _navigationSidebarLayoutAnimate = false;
+
         OnPropertyChanged(nameof(IsNavigationSidebarVisible));
         OnPropertyChanged(nameof(NavigationSidebarWidth));
         OnPropertyChanged(nameof(NavigationSidebarToggleToolTip));
+        NavigationSidebarLayoutChanged?.Invoke(
+            this,
+            new ContextSidebarLayoutChangedEventArgs { Animate = animate });
     }
 
     public Task PersistUiLayoutForSidebarAsync() => _layout.PersistNowAsync();
