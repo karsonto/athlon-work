@@ -15,7 +15,7 @@ public static class AgentRecordGrouping
         Action<string>? stopSession,
         IReadOnlySet<string>? previouslyExpandedKeys = null)
     {
-        var buckets = new Dictionary<string, (string Title, string? WorkspacePath, bool IsRemote, List<SessionHistoryItemViewModel> Items)>(
+        var buckets = new Dictionary<string, (string Title, string? WorkspacePath, string? ActiveWorkspaceId, bool IsRemote, List<SessionHistoryItemViewModel> Items)>(
             StringComparer.OrdinalIgnoreCase);
 
         foreach (var entry in entries)
@@ -33,6 +33,7 @@ public static class AgentRecordGrouping
                 bucket = (
                     ResolveRepositoryTitle(entry.ActiveWorkspace, isRemote),
                     NormalizeWorkspacePath(entry.ActiveWorkspace, isRemote),
+                    string.IsNullOrWhiteSpace(entry.ActiveWorkspaceId) ? null : entry.ActiveWorkspaceId.Trim(),
                     isRemote,
                     []);
                 buckets[key] = bucket;
@@ -69,6 +70,7 @@ public static class AgentRecordGrouping
                 bucket.Title,
                 isExpandedByDefault: expanded,
                 workspacePath: bucket.WorkspacePath,
+                activeWorkspaceId: bucket.ActiveWorkspaceId,
                 isRemote: bucket.IsRemote);
             foreach (var item in bucket.Items.OrderByDescending(i => i.UpdatedAt))
             {

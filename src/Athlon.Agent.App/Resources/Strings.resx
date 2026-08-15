@@ -906,6 +906,9 @@
   <data name="Nav_NewSessionTooltip" xml:space="preserve">
     <value>新建会话</value>
   </data>
+  <data name="Nav_NewSessionInWorkspaceTooltip" xml:space="preserve">
+    <value>在此工作区新建 Agent</value>
+  </data>
   <data name="Nav_NoAgentRecords" xml:space="preserve">
     <value>暂无 Agent 记录</value>
   </data>

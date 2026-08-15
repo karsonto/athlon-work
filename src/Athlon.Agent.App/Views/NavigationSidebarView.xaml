@@ -97,30 +97,62 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:AgentRecordGroupViewModel}">
                                 <StackPanel Margin="0,0,0,4">
-                                    <Button Command="{Binding ToggleExpandedCommand}"
-                                            Style="{StaticResource AgentRecordGroupHeaderStyle}"
-                                            ToolTip="{Binding WorkspacePath}">
-                                        <Grid Width="{Binding RelativeSource={RelativeSource AncestorType=ScrollViewer}, Path=ActualWidth}">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0"
-                                                       Text="{Binding FolderGlyph}"
-                                                       FontFamily="Segoe Fluent Icons"
-                                                       FontSize="13"
-                                                       Margin="0,0,8,0"
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button Grid.Column="0"
+                                                Command="{Binding ToggleExpandedCommand}"
+                                                Style="{StaticResource AgentRecordGroupHeaderStyle}"
+                                                ToolTip="{Binding WorkspacePath}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0"
+                                                           Text="{Binding FolderGlyph}"
+                                                           FontFamily="Segoe Fluent Icons"
+                                                           FontSize="13"
+                                                           Margin="0,0,8,0"
+                                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                                           VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="{Binding Title}"
+                                                           FontSize="12"
+                                                           FontWeight="Medium"
+                                                           Foreground="{DynamicResource Brush.Text}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                        <Button Grid.Column="1"
+                                                Command="{Binding DataContext.NewSessionInWorkspaceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{loc:Localize Key=Nav_NewSessionInWorkspaceTooltip}"
+                                                Margin="0,0,4,0"
+                                                VerticalAlignment="Center">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource SessionActionButtonStyle}">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasWorkspace}" Value="False">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <TextBlock Text="+"
+                                                       FontSize="16"
+                                                       FontWeight="Normal"
+                                                       LineHeight="16"
+                                                       LineStackingStrategy="BlockLineHeight"
                                                        Foreground="{DynamicResource Brush.SubtleText}"
+                                                       HorizontalAlignment="Center"
                                                        VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding Title}"
-                                                       FontSize="12"
-                                                       FontWeight="Medium"
-                                                       Foreground="{DynamicResource Brush.Text}"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       VerticalAlignment="Center" />
-                                        </Grid>
-                                    </Button>
+                                        </Button>
+                                    </Grid>
                                     <ItemsControl ItemsSource="{Binding Items}" Margin="4,0,0,4">
                                         <ItemsControl.Style>
                                             <Style TargetType="ItemsControl">

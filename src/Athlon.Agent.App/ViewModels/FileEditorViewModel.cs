@@ -143,16 +143,24 @@ public sealed partial class FileEditorViewModel : ObservableObject
         }
 
         var index = Tabs.IndexOf(document);
-        Tabs.Remove(document);
+        if (index < 0)
+        {
+            return;
+        }
+
+        // Capture before Remove: ListBox TwoWay SelectedItem clears ActiveDocument when the
+        // selected item leaves the collection, so post-Remove "ActiveDocument == document" fails.
+        var wasActive = ReferenceEquals(ActiveDocument, document);
+        Tabs.RemoveAt(index);
         if (Tabs.Count == 0)
         {
             ActiveDocument = null;
             return;
         }
 
-        if (ActiveDocument == document)
+        if (wasActive)
         {
-            ActiveDocument = Tabs[Math.Min(index, Tabs.Count - 1)];
+            ActiveDocument = Tabs[Math.Clamp(index, 0, Tabs.Count - 1)];
         }
     }
 

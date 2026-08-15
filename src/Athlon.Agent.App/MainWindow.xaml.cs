@@ -241,12 +241,13 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             });
         }
 
-        if (e.PropertyName == nameof(MainShellViewModel.IsBusy))
+        // Stay on the Computer Use overlay after a turn completes so the user can keep typing.
+        // Overlay closes only when the user dismisses it (or the shell ends CU mode).
+        if (e.PropertyName == nameof(MainShellViewModel.IsBusy)
+            && _viewModel.IsComputerUseOverlayActive
+            && !_viewModel.IsBusy)
         {
-            if (_viewModel.IsComputerUseOverlayActive && !_viewModel.IsBusy)
-            {
-                ExecuteOnUiThread(() => CloseComputerUseOverlay(restoreMainWindow: true));
-            }
+            ExecuteOnUiThread(() => _computerUseOverlayWindow?.FocusComposer());
         }
     }
 

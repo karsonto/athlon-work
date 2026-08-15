@@ -885,6 +885,9 @@ Error: {1}</value>
   <data name="Nav_NewSessionTooltip" xml:space="preserve">
     <value>New session</value>
   </data>
+  <data name="Nav_NewSessionInWorkspaceTooltip" xml:space="preserve">
+    <value>New Agent in this workspace</value>
+  </data>
   <data name="Nav_NoAgentRecords" xml:space="preserve">
     <value>No agent sessions yet</value>
   </data>

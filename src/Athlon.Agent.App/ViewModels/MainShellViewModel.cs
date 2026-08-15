@@ -1026,12 +1026,33 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public Task PersistUiLayoutForSidebarAsync() => _layout.PersistNowAsync();
 
     [RelayCommand]
-    private async Task NewSession()
+    private Task NewSession() => CreateNewSessionAsync(workspacePath: null, workspaceId: null);
+
+    [RelayCommand(CanExecute = nameof(CanNewSessionInWorkspace))]
+    private Task NewSessionInWorkspace(AgentRecordGroupViewModel? group)
+    {
+        if (!CanNewSessionInWorkspace(group) || group is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        return CreateNewSessionAsync(group.WorkspacePath, group.ActiveWorkspaceId);
+    }
+
+    private static bool CanNewSessionInWorkspace(AgentRecordGroupViewModel? group) =>
+        group is { HasWorkspace: true };
+
+    private async Task CreateNewSessionAsync(string? workspacePath, string? workspaceId)
     {
         CancelPendingSessionLoad();
         IsLoadingSession = false;
         var previousSession = _session;
         _session = AgentSession.Create("New Chat");
+        if (!string.IsNullOrWhiteSpace(workspacePath))
+        {
+            _session = _session.WithWorkspace(workspacePath, workspaceId);
+        }
+
         _olderDisplayCursor = null;
         SwitchDisplayedSession(_session);
         CurrentSessionTitle = _session.Title;

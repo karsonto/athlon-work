@@ -11,11 +11,13 @@ public sealed partial class AgentRecordGroupViewModel : ObservableObject
         string title,
         bool isExpandedByDefault,
         string? workspacePath = null,
+        string? activeWorkspaceId = null,
         bool isRemote = false)
     {
         Key = key;
         Title = title;
         WorkspacePath = workspacePath;
+        ActiveWorkspaceId = activeWorkspaceId;
         IsRemote = isRemote;
         IsExpanded = isExpandedByDefault;
     }
@@ -23,6 +25,7 @@ public sealed partial class AgentRecordGroupViewModel : ObservableObject
     public string Key { get; }
     public string Title { get; }
     public string? WorkspacePath { get; }
+    public string? ActiveWorkspaceId { get; }
     public bool IsRemote { get; }
     public ObservableCollection<SessionHistoryItemViewModel> Items { get; } = new();
     public bool HasItems => Items.Count > 0;

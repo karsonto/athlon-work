@@ -81,6 +81,7 @@ public sealed class AgentRecordGroupingTests
         var remote = Assert.Single(groups);
         Assert.True(remote.IsRemote);
         Assert.Equal("athlon-work", remote.Title);
+        Assert.Equal("ssh-workspace-1", remote.ActiveWorkspaceId);
         Assert.Equal("\uE753", remote.FolderGlyph);
         Assert.StartsWith("ssh:ssh-workspace-1:", remote.Key, StringComparison.OrdinalIgnoreCase);
     }
