@@ -2,6 +2,7 @@ using System.Windows.Media;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.Core.Compaction;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace Athlon.Agent.App.ViewModels;
 
@@ -49,10 +50,21 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
     private DoubleCollection ringDashArray = FrozenDash(0);
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCompactCtaEmphasized))]
     private ContextPressureLevel pressure = ContextPressureLevel.Normal;
 
     [ObservableProperty]
     private IReadOnlyList<ContextOccupancyCategoryRow> categories = Array.Empty<ContextOccupancyCategoryRow>();
+
+    [ObservableProperty]
+    private bool isCompacting;
+
+    public IRelayCommand? CompactCommand { get; set; }
+
+    public IRelayCommand? ClearCommand { get; set; }
+
+    public bool IsCompactCtaEmphasized =>
+        Pressure is ContextPressureLevel.Critical or ContextPressureLevel.Overflow;
 
     public void Apply(ContextBudgetSnapshot budget, ContextPressureLevel pressure)
     {
@@ -92,8 +104,11 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
     internal static DoubleCollection FrozenDash(double filled)
     {
         var clamped = Math.Clamp(filled, 0, RingCircumference);
-        var gap = Math.Max(DashEpsilon, RingCircumference - clamped);
-        var collection = new DoubleCollection { clamped, gap };
+        // WPF StrokeDashArray values are multiples of StrokeThickness (not pixels),
+        // so convert the pixel arc length to dash units before building the array.
+        var dash = clamped / RingStrokeThickness;
+        var gap = Math.Max(DashEpsilon, RingCircumference / RingStrokeThickness - dash);
+        var collection = new DoubleCollection { dash, gap };
         collection.Freeze();
         return collection;
     }

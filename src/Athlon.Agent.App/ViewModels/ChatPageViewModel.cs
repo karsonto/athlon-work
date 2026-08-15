@@ -27,7 +27,8 @@ public sealed partial class ChatPageViewModel : ObservableObject
     private Func<string>? _getDisplayedSessionId;
     private Func<AgentSession>? _getSession;
     private Func<SessionTurnUiController>? _getActiveUi;
-    private Action<string>? _setSettingsStatus;
+    private Action<string, ShellToastKind>? _showShellToast;
+    private Action<string?>? _setComposerStatus;
     private Action? _notifyCommandStatesChanged;
     private Action? _syncWorkspaceContext;
     private Action<bool>? _setIsBusy;
@@ -65,7 +66,8 @@ public sealed partial class ChatPageViewModel : ObservableObject
         Func<string> getDisplayedSessionId,
         Func<AgentSession> getSession,
         Func<SessionTurnUiController> getActiveUi,
-        Action<string> setSettingsStatus,
+        Action<string, ShellToastKind> showShellToast,
+        Action<string?> setComposerStatus,
         Action notifyCommandStatesChanged,
         Action syncWorkspaceContext,
         Action<bool> setIsBusy,
@@ -76,7 +78,8 @@ public sealed partial class ChatPageViewModel : ObservableObject
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
         _getActiveUi = getActiveUi;
-        _setSettingsStatus = setSettingsStatus;
+        _showShellToast = showShellToast;
+        _setComposerStatus = setComposerStatus;
         _notifyCommandStatesChanged = notifyCommandStatesChanged;
         _syncWorkspaceContext = syncWorkspaceContext;
         _setIsBusy = setIsBusy;
@@ -125,7 +128,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         }
 
         // Immediate UI feedback so long-press never feels like a no-op.
-        _setSettingsStatus?.Invoke(_loc["Chat_SpeechListeningTooltip"]);
+        _setComposerStatus?.Invoke(_loc["Chat_SpeechListeningTooltip"]);
 
         if (_speechToText.IsListening)
         {
@@ -153,6 +156,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         {
             IsSpeechListening = false;
             _speechDraftBase = null;
+            _setComposerStatus?.Invoke(null);
         }
     }
 
@@ -236,7 +240,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
 
         if (rejected.Count > 0)
         {
-            _setSettingsStatus?.Invoke(rejected[0]);
+            _showShellToast?.Invoke(rejected[0], ShellToastKind.Error);
         }
     }
 
@@ -334,16 +338,17 @@ public sealed partial class ChatPageViewModel : ObservableObject
 
                 if (extractionResults.Count == 0)
                 {
-                    _setSettingsStatus?.Invoke(failures.Count > 0
-                        ? failures[0]
-                        : Strings.Get("Chat_AttachmentParseFailed"));
+                    _showShellToast?.Invoke(
+                        failures.Count > 0 ? failures[0] : Strings.Get("Chat_AttachmentParseFailed"),
+                        ShellToastKind.Error);
                     return;
                 }
 
                 if (failures.Count > 0)
                 {
-                    _setSettingsStatus?.Invoke(
-                        Strings.Format("Chat_AttachmentParsePartial", extractionResults.Count, failures.Count));
+                    _showShellToast?.Invoke(
+                        Strings.Format("Chat_AttachmentParsePartial", extractionResults.Count, failures.Count),
+                        ShellToastKind.Error);
                 }
             }
             finally
@@ -375,7 +380,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         if (_sessionTurns.IsRunning(displayedSessionId))
         {
             _sessionTurns.EnqueueTurn(displayedSessionId, input, imageAttachments, ui);
-            _setSettingsStatus!(Strings.Get("Chat_QueuedStatus"));
+            _showShellToast!.Invoke(Strings.Get("Chat_QueuedStatus"), ShellToastKind.Info);
             _notifyCommandStatesChanged!();
             return;
         }
@@ -384,7 +389,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         var error = _sessionTurns.TryStartTurn(displayedSessionId, session, input, imageAttachments, ui);
         if (error is not null)
         {
-            _setSettingsStatus!(error);
+            _showShellToast!.Invoke(error, ShellToastKind.Error);
             _notifyCommandStatesChanged!();
             return;
         }
@@ -403,7 +408,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         var displayedSessionId = _getDisplayedSessionId!();
         if (_sessionTurns.IsRunning(displayedSessionId))
         {
-            _setSettingsStatus!(Strings.Get("Chat_QueuedStatus"));
+            _showShellToast!.Invoke(Strings.Get("Chat_QueuedStatus"), ShellToastKind.Info);
             return Task.FromResult(false);
         }
 
@@ -426,7 +431,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
             computerUseActive: true);
         if (error is not null)
         {
-            _setSettingsStatus!(error);
+            _showShellToast!.Invoke(error, ShellToastKind.Error);
             _notifyCommandStatesChanged!();
             return Task.FromResult(false);
         }
@@ -595,7 +600,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
             var baseline = _speechDraftBase ?? ComposerText;
             ComposerText = ComposerSpeechText.AppendTranscript(baseline, text);
             _speechDraftBase = null;
-            _setSettingsStatus?.Invoke(string.Empty);
+            _setComposerStatus?.Invoke(null);
         }
 
         var dispatcher = Application.Current?.Dispatcher;
@@ -614,7 +619,8 @@ public sealed partial class ChatPageViewModel : ObservableObject
         {
             if (!string.IsNullOrWhiteSpace(message))
             {
-                _setSettingsStatus?.Invoke(message);
+                _showShellToast?.Invoke(message, ShellToastKind.Error);
+                _setComposerStatus?.Invoke(null);
             }
         }
 

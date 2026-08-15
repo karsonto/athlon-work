@@ -190,6 +190,43 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <TextBlock Text="{loc:Localize Key=Shell_CompactingContext}"
+                               Margin="0,4,0,0"
+                               FontSize="12"
+                               Foreground="{DynamicResource Brush.SubtleText}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsCompacting}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <Button Content="{loc:Localize Key=Shell_CompactContextTitle}"
+                            Command="{Binding CompactCommand}"
+                            Margin="0,10,0,0"
+                            HorizontalAlignment="Stretch">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsCompactCtaEmphasized}" Value="True">
+                                        <Setter Property="Foreground" Value="White" />
+                                        <Setter Property="Background" Value="{DynamicResource Brush.Danger}" />
+                                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <Button Content="{loc:Localize Key=Shell_ClearContextTitle}"
+                            Command="{Binding ClearCommand}"
+                            Margin="0,6,0,0"
+                            HorizontalAlignment="Stretch"
+                            Style="{StaticResource GhostButtonStyle}" />
                 </StackPanel>
             </Border>
         </Popup>

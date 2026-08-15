@@ -38,7 +38,7 @@ public partial class MainShellViewModel
         catch (Exception ex)
         {
             Application.Current?.Dispatcher.InvokeAsync(() =>
-                Settings.SettingsStatus = _loc.Format("Shell_SaveConversationFailed", ex.Message));
+                ShowShellToast(_loc.Format("Shell_SaveConversationFailed", ex.Message), ShellToastKind.Error));
         }
     }
 }

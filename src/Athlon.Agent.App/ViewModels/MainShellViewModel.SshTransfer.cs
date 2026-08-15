@@ -34,7 +34,7 @@ public partial class MainShellViewModel
                     node.FullPath,
                     localRoot,
                     _workspaceContext.IgnorePatterns).ConfigureAwait(true);
-                Settings.SettingsStatus = _loc.Format("Shell_DownloadCompleteStatus", downloaded, skipped);
+                ShowShellToast(_loc.Format("Shell_DownloadCompleteStatus", downloaded, skipped), ShellToastKind.Success);
             }
             else
             {
@@ -52,18 +52,18 @@ public partial class MainShellViewModel
                 if (File.Exists(saveDialog.FileName)
                     && !_notifier.ConfirmYesNo("Shell_OverwriteTitle", "Shell_OverwriteLocalMessage", Path.GetFileName(saveDialog.FileName)))
                 {
-                    Settings.SettingsStatus = _loc["Shell_DownloadSkippedStatus"];
+                    ShowShellToast(_loc["Shell_DownloadSkippedStatus"], ShellToastKind.Success);
                     return;
                 }
 
                 await _sshTransfer.DownloadFileAsync(node.FullPath, saveDialog.FileName).ConfigureAwait(true);
-                Settings.SettingsStatus = _loc.Format("Shell_DownloadFileSuccess", node.Name);
+                ShowShellToast(_loc.Format("Shell_DownloadFileSuccess", node.Name), ShellToastKind.Success);
             }
         }
         catch (Exception exception)
         {
             _notifier.Warning("Shell_DownloadFailedTitle", "Shell_DownloadFailedMessage", node.Name, exception.Message);
-            Settings.SettingsStatus = _loc.Format("Shell_DownloadFailedStatus", exception.Message);
+            ShowShellToast(_loc.Format("Shell_DownloadFailedStatus", exception.Message), ShellToastKind.Error);
         }
     }
 
@@ -126,12 +126,12 @@ public partial class MainShellViewModel
             }
 
             await RefreshWorkspaceTreeAsync().ConfigureAwait(true);
-            Settings.SettingsStatus = _loc.Format("Shell_UploadCompleteStatus", uploaded, skipped);
+            ShowShellToast(_loc.Format("Shell_UploadCompleteStatus", uploaded, skipped), ShellToastKind.Success);
         }
         catch (Exception exception)
         {
             _notifier.Warning("Shell_UploadFailedTitle", "Shell_UploadFailedMessage", exception.Message);
-            Settings.SettingsStatus = _loc.Format("Shell_UploadFailedStatus", exception.Message);
+            ShowShellToast(_loc.Format("Shell_UploadFailedStatus", exception.Message), ShellToastKind.Error);
             try
             {
                 await RefreshWorkspaceTreeAsync().ConfigureAwait(true);

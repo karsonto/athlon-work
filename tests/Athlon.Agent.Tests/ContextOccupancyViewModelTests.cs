@@ -68,8 +68,8 @@ public sealed class ContextOccupancyViewModelTests
 
         Assert.Equal(46, occupancy.PercentUsed);
         Assert.Equal(2, occupancy.RingDashArray.Count);
-        Assert.Equal(0.46 * circumference, occupancy.RingDashArray[0], 3);
-        Assert.Equal(circumference, occupancy.RingDashArray[0] + occupancy.RingDashArray[1], 3);
+        Assert.Equal(0.46 * circumference / ContextOccupancyViewModel.RingStrokeThickness, occupancy.RingDashArray[0], 3);
+        Assert.Equal(circumference / ContextOccupancyViewModel.RingStrokeThickness, occupancy.RingDashArray[0] + occupancy.RingDashArray[1], 3);
         Assert.Contains(occupancy.Categories, row => row.Id == "conversation");
         Assert.DoesNotContain(occupancy.Categories, row => row.Id == "rules");
     }
@@ -78,8 +78,9 @@ public sealed class ContextOccupancyViewModelTests
     public void FrozenDash_FullUtilization_CoversCircumference()
     {
         var dash = ContextOccupancyViewModel.FrozenDash(ContextOccupancyViewModel.RingCircumference);
-        Assert.Equal(ContextOccupancyViewModel.RingCircumference, dash[0], 6);
+        var fullDash = ContextOccupancyViewModel.RingCircumference / ContextOccupancyViewModel.RingStrokeThickness;
+        Assert.Equal(fullDash, dash[0], 6);
         Assert.True(dash[1] > 0);
-        Assert.True(dash[0] + dash[1] >= ContextOccupancyViewModel.RingCircumference);
+        Assert.True(dash[0] + dash[1] >= fullDash);
     }
 }

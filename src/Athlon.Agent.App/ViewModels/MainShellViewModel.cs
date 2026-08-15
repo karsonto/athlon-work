@@ -166,7 +166,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             () => _displayedSessionId,
             () => _session,
             () => _activeUi,
-            status => Settings.SettingsStatus = status,
+            ShowShellToast,
+            SetComposerStatus,
             NotifyCommandStatesChanged,
             SyncWorkspaceContext,
             busy => IsBusy = busy,
@@ -200,6 +201,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         InitializeSsoDisplay();
 
         ApplySessionWorkspace();
+        ContextOccupancy.CompactCommand = CompactContextCommand;
+        ContextOccupancy.ClearCommand = ClearContextCommand;
+        ContextOccupancy.IsCompacting = IsCompacting;
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         WireModifiedFilesUi(_activeUi);
         ChatPage.PendingImageAttachments.CollectionChanged += (_, _) =>
@@ -521,14 +525,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public const double ContextSidebarCollapseDragThreshold = UiLayoutConstraints.ContextSidebarCollapseDragThreshold;
 
-    private CancellationTokenSource? _copyNoticeCts;
+    public ShellStatusFeedback StatusFeedback { get; } = new();
+
     private CancellationTokenSource? _compactionCts;
-
-    [ObservableProperty]
-    private string copyNotice = string.Empty;
-
-    [ObservableProperty]
-    private bool isCopyNoticeVisible;
 
     [ObservableProperty]
     private bool isBusy;
@@ -946,7 +945,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public void UpdateNavigationSidebarWidth(double width) =>
         _layout.UpdateNavigationSidebarWidth(width);
 
-    /// <summary>将 WebChatView 绑定到当前活跃 UI 控制器，用于消息的增量渲染。</summary>
+    /// <summary>??WebChatView ????????UI ???????????????/summary>
     public void AttachChatView(Controls.WebChatView chatView)
     {
         if (_savedChatView is not null)
@@ -1017,17 +1016,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [RelayCommand(CanExecute = nameof(CanClearContext))]
     private Task ClearContextAsync() => ClearDisplayedContextAsync();
 
-    [RelayCommand(CanExecute = nameof(CanClearSessionContext))]
-    private async Task ClearSessionContextAsync(SessionHistoryItemViewModel? item)
-    {
-        if (!await EnsureDisplayedSessionAsync(item).ConfigureAwait(true))
-        {
-            return;
-        }
-
-        await ClearDisplayedContextAsync().ConfigureAwait(true);
-    }
-
     private async Task ClearDisplayedContextAsync()
     {
         if (!_notifier.ConfirmYesNo("Shell_ClearContextTitle", "Shell_ClearContextMessage"))
@@ -1052,24 +1040,13 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionNavigation.Invalidate(_session.Id);
 
         await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
-        Settings.SettingsStatus = _loc["Shell_ClearContextDone"];
+        ShowShellToast(_loc["Shell_ClearContextDone"], ShellToastKind.Success);
         NotifyCommandStatesChanged();
         await RefreshSessionHistoryAsync().ConfigureAwait(true);
     }
 
     [RelayCommand(CanExecute = nameof(CanCompactContext))]
     private Task CompactContextAsync() => CompactDisplayedContextAsync();
-
-    [RelayCommand(CanExecute = nameof(CanCompactSessionContext))]
-    private async Task CompactSessionContextAsync(SessionHistoryItemViewModel? item)
-    {
-        if (!await EnsureDisplayedSessionAsync(item).ConfigureAwait(true))
-        {
-            return;
-        }
-
-        await CompactDisplayedContextAsync().ConfigureAwait(true);
-    }
 
     private async Task CompactDisplayedContextAsync()
     {
@@ -1085,7 +1062,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         IsCompacting = true;
         NotifyComposerCompactionStateChanged();
         _activeUi.BeginManualCompactionBubble();
-        Settings.SettingsStatus = _loc["Shell_CompactingContext"];
         NotifyCommandStatesChanged();
 
         try
@@ -1098,20 +1074,20 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             catch (OperationCanceledException)
             {
                 _activeUi.CancelManualCompactionBubble();
-                Settings.SettingsStatus = _loc["Shell_CompactContextCancelled"];
+                ShowShellToast(_loc["Shell_CompactContextCancelled"], ShellToastKind.Info);
                 return;
             }
             catch (Exception ex)
             {
                 _activeUi.DismissManualCompactionBubble();
-                Settings.SettingsStatus = ex.Message;
+                ShowShellToast(ex.Message, ShellToastKind.Error);
                 return;
             }
 
             if (!result.Compacted)
             {
                 _activeUi.DismissManualCompactionBubble();
-                Settings.SettingsStatus = _loc["Shell_CompactContextFailed"];
+                ShowShellToast(_loc["Shell_CompactContextFailed"], ShellToastKind.Error);
                 return;
             }
 
@@ -1130,7 +1106,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
             SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
             RefreshContextOccupancy();
-            Settings.SettingsStatus = _loc["Shell_CompactContextDone"];
+            ShowShellToast(_loc["Shell_CompactContextDone"], ShellToastKind.Success);
             await RefreshSessionHistoryAsync().ConfigureAwait(true);
         }
         finally
@@ -1141,25 +1117,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             NotifyComposerCompactionStateChanged();
             NotifyCommandStatesChanged();
         }
-    }
-
-    private async Task<bool> EnsureDisplayedSessionAsync(SessionHistoryItemViewModel? item)
-    {
-        if (item is null)
-        {
-            return false;
-        }
-
-        if (item.Id == _session.Id)
-        {
-            return true;
-        }
-
-        var previousSession = _session;
-        await LoadSessionInternalAsync(item.Id).ConfigureAwait(true);
-        _ = SaveSessionInBackgroundAsync(previousSession);
-        CurrentPage = AppPage.Chat;
-        return true;
     }
 
     private bool TryCancelCompaction()
@@ -1185,11 +1142,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private void NotifyComposerCompactionStateChanged()
     {
+        ContextOccupancy.IsCompacting = IsCompacting;
         OnPropertyChanged(nameof(IsComposerStopVisible));
         OnPropertyChanged(nameof(IsComposerSendVisible));
         CompactContextCommand.NotifyCanExecuteChanged();
-        CompactSessionContextCommand.NotifyCanExecuteChanged();
-        ClearSessionContextCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
     }
 
@@ -1197,33 +1153,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private bool CanClearContext() => Messages.Count > 0 && !IsBusy;
 
-    private bool CanClearSessionContext(SessionHistoryItemViewModel? item)
-    {
-        if (item is null || IsBusy)
-        {
-            return false;
-        }
-
-        return item.Id == _session.Id ? Messages.Count > 0 : item.HasMessages;
-    }
-
-    private bool CanCompactSessionContext(SessionHistoryItemViewModel? item)
-    {
-        if (item is null || IsBusy || IsCompacting)
-        {
-            return false;
-        }
-
-        return item.Id == _session.Id ? Messages.Count > 0 : item.HasMessages;
-    }
-
     private void OnMessagesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(HasChatMessages));
         ClearContextCommand.NotifyCanExecuteChanged();
         CompactContextCommand.NotifyCanExecuteChanged();
-        ClearSessionContextCommand.NotifyCanExecuteChanged();
-        CompactSessionContextCommand.NotifyCanExecuteChanged();
 
         if (IsBusy && e.Action == NotifyCollectionChangedAction.Add)
         {
@@ -1261,8 +1195,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         SendCommand.NotifyCanExecuteChanged();
         ClearContextCommand.NotifyCanExecuteChanged();
         CompactContextCommand.NotifyCanExecuteChanged();
-        ClearSessionContextCommand.NotifyCanExecuteChanged();
-        CompactSessionContextCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(HasChatMessages));
     }
 
@@ -1358,7 +1290,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         await RefreshSessionHistoryAsync();
-        Settings.SettingsStatus = _loc["Shell_DeleteConversationDone"];
+        ShowShellToast(_loc["Shell_DeleteConversationDone"], ShellToastKind.Success);
         NotifyCommandStatesChanged();
     }
 
@@ -1426,7 +1358,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             RunOnUi(() =>
             {
                 ContextOccupancy.ApplyOverflow();
-                Settings.SettingsStatus = _loc["Chat_OverflowRetrySkipped"];
+                ShowShellToast(_loc["Chat_OverflowRetrySkipped"], ShellToastKind.Info);
             });
         SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
         RefreshContextOccupancy();
@@ -1464,7 +1396,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         WireSessionUsageUi(_activeUi);
         WireModifiedFilesUi(_activeUi);
         _activeUi.SetDisplayed(true);
-        // 切换会话时重新绑定 WebChatView（如果已经初始化）
+        // ??????????WebChatView??????????
         if (_activeUi.ChatView is null)
         {
             _activeUi.ChatView = _savedChatView;
@@ -1665,7 +1597,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                     UpdateDisplayedBusyState();
                     if (queueError is not null)
                     {
-                        Settings.SettingsStatus = queueError;
+                        ShowShellToast(queueError, ShellToastKind.Error);
                     }
                 }
             }
@@ -1847,7 +1779,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         await _storage.SaveSettingsAsync(_appSettings).ConfigureAwait(true);
-        Settings.SettingsStatus = _loc.Format("Shell_SshConnectionDeleted", label);
+        ShowShellToast(_loc.Format("Shell_SshConnectionDeleted", label), ShellToastKind.Success);
         OnPropertyChanged(nameof(RunOnDisplayName));
         OnPropertyChanged(nameof(HasSessionWorkspace));
         OnPropertyChanged(nameof(WorkspacePanelActionLabel));
@@ -2133,7 +2065,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _session = _session.WithWorkspace(configured.RootPath, configured.Id);
         await ApplySessionWorkspaceAsync().ConfigureAwait(true);
         await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
-        Settings.SettingsStatus = _loc.Format("Shell_SshConnectedStatus", FormatRemoteLabel(configured));
+        ShowShellToast(_loc.Format("Shell_SshConnectedStatus", FormatRemoteLabel(configured)), ShellToastKind.Success);
     }
 
     [RelayCommand]
@@ -2166,7 +2098,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _session = _session.WithWorkspace(dialog.FolderName, workspaceId: null);
         await ApplySessionWorkspaceAsync().ConfigureAwait(true);
         await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
-        Settings.SettingsStatus = _loc.Format("Shell_WorkspaceStatus", folderName);
+        ShowShellToast(_loc.Format("Shell_WorkspaceStatus", folderName), ShellToastKind.Success);
     }
 
     private async Task RemoveSessionWorkspaceAsync()
@@ -2185,7 +2117,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _session = _session.WithWorkspace(null, workspaceId: null);
         await ApplySessionWorkspaceAsync().ConfigureAwait(true);
         await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
-        Settings.SettingsStatus = _loc["Shell_WorkspaceRemoved"];
+        ShowShellToast(_loc["Shell_WorkspaceRemoved"], ShellToastKind.Success);
     }
 
     private async Task OnSettingsSavedAsync()
@@ -2287,7 +2219,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         try
         {
             var fullPath = Path.GetFullPath(node.FullPath);
-            // 对文件取其所在目录，对文件夹直接用其自身
+            // ????????????????????
             var targetPath = node.IsDirectory ? fullPath : Path.GetDirectoryName(fullPath);
             if (targetPath is null)
             {
@@ -2364,19 +2296,19 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
             else
             {
-                Settings.SettingsStatus = _loc["Shell_TargetMissing"];
+                ShowShellToast(_loc["Shell_TargetMissing"], ShellToastKind.Error);
                 Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
                 return;
             }
 
             RefreshAtCompletionSources();
             Sidebar.RefreshWorkspaceTree(_session.ActiveWorkspace, _workspaceContext.IgnorePatterns);
-            Settings.SettingsStatus = _loc.Format("Shell_DeleteSuccess", kind, node.Name);
+            ShowShellToast(_loc.Format("Shell_DeleteSuccess", kind, node.Name), ShellToastKind.Success);
         }
         catch (Exception exception)
         {
             _notifier.Warning("Shell_DeleteFailedTitle", "Shell_DeleteFailedMessage", node.Name, exception.Message);
-            Settings.SettingsStatus = _loc.Format("Shell_DeleteFailedStatus", exception.Message);
+            ShowShellToast(_loc.Format("Shell_DeleteFailedStatus", exception.Message), ShellToastKind.Error);
         }
     }
 
@@ -2524,7 +2456,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         var loadGeneration = Interlocked.Increment(ref _sessionLoadGeneration);
         IsLoadingSession = true;
-        Settings.SettingsStatus = _loc["Shell_LoadingConversation"];
+        SetComposerStatus(_loc["Shell_LoadingConversation"]);
         try
         {
             var snapshot = await _sessionNavigation.LoadSnapshotAsync(sessionId).ConfigureAwait(true);
@@ -2535,7 +2467,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
             if (snapshot is null)
             {
-                Settings.SettingsStatus = _loc["Shell_LoadConversationFailed"];
+                SetComposerStatus(null);
+                ShowShellToast(_loc["Shell_LoadConversationFailed"], ShellToastKind.Error);
                 return;
             }
 
@@ -2577,7 +2510,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
             ApplySessionWorkspace();
             UpdateDisplayedBusyState();
-            Settings.SettingsStatus = _loc.Format("Shell_LoadConversationDone", _session.Title);
+            SetComposerStatus(null);
+            ShowShellToast(_loc.Format("Shell_LoadConversationDone", _session.Title), ShellToastKind.Success);
 
         }
         finally
@@ -2585,6 +2519,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             if (IsSessionLoadCurrent(loadGeneration))
             {
                 IsLoadingSession = false;
+                if (!StatusFeedback.IsComposerStatusVisible
+                    || StatusFeedback.ComposerStatusText == _loc["Shell_LoadingConversation"])
+                {
+                    SetComposerStatus(null);
+                }
+
                 NotifyCommandStatesChanged();
             }
         }
@@ -2657,8 +2597,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         UnwireModifiedFilesUi(_activeUi);
         WorkspacePane.PropertyChanged -= OnWorkspacePanePropertyChanged;
-        _copyNoticeCts?.Cancel();
-        _copyNoticeCts?.Dispose();
+        StatusFeedback.CancelPendingHide();
         _compactionCts?.Cancel();
         _compactionCts?.Dispose();
         _layout.Dispose();
@@ -2684,8 +2623,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         ClearContextCommand.NotifyCanExecuteChanged();
         CompactContextCommand.NotifyCanExecuteChanged();
-        ClearSessionContextCommand.NotifyCanExecuteChanged();
-        CompactSessionContextCommand.NotifyCanExecuteChanged();
         SendCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(IsComposerStopVisible));
         RefreshComputerUseStatus();
@@ -2802,33 +2739,18 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             MessageCount = Messages.Count,
             CompactAsync = cancellationToken => _compactionService.CompactAsync(_session, cancellationToken),
             ClearContextAsync = ClearContextAsync,
-            SetStatus = status => Settings.SettingsStatus = status,
+            SetStatus = status => ShowShellToast(status, ShellToastKind.Info),
             NotifyCommandStatesChanged = NotifyCommandStatesChanged
         };
 
-    public void ShowCopyNotice(string message)
-    {
-        CopyNotice = message;
-        IsCopyNoticeVisible = true;
-        _copyNoticeCts?.Cancel();
-        _copyNoticeCts?.Dispose();
-        _copyNoticeCts = new CancellationTokenSource();
-        var token = _copyNoticeCts.Token;
-        _ = HideCopyNoticeAsync(token);
-    }
+    public void ShowCopyNotice(string message) =>
+        ShowShellToast(message, ShellToastKind.Success);
 
-    private async Task HideCopyNoticeAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Task.Delay(2400, cancellationToken);
-            IsCopyNoticeVisible = false;
-        }
-        catch (OperationCanceledException)
-        {
-            // Superseded by a newer notice.
-        }
-    }
+    public void ShowShellToast(string message, ShellToastKind kind = ShellToastKind.Info) =>
+        StatusFeedback.ShowToast(message, kind);
+
+    public void SetComposerStatus(string? message) =>
+        StatusFeedback.SetComposerStatus(message);
 }
 
 public sealed record AtCompletionItemViewModel(

@@ -241,6 +241,28 @@
                     <Grid Grid.Row="1"
                           Margin="2,4"
                           HorizontalAlignment="Stretch">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0"
+                                   Margin="10,0,10,6"
+                                   FontSize="12"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                   Text="{Binding StatusFeedback.ComposerStatusText}"
+                                   TextWrapping="Wrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding StatusFeedback.IsComposerStatusVisible}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <Grid Grid.Row="1">
                         <Border Style="{StaticResource ComposerInputShadowStyle}" />
                         <Border x:Name="ComposerInputWrapper"
                                 HorizontalAlignment="Stretch"
@@ -397,6 +419,7 @@
                             <controls:ComposerKnowledgeChipsControl Grid.Row="2" />
                         </Grid>
                         </Border>
+                        </Grid>
                     </Grid>
                 </Grid>
                 </Grid>

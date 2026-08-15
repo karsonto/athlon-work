@@ -125,7 +125,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             : throw new InvalidOperationException("Chat page is not loaded.");
 
     private void OnChatWebViewInitializationFailed(object? sender, string message) =>
-        _viewModel.Settings.SettingsStatus = message;
+        _viewModel.ShowShellToast(message, ShellToastKind.Error);
 
     private void RegisterChatScrollService(ChatPageView chatPage)
     {

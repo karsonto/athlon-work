@@ -297,14 +297,31 @@
                 <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Collapsed" />
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsCopyNoticeVisible}" Value="True">
+                        <DataTrigger Binding="{Binding StatusFeedback.IsToastVisible}" Value="True">
                             <Setter Property="Visibility" Value="Visible" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
             </Border.Style>
-            <Border Style="{StaticResource ToastNoticeStyle}">
-                <TextBlock Text="{Binding CopyNotice}"
+            <Border Padding="16,12"
+                    CornerRadius="16"
+                    Background="{DynamicResource Brush.ToastBackground}"
+                    BorderThickness="1"
+                    IsHitTestVisible="False">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.ToastBorder}" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding StatusFeedback.ToastKind}" Value="{x:Static vm:ShellToastKind.Error}">
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Danger}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding StatusFeedback.ToastKind}" Value="{x:Static vm:ShellToastKind.Success}">
+                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Success}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <TextBlock Text="{Binding StatusFeedback.ToastMessage}"
                            Style="{StaticResource ToastNoticeTextStyle}" />
             </Border>
         </Border>
