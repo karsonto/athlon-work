@@ -1,6 +1,8 @@
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Athlon.Agent.App.Resources;
@@ -8,6 +10,7 @@ using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using ICSharpCode.AvalonEdit.Highlighting;
+using Microsoft.Web.WebView2.Core;
 
 namespace Athlon.Agent.App.Controls;
 
@@ -17,6 +20,7 @@ public partial class FileEditorView : UserControl
     private EditorDocumentViewModel? _loadedDocument;
     private bool _suppressEditorChange;
     private bool _htmlPreviewReady;
+    private bool _planHostMapped;
     private string? _lastHtmlPreviewContent;
     private readonly DispatcherTimer _previewRefreshTimer;
 
@@ -48,7 +52,8 @@ public partial class FileEditorView : UserControl
         ApplyEditorChrome();
         if (_loadedDocument is null || _loadedDocument.ShowPreview)
         {
-            if (_loadedDocument is { ShowPreview: true, IsHtmlFile: true })
+            if (_loadedDocument is { ShowPreview: true } doc
+                && (doc.IsHtmlFile || doc.UsePlanHtmlPreview))
             {
                 _lastHtmlPreviewContent = null;
                 RefreshPreviewSurface(immediate: true);
@@ -59,6 +64,26 @@ public partial class FileEditorView : UserControl
 
         CodeEditor.SyntaxHighlighting = EditorSyntaxHighlighting.Resolve(_loadedDocument.FilePath);
         CodeEditor.TextArea.TextView.Redraw();
+    }
+
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || Keyboard.Modifiers != ModifierKeys.Control)
+        {
+            return;
+        }
+
+        if (_editor?.ShowPlanBuildButton != true)
+        {
+            return;
+        }
+
+        var command = PlanBuildButton.Command;
+        if (command?.CanExecute(PlanBuildButton.CommandParameter) == true)
+        {
+            command.Execute(PlanBuildButton.CommandParameter);
+            e.Handled = true;
+        }
     }
 
     private void ApplyEditorChrome()
@@ -95,10 +120,14 @@ public partial class FileEditorView : UserControl
 
     private void OnEditorPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(FileEditorViewModel.ActiveDocument))
+        if (e.PropertyName == nameof(FileEditorViewModel.ActiveDocument)
+            || e.PropertyName == nameof(FileEditorViewModel.ShowPlanBuildButton))
         {
-            SyncEditorToActiveDocument();
-            LoadActiveDocument();
+            if (e.PropertyName == nameof(FileEditorViewModel.ActiveDocument))
+            {
+                SyncEditorToActiveDocument();
+                LoadActiveDocument();
+            }
         }
     }
 
@@ -154,7 +183,9 @@ public partial class FileEditorView : UserControl
             }
 
             CodeEditor.Document.Text = document.Content;
-            CodeEditor.SyntaxHighlighting = EditorSyntaxHighlighting.Resolve(document.FilePath);
+            CodeEditor.SyntaxHighlighting = document.IsSessionPlan
+                ? EditorSyntaxHighlighting.Resolve("plan.md")
+                : EditorSyntaxHighlighting.Resolve(document.FilePath);
             CodeEditor.TextArea.TextView.Redraw();
             CodeEditor.ScrollToHome();
             ApplyReadOnlyState();
@@ -175,6 +206,13 @@ public partial class FileEditorView : UserControl
             return;
         }
 
+        if (e.PropertyName is nameof(EditorDocumentViewModel.CanBuild)
+            or nameof(EditorDocumentViewModel.PathLabel)
+            or nameof(EditorDocumentViewModel.TabTitle))
+        {
+            return;
+        }
+
         if (e.PropertyName == nameof(EditorDocumentViewModel.ViewMode)
             || e.PropertyName == nameof(EditorDocumentViewModel.ShowPreview))
         {
@@ -192,12 +230,16 @@ public partial class FileEditorView : UserControl
             return;
         }
 
-        if (e.PropertyName == nameof(EditorDocumentViewModel.Content))
+        if (e.PropertyName == nameof(EditorDocumentViewModel.Content)
+            || e.PropertyName == nameof(EditorDocumentViewModel.PlanBody)
+            || e.PropertyName == nameof(EditorDocumentViewModel.PlanTitle)
+            || e.PropertyName == nameof(EditorDocumentViewModel.PlanOverview))
         {
             if (_loadedDocument?.ShowPreview == true)
             {
                 SyncDocumentContentToCodeEditor();
-                RefreshPreviewSurface();
+                _lastHtmlPreviewContent = null;
+                RefreshPreviewSurface(immediate: true);
             }
             else if (!_suppressEditorChange
                      && _loadedDocument is not null
@@ -252,8 +294,9 @@ public partial class FileEditorView : UserControl
         var document = _loadedDocument;
         var canPreview = document?.CanPreview == true;
         var showPreview = document?.ShowPreview == true;
-        var showMarkdown = showPreview && document!.IsMarkdownFile;
-        var showHtml = showPreview && document!.IsHtmlFile;
+        var usePlanHtml = showPreview && document!.UsePlanHtmlPreview;
+        var showMarkdown = showPreview && document!.IsMarkdownFile && !document.UsePlanHtmlPreview;
+        var showHtml = showPreview && (document!.IsHtmlFile || usePlanHtml);
 
         ViewModeBar.Visibility = canPreview ? Visibility.Visible : Visibility.Collapsed;
 
@@ -304,6 +347,12 @@ public partial class FileEditorView : UserControl
             return;
         }
 
+        if (document.UsePlanHtmlPreview)
+        {
+            _ = LoadPlanHtmlPreviewAsync(document);
+            return;
+        }
+
         if (document.IsMarkdownFile)
         {
             if (!string.Equals(MarkdownPreview.Markdown, document.Content, StringComparison.Ordinal))
@@ -317,6 +366,56 @@ public partial class FileEditorView : UserControl
         if (document.IsHtmlFile)
         {
             _ = LoadHtmlPreviewAsync(document.Content);
+        }
+    }
+
+    private async Task LoadPlanHtmlPreviewAsync(EditorDocumentViewModel document)
+    {
+        var stamp =
+            $"{document.PlanUpdatedAt}|{document.PlanTitle}|{document.PlanOverview}|{document.PlanBody.Length}|{AppThemeManager.CurrentKind}";
+        if (string.Equals(_lastHtmlPreviewContent, stamp, StringComparison.Ordinal)
+            && HtmlPreviewError.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        try
+        {
+            await WebView2Initializer.EnsureCoreWebView2Async(HtmlPreviewWebView).ConfigureAwait(true);
+            var core = HtmlPreviewWebView.CoreWebView2;
+            if (core is null)
+            {
+                throw new InvalidOperationException("WebView2 未初始化。");
+            }
+
+            core.Settings.AreDefaultContextMenusEnabled = false;
+            core.Settings.AreDevToolsEnabled = false;
+
+            if (!_planHostMapped && Directory.Exists(MermaidPreviewHtmlBuilder.AssetsDirectory))
+            {
+                core.SetVirtualHostNameToFolderMapping(
+                    MermaidPreviewHtmlBuilder.VirtualHostName,
+                    MermaidPreviewHtmlBuilder.AssetsDirectory,
+                    CoreWebView2HostResourceAccessKind.Allow);
+                _planHostMapped = true;
+            }
+
+            _htmlPreviewReady = true;
+            var html = PlanDocumentHtmlBuilder.BuildDocument(
+                document.PlanTitle,
+                document.PlanOverview,
+                document.PlanBody);
+            core.NavigateToString(html);
+            _lastHtmlPreviewContent = stamp;
+            HtmlPreviewError.Visibility = Visibility.Collapsed;
+            HtmlPreviewWebView.Visibility = Visibility.Visible;
+        }
+        catch (Exception exception)
+        {
+            _lastHtmlPreviewContent = null;
+            HtmlPreviewWebView.Visibility = Visibility.Collapsed;
+            HtmlPreviewErrorText.Text = Strings.Format("Preview_HtmlFailedMessage", exception.Message);
+            HtmlPreviewError.Visibility = Visibility.Visible;
         }
     }
 

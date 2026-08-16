@@ -15,10 +15,6 @@
                 </Grid.ColumnDefinitions>
 
                 <Grid Grid.Column="0" ClipToBounds="True">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="{Binding ContextSidebarEdgeGutterWidth}" />
-                </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="{x:Static app:AppLayoutMetrics.PanelHeaderRowHeight}" />
                     <RowDefinition Height="*" />
@@ -31,7 +27,6 @@
 
                 <!-- Chat header：无底边线；空对话不显示会话标题 -->
                 <Border Grid.Row="0"
-                        Grid.ColumnSpan="2"
                         Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}"
                         Background="{DynamicResource Brush.ChatBackground}"
                         BorderThickness="0">
@@ -147,7 +142,6 @@
                 </Grid>
                 <GridSplitter x:Name="ComposerSplitter"
                               Grid.Row="2"
-                              Grid.ColumnSpan="2"
                               Style="{StaticResource LayoutRowSplitterStyle}"
                               ResizeDirection="Rows"
                               ResizeBehavior="PreviousAndNext"
@@ -408,17 +402,6 @@
                 </Grid>
             </Border>
 
-                <!-- WPF-only gutter: keeps WebView2 HWND out of the splitter / sidebar edge -->
-                <Border Grid.Row="0"
-                        Grid.Column="1"
-                        Grid.RowSpan="4"
-                        Background="Transparent"
-                        SnapsToDevicePixels="True">
-                    <Border HorizontalAlignment="Right"
-                            Width="1"
-                            Background="{DynamicResource Brush.Border}"
-                            SnapsToDevicePixels="True" />
-                </Border>
                 </Grid>
 
                 <!-- Splitter on the chat column's trailing edge (star | fixed), same pattern as left-pane editor. -->

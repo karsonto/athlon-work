@@ -73,8 +73,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private Controls.WebChatView? _savedChatView;
     private ConversationDisplayCursor? _olderDisplayCursor;
     private bool _olderHistoryLoadInProgress;
-    private PlanDocumentWindow? _planDocumentWindow;
-    private string? _dismissedPlanWindowKey;
 
     public MainShellViewModel(
         IFileStorageService storage,
@@ -141,7 +139,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _longTermMemory = longTermMemory;
         _skillCatalog = skillCatalog;
         _appSettings = settings;
-        _contextSidebarEdgeGutterWidth = _appSettings.Ui.ContextSidebarVisible ? 12 : 0;
+        _contextSidebarEdgeGutterWidth = 0;
         _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
         _displayedSessionId = _session.Id;
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
@@ -491,7 +489,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public double ComposerHeight =>
         Math.Clamp(_appSettings.Ui.ComposerHeight, ComposerMinHeight, ComposerMaxHeight);
 
-    private double _contextSidebarEdgeGutterWidth = 12;
+    private double _contextSidebarEdgeGutterWidth;
     private bool _contextSidebarLayoutAnimate;
     private bool _navigationSidebarLayoutAnimate;
     private double _preMaximizeContextWidth = UiLayoutConstraints.ContextSidebarDefaultWidth;
@@ -1024,7 +1022,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _contextSidebarLayoutAnimate = false;
         if (!animate)
         {
-            SetContextSidebarEdgeGutterWidth(IsContextSidebarVisible ? 12 : 0);
+            SetContextSidebarEdgeGutterWidth(0);
         }
 
         OnPropertyChanged(nameof(IsContextSidebarVisible));
@@ -1549,9 +1547,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         Application.Current?.Dispatcher.InvokeAsync(async () =>
         {
             await ComposerHarness.RefreshPlanAsync().ConfigureAwait(true);
-            // create_plan / update_plan: always resurface the plan window, even if the user
-            // previously dismissed the prior draft.
-            SyncPlanDocumentWindow(forceShow: true);
+            // create_plan / update_plan: open or refresh the same editor tab (no popup).
+            SyncPlanInEditor();
         });
     }
 
@@ -1559,99 +1556,35 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         if (e.PropertyName is nameof(ComposerHarnessViewModel.ShowPlanPanel)
             or nameof(ComposerHarnessViewModel.CurrentPlan)
-            or nameof(ComposerHarnessViewModel.IsPlanMode))
+            or nameof(ComposerHarnessViewModel.IsPlanMode)
+            or nameof(ComposerHarnessViewModel.CanConfirmPlan))
         {
-            Application.Current?.Dispatcher.InvokeAsync(() => SyncPlanDocumentWindow());
+            Application.Current?.Dispatcher.InvokeAsync(SyncPlanInEditor);
         }
     }
 
-    private void SyncPlanDocumentWindow(bool forceShow = false)
+    private void SyncPlanInEditor()
     {
         if (!ComposerHarness.ShowPlanPanel || ComposerHarness.CurrentPlan is null)
         {
-            ClosePlanDocumentWindow();
+            FileEditor.CloseSessionPlanTab(_displayedSessionId);
+            OnPropertyChanged(nameof(HasOpenEditorTabs));
             return;
         }
 
-        if (forceShow)
-        {
-            _dismissedPlanWindowKey = null;
-        }
+        var path = EditorDocumentViewModel.BuildSessionPlanPath(_displayedSessionId);
+        var alreadyOpen = FileEditor.Tabs.Any(tab =>
+            tab.IsSessionPlan
+            && string.Equals(tab.FilePath, path, StringComparison.OrdinalIgnoreCase));
 
-        var planKey = BuildPlanWindowKey(ComposerHarness.CurrentPlan);
-        if (_planDocumentWindow is not null)
-        {
-            if (forceShow)
-            {
-                BringPlanDocumentWindowToFront(_planDocumentWindow);
-            }
-
-            return;
-        }
-
-        if (!forceShow && string.Equals(planKey, _dismissedPlanWindowKey, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        var owner = Application.Current?.MainWindow;
-        var window = new PlanDocumentWindow
-        {
-            Owner = owner,
-            DataContext = ComposerHarness
-        };
-        window.Closed += OnPlanDocumentWindowClosed;
-        _planDocumentWindow = window;
-        _dismissedPlanWindowKey = null;
-        window.Show();
-        if (forceShow)
-        {
-            BringPlanDocumentWindowToFront(window);
-        }
+        // Re-open / first create activates the tab so the editor pane expands.
+        // update_plan on an existing tab refreshes content without stealing the active tab.
+        FileEditor.OpenOrUpdateSessionPlan(
+            ComposerHarness.CurrentPlan,
+            _displayedSessionId,
+            activateTab: !alreadyOpen);
+        OnPropertyChanged(nameof(HasOpenEditorTabs));
     }
-
-    private static void BringPlanDocumentWindowToFront(Window window)
-    {
-        if (window.WindowState == WindowState.Minimized)
-        {
-            window.WindowState = WindowState.Normal;
-        }
-
-        window.Activate();
-        window.Focus();
-    }
-
-    private void OnPlanDocumentWindowClosed(object? sender, EventArgs e)
-    {
-        if (sender is PlanDocumentWindow window)
-        {
-            window.Closed -= OnPlanDocumentWindowClosed;
-        }
-
-        if (ComposerHarness.ShowPlanPanel && ComposerHarness.CurrentPlan is not null)
-        {
-            _dismissedPlanWindowKey = BuildPlanWindowKey(ComposerHarness.CurrentPlan);
-        }
-
-        _planDocumentWindow = null;
-    }
-
-    private void ClosePlanDocumentWindow()
-    {
-        _dismissedPlanWindowKey = null;
-        if (_planDocumentWindow is null)
-        {
-            return;
-        }
-
-        var window = _planDocumentWindow;
-        _planDocumentWindow = null;
-        window.Closed -= OnPlanDocumentWindowClosed;
-        window.Close();
-    }
-
-    private string BuildPlanWindowKey(SessionPlan plan) =>
-        $"{_displayedSessionId}|{plan.UpdatedAt}|{plan.Title}|{plan.Overview}|{plan.Body.Length}|{plan.Status}";
 
     private async Task StartCodingFromApprovedPlanAsync()
     {
@@ -2673,7 +2606,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _taskListChangedNotifier.TaskListChanged -= OnTaskListChanged;
         _planChangedNotifier.PlanChanged -= OnPlanChanged;
         ComposerHarness.PropertyChanged -= OnComposerHarnessPropertyChanged;
-        ClosePlanDocumentWindow();
+        FileEditor.CloseSessionPlanTab(_displayedSessionId);
         _composer.AtCompletionSourcesUpdated -= OnAtCompletionSourcesUpdated;
         if (_savedChatView is not null)
         {

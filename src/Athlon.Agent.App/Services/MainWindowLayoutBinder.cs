@@ -12,7 +12,8 @@ namespace Athlon.Agent.App.Services;
 public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWindowLayoutElements elements)
 {
     private const double SidebarAnimationDurationMs = 200;
-    private const double ContextSidebarEdgeGutterWidth = 12;
+    // Keep chat flush to the context sidebar; splitter overlays the shared edge.
+    private const double ContextSidebarEdgeGutterWidth = 0;
 
     private Storyboard? _contextSidebarStoryboard;
     private int _contextSidebarAnimationGeneration;
@@ -414,8 +415,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             elements.ContextSidebarPanel.Margin = new Thickness(0);
             elements.ContextSidebarSplitter.Visibility = Visibility.Visible;
             elements.ContextSidebarSplitter.IsEnabled = false;
-            // Square the shared edge immediately so AppBackground crescents don't show mid-animation.
-            SetMainWorkspaceCardRightCornersSquared(squared: true);
+            SetMainWorkspaceCardSharedEdge(flushToSidebar: true);
         }
         else
         {
@@ -547,7 +547,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
         }
 
-        SetMainWorkspaceCardRightCornersSquared(squared: true);
+        SetMainWorkspaceCardSharedEdge(flushToSidebar: true);
         viewModel.SetContextSidebarEdgeGutterWidth(ContextSidebarEdgeGutterWidth);
     }
 
@@ -575,7 +575,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
         }
 
-        SetMainWorkspaceCardRightCornersSquared(squared: true);
+        SetMainWorkspaceCardSharedEdge(flushToSidebar: true);
         viewModel.SetContextSidebarEdgeGutterWidth(0);
     }
 
@@ -626,21 +626,18 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
         }
 
-        SetMainWorkspaceCardRightCornersSquared(squared: false);
+        SetMainWorkspaceCardSharedEdge(flushToSidebar: false);
         viewModel.SetContextSidebarEdgeGutterWidth(0);
     }
 
-    private void SetMainWorkspaceCardRightCornersSquared(bool squared)
+    private void SetMainWorkspaceCardCornersUniform()
     {
         if (elements.MainWorkspaceCardInner is null)
         {
             return;
         }
 
-        var radius = AppLayoutMetrics.MainWorkspaceCardCornerRadiusValue;
-        var corners = squared
-            ? new CornerRadius(radius, 0, 0, radius)
-            : new CornerRadius(radius);
+        var corners = new CornerRadius(AppLayoutMetrics.MainWorkspaceCardCornerRadiusValue);
         elements.MainWorkspaceCardInner.CornerRadius = corners;
 
         foreach (var behavior in Interaction.GetBehaviors(elements.MainWorkspaceCardInner))
@@ -651,6 +648,20 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
                 break;
             }
         }
+    }
+
+    private void SetMainWorkspaceCardSharedEdge(bool flushToSidebar)
+    {
+        if (elements.MainWorkspaceCardInner is null)
+        {
+            return;
+        }
+
+        SetMainWorkspaceCardCornersUniform();
+        // Drop the right border when the files pane is open so the shared edge is a single line, not a gutter.
+        elements.MainWorkspaceCardInner.BorderThickness = flushToSidebar
+            ? new Thickness(1, 1, 0, 1)
+            : new Thickness(1);
     }
 
     private void StopContextSidebarAnimation()

@@ -7,23 +7,6 @@
              xmlns:loc="clr-namespace:Athlon.Agent.App.Localization">
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16">
         <StackPanel>
-            <Border Background="{DynamicResource Brush.PanelAlt}"
-                    BorderBrush="{DynamicResource Brush.Border}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="10,8"
-                    Margin="0,0,0,8">
-                <StackPanel VerticalAlignment="Center">
-                    <TextBlock Text="{loc:Localize Key=Context_Workspace}"
-                               Foreground="{DynamicResource Brush.SubtleText}"
-                               FontSize="11"
-                               Margin="0,0,0,2" />
-                    <TextBlock Text="{Binding ActiveWorkspaceName}"
-                               FontWeight="SemiBold"
-                               FontSize="13"
-                               TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-            </Border>
             <Border Background="{DynamicResource Brush.Panel}"
                     BorderBrush="{DynamicResource Brush.Border}"
                     BorderThickness="1"

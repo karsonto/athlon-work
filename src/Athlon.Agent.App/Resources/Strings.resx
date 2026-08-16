@@ -620,6 +620,12 @@
   <data name="Harness_ConfirmPlan" xml:space="preserve">
     <value>确认并开始实现</value>
   </data>
+  <data name="Harness_PlanBuild" xml:space="preserve">
+    <value>Build</value>
+  </data>
+  <data name="Harness_PlanBuildTooltip" xml:space="preserve">
+    <value>确认计划并开始实现 (Ctrl+Enter)</value>
+  </data>
   <data name="Harness_ConfirmPlanPrompt" xml:space="preserve">
     <value>按已批准的计划开始实现</value>
   </data>
