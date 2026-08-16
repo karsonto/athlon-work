@@ -274,6 +274,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public bool HasChatMessages => Messages.Count > 0;
 
+    public bool HasComputerUseTranscript =>
+        Messages.Any(static message => message.IsComputerUseTranscriptVisible);
+
     public string ChatWelcomeTitle =>
         string.IsNullOrWhiteSpace(SsoDisplayName)
             ? _loc["Chat_WelcomeTitle"]
@@ -1237,6 +1240,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private void OnMessagesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         OnPropertyChanged(nameof(HasChatMessages));
+        OnPropertyChanged(nameof(HasComputerUseTranscript));
         ClearContextCommand.NotifyCanExecuteChanged();
         CompactContextCommand.NotifyCanExecuteChanged();
 
@@ -1491,6 +1495,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
         OnPropertyChanged(nameof(Messages));
         OnPropertyChanged(nameof(HasChatMessages));
+        OnPropertyChanged(nameof(HasComputerUseTranscript));
         OnPropertyChanged(nameof(QueuedTurns));
         OnPropertyChanged(nameof(HasQueuedTurns));
         UpdateDisplayedBusyState();
@@ -2714,6 +2719,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private void RefreshComputerUseStatus()
     {
         OnPropertyChanged(nameof(ComputerUseStatusVisible));
+        OnPropertyChanged(nameof(HasComputerUseTranscript));
         if (!ComputerUseStatusVisible)
         {
             ComputerUseActiveToolText = string.Empty;

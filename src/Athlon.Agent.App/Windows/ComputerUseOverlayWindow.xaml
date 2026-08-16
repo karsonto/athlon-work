@@ -18,122 +18,203 @@
     </Window.InputBindings>
 
     <Grid Margin="12,8,12,12">
-        <Border Style="{StaticResource ComposerInputShadowStyle}" />
-        <Border Style="{StaticResource ComposerInputWrapperStyle}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Semi-transparent transcript: grow with content up to MaxHeight, then scroll. -->
+        <Border Grid.Row="0"
+                Margin="28,0,28,10"
+                MaxHeight="280"
+                CornerRadius="16"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="1"
+                SnapsToDevicePixels="True"
+                UseLayoutRounding="True"
+                ClipToBounds="True">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasComputerUseTranscript}" Value="True">
+                            <Setter Property="Visibility" Value="Visible" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
             <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0"
-                            Background="Transparent"
-                            Cursor="SizeAll"
-                            MouseLeftButtonDown="DragHandle_OnMouseLeftButtonDown">
-                        <TextBlock Text="{loc:Localize Key=ComputerUse_MenuStart}"
-                                   Margin="4,0,0,0"
-                                   FontSize="12"
-                                   FontWeight="SemiBold"
-                                   Foreground="{DynamicResource Brush.SubtleText}"
-                                   VerticalAlignment="Center" />
-                    </Border>
-                    <Button Grid.Column="1"
-                            Click="CloseButton_OnClick"
-                            ToolTip="{loc:Localize Key=Common_Close}"
-                            Style="{StaticResource GhostIconButtonStyle}"
-                            Width="28"
-                            Height="28"
-                            Content="×" />
-                </Grid>
-                <StackPanel Grid.Row="1"
-                            Margin="4,6,4,2">
-                    <StackPanel.Style>
-                        <Style TargetType="StackPanel">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ComputerUseStatusVisible}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </StackPanel.Style>
-                    <TextBlock Text="{Binding ComputerUseActiveToolText}"
-                               FontSize="12"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource Brush.Text}"
-                               TextTrimming="CharacterEllipsis"
-                               TextWrapping="NoWrap" />
-                    <TextBlock Text="{Binding ComputerUseAssistantSummary}"
-                               Margin="0,2,0,0"
-                               FontSize="11"
-                               Foreground="{DynamicResource Brush.SubtleText}"
-                               TextTrimming="CharacterEllipsis"
-                               TextWrapping="NoWrap">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Visible" />
+                <Border Background="{DynamicResource Brush.Panel}"
+                        Opacity="0.78"
+                        CornerRadius="15" />
+                <ScrollViewer x:Name="TranscriptScroll"
+                              Margin="14,12"
+                              MaxHeight="256"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              CanContentScroll="False">
+                    <ItemsControl x:Name="TranscriptList"
+                                  ItemsSource="{Binding Messages}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Padding="0,0,0,10"
+                                        Background="Transparent">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsComputerUseTranscriptVisible}" Value="False">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DisplayRole}"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                                   Margin="0,0,0,2" />
+                                        <TextBlock Text="{Binding Content}"
+                                                   FontSize="13"
+                                                   LineHeight="18"
+                                                   Foreground="{DynamicResource Brush.Text}"
+                                                   TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Grid>
+        </Border>
+
+        <!-- Compact composer bar -->
+        <Grid Grid.Row="1">
+            <Border Style="{StaticResource ComposerInputShadowStyle}"
+                    MinHeight="0"
+                    CornerRadius="18" />
+            <Border Style="{StaticResource ComposerInputWrapperStyle}"
+                    MinHeight="0"
+                    Padding="10,8"
+                    CornerRadius="18">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0"
+                                Background="Transparent"
+                                Cursor="SizeAll"
+                                MouseLeftButtonDown="DragHandle_OnMouseLeftButtonDown">
+                            <TextBlock Text="{loc:Localize Key=ComputerUse_MenuStart}"
+                                       Margin="4,0,0,0"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       VerticalAlignment="Center" />
+                        </Border>
+                        <Button Grid.Column="1"
+                                Click="CloseButton_OnClick"
+                                ToolTip="{loc:Localize Key=Common_Close}"
+                                Style="{StaticResource GhostIconButtonStyle}"
+                                Width="28"
+                                Height="28"
+                                Content="×" />
+                    </Grid>
+                    <StackPanel Grid.Row="1"
+                                Margin="4,6,4,2">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding ComputerUseAssistantSummary}" Value="">
-                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    <DataTrigger Binding="{Binding ComputerUseStatusVisible}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </StackPanel>
-                <Grid Grid.Row="2" Margin="0,4,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="PromptBox"
-                             Grid.Column="0"
-                             Style="{StaticResource ComposerTextBoxStyle}"
-                             VerticalContentAlignment="Center"
-                             KeyDown="PromptBox_OnKeyDown"
-                             Text="{Binding PromptText, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    <StackPanel Grid.Column="1"
-                                Orientation="Horizontal"
-                                VerticalAlignment="Center"
-                                Margin="8,0,0,0">
-                        <controls:ComposerContextMeterControl DataContext="{Binding ContextOccupancy}"
-                                                              VerticalAlignment="Center" />
-                        <Button Command="{Binding StopCommand}"
-                                ToolTip="{loc:Localize Key=Chat_PauseReplyTooltip}">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource DangerCircleButtonStyle}">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsComposerStopVisible}" Value="True">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                            <TextBlock Text="■" FontSize="12" />
-                        </Button>
-                        <Button Click="SendButton_OnClick"
-                                ToolTip="{loc:Localize Key=ComputerUse_Send}"
-                                Content="➤">
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource ComposerSendButtonStyle}">
+                        </StackPanel.Style>
+                        <TextBlock Text="{Binding ComputerUseActiveToolText}"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource Brush.Text}"
+                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="NoWrap" />
+                        <TextBlock Text="{Binding ComputerUseAssistantSummary}"
+                                   Margin="0,2,0,0"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                   TextTrimming="CharacterEllipsis"
+                                   TextWrapping="NoWrap">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
                                     <Setter Property="Visibility" Value="Visible" />
                                     <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsComposerStopVisible}" Value="True">
+                                        <DataTrigger Binding="{Binding ComputerUseAssistantSummary}" Value="">
                                             <Setter Property="Visibility" Value="Collapsed" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
-                            </Button.Style>
-                        </Button>
+                            </TextBlock.Style>
+                        </TextBlock>
                     </StackPanel>
+                    <Grid Grid.Row="2" Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="PromptBox"
+                                 Grid.Column="0"
+                                 Style="{StaticResource ComposerTextBoxStyle}"
+                                 MinHeight="28"
+                                 Padding="8,6"
+                                 VerticalContentAlignment="Center"
+                                 PreviewKeyDown="PromptBox_OnPreviewKeyDown"
+                                 Text="{Binding PromptText, RelativeSource={RelativeSource AncestorType=Window}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal"
+                                    VerticalAlignment="Center"
+                                    Margin="8,0,0,0">
+                            <controls:ComposerContextMeterControl DataContext="{Binding ContextOccupancy}"
+                                                                  VerticalAlignment="Center" />
+                            <Button Command="{Binding StopCommand}"
+                                    ToolTip="{loc:Localize Key=Chat_PauseReplyTooltip}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource DangerCircleButtonStyle}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsComposerStopVisible}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <TextBlock Text="■" FontSize="12" />
+                            </Button>
+                            <Button Click="SendButton_OnClick"
+                                    ToolTip="{loc:Localize Key=ComputerUse_Send}"
+                                    Content="➤">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource ComposerSendButtonStyle}">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsComposerStopVisible}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </StackPanel>
+                    </Grid>
                 </Grid>
-            </Grid>
-        </Border>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

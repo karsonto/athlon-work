@@ -1,6 +1,9 @@
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Athlon.Agent.App.ViewModels;
 
 namespace Athlon.Agent.App.Windows;
@@ -11,6 +14,8 @@ public partial class ComputerUseOverlayWindow : Window
     private const double BottomMargin = 56;
     private const double MinSideMargin = 24;
     private bool _hasUserPositioned;
+    private bool _scrollPending;
+    private MainShellViewModel? _shell;
 
     public event EventHandler<string>? PromptSubmitted;
 
@@ -23,9 +28,13 @@ public partial class ComputerUseOverlayWindow : Window
         ArgumentNullException.ThrowIfNull(shell);
         InitializeComponent();
         DataContext = shell;
+        _shell = shell;
         CloseCommand = new RelayCommand(_ => Close());
         Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         SizeChanged += OnSizeChanged;
+        shell.Messages.CollectionChanged += OnMessagesCollectionChanged;
+        AttachMessageListeners(shell);
     }
 
     public void FocusComposer()
@@ -40,6 +49,19 @@ public partial class ComputerUseOverlayWindow : Window
     {
         PositionFloatingComposer();
         FocusComposer();
+        ScheduleScrollTranscriptToEnd();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_shell is null)
+        {
+            return;
+        }
+
+        _shell.Messages.CollectionChanged -= OnMessagesCollectionChanged;
+        DetachMessageListeners(_shell);
+        _shell = null;
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e)
@@ -50,6 +72,86 @@ public partial class ComputerUseOverlayWindow : Window
         }
 
         PositionFloatingComposer();
+    }
+
+    private void OnMessagesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (_shell is null)
+        {
+            return;
+        }
+
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            DetachMessageListeners(_shell);
+            AttachMessageListeners(_shell);
+        }
+        else
+        {
+            if (e.OldItems is not null)
+            {
+                foreach (var item in e.OldItems)
+                {
+                    if (item is ChatMessageViewModel message)
+                    {
+                        message.PropertyChanged -= OnTranscriptMessagePropertyChanged;
+                    }
+                }
+            }
+
+            if (e.NewItems is not null)
+            {
+                foreach (var item in e.NewItems)
+                {
+                    if (item is ChatMessageViewModel message)
+                    {
+                        message.PropertyChanged += OnTranscriptMessagePropertyChanged;
+                    }
+                }
+            }
+        }
+
+        ScheduleScrollTranscriptToEnd();
+    }
+
+    private void AttachMessageListeners(MainShellViewModel shell)
+    {
+        foreach (var message in shell.Messages)
+        {
+            message.PropertyChanged += OnTranscriptMessagePropertyChanged;
+        }
+    }
+
+    private void DetachMessageListeners(MainShellViewModel shell)
+    {
+        foreach (var message in shell.Messages)
+        {
+            message.PropertyChanged -= OnTranscriptMessagePropertyChanged;
+        }
+    }
+
+    private void OnTranscriptMessagePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(ChatMessageViewModel.Content)
+            or nameof(ChatMessageViewModel.IsComputerUseTranscriptVisible))
+        {
+            ScheduleScrollTranscriptToEnd();
+        }
+    }
+
+    private void ScheduleScrollTranscriptToEnd()
+    {
+        if (_scrollPending)
+        {
+            return;
+        }
+
+        _scrollPending = true;
+        Dispatcher.BeginInvoke(() =>
+        {
+            _scrollPending = false;
+            TranscriptScroll.ScrollToEnd();
+        }, DispatcherPriority.Background);
     }
 
     private void SendButton_OnClick(object sender, RoutedEventArgs e)
@@ -70,7 +172,7 @@ public partial class ComputerUseOverlayWindow : Window
         PromptSubmitted?.Invoke(this, text);
     }
 
-    private void PromptBox_OnKeyDown(object sender, KeyEventArgs e)
+    private void PromptBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) != ModifierKeys.Shift)
         {

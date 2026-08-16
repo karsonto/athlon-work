@@ -158,6 +158,9 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     [ObservableProperty]
     private string _content = string.Empty;
 
+    partial void OnContentChanged(string value) =>
+        OnPropertyChanged(nameof(IsComputerUseTranscriptVisible));
+
     [ObservableProperty]
     private string _reasoningContent = string.Empty;
 
@@ -186,6 +189,13 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public bool IsHiddenPlaceholder { get; }
     public bool AssistantTone => !IsUser;
     public string CompactionCardTitle { get; private set; } = string.Empty;
+
+    /// <summary>User/assistant text lines for the Computer Use floating transcript (excludes tools).</summary>
+    public bool IsComputerUseTranscriptVisible =>
+        !IsTool
+        && !IsCompaction
+        && !IsHiddenPlaceholder
+        && !string.IsNullOrWhiteSpace(Content);
     public string CardTitle => IsCompaction
         ? (string.IsNullOrWhiteSpace(CompactionCardTitle) ? Strings.Get("Chat_CompactionDefault") : CompactionCardTitle)
         : Strings.Get("Chat_ToolCallTitle");
