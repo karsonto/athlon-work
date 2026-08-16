@@ -34,7 +34,60 @@ public sealed class SessionNavigationStore
         }
 
         var displayPage = await displayTask.ConfigureAwait(true);
-        return new SessionNavigationSnapshot(session, displayPage.Messages, displayPage.OlderCursor);
+        var activitySource = await ExpandActivitySourceToTurnStartAsync(
+                sessionId,
+                displayPage.Messages,
+                displayPage.OlderCursor,
+                cancellationToken)
+            .ConfigureAwait(true);
+        return new SessionNavigationSnapshot(
+            session,
+            displayPage.Messages,
+            displayPage.OlderCursor,
+            activitySource);
+    }
+
+    /// <summary>
+    /// Display pages are capped at <see cref="ConversationDisplayLimits.PageSize"/> and may start
+    /// mid-turn. Activity replay needs the full turn (from user/compaction) so explored/edited
+    /// counts stay stable across session switches.
+    /// </summary>
+    private async Task<IReadOnlyList<ChatMessage>> ExpandActivitySourceToTurnStartAsync(
+        string sessionId,
+        IReadOnlyList<ChatMessage> displayMessages,
+        ConversationDisplayCursor? olderCursor,
+        CancellationToken cancellationToken)
+    {
+        if (!ConversationActivitySource.NeedsTurnStartBackfill(displayMessages)
+            || olderCursor is null)
+        {
+            return displayMessages;
+        }
+
+        var activity = displayMessages.ToList();
+        var cursor = olderCursor;
+        for (var page = 0;
+             page < ConversationActivitySource.MaxBackfillPages
+             && ConversationActivitySource.NeedsTurnStartBackfill(activity)
+             && cursor is not null;
+             page++)
+        {
+            var older = await _storage.LoadConversationDisplayPageAsync(
+                    sessionId,
+                    cursor,
+                    ConversationDisplayLimits.PageSize,
+                    cancellationToken)
+                .ConfigureAwait(true);
+            if (older.Messages.Count == 0)
+            {
+                break;
+            }
+
+            activity = ConversationActivitySource.PrependOlder(older.Messages, activity);
+            cursor = older.OlderCursor;
+        }
+
+        return activity;
     }
 
     public Task<ConversationDisplayPage> LoadOlderDisplayPageAsync(
@@ -155,4 +208,13 @@ public sealed class SessionNavigationStore
 public sealed record SessionNavigationSnapshot(
     AgentSession Session,
     IReadOnlyList<ChatMessage> DisplayMessages,
-    ConversationDisplayCursor? OlderDisplayCursor);
+    ConversationDisplayCursor? OlderDisplayCursor,
+    IReadOnlyList<ChatMessage>? ActivitySourceMessages = null)
+{
+    /// <summary>
+    /// Messages used to rebuild TURN_ACTIVITY / FILES_CHANGED. May be longer than
+    /// <see cref="DisplayMessages"/> when the display page starts mid-turn.
+    /// </summary>
+    public IReadOnlyList<ChatMessage> ActivitySource =>
+        ActivitySourceMessages is { Count: > 0 } ? ActivitySourceMessages : DisplayMessages;
+}

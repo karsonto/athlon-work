@@ -238,6 +238,9 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("case 'TURN_ACTIVITY':", surface, StringComparison.Ordinal);
         Assert.Contains("formatWorkedFor", surface, StringComparison.Ordinal);
         Assert.Contains("syncTurnActivityChevron", surface, StringComparison.Ordinal);
+        Assert.Contains("var keepOpen = !!(existing && existing.open);", surface, StringComparison.Ordinal);
+        Assert.Contains("details.open = keepOpen;", surface, StringComparison.Ordinal);
+        Assert.DoesNotContain("Live: open so the action list is visible while working.", surface, StringComparison.Ordinal);
         Assert.Contains("turn-activity-duration", surface, StringComparison.Ordinal);
         Assert.Contains("turn-activity-line", surface, StringComparison.Ordinal);
         Assert.Contains("\"workedFor\":", surface, StringComparison.Ordinal);

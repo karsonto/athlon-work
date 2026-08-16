@@ -59,6 +59,69 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
+    public async Task SyncActivitySourceFromSession_backfills_turn_start_when_display_starts_mid_turn()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () => Task.CompletedTask;
+        ui.SetDisplayed(true);
+
+        var user = ChatMessage.Create(MessageRole.User, "分析项目代码");
+        var earlyRead = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-early",
+                "Tool `file_read` succeeded.",
+                "",
+                "Arguments: path = src/Early.cs",
+                "Summary: Read",
+                "",
+                "1|ok"));
+        var lateReads = Enumerable.Range(1, 5)
+            .Select(i => ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    $"ToolCallId: call-{i}",
+                    "Tool `file_read` succeeded.",
+                    "",
+                    $"Arguments: path = src/Late{i}.cs",
+                    "Summary: Read",
+                    "",
+                    "1|ok")))
+            .ToArray();
+        var assistant = ChatMessage.Create(MessageRole.Assistant, "done");
+        var session = AgentSession.Create("backfill")
+            .WithMessages([user, earlyRead, .. lateReads, assistant]);
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            // Simulate a truncated display page that starts mid-turn.
+            foreach (var read in lateReads)
+            {
+                ui.Messages.Add(new ChatMessageViewModel(read));
+            }
+
+            ui.Messages.Add(new ChatMessageViewModel(assistant));
+            ui.SyncActivitySourceFromSession(session);
+        });
+
+        var source = await dispatcher.InvokeAsync(() => ui.ActivitySourceMessages.ToList());
+        Assert.Equal(MessageRole.User, source[0].Role);
+        Assert.Contains(source, message => message.Id == earlyRead.Id);
+
+        var display = await dispatcher.InvokeAsync(() => ui.Messages.ToList());
+        var events = ChatEventSerializer.BuildReplayEvents(
+            display,
+            showToolCalls: false,
+            activitySourceMessages: source);
+        var activityJson = Assert.Single(events, json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal));
+        using var doc = System.Text.Json.JsonDocument.Parse(activityJson);
+        Assert.Equal(6, doc.RootElement.GetProperty("exploredFileCount").GetInt32());
+    }
+
+    [Fact]
     public async Task HiddenSession_buffers_text_delta_without_adding_messages()
     {
         var dispatcher = await StartStaDispatcherAsync();

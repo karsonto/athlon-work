@@ -60,6 +60,11 @@ public sealed partial class SessionTurnUiController
     /// </summary>
     private bool _activitySealedForCurrentText;
     private readonly HashSet<string> _foldedAssistantMessageIds = new(StringComparer.Ordinal);
+    /// <summary>
+    /// After the turn has used activity tools, intermediate assistant text streams into the
+    /// activity fold instead of flashing as a standalone bubble.
+    /// </summary>
+    private bool _turnSawActivityTool;
 
     private Action _requestScroll = NoOpScroll;
     private Action _requestScrollImmediate = NoOpScroll;
@@ -310,6 +315,7 @@ public sealed partial class SessionTurnUiController
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
             _activitySealedForCurrentText = false;
+            _turnSawActivityTool = false;
             _foldedAssistantMessageIds.Clear();
             var message = ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments);
             AppendActivitySourceMessage(message);
@@ -326,6 +332,7 @@ public sealed partial class SessionTurnUiController
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
             _activitySealedForCurrentText = false;
+            _turnSawActivityTool = false;
             _foldedAssistantMessageIds.Clear();
             _tokenBuffer.ClearBuffers();
             _tokenBuffer.StopFlushTimer();
@@ -459,6 +466,8 @@ public sealed partial class SessionTurnUiController
             _streaming.Reset();
             ReconcilePendingToolsFromSession(session);
             MergeActivitySourceFromSession(session);
+            // Drop provisional fold text so the final assistant reply is only a bubble.
+            _turnActivityTracker.ClearLiveNarration();
             _bulkChatViewSyncDepth++;
             try
             {
@@ -554,7 +563,9 @@ public sealed partial class SessionTurnUiController
         if (streamEvent is AgentStreamEvent.ToolCallStart(_, var startingToolName, _)
             && TurnActivityClassifier.IsActivityTool(startingToolName))
         {
+            _turnActivityTracker.ClearLiveNarration();
             FoldTurnAssistantNarrations(includeAll: true);
+            _turnSawActivityTool = true;
         }
 
         if (notifyTracker)
@@ -634,6 +645,7 @@ public sealed partial class SessionTurnUiController
         for (var i = 0; i < foldCount; i++)
         {
             var message = assistants[i];
+            _turnActivityTracker.ClearLiveNarration();
             _turnActivityTracker.AddNarration(message.Content);
             _foldedAssistantMessageIds.Add(message.MessageId);
             removedIds.Add(message.MessageId);
@@ -653,17 +665,40 @@ public sealed partial class SessionTurnUiController
     public Task HydrateDisplayAsync(
         AgentSession session,
         IReadOnlyList<ChatMessage> displayMessages,
-        bool synthesizeInterruptedToolResults = true) =>
-        RebuildDisplayFromMessagesAsync(displayMessages, synthesizeInterruptedToolResults);
+        bool synthesizeInterruptedToolResults = true,
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null) =>
+        RebuildDisplayFromMessagesAsync(
+            displayMessages,
+            synthesizeInterruptedToolResults,
+            activitySourceMessages);
 
     /// <summary>
     /// Rebuild the current display page after settings that affect rendering (e.g. show tool calls),
     /// without pulling the full <see cref="AgentSession.Messages"/> into the UI.
     /// </summary>
     public Task RefreshDisplayForSettingsAsync() =>
-        RebuildDisplayFromMessagesAsync(
-            _activitySourceMessages.Count > 0 ? _activitySourceMessages : Array.Empty<ChatMessage>(),
-            synthesizeInterruptedToolResults: true);
+        RunOnUiAsync(async () =>
+        {
+            var displayedIds = new HashSet<string>(
+                Messages
+                    .Where(message => !message.IsHiddenPlaceholder)
+                    .Select(message => message.MessageId),
+                StringComparer.Ordinal);
+            var activity = _activitySourceMessages.ToList();
+            var display = activity.Count > 0 && displayedIds.Count > 0
+                ? activity.Where(message => displayedIds.Contains(message.Id)).ToList()
+                : activity;
+            if (display.Count == 0)
+            {
+                display = activity;
+            }
+
+            await RebuildDisplayFromMessagesCoreAsync(
+                    display,
+                    synthesizeInterruptedToolResults: true,
+                    activity)
+                .ConfigureAwait(true);
+        });
 
     public void HydrateFromSession(AgentSession session) =>
         RunOnUiSync(() => RebuildDisplayFromMessages(session.Messages, synthesizeInterruptedToolResults: true));
@@ -671,23 +706,35 @@ public sealed partial class SessionTurnUiController
     public void HydrateDisplay(
         AgentSession session,
         IReadOnlyList<ChatMessage> displayMessages,
-        bool synthesizeInterruptedToolResults = true) =>
-        RunOnUiSync(() => RebuildDisplayFromMessages(displayMessages, synthesizeInterruptedToolResults));
+        bool synthesizeInterruptedToolResults = true,
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null) =>
+        RunOnUiSync(() => RebuildDisplayFromMessages(
+            displayMessages,
+            synthesizeInterruptedToolResults,
+            activitySourceMessages));
 
     private Task RebuildDisplayFromMessagesAsync(
         IReadOnlyList<ChatMessage> displayMessages,
-        bool synthesizeInterruptedToolResults) =>
+        bool synthesizeInterruptedToolResults,
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null) =>
         RunOnUiAsync(async () =>
         {
-            await RebuildDisplayFromMessagesCoreAsync(displayMessages, synthesizeInterruptedToolResults)
+            await RebuildDisplayFromMessagesCoreAsync(
+                    displayMessages,
+                    synthesizeInterruptedToolResults,
+                    activitySourceMessages)
                 .ConfigureAwait(true);
         });
 
     private void RebuildDisplayFromMessages(
         IReadOnlyList<ChatMessage> displayMessages,
-        bool synthesizeInterruptedToolResults)
+        bool synthesizeInterruptedToolResults,
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null)
     {
-        var viewModels = BeginRebuildDisplay(displayMessages, synthesizeInterruptedToolResults);
+        var viewModels = BeginRebuildDisplay(
+            displayMessages,
+            synthesizeInterruptedToolResults,
+            activitySourceMessages);
         foreach (var viewModel in viewModels)
         {
             Messages.Add(viewModel);
@@ -698,9 +745,13 @@ public sealed partial class SessionTurnUiController
 
     private async Task RebuildDisplayFromMessagesCoreAsync(
         IReadOnlyList<ChatMessage> displayMessages,
-        bool synthesizeInterruptedToolResults)
+        bool synthesizeInterruptedToolResults,
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null)
     {
-        var viewModels = BeginRebuildDisplay(displayMessages, synthesizeInterruptedToolResults);
+        var viewModels = BeginRebuildDisplay(
+            displayMessages,
+            synthesizeInterruptedToolResults,
+            activitySourceMessages);
         const int batchSize = ConversationDisplayLimits.UiHydrateBatchSize;
         for (var i = 0; i < viewModels.Count; i++)
         {
@@ -716,13 +767,14 @@ public sealed partial class SessionTurnUiController
 
     private IReadOnlyList<ChatMessageViewModel> BeginRebuildDisplay(
         IReadOnlyList<ChatMessage> displayMessages,
-        bool synthesizeInterruptedToolResults)
+        bool synthesizeInterruptedToolResults,
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null)
     {
         _bulkChatViewSyncDepth++;
         Messages.Clear();
         _streaming.Reset();
         _displayCoordinator.Reset();
-        _activitySourceMessages = displayMessages.ToList();
+        _activitySourceMessages = (activitySourceMessages ?? displayMessages).ToList();
 
         // Prune cache: remove entries that belong to old sessions (not in the new display list)
         var currentIds = new HashSet<string>(displayMessages.Select(m => m.Id), StringComparer.Ordinal);
@@ -1064,6 +1116,16 @@ public sealed partial class SessionTurnUiController
         {
             AppendActivitySourceMessage(session.Messages[i]);
         }
+
+        var backfill = ConversationActivitySource.CollectTurnStartBackfill(
+            session.Messages,
+            _activitySourceMessages);
+        if (backfill.Count > 0)
+        {
+            _activitySourceMessages = ConversationActivitySource.PrependOlder(
+                backfill,
+                _activitySourceMessages);
+        }
     }
 
     private bool ContainsMessageId(string messageId) =>
@@ -1098,7 +1160,15 @@ public sealed partial class SessionTurnUiController
                 && !string.IsNullOrWhiteSpace(assistant.Content)
                 && !_foldedAssistantMessageIds.Contains(assistant.MessageId))
             {
-                _ = ChatView.ApplyAssistantMarkdownAsync(assistant);
+                if (_turnSawActivityTool)
+                {
+                    _turnActivityTracker.SetLiveNarration(assistant.Content);
+                    PublishTurnActivity(upsert: true);
+                }
+                else
+                {
+                    _ = ChatView.ApplyAssistantMarkdownAsync(assistant);
+                }
             }
 
             return;
@@ -1141,7 +1211,16 @@ public sealed partial class SessionTurnUiController
                 && !string.IsNullOrWhiteSpace(assistant.Content)
                 && !_foldedAssistantMessageIds.Contains(assistant.MessageId))
             {
-                _ = ChatView.ApplyAssistantMarkdownAsync(assistant, streaming: true);
+                if (_turnSawActivityTool)
+                {
+                    // Keep intermediate replies inside the fold — no outside bubble flash.
+                    _turnActivityTracker.SetLiveNarration(assistant.Content);
+                    PublishTurnActivity(upsert: true);
+                }
+                else
+                {
+                    _ = ChatView.ApplyAssistantMarkdownAsync(assistant, streaming: true);
+                }
             }
         }
     }
@@ -1172,8 +1251,18 @@ public sealed partial class SessionTurnUiController
         _ = ChatView.DispatchUserMessageAsync(message);
     }
 
-    private bool ShouldDispatchToChatView(AgentStreamEvent streamEvent) =>
-        streamEvent is not AgentStreamEvent.UsageRecorded
+    private bool ShouldDispatchToChatView(AgentStreamEvent streamEvent)
+    {
+        if (_turnSawActivityTool
+            && streamEvent is AgentStreamEvent.TextMessageStart
+                or AgentStreamEvent.TextMessageContent
+                or AgentStreamEvent.TextMessageEnd)
+        {
+            // Intermediate text is rendered inside TURN_ACTIVITY; avoid creating a bubble first.
+            return false;
+        }
+
+        return streamEvent is not AgentStreamEvent.UsageRecorded
             and not AgentStreamEvent.ContextHygieneApplied
             and not AgentStreamEvent.ContextBudgetUpdated
             and not AgentStreamEvent.ChatMessageAppended
@@ -1183,6 +1272,7 @@ public sealed partial class SessionTurnUiController
             and not AgentStreamEvent.ReasoningMessageEnd
         && !TurnActivityClassifier.IsActivityToolStreamEvent(streamEvent, _turnActivityTracker.ResolveToolName)
         && (_showToolCalls() || !ChatDisplayPolicy.IsToolStreamEvent(streamEvent));
+    }
 
     private ChatMessageViewModel? FindToolMessage(string? toolCallId)
     {

@@ -2534,7 +2534,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 await _activeUi.HydrateDisplayAsync(
                     _session,
                     snapshot.DisplayMessages,
-                    synthesizeInterruptedToolResults: false).ConfigureAwait(true);
+                    synthesizeInterruptedToolResults: false,
+                    activitySourceMessages: snapshot.ActivitySource).ConfigureAwait(true);
             }
             else
             {

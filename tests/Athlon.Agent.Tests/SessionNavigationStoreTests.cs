@@ -120,6 +120,77 @@ public sealed class SessionNavigationStoreTests
     }
 
     [Fact]
+    public async Task LoadSnapshotAsync_ExpandsActivitySourceWhenDisplayStartsMidTurn()
+    {
+        var user = ChatMessage.Create(MessageRole.User, "分析项目代码");
+        var reads = Enumerable.Range(1, 45)
+            .Select(i => ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    $"ToolCallId: call-{i}",
+                    "Tool `file_read` succeeded.",
+                    "",
+                    $"Arguments: path = src/File{i}.cs",
+                    $"Summary: Read src/File{i}.cs",
+                    "",
+                    "1|ok")))
+            .ToArray();
+        var assistant = ChatMessage.Create(MessageRole.Assistant, "报告");
+        var all = new List<ChatMessage> { user };
+        all.AddRange(reads);
+        all.Add(assistant);
+
+        var storage = new CapturingStorage
+        {
+            SessionToLoad = AgentSession.Create("mid-turn").WithMessages(all),
+            DisplayMessagesToLoad = all
+        };
+        var store = new SessionNavigationStore(storage);
+
+        var snapshot = await store.LoadSnapshotAsync("mid-turn");
+
+        Assert.Equal(ConversationDisplayLimits.PageSize, snapshot!.DisplayMessages.Count);
+        Assert.True(ConversationActivitySource.NeedsTurnStartBackfill(snapshot.DisplayMessages));
+        Assert.False(ConversationActivitySource.NeedsTurnStartBackfill(snapshot.ActivitySource));
+        Assert.Equal(MessageRole.User, snapshot.ActivitySource[0].Role);
+
+        var display = snapshot.DisplayMessages
+            .Select(message => new Athlon.Agent.App.ViewModels.ChatMessageViewModel(message))
+            .ToList();
+        var truncated = ChatEventSerializer.BuildReplayEvents(
+            display,
+            showToolCalls: false,
+            activitySourceMessages: snapshot.DisplayMessages);
+        var complete = ChatEventSerializer.BuildReplayEvents(
+            display,
+            showToolCalls: false,
+            activitySourceMessages: snapshot.ActivitySource);
+
+        static int ExploredCount(IReadOnlyList<string> events)
+        {
+            foreach (var json in events)
+            {
+                if (!json.Contains("TURN_ACTIVITY", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                using var doc = System.Text.Json.JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("exploredFileCount", out var count))
+                {
+                    return count.GetInt32();
+                }
+            }
+
+            return 0;
+        }
+
+        Assert.Equal(45, ExploredCount(complete));
+        Assert.True(ExploredCount(truncated) < ExploredCount(complete));
+    }
+
+    [Fact]
     public async Task LoadOlderDisplayPageAsync_DefaultsToPageSizeForty()
     {
         var storage = new CapturingStorage
@@ -194,9 +265,21 @@ public sealed class SessionNavigationStoreTests
                 await SessionLoadStarted.Task.WaitAsync(cancellationToken);
             }
 
-            return new ConversationDisplayPage(
-                DisplayMessagesToLoad.TakeLast(pageSize).ToArray(),
-                null);
+            var all = DisplayMessagesToLoad;
+            var endExclusive = cursor is null
+                ? all.Count
+                : (int)Math.Clamp(cursor.ByteOffset, 0, all.Count);
+            if (endExclusive <= 0 || all.Count == 0)
+            {
+                return new ConversationDisplayPage(Array.Empty<ChatMessage>(), null);
+            }
+
+            var start = Math.Max(0, endExclusive - pageSize);
+            var page = all.Skip(start).Take(endExclusive - start).ToArray();
+            ConversationDisplayCursor? older = start > 0
+                ? new ConversationDisplayCursor(start, Array.Empty<string>())
+                : null;
+            return new ConversationDisplayPage(page, older);
         }
 
         public Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;

@@ -947,6 +947,8 @@ function appendTurnActivityCard(event) {
   // One live card for the whole turn; sealing (upsert=false) finalizes it.
   var existing = document.querySelector('.turn-activity[data-live="1"]');
   var details = existing;
+  // Stay collapsed by default; keep expanded only if the user already opened it.
+  var keepOpen = !!(existing && existing.open);
   if (!details) {
     var row = document.createElement('div');
     row.className = 'message-row assistant turn-activity-host';
@@ -955,6 +957,8 @@ function appendTurnActivityCard(event) {
     if (event.upsert) details.setAttribute('data-live', '1');
     details.addEventListener('toggle', function () {
       syncTurnActivityChevron(details);
+      if (details.open) details.classList.add('is-expanded');
+      else details.classList.remove('is-expanded');
     });
     row.appendChild(details);
     insertAfterLastUserRow(row);
@@ -1050,11 +1054,10 @@ function appendTurnActivityCard(event) {
   });
 
   details.appendChild(body);
-  // Live: open so the action list is visible while working.
-  // Seal: collapse into one summary line (user/final bubbles stay outside).
+  // Default collapsed; live upserts preserve a user-opened fold; seal always collapses.
   if (event.upsert) {
     details.setAttribute('data-live', '1');
-    details.open = true;
+    details.open = keepOpen;
   } else {
     details.removeAttribute('data-live');
     details.open = false;

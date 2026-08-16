@@ -508,6 +508,25 @@ public sealed class FilesChangedBubbleTests
     }
 
     [Fact]
+    public void SessionTurnActivityTracker_live_narration_appears_in_snapshot_until_cleared()
+    {
+        var tracker = new SessionTurnActivityTracker();
+        tracker.BeginTurn();
+        tracker.Process(new AgentStreamEvent.ToolCallStart("c1", "file_read", 0));
+        tracker.SetLiveNarration("我先查看工作区文件。");
+
+        var live = tracker.Snapshot();
+        Assert.NotNull(live);
+        Assert.Contains(live!.Items, item => item.Kind == TurnActivityKind.Narration && item.Body == "我先查看工作区文件。");
+
+        tracker.ClearLiveNarration();
+        tracker.AddNarration("我先查看工作区文件。");
+        var committed = tracker.Snapshot();
+        Assert.NotNull(committed);
+        Assert.Equal(1, committed!.Items.Count(item => item.Kind == TurnActivityKind.Narration));
+    }
+
+    [Fact]
     public void SessionTurnActivityTracker_accumulates_live_thoughts()
     {
         var tracker = new SessionTurnActivityTracker();
