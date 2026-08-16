@@ -1,6 +1,7 @@
 <UserControl x:Class="Athlon.Agent.App.Controls.BrowserWorkspaceView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:app="clr-namespace:Athlon.Agent.App"
              xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
     <Grid>
@@ -59,7 +60,9 @@
             </Grid>
         </Border>
 
+        <!-- Leave SplitterHitSize clear of WebView2 HWND so the context sidebar splitter stays draggable. -->
         <Border Grid.Row="1"
+                Margin="{x:Static app:AppLayoutMetrics.ContextSidebarHwndLeftInset}"
                 Background="{DynamicResource Brush.AppBackground}">
             <wv2:WebView2 x:Name="BrowserWebView"
                           DefaultBackgroundColor="Transparent" />

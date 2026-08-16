@@ -14,6 +14,51 @@ public sealed class SessionTurnUiControllerDisplayTests
     private const string MessageId2 = "assistant-msg-2";
 
     [Fact]
+    public async Task SyncActivitySourceFromSession_includes_folded_file_tools_for_replay()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () => Task.CompletedTask;
+        ui.SetDisplayed(true);
+
+        var user = ChatMessage.Create(MessageRole.User, "edit it");
+        var edit = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-1",
+                "Tool `file_edit` succeeded.",
+                "",
+                "Arguments: path = server.ts",
+                "Summary: Edited",
+                "",
+                "--- a/server.ts",
+                "+++ b/server.ts",
+                "@@ -1,1 +1,1 @@",
+                "-a",
+                "+b"));
+        var assistant = ChatMessage.Create(MessageRole.Assistant, "done");
+        var session = AgentSession.Create("switch-files").WithMessages([user, edit, assistant]);
+
+        await dispatcher.InvokeAsync(() =>
+        {
+            ui.Messages.Add(new ChatMessageViewModel(user));
+            ui.Messages.Add(new ChatMessageViewModel(assistant));
+            ui.SyncActivitySourceFromSession(session);
+        });
+
+        var source = await dispatcher.InvokeAsync(() => ui.ActivitySourceMessages.ToList());
+        Assert.Contains(source, message => message.Role == MessageRole.Tool);
+
+        var display = await dispatcher.InvokeAsync(() => ui.Messages.ToList());
+        var events = ChatEventSerializer.BuildReplayEvents(
+            display,
+            showToolCalls: false,
+            activitySourceMessages: source);
+        Assert.Contains(events, json => json.Contains("FILES_CHANGED", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task HiddenSession_buffers_text_delta_without_adding_messages()
     {
         var dispatcher = await StartStaDispatcherAsync();
@@ -194,7 +239,8 @@ public sealed class SessionTurnUiControllerDisplayTests
         ui.SetDisplayed(false);
 
         var callbacks = ui.BuildCallbacks();
-        await EmitToolStart(callbacks, "call-1", "read_file", 0);
+        // computer_* stay as tool cards; activity tools (file_read etc.) never enter Messages.
+        await EmitToolStart(callbacks, "call-1", "computer_observe", 0);
         await EmitToolArgs(callbacks, "call-1", "{\"path\":");
         await EmitToolArgs(callbacks, "call-1", "{\"path\":\"/tmp\"}");
 

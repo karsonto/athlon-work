@@ -17,6 +17,9 @@ public sealed class SessionModifiedFilesTracker
 
     public bool HasModifiedFiles => ModifiedFiles.Count > 0;
 
+    /// <summary>True while this turn still tracks paths for a live FILES_CHANGED card.</summary>
+    public bool HasCurrentTurnPaths => _currentTurnPaths.Count > 0;
+
     public void Clear()
     {
         _byPath.Clear();
@@ -303,9 +306,19 @@ public sealed class SessionModifiedFilesTracker
         string? toolContent)
     {
         var diff = ExtractDiff(toolName, argumentsText, toolContent, file.RelativePath);
-        if (!string.IsNullOrWhiteSpace(diff))
+        if (string.IsNullOrWhiteSpace(diff))
+        {
+            return;
+        }
+
+        // Whole-file rewrites replace; incremental edits accumulate.
+        if (string.Equals(toolName, "file_write", StringComparison.Ordinal))
         {
             file.SetDiff(diff);
+        }
+        else
+        {
+            file.AppendDiff(diff);
         }
     }
 

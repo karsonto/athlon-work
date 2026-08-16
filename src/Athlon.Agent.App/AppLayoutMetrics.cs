@@ -38,6 +38,12 @@ public static class AppLayoutMetrics
     /// <summary>Hit target width/height of column/row splitters.</summary>
     public const double SplitterHitSize = 12;
 
+    /// <summary>
+    /// Left inset for HWND hosts in the context sidebar (Browser WebView2 / Terminal)
+    /// so they do not cover the leading column splitter hit target.
+    /// </summary>
+    public static readonly Thickness ContextSidebarHwndLeftInset = new(SplitterHitSize, 0, 0, 0);
+
     /// <summary>Max content width for the chat composer (used with 85% column layout).</summary>
     public const double ComposerMaxContentWidth = 1120;
 

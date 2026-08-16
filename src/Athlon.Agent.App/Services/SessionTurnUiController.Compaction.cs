@@ -85,7 +85,7 @@ public sealed partial class SessionTurnUiController
             }
 
             pending.ApplyCompletedCompaction(auditMessage);
-            _activitySourceMessages = compactedSessionMessages;
+            _activitySourceMessages = compactedSessionMessages.ToList();
             DispatchPendingCompactionBubbleUpdate(pending);
             RequestScrollImmediate();
         });

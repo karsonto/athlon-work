@@ -789,14 +789,42 @@ function turnActivitySummaryText(event) {
   return t('thinking') || 'Working…';
 }
 
+function findLatestFilesChangedCardInCurrentTurn() {
+  var root = getMessageRoot();
+  if (!root) return null;
+  var rows = root.querySelectorAll('.message-row');
+  var lastUser = -1;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].classList.contains('user')) lastUser = i;
+  }
+  var latest = null;
+  for (var j = lastUser + 1; j < rows.length; j++) {
+    var card = rows[j].querySelector('.files-changed-card');
+    if (card) latest = card;
+  }
+  return latest;
+}
+
+function findFilesChangedTargetCard(upsert) {
+  var live = document.querySelector('.files-changed-card[data-live="1"]');
+  if (live) return live;
+  if (!upsert) return null;
+  // Live upsert after a timeline reload: reuse the latest unsealed card so we do not
+  // stack a second card that repeats the same paths.
+  var latest = findLatestFilesChangedCardInCurrentTurn();
+  if (latest && !latest.hasAttribute('data-sealed')) return latest;
+  return null;
+}
+
 function appendFilesChangedCard(event) {
   state.currentAssistantEl = null;
   state.currentReasoningEl = null;
   var files = event.files || [];
   if (!files.length) return;
 
-  var existing = document.querySelector('.files-changed-card[data-live="1"]');
+  var existing = findFilesChangedTargetCard(event.upsert === true);
   var card = existing;
+  var sealingLiveCard = !!(existing && existing.getAttribute('data-live') === '1');
   var openPaths = {};
   if (existing) {
     existing.querySelectorAll('.files-changed-item.open').forEach(function (item) {
@@ -871,8 +899,12 @@ function appendFilesChangedCard(event) {
   card.appendChild(list);
   if (event.upsert) {
     card.setAttribute('data-live', '1');
+    card.removeAttribute('data-sealed');
   } else {
     card.removeAttribute('data-live');
+    // Only mark sealed when closing a live card; replay creates plain cards so a later
+    // live upsert can reuse them instead of stacking duplicates.
+    if (sealingLiveCard) card.setAttribute('data-sealed', '1');
   }
   updateEmptyStateVisibility();
   scrollToBottom();
@@ -1105,7 +1137,10 @@ function handleEvent(event) {
         var liveActivity = document.querySelector('.turn-activity[data-live="1"]');
         if (liveActivity) liveActivity.removeAttribute('data-live');
         var liveFiles = document.querySelector('.files-changed-card[data-live="1"]');
-        if (liveFiles) liveFiles.removeAttribute('data-live');
+        if (liveFiles) {
+          liveFiles.removeAttribute('data-live');
+          liveFiles.setAttribute('data-sealed', '1');
+        }
       })();
       appendMessage('user', event.content || '', false, event.images || []);
       break;

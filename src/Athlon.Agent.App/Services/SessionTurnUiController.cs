@@ -39,7 +39,11 @@ public sealed partial class SessionTurnUiController
     private readonly SessionStreamingUiContext _streaming = new();
     private readonly SessionModifiedFilesTracker _modifiedFilesTracker = new();
     private readonly SessionTurnActivityTracker _turnActivityTracker = new();
-    private IReadOnlyList<ChatMessage>? _activitySourceMessages;
+    /// <summary>
+    /// Full transcript (including folded activity tools) used to replay TURN_ACTIVITY / FILES_CHANGED.
+    /// <see cref="Messages"/> omits those tools when show-tool-calls is off.
+    /// </summary>
+    private List<ChatMessage> _activitySourceMessages = new();
     private readonly ToolCallArgsDisplayCoordinator _displayCoordinator = new();
     private readonly StreamingTokenBuffer _tokenBuffer;
     private readonly ConcurrentDictionary<string, PendingUiApproval> _pendingApprovals =
@@ -156,6 +160,9 @@ public sealed partial class SessionTurnUiController
     /// <summary>Test seam: replaces <see cref="WebChatView.LoadMessagesAsync"/> during Sync/Reload.</summary>
     internal Func<Task>? ReloadChatViewOverride { get; set; }
 
+    /// <summary>Test seam: transcript used to replay FILES_CHANGED / TURN_ACTIVITY.</summary>
+    internal IReadOnlyList<ChatMessage> ActivitySourceMessages => _activitySourceMessages;
+
     /// <summary>Test seam: generation bumped when a chat-view sync is scheduled.</summary>
     internal int SyncChatViewGeneration => Volatile.Read(ref _syncChatViewGeneration);
 
@@ -245,7 +252,11 @@ public sealed partial class SessionTurnUiController
                     if (!IsDisplayed)
                     {
                         _tokenBuffer.EnqueueEvent(streamEvent);
-                        RunOnUiSync(() => _modifiedFilesTracker.Process(streamEvent));
+                        RunOnUiSync(() =>
+                        {
+                            _modifiedFilesTracker.Process(streamEvent);
+                            TryAppendActivitySourceFromStreamEvent(streamEvent);
+                        });
                         return Task.CompletedTask;
                     }
 
@@ -257,6 +268,13 @@ public sealed partial class SessionTurnUiController
             }
         }
     };
+
+    /// <summary>
+    /// Aligns the activity/files replay transcript with <paramref name="session"/> so switching
+    /// back to a cached UI can rebuild FILES_CHANGED cards.
+    /// </summary>
+    public void SyncActivitySourceFromSession(AgentSession session) =>
+        RunOnUiSync(() => MergeActivitySourceFromSession(session));
 
     public async Task ReloadChatViewAsync()
     {
@@ -277,7 +295,8 @@ public sealed partial class SessionTurnUiController
         }
 
         var chatView = ChatView;
-        await chatView.LoadMessagesAsync(Messages, _showToolCalls(), _activitySourceMessages).ConfigureAwait(true);
+        var activitySource = _activitySourceMessages.Count > 0 ? _activitySourceMessages : null;
+        await chatView.LoadMessagesAsync(Messages, _showToolCalls(), activitySource).ConfigureAwait(true);
         if (ReferenceEquals(ChatView, chatView) && IsDisplayed)
         {
             await RestorePendingToolApprovalsAsync().ConfigureAwait(true);
@@ -292,8 +311,9 @@ public sealed partial class SessionTurnUiController
             _turnActivityTracker.BeginTurn();
             _activitySealedForCurrentText = false;
             _foldedAssistantMessageIds.Clear();
-            var vm = new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments));
-            Messages.Add(vm);
+            var message = ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments);
+            AppendActivitySourceMessage(message);
+            Messages.Add(new ChatMessageViewModel(message));
             TrimMessagesIfNeeded();
             RequestScrollImmediate();
         });
@@ -332,7 +352,7 @@ public sealed partial class SessionTurnUiController
                 _viewModelCache.Clear();
                 _modifiedFilesTracker.Clear();
                 _turnActivityTracker.Clear();
-                _activitySourceMessages = null;
+                _activitySourceMessages = new List<ChatMessage>();
             }
             finally
             {
@@ -438,6 +458,7 @@ public sealed partial class SessionTurnUiController
 
             _streaming.Reset();
             ReconcilePendingToolsFromSession(session);
+            MergeActivitySourceFromSession(session);
             _bulkChatViewSyncDepth++;
             try
             {
@@ -540,6 +561,7 @@ public sealed partial class SessionTurnUiController
         {
             _modifiedFilesTracker.Process(streamEvent);
             _turnActivityTracker.Process(streamEvent);
+            TryAppendActivitySourceFromStreamEvent(streamEvent);
         }
 
         foreach (var uiEvent in _displayCoordinator.MapForUi(streamEvent))
@@ -640,7 +662,7 @@ public sealed partial class SessionTurnUiController
     /// </summary>
     public Task RefreshDisplayForSettingsAsync() =>
         RebuildDisplayFromMessagesAsync(
-            _activitySourceMessages ?? Array.Empty<ChatMessage>(),
+            _activitySourceMessages.Count > 0 ? _activitySourceMessages : Array.Empty<ChatMessage>(),
             synthesizeInterruptedToolResults: true);
 
     public void HydrateFromSession(AgentSession session) =>
@@ -700,7 +722,7 @@ public sealed partial class SessionTurnUiController
         Messages.Clear();
         _streaming.Reset();
         _displayCoordinator.Reset();
-        _activitySourceMessages = displayMessages;
+        _activitySourceMessages = displayMessages.ToList();
 
         // Prune cache: remove entries that belong to old sessions (not in the new display list)
         var currentIds = new HashSet<string>(displayMessages.Select(m => m.Id), StringComparer.Ordinal);
@@ -765,12 +787,29 @@ public sealed partial class SessionTurnUiController
                     {
                         DispatchUserMessageToChatView(single);
                     }
+                    else if (single.IsCompaction)
+                    {
+                        // Seal live files/activity first, then append checkpoint without a full
+                        // timeline reload (reload would duplicate FILES_CHANGED cards).
+                        SealCurrentSegment();
+                        if (CanTouchChatView)
+                        {
+                            _ = ChatView!.ApplyToolResultMarkdownAsync(single);
+                        }
+                    }
                     else if (!IsStreamingChatItem(single))
                     {
-                        SyncChatView();
+                        if (ShouldAvoidFullChatReload)
+                        {
+                            DispatchIncrementalChatItem(single);
+                        }
+                        else
+                        {
+                            SyncChatView();
+                        }
                     }
                 }
-                else
+                else if (!ShouldAvoidFullChatReload)
                 {
                     SyncChatView();
                 }
@@ -779,8 +818,42 @@ public sealed partial class SessionTurnUiController
             case NotifyCollectionChangedAction.Remove:
             case NotifyCollectionChangedAction.Replace:
             case NotifyCollectionChangedAction.Move:
-                SyncChatView();
+                if (!ShouldAvoidFullChatReload)
+                {
+                    SyncChatView();
+                }
+
                 break;
+        }
+    }
+
+    /// <summary>
+    /// Full WebView reload while a turn still has live FILES_CHANGED paths re-emits a sealed
+    /// card from replay, then live upsert creates a second card that repeats those files.
+    /// </summary>
+    private bool ShouldAvoidFullChatReload =>
+        _modifiedFilesTracker.HasCurrentTurnPaths
+        || _turnActivityTracker.HasSegmentContent
+        || _streaming.ActiveAssistantBubble is not null
+        || _streaming.ToolBubblesByIndex.Count > 0;
+
+    private void DispatchIncrementalChatItem(ChatMessageViewModel message)
+    {
+        if (!CanTouchChatView)
+        {
+            return;
+        }
+
+        if (message.IsTool || message.IsCompaction)
+        {
+            _ = ChatView!.ApplyToolResultMarkdownAsync(message);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(message.Content)
+            && !_foldedAssistantMessageIds.Contains(message.MessageId))
+        {
+            _ = ChatView!.ApplyAssistantMarkdownAsync(message);
         }
     }
 
@@ -885,6 +958,111 @@ public sealed partial class SessionTurnUiController
             Messages.Insert(0, new ChatMessageViewModel(
                 ChatMessage.Create(MessageRole.System, $"<!-- 查看更多历史消息 ({excess} 条已折叠) -->"),
                 isFoldedHistoryPlaceholder: true));
+        }
+
+        TrimActivitySourceToDisplayedMessages();
+    }
+
+    private void TrimActivitySourceToDisplayedMessages()
+    {
+        if (_activitySourceMessages.Count == 0 || Messages.Count == 0)
+        {
+            return;
+        }
+
+        var firstUserId = Messages.FirstOrDefault(message => message.IsUser)?.MessageId;
+        if (string.IsNullOrWhiteSpace(firstUserId))
+        {
+            return;
+        }
+
+        var startIndex = _activitySourceMessages.FindIndex(message =>
+            string.Equals(message.Id, firstUserId, StringComparison.Ordinal));
+        if (startIndex > 0)
+        {
+            _activitySourceMessages.RemoveRange(0, startIndex);
+        }
+    }
+
+    private void AppendActivitySourceMessage(ChatMessage message)
+    {
+        if (string.IsNullOrWhiteSpace(message.Id))
+        {
+            return;
+        }
+
+        if (message.Role is not (MessageRole.User or MessageRole.Tool or MessageRole.Assistant or MessageRole.Compaction))
+        {
+            return;
+        }
+
+        if (_activitySourceMessages.Any(existing =>
+                string.Equals(existing.Id, message.Id, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        _activitySourceMessages.Add(message);
+    }
+
+    private void TryAppendActivitySourceFromStreamEvent(AgentStreamEvent streamEvent)
+    {
+        switch (streamEvent)
+        {
+            case AgentStreamEvent.ToolCallResult(_, var content, var messageId):
+                AppendActivitySourceMessage(ChatMessage.CreateWithId(messageId, MessageRole.Tool, content));
+                break;
+            case AgentStreamEvent.ChatMessageAppended(var message):
+                AppendActivitySourceMessage(message);
+                break;
+        }
+    }
+
+    private void MergeActivitySourceFromSession(AgentSession session)
+    {
+        if (session.Messages.Count == 0)
+        {
+            return;
+        }
+
+        var startIndex = 0;
+        if (_activitySourceMessages.Count > 0)
+        {
+            var lastId = _activitySourceMessages[^1].Id;
+            var lastIndex = -1;
+            for (var i = 0; i < session.Messages.Count; i++)
+            {
+                if (string.Equals(session.Messages[i].Id, lastId, StringComparison.Ordinal))
+                {
+                    lastIndex = i;
+                    break;
+                }
+            }
+
+            startIndex = lastIndex >= 0 ? lastIndex + 1 : session.Messages.Count;
+        }
+        else
+        {
+            var firstDisplayedId = Messages.FirstOrDefault(message =>
+                !message.IsHiddenPlaceholder
+                && (message.IsUser || message.IsTool || !string.IsNullOrWhiteSpace(message.Content)))
+                ?.MessageId;
+            if (!string.IsNullOrWhiteSpace(firstDisplayedId))
+            {
+                for (var i = 0; i < session.Messages.Count; i++)
+                {
+                    if (string.Equals(session.Messages[i].Id, firstDisplayedId, StringComparison.Ordinal))
+                    {
+                        startIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        for (var i = startIndex; i < session.Messages.Count; i++)
+        {
+            AppendActivitySourceMessage(session.Messages[i]);
         }
     }
 

@@ -243,6 +243,7 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("\"workedFor\":", surface, StringComparison.Ordinal);
         AssertContainsLocalized(surface, Strings.Get("Chat_WorkedFor"));
         Assert.Contains("files-changed-card", surface, StringComparison.Ordinal);
+        Assert.Contains("findFilesChangedTargetCard", surface, StringComparison.Ordinal);
         Assert.Contains("case 'FILES_CHANGED':", surface, StringComparison.Ordinal);
         Assert.Contains("user-image-thumb", surface, StringComparison.Ordinal);
         Assert.Contains("image-lightbox", surface, StringComparison.Ordinal);

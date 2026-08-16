@@ -66,7 +66,32 @@ public sealed partial class ModifiedFileViewModel : ObservableObject
         }
 
         UnifiedDiffText = unifiedDiff;
-        var counts = Services.UnifiedDiffDisplayParser.CountChanges(unifiedDiff);
+        ApplyCountsFromUnifiedDiff();
+    }
+
+    /// <summary>
+    /// Appends another unified diff (e.g. a later file_edit on the same path) and recounts +/−.
+    /// </summary>
+    public void AppendDiff(string? unifiedDiff)
+    {
+        if (string.IsNullOrWhiteSpace(unifiedDiff))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(UnifiedDiffText))
+        {
+            SetDiff(unifiedDiff);
+            return;
+        }
+
+        UnifiedDiffText = UnifiedDiffText.TrimEnd() + Environment.NewLine + unifiedDiff.TrimStart();
+        ApplyCountsFromUnifiedDiff();
+    }
+
+    private void ApplyCountsFromUnifiedDiff()
+    {
+        var counts = Services.UnifiedDiffDisplayParser.CountChanges(UnifiedDiffText);
         AddedCount = counts.Added;
         RemovedCount = counts.Removed;
         OnPropertyChanged(nameof(HasDiff));

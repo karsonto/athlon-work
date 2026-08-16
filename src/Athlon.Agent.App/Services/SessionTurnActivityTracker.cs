@@ -33,6 +33,9 @@ public sealed class SessionTurnActivityTracker
 
     public void Clear() => BeginTurn();
 
+    /// <summary>True when the live activity fold still has unsealed content.</summary>
+    public bool HasSegmentContent => _turnMessages.Count > 0 || _hasActiveThought;
+
     public void FinishPendingThought() => FinishActiveThought();
 
     public void AddNarration(string text)

@@ -2,12 +2,50 @@ using System.Text.Json;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.Tests;
 
 public sealed class FilesChangedBubbleTests
 {
+    [Fact]
+    public void BuildReplayEvents_without_activity_source_loses_files_changed_when_tools_folded()
+    {
+        var user = ChatMessage.Create(MessageRole.User, "edit it");
+        var edit = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-1",
+                "Tool `file_edit` succeeded.",
+                "",
+                "Arguments: path = server.ts",
+                "Summary: Edited",
+                "",
+                "--- a/server.ts",
+                "+++ b/server.ts",
+                "@@ -1,1 +1,1 @@",
+                "-a",
+                "+b"));
+        var assistant = ChatMessage.Create(MessageRole.Assistant, "done");
+
+        var displayOnly = new List<ChatMessageViewModel>
+        {
+            new(user),
+            new(assistant)
+        };
+
+        var withoutSource = ChatEventSerializer.BuildReplayEvents(displayOnly, showToolCalls: false);
+        Assert.DoesNotContain(withoutSource, json => json.Contains("FILES_CHANGED", StringComparison.Ordinal));
+
+        var withSource = ChatEventSerializer.BuildReplayEvents(
+            displayOnly,
+            showToolCalls: false,
+            activitySourceMessages: [user, edit, assistant]);
+        Assert.Contains(withSource, json => json.Contains("FILES_CHANGED", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void SerializeFilesChanged_emits_independent_files_changed_event()
     {
@@ -364,6 +402,63 @@ public sealed class FilesChangedBubbleTests
         var thought = Assert.Single(summary.Items, item => item.Kind == TurnActivityKind.Thought);
         Assert.Equal("先读文件，再改配置。", thought.Body);
         Assert.Contains("先读文件", thought.Detail, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildReplayEvents_compaction_splits_files_changed_without_path_overlap()
+    {
+        var user = ChatMessage.Create(MessageRole.User, "edit");
+        var edit1 = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-1",
+                "Tool `file_edit` succeeded.",
+                "",
+                "Arguments: path = a.java",
+                "Summary: Edited",
+                "",
+                "--- a/a.java",
+                "+++ b/a.java",
+                "@@ -1,0 +1,1 @@",
+                "+a"));
+        var compaction = CompactionMessageContent.CreateCompactionMessage(
+            CompactionMessageContent.CreateConversationCompact(
+                1000, 500, 3, null, "summary", CompactionStrategy.ManualCompact));
+        var edit2 = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-2",
+                "Tool `file_edit` succeeded.",
+                "",
+                "Arguments: path = b.java",
+                "Summary: Edited",
+                "",
+                "--- a/b.java",
+                "+++ b/b.java",
+                "@@ -1,0 +1,1 @@",
+                "+b"));
+        var assistant = ChatMessage.Create(MessageRole.Assistant, "done");
+
+        var display = new List<ChatMessageViewModel>
+        {
+            new(user),
+            new(assistant)
+        };
+        var source = new List<ChatMessage> { user, edit1, compaction, edit2, assistant };
+
+        var events = ChatEventSerializer.BuildReplayEvents(display, showToolCalls: false, activitySourceMessages: source)
+            .ToList();
+        var fileEvents = events.Where(json => json.Contains("FILES_CHANGED", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, fileEvents.Count);
+
+        using var first = JsonDocument.Parse(fileEvents[0]);
+        using var second = JsonDocument.Parse(fileEvents[1]);
+        Assert.Equal("a.java", first.RootElement.GetProperty("files")[0].GetProperty("path").GetString());
+        Assert.Equal("b.java", second.RootElement.GetProperty("files")[0].GetProperty("path").GetString());
+        Assert.Equal(1, first.RootElement.GetProperty("files").GetArrayLength());
+        Assert.Equal(1, second.RootElement.GetProperty("files").GetArrayLength());
     }
 
     [Fact]

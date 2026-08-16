@@ -1511,6 +1511,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         if (renderExistingMessages && _savedChatView is not null)
         {
+            _activeUi.SyncActivitySourceFromSession(session);
             _ = _activeUi.ReloadChatViewAsync();
         }
 

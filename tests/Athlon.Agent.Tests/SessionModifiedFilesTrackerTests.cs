@@ -55,6 +55,103 @@ public sealed class SessionModifiedFilesTrackerTests
     }
 
     [Fact]
+    public void SamePath_two_file_edits_accumulates_diff_counts()
+    {
+        var tracker = new SessionModifiedFilesTracker();
+        ProcessSucceededFileEdit(
+            tracker,
+            "call-1",
+            "src/SqliteUsageRecorder.java",
+            string.Join(
+                Environment.NewLine,
+                "--- a/src/SqliteUsageRecorder.java",
+                "+++ b/src/SqliteUsageRecorder.java",
+                "@@ -1,0 +1,2 @@",
+                "+line-a",
+                "+line-b"));
+        ProcessSucceededFileEdit(
+            tracker,
+            "call-2",
+            "src/SqliteUsageRecorder.java",
+            string.Join(
+                Environment.NewLine,
+                "--- a/src/SqliteUsageRecorder.java",
+                "+++ b/src/SqliteUsageRecorder.java",
+                "@@ -10,0 +10,1 @@",
+                "+line-c"));
+
+        Assert.Single(tracker.ModifiedFiles);
+        var file = tracker.ModifiedFiles[0];
+        Assert.Equal(3, file.AddedCount);
+        Assert.Equal(0, file.RemovedCount);
+        Assert.Contains("line-a", file.UnifiedDiffText, StringComparison.Ordinal);
+        Assert.Contains("line-c", file.UnifiedDiffText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SamePath_two_file_writes_replaces_diff_counts()
+    {
+        var tracker = new SessionModifiedFilesTracker();
+        ProcessSucceededFileWrite(tracker, "call-1", "a.ts", "one\ntwo\nthree");
+        ProcessSucceededFileWrite(tracker, "call-2", "a.ts", "only");
+
+        Assert.Single(tracker.ModifiedFiles);
+        var file = tracker.ModifiedFiles[0];
+        Assert.Equal(1, file.AddedCount);
+        Assert.Equal(0, file.RemovedCount);
+        Assert.DoesNotContain("two", file.UnifiedDiffText, StringComparison.Ordinal);
+        Assert.DoesNotContain("three", file.UnifiedDiffText, StringComparison.Ordinal);
+        Assert.Contains("only", file.UnifiedDiffText, StringComparison.Ordinal);
+    }
+
+    private static void ProcessSucceededFileEdit(
+        SessionModifiedFilesTracker tracker,
+        string toolCallId,
+        string path,
+        string diff)
+    {
+        var result = string.Join(
+            Environment.NewLine,
+            $"ToolCallId: {toolCallId}",
+            "Tool `file_edit` succeeded.",
+            "",
+            $"Arguments: path={path}",
+            "Summary: Edited",
+            "",
+            diff);
+
+        tracker.Process(new AgentStreamEvent.ToolCallStart(toolCallId, "file_edit", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs(
+            toolCallId,
+            $$"""{"path":"{{path}}","old_text":"x","new_text":"y"}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd(toolCallId));
+        tracker.Process(new AgentStreamEvent.ToolCallResult(toolCallId, result, $"msg-{toolCallId}"));
+    }
+
+    private static void ProcessSucceededFileWrite(
+        SessionModifiedFilesTracker tracker,
+        string toolCallId,
+        string path,
+        string content)
+    {
+        var escaped = content.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "");
+        var args = $$"""{"path":"{{path}}","content":"{{escaped}}"}""";
+        var result = string.Join(
+            Environment.NewLine,
+            $"ToolCallId: {toolCallId}",
+            "Tool `file_write` succeeded.",
+            "",
+            $"Arguments: path={path}",
+            "Summary: Wrote",
+            "");
+
+        tracker.Process(new AgentStreamEvent.ToolCallStart(toolCallId, "file_write", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs(toolCallId, args));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd(toolCallId));
+        tracker.Process(new AgentStreamEvent.ToolCallResult(toolCallId, result, $"msg-{toolCallId}"));
+    }
+
+    [Fact]
     public void TakeCurrentTurnSucceededFiles_returns_only_this_turn()
     {
         var tracker = new SessionModifiedFilesTracker();
@@ -128,6 +225,53 @@ public sealed class SessionModifiedFilesTrackerTests
         tracker.Process(new AgentStreamEvent.ToolCallResult("call-b", failedResult, "msg-b"));
 
         Assert.Equal(ModifiedFileStatus.Failed, tracker.ModifiedFiles[0].Status);
+    }
+
+    [Fact]
+    public void TakeAndClearSegmentSucceededFiles_removes_paths_from_current_turn()
+    {
+        var tracker = new SessionModifiedFilesTracker();
+        ProcessSucceededFileEdit(
+            tracker,
+            "call-1",
+            "a.java",
+            string.Join(
+                Environment.NewLine,
+                "--- a/a.java",
+                "+++ b/a.java",
+                "@@ -1,0 +1,1 @@",
+                "+x"));
+        ProcessSucceededFileEdit(
+            tracker,
+            "call-2",
+            "b.java",
+            string.Join(
+                Environment.NewLine,
+                "--- a/b.java",
+                "+++ b/b.java",
+                "@@ -1,0 +1,1 @@",
+                "+y"));
+
+        Assert.True(tracker.HasCurrentTurnPaths);
+        var first = tracker.TakeAndClearSegmentSucceededFiles();
+        Assert.Equal(2, first.Count);
+        Assert.False(tracker.HasCurrentTurnPaths);
+        Assert.Empty(tracker.TakeCurrentTurnSucceededFiles());
+
+        ProcessSucceededFileEdit(
+            tracker,
+            "call-3",
+            "c.java",
+            string.Join(
+                Environment.NewLine,
+                "--- a/c.java",
+                "+++ b/c.java",
+                "@@ -1,0 +1,1 @@",
+                "+z"));
+
+        var second = tracker.TakeCurrentTurnSucceededFiles();
+        Assert.Single(second);
+        Assert.Equal("c.java", second[0].RelativePath);
     }
 
     [Fact]
