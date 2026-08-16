@@ -73,7 +73,7 @@ public interface IFileStorageService
     async Task<ConversationDisplayPage> LoadConversationDisplayPageAsync(
         string sessionId,
         ConversationDisplayCursor? cursor = null,
-        int pageSize = 100,
+        int pageSize = ConversationDisplayLimits.PageSize,
         CancellationToken cancellationToken = default)
     {
         var messages = await LoadConversationDisplayAsync(sessionId, cancellationToken).ConfigureAwait(false);

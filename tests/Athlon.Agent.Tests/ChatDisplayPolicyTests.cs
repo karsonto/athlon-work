@@ -288,6 +288,41 @@ public sealed class ChatDisplayPolicyTests
     }
 
     [Fact]
+    public void SerializeAppendCommand_omits_reset()
+    {
+        var user = new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "more"));
+
+        using var document = JsonDocument.Parse(
+            ChatEventSerializer.SerializeAppendCommand([user], showToolCalls: false));
+
+        var root = document.RootElement;
+        Assert.Equal("append", root.GetProperty("command").GetString());
+        Assert.False(root.TryGetProperty("hasOlderMessages", out _));
+        Assert.DoesNotContain(
+            root.GetProperty("events").EnumerateArray(),
+            item => item.GetProperty("type").GetString() == "RESET_TIMELINE");
+    }
+
+    [Fact]
+    public void SerializeEventsCommand_wraps_prebuilt_events_without_rebuilding_timeline()
+    {
+        var events = ChatEventSerializer.BuildReplayEvents(
+            [new ChatMessageViewModel(ChatMessage.Create(MessageRole.Assistant, "hi"))],
+            includeReset: false);
+
+        using var document = JsonDocument.Parse(
+            ChatEventSerializer.SerializeEventsCommand("append", events));
+
+        Assert.Equal("append", document.RootElement.GetProperty("command").GetString());
+        Assert.Contains(
+            document.RootElement.GetProperty("events").EnumerateArray(),
+            item => item.GetProperty("type").GetString() == "STATIC_ASSISTANT_HTML");
+        Assert.DoesNotContain(
+            document.RootElement.GetProperty("events").EnumerateArray(),
+            item => item.GetProperty("type").GetString() == "RESET_TIMELINE");
+    }
+
+    [Fact]
     public void IsToolStreamEvent_matches_tool_stream_types()
     {
         Assert.True(ChatDisplayPolicy.IsToolStreamEvent(new AgentStreamEvent.ToolCallStart("id", "tool", 0)));

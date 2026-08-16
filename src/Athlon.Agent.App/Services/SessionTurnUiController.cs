@@ -625,6 +625,24 @@ public sealed partial class SessionTurnUiController
         PublishTurnActivity(upsert: true);
     }
 
+    public Task HydrateFromSessionAsync(AgentSession session) =>
+        RebuildDisplayFromMessagesAsync(session.Messages, synthesizeInterruptedToolResults: true);
+
+    public Task HydrateDisplayAsync(
+        AgentSession session,
+        IReadOnlyList<ChatMessage> displayMessages,
+        bool synthesizeInterruptedToolResults = true) =>
+        RebuildDisplayFromMessagesAsync(displayMessages, synthesizeInterruptedToolResults);
+
+    /// <summary>
+    /// Rebuild the current display page after settings that affect rendering (e.g. show tool calls),
+    /// without pulling the full <see cref="AgentSession.Messages"/> into the UI.
+    /// </summary>
+    public Task RefreshDisplayForSettingsAsync() =>
+        RebuildDisplayFromMessagesAsync(
+            _activitySourceMessages ?? Array.Empty<ChatMessage>(),
+            synthesizeInterruptedToolResults: true);
+
     public void HydrateFromSession(AgentSession session) =>
         RunOnUiSync(() => RebuildDisplayFromMessages(session.Messages, synthesizeInterruptedToolResults: true));
 
@@ -634,16 +652,47 @@ public sealed partial class SessionTurnUiController
         bool synthesizeInterruptedToolResults = true) =>
         RunOnUiSync(() => RebuildDisplayFromMessages(displayMessages, synthesizeInterruptedToolResults));
 
-    public Task HydrateFromSessionAsync(AgentSession session) =>
-        RunOnUiAsync(() => RebuildDisplayFromMessages(session.Messages, synthesizeInterruptedToolResults: true));
-
-    public Task HydrateDisplayAsync(
-        AgentSession session,
+    private Task RebuildDisplayFromMessagesAsync(
         IReadOnlyList<ChatMessage> displayMessages,
-        bool synthesizeInterruptedToolResults = true) =>
-        RunOnUiAsync(() => RebuildDisplayFromMessages(displayMessages, synthesizeInterruptedToolResults));
+        bool synthesizeInterruptedToolResults) =>
+        RunOnUiAsync(async () =>
+        {
+            await RebuildDisplayFromMessagesCoreAsync(displayMessages, synthesizeInterruptedToolResults)
+                .ConfigureAwait(true);
+        });
 
     private void RebuildDisplayFromMessages(
+        IReadOnlyList<ChatMessage> displayMessages,
+        bool synthesizeInterruptedToolResults)
+    {
+        var viewModels = BeginRebuildDisplay(displayMessages, synthesizeInterruptedToolResults);
+        foreach (var viewModel in viewModels)
+        {
+            Messages.Add(viewModel);
+        }
+
+        FinishRebuildDisplay(viewModels);
+    }
+
+    private async Task RebuildDisplayFromMessagesCoreAsync(
+        IReadOnlyList<ChatMessage> displayMessages,
+        bool synthesizeInterruptedToolResults)
+    {
+        var viewModels = BeginRebuildDisplay(displayMessages, synthesizeInterruptedToolResults);
+        const int batchSize = ConversationDisplayLimits.UiHydrateBatchSize;
+        for (var i = 0; i < viewModels.Count; i++)
+        {
+            Messages.Add(viewModels[i]);
+            if (i > 0 && i % batchSize == 0)
+            {
+                await DispatcherYieldAsync().ConfigureAwait(true);
+            }
+        }
+
+        FinishRebuildDisplay(viewModels);
+    }
+
+    private IReadOnlyList<ChatMessageViewModel> BeginRebuildDisplay(
         IReadOnlyList<ChatMessage> displayMessages,
         bool synthesizeInterruptedToolResults)
     {
@@ -661,32 +710,15 @@ public sealed partial class SessionTurnUiController
             _viewModelCache.Remove(key);
         }
 
-        const int batchSize = 50;
-        var viewModels = ChatTimelineHydrator.BuildDisplayMessages(
+        return ChatTimelineHydrator.BuildDisplayMessages(
             displayMessages,
             _viewModelCache,
             _showToolCalls(),
             synthesizeInterruptedToolResults);
-        if (viewModels.Count <= batchSize)
-        {
-            foreach (var viewModel in viewModels)
-            {
-                Messages.Add(viewModel);
-            }
-        }
-        else
-        {
-            // Batch-add to reduce UI layout passes for long conversations
-            for (var i = 0; i < viewModels.Count; i += batchSize)
-            {
-                var batch = viewModels.Skip(i).Take(batchSize);
-                foreach (var viewModel in batch)
-                {
-                    Messages.Add(viewModel);
-                }
-            }
-        }
+    }
 
+    private void FinishRebuildDisplay(IReadOnlyList<ChatMessageViewModel> viewModels)
+    {
         // Cache ViewModels for future session switches
         foreach (var viewModel in viewModels)
         {
@@ -698,6 +730,19 @@ public sealed partial class SessionTurnUiController
         _bulkChatViewSyncDepth--;
         SyncChatView(immediate: true);
         RequestScrollImmediate();
+    }
+
+    private async Task DispatcherYieldAsync()
+    {
+        if (!_dispatcher.CheckAccess())
+        {
+            await Task.Yield();
+            return;
+        }
+
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _ = _dispatcher.BeginInvoke(DispatcherPriority.Background, () => tcs.TrySetResult());
+        await tcs.Task.ConfigureAwait(true);
     }
 
     private void OnMessagesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -1110,6 +1155,17 @@ public sealed partial class SessionTurnUiController
         }
 
         return _dispatcher.InvokeAsync(action).Task;
+    }
+
+    private async Task RunOnUiAsync(Func<Task> action)
+    {
+        if (_dispatcher.CheckAccess())
+        {
+            await action().ConfigureAwait(true);
+            return;
+        }
+
+        await _dispatcher.InvokeAsync(action).Task.Unwrap().ConfigureAwait(true);
     }
 
     private void RunOnUiSync(Action action)

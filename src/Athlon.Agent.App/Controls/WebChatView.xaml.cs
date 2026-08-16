@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -307,15 +308,13 @@ public partial class WebChatView : UserControl
             var messages = _pendingMessages;
             var showToolCalls = _pendingShowToolCalls;
             var activitySource = _pendingActivitySourceMessages;
-            var replayJson = await Task.Run(
-                () => ChatEventSerializer.SerializeReplayCommand(messages, showToolCalls, activitySource))
+            await PostReplayInBatchesAsync(messages, showToolCalls, activitySource, expectedGeneration)
                 .ConfigureAwait(true);
             if (expectedGeneration != _renderGeneration)
             {
                 return;
             }
 
-            ChatWebView.CoreWebView2.PostWebMessageAsJson(replayJson);
             _needsRender = false;
             App.StartupTrace($"WebChatView replayed {_pendingMessages.Count} messages");
         }
@@ -330,6 +329,61 @@ public partial class WebChatView : UserControl
             else
             {
                 _renderQueuedWhileInProgress = false;
+            }
+        }
+    }
+
+    private async Task PostReplayInBatchesAsync(
+        IReadOnlyList<ChatMessageViewModel> messages,
+        bool showToolCalls,
+        IReadOnlyList<ChatMessage>? activitySource,
+        int expectedGeneration)
+    {
+        const int batchSize = ConversationDisplayLimits.WebViewReplayBatchSize;
+        // Build the full timeline once so turn folding (final assistant vs activity) stays correct,
+        // then post event batches to keep the UI responsive.
+        var allEvents = await Task.Run(
+                () => ChatEventSerializer.BuildReplayEvents(
+                    messages,
+                    showToolCalls,
+                    includeReset: true,
+                    activitySourceMessages: activitySource))
+            .ConfigureAwait(true);
+        if (expectedGeneration != _renderGeneration)
+        {
+            return;
+        }
+
+        if (allEvents.Count == 0)
+        {
+            ChatWebView.CoreWebView2.PostWebMessageAsJson(
+                ChatEventSerializer.SerializeEventsCommand("replay", Array.Empty<string>()));
+            return;
+        }
+
+        for (var offset = 0; offset < allEvents.Count; offset += batchSize)
+        {
+            if (expectedGeneration != _renderGeneration)
+            {
+                return;
+            }
+
+            var take = Math.Min(batchSize, allEvents.Count - offset);
+            var slice = allEvents.Skip(offset).Take(take).ToArray();
+            var isFirst = offset == 0;
+            var json = await Task.Run(() => ChatEventSerializer.SerializeEventsCommand(
+                    isFirst ? "replay" : "append",
+                    slice))
+                .ConfigureAwait(true);
+            if (expectedGeneration != _renderGeneration)
+            {
+                return;
+            }
+
+            ChatWebView.CoreWebView2.PostWebMessageAsJson(json);
+            if (offset + take < allEvents.Count)
+            {
+                await Dispatcher.Yield(DispatcherPriority.Background);
             }
         }
     }

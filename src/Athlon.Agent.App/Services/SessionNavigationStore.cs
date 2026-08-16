@@ -40,7 +40,7 @@ public sealed class SessionNavigationStore
     public Task<ConversationDisplayPage> LoadOlderDisplayPageAsync(
         string sessionId,
         ConversationDisplayCursor cursor,
-        int pageSize = 100,
+        int pageSize = ConversationDisplayLimits.PageSize,
         CancellationToken cancellationToken = default) =>
         _storage.LoadConversationDisplayPageAsync(sessionId, cursor, pageSize, cancellationToken);
 
@@ -83,7 +83,7 @@ public sealed class SessionNavigationStore
         var page = await _storage.LoadConversationDisplayPageAsync(
             sessionId,
             cursor: null,
-            pageSize: 100,
+            pageSize: ConversationDisplayLimits.PageSize,
             cancellationToken: cancellationToken).ConfigureAwait(true);
         lock (_cacheLock)
         {

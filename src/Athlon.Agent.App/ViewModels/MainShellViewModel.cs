@@ -1121,8 +1121,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         await _storage.SaveSessionAsync(_session);
         _sessionNavigation.Invalidate(_session.Id);
 
-        await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
-        ShowShellToast(_loc["Shell_ClearContextDone"], ShellToastKind.Success);
+        await _activeUi.HydrateDisplayAsync(
+            _session,
+            Array.Empty<ChatMessage>(),
+            synthesizeInterruptedToolResults: false).ConfigureAwait(true);
         NotifyCommandStatesChanged();
         await RefreshSessionHistoryAsync().ConfigureAwait(true);
     }
@@ -1459,9 +1461,31 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _ = dispatcher.InvokeAsync(action);
     }
 
-    private void RefreshContextOccupancy()
+    private void RefreshContextOccupancy() =>
+        _ = RefreshContextOccupancyAsync();
+
+    private async Task RefreshContextOccupancyAsync()
     {
-        var budget = _compactionService.ComputeBudget(_session);
+        var session = _session;
+        var sessionId = session.Id;
+
+        ContextBudgetSnapshot budget;
+        try
+        {
+            // Never run PrepareForTurn / BuildRuntimeContext (sync-over-async) on the UI thread —
+            // contributors use GetAwaiter().GetResult() and deadlock the WPF sync context.
+            budget = await Task.Run(() => _compactionService.ComputeBudget(session)).ConfigureAwait(true);
+        }
+        catch
+        {
+            return;
+        }
+
+        if (!string.Equals(_displayedSessionId, sessionId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
         var pressure = ContextPressureEvaluator.Evaluate(
             budget,
             _appSettings.ContextCompaction.DynamicCompaction);
@@ -2142,7 +2166,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private async Task OnSettingsSavedAsync()
     {
         _uiCache.ApplyShowToolCalls();
-        await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
+        await _activeUi.RefreshDisplayForSettingsAsync().ConfigureAwait(true);
         await RefreshMcpRuntimeAsync().ConfigureAwait(true);
         ApplySessionWorkspace();
         ComposerKnowledge.NotifyEmbeddingConfigurationChanged();
@@ -2513,7 +2537,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
             else
             {
-                await _activeUi.HydrateFromSessionAsync(_session).ConfigureAwait(true);
+                // Never hydrate the full session.Messages into the chat UI — that freezes on huge histories
+                // when conversation.jsonl is missing/empty. Show an empty timeline instead.
+                await _activeUi.HydrateDisplayAsync(
+                    _session,
+                    Array.Empty<ChatMessage>(),
+                    synthesizeInterruptedToolResults: false).ConfigureAwait(true);
             }
 
             if (_savedChatView is not null)

@@ -301,6 +301,21 @@ internal static class ChatEventSerializer
             "replay",
             BuildReplayEvents(messages, showToolCalls, activitySourceMessages: activitySourceMessages));
 
+    public static string SerializeAppendCommand(
+        IReadOnlyList<ChatMessageViewModel> messages,
+        bool showToolCalls = false,
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null) =>
+        SerializeWebMessageCommand(
+            "append",
+            BuildReplayEvents(
+                messages,
+                showToolCalls,
+                includeReset: false,
+                activitySourceMessages: activitySourceMessages));
+
+    public static string SerializeEventsCommand(string command, IReadOnlyList<string> events) =>
+        SerializeWebMessageCommand(command, events);
+
     public static string SerializeResetCommand() =>
         SerializeWebMessageCommand("reset", Array.Empty<string>());
 

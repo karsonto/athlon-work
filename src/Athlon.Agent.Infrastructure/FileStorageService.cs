@@ -194,7 +194,7 @@ public sealed class FileStorageService(
     public async Task<ConversationDisplayPage> LoadConversationDisplayPageAsync(
         string sessionId,
         ConversationDisplayCursor? cursor = null,
-        int pageSize = 100,
+        int pageSize = ConversationDisplayLimits.PageSize,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sessionId))

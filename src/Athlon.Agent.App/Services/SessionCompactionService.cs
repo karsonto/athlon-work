@@ -78,6 +78,7 @@ public sealed class SessionCompactionService(
             session.Messages,
             settings.ContextCompaction,
             settings.Model,
+            calibrationMultiplier: 1.0,
             runtimeContext: runtimeContext,
             promptOccupancy: frozen.Occupancy);
     }

@@ -1,3 +1,4 @@
+using System.Linq;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 
@@ -97,6 +98,46 @@ public sealed class SessionNavigationStoreTests
         Assert.True(storage.DisplayLoadStarted.Task.IsCompletedSuccessfully);
     }
 
+    [Fact]
+    public async Task LoadSnapshotAsync_UsesFirstPageSizeOfForty()
+    {
+        var messages = Enumerable.Range(0, 80)
+            .Select(i => ChatMessage.Create(MessageRole.User, $"m{i}"))
+            .ToArray();
+        var storage = new CapturingStorage
+        {
+            SessionToLoad = AgentSession.Create("page-size"),
+            DisplayMessagesToLoad = messages
+        };
+        var store = new SessionNavigationStore(storage);
+
+        var snapshot = await store.LoadSnapshotAsync("page-size");
+
+        Assert.Equal(ConversationDisplayLimits.PageSize, storage.LastPageSize);
+        Assert.Equal(ConversationDisplayLimits.PageSize, snapshot!.DisplayMessages.Count);
+        Assert.Equal("m40", snapshot.DisplayMessages[0].Content);
+        Assert.Equal("m79", snapshot.DisplayMessages[^1].Content);
+    }
+
+    [Fact]
+    public async Task LoadOlderDisplayPageAsync_DefaultsToPageSizeForty()
+    {
+        var storage = new CapturingStorage
+        {
+            DisplayMessagesToLoad =
+            [
+                ChatMessage.Create(MessageRole.User, "a"),
+                ChatMessage.Create(MessageRole.User, "b")
+            ]
+        };
+        var store = new SessionNavigationStore(storage);
+        var cursor = new ConversationDisplayCursor(0, Array.Empty<string>());
+
+        await store.LoadOlderDisplayPageAsync("s1", cursor);
+
+        Assert.Equal(ConversationDisplayLimits.PageSize, storage.LastPageSize);
+    }
+
     private sealed class CapturingStorage : IFileStorageService
     {
         public string RootPath => "/tmp";
@@ -105,6 +146,7 @@ public sealed class SessionNavigationStoreTests
         public AgentSession? SavedSession { get; private set; }
         public int LoadSessionCount { get; private set; }
         public int LoadDisplayCount { get; private set; }
+        public int? LastPageSize { get; private set; }
         public bool EnableParallelProbe { get; init; }
         public TaskCompletionSource<bool> SessionLoadStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -141,9 +183,10 @@ public sealed class SessionNavigationStoreTests
         public async Task<ConversationDisplayPage> LoadConversationDisplayPageAsync(
             string sessionId,
             ConversationDisplayCursor? cursor = null,
-            int pageSize = 100,
+            int pageSize = ConversationDisplayLimits.PageSize,
             CancellationToken cancellationToken = default)
         {
+            LastPageSize = pageSize;
             LoadDisplayCount++;
             if (EnableParallelProbe)
             {

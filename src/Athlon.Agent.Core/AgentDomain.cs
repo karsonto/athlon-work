@@ -131,3 +131,11 @@ public sealed record ConversationDisplayCursor(
 public sealed record ConversationDisplayPage(
     IReadOnlyList<ChatMessage> Messages,
     ConversationDisplayCursor? OlderCursor);
+
+/// <summary>Display-path page sizes for conversation history (UI + storage defaults).</summary>
+public static class ConversationDisplayLimits
+{
+    public const int PageSize = 40;
+    public const int WebViewReplayBatchSize = 15;
+    public const int UiHydrateBatchSize = 20;
+}

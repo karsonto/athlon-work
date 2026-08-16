@@ -193,13 +193,21 @@ function updateEmptyStateVisibility() {
 
 function findAssistantContentNode(messageId) {
   if (!messageId) return null;
-  const row = document.querySelector('.message-row.assistant-row[data-message-id="' + cssEscape(messageId) + '"]');
+  const row = findAssistantBubbleRow(messageId);
   return row ? row.querySelector('.bubble > .message-content') : null;
 }
 
 function findAssistantBubbleRow(messageId) {
   if (!messageId) return null;
-  return document.querySelector('.message-row.assistant-row[data-message-id="' + cssEscape(messageId) + '"]');
+  const selector = '.message-row.assistant-row[data-message-id="' + cssEscape(messageId) + '"]';
+  // Prefer the active batch root (DocumentFragment during prepend/append) — nodes there
+  // are not queryable via document until attached.
+  const root = getMessageRoot();
+  if (root && root.querySelector) {
+    const inRoot = root.querySelector(selector);
+    if (inRoot) return inRoot;
+  }
+  return document.querySelector(selector);
 }
 
 function applyMarkdownHtml(node, html, enhance) {
@@ -222,7 +230,9 @@ function applyAssistantHtml(messageId, html, createIfMissing, streaming) {
     state.assistantStarted[messageId] = true;
     state.currentAssistantEl = row;
   }
-  applyMarkdownHtml(findAssistantContentNode(messageId), html, streaming !== true);
+  if (!row) return;
+  // Query content on the row itself — do not re-query document (breaks DocumentFragment batches).
+  applyMarkdownHtml(row.querySelector('.bubble > .message-content'), html, streaming !== true);
   updateEmptyStateVisibility();
   scrollToBottom();
 }
@@ -1288,6 +1298,25 @@ function replayEvents(events) {
   endBatch(true);
 }
 
+function appendEvents(events) {
+  const root = document.getElementById('messages');
+  if (!root) return;
+  const fragment = document.createDocumentFragment();
+  beginBatch();
+  state.batchTarget = fragment;
+  state.trackReasoningDuration = false;
+  for (const raw of events) {
+    try {
+      const event = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      handleEvent(event);
+    } catch (e) { console.warn('appendEvents parse failed', e); }
+  }
+  state.batchTarget = null;
+  state.trackReasoningDuration = true;
+  root.appendChild(fragment);
+  endBatch(true);
+}
+
 function setOlderMessagesAvailable(available) {
   const button = document.getElementById('load-older');
   if (!button) return;
@@ -1325,6 +1354,8 @@ function handleWebMessage(message) {
   if (!command || !command.command) return;
   if (command.command === 'replay') {
     replayEvents(Array.isArray(command.events) ? command.events : []);
+  } else if (command.command === 'append') {
+    appendEvents(Array.isArray(command.events) ? command.events : []);
   } else if (command.command === 'prepend') {
     prependEvents(
       Array.isArray(command.events) ? command.events : [],

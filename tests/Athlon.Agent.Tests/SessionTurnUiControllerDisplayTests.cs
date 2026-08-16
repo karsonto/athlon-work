@@ -64,6 +64,26 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
+    public async Task HydrateDisplayAsync_empty_list_does_not_pull_session_messages_into_ui()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () => Task.CompletedTask;
+        ui.SetDisplayed(true);
+
+        var huge = Enumerable.Range(0, 200)
+            .Select(i => ChatMessage.Create(MessageRole.User, $"msg-{i}"))
+            .ToArray();
+        var session = AgentSession.Create("huge").WithMessages(huge);
+
+        await ui.HydrateDisplayAsync(session, Array.Empty<ChatMessage>(), synthesizeInterruptedToolResults: false);
+
+        var count = await dispatcher.InvokeAsync(() => ui.Messages.Count);
+        Assert.Equal(0, count);
+        Assert.Equal(200, session.Messages.Count);
+    }
+
+    [Fact]
     public async Task HiddenSession_FinalizeTurn_does_not_require_ChatView_or_scroll()
     {
         var dispatcher = await StartStaDispatcherAsync();
