@@ -77,7 +77,7 @@
                     Padding="16,12">
                 <StackPanel x:Name="ButtonPanel"
                             Orientation="Horizontal"
-                            HorizontalAlignment="Left" />
+                            HorizontalAlignment="Right" />
             </Border>
         </Grid>
     </Border>

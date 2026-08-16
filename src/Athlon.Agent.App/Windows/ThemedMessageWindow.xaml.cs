@@ -85,17 +85,17 @@ public partial class ThemedMessageWindow : Window
                 AddButton(Strings.Get("Common_OK"), MessageBoxResult.OK, isDefault: true, isCancel: true);
                 break;
             case MessageBoxButton.OKCancel:
-                AddButton(Strings.Get("Common_Cancel"), MessageBoxResult.Cancel, isCancel: true);
                 AddButton(Strings.Get("Common_OK"), MessageBoxResult.OK, isDefault: true, emphasize: true);
+                AddButton(Strings.Get("Common_Cancel"), MessageBoxResult.Cancel, isCancel: true);
                 break;
             case MessageBoxButton.YesNo:
-                AddButton(Strings.Get("Common_No"), MessageBoxResult.No, isCancel: true);
                 AddButton(Strings.Get("Common_Yes"), MessageBoxResult.Yes, isDefault: true, emphasize: true);
+                AddButton(Strings.Get("Common_No"), MessageBoxResult.No, isCancel: true);
                 break;
             case MessageBoxButton.YesNoCancel:
-                AddButton(Strings.Get("Common_Cancel"), MessageBoxResult.Cancel, isCancel: true);
-                AddButton(Strings.Get("Common_No"), MessageBoxResult.No);
                 AddButton(Strings.Get("Common_Yes"), MessageBoxResult.Yes, isDefault: true, emphasize: true);
+                AddButton(Strings.Get("Common_No"), MessageBoxResult.No);
+                AddButton(Strings.Get("Common_Cancel"), MessageBoxResult.Cancel, isCancel: true);
                 break;
             default:
                 AddButton(Strings.Get("Common_OK"), MessageBoxResult.OK, isDefault: true, isCancel: true);
@@ -114,7 +114,7 @@ public partial class ThemedMessageWindow : Window
         {
             Content = content,
             MinWidth = 88,
-            Margin = new Thickness(8, 0, 0, 0),
+            Margin = new Thickness(ButtonPanel.Children.Count == 0 ? 0 : 8, 0, 0, 0),
             IsDefault = isDefault,
             IsCancel = isCancel,
             Style = TryFindResource("GhostButtonStyle") as Style
