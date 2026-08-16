@@ -35,9 +35,6 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
     private bool isVisible;
 
     [ObservableProperty]
-    private bool isFlyoutOpen;
-
-    [ObservableProperty]
     private int percentUsed;
 
     [ObservableProperty]

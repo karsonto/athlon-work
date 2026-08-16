@@ -2,7 +2,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Animation;
 using Athlon.Agent.App.Animations;
+using Athlon.Agent.App.Behaviors;
 using Athlon.Agent.App.ViewModels;
+using Microsoft.Xaml.Behaviors;
 using UiLayoutConstraints = Athlon.Agent.App.UiLayoutConstraints;
 
 namespace Athlon.Agent.App.Services;
@@ -287,6 +289,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             elements.EditorPaneColumn.Width = new GridLength(0);
             elements.EditorPaneHost.Visibility = Visibility.Collapsed;
             elements.EditorChatSplitter.Visibility = Visibility.Collapsed;
+            elements.EditorChatSplitter.IsEnabled = false;
             return;
         }
 
@@ -295,6 +298,8 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
         elements.EditorPaneColumn.Width = new GridLength(viewModel.EditorPaneWidth);
         elements.EditorPaneHost.Visibility = Visibility.Visible;
         elements.EditorChatSplitter.Visibility = Visibility.Visible;
+        elements.EditorChatSplitter.IsEnabled = true;
+        elements.EditorChatSplitter.IsHitTestVisible = true;
     }
 
     public void OnEditorPaneDragCompleted()
@@ -406,8 +411,11 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
         {
             elements.ContextSidebarPanel.Visibility = Visibility.Visible;
             elements.ContextSidebarPanel.Opacity = 0;
+            elements.ContextSidebarPanel.Margin = new Thickness(0);
             elements.ContextSidebarSplitter.Visibility = Visibility.Visible;
             elements.ContextSidebarSplitter.IsEnabled = false;
+            // Square the shared edge immediately so AppBackground crescents don't show mid-animation.
+            SetMainWorkspaceCardRightCornersSquared(squared: true);
         }
         else
         {
@@ -529,8 +537,8 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
         elements.ContextSidebarColumn.Width = new GridLength(viewModel.ContextSidebarWidth);
         elements.ContextSidebarPanel.Visibility = Visibility.Visible;
         elements.ContextSidebarPanel.Opacity = 1;
-        // Leave a grip strip so the leading splitter is never covered by the panel.
-        elements.ContextSidebarPanel.Margin = new Thickness(12, 0, 0, 0);
+        // Flush against the main card / editor; splitter sits on the leading edge with ZIndex.
+        elements.ContextSidebarPanel.Margin = new Thickness(0);
         elements.ContextSidebarSplitter.Visibility = Visibility.Visible;
         elements.ContextSidebarSplitter.IsEnabled = true;
         elements.ContextSidebarSplitter.IsHitTestVisible = true;
@@ -539,6 +547,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
         }
 
+        SetMainWorkspaceCardRightCornersSquared(squared: true);
         viewModel.SetContextSidebarEdgeGutterWidth(ContextSidebarEdgeGutterWidth);
     }
 
@@ -566,6 +575,7 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
         }
 
+        SetMainWorkspaceCardRightCornersSquared(squared: true);
         viewModel.SetContextSidebarEdgeGutterWidth(0);
     }
 
@@ -616,7 +626,31 @@ public sealed class MainWindowLayoutBinder(MainShellViewModel viewModel, MainWin
             elements.ContextSidebarCollapsedRail.Visibility = Visibility.Collapsed;
         }
 
+        SetMainWorkspaceCardRightCornersSquared(squared: false);
         viewModel.SetContextSidebarEdgeGutterWidth(0);
+    }
+
+    private void SetMainWorkspaceCardRightCornersSquared(bool squared)
+    {
+        if (elements.MainWorkspaceCardInner is null)
+        {
+            return;
+        }
+
+        var radius = AppLayoutMetrics.MainWorkspaceCardCornerRadiusValue;
+        var corners = squared
+            ? new CornerRadius(radius, 0, 0, radius)
+            : new CornerRadius(radius);
+        elements.MainWorkspaceCardInner.CornerRadius = corners;
+
+        foreach (var behavior in Interaction.GetBehaviors(elements.MainWorkspaceCardInner))
+        {
+            if (behavior is RoundedClipBehavior clip)
+            {
+                clip.CornerRadius = corners;
+                break;
+            }
+        }
     }
 
     private void StopContextSidebarAnimation()
@@ -686,4 +720,5 @@ public sealed class MainWindowLayoutElements
     public FrameworkElement? ContextSidebarPanel { get; init; }
     public FrameworkElement? ContextSidebarSplitter { get; init; }
     public FrameworkElement? ContextSidebarCollapsedRail { get; init; }
+    public Border? MainWorkspaceCardInner { get; init; }
 }

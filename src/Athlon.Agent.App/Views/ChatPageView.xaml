@@ -10,33 +10,11 @@
              xmlns:harness="clr-namespace:Athlon.Agent.Core.Harness;assembly=Athlon.Agent.Core">
     <Grid Background="{DynamicResource Brush.ChatBackground}" ClipToBounds="True">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="EditorPaneColumn" Width="0" MinWidth="0" MaxWidth="1200" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition x:Name="EditorPaneColumn" Width="0" MinWidth="0" MaxWidth="1200" />
                 </Grid.ColumnDefinitions>
 
-                <Border x:Name="EditorPaneHost"
-                        Grid.Column="0"
-                        Background="{DynamicResource Brush.AppBackground}"
-                        BorderThickness="0"
-                        Visibility="Collapsed">
-                    <Grid>
-                        <controls:FileEditorView DataContext="{Binding FileEditor}" />
-                    </Grid>
-                </Border>
-
-                <GridSplitter x:Name="EditorChatSplitter"
-                              Grid.Column="0"
-                              Style="{StaticResource LayoutColumnSplitterStyle}"
-                              ResizeDirection="Columns"
-                              ResizeBehavior="CurrentAndNext"
-                              Panel.ZIndex="2"
-                              Visibility="Collapsed">
-                    <i:Interaction.Behaviors>
-                        <behaviors:GridSplitterLayoutBehavior Kind="EditorPane" />
-                    </i:Interaction.Behaviors>
-                </GridSplitter>
-
-                <Grid Grid.Column="1" ClipToBounds="True">
+                <Grid Grid.Column="0" ClipToBounds="True">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="{Binding ContextSidebarEdgeGutterWidth}" />
@@ -442,5 +420,29 @@
                             SnapsToDevicePixels="True" />
                 </Border>
                 </Grid>
+
+                <!-- Splitter on the chat column's trailing edge (star | fixed), same pattern as left-pane editor. -->
+                <GridSplitter x:Name="EditorChatSplitter"
+                              Grid.Column="0"
+                              Style="{StaticResource LayoutColumnSplitterStyle}"
+                              ResizeDirection="Columns"
+                              ResizeBehavior="CurrentAndNext"
+                              Panel.ZIndex="6"
+                              IsHitTestVisible="True"
+                              Visibility="Collapsed">
+                    <i:Interaction.Behaviors>
+                        <behaviors:GridSplitterLayoutBehavior Kind="EditorPane" />
+                    </i:Interaction.Behaviors>
+                </GridSplitter>
+
+                <Border x:Name="EditorPaneHost"
+                        Grid.Column="1"
+                        Background="{DynamicResource Brush.AppBackground}"
+                        BorderThickness="0"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <controls:FileEditorView DataContext="{Binding FileEditor}" />
+                    </Grid>
+                </Border>
     </Grid>
 </UserControl>

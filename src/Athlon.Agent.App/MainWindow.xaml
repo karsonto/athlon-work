@@ -135,9 +135,11 @@
                 Grid.RowSpan="2"
                 Grid.Column="1"
                 Style="{StaticResource MainWorkspaceCardOuterStyle}">
-            <Border Style="{StaticResource MainWorkspaceCardInnerStyle}">
+            <Border x:Name="MainWorkspaceCardInner"
+                    Style="{StaticResource MainWorkspaceCardInnerStyle}">
                 <i:Interaction.Behaviors>
-                    <behaviors:RoundedClipBehavior CornerRadius="{x:Static app:AppLayoutMetrics.MainWorkspaceCardCornerRadius}" />
+                    <behaviors:RoundedClipBehavior x:Name="MainWorkspaceCardClip"
+                                                   CornerRadius="{x:Static app:AppLayoutMetrics.MainWorkspaceCardCornerRadius}" />
                 </i:Interaction.Behaviors>
                 <Grid>
                     <Grid.RowDefinitions>

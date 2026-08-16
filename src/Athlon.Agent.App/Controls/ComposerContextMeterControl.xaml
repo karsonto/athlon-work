@@ -129,7 +129,7 @@
         </Button>
         <Popup PlacementTarget="{Binding ElementName=MeterButton}"
                Placement="Top"
-               IsOpen="{Binding IsFlyoutOpen, Mode=TwoWay}"
+               IsOpen="{Binding IsFlyoutOpen, RelativeSource={RelativeSource AncestorType=UserControl}, Mode=TwoWay}"
                StaysOpen="False"
                AllowsTransparency="True">
             <Border Background="{DynamicResource Brush.Panel}"

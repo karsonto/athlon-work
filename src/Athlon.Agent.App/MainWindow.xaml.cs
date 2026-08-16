@@ -60,7 +60,8 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             ContextSidebarColumn = ContextSidebarColumn,
             ContextSidebarPanel = ContextSidebarPanel,
             ContextSidebarSplitter = ContextSidebarSplitter,
-            ContextSidebarCollapsedRail = ContextSidebarCollapsedRail
+            ContextSidebarCollapsedRail = ContextSidebarCollapsedRail,
+            MainWorkspaceCardInner = MainWorkspaceCardInner
         });
         DataContext = _viewModel;
         _viewModelPropertyChangedHandler = OnViewModelPropertyChanged;
