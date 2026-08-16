@@ -54,11 +54,6 @@ public sealed partial class SessionTurnUiController
     private int _bulkChatViewSyncDepth;
     private int _syncChatViewGeneration;
     private Func<bool> _showToolCalls = () => true;
-    /// <summary>
-    /// Whether the live activity segment has already been sealed above the current assistant text.
-    /// Empty TextMessageStart/End between tool rounds must not seal (keeps one summary bubble).
-    /// </summary>
-    private bool _activitySealedForCurrentText;
     private readonly HashSet<string> _foldedAssistantMessageIds = new(StringComparer.Ordinal);
     /// <summary>
     /// After the turn has used activity tools, intermediate assistant text streams into the
@@ -314,7 +309,6 @@ public sealed partial class SessionTurnUiController
         {
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
-            _activitySealedForCurrentText = false;
             _turnSawActivityTool = false;
             _foldedAssistantMessageIds.Clear();
             var message = ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments);
@@ -331,7 +325,6 @@ public sealed partial class SessionTurnUiController
         {
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
-            _activitySealedForCurrentText = false;
             _turnSawActivityTool = false;
             _foldedAssistantMessageIds.Clear();
             _tokenBuffer.ClearBuffers();
@@ -552,12 +545,6 @@ public sealed partial class SessionTurnUiController
 
     private void ProcessUiStreamEvents(AgentStreamEvent streamEvent, bool notifyTracker)
     {
-        // Do not seal on TextMessageStart: one activity fold spans the whole turn until FinalizeTurn.
-        if (streamEvent is AgentStreamEvent.TextMessageStart)
-        {
-            _activitySealedForCurrentText = false;
-        }
-
         // Fold provisional assistant text before the next tool is appended to the activity list,
         // so narrations keep timeline order (text → tool → text → tool).
         if (streamEvent is AgentStreamEvent.ToolCallStart(_, var startingToolName, _)

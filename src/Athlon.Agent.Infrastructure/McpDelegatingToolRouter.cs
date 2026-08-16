@@ -1,12 +1,10 @@
 using System.Collections.Concurrent;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Browser;
-using Athlon.Agent.Core.ComputerUse;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
-using Athlon.Agent.Core.Memory;
-using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Core.Terminal;
+using Athlon.Agent.Core.Tools;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -44,90 +42,41 @@ internal sealed class McpDelegatingToolRouter(
 
     private IEnumerable<IAgentTool> ActiveLocalTools => _allLocalTools.Where(IsToolEnabled);
 
-    private bool IsToolEnabled(IAgentTool tool)
+    private bool IsToolEnabled(IAgentTool tool) =>
+        ToolAvailabilityPolicy.IsEnabled(tool, BuildAvailabilityContext());
+
+    private ToolAvailabilityContext BuildAvailabilityContext()
     {
-        if (IsComputerUseMode)
+        var sessionId = activeSessionContext.SessionId;
+        var mode = ResolveSessionAgentMode();
+        return new ToolAvailabilityContext(
+            ComputerUseActive: IsComputerUseMode,
+            HasWorkspace: workspaceGuard.HasConfiguredWorkspace,
+            WorkspaceKind: workspaceGuard.CurrentKind,
+            Mode: mode,
+            BrowserTabOpen: browserWorkspaceState.HasOpenBrowserTab,
+            TerminalTabOpen: terminalWorkspaceState.HasOpenTerminalTab,
+            KnowledgeEnabled: sessionKnowledgeState.ShouldExposeKnowledgeTool(sessionId));
+    }
+
+    private SessionAgentMode ResolveSessionAgentMode()
+    {
+        if (sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor))
         {
-            return tool is IComputerUseTool;
+            return SessionAgentMode.Coding;
         }
 
-        if (IsChatOnlyMode)
+        if (sessionHarnessState.IsAskModeForActiveRun(runContextAccessor))
         {
-            if (string.Equals(tool.Definition.Name, "browser_navigate", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            if (string.Equals(tool.Definition.Name, "terminal_open", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            // After navigate opens a Browser tab, expose page/ARIA tools even without a workspace.
-            if (tool is IBrowserTool && browserWorkspaceState.HasOpenBrowserTab)
-            {
-                return true;
-            }
-
-            if (tool is ITerminalTool && terminalWorkspaceState.HasOpenTerminalTab)
-            {
-                return true;
-            }
-
-            return tool is IGlobalKnowledgeTool
-                && sessionKnowledgeState.ShouldExposeKnowledgeTool(activeSessionContext.SessionId);
+            return SessionAgentMode.Ask;
         }
 
-        if (tool is ILocalWorkspaceTool && workspaceGuard.CurrentKind == WorkspaceKind.Ssh)
+        if (sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor))
         {
-            return false;
+            return SessionAgentMode.Plan;
         }
 
-        if (tool is IRemoteWorkspaceTool && workspaceGuard.CurrentKind != WorkspaceKind.Ssh)
-        {
-            return false;
-        }
-
-        if (tool is IHarnessTool && !sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor))
-        {
-            return false;
-        }
-
-        if (tool is IPlanTool && !sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor))
-        {
-            return false;
-        }
-
-        if (tool is IBrowserTool && !browserWorkspaceState.HasOpenBrowserTab)
-        {
-            return false;
-        }
-
-        if (tool is ITerminalTool && !terminalWorkspaceState.HasOpenTerminalTab)
-        {
-            return false;
-        }
-
-        if (tool is ILongTermMemoryTool && !workspaceGuard.HasConfiguredWorkspace)
-        {
-            return false;
-        }
-
-        var askOrPlan = sessionHarnessState.IsAskModeForActiveRun(runContextAccessor)
-            || sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor);
-        if (askOrPlan
-            && (tool.Definition.Name is "file_write" or "file_edit" or "apply_patch" or "execute_command"
-                || tool is ISubAgentTool))
-        {
-            return false;
-        }
-
-        if (tool is IGlobalKnowledgeTool)
-        {
-            return sessionKnowledgeState.ShouldExposeKnowledgeTool(activeSessionContext.SessionId);
-        }
-
-        return true;
+        return SessionAgentMode.Agent;
     }
 
     private ToolRouter GetOrCreateLocalRouter()

@@ -7,8 +7,6 @@ namespace Athlon.Agent.App.Services;
 
 internal static class ChatDisplayPolicy
 {
-    public static bool ShouldShowToolCalls(bool showToolCalls) => showToolCalls;
-
     public static bool ShouldIncludeToolMessage(bool showToolCalls, ChatMessage message)
     {
         if (message.Role != MessageRole.Tool)

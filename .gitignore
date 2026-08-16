@@ -47,6 +47,12 @@ Desktop.ini
 # Build temp directories
 .build-tmp/
 .obj-tmp/
+.test-out/
+
+# Local one-off dumps / analysis (never commit)
+tools-tmp-dump.cs
+athlon-agent-analysis.html
+*-analysis.html
 
 # Local NuGet global packages folder (see nuget.config)
 .nuget/

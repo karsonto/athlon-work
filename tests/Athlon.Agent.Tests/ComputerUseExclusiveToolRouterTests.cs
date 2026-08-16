@@ -54,7 +54,34 @@ public sealed class ComputerUseExclusiveToolRouterTests
         Assert.True(result.Succeeded);
     }
 
-    private static McpDelegatingToolRouter CreateRouter(string mcpMode = "search")
+    [Fact]
+    public void ListTools_WhenAgentMode_ExcludesComputerUseTools()
+    {
+        var router = CreateRouter(computerUseActive: false);
+
+        var names = router.ListTools().Select(tool => tool.Name).ToArray();
+
+        Assert.Contains("file_list", names);
+        Assert.DoesNotContain("computer_observe", names);
+        Assert.DoesNotContain("computer_interact", names);
+        Assert.DoesNotContain("computer_wait", names);
+        Assert.Null(router.FindDefinition("computer_observe"));
+    }
+
+    [Fact]
+    public async Task InvokeAsync_WhenAgentMode_RejectsComputerUseTool()
+    {
+        var router = CreateRouter(computerUseActive: false);
+
+        var result = await router.InvokeAsync(
+            new ToolInvocation("computer_observe", ToolCallArguments.Empty));
+
+        Assert.False(result.Succeeded);
+    }
+
+    private static McpDelegatingToolRouter CreateRouter(
+        string mcpMode = "search",
+        bool computerUseActive = true)
     {
         IAgentTool[] tools =
         [
@@ -88,7 +115,7 @@ public sealed class ComputerUseExclusiveToolRouterTests
             RouterTestDependencies.CreateSessionContext(),
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
-            RouterTestDependencies.CreateRunContextAccessor(computerUseActive: true),
+            RouterTestDependencies.CreateRunContextAccessor(computerUseActive: computerUseActive),
             RouterTestDependencies.CreateWorkspaceGuard(),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             RouterTestDependencies.CreateTerminalWorkspaceState());
