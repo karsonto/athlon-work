@@ -192,10 +192,12 @@ public sealed class SshWorkspaceGuardAndToolTests
         public bool IsCodingMode(string? sessionId) => true;
         public bool IsAskMode(string? sessionId) => false;
         public bool IsPlanMode(string? sessionId) => false;
+        public bool IsDebugMode(string? sessionId) => false;
         public bool IsEnabled(string? sessionId) => true;
         public bool IsCodingModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => true;
         public bool IsAskModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => false;
         public bool IsPlanModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => false;
+        public bool IsDebugModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => false;
         public bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor) => true;
     }
 

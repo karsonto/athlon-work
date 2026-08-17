@@ -370,6 +370,8 @@ public sealed class ComposerHarnessViewModelTests
 
         public bool IsPlanMode(string? sessionId) => GetMode(sessionId) == SessionAgentMode.Plan;
 
+        public bool IsDebugMode(string? sessionId) => GetMode(sessionId) == SessionAgentMode.Debug;
+
         public bool IsEnabled(string? sessionId) => IsCodingMode(sessionId);
 
         public bool IsCodingModeForActiveRun(IAgentRunContextAccessor runContextAccessor)
@@ -403,6 +405,17 @@ public sealed class ComposerHarnessViewModelTests
             }
 
             return IsPlanMode(run.SessionId);
+        }
+
+        public bool IsDebugModeForActiveRun(IAgentRunContextAccessor runContextAccessor)
+        {
+            var run = runContextAccessor.Current;
+            if (run is null || run.Kind == AgentRunKind.SubAgent)
+            {
+                return false;
+            }
+
+            return IsDebugMode(run.SessionId);
         }
 
         public bool IsEnabledForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
