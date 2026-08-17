@@ -405,6 +405,58 @@ public sealed class FilesChangedBubbleTests
     }
 
     [Fact]
+    public void OverlayLiveThought_keeps_replayed_file_count()
+    {
+        var replayed = TurnActivitySummaryBuilder.Build(
+        [
+            new ChatMessageViewModel(ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    "ToolCallId: c1",
+                    "Tool `file_read` succeeded.",
+                    "",
+                    "Arguments: path = a.ts",
+                    "Summary: Read a.ts",
+                    ""))),
+            new ChatMessageViewModel(ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    "ToolCallId: c2",
+                    "Tool `file_read` succeeded.",
+                    "",
+                    "Arguments: path = b.ts",
+                    "Summary: Read b.ts",
+                    "")))
+        ]);
+        var live = TurnActivitySummaryBuilder.Build(
+        [
+            new ChatMessageViewModel(ChatMessage.Create(
+                MessageRole.Assistant,
+                string.Empty,
+                reasoningContent: "继续看调用链")),
+            new ChatMessageViewModel(ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    "ToolCallId: c2",
+                    "Tool `file_read` succeeded.",
+                    "",
+                    "Arguments: path = b.ts",
+                    "Summary: Read b.ts",
+                    "")))
+        ]);
+
+        Assert.NotNull(replayed);
+        Assert.NotNull(live);
+        var merged = TurnActivitySummaryBuilder.OverlayLiveThought(replayed, live!);
+        Assert.Equal(2, merged.ExploredFileCount);
+        Assert.Equal(1, merged.ThoughtCount);
+        Assert.Contains(merged.Items, item => item.Kind == TurnActivityKind.Thought);
+    }
+
+    [Fact]
     public void BuildReplayEvents_compaction_splits_files_changed_without_path_overlap()
     {
         var user = ChatMessage.Create(MessageRole.User, "edit");

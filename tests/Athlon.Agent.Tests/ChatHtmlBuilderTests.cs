@@ -235,6 +235,7 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("border-radius: 12px;", surface, StringComparison.Ordinal);
         Assert.Contains("background: var(--panel);", surface, StringComparison.Ordinal);
         Assert.Contains("turn-activity", surface, StringComparison.Ordinal);
+        Assert.Contains("scrollTurnActivityThoughts", surface, StringComparison.Ordinal);
         Assert.Contains("case 'TURN_ACTIVITY':", surface, StringComparison.Ordinal);
         Assert.Contains("formatWorkedFor", surface, StringComparison.Ordinal);
         Assert.Contains("syncTurnActivityChevron", surface, StringComparison.Ordinal);
@@ -247,6 +248,7 @@ public sealed class ChatHtmlBuilderTests
         AssertContainsLocalized(surface, Strings.Get("Chat_WorkedFor"));
         Assert.Contains("files-changed-card", surface, StringComparison.Ordinal);
         Assert.Contains("findFilesChangedTargetCard", surface, StringComparison.Ordinal);
+        Assert.Contains("findTurnActivityTargetCard", surface, StringComparison.Ordinal);
         Assert.Contains("case 'FILES_CHANGED':", surface, StringComparison.Ordinal);
         Assert.Contains("user-image-thumb", surface, StringComparison.Ordinal);
         Assert.Contains("image-lightbox", surface, StringComparison.Ordinal);

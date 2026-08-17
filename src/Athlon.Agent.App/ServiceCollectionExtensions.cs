@@ -47,6 +47,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SessionHistoryCoordinator>();
 
         services.AddSingleton<SessionNavigationStore>();
+        services.AddSingleton<SessionRuntimeStore>();
+        services.AddSingleton<IConversationTranscriptWriter>(sp =>
+            sp.GetRequiredService<SessionRuntimeStore>());
 
         services.AddSingleton<ApiKeySecretMigrationService>();
 

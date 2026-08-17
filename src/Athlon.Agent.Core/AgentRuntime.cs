@@ -23,7 +23,8 @@ public sealed class AgentRuntime(
     CompactionTurnMiddleware compactionMiddleware,
     AppSettings settings,
     IAppLogger logger,
-    IEventManager? eventManager = null) : IAgentRuntime
+    IEventManager? eventManager = null,
+    IConversationTranscriptWriter? transcriptWriter = null) : IAgentRuntime
 {
     private readonly IAppLogger _logger = logger.ForContext("AgentRuntime");
     private readonly IEventManager _eventManager = eventManager ?? NullEventManager.Instance;
@@ -35,6 +36,8 @@ public sealed class AgentRuntime(
         () => settings.ToolPermissions.ApprovalEnabled,
         logger,
         eventManager);
+    private readonly IConversationTranscriptWriter _transcript =
+        transcriptWriter ?? new ImmediateConversationTranscriptWriter(storage);
     private TrainingData.ITrainingDataCollector? _trainingDataCollector;
     private AgentTurnCoordinator? _turnCoordinator;
 
@@ -316,11 +319,11 @@ public sealed class AgentRuntime(
         }
         catch (OperationCanceledException)
         {
-            // Save with a short timeout to avoid hanging on shutdown
+            // Mark dirty with a short timeout to avoid hanging on shutdown
             using var saveCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             try
             {
-                await storage.SaveSessionAsync(session, saveCts.Token).ConfigureAwait(false);
+                await _transcript.MarkSessionDirtyAsync(session, saveCts.Token).ConfigureAwait(false);
                 await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
@@ -518,7 +521,7 @@ public sealed class AgentRuntime(
 
     private async Task PersistMessageAsync(AgentSession session, ChatMessage message, CancellationToken cancellationToken)
     {
-        await storage.AppendConversationMessageAsync(session.Id, message, cancellationToken).ConfigureAwait(false);
+        await _transcript.AppendAsync(session.Id, message, cancellationToken).ConfigureAwait(false);
     }
 
     internal static async Task PublishStreamEventsAsync(

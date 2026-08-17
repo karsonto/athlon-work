@@ -10,7 +10,7 @@ namespace Athlon.Agent.Tests;
 public sealed class SessionUiCacheTests
 {
     [Fact]
-    public async Task Touch_evicts_oldest_session_and_clears_messages()
+    public async Task GetOrCreate_keeps_all_opened_sessions()
     {
         var dispatcher = await StartStaDispatcherAsync();
         var cache = new SessionUiCache(dispatcher, new AppSettings());
@@ -28,8 +28,9 @@ public sealed class SessionUiCacheTests
             cache.GetOrCreate("session-8");
             cache.GetOrCreate("session-9");
 
-            Assert.False(cache.TryGet("session-1", out _));
-            Assert.Empty(first.Messages);
+            Assert.True(cache.TryGet("session-1", out var restored));
+            Assert.Same(first, restored);
+            Assert.Single(first.Messages);
         });
     }
 

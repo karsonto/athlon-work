@@ -12,44 +12,68 @@
             </Style.Triggers>
         </Style>
     </UserControl.Style>
-    <Border Background="{DynamicResource Brush.SurfaceMuted}"
-            BorderBrush="{DynamicResource Brush.ComposerBorder}"
+    <Border Background="{DynamicResource Brush.Composer}"
+            BorderBrush="{DynamicResource Brush.ModeDebugBorder}"
             BorderThickness="1"
-            CornerRadius="10"
-            Padding="10,8"
+            CornerRadius="12"
+            Padding="14,12"
             Margin="0,0,0,8">
-        <StackPanel>
-            <TextBlock Text="{Binding PhaseLabel}"
-                       FontWeight="SemiBold"
-                       Foreground="{DynamicResource Brush.Text}" />
-            <TextBlock Text="{Binding Summary}"
-                       TextWrapping="Wrap"
-                       MaxHeight="120"
-                       Margin="0,4,0,8"
-                       Foreground="{DynamicResource Brush.TextSecondary}" />
-            <StackPanel Orientation="Horizontal">
-                <Button Content="{loc:Localize Key=Debug_MarkReproduced}"
-                        Command="{Binding MarkReproducedCommand}"
-                        Margin="0,0,8,0">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <StackPanel Grid.Row="0"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center">
+                <Border Width="18"
+                        Height="18"
+                        Margin="0,0,8,0"
+                        CornerRadius="4"
+                        Background="{DynamicResource Brush.ModeDebugBg}"
+                        VerticalAlignment="Center">
+                    <TextBlock Text=">_ "
+                               FontSize="9"
+                               FontFamily="Consolas, Cascadia Mono, Microsoft YaHei UI"
+                               Foreground="{DynamicResource Brush.ModeDebugBorder}"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Margin="0,-1,0,0" />
+                </Border>
+                <TextBlock Text="{Binding PhaseLabel}"
+                           FontWeight="SemiBold"
+                           FontSize="13"
+                           Foreground="{DynamicResource Brush.Text}"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <ScrollViewer Grid.Row="1"
+                          Margin="0,10,0,12"
+                          MaxHeight="180"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <TextBlock Text="{Binding Summary}"
+                           TextWrapping="Wrap"
+                           FontSize="12"
+                           LineHeight="18"
+                           Foreground="{DynamicResource Brush.Text}"
+                           Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}" />
+            </ScrollViewer>
+            <StackPanel Grid.Row="2"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+                <Button x:Name="ReproducedButton"
+                        Content="{loc:Localize Key=Debug_MarkReproduced}"
+                        Command="{Binding MarkReproducedCommand}">
                     <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
                             <Setter Property="Visibility" Value="Collapsed" />
+                            <Setter Property="Padding" Value="12,6" />
+                            <Setter Property="FontSize" Value="12" />
+                            <Setter Property="Margin" Value="0,0,8,0" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding ShowReproduced}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
-                <Button Content="{loc:Localize Key=Debug_MarkFixed}"
-                        Command="{Binding MarkFixedCommand}"
-                        Margin="0,0,8,0">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ShowVerify}" Value="True">
                                     <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
                             </Style.Triggers>
@@ -59,10 +83,30 @@
                 <Button Content="{loc:Localize Key=Debug_MarkNotFixed}"
                         Command="{Binding MarkNotFixedCommand}">
                     <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
                             <Setter Property="Visibility" Value="Collapsed" />
+                            <Setter Property="Padding" Value="12,6" />
+                            <Setter Property="FontSize" Value="12" />
+                            <Setter Property="Margin" Value="0,0,8,0" />
                             <Style.Triggers>
-                                <DataTrigger Binding="{Binding ShowVerify}" Value="True">
+                                <DataTrigger Binding="{Binding ShowNotFixed}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="{loc:Localize Key=Debug_MarkFixed}"
+                        Command="{Binding MarkFixedCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Setter Property="Padding" Value="14,6" />
+                            <Setter Property="FontSize" Value="12" />
+                            <Setter Property="Background" Value="{DynamicResource Brush.HoverNeutralAlt}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ShowFixed}" Value="True">
                                     <Setter Property="Visibility" Value="Visible" />
                                 </DataTrigger>
                             </Style.Triggers>
@@ -70,6 +114,6 @@
                     </Button.Style>
                 </Button>
             </StackPanel>
-        </StackPanel>
+        </Grid>
     </Border>
 </UserControl>

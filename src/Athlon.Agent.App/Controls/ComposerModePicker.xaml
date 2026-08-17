@@ -43,9 +43,9 @@
                         </DataTrigger>
                         <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
                                      Value="{x:Static harness:SessionAgentMode.Debug}">
-                            <Setter Property="Background" Value="{DynamicResource Brush.ModePlanBg}" />
-                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.ModePlanBorder}" />
-                            <Setter Property="Foreground" Value="{DynamicResource Brush.ModePlanForeground}" />
+                            <Setter Property="Background" Value="{DynamicResource Brush.ModeDebugBg}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.ModeDebugBorder}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.ModeDebugForeground}" />
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
@@ -508,16 +508,16 @@
                                 <Canvas Width="16" Height="16">
                                     <Ellipse Canvas.Left="3.5" Canvas.Top="3.5" Width="9" Height="9"
                                              Style="{StaticResource ModeIconStroke}"
-                                             Stroke="{DynamicResource Brush.Text}" />
+                                             Stroke="{DynamicResource Brush.ModeDebugBorder}" />
                                     <Line X1="8" Y1="12.5" X2="8" Y2="14.5"
                                           Style="{StaticResource ModeIconStroke}"
-                                          Stroke="{DynamicResource Brush.Text}" />
+                                          Stroke="{DynamicResource Brush.ModeDebugBorder}" />
                                     <Line X1="5.5" Y1="14.5" X2="10.5" Y2="14.5"
                                           Style="{StaticResource ModeIconStroke}"
-                                          Stroke="{DynamicResource Brush.Text}" />
+                                          Stroke="{DynamicResource Brush.ModeDebugBorder}" />
                                     <Line X1="11.5" Y1="5.5" X2="13.5" Y2="3.5"
                                           Style="{StaticResource ModeIconStroke}"
-                                          Stroke="{DynamicResource Brush.Text}" />
+                                          Stroke="{DynamicResource Brush.ModeDebugBorder}" />
                                 </Canvas>
                             </Viewbox>
                             <TextBlock Grid.Column="1"

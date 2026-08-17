@@ -122,6 +122,46 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
+    public async Task ReplayActivitySource_slices_to_displayed_user_window()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () => Task.CompletedTask;
+        ui.SetDisplayed(true);
+
+        static ChatMessage Read(string id, string path) => ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                $"ToolCallId: {id}",
+                "Tool `file_read` succeeded.",
+                "",
+                $"Arguments: path = {path}",
+                $"Summary: Read {path}",
+                ""));
+
+        var oldUser = ChatMessage.Create(MessageRole.User, "old");
+        var oldRead = Read("old-read", "Old.cs");
+        var oldAssistant = ChatMessage.Create(MessageRole.Assistant, "old done");
+        var newUser = ChatMessage.Create(MessageRole.User, "new");
+        var newRead = Read("new-read", "New.cs");
+        var newAssistant = ChatMessage.Create(MessageRole.Assistant, "new done");
+        var session = AgentSession.Create("slice").WithMessages(
+            [oldUser, oldRead, oldAssistant, newUser, newRead, newAssistant]);
+
+        await ui.HydrateDisplayAsync(
+            session,
+            [newUser, newAssistant],
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: [oldUser, oldRead, oldAssistant, newUser, newRead, newAssistant]);
+
+        var replay = await dispatcher.InvokeAsync(() => ui.ReplayActivitySource.ToList());
+        Assert.Equal(newUser.Id, replay[0].Id);
+        Assert.DoesNotContain(replay, message => message.Id == oldUser.Id);
+        Assert.Contains(replay, message => message.Id == newRead.Id);
+    }
+
+    [Fact]
     public async Task HiddenSession_buffers_text_delta_without_adding_messages()
     {
         var dispatcher = await StartStaDispatcherAsync();

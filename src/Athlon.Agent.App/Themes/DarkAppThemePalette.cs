@@ -51,6 +51,9 @@ public static class DarkAppThemePalette
         ModeAskBg = C("#141A17"),
         ModeAskBorder = C("#34D399"),
         ModeAskForeground = C("#F4F4F5"),
+        ModeDebugBg = C("#1F1517"),
+        ModeDebugBorder = C("#F87171"),
+        ModeDebugForeground = C("#F4F4F5"),
         SurfaceHover = C("#1A1A1E"),
         SurfaceActive = C("#222226"),
 

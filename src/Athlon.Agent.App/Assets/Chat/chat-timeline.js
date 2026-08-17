@@ -938,6 +938,38 @@ function insertAfterLastUserRow(row) {
   root.appendChild(row);
 }
 
+function scrollTurnActivityThoughts(details) {
+  if (!details || !details.open) return;
+  details.querySelectorAll('.turn-activity-thought').forEach(function (el) {
+    el.scrollTop = el.scrollHeight;
+  });
+}
+
+function findLatestTurnActivityInCurrentTurn() {
+  var root = getMessageRoot();
+  if (!root) return null;
+  var rows = root.querySelectorAll('.message-row');
+  var lastUser = -1;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].classList.contains('user')) lastUser = i;
+  }
+  var latest = null;
+  for (var j = lastUser + 1; j < rows.length; j++) {
+    var card = rows[j].querySelector('.turn-activity');
+    if (card) latest = card;
+  }
+  return latest;
+}
+
+function findTurnActivityTargetCard(upsert) {
+  var live = document.querySelector('.turn-activity[data-live="1"]');
+  if (live) return live;
+  if (!upsert) return null;
+  // After a conversation switch the replayed card has no data-live. Reuse it so
+  // the next thought upsert does not stack a second fold.
+  return findLatestTurnActivityInCurrentTurn();
+}
+
 function appendTurnActivityCard(event) {
   state.currentAssistantEl = null;
   state.currentReasoningEl = null;
@@ -945,7 +977,7 @@ function appendTurnActivityCard(event) {
   if (!items.length && !(event.exploredFileCount || event.searchCount || event.commandCount || event.thoughtCount)) return;
 
   // One live card for the whole turn; sealing (upsert=false) finalizes it.
-  var existing = document.querySelector('.turn-activity[data-live="1"]');
+  var existing = findTurnActivityTargetCard(event.upsert === true);
   var details = existing;
   // Stay collapsed by default; keep expanded only if the user already opened it.
   var keepOpen = !!(existing && existing.open);
@@ -957,8 +989,13 @@ function appendTurnActivityCard(event) {
     if (event.upsert) details.setAttribute('data-live', '1');
     details.addEventListener('toggle', function () {
       syncTurnActivityChevron(details);
-      if (details.open) details.classList.add('is-expanded');
-      else details.classList.remove('is-expanded');
+      if (details.open) {
+        details.classList.add('is-expanded');
+        scrollTurnActivityThoughts(details);
+        scrollToBottom();
+      } else {
+        details.classList.remove('is-expanded');
+      }
     });
     row.appendChild(details);
     insertAfterLastUserRow(row);
@@ -1069,6 +1106,7 @@ function appendTurnActivityCard(event) {
   }
   syncTurnActivityChevron(details);
   updateEmptyStateVisibility();
+  scrollTurnActivityThoughts(details);
   scrollToBottom();
 }
 

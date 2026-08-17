@@ -91,6 +91,8 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
     /// <summary>Host starts a Coding turn after plan confirmation.</summary>
     public Func<Task>? OnPlanConfirmedAsync { get; set; }
 
+    public Func<SessionAgentMode, SessionAgentMode, Task>? OnModeChangedAsync { get; set; }
+
     public Action? OnModePickerOpened { get; set; }
 
     public async Task LoadForSessionAsync(string sessionId)
@@ -128,7 +130,8 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
             return;
         }
 
-        var wasCoding = SelectedMode == SessionAgentMode.Coding;
+        var previous = SelectedMode;
+        var wasCoding = previous == SessionAgentMode.Coding;
         await _harnessState.SaveAsync(_sessionId, new SessionHarnessSnapshot(mode)).ConfigureAwait(true);
         SelectedMode = mode;
         IsModePickerOpen = false;
@@ -148,6 +151,10 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         }
 
         NotifyHarnessStateChanged();
+        if (OnModeChangedAsync is not null)
+        {
+            await OnModeChangedAsync(previous, mode).ConfigureAwait(true);
+        }
     }
 
     public async Task RefreshTasksAsync()

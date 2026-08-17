@@ -46,8 +46,9 @@ public sealed class SessionTurnHost
     private readonly IAgentOrchestrator _orchestrator;
     private readonly IDebugTurnOrchestrator _debugOrchestrator;
     private readonly ISessionHarnessState _harnessState;
-    private readonly IFileStorageService _storage;
     private readonly AppSettings _settings;
+    private readonly IConversationTranscriptWriter _transcript;
+    private readonly SessionRuntimeStore? _runtimeStore;
     private readonly ConcurrentDictionary<string, SessionTurnRunner> _runners = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Queue<QueuedTurnPayload>> _queues = new(StringComparer.Ordinal);
     private readonly object _startGate = new();
@@ -57,13 +58,16 @@ public sealed class SessionTurnHost
         IDebugTurnOrchestrator debugOrchestrator,
         ISessionHarnessState harnessState,
         IFileStorageService storage,
-        AppSettings settings)
+        AppSettings settings,
+        IConversationTranscriptWriter? transcriptWriter = null,
+        SessionRuntimeStore? runtimeStore = null)
     {
         _orchestrator = orchestrator;
         _debugOrchestrator = debugOrchestrator;
         _harnessState = harnessState;
-        _storage = storage;
         _settings = settings;
+        _transcript = transcriptWriter ?? new ImmediateConversationTranscriptWriter(storage);
+        _runtimeStore = runtimeStore;
     }
 
     public event EventHandler<SessionTurnCompletedEventArgs>? TurnCompleted;
@@ -401,6 +405,22 @@ public sealed class SessionTurnHost
                 var liveSession = new LiveAgentSession(_session);
                 var eventBridge = new AgentRunEventBridge();
                 var callbacks = eventBridge.BuildCallbacks(_request.Ui, liveSession);
+                var innerUpdated = callbacks.OnSessionUpdated;
+                callbacks = new AgentTurnCallbacks
+                {
+                    OnSessionUpdated = async session =>
+                    {
+                        if (innerUpdated is not null)
+                        {
+                            await innerUpdated(session).ConfigureAwait(false);
+                        }
+
+                        _host._runtimeStore?.UpdateSession(session);
+                    },
+                    OnUsageRecorded = callbacks.OnUsageRecorded,
+                    OnToolApprovalRequested = callbacks.OnToolApprovalRequested,
+                    EventSink = callbacks.EventSink
+                };
                 var turnToken = _linked?.Token ?? _cancellation!.Token;
                 if (_host._harnessState.IsDebugMode(SessionId))
                 {
@@ -432,11 +452,7 @@ public sealed class SessionTurnHost
                 cancelled = true;
                 timedOut = _timeoutCancellation is { IsCancellationRequested: true }
                            && _cancellation is { IsCancellationRequested: false };
-                var reloaded = await _host._storage.LoadSessionAsync(SessionId).ConfigureAwait(false);
-                if (reloaded is not null)
-                {
-                    _session = reloaded;
-                }
+                // Memory is authoritative; do not reload a possibly stale session.json.
             }
             catch (Exception ex)
             {
@@ -454,12 +470,13 @@ public sealed class SessionTurnHost
                     persistedTurnMessages = reconcileResult.PersistedMessages;
                     foreach (var message in persistedTurnMessages)
                     {
-                        await _host._storage.AppendConversationMessageAsync(_session.Id, message).ConfigureAwait(false);
+                        await _host._transcript.AppendAsync(_session.Id, message).ConfigureAwait(false);
                     }
                 }
 
                 _session = SessionHistoryCoordinator.DeriveSessionTitle(_session);
-                await _host._storage.SaveSessionAsync(_session).ConfigureAwait(false);
+                await _host._transcript.MarkSessionDirtyAsync(_session).ConfigureAwait(false);
+                _host._runtimeStore?.UpdateSession(_session);
                 _request.Ui.FinalizeTurn(
                     _session,
                     persistedTurnMessages,

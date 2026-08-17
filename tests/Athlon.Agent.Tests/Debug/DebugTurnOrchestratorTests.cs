@@ -39,6 +39,75 @@ public sealed class DebugTurnOrchestratorTests
     }
 
     [Fact]
+    public async Task RunUserTurnAsync_FollowUpReusesActiveRunWithoutAdvancingPhase()
+    {
+        var session = AgentSession.Create("debug-session");
+        var store = new InMemoryDebugRunStore();
+        var phaseAccessor = new DebugPhaseAccessor();
+        var sessionState = new DebugSessionState();
+        var orchestrator = new StubAgentOrchestrator(responses =>
+        [
+            """
+            H1: Off-by-one in loop bound
+            H2: Stale cache entry
+            """,
+            """
+            Added probes.
+
+            ## Repro steps
+            1. Run the app
+            2. Trigger save
+            """,
+            "Thanks, I reproduced it on Windows."
+        ]);
+
+        var sut = new DebugTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        session = await sut.RunUserTurnAsync(session, "Save button drops the last item", null, CancellationToken.None);
+        var first = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(first);
+
+        session = await sut.RunUserTurnAsync(session, "Reproduced on Windows 11.", null, CancellationToken.None);
+        var followUp = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(followUp);
+        Assert.Equal(first.Id, followUp.Id);
+        Assert.Equal(DebugPhase.AwaitRepro, followUp.Phase);
+        Assert.Equal(3, orchestrator.TurnCount);
+    }
+
+    [Fact]
+    public async Task ContinueAsync_VerifiedFixedFromAwaitReproGoesToDone()
+    {
+        var session = AgentSession.Create("debug-session");
+        var store = new InMemoryDebugRunStore();
+        var phaseAccessor = new DebugPhaseAccessor();
+        var sessionState = new DebugSessionState();
+        var orchestrator = new StubAgentOrchestrator(_ =>
+        [
+            "Removed athlon-debug probes."
+        ]);
+
+        var run = new DebugRun
+        {
+            Id = "run1",
+            SessionId = session.Id,
+            LogPath = store.CreateLogPath("run1"),
+            Phase = DebugPhase.AwaitRepro,
+            BugDescription = "bug",
+            ReproStepsMarkdown = "repro"
+        };
+        await store.SaveActiveAsync(run);
+        phaseAccessor.SetActiveRun(run);
+
+        var sut = new DebugTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        session = await sut.ContinueAsync(session, DebugContinuationKind.VerifiedFixed, null, CancellationToken.None);
+
+        run = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(run);
+        Assert.Equal(DebugPhase.Done, run.Phase);
+        Assert.Equal(1, orchestrator.TurnCount);
+    }
+
+    [Fact]
     public async Task ContinueAsync_ReproducedAdvancesToAwaitVerify()
     {
         var session = AgentSession.Create("debug-session");
@@ -74,6 +143,8 @@ public sealed class DebugTurnOrchestratorTests
     private sealed class StubAgentOrchestrator(Func<int, IReadOnlyList<string>> responses) : IAgentOrchestrator
     {
         private int _turn;
+
+        public int TurnCount => _turn;
 
         public Task<AgentSession> SendAsync(
             AgentSession session,

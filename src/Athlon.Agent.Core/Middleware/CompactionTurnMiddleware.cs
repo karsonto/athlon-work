@@ -8,7 +8,8 @@ public sealed class CompactionTurnMiddleware(
     ITokenEstimatorCalibrator tokenEstimatorCalibrator,
     IPromptPressureStore promptPressureStore,
     IFileStorageService storage,
-    AppSettings settings) : AgentTurnMiddlewareBase
+    AppSettings settings,
+    IConversationTranscriptWriter? transcriptWriter = null) : AgentTurnMiddlewareBase
 {
     public override async ValueTask OnBeforeModelRoundAsync(
         AgentTurnInvocation invocation,
@@ -139,6 +140,12 @@ public sealed class CompactionTurnMiddleware(
             {
                 await onSessionUpdated(invocation.Session).ConfigureAwait(false);
             }
+        }
+
+        if (transcriptWriter is not null)
+        {
+            await transcriptWriter.FlushSessionAsync(invocation.Session.Id, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         foreach (var message in invocation.Session.Messages)

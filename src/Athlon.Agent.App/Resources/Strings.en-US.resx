@@ -633,7 +633,7 @@ Hold to talk</value>
     <value>Reproduced</value>
   </data>
   <data name="Debug_MarkFixed" xml:space="preserve">
-    <value>Fixed</value>
+    <value>Mark as fixed</value>
   </data>
   <data name="Debug_MarkNotFixed" xml:space="preserve">
     <value>Not fixed</value>

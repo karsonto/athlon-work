@@ -319,6 +319,37 @@ public static class TurnActivitySummaryBuilder
         };
     }
 
+    /// <summary>
+    /// Reuses the replayed turn fold (file counts from transcript) and overlays live thought
+    /// so a WebView reload does not replace a 39-file card with a shorter live snapshot.
+    /// </summary>
+    public static TurnActivitySummary OverlayLiveThought(TurnActivitySummary? replayed, TurnActivitySummary live)
+    {
+        if (replayed is null || !replayed.HasContent)
+        {
+            return live;
+        }
+
+        var liveThoughts = live.Items
+            .Where(item => item.Kind == TurnActivityKind.Thought)
+            .ToList();
+        if (liveThoughts.Count == 0 && live.ThoughtCount == 0)
+        {
+            return replayed with { DurationMs = Math.Max(replayed.DurationMs, live.DurationMs) };
+        }
+
+        var items = replayed.Items
+            .Where(item => item.Kind != TurnActivityKind.Thought)
+            .ToList();
+        items.AddRange(liveThoughts);
+        return replayed with
+        {
+            ThoughtCount = Math.Max(replayed.ThoughtCount, Math.Max(live.ThoughtCount, liveThoughts.Count)),
+            Items = items,
+            DurationMs = Math.Max(replayed.DurationMs, live.DurationMs)
+        };
+    }
+
     internal static string ToActivityStatus(ToolCallDisplayStatus status) => status switch
     {
         ToolCallDisplayStatus.Preparing => "preparing",

@@ -77,6 +77,7 @@ public static class ServiceCollectionExtensions
             return BehaviorEventManager.Instance;
         });
         services.AddSingleton<IFileStorageService, FileStorageService>();
+        services.AddSingleton<IConversationTranscriptWriter, ImmediateConversationTranscriptWriter>();
         services.AddSingleton<IDesktopSessionRunProbe>(_ => NullDesktopSessionRunProbe.Instance);
         services.AddSingleton<CliSessionMap>();
         services.AddSingleton<CliIpcServer>();

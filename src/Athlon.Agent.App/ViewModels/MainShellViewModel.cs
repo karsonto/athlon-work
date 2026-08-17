@@ -47,6 +47,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly NavigationCoordinator _navigation;
     private readonly IChatScrollService _chatScroll;
     private readonly SessionUiCache _uiCache;
+    private readonly SessionRuntimeStore _runtime;
     private readonly ApplicationShutdownService _shutdownService;
     private readonly SessionHistoryCoordinator _sessionHistory;
     private readonly SessionNavigationStore _sessionNavigation;
@@ -87,6 +88,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         NavigationCoordinator navigation,
         IChatScrollService chatScroll,
         SessionUiCache uiCache,
+        SessionRuntimeStore runtimeStore,
         ApplicationShutdownService shutdownService,
         AppSettings settings,
         IImpSsoSessionStore ssoSessionStore,
@@ -124,6 +126,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _navigation = navigation;
         _chatScroll = chatScroll;
         _uiCache = uiCache;
+        _runtime = runtimeStore;
         _shutdownService = shutdownService;
         _sessionHistory = sessionHistory;
         _sessionNavigation = sessionNavigation;
@@ -143,6 +146,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _contextSidebarEdgeGutterWidth = 0;
         _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
         _displayedSessionId = _session.Id;
+        _runtime.Attach(_session, hydrated: true);
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         WireSessionUsageUi(_activeUi);
         _activeUi.SetDisplayed(true);
@@ -166,6 +170,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             ShowShellToast);
         ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
         ComposerHarness.OnPlanConfirmedAsync = StartCodingFromApprovedPlanAsync;
+        ComposerHarness.OnModeChangedAsync = OnComposerModeChangedAsync;
         ComposerHarness.PropertyChanged += OnComposerHarnessPropertyChanged;
         ChatPage = chatPage;
         ChatPage.Configure(
@@ -1086,6 +1091,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         _olderDisplayCursor = null;
+        _runtime.Attach(_session, hydrated: true);
         SwitchDisplayedSession(_session);
         CurrentSessionTitle = _session.Title;
         ComposerText = string.Empty;
@@ -1097,7 +1103,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
         _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
         ApplySessionWorkspace();
-        _ = SaveSessionInBackgroundAsync(previousSession);
+        _runtime.UpdateSession(previousSession);
         await _storage.SaveSessionAsync(_session);
         _sessionNavigation.Invalidate(_session.Id);
         await RefreshSessionHistoryAsync();
@@ -1121,6 +1127,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         _session = _session.WithMessages(Array.Empty<ChatMessage>());
         _olderDisplayCursor = null;
+        _runtime.DiscardPending(_displayedSessionId);
         await _storage.ClearConversationDisplayAsync(_session.Id);
         PendingImageAttachments.Clear();
         PendingDocumentAttachments.Clear();
@@ -1128,6 +1135,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _taskListChangedNotifier.Notify(_session.Id);
 
         await _storage.SaveSessionAsync(_session);
+        _runtime.Attach(_session, hydrated: true);
         _sessionNavigation.Invalidate(_session.Id);
 
         await _activeUi.HydrateDisplayAsync(
@@ -1162,6 +1170,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             ManualCompactionResult result;
             try
             {
+                await _runtime.FlushSessionAsync(_session.Id, compactionToken).ConfigureAwait(true);
                 result = await _compactionService.CompactAsync(_session, compactionToken).ConfigureAwait(true);
             }
             catch (OperationCanceledException)
@@ -1185,7 +1194,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
 
             _session = result.Session;
+            _runtime.DiscardPending(_session.Id);
             await _storage.ReplaceConversationDisplayAsync(_session.Id, _session.Messages).ConfigureAwait(true);
+            _runtime.Attach(_session, hydrated: true, _olderDisplayCursor);
             _sessionNavigation.Invalidate(_session.Id);
             var audit = _session.Messages.LastOrDefault(message => message.Role == MessageRole.Compaction);
             if (audit is null)
@@ -1311,7 +1322,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         var previousSession = _session;
         await LoadSessionInternalAsync(item.Id);
-        _ = SaveSessionInBackgroundAsync(previousSession);
+        _runtime.UpdateSession(previousSession);
         CurrentPage = AppPage.Chat;
     }
 
@@ -1336,7 +1347,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionTurns.TurnHost.ClearQueue(item.Id);
         _sessionTurns.QueuedTurnPresenter.RemoveSession(item.Id);
 
-        _uiCache.Remove(item.Id);
+        _runtime.Remove(item.Id);
 
         string? workspaceKey = null;
         try
@@ -1374,6 +1385,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         if (string.Equals(_session.Id, item.Id, StringComparison.Ordinal))
         {
             _session = AgentSession.Create("New Chat");
+            _runtime.Attach(_session, hydrated: true);
             SwitchDisplayedSession(_session);
             CurrentSessionTitle = _session.Title;
             ComposerText = string.Empty;
@@ -1420,6 +1432,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
 
             _olderDisplayCursor = page.OlderCursor;
+            _runtime.SetOlderDisplayCursor(sessionId, _olderDisplayCursor);
             var viewModels = await Task.Run(() =>
                 ChatTimelineHydrator.BuildDisplayMessages(
                     page.Messages,
@@ -1508,6 +1521,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         UnwireModifiedFilesUi(_activeUi);
         _displayedSessionId = session.Id;
         _session = session;
+        _runtime.Attach(session);
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         WireSessionUsageUi(_activeUi);
         WireModifiedFilesUi(_activeUi);
@@ -1520,7 +1534,14 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         if (renderExistingMessages && _savedChatView is not null)
         {
-            _activeUi.SyncActivitySourceFromSession(session);
+            // Live UI already has a paged activity source. Merging the full in-memory
+            // AgentSession.Messages here would replay the entire transcript into the
+            // shared WebView and make switching slower than a cold page load.
+            if (_activeUi.ActivitySourceMessages.Count == 0)
+            {
+                _activeUi.SyncActivitySourceFromSession(session);
+            }
+
             _ = _activeUi.ReloadChatViewAsync();
         }
 
@@ -1585,6 +1606,14 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             // create_plan / update_plan: open or refresh the same editor tab (no popup).
             SyncPlanInEditor();
         });
+    }
+
+    private async Task OnComposerModeChangedAsync(SessionAgentMode from, SessionAgentMode to)
+    {
+        if (from == SessionAgentMode.Debug && to != SessionAgentMode.Debug)
+        {
+            await DebugBar.AbandonActiveRunAsync().ConfigureAwait(true);
+        }
     }
 
     private void OnComposerHarnessPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -2408,6 +2437,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public void CloseAtCompletion() => ChatPage.CloseAtCompletion();
 
+    private static bool SameSessionWorkspace(AgentSession current, AgentSession next) =>
+        string.Equals(current.ActiveWorkspaceId, next.ActiveWorkspaceId, StringComparison.Ordinal)
+        && string.Equals(current.ActiveWorkspace, next.ActiveWorkspace, StringComparison.OrdinalIgnoreCase);
+
     private void ApplySessionWorkspace() =>
         _ = ApplySessionWorkspaceAsync();
 
@@ -2510,6 +2543,33 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private async Task LoadSessionInternalAsync(string sessionId)
     {
         var loadGeneration = Interlocked.Increment(ref _sessionLoadGeneration);
+        if (_runtime.TryGetHydrated(sessionId, out var live))
+        {
+            var workspaceChanged = !SameSessionWorkspace(_session, live.Session!);
+            SwitchDisplayedSession(live.Session!, renderExistingMessages: true);
+            _olderDisplayCursor = live.OlderDisplayCursor;
+            ApplyLoadedSessionChrome();
+            if (_savedChatView is not null)
+            {
+                await _savedChatView.SetOlderMessagesAvailableAsync(
+                    _olderDisplayCursor is not null).ConfigureAwait(true);
+            }
+
+            if (!IsSessionLoadCurrent(loadGeneration))
+            {
+                return;
+            }
+
+            if (workspaceChanged)
+            {
+                ApplySessionWorkspace();
+            }
+
+            UpdateDisplayedBusyState();
+            NotifyCommandStatesChanged();
+            return;
+        }
+
         IsLoadingSession = true;
         SetComposerStatus(_loc["Shell_LoadingConversation"]);
         try
@@ -2527,13 +2587,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 return;
             }
 
+            _runtime.Attach(snapshot.Session);
             SwitchDisplayedSession(snapshot.Session, renderExistingMessages: false);
             _olderDisplayCursor = snapshot.OlderDisplayCursor;
-            CurrentSessionTitle = _session.Title;
-            KnowledgePageVm.SetSession(_displayedSessionId);
-            ComposerText = string.Empty;
-            PendingImageAttachments.Clear();
-            PendingDocumentAttachments.Clear();
+            ApplyLoadedSessionChrome();
 
             if (!IsSessionLoadCurrent(loadGeneration))
             {
@@ -2557,6 +2614,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                     Array.Empty<ChatMessage>(),
                     synthesizeInterruptedToolResults: false).ConfigureAwait(true);
             }
+
+            _runtime.MarkHydrated(sessionId, _olderDisplayCursor);
 
             if (_savedChatView is not null)
             {
@@ -2589,6 +2648,15 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 NotifyCommandStatesChanged();
             }
         }
+    }
+
+    private void ApplyLoadedSessionChrome()
+    {
+        CurrentSessionTitle = _session.Title;
+        KnowledgePageVm.SetSession(_displayedSessionId);
+        ComposerText = string.Empty;
+        PendingImageAttachments.Clear();
+        PendingDocumentAttachments.Clear();
     }
 
     private void ConfigureWorkspaceWatcher() =>
@@ -2666,6 +2734,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _layout.Dispose();
         _sessionHistory.Dispose();
         _workspaceBridge.Dispose();
+        _runtime.Dispose();
     }
 
     partial void OnCurrentPageChanged(AppPage value)

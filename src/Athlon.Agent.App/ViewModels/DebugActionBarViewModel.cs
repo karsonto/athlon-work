@@ -1,3 +1,4 @@
+using System.Windows;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Debug;
 using Athlon.Agent.App.Localization;
@@ -12,6 +13,8 @@ public sealed partial class DebugActionBarViewModel : ObservableObject
 {
     private readonly SessionTurnCoordinator _sessionTurns;
     private readonly IDebugSessionState _debugSessionState;
+    private readonly IDebugPhaseAccessor _debugPhaseAccessor;
+    private readonly IDebugRunStore _debugRunStore;
     private readonly ILocalizationService _loc;
 
     private Func<string>? _getDisplayedSessionId;
@@ -22,12 +25,16 @@ public sealed partial class DebugActionBarViewModel : ObservableObject
     public DebugActionBarViewModel(
         SessionTurnCoordinator sessionTurns,
         IDebugSessionState debugSessionState,
+        IDebugPhaseAccessor debugPhaseAccessor,
+        IDebugRunStore debugRunStore,
         ILocalizationService localization)
     {
         _sessionTurns = sessionTurns;
         _debugSessionState = debugSessionState;
+        _debugPhaseAccessor = debugPhaseAccessor;
+        _debugRunStore = debugRunStore;
         _loc = localization;
-        _debugSessionState.RunChanged += (_, _) => RefreshFromActiveRun();
+        _debugSessionState.RunChanged += (_, _) => RequestRefreshFromActiveRun();
     }
 
     public void Configure(
@@ -40,7 +47,7 @@ public sealed partial class DebugActionBarViewModel : ObservableObject
         _getSession = getSession;
         _getActiveUi = getActiveUi;
         _showToast = showToast;
-        RefreshFromActiveRun();
+        RequestRefreshFromActiveRun();
     }
 
     [ObservableProperty]
@@ -56,7 +63,22 @@ public sealed partial class DebugActionBarViewModel : ObservableObject
     private bool _showReproduced;
 
     [ObservableProperty]
-    private bool _showVerify;
+    private bool _showNotFixed;
+
+    [ObservableProperty]
+    private bool _showFixed;
+
+    private void RequestRefreshFromActiveRun()
+    {
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.InvokeAsync(RefreshFromActiveRun);
+            return;
+        }
+
+        RefreshFromActiveRun();
+    }
 
     public void RefreshFromActiveRun()
     {
@@ -68,26 +90,60 @@ public sealed partial class DebugActionBarViewModel : ObservableObject
             PhaseLabel = string.Empty;
             Summary = string.Empty;
             ShowReproduced = false;
-            ShowVerify = false;
+            ShowNotFixed = false;
+            ShowFixed = false;
+            NotifyActionCommands();
             return;
         }
 
         PhaseLabel = string.Format(Strings.Get("Debug_PhaseLabel"), run.Phase);
         Summary = run.ReproStepsMarkdown ?? run.BugDescription ?? string.Empty;
         ShowReproduced = run.Phase == DebugPhase.AwaitRepro;
-        ShowVerify = run.Phase == DebugPhase.AwaitVerify;
+        ShowNotFixed = run.Phase == DebugPhase.AwaitVerify;
+        ShowFixed = run.IsAwaitingUser;
+        NotifyActionCommands();
     }
 
-    [RelayCommand(CanExecute = nameof(CanContinue))]
+    public async Task AbandonActiveRunAsync()
+    {
+        var sessionId = _getDisplayedSessionId?.Invoke();
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        if (_sessionTurns.IsRunning(sessionId))
+        {
+            _sessionTurns.Cancel(sessionId);
+        }
+
+        _debugPhaseAccessor.Clear(sessionId);
+        await _debugRunStore.ClearActiveAsync(sessionId).ConfigureAwait(true);
+        _debugSessionState.NotifyChanged(null);
+        RequestRefreshFromActiveRun();
+    }
+
+    [RelayCommand(CanExecute = nameof(CanMarkReproduced))]
     private void MarkReproduced() => StartContinuation(DebugContinuationKind.Reproduced);
 
-    [RelayCommand(CanExecute = nameof(CanContinue))]
+    [RelayCommand(CanExecute = nameof(CanMarkFixed))]
     private void MarkFixed() => StartContinuation(DebugContinuationKind.VerifiedFixed);
 
-    [RelayCommand(CanExecute = nameof(CanContinue))]
+    [RelayCommand(CanExecute = nameof(CanMarkNotFixed))]
     private void MarkNotFixed() => StartContinuation(DebugContinuationKind.VerifiedNotFixed);
 
-    private bool CanContinue() => ShowReproduced || ShowVerify;
+    private bool CanMarkReproduced() => ShowReproduced;
+
+    private bool CanMarkFixed() => ShowFixed;
+
+    private bool CanMarkNotFixed() => ShowNotFixed;
+
+    private void NotifyActionCommands()
+    {
+        MarkReproducedCommand.NotifyCanExecuteChanged();
+        MarkFixedCommand.NotifyCanExecuteChanged();
+        MarkNotFixedCommand.NotifyCanExecuteChanged();
+    }
 
     private void StartContinuation(DebugContinuationKind kind)
     {

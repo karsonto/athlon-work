@@ -18,6 +18,14 @@ public sealed class DebugTurnOrchestrator(
         AgentTurnCallbacks? callbacks,
         CancellationToken cancellationToken)
     {
+        var existing = phaseAccessor.GetActiveRun(session.Id)
+            ?? await runStore.LoadActiveAsync(session.Id, cancellationToken).ConfigureAwait(false);
+        if (existing is not null && existing.Phase != DebugPhase.Done)
+        {
+            return await RunPhaseAsync(session, existing, userInput, callbacks, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         var runId = Guid.NewGuid().ToString("N");
         var run = new DebugRun
         {
@@ -99,18 +107,9 @@ public sealed class DebugTurnOrchestrator(
                 await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case DebugContinuationKind.VerifiedFixed when run.Phase == DebugPhase.AwaitVerify:
-                run.Phase = DebugPhase.Cleanup;
-                await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
-                session = await RunPhaseAsync(
-                    session,
-                    run,
-                    "The user confirmed the bug is fixed. Remove all athlon-debug probes.",
-                    callbacks,
-                    cancellationToken).ConfigureAwait(false);
-                run = phaseAccessor.GetActiveRun(session.Id)!;
-                run.Phase = DebugPhase.Done;
-                await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
+            case DebugContinuationKind.VerifiedFixed when run.Phase is DebugPhase.AwaitVerify or DebugPhase.AwaitRepro:
+                session = await RunCleanupToDoneAsync(session, run, callbacks, cancellationToken)
+                    .ConfigureAwait(false);
                 break;
 
             case DebugContinuationKind.VerifiedNotFixed when run.Phase == DebugPhase.AwaitVerify:
@@ -131,6 +130,26 @@ public sealed class DebugTurnOrchestrator(
                 throw new InvalidOperationException($"Invalid debug continuation {continuation} for phase {run.Phase}.");
         }
 
+        return session;
+    }
+
+    private async Task<AgentSession> RunCleanupToDoneAsync(
+        AgentSession session,
+        DebugRun run,
+        AgentTurnCallbacks? callbacks,
+        CancellationToken cancellationToken)
+    {
+        run.Phase = DebugPhase.Cleanup;
+        await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
+        session = await RunPhaseAsync(
+            session,
+            run,
+            "The user confirmed the bug is fixed. Remove all athlon-debug probes.",
+            callbacks,
+            cancellationToken).ConfigureAwait(false);
+        run = phaseAccessor.GetActiveRun(session.Id)!;
+        run.Phase = DebugPhase.Done;
+        await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
         return session;
     }
 

@@ -38,6 +38,10 @@ public sealed class UiChromeColors
     public required Color ModeAskBg { get; init; }
     public required Color ModeAskBorder { get; init; }
     public required Color ModeAskForeground { get; init; }
+    /// <summary>Composer mode pill: Debug (rose red, Cursor-like).</summary>
+    public required Color ModeDebugBg { get; init; }
+    public required Color ModeDebugBorder { get; init; }
+    public required Color ModeDebugForeground { get; init; }
     public required Color SurfaceHover { get; init; }
     public required Color SurfaceActive { get; init; }
     public required Color UserBubble { get; init; }

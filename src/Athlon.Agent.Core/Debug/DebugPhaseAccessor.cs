@@ -36,5 +36,13 @@ public sealed class DebugPhaseAccessor : IDebugPhaseAccessor
         _activeBySession[run.SessionId] = run.Clone();
     }
 
-    public void Clear(string sessionId) => _activeBySession.TryRemove(sessionId, out _);
+    public void Clear(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        _activeBySession.TryRemove(sessionId, out _);
+    }
 }

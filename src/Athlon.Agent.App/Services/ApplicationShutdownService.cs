@@ -20,7 +20,8 @@ public sealed class ApplicationShutdownService(
     IFileStorageService storage,
     AppSettings appSettings,
     IAppLogger logger,
-    IEventManager eventManager)
+    IEventManager eventManager,
+    SessionRuntimeStore runtimeStore)
 {
     public static readonly TimeSpan DefaultTurnWaitTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan UiMarshalTimeout = TimeSpan.FromSeconds(2);
@@ -70,6 +71,15 @@ public sealed class ApplicationShutdownService(
             .ConfigureAwait(false);
 
         progress?.Report(Strings.Get("Shutdown_FlushingToolLogs"));
+        try
+        {
+            await runtimeStore.FlushAllAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            // Best-effort persist on exit.
+        }
+
         await storage.FlushPendingToolCallLogsAsync(cancellationToken).ConfigureAwait(false);
 
         progress?.Report(Strings.Get("Shutdown_KillingProcesses"));

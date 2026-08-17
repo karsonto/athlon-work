@@ -16,15 +16,13 @@ public partial class MainShellViewModel
 
     private async Task SaveSessionCoreAsync(AgentSession session)
     {
-        var toSave = await _sessionNavigation.SaveIfNotEmptyAsync(session);
-        if (toSave is null)
+        _runtime.UpdateSession(session);
+        await _runtime.FlushSessionAsync(session.Id);
+        if (string.Equals(session.Id, _displayedSessionId, StringComparison.Ordinal)
+            && _runtime.TryGetHydrated(session.Id, out var live)
+            && live.Session is not null)
         {
-            return;
-        }
-
-        if (string.Equals(toSave.Id, _displayedSessionId, StringComparison.Ordinal))
-        {
-            _session = toSave;
+            _session = live.Session;
         }
     }
 

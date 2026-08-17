@@ -163,6 +163,9 @@ public sealed partial class SessionTurnUiController
     /// <summary>Test seam: transcript used to replay FILES_CHANGED / TURN_ACTIVITY.</summary>
     internal IReadOnlyList<ChatMessage> ActivitySourceMessages => _activitySourceMessages;
 
+    /// <summary>Test seam: activity source sliced to the displayed window for WebView replay.</summary>
+    internal IReadOnlyList<ChatMessage> ReplayActivitySource => BuildReplayActivitySource();
+
     /// <summary>Test seam: generation bumped when a chat-view sync is scheduled.</summary>
     internal int SyncChatViewGeneration => Volatile.Read(ref _syncChatViewGeneration);
 
@@ -295,11 +298,16 @@ public sealed partial class SessionTurnUiController
         }
 
         var chatView = ChatView;
-        var activitySource = _activitySourceMessages.Count > 0 ? _activitySourceMessages : null;
-        await chatView.LoadMessagesAsync(Messages, _showToolCalls(), activitySource).ConfigureAwait(true);
+        var activitySource = BuildReplayActivitySource();
+        await chatView.LoadMessagesAsync(
+                Messages,
+                _showToolCalls(),
+                activitySource.Count > 0 ? activitySource : null)
+            .ConfigureAwait(true);
         if (ReferenceEquals(ChatView, chatView) && IsDisplayed)
         {
             await RestorePendingToolApprovalsAsync().ConfigureAwait(true);
+            RestoreLiveTurnCardsAfterReload();
         }
     }
 
@@ -489,7 +497,9 @@ public sealed partial class SessionTurnUiController
     {
         if (!CanTouchChatView)
         {
-            _turnActivityTracker.BeginSegment();
+            // Keep the live segment so switching back can restore one fold with thought.
+            // Wiping here drops reasoning and makes the next upsert a second, shorter card.
+            _turnActivityTracker.FinishPendingThought();
             return;
         }
 
@@ -787,7 +797,10 @@ public sealed partial class SessionTurnUiController
         }
 
         TrimMessagesIfNeeded();
-        _modifiedFilesTracker.RebuildFromMessages(Messages);
+        var fileSource = _activitySourceMessages.Count > 0
+            ? _activitySourceMessages.Select(message => new ChatMessageViewModel(message)).ToList()
+            : viewModels;
+        _modifiedFilesTracker.RebuildFromMessages(fileSource);
         _bulkChatViewSyncDepth--;
         SyncChatView(immediate: true);
         RequestScrollImmediate();
@@ -828,12 +841,15 @@ public sealed partial class SessionTurnUiController
                     }
                     else if (single.IsCompaction)
                     {
-                        // Seal live files/activity first, then append checkpoint without a full
-                        // timeline reload (reload would duplicate FILES_CHANGED cards).
-                        SealCurrentSegment();
-                        if (CanTouchChatView)
+                        // Only visible (manual) checkpoints split the fold. Hidden auto-compaction
+                        // must not seal, or replay+live upsert stacks two activity cards.
+                        if (ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(single))
                         {
-                            _ = ChatView!.ApplyToolResultMarkdownAsync(single);
+                            SealCurrentSegment();
+                            if (CanTouchChatView)
+                            {
+                                _ = ChatView!.ApplyToolResultMarkdownAsync(single);
+                            }
                         }
                     }
                     else if (!IsStreamingChatItem(single))
@@ -1057,6 +1073,76 @@ public sealed partial class SessionTurnUiController
         }
     }
 
+    private void RestoreLiveTurnCardsAfterReload()
+    {
+        PublishFilesChanged(upsert: true);
+
+        var live = _turnActivityTracker.Snapshot();
+        if (live is not { HasContent: true } || !CanTouchChatView)
+        {
+            return;
+        }
+
+        var replayed = TurnActivitySummaryBuilder.Build(CurrentTurnActivitySourceViewModels());
+        var summary = TurnActivitySummaryBuilder.OverlayLiveThought(replayed, live);
+        if (summary.HasContent)
+        {
+            _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: true);
+        }
+    }
+
+    private List<ChatMessageViewModel> CurrentTurnActivitySourceViewModels()
+    {
+        var source = _activitySourceMessages;
+        var start = 0;
+        for (var i = source.Count - 1; i >= 0; i--)
+        {
+            if (source[i].Role == MessageRole.User)
+            {
+                start = i + 1;
+                break;
+            }
+
+            if (source[i].Role == MessageRole.Compaction
+                && ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(source[i]))
+            {
+                start = i + 1;
+                break;
+            }
+        }
+
+        var result = new List<ChatMessageViewModel>(Math.Max(0, source.Count - start));
+        for (var i = start; i < source.Count; i++)
+        {
+            result.Add(new ChatMessageViewModel(source[i]));
+        }
+
+        return result;
+    }
+
+    private List<ChatMessage> BuildReplayActivitySource()
+    {
+        if (_activitySourceMessages.Count == 0)
+        {
+            return _activitySourceMessages;
+        }
+
+        var firstUserId = Messages.FirstOrDefault(message => message.IsUser)?.MessageId;
+        if (string.IsNullOrWhiteSpace(firstUserId))
+        {
+            return _activitySourceMessages;
+        }
+
+        var startIndex = _activitySourceMessages.FindIndex(message =>
+            string.Equals(message.Id, firstUserId, StringComparison.Ordinal));
+        if (startIndex <= 0)
+        {
+            return _activitySourceMessages;
+        }
+
+        return _activitySourceMessages.GetRange(startIndex, _activitySourceMessages.Count - startIndex);
+    }
+
     private void MergeActivitySourceFromSession(AgentSession session)
     {
         if (session.Messages.Count == 0)
@@ -1064,7 +1150,7 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
-        var startIndex = 0;
+        int startIndex;
         if (_activitySourceMessages.Count > 0)
         {
             var lastId = _activitySourceMessages[^1].Id;
@@ -1078,10 +1164,12 @@ public sealed partial class SessionTurnUiController
                 }
             }
 
+            // Missing last id: keep the existing paged source instead of copying the full transcript.
             startIndex = lastIndex >= 0 ? lastIndex + 1 : session.Messages.Count;
         }
         else
         {
+            startIndex = -1;
             var firstDisplayedId = Messages.FirstOrDefault(message =>
                 !message.IsHiddenPlaceholder
                 && (message.IsUser || message.IsTool || !string.IsNullOrWhiteSpace(message.Content)))
@@ -1096,6 +1184,11 @@ public sealed partial class SessionTurnUiController
                         break;
                     }
                 }
+            }
+
+            if (startIndex < 0)
+            {
+                return;
             }
         }
 

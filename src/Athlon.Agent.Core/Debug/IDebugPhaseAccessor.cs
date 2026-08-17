@@ -7,4 +7,6 @@ public interface IDebugPhaseAccessor
     DebugRun? GetActiveRun(string? sessionId);
 
     void SetActiveRun(DebugRun? run);
+
+    void Clear(string sessionId);
 }
