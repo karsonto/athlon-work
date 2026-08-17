@@ -110,6 +110,7 @@ public sealed class TerminalToolRouterTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
+            RouterTestDependencies.CreateDebugPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(configuredWorkspace),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             terminalWorkspaceState);

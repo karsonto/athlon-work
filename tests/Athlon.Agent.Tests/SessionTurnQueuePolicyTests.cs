@@ -8,7 +8,12 @@ public sealed class SessionTurnQueuePolicyTests
     [Fact]
     public void HasQueuedTurns_ReturnsTrueWhenQueueNotEmpty()
     {
-        var host = new SessionTurnHost(new NoOpOrchestrator(), new NoOpStorage(), new AppSettings());
+        var host = new SessionTurnHost(
+            new NoOpOrchestrator(),
+            RouterTestDependencies.CreateDebugTurnOrchestrator(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new NoOpStorage(),
+            new AppSettings());
         var sessionId = "queued-session";
         host.Enqueue(new QueuedTurnPayload("q1", sessionId, "next", Array.Empty<ImageAttachment>(), null!));
 
@@ -18,7 +23,12 @@ public sealed class SessionTurnQueuePolicyTests
     [Fact]
     public void HasQueuedTurns_ReturnsFalseWhenQueueEmpty()
     {
-        var host = new SessionTurnHost(new NoOpOrchestrator(), new NoOpStorage(), new AppSettings());
+        var host = new SessionTurnHost(
+            new NoOpOrchestrator(),
+            RouterTestDependencies.CreateDebugTurnOrchestrator(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new NoOpStorage(),
+            new AppSettings());
         var sessionId = "empty-session";
 
         Assert.False(host.HasQueuedTurns(sessionId));

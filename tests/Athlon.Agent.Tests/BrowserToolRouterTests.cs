@@ -154,6 +154,7 @@ public sealed class BrowserToolRouterTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
+            RouterTestDependencies.CreateDebugPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(configuredWorkspace),
             browserWorkspaceState,
             RouterTestDependencies.CreateTerminalWorkspaceState());

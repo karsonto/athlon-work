@@ -8,7 +8,12 @@ public sealed class SessionTurnQueueImageTests
     [Fact]
     public void Enqueue_Dequeue_PreservesImageAttachments()
     {
-        var host = new SessionTurnHost(new NoOpOrchestrator(), new NoOpStorage(), new AppSettings());
+        var host = new SessionTurnHost(
+            new NoOpOrchestrator(),
+            RouterTestDependencies.CreateDebugTurnOrchestrator(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new NoOpStorage(),
+            new AppSettings());
         var sessionId = "session-images";
         var images = new[]
         {

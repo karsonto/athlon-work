@@ -25,6 +25,7 @@ public sealed class ChildAgentToolRouterTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
+            RouterTestDependencies.CreateDebugPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             RouterTestDependencies.CreateTerminalWorkspaceState());
@@ -51,6 +52,7 @@ public sealed class ChildAgentToolRouterTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
+            RouterTestDependencies.CreateDebugPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             RouterTestDependencies.CreateTerminalWorkspaceState());
@@ -76,6 +78,7 @@ public sealed class ChildAgentToolRouterTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
+            RouterTestDependencies.CreateDebugPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(configured: false),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             RouterTestDependencies.CreateTerminalWorkspaceState());
@@ -100,6 +103,7 @@ public sealed class ChildAgentToolRouterTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
+            RouterTestDependencies.CreateDebugPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             RouterTestDependencies.CreateTerminalWorkspaceState());

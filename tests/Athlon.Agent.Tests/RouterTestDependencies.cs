@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Browser;
+using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Prompt;
@@ -81,6 +82,10 @@ internal static class RouterTestDependencies
 
     public static ISessionHarnessState CreateSessionHarnessState(bool enabled) =>
         CreateSessionHarnessState(enabled ? SessionAgentMode.Coding : SessionAgentMode.Agent);
+
+    public static IDebugPhaseAccessor CreateDebugPhaseAccessor() => new DebugPhaseAccessor();
+
+    public static IDebugTurnOrchestrator CreateDebugTurnOrchestrator() => new NoOpDebugTurnOrchestrator();
 
     public static WorkspaceGuard CreateWorkspaceGuard(bool configured = true, string? workspaceRoot = null)
     {
@@ -184,5 +189,24 @@ internal static class RouterTestDependencies
 
         public string ResolveSkillPath(string path) =>
             Path.IsPathRooted(path) ? path : Path.Combine(SkillsPath, path);
+    }
+
+    private sealed class NoOpDebugTurnOrchestrator : IDebugTurnOrchestrator
+    {
+        public bool IsAwaitingUser(string sessionId) => false;
+
+        public Task<AgentSession> RunUserTurnAsync(
+            AgentSession session,
+            string userInput,
+            AgentTurnCallbacks? callbacks,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(session);
+
+        public Task<AgentSession> ContinueAsync(
+            AgentSession session,
+            DebugContinuationKind continuation,
+            AgentTurnCallbacks? callbacks,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(session);
     }
 }

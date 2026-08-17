@@ -72,6 +72,7 @@ public sealed class SshWorkspaceGuardAndToolTests
             new StubKnowledgeState(),
             new StubHarnessState(),
             new AgentRunContextAccessor(),
+            RouterTestDependencies.CreateDebugPhaseAccessor(),
             guard,
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             RouterTestDependencies.CreateTerminalWorkspaceState());

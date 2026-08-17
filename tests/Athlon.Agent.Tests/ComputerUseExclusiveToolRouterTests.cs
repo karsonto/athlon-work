@@ -116,6 +116,7 @@ public sealed class ComputerUseExclusiveToolRouterTests
             RouterTestDependencies.CreateSessionKnowledgeState(),
             RouterTestDependencies.CreateSessionHarnessState(),
             RouterTestDependencies.CreateRunContextAccessor(computerUseActive: computerUseActive),
+            RouterTestDependencies.CreateDebugPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             RouterTestDependencies.CreateTerminalWorkspaceState());

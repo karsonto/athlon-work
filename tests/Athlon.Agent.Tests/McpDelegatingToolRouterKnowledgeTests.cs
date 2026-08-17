@@ -106,6 +106,7 @@ public sealed class McpDelegatingToolRouterKnowledgeTests
             RouterTestDependencies.CreateSessionKnowledgeState(enabled, moduleIds.ToArray()),
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
+            RouterTestDependencies.CreateDebugPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(configuredWorkspace),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             RouterTestDependencies.CreateTerminalWorkspaceState());

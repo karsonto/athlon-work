@@ -166,7 +166,12 @@ public sealed class SessionTurnHostTests
     }
 
     private static SessionTurnHost CreateHost(IAgentOrchestrator orchestrator) =>
-        new(orchestrator, new NoOpStorage(), new AppSettings());
+        new(
+            orchestrator,
+            RouterTestDependencies.CreateDebugTurnOrchestrator(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new NoOpStorage(),
+            new AppSettings());
 
     private static bool TryStart(SessionTurnHost host, Dispatcher dispatcher, AgentSession session, out string? error)
     {
