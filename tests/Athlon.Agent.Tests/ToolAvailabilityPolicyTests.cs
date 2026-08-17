@@ -133,6 +133,7 @@ public sealed class ToolAvailabilityPolicyTests
         Assert.True(ToolFacetClassifier.Classify(new StubNamed("terminal_open")).HasFlag(ToolFacet.TerminalBootstrap));
         Assert.True(ToolFacetClassifier.Classify(new StubNamed("file_write")).HasFlag(ToolFacet.WriteFileOrShell));
         Assert.False(ToolFacetClassifier.Classify(new StubNamed("file_read")).HasFlag(ToolFacet.WriteFileOrShell));
+        Assert.True(ToolFacetClassifier.Classify(new StubNamed("execute_command")).HasFlag(ToolFacet.Shell));
     }
 
     private sealed class StubNamed(string name) : IAgentTool

@@ -620,6 +620,24 @@ Hold to talk</value>
   <data name="Harness_PlanDialogSubtitle" xml:space="preserve">
     <value>Review the plan, then confirm to switch to Coding and start implementing</value>
   </data>
+  <data name="Harness_Mode_Debug" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="Harness_Mode_Debug_Tooltip" xml:space="preserve">
+    <value>Investigate reproducible bugs with runtime JSONL logs: hypothesize → instrument → repro → analyze → fix → cleanup</value>
+  </data>
+  <data name="Debug_PhaseLabel" xml:space="preserve">
+    <value>Debug phase: {0}</value>
+  </data>
+  <data name="Debug_MarkReproduced" xml:space="preserve">
+    <value>Reproduced</value>
+  </data>
+  <data name="Debug_MarkFixed" xml:space="preserve">
+    <value>Fixed</value>
+  </data>
+  <data name="Debug_MarkNotFixed" xml:space="preserve">
+    <value>Not fixed</value>
+  </data>
   <data name="Knowledge_DefaultStatus" xml:space="preserve">
     <value>Turn on the knowledge base toggle in the composer for the agent to use retrieval in answers.</value>
   </data>

@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Browser;
+using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.SubAgents;
@@ -15,6 +16,7 @@ public sealed class ChildAgentToolRouter(
     ISessionKnowledgeState sessionKnowledgeState,
     ISessionHarnessState sessionHarnessState,
     IAgentRunContextAccessor runContextAccessor,
+    IDebugPhaseAccessor debugPhaseAccessor,
     WorkspaceGuard workspaceGuard,
     IBrowserWorkspaceState browserWorkspaceState,
     ITerminalWorkspaceState terminalWorkspaceState) : IToolRouter
@@ -28,6 +30,7 @@ public sealed class ChildAgentToolRouter(
         sessionKnowledgeState,
         sessionHarnessState,
         runContextAccessor,
+        debugPhaseAccessor,
         workspaceGuard,
         browserWorkspaceState,
         terminalWorkspaceState);

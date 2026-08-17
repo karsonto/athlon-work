@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Core.Debug;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Infrastructure.BehaviorReport;
 
 namespace Athlon.Agent.App.Services;
@@ -12,7 +14,8 @@ public sealed record SessionTurnRequest(
     IReadOnlyList<ImageAttachment> ImageAttachments,
     SessionTurnUiController Ui,
     bool IsAutoContinue = false,
-    bool ComputerUseActive = false);
+    bool ComputerUseActive = false,
+    DebugContinuationKind? DebugContinuation = null);
 
 public enum SessionTurnState
 {
@@ -41,15 +44,24 @@ public sealed class SessionTurnHost
     public const int MaxConcurrentTurns = 3;
 
     private readonly IAgentOrchestrator _orchestrator;
+    private readonly IDebugTurnOrchestrator _debugOrchestrator;
+    private readonly ISessionHarnessState _harnessState;
     private readonly IFileStorageService _storage;
     private readonly AppSettings _settings;
     private readonly ConcurrentDictionary<string, SessionTurnRunner> _runners = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Queue<QueuedTurnPayload>> _queues = new(StringComparer.Ordinal);
     private readonly object _startGate = new();
 
-    public SessionTurnHost(IAgentOrchestrator orchestrator, IFileStorageService storage, AppSettings settings)
+    public SessionTurnHost(
+        IAgentOrchestrator orchestrator,
+        IDebugTurnOrchestrator debugOrchestrator,
+        ISessionHarnessState harnessState,
+        IFileStorageService storage,
+        AppSettings settings)
     {
         _orchestrator = orchestrator;
+        _debugOrchestrator = debugOrchestrator;
+        _harnessState = harnessState;
         _storage = storage;
         _settings = settings;
     }
@@ -390,13 +402,30 @@ public sealed class SessionTurnHost
                 var eventBridge = new AgentRunEventBridge();
                 var callbacks = eventBridge.BuildCallbacks(_request.Ui, liveSession);
                 var turnToken = _linked?.Token ?? _cancellation!.Token;
-                _session = await _host._orchestrator.SendAsync(
-                    _session,
-                    _request.UserInput,
-                    _request.ImageAttachments,
-                    callbacks,
-                    turnToken,
-                    _request.ComputerUseActive).ConfigureAwait(false);
+                if (_host._harnessState.IsDebugMode(SessionId))
+                {
+                    _session = _request.DebugContinuation is { } continuation
+                        ? await _host._debugOrchestrator.ContinueAsync(
+                            _session,
+                            continuation,
+                            callbacks,
+                            turnToken).ConfigureAwait(false)
+                        : await _host._debugOrchestrator.RunUserTurnAsync(
+                            _session,
+                            _request.UserInput,
+                            callbacks,
+                            turnToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    _session = await _host._orchestrator.SendAsync(
+                        _session,
+                        _request.UserInput,
+                        _request.ImageAttachments,
+                        callbacks,
+                        turnToken,
+                        _request.ComputerUseActive).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException)
             {

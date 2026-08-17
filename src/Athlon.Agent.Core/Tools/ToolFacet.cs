@@ -20,5 +20,9 @@ public enum ToolFacet
     Memory = 1 << 10,
     Knowledge = 1 << 11,
     /// <summary>file_write / file_edit / apply_patch / execute_command.</summary>
-    WriteFileOrShell = 1 << 12
+    WriteFileOrShell = 1 << 12,
+    /// <summary>debug_read_logs and related debug tools.</summary>
+    Debug = 1 << 13,
+    /// <summary>execute_command.</summary>
+    Shell = 1 << 14
 }

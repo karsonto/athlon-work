@@ -59,6 +59,8 @@ public sealed class SessionHarnessState(
 
     public bool IsPlanMode(string? sessionId) => GetMode(sessionId) == SessionAgentMode.Plan;
 
+    public bool IsDebugMode(string? sessionId) => GetMode(sessionId) == SessionAgentMode.Debug;
+
     public bool IsEnabled(string? sessionId) => IsCodingMode(sessionId);
 
     public bool IsCodingModeForActiveRun(IAgentRunContextAccessor accessor) =>
@@ -69,6 +71,9 @@ public sealed class SessionHarnessState(
 
     public bool IsPlanModeForActiveRun(IAgentRunContextAccessor accessor) =>
         IsActiveRunMode(accessor, IsPlanMode);
+
+    public bool IsDebugModeForActiveRun(IAgentRunContextAccessor accessor) =>
+        IsActiveRunMode(accessor, IsDebugMode);
 
     public bool IsEnabledForActiveRun(IAgentRunContextAccessor accessor) =>
         IsCodingModeForActiveRun(accessor);

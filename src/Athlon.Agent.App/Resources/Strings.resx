@@ -617,6 +617,24 @@
   <data name="Harness_Mode_Plan_Tooltip" xml:space="preserve">
     <value>只读探索并生成详细计划；确认后自动进入 Coding</value>
   </data>
+  <data name="Harness_Mode_Debug" xml:space="preserve">
+    <value>Debug</value>
+  </data>
+  <data name="Harness_Mode_Debug_Tooltip" xml:space="preserve">
+    <value>用运行时日志调查可复现 bug：假设 → 埋点 → 复现 → 分析 → 修复 → 清理</value>
+  </data>
+  <data name="Debug_PhaseLabel" xml:space="preserve">
+    <value>Debug 阶段：{0}</value>
+  </data>
+  <data name="Debug_MarkReproduced" xml:space="preserve">
+    <value>已复现</value>
+  </data>
+  <data name="Debug_MarkFixed" xml:space="preserve">
+    <value>已修复</value>
+  </data>
+  <data name="Debug_MarkNotFixed" xml:space="preserve">
+    <value>仍未修复</value>
+  </data>
   <data name="Harness_ConfirmPlan" xml:space="preserve">
     <value>确认并开始实现</value>
   </data>

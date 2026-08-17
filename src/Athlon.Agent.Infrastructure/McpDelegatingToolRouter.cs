@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Browser;
+using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Terminal;
@@ -17,6 +18,7 @@ internal sealed class McpDelegatingToolRouter(
     ISessionKnowledgeState sessionKnowledgeState,
     ISessionHarnessState sessionHarnessState,
     IAgentRunContextAccessor runContextAccessor,
+    IDebugPhaseAccessor debugPhaseAccessor,
     WorkspaceGuard workspaceGuard,
     IBrowserWorkspaceState browserWorkspaceState,
     ITerminalWorkspaceState terminalWorkspaceState,
@@ -49,6 +51,9 @@ internal sealed class McpDelegatingToolRouter(
     {
         var sessionId = activeSessionContext.SessionId;
         var mode = ResolveSessionAgentMode();
+        var debugPhase = mode == SessionAgentMode.Debug
+            ? debugPhaseAccessor.GetPhase(sessionId)
+            : null;
         return new ToolAvailabilityContext(
             ComputerUseActive: IsComputerUseMode,
             HasWorkspace: workspaceGuard.HasConfiguredWorkspace,
@@ -56,7 +61,8 @@ internal sealed class McpDelegatingToolRouter(
             Mode: mode,
             BrowserTabOpen: browserWorkspaceState.HasOpenBrowserTab,
             TerminalTabOpen: terminalWorkspaceState.HasOpenTerminalTab,
-            KnowledgeEnabled: sessionKnowledgeState.ShouldExposeKnowledgeTool(sessionId));
+            KnowledgeEnabled: sessionKnowledgeState.ShouldExposeKnowledgeTool(sessionId),
+            ActiveDebugPhase: debugPhase);
     }
 
     private SessionAgentMode ResolveSessionAgentMode()
@@ -74,6 +80,11 @@ internal sealed class McpDelegatingToolRouter(
         if (sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor))
         {
             return SessionAgentMode.Plan;
+        }
+
+        if (sessionHarnessState.IsDebugModeForActiveRun(runContextAccessor))
+        {
+            return SessionAgentMode.Debug;
         }
 
         return SessionAgentMode.Agent;
@@ -104,6 +115,8 @@ internal sealed class McpDelegatingToolRouter(
         var coding = sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor);
         var ask = sessionHarnessState.IsAskModeForActiveRun(runContextAccessor);
         var plan = sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor);
+        var debug = sessionHarnessState.IsDebugModeForActiveRun(runContextAccessor);
+        var debugPhase = debug ? debugPhaseAccessor.GetPhase(sessionId)?.ToString() ?? "none" : "off";
         var browser = browserWorkspaceState.HasOpenBrowserTab;
         var terminal = terminalWorkspaceState.HasOpenTerminalTab;
         var computerUse = IsComputerUseMode;
@@ -116,6 +129,8 @@ internal sealed class McpDelegatingToolRouter(
             coding,
             ask,
             plan,
+            debug,
+            debugPhase,
             browser,
             terminal,
             computerUse);

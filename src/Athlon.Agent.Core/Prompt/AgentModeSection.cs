@@ -58,6 +58,11 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
                 builder.AppendLine("- The user selected Ask mode for this session — read-only Q&A about the workspace.");
                 builder.AppendLine("- Follow the tool decision tree below; unavailable mutating tools are not permitted.");
                 break;
+            case SessionAgentMode.Debug:
+                builder.AppendLine("- The user selected Debug mode — investigate a reproducible bug with runtime logs.");
+                builder.AppendLine("- Do not fix the bug until Analyze phase evidence is collected via debug_read_logs.");
+                builder.AppendLine("- Instrument and Cleanup phases may edit files; Hypothesize and Analyze are read-only.");
+                break;
             default:
                 builder.AppendLine("- The user selected Agent mode for this session.");
                 builder.AppendLine("- You have full workspace tools (read, write, shell) as advertised. Long-term memory and todo_write are disabled unless advertised.");

@@ -100,6 +100,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         WorkspacePaneViewModel workspacePane,
         ComposerKnowledgeViewModel composerKnowledge,
         ComposerHarnessViewModel composerHarness,
+        DebugActionBarViewModel debugBar,
         ITaskListChangedNotifier taskListChangedNotifier,
         IPlanChangedNotifier planChangedNotifier,
         PageViewFactory pageViewFactory,
@@ -157,6 +158,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _composer.AtCompletionSourcesUpdated += OnAtCompletionSourcesUpdated;
         ComposerKnowledge = composerKnowledge;
         ComposerHarness = composerHarness;
+        DebugBar = debugBar;
+        DebugBar.Configure(
+            () => _displayedSessionId,
+            () => _session,
+            () => _activeUi,
+            ShowShellToast);
         ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
         ComposerHarness.OnPlanConfirmedAsync = StartCodingFromApprovedPlanAsync;
         ComposerHarness.PropertyChanged += OnComposerHarnessPropertyChanged;
@@ -620,6 +627,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public ComposerKnowledgeViewModel ComposerKnowledge { get; }
 
     public ComposerHarnessViewModel ComposerHarness { get; }
+
+    public DebugActionBarViewModel DebugBar { get; }
 
     public ContextOccupancyViewModel ContextOccupancy { get; } = new();
 
@@ -1531,6 +1540,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         KnowledgePageVm.SetSession(_displayedSessionId);
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
         _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
+        DebugBar.RefreshFromActiveRun();
     }
 
     private void OnTurnStateChanged(object? sender, string sessionId)
@@ -1630,6 +1640,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 CurrentSessionTitle = _session.Title;
                 UpdateDisplayedBusyState();
                 _ = ComposerHarness.RefreshTasksAsync();
+                DebugBar.RefreshFromActiveRun();
             }
 
             _sessionNavigation.Invalidate(e.SessionId);

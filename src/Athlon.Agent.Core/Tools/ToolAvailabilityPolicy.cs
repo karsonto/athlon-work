@@ -1,3 +1,4 @@
+using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
 
 namespace Athlon.Agent.Core.Tools;
@@ -87,9 +88,32 @@ public static class ToolAvailabilityPolicy
             "ask-plan-block-writes-and-subagents",
             static ctx => ctx.Mode is SessionAgentMode.Ask or SessionAgentMode.Plan,
             static (_, facets) =>
-                facets.HasFlag(ToolFacet.WriteFileOrShell) || facets.HasFlag(ToolFacet.SubAgent)
+                facets.HasFlag(ToolFacet.WriteFileOrShell)
+                || facets.HasFlag(ToolFacet.Shell)
+                || facets.HasFlag(ToolFacet.SubAgent)
                     ? false
                     : null),
+        new(
+            "debug-read-logs-analyze-only",
+            static ctx => ctx.Mode == SessionAgentMode.Debug,
+            static (ctx, facets) =>
+                facets.HasFlag(ToolFacet.Debug)
+                    ? ctx.ActiveDebugPhase == DebugPhase.Analyze
+                    : null),
+        new(
+            "debug-mode-block-subagents-and-shell",
+            static ctx => ctx.Mode == SessionAgentMode.Debug,
+            static (_, facets) =>
+                facets.HasFlag(ToolFacet.SubAgent) || facets.HasFlag(ToolFacet.Shell) ? false : null),
+        new(
+            "debug-mode-hypothesize-readonly",
+            static ctx => ctx.Mode == SessionAgentMode.Debug && ctx.ActiveDebugPhase == DebugPhase.Hypothesize,
+            static (_, facets) =>
+                facets.HasFlag(ToolFacet.WriteFileOrShell) || facets.HasFlag(ToolFacet.Debug) ? false : null),
+        new(
+            "debug-mode-analyze-readonly",
+            static ctx => ctx.Mode == SessionAgentMode.Debug && ctx.ActiveDebugPhase == DebugPhase.Analyze,
+            static (_, facets) => facets.HasFlag(ToolFacet.WriteFileOrShell) ? false : null),
         new(
             "knowledge-session-gate",
             static _ => true,

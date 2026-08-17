@@ -48,6 +48,8 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
 
     public bool IsPlanMode => SelectedMode == SessionAgentMode.Plan;
 
+    public bool IsDebugMode => SelectedMode == SessionAgentMode.Debug;
+
     public bool ShowTaskPanel => IsHarnessActive && Tasks.Count > 0;
 
     public bool ShowPlanPanel =>
@@ -69,6 +71,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         SessionAgentMode.Coding => _loc["Harness_Mode_Coding_Tooltip"],
         SessionAgentMode.Ask => _loc["Harness_Mode_Ask_Tooltip"],
         SessionAgentMode.Plan => _loc["Harness_Mode_Plan_Tooltip"],
+        SessionAgentMode.Debug => _loc["Harness_Mode_Debug_Tooltip"],
         _ => _loc["Harness_Mode_Agent_Tooltip"],
     };
 
@@ -77,6 +80,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         SessionAgentMode.Coding => _loc["Harness_Mode_Coding"],
         SessionAgentMode.Ask => _loc["Harness_Mode_Ask"],
         SessionAgentMode.Plan => _loc["Harness_Mode_Plan"],
+        SessionAgentMode.Debug => _loc["Harness_Mode_Debug"],
         _ => _loc["Harness_Mode_Agent"],
     };
 
@@ -279,6 +283,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         OnPropertyChanged(nameof(HarnessPickerLabel));
         OnPropertyChanged(nameof(IsHarnessActive));
         OnPropertyChanged(nameof(IsPlanMode));
+        OnPropertyChanged(nameof(IsDebugMode));
         OnPropertyChanged(nameof(ShowPlanPanel));
         OnPropertyChanged(nameof(CanConfirmPlan));
         ConfirmPlanCommand.NotifyCanExecuteChanged();
@@ -291,6 +296,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowTaskPanel));
         OnPropertyChanged(nameof(IsHarnessActive));
         OnPropertyChanged(nameof(IsPlanMode));
+        OnPropertyChanged(nameof(IsDebugMode));
         OnPropertyChanged(nameof(ShowPlanPanel));
         OnPropertyChanged(nameof(CanConfirmPlan));
         ConfirmPlanCommand.NotifyCanExecuteChanged();

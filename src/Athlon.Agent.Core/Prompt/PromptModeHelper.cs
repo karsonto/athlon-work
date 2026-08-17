@@ -40,6 +40,12 @@ public static class PromptModeHelper
 
 
 
+    public static bool IsDebugMode(EnvironmentPromptContext context) =>
+
+        context.AgentMode == SessionAgentMode.Debug;
+
+
+
     public static bool HasTool(EnvironmentPromptContext context, string name) =>
 
         context.Tools.Any(tool => string.Equals(tool.Name, name, StringComparison.OrdinalIgnoreCase));

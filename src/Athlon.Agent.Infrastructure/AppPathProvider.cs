@@ -41,6 +41,8 @@ public sealed class AppPathProvider : IAppPathProvider
         Directory.CreateDirectory(CredentialsPath);
         Directory.CreateDirectory(SkillsPath);
         Directory.CreateDirectory(BehaviorPath);
+        Directory.CreateDirectory(Path.Combine(RootPath, "debug", "logs"));
+        Directory.CreateDirectory(Path.Combine(RootPath, "debug", "runs"));
     }
 
     public string ResolveSkillPath(string path)

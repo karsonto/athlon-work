@@ -1,3 +1,4 @@
+using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
 
 namespace Athlon.Agent.Core.Tools;
@@ -10,4 +11,5 @@ public sealed record ToolAvailabilityContext(
     SessionAgentMode Mode,
     bool BrowserTabOpen,
     bool TerminalTabOpen,
-    bool KnowledgeEnabled);
+    bool KnowledgeEnabled,
+    DebugPhase? ActiveDebugPhase = null);

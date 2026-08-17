@@ -1,3 +1,4 @@
+using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.ComputerUse;
 using Athlon.Agent.Core.Harness;
@@ -11,11 +12,15 @@ namespace Athlon.Agent.Core.Tools;
 /// <summary>Maps an <see cref="IAgentTool"/> to <see cref="ToolFacet"/> flags.</summary>
 public static class ToolFacetClassifier
 {
-    private static readonly HashSet<string> WriteOrShellNames = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> WriteFileNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "file_write",
         "file_edit",
-        "apply_patch",
+        "apply_patch"
+    };
+
+    private static readonly HashSet<string> ShellToolNames = new(StringComparer.OrdinalIgnoreCase)
+    {
         "execute_command"
     };
 
@@ -86,9 +91,19 @@ public static class ToolFacetClassifier
             facets |= ToolFacet.TerminalBootstrap;
         }
 
-        if (WriteOrShellNames.Contains(name))
+        if (tool is IDebugTool)
+        {
+            facets |= ToolFacet.Debug;
+        }
+
+        if (WriteFileNames.Contains(name))
         {
             facets |= ToolFacet.WriteFileOrShell;
+        }
+
+        if (ShellToolNames.Contains(name))
+        {
+            facets |= ToolFacet.Shell;
         }
 
         return facets;
