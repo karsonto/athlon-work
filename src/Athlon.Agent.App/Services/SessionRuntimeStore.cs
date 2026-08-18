@@ -61,22 +61,31 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             return false;
         }
 
-        if (found.Hydrated)
-        {
-            entry = found;
-            return true;
-        }
-
-        if (_uiCache is not null
+        var hasDisplayMessages = _uiCache is not null
             && _uiCache.TryGet(sessionId, out var ui)
-            && ui is { Messages.Count: > 0 })
+            && ui is { Messages.Count: > 0 };
+
+        if (hasDisplayMessages)
         {
             found.Hydrated = true;
             entry = found;
             return true;
         }
 
-        return false;
+        if (!found.Hydrated)
+        {
+            return false;
+        }
+
+        // Hydrated + empty UI is only reusable for a truly empty chat. A session with
+        // in-memory history but no display messages must reload from conversation.jsonl.
+        if (_uiCache is not null && found.Session.Messages.Count > 0)
+        {
+            return false;
+        }
+
+        entry = found;
+        return true;
     }
 
     public RuntimeSessionEntry Attach(

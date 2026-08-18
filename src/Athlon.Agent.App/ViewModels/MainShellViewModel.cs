@@ -1534,15 +1534,20 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         if (renderExistingMessages && _savedChatView is not null)
         {
-            // Live UI already has a paged activity source. Merging the full in-memory
-            // AgentSession.Messages here would replay the entire transcript into the
-            // shared WebView and make switching slower than a cold page load.
-            if (_activeUi.ActivitySourceMessages.Count == 0)
+            // Reuse the paged UI cache. Do not merge AgentSession.Messages into the
+            // shared WebView — that replays the full transcript and freezes huge histories.
+            // Skip empty replay when the session still has history: LoadSessionInternalAsync
+            // will cold-load conversation.jsonl instead of wiping the previous transcript.
+            var cacheIsEmpty = _activeUi.Messages.Count == 0;
+            if (!(cacheIsEmpty && session.Messages.Count > 0))
             {
-                _activeUi.SyncActivitySourceFromSession(session);
-            }
+                if (_activeUi.ActivitySourceMessages.Count == 0)
+                {
+                    _activeUi.SyncActivitySourceFromSession(session);
+                }
 
-            _ = _activeUi.ReloadChatViewAsync();
+                _ = _activeUi.ReloadChatViewAsync();
+            }
         }
 
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
@@ -2548,6 +2553,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         {
             var workspaceChanged = !SameSessionWorkspace(_session, live.Session!);
             SwitchDisplayedSession(live.Session!, renderExistingMessages: true);
+            var displayedUi = _activeUi;
             _olderDisplayCursor = live.OlderDisplayCursor;
             ApplyLoadedSessionChrome();
             if (_savedChatView is not null)
@@ -2559,6 +2565,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             if (!IsSessionLoadCurrent(loadGeneration))
             {
                 return;
+            }
+
+            if (ReferenceEquals(_activeUi, displayedUi))
+            {
+                await displayedUi.ReloadChatViewAsync().ConfigureAwait(true);
             }
 
             if (workspaceChanged)
@@ -2575,6 +2586,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         SetComposerStatus(_loc["Shell_LoadingConversation"]);
         try
         {
+            if (_uiCache.TryGet(sessionId, out var staleUi) && staleUi is { Messages.Count: 0 })
+            {
+                _sessionNavigation.Invalidate(sessionId);
+            }
+
             var snapshot = await _sessionNavigation.LoadSnapshotAsync(sessionId).ConfigureAwait(true);
             if (!IsSessionLoadCurrent(loadGeneration))
             {

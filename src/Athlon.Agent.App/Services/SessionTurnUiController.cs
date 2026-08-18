@@ -281,7 +281,7 @@ public sealed partial class SessionTurnUiController
 
     public async Task ReloadChatViewAsync()
     {
-        if (!_isDisplayed)
+        if (!IsDisplayed)
         {
             return;
         }
@@ -292,13 +292,18 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
-        if (ChatView is null)
+        if (ChatView is null || !IsDisplayed)
         {
             return;
         }
 
         var chatView = ChatView;
         var activitySource = BuildReplayActivitySource();
+        if (!IsDisplayed || !ReferenceEquals(ChatView, chatView))
+        {
+            return;
+        }
+
         await chatView.LoadMessagesAsync(
                 Messages,
                 _showToolCalls(),

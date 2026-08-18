@@ -293,6 +293,25 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
+    public async Task ReloadChatViewAsync_skips_shared_view_when_session_is_hidden()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var reloadCount = 0;
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () =>
+        {
+            Interlocked.Increment(ref reloadCount);
+            return Task.CompletedTask;
+        };
+        ui.SetDisplayed(true);
+        ui.SetDisplayed(false);
+
+        await ui.ReloadChatViewAsync();
+
+        Assert.Equal(0, Volatile.Read(ref reloadCount));
+    }
+
+    [Fact]
     public async Task CaptureEndSnapshot_includes_buffered_tokens_when_hidden()
     {
         var dispatcher = await StartStaDispatcherAsync();
