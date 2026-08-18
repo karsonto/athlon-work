@@ -115,6 +115,16 @@ public static class ToolAvailabilityPolicy
             static ctx => ctx.Mode == SessionAgentMode.Debug && ctx.ActiveDebugPhase == DebugPhase.Analyze,
             static (_, facets) => facets.HasFlag(ToolFacet.WriteFileOrShell) ? false : null),
         new(
+            "debug-mode-await-readonly",
+            static ctx => ctx.Mode == SessionAgentMode.Debug && ctx.ActiveDebugPhase is { } phase && phase.IsReadOnlyFollowUp(),
+            static (_, facets) =>
+                facets.HasFlag(ToolFacet.WriteFileOrShell)
+                || facets.HasFlag(ToolFacet.Debug)
+                || facets.HasFlag(ToolFacet.Shell)
+                || facets.HasFlag(ToolFacet.SubAgent)
+                    ? false
+                    : null),
+        new(
             "knowledge-session-gate",
             static _ => true,
             static (ctx, facets) =>

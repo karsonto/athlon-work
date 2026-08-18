@@ -635,6 +635,12 @@
   <data name="Debug_MarkNotFixed" xml:space="preserve">
     <value>仍未修复</value>
   </data>
+  <data name="Debug_StartFix" xml:space="preserve">
+    <value>开始修复</value>
+  </data>
+  <data name="Debug_Reanalyze" xml:space="preserve">
+    <value>重新分析</value>
+  </data>
   <data name="Harness_ConfirmPlan" xml:space="preserve">
     <value>确认并开始实现</value>
   </data>

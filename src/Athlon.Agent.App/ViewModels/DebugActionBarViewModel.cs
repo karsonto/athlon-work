@@ -63,6 +63,12 @@ public sealed partial class DebugActionBarViewModel : ObservableObject
     private bool _showReproduced;
 
     [ObservableProperty]
+    private bool _showStartFix;
+
+    [ObservableProperty]
+    private bool _showReanalyze;
+
+    [ObservableProperty]
     private bool _showNotFixed;
 
     [ObservableProperty]
@@ -90,6 +96,8 @@ public sealed partial class DebugActionBarViewModel : ObservableObject
             PhaseLabel = string.Empty;
             Summary = string.Empty;
             ShowReproduced = false;
+            ShowStartFix = false;
+            ShowReanalyze = false;
             ShowNotFixed = false;
             ShowFixed = false;
             NotifyActionCommands();
@@ -97,10 +105,14 @@ public sealed partial class DebugActionBarViewModel : ObservableObject
         }
 
         PhaseLabel = string.Format(Strings.Get("Debug_PhaseLabel"), run.Phase);
-        Summary = run.ReproStepsMarkdown ?? run.BugDescription ?? string.Empty;
+        Summary = run.Phase is DebugPhase.AwaitFixConfirm or DebugPhase.Analyze
+            ? (run.RootCauseSummary ?? run.ReproStepsMarkdown ?? run.BugDescription ?? string.Empty)
+            : (run.ReproStepsMarkdown ?? run.BugDescription ?? string.Empty);
         ShowReproduced = run.Phase == DebugPhase.AwaitRepro;
+        ShowStartFix = run.Phase == DebugPhase.AwaitFixConfirm;
+        ShowReanalyze = run.Phase == DebugPhase.AwaitFixConfirm;
         ShowNotFixed = run.Phase == DebugPhase.AwaitVerify;
-        ShowFixed = run.IsAwaitingUser;
+        ShowFixed = run.Phase == DebugPhase.AwaitVerify;
         NotifyActionCommands();
     }
 
@@ -126,6 +138,12 @@ public sealed partial class DebugActionBarViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanMarkReproduced))]
     private void MarkReproduced() => StartContinuation(DebugContinuationKind.Reproduced);
 
+    [RelayCommand(CanExecute = nameof(CanStartFix))]
+    private void StartFix() => StartContinuation(DebugContinuationKind.StartFix);
+
+    [RelayCommand(CanExecute = nameof(CanReanalyze))]
+    private void Reanalyze() => StartContinuation(DebugContinuationKind.Reanalyze);
+
     [RelayCommand(CanExecute = nameof(CanMarkFixed))]
     private void MarkFixed() => StartContinuation(DebugContinuationKind.VerifiedFixed);
 
@@ -134,6 +152,10 @@ public sealed partial class DebugActionBarViewModel : ObservableObject
 
     private bool CanMarkReproduced() => ShowReproduced;
 
+    private bool CanStartFix() => ShowStartFix;
+
+    private bool CanReanalyze() => ShowReanalyze;
+
     private bool CanMarkFixed() => ShowFixed;
 
     private bool CanMarkNotFixed() => ShowNotFixed;
@@ -141,6 +163,8 @@ public sealed partial class DebugActionBarViewModel : ObservableObject
     private void NotifyActionCommands()
     {
         MarkReproducedCommand.NotifyCanExecuteChanged();
+        StartFixCommand.NotifyCanExecuteChanged();
+        ReanalyzeCommand.NotifyCanExecuteChanged();
         MarkFixedCommand.NotifyCanExecuteChanged();
         MarkNotFixedCommand.NotifyCanExecuteChanged();
     }

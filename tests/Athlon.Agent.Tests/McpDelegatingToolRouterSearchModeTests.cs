@@ -1,4 +1,6 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Debug;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -131,6 +133,70 @@ public sealed class McpDelegatingToolRouterSearchModeTests
         Assert.DoesNotContain(router.ListTools(), tool => tool.Name == McpSearchGatewayTools.SearchToolName);
         Assert.Contains(router.ListTools(), tool => tool.Name.StartsWith("mcp_server__", StringComparison.Ordinal));
     }
+
+    [Fact]
+    public void ListTools_HidesMcp_InDebugHypothesize()
+    {
+        var registry = new TestMcpRegistry(CreateCatalog(3));
+        var settings = new AppSettings
+        {
+            McpSearch = new McpSearchSettings { Enabled = true, Mode = "direct" }
+        };
+        var phaseAccessor = new DebugPhaseAccessor();
+        phaseAccessor.SetActiveRun(new DebugRun
+        {
+            Id = "run1",
+            SessionId = "test-session",
+            LogPath = Path.Combine(Path.GetTempPath(), "athlon-debug-run1.jsonl"),
+            Phase = DebugPhase.Hypothesize
+        });
+
+        var names = CreateDebugRouter(registry, settings, phaseAccessor).ListTools().Select(tool => tool.Name).ToArray();
+        Assert.DoesNotContain(McpSearchGatewayTools.SearchToolName, names);
+        Assert.DoesNotContain(names, name => name.StartsWith("mcp_", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task InvokeAsync_RejectsMcp_InDebugAnalyze()
+    {
+        var registry = new TestMcpRegistry(CreateCatalog(1));
+        var settings = new AppSettings
+        {
+            McpSearch = new McpSearchSettings { Enabled = true, Mode = "direct" }
+        };
+        var phaseAccessor = new DebugPhaseAccessor();
+        phaseAccessor.SetActiveRun(new DebugRun
+        {
+            Id = "run1",
+            SessionId = "test-session",
+            LogPath = Path.Combine(Path.GetTempPath(), "athlon-debug-run1.jsonl"),
+            Phase = DebugPhase.Analyze
+        });
+
+        var result = await CreateDebugRouter(registry, settings, phaseAccessor).InvokeAsync(new ToolInvocation(
+            McpToolNameCodec.Encode("server", "tool_0"),
+            new Dictionary<string, string>()));
+        Assert.False(result.Succeeded);
+        Assert.Contains("Debug phase", result.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static McpDelegatingToolRouter CreateDebugRouter(
+        IMcpRegistry registry,
+        AppSettings settings,
+        IDebugPhaseAccessor phaseAccessor) =>
+        new(
+            static tools => tools,
+            Array.Empty<IAgentTool>(),
+            registry,
+            settings,
+            RouterTestDependencies.CreateSessionContext(),
+            RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateSessionHarnessState(SessionAgentMode.Debug),
+            RouterTestDependencies.CreateRunContextAccessor(SessionAgentMode.Debug),
+            phaseAccessor,
+            RouterTestDependencies.CreateWorkspaceGuard(),
+            RouterTestDependencies.CreateBrowserWorkspaceState(),
+            RouterTestDependencies.CreateTerminalWorkspaceState());
 
     private static McpDelegatingToolRouter CreateRouter(
         IMcpRegistry registry,

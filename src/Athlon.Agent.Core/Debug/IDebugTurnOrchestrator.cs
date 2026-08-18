@@ -3,6 +3,8 @@ namespace Athlon.Agent.Core.Debug;
 public enum DebugContinuationKind
 {
     Reproduced,
+    StartFix,
+    Reanalyze,
     VerifiedFixed,
     VerifiedNotFixed
 }

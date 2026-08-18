@@ -36,6 +36,7 @@ public sealed class DebugTurnOrchestratorTests
         Assert.Equal(2, run.Hypotheses.Count);
         Assert.Contains("Trigger save", run.ReproStepsMarkdown, StringComparison.Ordinal);
         Assert.True(sut.IsAwaitingUser(session.Id));
+        Assert.Equal(new List<bool> { true, false }, orchestrator.AppendUserMessageFlags);
     }
 
     [Fact]
@@ -75,7 +76,7 @@ public sealed class DebugTurnOrchestratorTests
     }
 
     [Fact]
-    public async Task ContinueAsync_VerifiedFixedFromAwaitReproGoesToDone()
+    public async Task RunUserTurnAsync_FallsBackToH1_WhenHypothesesUnparsed()
     {
         var session = AgentSession.Create("debug-session");
         var store = new InMemoryDebugRunStore();
@@ -83,8 +84,37 @@ public sealed class DebugTurnOrchestratorTests
         var sessionState = new DebugSessionState();
         var orchestrator = new StubAgentOrchestrator(_ =>
         [
-            "Removed athlon-debug probes."
+            "I think the cache is stale but I will not use the required format.",
+            "Still no H-lines here.",
+            """
+            Added probes.
+
+            ## Repro steps
+            1. Retry save
+            """
         ]);
+
+        var sut = new DebugTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        session = await sut.RunUserTurnAsync(session, "Save drops the last item", null, CancellationToken.None);
+
+        var run = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(run);
+        Assert.Equal(DebugPhase.AwaitRepro, run.Phase);
+        Assert.Single(run.Hypotheses);
+        Assert.Equal("H1", run.Hypotheses[0].Id);
+        Assert.Contains("Still no H-lines", run.Hypotheses[0].Summary, StringComparison.Ordinal);
+        Assert.Equal(3, orchestrator.TurnCount);
+        Assert.Equal(new List<bool> { true, false, false }, orchestrator.AppendUserMessageFlags);
+    }
+
+    [Fact]
+    public async Task ContinueAsync_VerifiedFixedFromAwaitReproFails()
+    {
+        var session = AgentSession.Create("debug-session");
+        var store = new InMemoryDebugRunStore();
+        var phaseAccessor = new DebugPhaseAccessor();
+        var sessionState = new DebugSessionState();
+        var orchestrator = new StubAgentOrchestrator(_ => ["should not run"]);
 
         var run = new DebugRun
         {
@@ -99,16 +129,13 @@ public sealed class DebugTurnOrchestratorTests
         phaseAccessor.SetActiveRun(run);
 
         var sut = new DebugTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
-        session = await sut.ContinueAsync(session, DebugContinuationKind.VerifiedFixed, null, CancellationToken.None);
-
-        run = phaseAccessor.GetActiveRun(session.Id);
-        Assert.NotNull(run);
-        Assert.Equal(DebugPhase.Done, run.Phase);
-        Assert.Equal(1, orchestrator.TurnCount);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.ContinueAsync(session, DebugContinuationKind.VerifiedFixed, null, CancellationToken.None));
+        Assert.Equal(0, orchestrator.TurnCount);
     }
 
     [Fact]
-    public async Task ContinueAsync_ReproducedAdvancesToAwaitVerify()
+    public async Task ContinueAsync_ReproducedStopsAtAwaitFixConfirm()
     {
         var session = AgentSession.Create("debug-session");
         var store = new InMemoryDebugRunStore();
@@ -116,8 +143,7 @@ public sealed class DebugTurnOrchestratorTests
         var sessionState = new DebugSessionState();
         var orchestrator = new StubAgentOrchestrator(_ =>
         [
-            "Root cause: loop uses `<` instead of `<=`.",
-            "Fixed loop bound."
+            "Root cause: loop uses `<` instead of `<=`."
         ]);
 
         var run = new DebugRun
@@ -137,7 +163,76 @@ public sealed class DebugTurnOrchestratorTests
 
         run = phaseAccessor.GetActiveRun(session.Id);
         Assert.NotNull(run);
+        Assert.Equal(DebugPhase.AwaitFixConfirm, run.Phase);
+        Assert.Contains("Root cause", run.RootCauseSummary, StringComparison.Ordinal);
+        Assert.Equal(new List<bool> { false }, orchestrator.AppendUserMessageFlags);
+    }
+
+    [Fact]
+    public async Task ContinueAsync_StartFixAdvancesToAwaitVerify()
+    {
+        var session = AgentSession.Create("debug-session");
+        var store = new InMemoryDebugRunStore();
+        var phaseAccessor = new DebugPhaseAccessor();
+        var sessionState = new DebugSessionState();
+        var orchestrator = new StubAgentOrchestrator(_ =>
+        [
+            "Fixed loop bound."
+        ]);
+
+        var run = new DebugRun
+        {
+            Id = "run1",
+            SessionId = session.Id,
+            LogPath = store.CreateLogPath("run1"),
+            Phase = DebugPhase.AwaitFixConfirm,
+            BugDescription = "bug",
+            RootCauseSummary = "off-by-one"
+        };
+        await store.SaveActiveAsync(run);
+        phaseAccessor.SetActiveRun(run);
+
+        var sut = new DebugTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        session = await sut.ContinueAsync(session, DebugContinuationKind.StartFix, null, CancellationToken.None);
+
+        run = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(run);
         Assert.Equal(DebugPhase.AwaitVerify, run.Phase);
+        Assert.Equal(new List<bool> { false }, orchestrator.AppendUserMessageFlags);
+    }
+
+    [Fact]
+    public async Task ContinueAsync_ReanalyzeStaysAtAwaitFixConfirm()
+    {
+        var session = AgentSession.Create("debug-session");
+        var store = new InMemoryDebugRunStore();
+        var phaseAccessor = new DebugPhaseAccessor();
+        var sessionState = new DebugSessionState();
+        var orchestrator = new StubAgentOrchestrator(_ =>
+        [
+            "Re-read logs: evidence still points to the loop bound."
+        ]);
+
+        var run = new DebugRun
+        {
+            Id = "run1",
+            SessionId = session.Id,
+            LogPath = store.CreateLogPath("run1"),
+            Phase = DebugPhase.AwaitFixConfirm,
+            BugDescription = "bug",
+            RootCauseSummary = "old summary"
+        };
+        await store.SaveActiveAsync(run);
+        phaseAccessor.SetActiveRun(run);
+
+        var sut = new DebugTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        session = await sut.ContinueAsync(session, DebugContinuationKind.Reanalyze, null, CancellationToken.None);
+
+        run = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(run);
+        Assert.Equal(DebugPhase.AwaitFixConfirm, run.Phase);
+        Assert.Contains("loop bound", run.RootCauseSummary, StringComparison.Ordinal);
+        Assert.Equal(new List<bool> { false }, orchestrator.AppendUserMessageFlags);
     }
 
     private sealed class StubAgentOrchestrator(Func<int, IReadOnlyList<string>> responses) : IAgentOrchestrator
@@ -146,14 +241,18 @@ public sealed class DebugTurnOrchestratorTests
 
         public int TurnCount => _turn;
 
+        public List<bool> AppendUserMessageFlags { get; } = [];
+
         public Task<AgentSession> SendAsync(
             AgentSession session,
             string userInput,
             IReadOnlyList<ImageAttachment>? imageAttachments = null,
             AgentTurnCallbacks? callbacks = null,
             CancellationToken cancellationToken = default,
-            bool computerUseActive = false)
+            bool computerUseActive = false,
+            bool appendUserMessage = true)
         {
+            AppendUserMessageFlags.Add(appendUserMessage);
             var list = responses(_turn++);
             var content = list[Math.Min(_turn - 1, list.Count - 1)];
             session = session.WithMessage(ChatMessage.Create(MessageRole.Assistant, content));

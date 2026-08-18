@@ -139,7 +139,7 @@ internal sealed class McpDelegatingToolRouter(
     public IReadOnlyList<ToolDefinition> ListTools()
     {
         var local = GetOrCreateLocalRouter().ListTools();
-        if (IsComputerUseMode || IsChatOnlyMode)
+        if (IsComputerUseMode || IsChatOnlyMode || IsDebugMcpBlocked())
         {
             return Canonicalize(local);
         }
@@ -177,7 +177,7 @@ internal sealed class McpDelegatingToolRouter(
             return local;
         }
 
-        if (IsComputerUseMode || IsChatOnlyMode)
+        if (IsComputerUseMode || IsChatOnlyMode || IsDebugMcpBlocked())
         {
             return null;
         }
@@ -211,7 +211,7 @@ internal sealed class McpDelegatingToolRouter(
             return true;
         }
 
-        if (!ShouldUseMcpSearch())
+        if (IsDebugMcpBlocked() || !ShouldUseMcpSearch())
         {
             return false;
         }
@@ -245,6 +245,15 @@ internal sealed class McpDelegatingToolRouter(
                     "Tool not available",
                     "This tool is not available without a configured workspace."));
             }
+        }
+
+        if (IsDebugMcpBlocked()
+            && (IsSearchGatewayTool(invocation.ToolName)
+                || McpToolNameCodec.TryDecode(invocation.ToolName, out _, out _)))
+        {
+            return Task.FromResult(ToolResult.Failure(
+                "Tool not available",
+                "MCP tools are not available during this Debug phase. Use file/grep tools, then debug_read_logs after the user reproduces."));
         }
 
         if (IsSearchGatewayTool(invocation.ToolName))
@@ -316,6 +325,17 @@ internal sealed class McpDelegatingToolRouter(
         }
 
         return localRouter.InvokeAsync(invocation, cancellationToken);
+    }
+
+    private bool IsDebugMcpBlocked()
+    {
+        if (ResolveSessionAgentMode() != SessionAgentMode.Debug)
+        {
+            return false;
+        }
+
+        var phase = debugPhaseAccessor.GetPhase(activeSessionContext.SessionId);
+        return phase is null || phase.Value.BlocksMcp();
     }
 
     private bool ShouldUseMcpSearch()

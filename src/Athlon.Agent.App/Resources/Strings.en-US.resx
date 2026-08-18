@@ -638,6 +638,12 @@ Hold to talk</value>
   <data name="Debug_MarkNotFixed" xml:space="preserve">
     <value>Not fixed</value>
   </data>
+  <data name="Debug_StartFix" xml:space="preserve">
+    <value>Start fix</value>
+  </data>
+  <data name="Debug_Reanalyze" xml:space="preserve">
+    <value>Reanalyze</value>
+  </data>
   <data name="Knowledge_DefaultStatus" xml:space="preserve">
     <value>Turn on the knowledge base toggle in the composer for the agent to use retrieval in answers.</value>
   </data>

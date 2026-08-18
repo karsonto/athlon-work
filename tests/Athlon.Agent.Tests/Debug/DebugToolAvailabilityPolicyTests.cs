@@ -22,6 +22,8 @@ public sealed class DebugToolAvailabilityPolicyTests
     [InlineData(DebugPhase.Hypothesize, false)]
     [InlineData(DebugPhase.Instrument, true)]
     [InlineData(DebugPhase.Analyze, false)]
+    [InlineData(DebugPhase.AwaitRepro, false)]
+    [InlineData(DebugPhase.AwaitFixConfirm, false)]
     [InlineData(DebugPhase.Fix, true)]
     public void DebugMode_WriteGatedByPhase(DebugPhase phase, bool expectedWrite)
     {
@@ -32,6 +34,7 @@ public sealed class DebugToolAvailabilityPolicyTests
     [Theory]
     [InlineData(DebugPhase.Hypothesize, false)]
     [InlineData(DebugPhase.Analyze, true)]
+    [InlineData(DebugPhase.AwaitFixConfirm, false)]
     [InlineData(DebugPhase.Fix, false)]
     public void DebugMode_ReadLogsOnlyInAnalyze(DebugPhase phase, bool expected)
     {

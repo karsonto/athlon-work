@@ -38,6 +38,32 @@ public static partial class DebugRunParser
         return results;
     }
 
+    public static IReadOnlyList<DebugHypothesis> ParseHypothesesOrFallback(string? assistantText)
+    {
+        var parsed = ParseHypotheses(assistantText);
+        if (parsed.Count > 0)
+        {
+            return parsed;
+        }
+
+        var summary = TruncateForHypothesis(assistantText);
+        return
+        [
+            new DebugHypothesis("H1", string.IsNullOrWhiteSpace(summary) ? "Unparsed hypothesis from explore turn" : summary)
+        ];
+    }
+
+    private static string TruncateForHypothesis(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        var compact = string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return compact.Length <= 240 ? compact : compact[..237] + "...";
+    }
+
     public static string? ParseReproSteps(string? assistantText)
     {
         if (string.IsNullOrWhiteSpace(assistantText))

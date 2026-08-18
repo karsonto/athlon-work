@@ -54,16 +54,26 @@ internal static class DebugPhaseInstructions
     internal static string For(DebugPhase phase, string logPath) => phase switch
     {
         DebugPhase.Hypothesize =>
-            "Phase Hypothesize: explore with read/grep tools only. Output 3-5 hypotheses as `- H1: ...` lines. Do not edit files.",
+            "Phase Hypothesize: explore with read/grep tools only. Output 3-5 hypotheses as standalone lines `- H1: ...`. Do not edit files. Do not claim a root cause.",
         DebugPhase.Instrument =>
             "Phase Instrument: add minimal log probes via file_edit/file_write (user approves diffs). "
-            + $"Each probe appends JSONL to `{logPath}`. End with a numbered `## Repro steps` section.",
+            + $"Each probe appends JSONL to `{logPath}`. End with a numbered `## Repro steps` section. Do not fix the bug yet.",
         DebugPhase.Analyze =>
-            "Phase Analyze: call debug_read_logs first. Use runtime evidence to mark hypotheses supported/refuted and state the root cause. Do not edit files yet.",
+            "Phase Analyze: call debug_read_logs FIRST. You may state a root cause only if the logs contain matching hits you cite. "
+            + "If the log file is missing, empty, or has no matching entries, say evidence is insufficient — do not guess a root cause and do not propose a fix.",
         DebugPhase.Fix =>
-            "Phase Fix: apply the smallest correct code change via file_edit. Do not add new probes.",
+            "Phase Fix: apply the smallest correct code change via file_edit for the log-supported root cause only. Do not add new probes. Do not invent causes not backed by logs.",
         DebugPhase.Cleanup =>
             "Phase Cleanup: remove all `#region athlon-debug` probes via file_edit. Leave the functional fix intact.",
-        _ => $"Phase {phase}: wait for user action."
+        DebugPhase.AwaitRepro =>
+            "Phase AwaitRepro: the user is adding context while reproducing. Update repro understanding if needed. "
+            + "Do not edit files, do not call debug_read_logs, and do not state a root cause until they mark the bug reproduced.",
+        DebugPhase.AwaitFixConfirm =>
+            "Phase AwaitFixConfirm: the user is reviewing the analysis. Treat extra messages as questions or extra context. "
+            + "Do not edit files and do not start a fix until they confirm. If logs were empty, say evidence is still insufficient.",
+        DebugPhase.AwaitVerify =>
+            "Phase AwaitVerify: the user is verifying the fix. Treat extra messages as verification notes. "
+            + "Do not edit files and do not change the debug phase.",
+        _ => $"Phase {phase}: wait for user action. Do not edit files or conclude a root cause without log evidence."
     };
 }

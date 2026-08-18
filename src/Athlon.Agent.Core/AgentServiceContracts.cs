@@ -57,7 +57,8 @@ public interface IAgentRuntime
         AgentTurnCallbacks? callbacks = null,
         CancellationToken cancellationToken = default,
         bool computerUseActive = false,
-        AgentLoopOptions? loopOptions = null);
+        AgentLoopOptions? loopOptions = null,
+        bool appendUserMessage = true);
 }
 public interface IFileStorageService
 {
@@ -120,7 +121,8 @@ public interface IAgentOrchestrator
         IReadOnlyList<ImageAttachment>? imageAttachments = null,
         AgentTurnCallbacks? callbacks = null,
         CancellationToken cancellationToken = default,
-        bool computerUseActive = false);
+        bool computerUseActive = false,
+        bool appendUserMessage = true);
 }
 
 public interface IImageAttachmentReader

@@ -20,8 +20,7 @@ public sealed class DebugRun
 
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
 
-    public bool IsAwaitingUser =>
-        Phase is DebugPhase.AwaitRepro or DebugPhase.AwaitVerify;
+    public bool IsAwaitingUser => Phase.IsAwaitingUser();
 
     public DebugRun Clone() => new()
     {

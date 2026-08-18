@@ -60,8 +60,9 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
                 break;
             case SessionAgentMode.Debug:
                 builder.AppendLine("- The user selected Debug mode — investigate a reproducible bug with runtime logs.");
-                builder.AppendLine("- Do not fix the bug until Analyze phase evidence is collected via debug_read_logs.");
-                builder.AppendLine("- Instrument and Cleanup phases may edit files; Hypothesize and Analyze are read-only.");
+                builder.AppendLine("- Evidence gate: do not state a root cause and do not apply a fix until you have called debug_read_logs and cited matching log hits.");
+                builder.AppendLine("- Empty logs or no matching entries means evidence is insufficient: adjust probes and wait for another repro. Do not guess.");
+                builder.AppendLine("- Instrument, Fix, and Cleanup may edit files; Hypothesize, Analyze, and Await phases are read-only.");
                 break;
             default:
                 builder.AppendLine("- The user selected Agent mode for this session.");

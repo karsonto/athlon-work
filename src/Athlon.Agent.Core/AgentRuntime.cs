@@ -71,7 +71,8 @@ public sealed class AgentRuntime(
         AgentTurnCallbacks? callbacks = null,
         CancellationToken cancellationToken = default,
         bool computerUseActive = false,
-        AgentLoopOptions? loopOptions = null)
+        AgentLoopOptions? loopOptions = null,
+        bool appendUserMessage = true)
     {
         var existing = runContextAccessor.Current;
         AgentRunContext runContext;
@@ -110,7 +111,7 @@ public sealed class AgentRuntime(
             runContext.WorkspaceKind);
         using var skillActivationScope = SessionSkillActivationScope.EnterNewTurn();
         using var sessionScope = activeSessionContext.Enter(session.Id);
-        return await SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, runContext, cancellationToken).ConfigureAwait(false);
+        return await SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, runContext, cancellationToken, appendUserMessage).ConfigureAwait(false);
     }
 
     private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session) =>
@@ -122,18 +123,25 @@ public sealed class AgentRuntime(
         IReadOnlyList<ImageAttachment>? imageAttachments,
         AgentTurnCallbacks? callbacks,
         AgentRunContext runContext,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool appendUserMessage)
     {
         try
         {
-            var userMessage = ChatMessage.Create(
-                MessageRole.User,
-                userInput,
-                session.Messages.LastOrDefault()?.Id,
-                imageAttachments: imageAttachments);
-            session = session.WithMessage(userMessage);
-            await PersistMessageAsync(session, userMessage, cancellationToken).ConfigureAwait(false);
-            await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
+            ChatMessage? userMessage = null;
+            if (appendUserMessage)
+            {
+                userMessage = ChatMessage.Create(
+                    MessageRole.User,
+                    userInput,
+                    session.Messages.LastOrDefault()?.Id,
+                    imageAttachments: imageAttachments);
+                session = session.WithMessage(userMessage);
+                await PersistMessageAsync(session, userMessage, cancellationToken).ConfigureAwait(false);
+                await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
+            }
+
+            var parentMessageId = userMessage?.Id ?? session.Messages.LastOrDefault()?.Id;
 
             var activeRouter = ResolveToolRouter();
             var activePrompt = ResolveSystemPromptOrchestrator();
@@ -232,7 +240,7 @@ public sealed class AgentRuntime(
                         assistantMessageId,
                         MessageRole.Assistant,
                         response.Content,
-                        userMessage.Id,
+                        parentMessageId,
                         reasoningContent: response.ReasoningContent);
                     session = session.WithMessage(assistant);
                     await PersistMessageAsync(session, assistant, cancellationToken).ConfigureAwait(false);
@@ -250,7 +258,7 @@ public sealed class AgentRuntime(
                     assistantMessageId,
                     MessageRole.Assistant,
                     response.Content,
-                    userMessage.Id,
+                    parentMessageId,
                     response.ToolCalls,
                     response.ReasoningContent);
                 session = session.WithMessage(assistantWithToolCalls);
@@ -272,7 +280,7 @@ public sealed class AgentRuntime(
                             "Max model tool rounds reached",
                             $"Tool was not executed because the session reached the max model tool rounds limit ({maxModelToolRounds}).");
                         var content = FormatToolResult(toolCall, failure);
-                        var toolMessage = ChatMessage.Create(MessageRole.Tool, content, userMessage.Id);
+                        var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
                         session = session.WithMessage(toolMessage);
                         await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall)).ConfigureAwait(false);
                         await PersistMessageAsync(session, toolMessage, cancellationToken).ConfigureAwait(false);
@@ -299,7 +307,7 @@ public sealed class AgentRuntime(
                     turnInvocation.Session = session;
                     session = await InvokeParallelToolBatchAsync(
                         turnInvocation,
-                        userMessage.Id,
+                        parentMessageId,
                         response.ToolCalls,
                         cancellationToken).ConfigureAwait(false);
                 }
@@ -310,7 +318,7 @@ public sealed class AgentRuntime(
                         turnInvocation.Session = session;
                         session = await InvokeToolAndPersistAsync(
                             turnInvocation,
-                            userMessage.Id,
+                            parentMessageId,
                             toolCall,
                             cancellationToken).ConfigureAwait(false);
                     }

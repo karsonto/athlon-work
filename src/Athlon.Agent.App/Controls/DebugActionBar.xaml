@@ -80,6 +80,40 @@
                         </Style>
                     </Button.Style>
                 </Button>
+                <Button Content="{loc:Localize Key=Debug_Reanalyze}"
+                        Command="{Binding ReanalyzeCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Setter Property="Padding" Value="12,6" />
+                            <Setter Property="FontSize" Value="12" />
+                            <Setter Property="Margin" Value="0,0,8,0" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ShowReanalyze}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+                <Button Content="{loc:Localize Key=Debug_StartFix}"
+                        Command="{Binding StartFixCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Setter Property="Padding" Value="14,6" />
+                            <Setter Property="FontSize" Value="12" />
+                            <Setter Property="Margin" Value="0,0,8,0" />
+                            <Setter Property="Background" Value="{DynamicResource Brush.HoverNeutralAlt}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ShowStartFix}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
                 <Button Content="{loc:Localize Key=Debug_MarkNotFixed}"
                         Command="{Binding MarkNotFixedCommand}">
                     <Button.Style>

@@ -56,7 +56,7 @@ Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is
 - **Computer Use**: desktop automation (observe/interact) with coordinate mapping and UI Automation tree
 - **ConPTY Terminal**: workspace Terminal tab with `terminal_open` / `terminal_send_input` / `terminal_read_output`
 - **SSH workspaces**: connect to remote hosts, browse remote file trees, and run file tools over SSH
-- **Debug mode** — evidence-first bug investigation: hypothesize → instrument (JSONL probes via `file_edit`) → manual repro → analyze logs (`debug_read_logs`) → fix → verify → cleanup probes
+- **Debug mode** — evidence-first bug investigation: hypothesize → instrument (JSONL probes via `file_edit`) → manual repro → analyze logs (`debug_read_logs`) → confirm → fix → verify → cleanup probes
 
 ### Debug Mode (Desktop Composer)
 
@@ -65,10 +65,11 @@ Select **Debug** in the Composer mode picker, describe a reproducible bug, and f
 1. **Hypothesize** — read-only exploration; agent lists `H1:` / `H2:` hypotheses
 2. **Instrument** — agent adds minimal runtime log probes (wrapped in `#region athlon-debug Hn`) that append JSONL to `~/.athlon-agent/debug/logs/{runId}.jsonl`
 3. **Reproduce** — follow the repro steps, then click **Reproduced**
-4. **Analyze** — agent reads logs with `debug_read_logs` and confirms root cause
-5. **Fix** — small approved diffs only
-6. **Verify** — click **Fixed** or **Not fixed**
-7. **Cleanup** — agent removes all debug probes when you confirm the fix
+4. **Analyze** — agent reads logs with `debug_read_logs`. Empty logs mean evidence is insufficient — it must not guess a root cause.
+5. **Confirm fix** — click **Start fix** (or **Reanalyze**) after reviewing the analysis
+6. **Fix** — small approved diffs only, for the log-supported cause
+7. **Verify** — click **Fixed** or **Not fixed**
+8. **Cleanup** — agent removes all debug probes when you confirm the fix
 
 Logs use one JSON object per line, for example:
 
@@ -76,6 +77,7 @@ Logs use one JSON object per line, for example:
 {"ts":"2026-08-17T07:00:00.000Z","runId":"…","hypothesisId":"H1","location":"File.cs:42","message":"enter","data":{"x":1}}
 ```
 
+### Context Management
 - **Dynamic compaction**: budget-aware multi-level compaction (normal → elevated → high → critical → overflow)
 - **3-level pass**: truncate args → conversation compact + summarize → tool result eviction
 - **Send-boundary hygiene**: compact oversized tool payloads in every outbound request

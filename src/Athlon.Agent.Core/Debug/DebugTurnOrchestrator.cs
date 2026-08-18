@@ -22,7 +22,7 @@ public sealed class DebugTurnOrchestrator(
             ?? await runStore.LoadActiveAsync(session.Id, cancellationToken).ConfigureAwait(false);
         if (existing is not null && existing.Phase != DebugPhase.Done)
         {
-            return await RunPhaseAsync(session, existing, userInput, callbacks, cancellationToken)
+            return await RunPhaseAsync(session, existing, userInput, callbacks, cancellationToken, appendUserMessage: true)
                 .ConfigureAwait(false);
         }
 
@@ -38,26 +38,38 @@ public sealed class DebugTurnOrchestrator(
 
         await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
 
-        session = await RunPhaseAsync(session, run, userInput, callbacks, cancellationToken).ConfigureAwait(false);
+        session = await RunPhaseAsync(session, run, userInput, callbacks, cancellationToken, appendUserMessage: true)
+            .ConfigureAwait(false);
         run = phaseAccessor.GetActiveRun(session.Id)!;
 
         if (run.Phase == DebugPhase.Hypothesize)
         {
             var text = DebugRunParser.GetLastAssistantText(session);
             var hypotheses = DebugRunParser.ParseHypotheses(text);
-            if (hypotheses.Count > 0)
+            if (hypotheses.Count == 0)
             {
-                run.Hypotheses = hypotheses.ToList();
+                session = await RunPhaseAsync(
+                    session,
+                    run,
+                    string.Empty,
+                    callbacks,
+                    cancellationToken,
+                    appendUserMessage: false).ConfigureAwait(false);
+                run = phaseAccessor.GetActiveRun(session.Id)!;
+                text = DebugRunParser.GetLastAssistantText(session);
+                hypotheses = DebugRunParser.ParseHypothesesOrFallback(text);
             }
 
+            run.Hypotheses = hypotheses.ToList();
             run.Phase = DebugPhase.Instrument;
             await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
             session = await RunPhaseAsync(
                 session,
                 run,
-                "Proceed to Instrument phase: add minimal JSONL log probes for each hypothesis and finish with ## Repro steps.",
+                string.Empty,
                 callbacks,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken,
+                appendUserMessage: false).ConfigureAwait(false);
             run = phaseAccessor.GetActiveRun(session.Id)!;
         }
 
@@ -85,29 +97,31 @@ public sealed class DebugTurnOrchestrator(
         switch (continuation)
         {
             case DebugContinuationKind.Reproduced when run.Phase == DebugPhase.AwaitRepro:
-                run.Phase = DebugPhase.Analyze;
-                await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
-                session = await RunPhaseAsync(
-                    session,
-                    run,
-                    "The user reproduced the bug. Call debug_read_logs, evaluate hypotheses, and state the root cause.",
-                    callbacks,
-                    cancellationToken).ConfigureAwait(false);
-                run = phaseAccessor.GetActiveRun(session.Id)!;
+                session = await RunAnalyzeToConfirmAsync(session, run, callbacks, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+
+            case DebugContinuationKind.StartFix when run.Phase == DebugPhase.AwaitFixConfirm:
                 run.Phase = DebugPhase.Fix;
                 await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
                 session = await RunPhaseAsync(
                     session,
                     run,
-                    "Apply the smallest fix for the confirmed root cause.",
+                    string.Empty,
                     callbacks,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    appendUserMessage: false).ConfigureAwait(false);
                 run = phaseAccessor.GetActiveRun(session.Id)!;
                 run.Phase = DebugPhase.AwaitVerify;
                 await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
                 break;
 
-            case DebugContinuationKind.VerifiedFixed when run.Phase is DebugPhase.AwaitVerify or DebugPhase.AwaitRepro:
+            case DebugContinuationKind.Reanalyze when run.Phase == DebugPhase.AwaitFixConfirm:
+                session = await RunAnalyzeToConfirmAsync(session, run, callbacks, cancellationToken)
+                    .ConfigureAwait(false);
+                break;
+
+            case DebugContinuationKind.VerifiedFixed when run.Phase == DebugPhase.AwaitVerify:
                 session = await RunCleanupToDoneAsync(session, run, callbacks, cancellationToken)
                     .ConfigureAwait(false);
                 break;
@@ -118,9 +132,10 @@ public sealed class DebugTurnOrchestrator(
                 session = await RunPhaseAsync(
                     session,
                     run,
-                    "The user says the bug is NOT fixed. Revise hypotheses using existing logs and add/adjust instrumentation.",
+                    string.Empty,
                     callbacks,
-                    cancellationToken).ConfigureAwait(false);
+                    cancellationToken,
+                    appendUserMessage: false).ConfigureAwait(false);
                 run = phaseAccessor.GetActiveRun(session.Id)!;
                 run.Phase = DebugPhase.AwaitRepro;
                 await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
@@ -130,6 +145,28 @@ public sealed class DebugTurnOrchestrator(
                 throw new InvalidOperationException($"Invalid debug continuation {continuation} for phase {run.Phase}.");
         }
 
+        return session;
+    }
+
+    private async Task<AgentSession> RunAnalyzeToConfirmAsync(
+        AgentSession session,
+        DebugRun run,
+        AgentTurnCallbacks? callbacks,
+        CancellationToken cancellationToken)
+    {
+        run.Phase = DebugPhase.Analyze;
+        await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
+        session = await RunPhaseAsync(
+            session,
+            run,
+            string.Empty,
+            callbacks,
+            cancellationToken,
+            appendUserMessage: false).ConfigureAwait(false);
+        run = phaseAccessor.GetActiveRun(session.Id)!;
+        run.RootCauseSummary = DebugRunParser.GetLastAssistantText(session);
+        run.Phase = DebugPhase.AwaitFixConfirm;
+        await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
         return session;
     }
 
@@ -144,9 +181,10 @@ public sealed class DebugTurnOrchestrator(
         session = await RunPhaseAsync(
             session,
             run,
-            "The user confirmed the bug is fixed. Remove all athlon-debug probes.",
+            string.Empty,
             callbacks,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken,
+            appendUserMessage: false).ConfigureAwait(false);
         run = phaseAccessor.GetActiveRun(session.Id)!;
         run.Phase = DebugPhase.Done;
         await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
@@ -158,11 +196,19 @@ public sealed class DebugTurnOrchestrator(
         DebugRun run,
         string userInput,
         AgentTurnCallbacks? callbacks,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool appendUserMessage)
     {
         phaseAccessor.SetActiveRun(run);
         sessionState.NotifyChanged(run);
-        return await orchestrator.SendAsync(session, userInput, null, callbacks, cancellationToken).ConfigureAwait(false);
+        return await orchestrator.SendAsync(
+            session,
+            userInput,
+            null,
+            callbacks,
+            cancellationToken,
+            computerUseActive: false,
+            appendUserMessage: appendUserMessage).ConfigureAwait(false);
     }
 
     private async Task PersistRunAsync(DebugRun run, CancellationToken cancellationToken)

@@ -36,4 +36,13 @@ public sealed class DebugRunParserTests
         Assert.NotNull(steps);
         Assert.Contains("Click save twice", steps, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void ParseHypothesesOrFallback_UsesH1WhenUnformatted()
+    {
+        var hypotheses = DebugRunParser.ParseHypothesesOrFallback("The loader races on cache miss.");
+        Assert.Single(hypotheses);
+        Assert.Equal("H1", hypotheses[0].Id);
+        Assert.Contains("loader races", hypotheses[0].Summary, StringComparison.Ordinal);
+    }
 }

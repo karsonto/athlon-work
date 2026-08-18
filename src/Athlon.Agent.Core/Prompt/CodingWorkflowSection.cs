@@ -26,7 +26,9 @@ public sealed class CodingWorkflowSection : IEnvironmentPromptSection
 
             || PromptModeHelper.IsAskMode(context)
 
-            || PromptModeHelper.IsPlanMode(context))
+            || PromptModeHelper.IsPlanMode(context)
+
+            || PromptModeHelper.IsDebugMode(context))
 
         {
 

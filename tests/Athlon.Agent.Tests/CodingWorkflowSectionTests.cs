@@ -42,10 +42,10 @@ public sealed class CodingWorkflowSectionTests
     }
 
     [Fact]
-    public void Append_SkipsContent_InPlanMode()
+    public void Append_SkipsContent_InDebugMode()
     {
         var builder = new StringBuilder();
-        new CodingWorkflowSection().Append(builder, CreateContext(hasWorkspace: true, SessionAgentMode.Plan));
+        new CodingWorkflowSection().Append(builder, CreateContext(hasWorkspace: true, SessionAgentMode.Debug));
 
         Assert.Equal(string.Empty, builder.ToString());
     }

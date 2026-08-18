@@ -204,7 +204,8 @@ public sealed class CliIpcServerTests
             IReadOnlyList<ImageAttachment>? imageAttachments = null,
             AgentTurnCallbacks? callbacks = null,
             CancellationToken cancellationToken = default,
-            bool computerUseActive = false)
+            bool computerUseActive = false,
+            bool appendUserMessage = true)
         {
             if (Handler is not null)
             {
