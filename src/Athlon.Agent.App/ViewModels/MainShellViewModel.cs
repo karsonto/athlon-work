@@ -1315,7 +1315,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [RelayCommand]
     private async Task LoadSessionAsync(SessionHistoryItemViewModel? item)
     {
-        if (item is null || item.Id == _session.Id)
+        if (item is null || string.Equals(item.Id, _displayedSessionId, StringComparison.Ordinal))
         {
             return;
         }
@@ -1562,6 +1562,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
         _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
         DebugBar.RefreshFromActiveRun();
+        RequestRefreshSessionHistory();
     }
 
     private void OnTurnStateChanged(object? sender, string sessionId)
@@ -2522,7 +2523,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private async Task RefreshSessionHistoryAsync()
     {
-        await _sessionHistory.RefreshAsync(_session.Id, _sessionTurns.TurnHost.IsRunning, StopSession);
+        await _sessionHistory.RefreshAsync(_displayedSessionId, _sessionTurns.TurnHost.IsRunning, StopSession);
         OnPropertyChanged(nameof(HasAgentRecords));
     }
 
