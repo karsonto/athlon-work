@@ -107,6 +107,28 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public void ContextTokenEstimator_IncludesToolCallReasoningByDefault()
+    {
+        var call = new AgentToolCall("c1", "file_read", new Dictionary<string, string>());
+        var withoutReasoning = ChatMessage.Create(
+            MessageRole.Assistant,
+            "step",
+            toolCalls: [call]);
+        var withReasoning = ChatMessage.Create(
+            MessageRole.Assistant,
+            "step",
+            toolCalls: [call],
+            reasoningContent: new string('r', 500));
+
+        Assert.True(
+            ContextTokenEstimator.EstimateMessage(withReasoning)
+            > ContextTokenEstimator.EstimateMessage(withoutReasoning));
+        Assert.Equal(
+            ContextTokenEstimator.EstimateMessage(withReasoning, includeReasoningInModelContext: true),
+            ContextTokenEstimator.EstimateMessage(withReasoning));
+    }
+
+    [Fact]
     public void ConversationCutoffPlanner_LongAgentLoop_CompactsWithoutSecondUserMessage()
     {
         var messages = new List<ChatMessage>

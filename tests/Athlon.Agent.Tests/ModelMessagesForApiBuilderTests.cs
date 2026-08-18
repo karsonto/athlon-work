@@ -216,4 +216,32 @@ public sealed class ModelMessagesForApiBuilderTests
         var contentArg = assistant.ToolCalls![0].Arguments["content"].GetString();
         Assert.Contains("...(truncated)", contentArg, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Build_includes_tool_call_reasoning_with_default_compaction_settings()
+    {
+        var call = new AgentToolCall("tc1", "file_read", new Dictionary<string, string>());
+        var history = new List<ChatMessage>
+        {
+            ChatMessage.Create(MessageRole.User, "read file"),
+            ChatMessage.Create(
+                MessageRole.Assistant,
+                string.Empty,
+                toolCalls: [call],
+                reasoningContent: "inspect the file before editing"),
+            ChatMessage.Create(MessageRole.Tool, AgentRuntime.FormatToolResult(
+                call,
+                ToolResult.Success("ok", "small")))
+        };
+
+        var result = ModelMessagesForApiBuilder.Build(
+            cache: null,
+            "system",
+            history,
+            new ContextCompactionSettings());
+
+        var assistant = Assert.Single(result.Messages, message => message.Role == "assistant");
+        Assert.Equal("inspect the file before editing", assistant.ReasoningContent);
+        Assert.NotNull(assistant.ToolCalls);
+    }
 }

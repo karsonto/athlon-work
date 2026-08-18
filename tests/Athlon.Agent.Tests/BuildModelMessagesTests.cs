@@ -195,6 +195,31 @@ public sealed class BuildModelMessagesTests
     }
 
     [Fact]
+    public void BuildModelMessages_AssistantToolCallWithReasoning_IncludedByDefault()
+    {
+        var call = new AgentToolCall("c1", "file_read", new Dictionary<string, string>());
+        var history = new[]
+        {
+            ChatMessage.Create(MessageRole.User, "read it"),
+            ChatMessage.Create(
+                MessageRole.Assistant,
+                string.Empty,
+                toolCalls: [call],
+                reasoningContent: "need the file first"),
+            ChatMessage.Create(
+                MessageRole.Tool,
+                AgentRuntime.FormatToolResult(call, ToolResult.Success("ok", "contents")))
+        };
+
+        var messages = AgentRuntime.BuildModelMessages("system", history);
+
+        var assistant = Assert.Single(messages, message => message.Role == "assistant");
+        Assert.Equal("need the file first", assistant.ReasoningContent);
+        Assert.NotNull(assistant.ToolCalls);
+        Assert.Equal("c1", assistant.ToolCalls[0].Id);
+    }
+
+    [Fact]
     public void BuildModelMessages_RetainsOnlyLatestTwoToolScreenshots()
     {
         var history = new List<ChatMessage>

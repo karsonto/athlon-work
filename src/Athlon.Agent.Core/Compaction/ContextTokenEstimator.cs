@@ -150,7 +150,7 @@ public static class ContextTokenEstimator
             case MessageRole.System:
             case MessageRole.Summary:
                 tokens += EstimateRawTextTokens(message.Content);
-                if (includeReasoningInModelContext)
+                if (ReasoningInModelContext.CountsTowardEstimate(message, includeReasoningInModelContext))
                 {
                     tokens += EstimateRawTextTokens(message.ReasoningContent);
                 }

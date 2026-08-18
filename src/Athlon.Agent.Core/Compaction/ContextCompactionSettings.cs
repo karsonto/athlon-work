@@ -24,8 +24,9 @@ public sealed class ContextCompactionSettings
     public bool OffloadBeforeCompact { get; set; } = true;
 
     /// <summary>
-    /// When false (default), assistant <c>ReasoningContent</c> is omitted from API history and excluded from compaction token estimates.
-    /// UI and <c>conversation.jsonl</c> still persist reasoning for display.
+    /// When false (default), plain assistant replies omit <c>ReasoningContent</c> from API history
+    /// and compaction token estimates. Assistant messages with <c>tool_calls</c> still include
+    /// reasoning so tool loops can continue. UI and <c>conversation.jsonl</c> persist reasoning for display.
     /// </summary>
     public bool IncludeReasoningInModelContext { get; set; }
 

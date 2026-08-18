@@ -303,8 +303,11 @@ internal static class ModelMessageBuilder
         bool includeReasoningInModelContext)
     {
         var message = history[assistantIndex];
-        var reasoningContent = includeReasoningInModelContext ? message.ReasoningContent : null;
         var toolCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
+        var reasoningContent = ReasoningInModelContext.Select(
+            message.ReasoningContent,
+            includeReasoningInModelContext,
+            toolCalls is { Count: > 0 });
         if (toolCalls is not { Count: > 0 })
         {
             messages.Add(new AgentModelMessage("assistant", message.Content, ReasoningContent: reasoningContent));
