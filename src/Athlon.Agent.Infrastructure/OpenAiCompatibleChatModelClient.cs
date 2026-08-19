@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.RuntimeDiagnostics;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -10,9 +11,13 @@ public sealed class OpenAiCompatibleChatModelClient(
     AppSettings settings,
     ICredentialStore credentialStore,
     ISessionHttpLogService sessionHttpLog,
-    IActiveAgentSessionContext activeSessionContext) : IAgentModelClient
+    IActiveAgentSessionContext activeSessionContext,
+    IAgentRunContextAccessor? runContextAccessor = null,
+    IRuntimeDiagnosticEventSink? runtimeDiagnosticEventSink = null) : IAgentModelClient
 {
     private readonly IAppLogger _logger = logger.ForContext("ModelGateway");
+    private readonly IAgentRunContextAccessor? _runContextAccessor = runContextAccessor;
+    private readonly IRuntimeDiagnosticEventSink? _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
 
     public async Task<AgentModelResponse> CompleteAsync(
         AgentModelRequest request,
@@ -36,6 +41,14 @@ public sealed class OpenAiCompatibleChatModelClient(
                     "Streaming completion failed, fallback to non-stream mode: {Message} (AllowToolCalls={AllowToolCalls})",
                     ex.Message,
                     request.AllowToolCalls);
+                await EnqueueDiagnosticAsync(
+                    sessionId: activeSessionContext.SessionId,
+                    component: RuntimeDiagnosticComponent.Model,
+                    phase: RuntimeDiagnosticPhase.Streaming,
+                    eventType: "model.streaming_interrupted",
+                    severity: RuntimeDiagnosticSeverity.Warning,
+                    errorCode: RuntimeDiagnosticErrorCodes.ModelStreamingInterrupted,
+                    message: ex.Message).ConfigureAwait(false);
             }
         }
 
@@ -111,6 +124,14 @@ public sealed class OpenAiCompatibleChatModelClient(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             error ??= ex.Message;
+            await EnqueueDiagnosticAsync(
+                sessionId: sessionId,
+                component: RuntimeDiagnosticComponent.Model,
+                phase: RuntimeDiagnosticPhase.Request,
+                eventType: "model.request_failed",
+                severity: RuntimeDiagnosticSeverity.Error,
+                errorCode: RuntimeDiagnosticErrorCodes.ModelRequestFailed,
+                message: ex.Message).ConfigureAwait(false);
             throw;
         }
         finally
@@ -137,7 +158,50 @@ public sealed class OpenAiCompatibleChatModelClient(
                     "Failed to write HTTP interaction log for session {SessionId}: {Message}",
                     sessionId ?? "(none)",
                     logEx.Message);
+                await EnqueueDiagnosticAsync(
+                    sessionId: sessionId,
+                    component: RuntimeDiagnosticComponent.Storage,
+                    phase: RuntimeDiagnosticPhase.Persist,
+                    eventType: "storage.persist_failed",
+                    severity: RuntimeDiagnosticSeverity.Warning,
+                    errorCode: RuntimeDiagnosticErrorCodes.StoragePersistFailed,
+                    message: $"session_http_log failed: {logEx.Message}").ConfigureAwait(false);
             }
         }
+    }
+
+    private async Task EnqueueDiagnosticAsync(
+        string? sessionId,
+        RuntimeDiagnosticComponent component,
+        RuntimeDiagnosticPhase phase,
+        string eventType,
+        RuntimeDiagnosticSeverity severity,
+        string errorCode,
+        string? message)
+    {
+        if (_runtimeDiagnosticEventSink is not { } sink)
+        {
+            return;
+        }
+
+        var runId = _runContextAccessor?.Current?.RunId ?? sessionId;
+        var evt = new RuntimeDiagnosticEvent(
+            eventId: "",
+            ts: default,
+            sequence: 0,
+            sessionId: sessionId,
+            runId: runId,
+            turnId: null,
+            attemptId: null,
+            parentAttemptId: null,
+            toolCallId: null,
+            messageId: null,
+            component: component,
+            phase: phase,
+            eventType: eventType,
+            severity: severity,
+            errorCode: errorCode,
+            message: message);
+        await sink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
     }
 }

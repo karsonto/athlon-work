@@ -5,6 +5,7 @@ using Athlon.Agent.Core.Streaming;
 using Athlon.Agent.Core.Events;
 using Athlon.Agent.Core.Middleware;
 using Athlon.Agent.Core.SubAgents;
+using Athlon.Agent.Core.RuntimeDiagnostics;
 
 namespace Athlon.Agent.Core;
 
@@ -23,6 +24,7 @@ public sealed class AgentRuntime(
     CompactionTurnMiddleware compactionMiddleware,
     AppSettings settings,
     IAppLogger logger,
+    IRuntimeDiagnosticEventSink runtimeDiagnosticEventSink,
     IEventManager? eventManager = null,
     IConversationTranscriptWriter? transcriptWriter = null) : IAgentRuntime
 {
@@ -35,7 +37,8 @@ public sealed class AgentRuntime(
         runContextAccessor,
         () => settings.ToolPermissions.ApprovalEnabled,
         logger,
-        eventManager);
+        eventManager,
+        runtimeDiagnosticEventSink);
     private readonly IConversationTranscriptWriter _transcript =
         transcriptWriter ?? new ImmediateConversationTranscriptWriter(storage);
     private TrainingData.ITrainingDataCollector? _trainingDataCollector;
@@ -62,7 +65,8 @@ public sealed class AgentRuntime(
         runContextAccessor,
         RunForceCompactPreCompletionAsync,
         logger,
-        _eventManager);
+        _eventManager,
+        runtimeDiagnosticEventSink);
 
     public async Task<AgentSession> SendAsync(
         AgentSession session,

@@ -2,9 +2,9 @@ namespace Athlon.Agent.Core.Compaction;
 
 public static class SummaryMessageBuilder
 {
-    public static ChatMessage CreateSummaryPlaceholder(string summaryText, string? transcriptPath)
+    public static ChatMessage CreateSummaryPlaceholder(string summaryText, string? transcriptPath, bool hiddenFromTimeline = false)
     {
-        var content = BuildSummaryContent(summaryText, transcriptPath);
+        var content = BuildSummaryContent(summaryText, transcriptPath, hiddenFromTimeline);
         return ChatMessage.Create(MessageRole.Summary, content);
     }
 
@@ -25,12 +25,19 @@ public static class SummaryMessageBuilder
                || CompactionMessageContent.IsCompressedPlaceholder(message.Content);
     }
 
+    public static bool IsHiddenSummaryMessage(ChatMessage message) =>
+        message.Role == MessageRole.Summary
+        && message.Content.Contains(ConversationCompactionDefaults.HiddenSummaryMessageMarker, StringComparison.Ordinal);
+
     public static IReadOnlyList<ChatMessage> FilterSummaryMessages(IReadOnlyList<ChatMessage> messages) =>
         messages.Where(message => !IsSummaryMessage(message)).ToList();
 
-    private static string BuildSummaryContent(string summaryText, string? transcriptPath)
+    private static string BuildSummaryContent(string summaryText, string? transcriptPath, bool hiddenFromTimeline)
     {
         var trimmedSummary = summaryText.Trim();
+        var marker = hiddenFromTimeline
+            ? ConversationCompactionDefaults.HiddenSummaryMessageMarker
+            : ConversationCompactionDefaults.SummaryMessageMarker;
         if (!string.IsNullOrWhiteSpace(transcriptPath))
         {
             return
@@ -42,10 +49,10 @@ public static class SummaryMessageBuilder
                 "<summary>\n" +
                 trimmedSummary +
                 "\n</summary>\n\n" +
-                ConversationCompactionDefaults.SummaryMessageMarker;
+                marker;
         }
 
-        return ConversationCompactionDefaults.SummaryMessageMarker + "\n" +
+        return marker + "\n" +
                "Here is a summary of the conversation to date:\n\n" +
                trimmedSummary;
     }

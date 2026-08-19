@@ -5,6 +5,7 @@ public enum CompactionStrategy
     ConversationCompact,
     ForceCompact,
     ManualCompact,
+    MiddleCutOnRetrySkipped,
 }
 
 public enum CompactionLayer

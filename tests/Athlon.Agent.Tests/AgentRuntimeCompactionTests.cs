@@ -54,7 +54,8 @@ public sealed class AgentRuntimeCompactionTests
             compaction,
             settings,
 
-            logger);
+            logger,
+            new NullRuntimeDiagnosticEventSink());
 
         ChatMessage? notified = null;
         AgentSession? sessionAfterCompact = null;

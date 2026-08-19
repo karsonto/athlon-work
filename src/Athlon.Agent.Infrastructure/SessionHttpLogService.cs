@@ -32,45 +32,18 @@ public sealed class SessionHttpLogService(
     IAppLogger logger) : ISessionHttpLogService
 {
     private readonly IAppLogger _logger = logger.ForContext("SessionHttpLog");
+    private readonly IAppPathProvider _ = paths;
+    private readonly IJsonFileStore __ = jsonFileStore;
+    private readonly IAgentRunContextAccessor ___ = runContextAccessor;
 
     public async Task LogInteractionAsync(string? sessionId, SessionHttpInteractionLog entry, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(sessionId))
-        {
-            _logger.Debug("Skipped HTTP log without session id ({Purpose})", entry.Purpose);
-            return;
-        }
-
-        var sessionDir = runContextAccessor.ResolveSessionDirectory(paths.SessionsPath, sessionId);
-        var httpDir = Path.Combine(sessionDir, "http");
-        Directory.CreateDirectory(httpDir);
-        var path = Path.Combine(httpDir, "interactions.jsonl");
-
-        var record = new
-        {
-            time = AppTimeZone.ToChina(entry.Timestamp),
-            endpoint = entry.Endpoint,
-            purpose = entry.Purpose,
-            statusCode = entry.StatusCode,
-            durationMs = entry.DurationMs,
-            request = entry.Request is null ? null : HttpLogSanitizer.SerializeForLog(entry.Request),
-            responseBody = entry.ResponseBody is null
-                ? null
-                : HttpLogSanitizer.Truncate(HttpLogSanitizer.RedactSecrets(entry.ResponseBody)),
-            error = entry.Error
-        };
-
-        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
-        {
-            await jsonFileStore.AppendJsonLineAsync(path, record, cancellationToken, prettyPrint: true);
-        }
-
-        _logger.Information(
-            "HTTP {Purpose} logged for session {SessionId} status={StatusCode} duration={DurationMs}ms",
+        _logger.Debug(
+            "Legacy HTTP interaction log disabled ({Purpose}, status={StatusCode}, duration={DurationMs}ms)",
             entry.Purpose,
-            sessionId,
             entry.StatusCode?.ToString() ?? "n/a",
             entry.DurationMs);
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 }
 

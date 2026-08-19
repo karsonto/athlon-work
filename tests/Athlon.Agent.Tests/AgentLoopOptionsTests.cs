@@ -34,7 +34,8 @@ public sealed class AgentLoopOptionsTests
             pipeline,
             compaction,
             settings,
-            logger);
+            logger,
+            new NullRuntimeDiagnosticEventSink());
 
         var session = AgentSession.Create("loop-test");
         session = await runtime.SendAsync(

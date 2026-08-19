@@ -1,12 +1,15 @@
 using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.RuntimeDiagnostics;
 
 namespace Athlon.Agent.Infrastructure;
 
 public sealed class ToolResultEvictor(
     AppSettings settings,
-    IFileStorageService storage) : IToolResultEvictor
+    IFileStorageService storage,
+    IAgentRunContextAccessor? runContextAccessor = null,
+    IRuntimeDiagnosticEventSink? runtimeDiagnosticEventSink = null) : IToolResultEvictor
 {
     public async Task<string> EvictIfNeededAsync(
         string sessionId,
@@ -33,7 +36,24 @@ public sealed class ToolResultEvictor(
             return formattedToolContent;
         }
 
-        var path = await storage.SaveEvictedToolResultAsync(sessionId, toolCall.Id, rawContent, cancellationToken);
+        string path;
+        try
+        {
+            path = await storage.SaveEvictedToolResultAsync(sessionId, toolCall.Id, rawContent, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            await EnqueueDiagnosticAsync(
+                sessionId,
+                toolCall.Id,
+                RuntimeDiagnosticPhase.Persist,
+                "storage.persist_failed",
+                RuntimeDiagnosticSeverity.Error,
+                RuntimeDiagnosticErrorCodes.StoragePersistFailed,
+                $"SaveEvictedToolResult failed: {ex.Message}").ConfigureAwait(false);
+            return formattedToolContent;
+        }
+
         var preview = BuildPreview(rawContent, cfg.PreviewChars);
         var placeholder = new StringBuilder()
             .AppendLine($"[Tool result evicted - {rawContent.Length} chars]")
@@ -42,9 +62,53 @@ public sealed class ToolResultEvictor(
             .Append(preview)
             .ToString();
 
+        await EnqueueDiagnosticAsync(
+            sessionId,
+            toolCall.Id,
+            RuntimeDiagnosticPhase.Persist,
+            "tool.output_evicted",
+            RuntimeDiagnosticSeverity.Warning,
+            RuntimeDiagnosticErrorCodes.ToolOutputEvicted,
+            $"Evicted oversized tool result ({rawContent.Length} chars) for {toolCall.Name}.").ConfigureAwait(false);
+
         return AgentRuntime.FormatToolResult(
             toolCall,
             ToolResult.Success(result.Summary, placeholder));
+    }
+
+    private async Task EnqueueDiagnosticAsync(
+        string sessionId,
+        string toolCallId,
+        RuntimeDiagnosticPhase phase,
+        string eventType,
+        RuntimeDiagnosticSeverity severity,
+        string errorCode,
+        string message)
+    {
+        if (runtimeDiagnosticEventSink is not { } sink)
+        {
+            return;
+        }
+
+        var context = runContextAccessor?.Current;
+        var evt = new RuntimeDiagnosticEvent(
+            eventId: "",
+            ts: default,
+            sequence: 0,
+            sessionId: sessionId,
+            runId: context?.RunId ?? sessionId,
+            turnId: null,
+            attemptId: toolCallId,
+            parentAttemptId: null,
+            toolCallId: toolCallId,
+            messageId: null,
+            component: RuntimeDiagnosticComponent.Tool,
+            phase: phase,
+            eventType: eventType,
+            severity: severity,
+            errorCode: errorCode,
+            message: message);
+        await sink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
     }
 
     private static string BuildPreview(string content, int previewChars)

@@ -1,4 +1,3 @@
-using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.ComputerUse;
 using Athlon.Agent.Core.Harness;
@@ -89,11 +88,6 @@ public static class ToolFacetClassifier
         if (string.Equals(name, "terminal_open", StringComparison.OrdinalIgnoreCase))
         {
             facets |= ToolFacet.TerminalBootstrap;
-        }
-
-        if (tool is IDebugTool)
-        {
-            facets |= ToolFacet.Debug;
         }
 
         if (WriteFileNames.Contains(name))

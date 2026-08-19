@@ -1,5 +1,6 @@
 using System.IO;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.RuntimeDiagnostics;
 using Athlon.Agent.Infrastructure;
 using Microsoft.Web.WebView2.Core;
 
@@ -12,13 +13,18 @@ public sealed class WebView2EnvironmentProvider
 
     private readonly IAppPathProvider _paths;
     private readonly IAppLogger _logger;
+    private readonly IRuntimeDiagnosticEventSink? _runtimeDiagnosticEventSink;
     private readonly object _lock = new();
     private Task<CoreWebView2Environment?>? _bundledEnvironmentTask;
 
-    public WebView2EnvironmentProvider(IAppPathProvider paths, IAppLogger logger)
+    public WebView2EnvironmentProvider(
+        IAppPathProvider paths,
+        IAppLogger logger,
+        IRuntimeDiagnosticEventSink? runtimeDiagnosticEventSink = null)
     {
         _paths = paths;
         _logger = logger.ForContext(nameof(WebView2EnvironmentProvider));
+        _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
     }
 
     /// <summary>
@@ -46,6 +52,27 @@ public sealed class WebView2EnvironmentProvider
         {
             _logger.Warning("Bundled WebView2 runtime not found on Windows 10");
             App.StartupTrace("WebView2 bundled runtime missing on Windows 10");
+            if (_runtimeDiagnosticEventSink is { } sink)
+            {
+                var evt = new RuntimeDiagnosticEvent(
+                    eventId: "",
+                    ts: default,
+                    sequence: 0,
+                    sessionId: null,
+                    runId: null,
+                    turnId: null,
+                    attemptId: null,
+                    parentAttemptId: null,
+                    toolCallId: null,
+                    messageId: null,
+                    component: RuntimeDiagnosticComponent.UiWebview,
+                    phase: RuntimeDiagnosticPhase.Initialize,
+                    eventType: RuntimeDiagnosticErrorCodes.UiWebviewInitFailed,
+                    severity: RuntimeDiagnosticSeverity.Error,
+                    errorCode: RuntimeDiagnosticErrorCodes.UiWebviewInitFailed,
+                    message: "Bundled WebView2 runtime not found on Windows 10");
+                await sink.EnqueueAsync(evt, cancellationToken).ConfigureAwait(false);
+            }
             return null;
         }
 
@@ -71,6 +98,27 @@ public sealed class WebView2EnvironmentProvider
                 browserFolder,
                 ex.Message);
             App.StartupTrace($"WebView2 bundled runtime failed ({ex.Message})");
+            if (_runtimeDiagnosticEventSink is { } sink)
+            {
+                var evt = new RuntimeDiagnosticEvent(
+                    eventId: "",
+                    ts: default,
+                    sequence: 0,
+                    sessionId: null,
+                    runId: null,
+                    turnId: null,
+                    attemptId: null,
+                    parentAttemptId: null,
+                    toolCallId: null,
+                    messageId: null,
+                    component: RuntimeDiagnosticComponent.UiWebview,
+                    phase: RuntimeDiagnosticPhase.Initialize,
+                    eventType: RuntimeDiagnosticErrorCodes.UiWebviewInitFailed,
+                    severity: RuntimeDiagnosticSeverity.Error,
+                    errorCode: RuntimeDiagnosticErrorCodes.UiWebviewInitFailed,
+                    message: $"Bundled WebView2 runtime failed ({ex.Message})");
+                await sink.EnqueueAsync(evt, cancellationToken).ConfigureAwait(false);
+            }
             return null;
         }
     }

@@ -59,7 +59,7 @@ internal static class DebugPhaseInstructions
             "Phase Instrument: add minimal log probes via file_edit/file_write (user approves diffs). "
             + $"Each probe appends JSONL to `{logPath}`. End with a numbered `## Repro steps` section. Do not fix the bug yet.",
         DebugPhase.Analyze =>
-            "Phase Analyze: call debug_read_logs FIRST. You may state a root cause only if the logs contain matching hits you cite. "
+            "Phase Analyze: call diagnose_logs FIRST. You may state a root cause only if the diagnostic report contains matching evidence you cite. "
             + "If the log file is missing, empty, or has no matching entries, say evidence is insufficient — do not guess a root cause and do not propose a fix.",
         DebugPhase.Fix =>
             "Phase Fix: apply the smallest correct code change via file_edit for the log-supported root cause only. Do not add new probes. Do not invent causes not backed by logs.",
@@ -67,7 +67,7 @@ internal static class DebugPhaseInstructions
             "Phase Cleanup: remove all `#region athlon-debug` probes via file_edit. Leave the functional fix intact.",
         DebugPhase.AwaitRepro =>
             "Phase AwaitRepro: the user is adding context while reproducing. Update repro understanding if needed. "
-            + "Do not edit files, do not call debug_read_logs, and do not state a root cause until they mark the bug reproduced.",
+            + "Do not edit files, do not call diagnose_logs, and do not state a root cause until they mark the bug reproduced.",
         DebugPhase.AwaitFixConfirm =>
             "Phase AwaitFixConfirm: the user is reviewing the analysis. Treat extra messages as questions or extra context. "
             + "Do not edit files and do not start a fix until they confirm. If logs were empty, say evidence is still insufficient.",

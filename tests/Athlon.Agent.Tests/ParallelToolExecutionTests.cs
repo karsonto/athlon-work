@@ -402,7 +402,8 @@ public sealed class ParallelToolExecutionTests
             pipeline,
             compaction,
             settings,
-            logger);
+            logger,
+            new NullRuntimeDiagnosticEventSink());
     }
 
     private static string FileReadToolName() =>

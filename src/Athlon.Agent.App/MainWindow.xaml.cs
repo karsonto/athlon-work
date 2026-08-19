@@ -2,11 +2,14 @@ using System.ComponentModel;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Threading;
 using Athlon.Agent.App.Controls;
 using Athlon.Agent.App.Navigation;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.App.Views;
+using Athlon.Agent.Core;
+using Athlon.Agent.Core.RuntimeDiagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Athlon.Agent.App;
@@ -19,6 +22,8 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
     private readonly MainWindowShutdownCoordinator _shutdownCoordinator;
     private readonly PageViewFactory _pageViewFactory;
     private readonly Services.ComputerUse.ComputerUseOverlayRegistry _computerUseOverlayRegistry;
+    private readonly IRuntimeDiagnosticEventSink _runtimeDiagnosticEventSink;
+    private readonly IAgentRunContextAccessor _runContextAccessor;
     private bool _shutdownInProgress;
     private readonly PropertyChangedEventHandler _viewModelPropertyChangedHandler;
     private readonly EventHandler<ContextSidebarLayoutChangedEventArgs> _contextSidebarLayoutChangedHandler;
@@ -39,7 +44,9 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         ClipboardImageAttachmentReader clipboardImageReader,
         PageViewFactory pageViewFactory,
         MainWindowShutdownCoordinator shutdownCoordinator,
-        Services.ComputerUse.ComputerUseOverlayRegistry computerUseOverlayRegistry)
+        Services.ComputerUse.ComputerUseOverlayRegistry computerUseOverlayRegistry,
+        IAgentRunContextAccessor runContextAccessor,
+        IRuntimeDiagnosticEventSink runtimeDiagnosticEventSink)
     {
         App.StartupTrace("MainWindow constructor entered");
         InitializeComponent();
@@ -50,6 +57,8 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         _pageViewFactory = pageViewFactory;
         _shutdownCoordinator = shutdownCoordinator;
         _computerUseOverlayRegistry = computerUseOverlayRegistry;
+        _runContextAccessor = runContextAccessor;
+        _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
         _layoutBinder = new MainWindowLayoutBinder(_viewModel, new MainWindowLayoutElements
         {
             NavigationSidebarColumn = NavigationSidebarColumn,
@@ -109,6 +118,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             ((IChatLayoutSurface)chatPage).ComposerInput.ClipboardImageReader = _clipboardImageReader;
             _layoutBinder.ApplyAll();
             ChatWebView.InitializationFailed += OnChatWebViewInitializationFailed;
+            ChatWebView.ScriptExecutionFailed += OnChatWebViewScriptExecutionFailed;
             _viewModel.AttachChatView(ChatWebView);
             RegisterChatScrollService(chatPage);
         }
@@ -127,8 +137,59 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             ? ((IChatLayoutSurface)chatPage).ChatWebView
             : throw new InvalidOperationException("Chat page is not loaded.");
 
-    private void OnChatWebViewInitializationFailed(object? sender, string message) =>
+    private void OnChatWebViewInitializationFailed(object? sender, string message)
+    {
         _viewModel.ShowShellToast(message, ShellToastKind.Error);
+
+        var context = _runContextAccessor.Current;
+        var sessionId = context?.SessionId;
+        var runId = context?.RunId;
+
+        var evt = new RuntimeDiagnosticEvent(
+            eventId: "",
+            ts: default,
+            sequence: 0,
+            sessionId: sessionId,
+            runId: runId,
+            turnId: null,
+            attemptId: null,
+            parentAttemptId: null,
+            toolCallId: null,
+            messageId: null,
+            component: RuntimeDiagnosticComponent.UiWebview,
+            phase: RuntimeDiagnosticPhase.Initialize,
+            eventType: "ui.webview_init_failed",
+            severity: RuntimeDiagnosticSeverity.Error,
+            errorCode: RuntimeDiagnosticErrorCodes.UiWebviewInitFailed,
+            message: message);
+        _ = _runtimeDiagnosticEventSink.EnqueueAsync(evt, CancellationToken.None);
+    }
+
+    private void OnChatWebViewScriptExecutionFailed(object? sender, string message)
+    {
+        var context = _runContextAccessor.Current;
+        var sessionId = context?.SessionId;
+        var runId = context?.RunId;
+
+        var evt = new RuntimeDiagnosticEvent(
+            eventId: "",
+            ts: default,
+            sequence: 0,
+            sessionId: sessionId,
+            runId: runId,
+            turnId: null,
+            attemptId: null,
+            parentAttemptId: null,
+            toolCallId: null,
+            messageId: null,
+            component: RuntimeDiagnosticComponent.UiWebview,
+            phase: RuntimeDiagnosticPhase.Invoke,
+            eventType: "ui.webview_script_failed",
+            severity: RuntimeDiagnosticSeverity.Error,
+            errorCode: RuntimeDiagnosticErrorCodes.UiWebviewScriptFailed,
+            message: message);
+        _ = _runtimeDiagnosticEventSink.EnqueueAsync(evt, CancellationToken.None);
+    }
 
     private void RegisterChatScrollService(ChatPageView chatPage)
     {
@@ -152,6 +213,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         if (_viewModel.CurrentPageView is ChatPageView chatPage)
         {
             ((IChatLayoutSurface)chatPage).ChatWebView.InitializationFailed -= OnChatWebViewInitializationFailed;
+            ((IChatLayoutSurface)chatPage).ChatWebView.ScriptExecutionFailed -= OnChatWebViewScriptExecutionFailed;
         }
         _viewModel.ContextSidebarLayoutChanged -= _contextSidebarLayoutChangedHandler;
         _viewModel.NavigationSidebarLayoutChanged -= _navigationSidebarLayoutChangedHandler;
@@ -208,6 +270,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
                 _layoutBinder.ApplyEditorPane();
                 _layoutBinder.ApplyComposer();
                 ((IChatLayoutSurface)chatPage).ChatWebView.InitializationFailed += OnChatWebViewInitializationFailed;
+                ((IChatLayoutSurface)chatPage).ChatWebView.ScriptExecutionFailed += OnChatWebViewScriptExecutionFailed;
                 _viewModel.AttachChatView(((IChatLayoutSurface)chatPage).ChatWebView);
                 RegisterChatScrollService(chatPage);
             }

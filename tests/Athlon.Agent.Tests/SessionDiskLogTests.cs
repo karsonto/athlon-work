@@ -279,7 +279,8 @@ public sealed class SessionDiskLogTests
             turnPipeline,
             compaction,
             settings,
-            runtimeLogger);
+            runtimeLogger,
+            new NullRuntimeDiagnosticEventSink());
 
         var session = AgentSession.Create("cancel-persist");
 

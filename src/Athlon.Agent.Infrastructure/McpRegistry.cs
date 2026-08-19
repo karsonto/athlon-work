@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
+using Athlon.Agent.Core.RuntimeDiagnostics;
 using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Infrastructure.Sso;
 using Athlon.Agent.Mcp;
@@ -37,9 +38,15 @@ public interface IMcpRegistry
     Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments args, CancellationToken cancellationToken = default);
 }
 
-public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext workspaceContext) : IMcpRegistry, IAsyncDisposable
+public sealed class McpRegistry(
+    IAppLogger logger,
+    IActiveWorkspaceContext workspaceContext,
+    IAgentRunContextAccessor runContextAccessor,
+    IRuntimeDiagnosticEventSink runtimeDiagnosticEventSink) : IMcpRegistry, IAsyncDisposable
 {
     private readonly IAppLogger _logger = logger.ForContext("McpRegistry");
+    private readonly IAgentRunContextAccessor _runContextAccessor = runContextAccessor;
+    private readonly IRuntimeDiagnosticEventSink _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
     private readonly ConcurrentDictionary<string, IMcpClient> _clients = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, McpServerStatus> _statuses = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, IReadOnlyList<McpTool>> _tools = new(StringComparer.OrdinalIgnoreCase);
@@ -352,6 +359,27 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
                 ? $"Timed out connecting to MCP server ({transportLabel})."
                 : ex.Message;
             _logger.Warning("MCP connect failed for {Server}: {Message}", name, message);
+
+            var context = _runContextAccessor.Current;
+            var evt = new RuntimeDiagnosticEvent(
+                eventId: "",
+                ts: default,
+                sequence: 0,
+                sessionId: context?.SessionId,
+                runId: context?.RunId,
+                turnId: null,
+                attemptId: null,
+                parentAttemptId: null,
+                toolCallId: null,
+                messageId: null,
+                component: RuntimeDiagnosticComponent.Mcp,
+                phase: RuntimeDiagnosticPhase.Request,
+                eventType: "mcp.connect_failed",
+                severity: RuntimeDiagnosticSeverity.Error,
+                errorCode: RuntimeDiagnosticErrorCodes.McpConnectFailed,
+                message: message);
+            await _runtimeDiagnosticEventSink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
+
             _tools[name] = Array.Empty<McpTool>();
             _statuses[name] = new McpServerStatus(
                 name,
@@ -413,6 +441,27 @@ public sealed class McpRegistry(IAppLogger logger, IActiveWorkspaceContext works
             }
 
             _logger.Warning("MCP refresh failed for {Server}: {Message}", name, ex.Message);
+
+            var context = _runContextAccessor.Current;
+            var evt = new RuntimeDiagnosticEvent(
+                eventId: "",
+                ts: default,
+                sequence: 0,
+                sessionId: context?.SessionId,
+                runId: context?.RunId,
+                turnId: null,
+                attemptId: null,
+                parentAttemptId: null,
+                toolCallId: null,
+                messageId: null,
+                component: RuntimeDiagnosticComponent.Mcp,
+                phase: RuntimeDiagnosticPhase.Request,
+                eventType: "mcp.list_tools_failed",
+                severity: RuntimeDiagnosticSeverity.Error,
+                errorCode: RuntimeDiagnosticErrorCodes.McpListToolsFailed,
+                message: ex.Message);
+            await _runtimeDiagnosticEventSink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
+
             _tools[name] = Array.Empty<McpTool>();
             _statuses[name] = client.Status with
             {

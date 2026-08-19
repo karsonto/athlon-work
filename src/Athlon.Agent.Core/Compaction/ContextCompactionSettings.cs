@@ -49,6 +49,21 @@ public sealed class ContextCompactionSettings
 
     public DynamicCompactionSettings DynamicCompaction { get; set; } = new();
 
+    /// <summary>
+    /// When true, if overflow retry is skipped (payload not reduced), perform a single
+    /// middle-cut compaction: keep head/tail windows and summarize the middle span.
+    /// </summary>
+    public bool MiddleCutOnRetrySkipped { get; set; } = true;
+
+    /// <summary>Number of earliest conversation messages to preserve during middle-cut compaction.</summary>
+    public int MiddleCutKeepHeadMessages { get; set; } = 2;
+
+    /// <summary>Number of latest conversation messages to preserve during middle-cut compaction.</summary>
+    public int MiddleCutKeepTailMessages { get; set; } = 12;
+
+    /// <summary>Max middle-cut attempts per run to avoid repeated reshaping.</summary>
+    public int MiddleCutMaxPerRun { get; set; } = 1;
+
     public RequestHistoryHygieneSettings RequestHistoryHygiene { get; set; } = new();
 
     public ToolStormSettings ToolStorm { get; set; } = new();

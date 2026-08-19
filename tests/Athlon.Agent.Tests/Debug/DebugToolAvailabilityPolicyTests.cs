@@ -31,17 +31,6 @@ public sealed class DebugToolAvailabilityPolicyTests
         Assert.Equal(expectedWrite, ToolAvailabilityPolicy.IsEnabled(new StubLocalWrite("file_write"), ctx));
     }
 
-    [Theory]
-    [InlineData(DebugPhase.Hypothesize, false)]
-    [InlineData(DebugPhase.Analyze, true)]
-    [InlineData(DebugPhase.AwaitFixConfirm, false)]
-    [InlineData(DebugPhase.Fix, false)]
-    public void DebugMode_ReadLogsOnlyInAnalyze(DebugPhase phase, bool expected)
-    {
-        var ctx = DebugCtx(phase);
-        Assert.Equal(expected, ToolAvailabilityPolicy.IsEnabled(new StubDebug("debug_read_logs"), ctx));
-    }
-
     [Fact]
     public void DebugMode_BlocksShellAndSubAgents()
     {
@@ -51,11 +40,10 @@ public sealed class DebugToolAvailabilityPolicyTests
     }
 
     [Fact]
-    public void Classifier_TagsShellAndDebugFacets()
+    public void Classifier_TagsShellFacet()
     {
         Assert.True(ToolFacetClassifier.Classify(new StubNamed("execute_command")).HasFlag(ToolFacet.Shell));
         Assert.False(ToolFacetClassifier.Classify(new StubNamed("file_write")).HasFlag(ToolFacet.Shell));
-        Assert.True(ToolFacetClassifier.Classify(new StubDebug("debug_read_logs")).HasFlag(ToolFacet.Debug));
     }
 
     private sealed class StubNamed(string name) : IAgentTool
@@ -67,14 +55,6 @@ public sealed class DebugToolAvailabilityPolicyTests
     }
 
     private sealed class StubLocalWrite(string name) : IAgentTool, ILocalWorkspaceTool
-    {
-        public ToolDefinition Definition { get; } = new(name, name, ToolSchema.Object().Build());
-
-        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
-            Task.FromResult(ToolResult.Success("ok"));
-    }
-
-    private sealed class StubDebug(string name) : IAgentTool, IDebugTool
     {
         public ToolDefinition Definition { get; } = new(name, name, ToolSchema.Object().Build());
 

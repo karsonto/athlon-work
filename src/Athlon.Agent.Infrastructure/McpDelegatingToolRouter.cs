@@ -4,6 +4,7 @@ using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.RuntimeDiagnostics;
 using Athlon.Agent.Core.Terminal;
 using Athlon.Agent.Core.Tools;
 
@@ -23,7 +24,8 @@ internal sealed class McpDelegatingToolRouter(
     IBrowserWorkspaceState browserWorkspaceState,
     ITerminalWorkspaceState terminalWorkspaceState,
     Func<Task>? refreshMcpCatalogAsync = null,
-    IAppLogger? logger = null) : IToolRouter
+    IAppLogger? logger = null,
+    IRuntimeDiagnosticEventSink? runtimeDiagnosticEventSink = null) : IToolRouter
 {
     private readonly IAppLogger _logger = (logger ?? NullAppLogger.Instance).ForContext("McpDelegatingToolRouter");
     private readonly IAgentTool[] _allLocalTools = localToolFilter(allLocalTools).ToArray();
@@ -33,6 +35,7 @@ internal sealed class McpDelegatingToolRouter(
             settings,
             refreshMcpCatalogAsync ?? (() => mcpRegistry.RefreshAsync(settings.McpServers, CancellationToken.None))));
     private readonly ConcurrentDictionary<string, bool> _autoSearchStickyBySession = new(StringComparer.Ordinal);
+    private readonly IRuntimeDiagnosticEventSink? _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
 
     private ToolRouter? _cachedLocalRouter;
     private string? _cachedLocalStamp;
@@ -253,7 +256,7 @@ internal sealed class McpDelegatingToolRouter(
         {
             return Task.FromResult(ToolResult.Failure(
                 "Tool not available",
-                "MCP tools are not available during this Debug phase. Use file/grep tools, then debug_read_logs after the user reproduces."));
+                "MCP tools are not available during this Debug phase. Use file/grep tools, then diagnose_logs after the user reproduces."));
         }
 
         if (IsSearchGatewayTool(invocation.ToolName))
@@ -299,7 +302,7 @@ internal sealed class McpDelegatingToolRouter(
                 }
             }
 
-            return mcpRegistry.InvokeAsync(serverName, toolName, invocation.Arguments, cancellationToken);
+            return InvokeMcpWithDiagnosticsAsync(invocation, serverName, toolName, cancellationToken);
         }
 
         var localRouter = GetOrCreateLocalRouter();
@@ -411,6 +414,49 @@ internal sealed class McpDelegatingToolRouter(
         if (!string.IsNullOrWhiteSpace(sessionId))
         {
             _autoSearchStickyBySession.TryRemove(sessionId, out _);
+        }
+    }
+
+    private async Task<ToolResult> InvokeMcpWithDiagnosticsAsync(
+        ToolInvocation invocation,
+        string serverName,
+        string toolName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await mcpRegistry.InvokeAsync(serverName, toolName, invocation.Arguments, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            if (_runtimeDiagnosticEventSink is { } sink)
+            {
+                var context = runContextAccessor.Current;
+                var evt = new RuntimeDiagnosticEvent(
+                    eventId: "",
+                    ts: default,
+                    sequence: 0,
+                    sessionId: context?.SessionId ?? activeSessionContext.SessionId,
+                    runId: context?.RunId ?? activeSessionContext.SessionId,
+                    turnId: null,
+                    attemptId: null,
+                    parentAttemptId: null,
+                    toolCallId: null,
+                    messageId: null,
+                    component: RuntimeDiagnosticComponent.Mcp,
+                    phase: RuntimeDiagnosticPhase.Invoke,
+                    eventType: "mcp.tool_invoke_failed",
+                    severity: RuntimeDiagnosticSeverity.Error,
+                    errorCode: RuntimeDiagnosticErrorCodes.McpToolInvokeFailed,
+                    message: $"{serverName}.{toolName}: {ex.Message}");
+                await sink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
+            }
+
+            throw;
         }
     }
 

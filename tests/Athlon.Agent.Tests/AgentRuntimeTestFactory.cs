@@ -43,7 +43,8 @@ internal static class AgentRuntimeTestFactory
             pipeline,
             compaction,
             settings,
-            logger);
+            logger,
+            new NullRuntimeDiagnosticEventSink());
     }
 
     public static (AgentTurnMiddlewarePipeline Pipeline, CompactionTurnMiddleware Compaction) CreateMiddleware(

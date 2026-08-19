@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 using Athlon.Agent.App.Licensing;
 using Athlon.Agent.App.Localization;
@@ -156,9 +155,7 @@ public partial class App : Application
             return;
         }
 
-        var paths = new AppPathProvider();
-        paths.EnsureCreated();
-        File.AppendAllText(Path.Combine(paths.LogsPath, "startup.log"), $"{AppTimeZone.Now:O} {message}{Environment.NewLine}");
+        System.Diagnostics.Trace.WriteLine($"[Startup] {AppTimeZone.Now:O} {message}");
     }
 
     private static void StartCliIpc(ServiceProvider services)
@@ -178,24 +175,6 @@ public partial class App : Application
     {
         try
         {
-            var settings = services.GetRequiredService<AppSettings>();
-            var httpFactory = services.GetRequiredService<System.Net.Http.IHttpClientFactory>();
-            var httpClient = httpFactory.CreateClient("BehaviorReport");
-            BehaviorEventManager.Instance.Configure(
-                settings,
-                services.GetRequiredService<IAppPathProvider>(),
-                httpClient,
-                services.GetRequiredService<IAppLogger>(),
-                services.GetService<IImpSsoSessionStore>(),
-                static () =>
-                {
-                    var w = SystemParameters.PrimaryScreenWidth;
-                    var h = SystemParameters.PrimaryScreenHeight;
-                    return $"{(int)w}x{(int)h}";
-                },
-                AppVersionInfo.ProductName,
-                AppVersionInfo.VersionDisplay);
-
             var eventManager = services.GetRequiredService<IEventManager>();
             eventManager.Start();
             eventManager.Record(

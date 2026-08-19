@@ -5,6 +5,7 @@ using System.Text.Json;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Streaming;
+using Athlon.Agent.Core.RuntimeDiagnostics;
 
 namespace Athlon.Agent.Core;
 
@@ -17,10 +18,12 @@ internal sealed class ToolInvocationPipeline(
     IAgentRunContextAccessor runContextAccessor,
     Func<bool> isApprovalEnabled,
     IAppLogger logger,
-    IEventManager? eventManager = null)
+    IEventManager? eventManager = null,
+    IRuntimeDiagnosticEventSink runtimeDiagnosticEventSink = null!)
 {
     private readonly IAppLogger _logger = logger.ForContext("ToolInvocationPipeline");
     private readonly IEventManager _eventManager = eventManager ?? NullEventManager.Instance;
+    private readonly IRuntimeDiagnosticEventSink _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
 
     public async Task<ToolInvocationOutcome> InvokeCoreAsync(
         string sessionId,
@@ -42,6 +45,27 @@ internal sealed class ToolInvocationPipeline(
         catch (Exception ex)
         {
             _logger.Error(ex, "Tool {ToolName} threw; returning failure to the model", toolCall.Name);
+
+            var diagContext = runContextAccessor.Current;
+            var evt = new RuntimeDiagnosticEvent(
+                eventId: "",
+                ts: default,
+                sequence: 0,
+                sessionId: sessionId,
+                runId: diagContext?.RunId ?? sessionId,
+                turnId: null,
+                attemptId: toolCall.Id,
+                parentAttemptId: null,
+                toolCallId: toolCall.Id,
+                messageId: null,
+                component: RuntimeDiagnosticComponent.Tool,
+                phase: RuntimeDiagnosticPhase.Invoke,
+                eventType: "tool.invoke_failed",
+                severity: RuntimeDiagnosticSeverity.Error,
+                errorCode: RuntimeDiagnosticErrorCodes.ToolInvokeFailed,
+                message: ex.Message);
+            await _runtimeDiagnosticEventSink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
+
             result = ToolResult.Failure("Tool invocation failed", ex.Message, sw.Elapsed);
         }
 

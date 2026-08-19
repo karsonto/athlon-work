@@ -82,12 +82,34 @@ public sealed class AgentRuntimeOverflowTests
                 }
             }));
 
-        Assert.Equal(1, compactor.ForceCallCount);
+        Assert.Equal(2, compactor.ForceCallCount);
         Assert.Equal(1, modelClient.CallCount);
         Assert.Contains("context_length", error.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(skipped, item => item is AgentStreamEvent.OverflowRetrySkipped);
         Assert.Contains(skipped, item => item is AgentStreamEvent.ContextBudgetUpdated updated
             && updated.Pressure == ContextPressureLevel.Overflow);
+    }
+
+    [Fact]
+    public async Task SendAsync_ContextOverflow_RetrySkipped_TriggersMiddleCutAndContinues()
+    {
+        var compactor = new MiddleCutRecoveryCompactor();
+        var settings = CreateOverflowSettings();
+        var modelClient = new OverflowCapturingModelClient();
+        var runtime = CreateRuntime(compactor, modelClient, settings);
+
+        var session = AgentSession.Create("overflow-middle-cut");
+        session = session.WithMessage(ChatMessage.Create(MessageRole.User, new string('x', 50_000)));
+        var result = await runtime.SendAsync(session, "continue");
+
+        Assert.Equal(2, modelClient.CallCount);
+        Assert.Equal(2, compactor.CallCount);
+        Assert.NotNull(modelClient.RetryRequest);
+        Assert.Contains(
+            modelClient.RetryRequest!.Messages,
+            message => message.Content is string content
+                && content.Contains(ConversationCompactionDefaults.HiddenSummaryMessageMarker, StringComparison.Ordinal));
+        Assert.Contains(result.Messages, message => message.Role == MessageRole.Assistant);
     }
 
     private static AppSettings CreateOverflowSettings() =>
@@ -128,7 +150,8 @@ public sealed class AgentRuntimeOverflowTests
             turnPipeline,
             compaction,
             settings,
-            logger);
+            logger,
+            new NullRuntimeDiagnosticEventSink());
     }
 
     private sealed class OverflowThenSuccessModelClient : IAgentModelClient
@@ -235,6 +258,27 @@ public sealed class AgentRuntimeOverflowTests
             }
 
             return Task.FromResult(new ConversationCompactResult(session, false));
+        }
+    }
+
+    private sealed class MiddleCutRecoveryCompactor : IConversationCompactor
+    {
+        public int CallCount { get; private set; }
+
+        public Task<ConversationCompactResult> CompactIfNeededAsync(
+            AgentSession session,
+            CompactionExecutionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            if (request.Strategy != CompactionStrategy.MiddleCutOnRetrySkipped)
+            {
+                return Task.FromResult(new ConversationCompactResult(session, false));
+            }
+
+            var summary = SummaryMessageBuilder.CreateSummaryPlaceholder("middle cut summary", null, hiddenFromTimeline: true);
+            var compacted = session.WithMessages([summary, .. session.Messages.TakeLast(1)]);
+            return Task.FromResult(new ConversationCompactResult(compacted, true));
         }
     }
 

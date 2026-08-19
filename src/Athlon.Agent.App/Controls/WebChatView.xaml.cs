@@ -47,6 +47,7 @@ public partial class WebChatView : UserControl
     }
 
     public event EventHandler<string>? InitializationFailed;
+    public event EventHandler<string>? ScriptExecutionFailed;
     public event EventHandler? OlderMessagesRequested;
     public event EventHandler<string>? ExternalLinkRequested;
     public event EventHandler<ToolApprovalDecisionEventArgs>? ToolApprovalDecisionReceived;
@@ -634,7 +635,9 @@ public partial class WebChatView : UserControl
         }
         catch (Exception ex)
         {
-            App.StartupTrace($"WebChatView ExecuteScript failed ({script.Length} chars): {ex.Message}");
+            var message = $"WebChatView ExecuteScript failed ({script.Length} chars): {ex.Message}";
+            ScriptExecutionFailed?.Invoke(this, message);
+            App.StartupTrace(message);
         }
     }
 
@@ -654,7 +657,9 @@ public partial class WebChatView : UserControl
 
         if (!_documentReady && generation == _navigationGeneration)
         {
-            App.StartupTrace("WebChatView WaitForDocumentReady timed out after 5s");
+            const string timeoutMessage = "WebChatView WaitForDocumentReady timed out after 5s";
+            ScriptExecutionFailed?.Invoke(this, timeoutMessage);
+            App.StartupTrace(timeoutMessage);
             return false;
         }
 
@@ -730,7 +735,9 @@ public partial class WebChatView : UserControl
         }
         catch (Exception ex)
         {
-            App.StartupTrace($"WebChatView prepend history failed: {ex.Message}");
+            var message = $"WebChatView prepend history failed: {ex.Message}";
+            ScriptExecutionFailed?.Invoke(this, message);
+            App.StartupTrace(message);
         }
     }
 
@@ -749,7 +756,9 @@ public partial class WebChatView : UserControl
         }
         catch (Exception ex)
         {
-            App.StartupTrace($"WebChatView history availability failed: {ex.Message}");
+            var message = $"WebChatView history availability failed: {ex.Message}";
+            ScriptExecutionFailed?.Invoke(this, message);
+            App.StartupTrace(message);
         }
     }
 

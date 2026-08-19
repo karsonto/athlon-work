@@ -2,6 +2,7 @@ using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Infrastructure.BehaviorReport;
+using Athlon.Agent.Core.RuntimeDiagnostics;
 using System.Diagnostics;
 
 namespace Athlon.Agent.Infrastructure;
@@ -12,15 +13,24 @@ public sealed class ConversationCompactor(
     IFileStorageService storage,
     TruncateArgsService truncateArgsService,
     ISessionUsageAccumulator sessionUsageAccumulator,
-    IAppLogger logger) : IConversationCompactor
+    IAppLogger logger,
+    IAgentRunContextAccessor? runContextAccessor = null,
+    IRuntimeDiagnosticEventSink? runtimeDiagnosticEventSink = null) : IConversationCompactor
 {
     private readonly IAppLogger _logger = logger.ForContext("ConversationCompactor");
+    private readonly IAgentRunContextAccessor? _runContextAccessor = runContextAccessor;
+    private readonly IRuntimeDiagnosticEventSink? _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
 
     public async Task<ConversationCompactResult> CompactIfNeededAsync(
         AgentSession session,
         CompactionExecutionRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (request.Strategy == CompactionStrategy.MiddleCutOnRetrySkipped)
+        {
+            return await ApplyMiddleCutCompactAsync(session, request, cancellationToken).ConfigureAwait(false);
+        }
+
         var cfg = settings.ContextCompaction;
         var conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
         if (conversation.Count == 0)
@@ -143,6 +153,28 @@ public sealed class ConversationCompactor(
                 _logger.Warning(
                     "Summarization returned empty content for session {SessionId}; aborting compaction",
                     session.Id);
+                var context = _runContextAccessor.Current;
+                var evt = new RuntimeDiagnosticEvent(
+                    eventId: "",
+                    ts: default,
+                    sequence: 0,
+                    sessionId: session.Id,
+                    runId: context?.RunId,
+                    turnId: null,
+                    attemptId: summaryAttemptId,
+                    parentAttemptId: null,
+                    toolCallId: null,
+                    messageId: null,
+                    component: RuntimeDiagnosticComponent.Compaction,
+                    phase: RuntimeDiagnosticPhase.Persist,
+                    eventType: "compaction.summary_failed",
+                    severity: RuntimeDiagnosticSeverity.Error,
+                    errorCode: RuntimeDiagnosticErrorCodes.CompactionSummaryFailed,
+                    message: "Empty summary");
+                if (_runtimeDiagnosticEventSink is { } sink)
+                {
+                    await sink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
+                }
                 return new ConversationCompactResult(session, false);
             }
         }
@@ -153,6 +185,7 @@ public sealed class ConversationCompactor(
         catch (Exception ex)
         {
             summaryStopwatch.Stop();
+            var context = _runContextAccessor.Current;
             var promptTokens = ContextTokenEstimator.EstimateModelRequest(summaryRequest);
             sessionUsageAccumulator.RecordCall(
                 session.Id,
@@ -169,6 +202,28 @@ public sealed class ConversationCompactor(
                     ex.GetType().Name, summaryStopwatch.ElapsedMilliseconds),
                 CancellationToken.None).ConfigureAwait(false);
             _logger.Error(ex, "Summarization LLM call failed for session {SessionId}; aborting compaction", session.Id);
+
+            var evt = new RuntimeDiagnosticEvent(
+                eventId: "",
+                ts: default,
+                sequence: 0,
+                sessionId: session.Id,
+                runId: context?.RunId,
+                turnId: null,
+                attemptId: summaryAttemptId,
+                parentAttemptId: null,
+                toolCallId: null,
+                messageId: null,
+                component: RuntimeDiagnosticComponent.Compaction,
+                phase: RuntimeDiagnosticPhase.Persist,
+                eventType: "compaction.summary_failed",
+                severity: RuntimeDiagnosticSeverity.Error,
+                errorCode: RuntimeDiagnosticErrorCodes.CompactionSummaryFailed,
+                message: ex.Message);
+            if (_runtimeDiagnosticEventSink is { } sink)
+            {
+                await sink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
+            }
             return new ConversationCompactResult(session, false);
         }
 
@@ -252,6 +307,143 @@ public sealed class ConversationCompactor(
             session.Messages.Count,
             request.Kind,
             request.Force);
+
+        return new ConversationCompactResult(session, true);
+    }
+
+    private async Task<ConversationCompactResult> ApplyMiddleCutCompactAsync(
+        AgentSession session,
+        CompactionExecutionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var cfg = settings.ContextCompaction;
+        var conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
+        if (conversation.Count == 0)
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
+        var keepHead = Math.Max(1, cfg.MiddleCutKeepHeadMessages);
+        var keepTail = Math.Max(1, cfg.MiddleCutKeepTailMessages);
+        if (conversation.Count <= keepHead + keepTail + 1)
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
+        var middleStart = keepHead;
+        var middleCount = conversation.Count - keepHead - keepTail;
+        if (middleCount <= 0)
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
+        var head = conversation.Take(keepHead).ToList();
+        var middle = conversation.Skip(middleStart).Take(middleCount).ToList();
+        var tail = conversation.Skip(conversation.Count - keepTail).ToList();
+
+        var summaryRequest = BuildSummaryRequest(
+            middle,
+            cfg,
+            request,
+            request.Plan?.MustPreserveAppendix,
+            out _,
+            out _,
+            out _);
+
+        string summary;
+        var summaryAttemptId = Guid.NewGuid().ToString("N");
+        var summaryStopwatch = Stopwatch.StartNew();
+        try
+        {
+            var summaryResponse = await modelClient.CompleteAsync(summaryRequest, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var usage = ModelUsageAccounting.Resolve(summaryRequest, summaryResponse);
+            summaryStopwatch.Stop();
+            sessionUsageAccumulator.RecordCall(
+                session.Id, summaryAttemptId, ModelCallPurpose.Summary, usage);
+            summary = summaryResponse.Content.Trim();
+            if (string.IsNullOrWhiteSpace(summary))
+            {
+                return new ConversationCompactResult(session, false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            summaryStopwatch.Stop();
+            var context = _runContextAccessor?.Current;
+            if (_runtimeDiagnosticEventSink is { } sink)
+            {
+                var evt = new RuntimeDiagnosticEvent(
+                    eventId: "",
+                    ts: default,
+                    sequence: 0,
+                    sessionId: session.Id,
+                    runId: context?.RunId,
+                    turnId: null,
+                    attemptId: summaryAttemptId,
+                    parentAttemptId: null,
+                    toolCallId: null,
+                    messageId: null,
+                    component: RuntimeDiagnosticComponent.Compaction,
+                    phase: RuntimeDiagnosticPhase.Persist,
+                    eventType: "compaction.summary_failed",
+                    severity: RuntimeDiagnosticSeverity.Error,
+                    errorCode: RuntimeDiagnosticErrorCodes.CompactionSummaryFailed,
+                    message: ex.Message);
+                await sink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
+            }
+
+            return new ConversationCompactResult(session, false);
+        }
+
+        var hiddenSummary = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath: null, hiddenFromTimeline: true);
+        var compactMessages = new List<ChatMessage>(head.Count + tail.Count + 2);
+        compactMessages.AddRange(head);
+        compactMessages.Add(hiddenSummary);
+        compactMessages.AddRange(tail);
+
+        if (request.EmitAudit)
+        {
+            var auditContent = CompactionMessageContent.CreateConversationCompact(
+                tokensBefore: ContextTokenEstimator.Estimate(conversation, cfg.IncludeReasoningInModelContext),
+                tokensAfter: ContextTokenEstimator.Estimate(compactMessages, cfg.IncludeReasoningInModelContext),
+                originalMessageCount: conversation.Count,
+                transcriptPath: null,
+                summaryPreview: "Middle-cut compaction applied due to overflow retry skip.",
+                strategy: CompactionStrategy.MiddleCutOnRetrySkipped,
+                layers: [CompactionLayer.ConversationCompact],
+                pressureLevel: request.Plan?.Pressure,
+                utilization: request.RuntimeContext?.Budget.TotalUtilization);
+            compactMessages.Insert(0, CompactionMessageContent.CreateCompactionMessage(auditContent));
+        }
+
+        session = session.WithMessages(compactMessages);
+
+        var runContext = _runContextAccessor?.Current;
+        if (_runtimeDiagnosticEventSink is { } runtimeSink)
+        {
+            var evt = new RuntimeDiagnosticEvent(
+                eventId: "",
+                ts: default,
+                sequence: 0,
+                sessionId: session.Id,
+                runId: runContext?.RunId ?? session.Id,
+                turnId: null,
+                attemptId: summaryAttemptId,
+                parentAttemptId: null,
+                toolCallId: null,
+                messageId: null,
+                component: RuntimeDiagnosticComponent.Compaction,
+                phase: RuntimeDiagnosticPhase.Compact,
+                eventType: "compaction.middle_cut_applied",
+                severity: RuntimeDiagnosticSeverity.Warning,
+                errorCode: RuntimeDiagnosticErrorCodes.CompactionMiddleCutApplied,
+                message: $"keptHead={keepHead}, keptTail={keepTail}, droppedMiddle={middleCount}, summaryChars={summary.Length}");
+            await runtimeSink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
+        }
 
         return new ConversationCompactResult(session, true);
     }

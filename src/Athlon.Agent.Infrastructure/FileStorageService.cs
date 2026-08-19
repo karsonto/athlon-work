@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.RuntimeDiagnostics;
 using Athlon.Agent.Infrastructure.BehaviorReport;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
@@ -19,10 +20,13 @@ public sealed class FileStorageService(
     IAppLogger logger,
     IAppPathProvider paths,
     IJsonFileStore jsonFileStore,
-    IAgentRunContextAccessor runContextAccessor) : IFileStorageService
+    IAgentRunContextAccessor runContextAccessor,
+    IRuntimeDiagnosticEventSink? runtimeDiagnosticEventSink = null) : IFileStorageService
 {
+    private static readonly UTF8Encoding Utf8Bom = new(encoderShouldEmitUTF8Identifier: true);
     private readonly IAppLogger _logger = logger.ForContext("Storage");
     private readonly SessionIndexCoordinator _indexCoordinator = new(paths, jsonFileStore, runContextAccessor);
+    private readonly IRuntimeDiagnosticEventSink? _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
     private ToolCallLogWriteQueue? _toolCallLogQueue;
 
     private ToolCallLogWriteQueue ToolCallLogQueue =>
@@ -33,13 +37,31 @@ public sealed class FileStorageService(
     public async Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default)
     {
         string sessionDir;
-        using (await SessionWriteLock.AcquireAsync(session.Id, cancellationToken).ConfigureAwait(false))
+        try
         {
-            EnsureSessionLogDirectories(session.Id);
-            sessionDir = GetSessionDirectory(session);
+            using (await SessionWriteLock.AcquireAsync(session.Id, cancellationToken).ConfigureAwait(false))
+            {
+                EnsureSessionLogDirectories(session.Id);
+                sessionDir = GetSessionDirectory(session);
 
-            await jsonFileStore.SaveAsync(Path.Combine(sessionDir, "session.json"), session, cancellationToken);
-            _logger.Information("Session persisted to {SessionDir}", sessionDir);
+                await jsonFileStore.SaveAsync(Path.Combine(sessionDir, "session.json"), session, cancellationToken);
+                _logger.Information("Session persisted to {SessionDir}", sessionDir);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await EnqueueStorageDiagnosticAsync(
+                session.Id,
+                RuntimeDiagnosticPhase.Persist,
+                "storage.persist_failed",
+                RuntimeDiagnosticSeverity.Error,
+                RuntimeDiagnosticErrorCodes.StoragePersistFailed,
+                ex.Message).ConfigureAwait(false);
+            throw;
         }
 
         if (SessionDirectoryLayout.IsTopLevelSessionDirectory(paths.SessionsPath, sessionDir)
@@ -70,7 +92,9 @@ public sealed class FileStorageService(
                 builder.AppendLine(JsonSerializer.Serialize(message, JsonFileStore.JsonLineOptions));
             }
 
-            await AtomicFile.WriteAllTextAsync(path, builder.ToString(), cancellationToken);
+            await FileIoRetry.RunAsync(
+                () => File.WriteAllTextAsync(path, builder.ToString(), Utf8Bom, cancellationToken),
+                cancellationToken);
             return path;
         }
     }
@@ -126,7 +150,9 @@ public sealed class FileStorageService(
                 builder.AppendLine(JsonSerializer.Serialize(message, JsonFileStore.JsonLineOptions));
             }
 
-            await AtomicFile.WriteAllTextAsync(path, builder.ToString(), cancellationToken);
+            await FileIoRetry.RunAsync(
+                () => File.WriteAllTextAsync(path, builder.ToString(), Utf8Bom, cancellationToken),
+                cancellationToken);
         }
     }
 
@@ -345,22 +371,13 @@ public sealed class FileStorageService(
         Path.Combine(GetSessionDirectory(sessionId), "conversation.jsonl");
 
     public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) =>
-        ToolCallLogQueue.EnqueueAsync(sessionId, entry, cancellationToken);
+        Task.CompletedTask;
 
-    public async Task AppendAttemptEventAsync(
+    public Task AppendAttemptEventAsync(
         string sessionId,
         AgentAttemptEvent entry,
         CancellationToken cancellationToken = default)
     {
-        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
-        {
-            EnsureSessionLogDirectories(sessionId);
-            await jsonFileStore.AppendJsonLineAsync(
-                Path.Combine(GetSessionDirectory(sessionId), "attempts.jsonl"),
-                entry with { Timestamp = AppTimeZone.ToChina(entry.Timestamp) },
-                cancellationToken).ConfigureAwait(false);
-        }
-
         try
         {
             BehaviorEventManager.Instance.RecordAttempt(entry);
@@ -369,6 +386,8 @@ public sealed class FileStorageService(
         {
             // Behavior reporting must never affect persistence.
         }
+
+        return Task.CompletedTask;
     }
 
     public async Task<IReadOnlyList<AgentAttemptEvent>> LoadAttemptEventsAsync(
@@ -400,33 +419,14 @@ public sealed class FileStorageService(
     }
 
     public Task FlushPendingToolCallLogsAsync(CancellationToken cancellationToken = default) =>
-        ToolCallLogQueue.FlushAsync(cancellationToken);
+        Task.CompletedTask;
 
-    private async Task WriteToolCallLogCoreAsync(
+    private Task WriteToolCallLogCoreAsync(
         string sessionId,
         SessionToolCallLogEntry entry,
         CancellationToken cancellationToken)
     {
-        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
-        {
-            EnsureSessionLogDirectories(sessionId);
-            var path = Path.Combine(GetSessionDirectory(sessionId), "tool-calls", "calls.jsonl");
-            await jsonFileStore.AppendJsonLineAsync(
-                path,
-                new
-                {
-                    time = AppTimeZone.ToChina(entry.Timestamp),
-                    toolCallId = entry.ToolCallId,
-                    toolName = entry.ToolName,
-                    arguments = entry.Arguments,
-                    succeeded = entry.Succeeded,
-                    summary = entry.Summary,
-                    content = HttpLogSanitizer.Truncate(entry.Content),
-                    error = entry.Error,
-                    durationMs = entry.DurationMs
-                },
-                cancellationToken);
-        }
+        return Task.CompletedTask;
     }
 
     public async Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -441,40 +441,58 @@ public sealed class FileStorageService(
             return null;
         }
 
-        var directPath = Path.Combine(GetSessionDirectory(sessionId), "session.json");
-        if (File.Exists(directPath))
+        try
         {
-            var session = await jsonFileStore.LoadAsync<AgentSession>(directPath, cancellationToken);
-            return session is null ? null : ChatMessageMemorySanitizer.SanitizeSession(session);
-        }
-
-        if (!Directory.Exists(paths.SessionsPath))
-        {
-            return null;
-        }
-
-        var indexedEntry = (await ListSessionsAsync(cancellationToken).ConfigureAwait(false))
-            .FirstOrDefault(entry => string.Equals(entry.Id, sessionId, StringComparison.Ordinal));
-        if (indexedEntry is not null)
-        {
-            var indexedPath = Path.Combine(indexedEntry.Path, "session.json");
-            if (File.Exists(indexedPath))
+            var directPath = Path.Combine(GetSessionDirectory(sessionId), "session.json");
+            if (File.Exists(directPath))
             {
-                var session = await jsonFileStore.LoadAsync<AgentSession>(indexedPath, cancellationToken);
+                var session = await jsonFileStore.LoadAsync<AgentSession>(directPath, cancellationToken);
+                return session is null ? null : ChatMessageMemorySanitizer.SanitizeSession(session);
+            }
+
+            if (!Directory.Exists(paths.SessionsPath))
+            {
+                return null;
+            }
+
+            var indexedEntry = (await ListSessionsAsync(cancellationToken).ConfigureAwait(false))
+                .FirstOrDefault(entry => string.Equals(entry.Id, sessionId, StringComparison.Ordinal));
+            if (indexedEntry is not null)
+            {
+                var indexedPath = Path.Combine(indexedEntry.Path, "session.json");
+                if (File.Exists(indexedPath))
+                {
+                    var session = await jsonFileStore.LoadAsync<AgentSession>(indexedPath, cancellationToken);
+                    return session is null ? null : ChatMessageMemorySanitizer.SanitizeSession(session);
+                }
+            }
+
+            foreach (var sessionJson in SessionDirectoryLayout.EnumerateTopLevelSessionJsonPaths(paths.SessionsPath))
+            {
+                var indexEntry = SessionJsonIndexReader.TryRead(sessionJson);
+                if (indexEntry is null || !string.Equals(indexEntry.Id, sessionId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var session = await jsonFileStore.LoadAsync<AgentSession>(sessionJson, cancellationToken);
                 return session is null ? null : ChatMessageMemorySanitizer.SanitizeSession(session);
             }
         }
-
-        foreach (var sessionJson in SessionDirectoryLayout.EnumerateTopLevelSessionJsonPaths(paths.SessionsPath))
+        catch (OperationCanceledException)
         {
-            var indexEntry = SessionJsonIndexReader.TryRead(sessionJson);
-            if (indexEntry is null || !string.Equals(indexEntry.Id, sessionId, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var session = await jsonFileStore.LoadAsync<AgentSession>(sessionJson, cancellationToken);
-            return session is null ? null : ChatMessageMemorySanitizer.SanitizeSession(session);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await EnqueueStorageDiagnosticAsync(
+                sessionId,
+                RuntimeDiagnosticPhase.Prepare,
+                "storage.load_failed",
+                RuntimeDiagnosticSeverity.Error,
+                RuntimeDiagnosticErrorCodes.StorageLoadFailed,
+                ex.Message).ConfigureAwait(false);
+            throw;
         }
 
         return null;
@@ -565,11 +583,9 @@ public sealed class FileStorageService(
     {
         var sessionDir = GetSessionDirectory(sessionId);
         Directory.CreateDirectory(sessionDir);
-        Directory.CreateDirectory(Path.Combine(sessionDir, "tool-calls"));
         Directory.CreateDirectory(Path.Combine(sessionDir, "summaries"));
         Directory.CreateDirectory(Path.Combine(sessionDir, "transcripts"));
         Directory.CreateDirectory(Path.Combine(sessionDir, "evicted"));
-        Directory.CreateDirectory(Path.Combine(sessionDir, "http"));
     }
 
     private string GetSessionDirectory(AgentSession session) => GetSessionDirectory(session.Id);
@@ -589,6 +605,40 @@ public sealed class FileStorageService(
         }
 
         return resolved;
+    }
+
+    private async Task EnqueueStorageDiagnosticAsync(
+        string? sessionId,
+        RuntimeDiagnosticPhase phase,
+        string eventType,
+        RuntimeDiagnosticSeverity severity,
+        string errorCode,
+        string? message)
+    {
+        if (_runtimeDiagnosticEventSink is not { } sink)
+        {
+            return;
+        }
+
+        var context = runContextAccessor.Current;
+        var evt = new RuntimeDiagnosticEvent(
+            eventId: "",
+            ts: default,
+            sequence: 0,
+            sessionId: sessionId,
+            runId: context?.RunId ?? sessionId,
+            turnId: null,
+            attemptId: null,
+            parentAttemptId: null,
+            toolCallId: null,
+            messageId: null,
+            component: RuntimeDiagnosticComponent.Storage,
+            phase: phase,
+            eventType: eventType,
+            severity: severity,
+            errorCode: errorCode,
+            message: message);
+        await sink.EnqueueAsync(evt, CancellationToken.None).ConfigureAwait(false);
     }
 
     private string GetSessionTranscriptsDirectory(string sessionId) =>

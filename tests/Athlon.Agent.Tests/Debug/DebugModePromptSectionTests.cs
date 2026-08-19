@@ -17,7 +17,7 @@ public sealed class DebugModePromptSectionTests
         Assert.Contains("never claim a root cause", text, StringComparison.Ordinal);
         Assert.Contains("- H1:", text, StringComparison.Ordinal);
         Assert.Contains("## Repro steps", text, StringComparison.Ordinal);
-        Assert.Contains("Empty logs are not evidence", text, StringComparison.Ordinal);
+        Assert.Contains("insufficient evidence", text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public sealed class DebugModePromptSectionTests
         var builder = new StringBuilder();
         new AgentModeSection().Append(builder, CreateContext(SessionAgentMode.Debug));
         var text = builder.ToString();
-        Assert.Contains("debug_read_logs", text, StringComparison.Ordinal);
+        Assert.Contains("diagnose_logs", text, StringComparison.Ordinal);
         Assert.Contains("insufficient", text, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Coding workflow:", text, StringComparison.Ordinal);
     }
@@ -49,7 +49,7 @@ public sealed class DebugModePromptSectionTests
             Tools =
             [
                 new ToolDefinition("file_read", "Read", ToolSchema.Object().Build()),
-                new ToolDefinition("debug_read_logs", "Logs", ToolSchema.Object().Build())
+                new ToolDefinition("diagnose_logs", "Logs", ToolSchema.Object().Build())
             ],
             SkillsDirectory = @"C:\Users\test\.athlon-agent\skills",
             Host = new PromptTestHelpers.FakeHostEnvironment(

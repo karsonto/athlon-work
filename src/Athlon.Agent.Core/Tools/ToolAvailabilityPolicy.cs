@@ -94,13 +94,6 @@ public static class ToolAvailabilityPolicy
                     ? false
                     : null),
         new(
-            "debug-read-logs-analyze-only",
-            static ctx => ctx.Mode == SessionAgentMode.Debug,
-            static (ctx, facets) =>
-                facets.HasFlag(ToolFacet.Debug)
-                    ? ctx.ActiveDebugPhase == DebugPhase.Analyze
-                    : null),
-        new(
             "debug-mode-block-subagents-and-shell",
             static ctx => ctx.Mode == SessionAgentMode.Debug,
             static (_, facets) =>
@@ -109,7 +102,7 @@ public static class ToolAvailabilityPolicy
             "debug-mode-hypothesize-readonly",
             static ctx => ctx.Mode == SessionAgentMode.Debug && ctx.ActiveDebugPhase == DebugPhase.Hypothesize,
             static (_, facets) =>
-                facets.HasFlag(ToolFacet.WriteFileOrShell) || facets.HasFlag(ToolFacet.Debug) ? false : null),
+                facets.HasFlag(ToolFacet.WriteFileOrShell) ? false : null),
         new(
             "debug-mode-analyze-readonly",
             static ctx => ctx.Mode == SessionAgentMode.Debug && ctx.ActiveDebugPhase == DebugPhase.Analyze,
@@ -119,7 +112,6 @@ public static class ToolAvailabilityPolicy
             static ctx => ctx.Mode == SessionAgentMode.Debug && ctx.ActiveDebugPhase is { } phase && phase.IsReadOnlyFollowUp(),
             static (_, facets) =>
                 facets.HasFlag(ToolFacet.WriteFileOrShell)
-                || facets.HasFlag(ToolFacet.Debug)
                 || facets.HasFlag(ToolFacet.Shell)
                 || facets.HasFlag(ToolFacet.SubAgent)
                     ? false

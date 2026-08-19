@@ -12,10 +12,10 @@ public static class SkillServiceCollectionExtensions
         services.AddSingleton<IAgentSkillRepository>(sp =>
         {
             var paths = sp.GetRequiredService<IAppPathProvider>();
-            var startupLog = sp.GetRequiredService<IStartupLog>();
+            var logger = sp.GetRequiredService<IAppLogger>().ForContext("SkillRepository");
             return new FileSystemSkillRepository(
                 paths.SkillsPath,
-                (dir, ex) => startupLog.Write(
+                (dir, ex) => logger.Warning(
                     $"Skill load failed ({Path.GetFileName(dir)}): {ex.Message} [{dir}]"));
         });
         services.AddSingleton<IAgentSkillCatalog, AgentSkillCatalog>();

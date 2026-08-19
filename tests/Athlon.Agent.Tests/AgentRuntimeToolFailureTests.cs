@@ -34,7 +34,8 @@ public sealed class AgentRuntimeToolFailureTests
             pipeline,
             compaction,
             settings,
-            logger);
+            logger,
+            new NullRuntimeDiagnosticEventSink());
 
         var session = AgentSession.Create("tool-failure-test");
         var result = await runtime.SendAsync(session, "run tool", null);

@@ -39,7 +39,8 @@ public sealed class AgentRuntimeSubAgentContextTests
             pipeline,
             compaction,
             settings,
-            logger);
+            logger,
+            new NullRuntimeDiagnosticEventSink());
 
         var session = AgentSession.Create("sub-1");
         var child = AgentRunContext.CreateRoot(

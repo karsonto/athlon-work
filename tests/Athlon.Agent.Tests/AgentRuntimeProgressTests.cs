@@ -39,7 +39,8 @@ public sealed class AgentRuntimeProgressTests
             pipeline,
             compaction,
             settings,
-            logger);
+            logger,
+            new NullRuntimeDiagnosticEventSink());
 
         var events = new List<string>();
         var session = AgentSession.Create("progress-test");
@@ -104,7 +105,8 @@ public sealed class AgentRuntimeProgressTests
             pipeline,
             compaction,
             settings,
-            logger);
+            logger,
+            new NullRuntimeDiagnosticEventSink());
 
         var tokens = new List<string>();
         var session = AgentSession.Create("delta-test");
@@ -158,7 +160,8 @@ public sealed class AgentRuntimeProgressTests
             pipeline,
             compaction,
             settings,
-            logger);
+            logger,
+            new NullRuntimeDiagnosticEventSink());
 
         await runtime.SendAsync(AgentSession.Create("thread-test"), "run tool");
 
@@ -207,7 +210,8 @@ public sealed class AgentRuntimeProgressTests
             pipeline,
             compaction,
             mcpSettings,
-            logger);
+            logger,
+            new NullRuntimeDiagnosticEventSink());
 
         await runtime.SendAsync(AgentSession.Create("mcp-route-test"), "call mcp");
 

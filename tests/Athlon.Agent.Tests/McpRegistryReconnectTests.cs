@@ -8,7 +8,11 @@ public sealed class McpRegistryReconnectTests
     [Fact]
     public async Task ReconnectAsync_DoesNothing_WhenServerMissingOrDisabled()
     {
-        await using var registry = new McpRegistry(new NoOpLogger(), new FixedWorkspaceContext(null));
+        await using var registry = new McpRegistry(
+            new NoOpLogger(),
+            new FixedWorkspaceContext(null),
+            new AgentRunContextAccessor(),
+            new NullRuntimeDiagnosticEventSink());
 
         await registry.ReconnectAsync("missing", Array.Empty<McpServerSettings>());
         await registry.ReconnectAsync(

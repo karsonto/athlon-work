@@ -101,11 +101,6 @@ public interface IAppLogger
     IAppLogger ForContext(string sourceContext);
 }
 
-/// <summary>Append-only trace log written to startup.log during application bootstrap.</summary>
-public interface IStartupLog
-{
-    void Write(string message);
-}
 public interface ICredentialStore
 {
     Task SaveSecretAsync(string name, string secret, CancellationToken cancellationToken = default);

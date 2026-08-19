@@ -130,6 +130,7 @@ public static class CompactionAuditDisplay
         {
             CompactionStrategy.ForceCompact => "force_compact",
             CompactionStrategy.ManualCompact => "manual_compact",
+            CompactionStrategy.MiddleCutOnRetrySkipped => "middle_cut_on_retry_skipped",
             _ => "conversation_compact",
         };
 
@@ -162,6 +163,7 @@ public static class CompactionAuditDisplay
             {
                 "force_compact" => CompactionStrategy.ForceCompact,
                 "manual_compact" => CompactionStrategy.ManualCompact,
+                "middle_cut_on_retry_skipped" => CompactionStrategy.MiddleCutOnRetrySkipped,
                 _ => CompactionStrategy.ConversationCompact,
             };
         }
@@ -221,6 +223,7 @@ public static class CompactionAuditDisplay
         {
             CompactionStrategy.ForceCompact => "触发：模型上下文超限后强制压缩",
             CompactionStrategy.ManualCompact => "触发：用户手动压缩",
+            CompactionStrategy.MiddleCutOnRetrySkipped => "触发：超限重试仍超限，中段摘要压缩",
             _ => "触发：动态预算 / 消息数阈值",
         };
 

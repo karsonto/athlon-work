@@ -31,6 +31,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
 using Serilog.Events;
+using Athlon.Agent.Core.RuntimeDiagnostics;
+using Athlon.Agent.Infrastructure.RuntimeDiagnostics;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -52,7 +54,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ILicenseValidator, LicenseValidator>();
         services.AddSingleton<ILicenseStore, LicenseStore>();
         services.AddSingleton<IAgentHostEnvironment, AgentHostEnvironment>();
-        services.AddSingleton<IStartupLog, StartupLog>();
         services.AddAthlonSkills();
         services.AddAthlonEnvironmentPrompt();
         services.AddSingleton<IJsonFileStore>(jsonFileStore);
@@ -126,6 +127,8 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IEmbeddingClient, OpenAiCompatibleEmbeddingClient>(
             static client => client.Timeout = TimeSpan.FromMinutes(5));
         services.AddSingleton<AuditLogService>();
+        services.AddSingleton<RuntimeDiagnosticEventSink>();
+        services.AddSingleton<IRuntimeDiagnosticEventSink>(sp => sp.GetRequiredService<RuntimeDiagnosticEventSink>());
         services.AddSingleton<ExecuteCommandProcessRegistry>();
         services.AddSingleton<IAgentTool, FileListTool>();
         services.AddSingleton<IAgentTool, FileReadTool>();
@@ -134,7 +137,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, ApplyPatchTool>();
         services.AddSingleton<IAgentTool, GrepFilesTool>();
         services.AddSingleton<IAgentTool, GlobFilesTool>();
-        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Debug.DebugReadLogsTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.RuntimeDiagnostics.DiagnoseLogsTool>();
         services.AddSingleton<IAgentTool, ExecuteCommandTool>();
         services.AddSingleton<IAgentTool, SshFileListTool>();
         services.AddSingleton<IAgentTool, SshFileReadTool>();

@@ -3,6 +3,7 @@ namespace Athlon.Agent.Core.Compaction;
 public static class ConversationCompactionDefaults
 {
     public const string SummaryMessageMarker = "__compaction_summary__";
+    public const string HiddenSummaryMessageMarker = "__hidden_compaction_summary__";
 
     public const string PrecedingMessagesPlaceholder =
         "The conversation to summarize is in the preceding messages.";
