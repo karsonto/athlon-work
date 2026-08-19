@@ -217,4 +217,7 @@ public sealed record SessionNavigationSnapshot(
     /// </summary>
     public IReadOnlyList<ChatMessage> ActivitySource =>
         ActivitySourceMessages is { Count: > 0 } ? ActivitySourceMessages : DisplayMessages;
+
+    public DisplaySurfaceFingerprint SurfaceFingerprint =>
+        DisplaySurfaceFingerprint.From(DisplayMessages, ActivitySource, OlderDisplayCursor);
 }

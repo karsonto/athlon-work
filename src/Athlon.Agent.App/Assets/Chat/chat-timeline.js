@@ -1428,9 +1428,9 @@ function prependEvents(events, hasOlderMessages) {
 function handleWebMessage(message) {
   const command = typeof message === 'string' ? JSON.parse(message) : message;
   if (!command || !command.command) return;
-  if (command.command === 'replay') {
+  if (command.command === 'replay' || command.command === 'replaceSurface') {
     replayEvents(Array.isArray(command.events) ? command.events : []);
-  } else if (command.command === 'append') {
+  } else if (command.command === 'append' || command.command === 'appendEvents') {
     appendEvents(Array.isArray(command.events) ? command.events : []);
   } else if (command.command === 'prepend') {
     prependEvents(

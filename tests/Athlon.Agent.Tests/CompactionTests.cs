@@ -345,6 +345,39 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public void ConversationSummaryFormatter_FormatsSummaryRoleExplicitly()
+    {
+        var summary = ChatMessage.Create(MessageRole.Summary, "condensed facts");
+
+        var formatted = ConversationSummaryFormatter.FormatMessages([summary]);
+
+        Assert.Contains("Summary: condensed facts", formatted, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ConversationSummaryFormatter_ToolPreview_PreservesHeadAndTail()
+    {
+        var content = string.Join(
+            Environment.NewLine,
+            "ToolCallId: c1",
+            "Tool `file_read` succeeded.",
+            "",
+            "Arguments: path = Foo.cs",
+            "Summary: Read Foo.cs",
+            "",
+            new string('a', 640),
+            new string('b', 640),
+            "tail-marker");
+        var tool = ChatMessage.Create(MessageRole.Tool, content);
+
+        var formatted = ConversationSummaryFormatter.FormatMessages([tool]);
+
+        Assert.Contains("ToolCallId: c1", formatted, StringComparison.Ordinal);
+        Assert.Contains("...", formatted, StringComparison.Ordinal);
+        Assert.DoesNotContain(content, formatted, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task PreCompletionPipeline_BelowThreshold_DoesNotCompact()
     {
         var settings = new AppSettings
@@ -1658,6 +1691,69 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public async Task ConversationCompactor_WithoutRuntimeContext_StillBuildsStructuredSummaryRequest()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var settings = new AppSettings
+            {
+                ContextCompaction = new ContextCompactionSettings
+                {
+                    TriggerMessages = 2,
+                    KeepMessages = 1,
+                    SummaryMaxTokens = 512,
+                    MaxConversationCharsForSummary = 10_000,
+                    OffloadBeforeCompact = false
+                }
+            };
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+            var capturing = new CapturingModelClient("summary text");
+            var session = AgentSession.Create("structured-no-runtime")
+                .WithMessages(
+                [
+                    ChatMessage.Create(MessageRole.User, "implement Foo.cs"),
+                    ChatMessage.Create(MessageRole.Assistant, "done"),
+                    ChatMessage.Create(MessageRole.User, "continue"),
+                    ChatMessage.Create(MessageRole.Assistant, "ok")
+                ]);
+
+            var result = await new ConversationCompactor(
+                settings,
+                capturing,
+                storage,
+                new TruncateArgsService(),
+                new SessionUsageAccumulator(),
+                new NoOpLogger()).CompactIfNeededAsync(
+                session,
+                new CompactionExecutionRequest(
+                    CompactionKind.ConversationCompact,
+                    Force: true,
+                    EmitAudit: true));
+
+            Assert.True(result.Compacted);
+            Assert.NotNull(capturing.LastRequest);
+            Assert.Equal("system", capturing.LastRequest!.Messages[0].Role);
+            Assert.Equal(string.Empty, capturing.LastRequest.Messages[0].Content as string);
+            Assert.Equal("user", capturing.LastRequest.Messages[^1].Role);
+            Assert.Contains(
+                ConversationCompactionDefaults.PrecedingMessagesPlaceholder,
+                capturing.LastRequest.Messages[^1].Content as string,
+                StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ConversationCompactor_SecondCompact_IncludesPriorSummaryInPrefixReplay()
     {
         var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
@@ -1757,6 +1853,136 @@ public sealed class CompactionTests
                 Directory.Delete(root, true);
             }
         }
+    }
+
+    [Fact]
+    public async Task ConversationCompactor_Overflow_UsesMoreAggressiveSummaryBudgets()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var tools = new[]
+            {
+                new ToolDefinition("file_read", "Read files", ToolSchema.Object().String("path", "path", required: true).Build())
+            };
+            var settings = new AppSettings
+            {
+                ContextCompaction = new ContextCompactionSettings
+                {
+                    TriggerMessages = 2,
+                    KeepMessages = 1,
+                    SummaryMaxTokens = 1024,
+                    MaxConversationCharsForSummary = 20_000,
+                    OffloadBeforeCompact = false
+                }
+            };
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+            var capturing = new CapturingModelClient("summary text");
+            var toolCall = new AgentToolCall("t1", "file_read", new Dictionary<string, string>());
+            var session = AgentSession.Create("overflow-compact")
+                .WithMessages(
+                [
+                    ChatMessage.Create(MessageRole.User, "old"),
+                    ChatMessage.Create(MessageRole.Assistant, string.Empty, toolCalls: [toolCall]),
+                    ChatMessage.Create(
+                        MessageRole.Tool,
+                        AgentRuntime.FormatToolResult(toolCall, ToolResult.Success("ok", new string('x', 30_000)))),
+                    ChatMessage.Create(MessageRole.User, "continue"),
+                    ChatMessage.Create(MessageRole.Assistant, "ok")
+                ]);
+            var runtime = new CompactionRuntimeContext(
+                new ContextBudgetSnapshot(100_000, 1_000, 1_000, 90_000, 50_000, 0.5),
+                "You are Athlon.",
+                tools,
+                PressureOverride: ContextPressureLevel.Overflow);
+
+            var result = await new ConversationCompactor(
+                settings,
+                capturing,
+                storage,
+                new TruncateArgsService(),
+                new SessionUsageAccumulator(),
+                new NoOpLogger()).CompactIfNeededAsync(
+                session,
+                new CompactionExecutionRequest(
+                    CompactionKind.ConversationCompact,
+                    Force: false,
+                    EmitAudit: true,
+                    RuntimeContext: runtime,
+                    Plan: new DynamicCompactionPlan(
+                        ContextPressureLevel.Overflow,
+                        ApplyTruncateArgs: true,
+                        ApplyPrefixReEvict: false,
+                        ApplyConversationCompact: true,
+                        KeepTokenBudget: 0,
+                        MustPreserveAppendix: null)));
+
+            Assert.True(result.Compacted);
+            Assert.NotNull(capturing.LastRequest);
+            Assert.Equal(512, capturing.LastRequest!.MaxTokens);
+            var toolMessage = Assert.Single(capturing.LastRequest.Messages, message => message.Role == "tool");
+            var content = Assert.IsType<string>(toolMessage.Content);
+            Assert.Contains("[cache hygiene:", content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public void ConversationCutoffPlanner_FindSafeCutoff_AllowsSummaryInsideCompactedPrefix()
+    {
+        var summary = SummaryMessageBuilder.CreateSummaryPlaceholder("older summary", null);
+        var user = ChatMessage.Create(MessageRole.User, "latest question");
+        var assistant = ChatMessage.Create(
+            MessageRole.Assistant,
+            string.Empty,
+            toolCalls: [new AgentToolCall("call-1", "file_read", new Dictionary<string, string>())]);
+        var tool = ChatMessage.Create(MessageRole.Tool, "ToolCallId: call-1\noutput");
+        var messages = new[] { summary, user, assistant, tool };
+
+        var cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(messages, 2);
+
+        Assert.Equal(2, cutoff);
+        Assert.True(ConversationCutoffPlanner.IsPairingBalancedBefore(messages, cutoff));
+    }
+
+    [Fact]
+    public void ConversationCutoffPlanner_FindSafeCutoff_DoesNotSplitEvictedToolPlaceholder()
+    {
+        var assistant = ChatMessage.Create(
+            MessageRole.Assistant,
+            string.Empty,
+            toolCalls: [new AgentToolCall("call-1", "file_read", new Dictionary<string, string>())]);
+        var tool = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-1",
+                "Tool `file_read` succeeded.",
+                "",
+                "Arguments: path = Foo.cs",
+                "Summary: ok",
+                "",
+                "[Tool result evicted - 120000 chars]",
+                "Archived at: /tmp/tool.txt",
+                "Preview:",
+                "head",
+                "...",
+                "tail"));
+        var messages = new[] { ChatMessage.Create(MessageRole.User, "old"), assistant, tool };
+
+        var cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(messages, 2);
+
+        Assert.Equal(1, cutoff);
+        Assert.True(ConversationCutoffPlanner.IsPairingBalancedBefore(messages, cutoff));
     }
 
     private static (AppSettings Settings, AgentSession Session, CompactionRuntimeContext Runtime) CreatePruneBelowCompactThresholdFixture(

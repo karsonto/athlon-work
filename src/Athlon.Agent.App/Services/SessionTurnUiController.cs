@@ -44,6 +44,8 @@ public sealed partial class SessionTurnUiController
     /// <see cref="Messages"/> omits those tools when show-tool-calls is off.
     /// </summary>
     private List<ChatMessage> _activitySourceMessages = new();
+    private List<ChatMessage> _displayMessages = new();
+    private ConversationDisplayCursor? _olderDisplayCursor;
     private readonly ToolCallArgsDisplayCoordinator _displayCoordinator = new();
     private readonly StreamingTokenBuffer _tokenBuffer;
     private readonly ConcurrentDictionary<string, PendingUiApproval> _pendingApprovals =
@@ -163,6 +165,13 @@ public sealed partial class SessionTurnUiController
     /// <summary>Test seam: transcript used to replay FILES_CHANGED / TURN_ACTIVITY.</summary>
     internal IReadOnlyList<ChatMessage> ActivitySourceMessages => _activitySourceMessages;
 
+    internal IReadOnlyList<ChatMessage> DisplayMessagesSnapshot => _displayMessages;
+
+    internal ConversationDisplayCursor? OlderDisplayCursor => _olderDisplayCursor;
+
+    internal DisplaySurfaceFingerprint SurfaceFingerprint =>
+        DisplaySurfaceFingerprint.From(_displayMessages, _activitySourceMessages, _olderDisplayCursor);
+
     /// <summary>Test seam: activity source sliced to the displayed window for WebView replay.</summary>
     internal IReadOnlyList<ChatMessage> ReplayActivitySource => BuildReplayActivitySource();
 
@@ -204,6 +213,19 @@ public sealed partial class SessionTurnUiController
             if (liveSession is not null)
             {
                 liveSession.Value = session;
+            }
+
+            if (ShouldRefreshDisplayAfterSessionReplace(session))
+            {
+                if (!IsDisplayed)
+                {
+                    SyncActivitySourceFromSession(session);
+                    return Task.CompletedTask;
+                }
+
+                return RebuildDisplayFromMessagesAsync(
+                    session.Messages,
+                    synthesizeInterruptedToolResults: true);
             }
 
             return Task.CompletedTask;
@@ -278,6 +300,89 @@ public sealed partial class SessionTurnUiController
     /// </summary>
     public void SyncActivitySourceFromSession(AgentSession session) =>
         RunOnUiSync(() => MergeActivitySourceFromSession(session));
+
+    public void UpdateSurfaceCursor(ConversationDisplayCursor? olderDisplayCursor) =>
+        RunOnUiSync(() => _olderDisplayCursor = olderDisplayCursor);
+
+    public Task PrependDisplayMessagesAsync(
+        IReadOnlyList<ChatMessage> olderDisplayMessages,
+        ConversationDisplayCursor? olderDisplayCursor,
+        bool showToolCalls,
+        bool hasOlderMessages) =>
+        RunOnUiTaskAsync(async () =>
+        {
+            if (olderDisplayMessages.Count == 0)
+            {
+                _olderDisplayCursor = olderDisplayCursor;
+                if (IsDisplayed && ChatView is not null)
+                {
+                    await ChatView.SetOlderMessagesAvailableAsync(hasOlderMessages).ConfigureAwait(true);
+                }
+
+                return;
+            }
+
+            var prependViewModels = ChatTimelineHydrator.BuildDisplayMessages(
+                olderDisplayMessages,
+                viewModelCache: null,
+                showToolCalls,
+                synthesizeInterruptedToolResults: false);
+            var visibleIds = new HashSet<string>(
+                Messages.Where(message => !message.IsHiddenPlaceholder).Select(message => message.MessageId),
+                StringComparer.Ordinal);
+            var toInsert = prependViewModels
+                .Where(viewModel => !visibleIds.Contains(viewModel.MessageId))
+                .ToList();
+            if (toInsert.Count > 0)
+            {
+                _bulkChatViewSyncDepth++;
+                try
+                {
+                    var insertIndex = Messages.Count > 0 && Messages[0].IsHiddenPlaceholder ? 1 : 0;
+                    foreach (var viewModel in toInsert)
+                    {
+                        Messages.Insert(insertIndex++, viewModel);
+                        _viewModelCache[viewModel.MessageId] = viewModel;
+                    }
+                }
+                finally
+                {
+                    _bulkChatViewSyncDepth--;
+                }
+            }
+
+            _displayMessages = PrependDistinct(olderDisplayMessages, _displayMessages);
+            _activitySourceMessages = PrependDistinct(olderDisplayMessages, _activitySourceMessages);
+            _olderDisplayCursor = olderDisplayCursor;
+            TrimMessagesIfNeeded();
+
+            if (IsDisplayed && ChatView is not null)
+            {
+                await ChatView.PrependMessagesAsync(toInsert, showToolCalls, hasOlderMessages).ConfigureAwait(true);
+            }
+        });
+
+    private bool ShouldRefreshDisplayAfterSessionReplace(AgentSession session)
+    {
+        if (!session.Messages.Any(message =>
+                message.Role == MessageRole.Compaction || SummaryMessageBuilder.IsSummaryMessage(message)))
+        {
+            return false;
+        }
+
+        if (_activitySourceMessages.Count == 0)
+        {
+            return true;
+        }
+
+        if (session.Messages.Count < _activitySourceMessages.Count)
+        {
+            return true;
+        }
+
+        var sessionIds = session.Messages.Select(message => message.Id).ToHashSet(StringComparer.Ordinal);
+        return _activitySourceMessages.Any(message => !sessionIds.Contains(message.Id));
+    }
 
     public async Task ReloadChatViewAsync()
     {
@@ -365,7 +470,9 @@ public sealed partial class SessionTurnUiController
                 _viewModelCache.Clear();
                 _modifiedFilesTracker.Clear();
                 _turnActivityTracker.Clear();
+                _displayMessages = new List<ChatMessage>();
                 _activitySourceMessages = new List<ChatMessage>();
+                _olderDisplayCursor = null;
             }
             finally
             {
@@ -776,6 +883,7 @@ public sealed partial class SessionTurnUiController
         Messages.Clear();
         _streaming.Reset();
         _displayCoordinator.Reset();
+        _displayMessages = displayMessages.ToList();
         _activitySourceMessages = (activitySourceMessages ?? displayMessages).ToList();
 
         // Prune cache: remove entries that belong to old sessions (not in the new display list)
@@ -1042,6 +1150,31 @@ public sealed partial class SessionTurnUiController
         {
             _activitySourceMessages.RemoveRange(0, startIndex);
         }
+    }
+
+    private static List<ChatMessage> PrependDistinct(
+        IReadOnlyList<ChatMessage> olderMessages,
+        IReadOnlyList<ChatMessage> currentMessages)
+    {
+        var merged = new List<ChatMessage>(olderMessages.Count + currentMessages.Count);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var message in olderMessages)
+        {
+            if (seen.Add(message.Id))
+            {
+                merged.Add(message);
+            }
+        }
+
+        foreach (var message in currentMessages)
+        {
+            if (seen.Add(message.Id))
+            {
+                merged.Add(message);
+            }
+        }
+
+        return merged;
     }
 
     private void AppendActivitySourceMessage(ChatMessage message)

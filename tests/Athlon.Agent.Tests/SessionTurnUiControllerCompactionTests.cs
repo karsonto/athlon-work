@@ -12,10 +12,11 @@ namespace Athlon.Agent.Tests;
 public sealed class SessionTurnUiControllerCompactionTests
 {
     [Fact]
-    public async Task Compaction_DoesNotRemoveExistingDisplayMessages()
+    public async Task Compaction_OnSessionUpdated_ReplacesDisplayedSurface()
     {
         var dispatcher = await StartStaDispatcherAsync();
         var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () => Task.CompletedTask;
 
         await dispatcher.InvokeAsync(() =>
         {
@@ -28,17 +29,21 @@ public sealed class SessionTurnUiControllerCompactionTests
         [
             CompactionMessageContent.CreateCompactionMessage(
                 CompactionMessageContent.CreateConversationCompact(1000, 500, 3, null, "summary")),
-            ChatMessage.Create(MessageRole.User, "three"),
+            SummaryMessageBuilder.CreateSummaryPlaceholder("summary", null),
             ChatMessage.Create(MessageRole.Assistant, "four")
         ]);
 
-        var compactionMessage = compactedSession.Messages[0];
         ui.SetDisplayed(true);
         var callbacks = ui.BuildCallbacks(new LiveAgentSession(compactedSession));
-        await callbacks.OnStreamEvent!(new AgentStreamEvent.ChatMessageAppended(compactionMessage));
+        await callbacks.OnSessionUpdated!(compactedSession);
 
-        Assert.Equal(3, ui.Messages.Count);
-        Assert.DoesNotContain(ui.Messages, message => message.IsCompaction);
+        await dispatcher.InvokeAsync(() =>
+        {
+            Assert.Single(ui.Messages);
+            Assert.Equal("four", ui.Messages[0].Content);
+            Assert.DoesNotContain(ui.Messages, message => message.Content == "one");
+            Assert.DoesNotContain(ui.Messages, message => message.Content == "two");
+        });
     }
 
     [Fact]

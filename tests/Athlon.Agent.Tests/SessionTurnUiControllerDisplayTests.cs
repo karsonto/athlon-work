@@ -162,6 +162,40 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
+    public async Task PrependDisplayMessagesAsync_updates_surface_snapshot_and_visible_messages()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () => Task.CompletedTask;
+        ui.SetDisplayed(false);
+
+        var oldUser = ChatMessage.Create(MessageRole.User, "old");
+        var newUser = ChatMessage.Create(MessageRole.User, "new");
+        var newAssistant = ChatMessage.Create(MessageRole.Assistant, "done");
+
+        await ui.HydrateDisplayAsync(
+            AgentSession.Create("prepend").WithMessages([oldUser, newUser, newAssistant]),
+            [newUser, newAssistant],
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: [newUser, newAssistant]);
+
+        await ui.PrependDisplayMessagesAsync(
+            [oldUser],
+            new ConversationDisplayCursor(0, Array.Empty<string>()),
+            showToolCalls: false,
+            hasOlderMessages: false);
+
+        var visible = await dispatcher.InvokeAsync(() => ui.Messages.ToList());
+        var displaySnapshot = await dispatcher.InvokeAsync(() => ui.DisplayMessagesSnapshot.ToList());
+        var fingerprint = await dispatcher.InvokeAsync(() => ui.SurfaceFingerprint);
+
+        Assert.Equal(oldUser.Id, visible[0].MessageId);
+        Assert.Equal(oldUser.Id, displaySnapshot[0].Id);
+        Assert.Equal(3, fingerprint.DisplayCount);
+        Assert.Equal(oldUser.Id, fingerprint.FirstDisplayMessageId);
+    }
+
+    [Fact]
     public async Task HiddenSession_buffers_text_delta_without_adding_messages()
     {
         var dispatcher = await StartStaDispatcherAsync();

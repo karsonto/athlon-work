@@ -17,6 +17,11 @@ internal static class ChatEventSerializer
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
+    private static readonly object ReplayCacheLock = new();
+    private static readonly Dictionary<string, IReadOnlyList<string>> ReplayEventsCache = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, IReadOnlyList<ReplayTurnSegment>> ReplaySegmentsCache = new(StringComparer.Ordinal);
+    private static readonly Queue<string> ReplayCacheOrder = new();
+    private const int ReplayCacheCapacity = 32;
 
     public static string Serialize(AgentStreamEvent streamEvent) =>
         streamEvent switch
@@ -298,7 +303,7 @@ internal static class ChatEventSerializer
         bool showToolCalls = false,
         IReadOnlyList<ChatMessage>? activitySourceMessages = null) =>
         SerializeWebMessageCommand(
-            "replay",
+            "replaceSurface",
             BuildReplayEvents(messages, showToolCalls, activitySourceMessages: activitySourceMessages));
 
     public static string SerializeAppendCommand(
@@ -306,7 +311,7 @@ internal static class ChatEventSerializer
         bool showToolCalls = false,
         IReadOnlyList<ChatMessage>? activitySourceMessages = null) =>
         SerializeWebMessageCommand(
-            "append",
+            "appendEvents",
             BuildReplayEvents(
                 messages,
                 showToolCalls,
@@ -346,10 +351,13 @@ internal static class ChatEventSerializer
         bool includeReset = true,
         IReadOnlyList<ChatMessage>? activitySourceMessages = null)
     {
-        var events = new List<string>();
-        if (includeReset)
+        var cacheKey = BuildReplayCacheKey(messages, showToolCalls, includeReset, activitySourceMessages);
+        lock (ReplayCacheLock)
         {
-            events.Add(SerializeResetTimeline());
+            if (ReplayEventsCache.TryGetValue(cacheKey, out var cached))
+            {
+                return cached;
+            }
         }
 
         var timeline = activitySourceMessages is { Count: > 0 }
@@ -361,9 +369,31 @@ internal static class ChatEventSerializer
                 .Select(message => new ChatMessageViewModel(message))
                 .ToList()
             : messages.ToList();
+        var timelineKey = BuildReplayTimelineKey(timeline, showToolCalls);
+        IReadOnlyList<ReplayTurnSegment> segments;
+        lock (ReplayCacheLock)
+        {
+            if (!ReplaySegmentsCache.TryGetValue(timelineKey, out segments!))
+            {
+                segments = BuildReplaySegments(timeline, showToolCalls);
+                AddReplaySegmentsToCache(timelineKey, segments);
+            }
+        }
 
-        // One turn = one activity fold (tools + reasoning + intermediate text in timeline order),
-        // then the final assistant bubble.
+        var events = BuildEventsFromSegments(segments, includeReset);
+        lock (ReplayCacheLock)
+        {
+            AddReplayEventsToCache(cacheKey, events);
+        }
+
+        return events;
+    }
+
+    private static IReadOnlyList<ReplayTurnSegment> BuildReplaySegments(
+        IReadOnlyList<ChatMessageViewModel> timeline,
+        bool showToolCalls)
+    {
+        var segments = new List<ReplayTurnSegment>();
         var activitySegment = new List<ChatMessageViewModel>();
         var pendingToolCards = new List<string>();
         var pendingAssistants = new List<ChatMessageViewModel>();
@@ -371,38 +401,47 @@ internal static class ChatEventSerializer
 
         void FlushTurnIntermediate()
         {
+            string? activityEvent = null;
+            string? filesEvent = null;
             if (activitySegment.Count > 0)
             {
                 var activity = TurnActivitySummaryBuilder.Build(activitySegment);
                 if (activity is { HasContent: true })
                 {
-                    events.Add(SerializeTurnActivity(activity));
+                    activityEvent = SerializeTurnActivity(activity);
                 }
 
                 var files = SessionModifiedFilesTracker.BuildTurnFileGroups(activitySegment);
                 if (files is { Count: > 0 } && files[0].Count > 0)
                 {
-                    events.Add(SerializeFilesChanged(files[0]));
+                    filesEvent = SerializeFilesChanged(files[0]);
                 }
 
                 activitySegment.Clear();
             }
 
-            if (pendingToolCards.Count > 0)
+            var assistantEvents = new List<string>();
+            foreach (var assistant in pendingAssistants)
             {
-                events.AddRange(pendingToolCards);
-                pendingToolCards.Clear();
+                assistantEvents.AddRange(BuildReplayEventsForMessage(assistant));
             }
 
-            if (pendingAssistants.Count > 0)
+            if (activityEvent is not null
+                || filesEvent is not null
+                || pendingToolCards.Count > 0
+                || assistantEvents.Count > 0)
             {
-                foreach (var assistant in pendingAssistants)
-                {
-                    events.AddRange(BuildReplayEventsForMessage(assistant));
-                }
-
-                pendingAssistants.Clear();
+                segments.Add(new ReplayTurnSegment(
+                    UserEvents: Array.Empty<string>(),
+                    ActivityEvent: activityEvent,
+                    FilesChangedEvent: filesEvent,
+                    ToolEvents: pendingToolCards.ToArray(),
+                    AssistantEvents: assistantEvents.ToArray(),
+                    CompactionEvent: null));
             }
+
+            pendingToolCards.Clear();
+            pendingAssistants.Clear();
         }
 
         foreach (var message in timeline)
@@ -415,7 +454,13 @@ internal static class ChatEventSerializer
             if (message.IsUser)
             {
                 FlushTurnIntermediate();
-                events.AddRange(BuildReplayEventsForMessage(message));
+                segments.Add(new ReplayTurnSegment(
+                    UserEvents: BuildReplayEventsForMessage(message).ToArray(),
+                    ActivityEvent: null,
+                    FilesChangedEvent: null,
+                    ToolEvents: Array.Empty<string>(),
+                    AssistantEvents: Array.Empty<string>(),
+                    CompactionEvent: null));
                 continue;
             }
 
@@ -424,7 +469,13 @@ internal static class ChatEventSerializer
                 if (ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(message))
                 {
                     FlushTurnIntermediate();
-                    events.Add(SerializeCompactionCheckpoint(message));
+                    segments.Add(new ReplayTurnSegment(
+                        UserEvents: Array.Empty<string>(),
+                        ActivityEvent: null,
+                        FilesChangedEvent: null,
+                        ToolEvents: Array.Empty<string>(),
+                        AssistantEvents: Array.Empty<string>(),
+                        CompactionEvent: SerializeCompactionCheckpoint(message)));
                 }
 
                 continue;
@@ -446,7 +497,6 @@ internal static class ChatEventSerializer
                 continue;
             }
 
-            // Assistant: keep chronological order inside the fold; only the turn's final text is a bubble.
             if (message.HasReasoning)
             {
                 activitySegment.Add(new ChatMessageViewModel(
@@ -475,8 +525,118 @@ internal static class ChatEventSerializer
         }
 
         FlushTurnIntermediate();
+        return segments;
+    }
+
+    private static IReadOnlyList<string> BuildEventsFromSegments(
+        IReadOnlyList<ReplayTurnSegment> segments,
+        bool includeReset)
+    {
+        var events = new List<string>();
+        if (includeReset)
+        {
+            events.Add(SerializeResetTimeline());
+        }
+
+        foreach (var segment in segments)
+        {
+            events.AddRange(segment.UserEvents);
+            if (segment.ActivityEvent is not null)
+            {
+                events.Add(segment.ActivityEvent);
+            }
+
+            if (segment.FilesChangedEvent is not null)
+            {
+                events.Add(segment.FilesChangedEvent);
+            }
+
+            events.AddRange(segment.ToolEvents);
+            events.AddRange(segment.AssistantEvents);
+            if (segment.CompactionEvent is not null)
+            {
+                events.Add(segment.CompactionEvent);
+            }
+        }
+
         return events;
     }
+
+    private static string BuildReplayCacheKey(
+        IReadOnlyList<ChatMessageViewModel> messages,
+        bool showToolCalls,
+        bool includeReset,
+        IReadOnlyList<ChatMessage>? activitySourceMessages) =>
+        string.Join(
+            "|",
+            BuildReplayTimelineKey(
+                activitySourceMessages is { Count: > 0 }
+                    ? activitySourceMessages.Select(message => new ChatMessageViewModel(message)).ToList()
+                    : messages.ToList(),
+                showToolCalls),
+            includeReset ? "reset" : "noreset",
+            System.Globalization.CultureInfo.CurrentUICulture.Name);
+
+    private static string BuildReplayTimelineKey(
+        IReadOnlyList<ChatMessageViewModel> timeline,
+        bool showToolCalls)
+    {
+        var builder = new StringBuilder();
+        builder.Append(showToolCalls ? '1' : '0');
+        foreach (var message in timeline)
+        {
+            builder.Append('|');
+            builder.Append(message.MessageId);
+            builder.Append(':');
+            builder.Append(message.Role);
+            builder.Append(':');
+            builder.Append(message.Content?.Length ?? 0);
+            builder.Append(':');
+            builder.Append(message.ReasoningContent?.Length ?? 0);
+            builder.Append(':');
+            builder.Append(message.ToolCallId);
+        }
+
+        return builder.ToString();
+    }
+
+    private static void AddReplayEventsToCache(string key, IReadOnlyList<string> events)
+    {
+        ReplayEventsCache[key] = events;
+        ReplayCacheOrder.Enqueue("events:" + key);
+        TrimReplayCaches();
+    }
+
+    private static void AddReplaySegmentsToCache(string key, IReadOnlyList<ReplayTurnSegment> segments)
+    {
+        ReplaySegmentsCache[key] = segments;
+        ReplayCacheOrder.Enqueue("segments:" + key);
+        TrimReplayCaches();
+    }
+
+    private static void TrimReplayCaches()
+    {
+        while (ReplayCacheOrder.Count > ReplayCacheCapacity)
+        {
+            var key = ReplayCacheOrder.Dequeue();
+            if (key.StartsWith("events:", StringComparison.Ordinal))
+            {
+                ReplayEventsCache.Remove(key["events:".Length..]);
+            }
+            else if (key.StartsWith("segments:", StringComparison.Ordinal))
+            {
+                ReplaySegmentsCache.Remove(key["segments:".Length..]);
+            }
+        }
+    }
+
+    private sealed record ReplayTurnSegment(
+        IReadOnlyList<string> UserEvents,
+        string? ActivityEvent,
+        string? FilesChangedEvent,
+        IReadOnlyList<string> ToolEvents,
+        IReadOnlyList<string> AssistantEvents,
+        string? CompactionEvent);
 
     /// <summary>
     /// Per user turn: assistants that should remain bubbles (not folded into activity).

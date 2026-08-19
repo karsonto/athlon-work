@@ -1433,16 +1433,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
             _olderDisplayCursor = page.OlderCursor;
             _runtime.SetOlderDisplayCursor(sessionId, _olderDisplayCursor);
-            var viewModels = await Task.Run(() =>
-                ChatTimelineHydrator.BuildDisplayMessages(
-                    page.Messages,
-                    viewModelCache: null,
-                    showToolCalls: _activeUi.ShowToolCalls,
-                    synthesizeInterruptedToolResults: false)).ConfigureAwait(true);
-            await chatView.PrependMessagesAsync(
-                viewModels,
+            await _activeUi.PrependDisplayMessagesAsync(
+                page.Messages,
+                _olderDisplayCursor,
                 _activeUi.ShowToolCalls,
                 _olderDisplayCursor is not null).ConfigureAwait(true);
+            _runtime.MarkHydrated(sessionId, _olderDisplayCursor, _activeUi.SurfaceFingerprint);
         }
         catch (Exception ex)
         {
@@ -1539,7 +1535,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             // Skip empty replay when the session still has history: LoadSessionInternalAsync
             // will cold-load conversation.jsonl instead of wiping the previous transcript.
             var cacheIsEmpty = _activeUi.Messages.Count == 0;
-            if (!(cacheIsEmpty && session.Messages.Count > 0))
+            var canReuseSurface = !cacheIsEmpty
+                && _runtime.TryGetHydrated(session.Id, out var live)
+                && live.SurfaceFingerprint is not null
+                && Equals(live.SurfaceFingerprint, _activeUi.SurfaceFingerprint);
+            if (canReuseSurface || !(cacheIsEmpty && session.Messages.Count > 0))
             {
                 if (_activeUi.ActivitySourceMessages.Count == 0)
                 {
@@ -2555,6 +2555,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             SwitchDisplayedSession(live.Session!, renderExistingMessages: true);
             var displayedUi = _activeUi;
             _olderDisplayCursor = live.OlderDisplayCursor;
+            displayedUi.UpdateSurfaceCursor(_olderDisplayCursor);
             ApplyLoadedSessionChrome();
             if (_savedChatView is not null)
             {
@@ -2607,6 +2608,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _runtime.Attach(snapshot.Session);
             SwitchDisplayedSession(snapshot.Session, renderExistingMessages: false);
             _olderDisplayCursor = snapshot.OlderDisplayCursor;
+            _activeUi.UpdateSurfaceCursor(_olderDisplayCursor);
             ApplyLoadedSessionChrome();
 
             if (!IsSessionLoadCurrent(loadGeneration))
@@ -2632,7 +2634,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                     synthesizeInterruptedToolResults: false).ConfigureAwait(true);
             }
 
-            _runtime.MarkHydrated(sessionId, _olderDisplayCursor);
+            _runtime.MarkHydrated(sessionId, _olderDisplayCursor, snapshot.SurfaceFingerprint);
 
             if (_savedChatView is not null)
             {

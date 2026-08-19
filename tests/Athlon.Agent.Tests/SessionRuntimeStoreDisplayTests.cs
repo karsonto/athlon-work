@@ -33,15 +33,50 @@ public sealed class SessionRuntimeStoreDisplayTests
         var session = AgentSession.Create("hist")
             .WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
 
+        var ui = cache.GetOrCreate(session.Id);
+        await ui.HydrateDisplayAsync(
+            session,
+            session.Messages,
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: session.Messages);
+        store.Attach(session);
+        DisplaySurfaceFingerprint fingerprint = DisplaySurfaceFingerprint.Empty;
         await dispatcher.InvokeAsync(() =>
         {
-            var ui = cache.GetOrCreate(session.Id);
-            ui.Messages.Add(new ChatMessageViewModel(session.Messages[0]));
+            fingerprint = ui.SurfaceFingerprint;
         });
-        store.Attach(session);
+        store.MarkHydrated(session.Id, olderDisplayCursor: null, fingerprint);
 
         Assert.True(store.TryGetHydrated(session.Id, out var live));
         Assert.Equal(session.Id, live.Session!.Id);
+    }
+
+    [Fact]
+    public async Task TryGetHydrated_is_false_when_surface_fingerprint_mismatches()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var cache = new SessionUiCache(dispatcher, new AppSettings());
+        using var store = new SessionRuntimeStore(new NoOpStorage(), cache, enablePeriodicFlush: false);
+        var session = AgentSession.Create("hist")
+            .WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
+        var fingerprint = DisplaySurfaceFingerprint.Empty;
+
+        var ui = cache.GetOrCreate(session.Id);
+        await ui.HydrateDisplayAsync(
+            session,
+            session.Messages,
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: session.Messages);
+        await dispatcher.InvokeAsync(() =>
+        {
+            ui.UpdateSurfaceCursor(new ConversationDisplayCursor(10, Array.Empty<string>()));
+            fingerprint = ui.SurfaceFingerprint;
+            ui.UpdateSurfaceCursor(new ConversationDisplayCursor(20, Array.Empty<string>()));
+        });
+        store.Attach(session);
+        store.MarkHydrated(session.Id, new ConversationDisplayCursor(10, Array.Empty<string>()), fingerprint);
+
+        Assert.False(store.TryGetHydrated(session.Id, out _));
     }
 
     [Fact]

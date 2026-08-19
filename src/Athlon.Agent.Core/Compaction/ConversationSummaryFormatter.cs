@@ -4,6 +4,7 @@ public static class ConversationSummaryFormatter
 {
     private const int MaxToolResultChars = 500;
     private const string MiddleOmitMarker = "\n\n[... middle omitted for summary budget ...]\n\n";
+    private const string ToolPreviewMarker = "\n...\n";
 
     public static string FormatMessages(IReadOnlyList<ChatMessage> messages)
     {
@@ -53,6 +54,7 @@ public static class ConversationSummaryFormatter
             MessageRole.User => $"Human: {message.Content}",
             MessageRole.Assistant => FormatAssistant(message),
             MessageRole.Tool => FormatTool(message),
+            MessageRole.Summary => $"Summary: {message.Content}",
             _ => $"{message.Role}: {message.Content}"
         };
     }
@@ -75,7 +77,7 @@ public static class ConversationSummaryFormatter
 
     private static string FormatTool(ChatMessage message)
     {
-        return $"Tool: [tool_result] {Truncate(message.Content, MaxToolResultChars)}";
+        return $"Tool: [tool_result] {TruncateToolResult(message.Content, MaxToolResultChars)}";
     }
 
     private static string FormatArguments(ToolCallArguments arguments) =>
@@ -91,5 +93,23 @@ public static class ConversationSummaryFormatter
         }
 
         return value[..maxChars] + "...";
+    }
+
+    private static string TruncateToolResult(string? value, int maxChars)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
+        {
+            return value ?? string.Empty;
+        }
+
+        if (maxChars <= ToolPreviewMarker.Length + 2)
+        {
+            return value[^Math.Min(maxChars, value.Length)..];
+        }
+
+        var budget = maxChars - ToolPreviewMarker.Length;
+        var head = Math.Max(1, budget / 2);
+        var tail = Math.Max(1, budget - head);
+        return value[..head] + ToolPreviewMarker + value[^tail..];
     }
 }

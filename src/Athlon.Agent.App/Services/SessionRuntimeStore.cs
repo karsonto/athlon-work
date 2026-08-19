@@ -13,6 +13,8 @@ public sealed class RuntimeSessionEntry
 
     public bool SessionJsonDirty { get; set; }
 
+    public DisplaySurfaceFingerprint? SurfaceFingerprint { get; set; }
+
     internal List<ChatMessage> PendingAppends { get; } = [];
 
     internal HashSet<string> PendingAppendIds { get; } = new(StringComparer.Ordinal);
@@ -61,11 +63,15 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             return false;
         }
 
+        SessionTurnUiController? ui = null;
         var hasDisplayMessages = _uiCache is not null
-            && _uiCache.TryGet(sessionId, out var ui)
+            && _uiCache.TryGet(sessionId, out ui)
             && ui is { Messages.Count: > 0 };
 
-        if (hasDisplayMessages)
+        if (hasDisplayMessages
+            && ui is not null
+            && found.SurfaceFingerprint is not null
+            && Equals(ui.SurfaceFingerprint, found.SurfaceFingerprint))
         {
             found.Hydrated = true;
             entry = found;
@@ -112,7 +118,10 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         return entry;
     }
 
-    public void MarkHydrated(string sessionId, ConversationDisplayCursor? olderDisplayCursor)
+    public void MarkHydrated(
+        string sessionId,
+        ConversationDisplayCursor? olderDisplayCursor,
+        DisplaySurfaceFingerprint? surfaceFingerprint = null)
     {
         if (!_sessions.TryGetValue(sessionId, out var entry))
         {
@@ -123,6 +132,7 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         {
             entry.Hydrated = true;
             entry.OlderDisplayCursor = olderDisplayCursor;
+            entry.SurfaceFingerprint = surfaceFingerprint;
         }
     }
 

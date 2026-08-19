@@ -286,57 +286,97 @@ public sealed class ConversationCompactor(
         out int? summaryInputCharsAfter,
         out int? hygieneSavingsEstimate)
     {
-        var environmentPrompt = request.RuntimeContext?.EnvironmentPrompt;
-        if (!string.IsNullOrWhiteSpace(environmentPrompt) && request.RuntimeContext is { } runtime)
-        {
-            var built = ModelMessagesForApiBuilder.Build(
-                cache: null,
-                environmentPrompt,
-                prefix,
-                cfg);
-            var messages = built.Messages.ToList();
-            summaryInputCharsBefore = ConversationSummaryFormatter.FormatMessages(prefix).Length;
-            summaryInputCharsAfter = summaryInputCharsBefore;
-            hygieneSavingsEstimate = built.EstimatedSavingsTokens > 0 ? built.EstimatedSavingsTokens : null;
-            messages.Add(new AgentModelMessage(
-                "user",
-                BuildSummaryPrompt(
-                    cfg.SummaryPrompt,
-                    ConversationCompactionDefaults.PrecedingMessagesPlaceholder,
-                    mustPreserve)));
-            return new AgentModelRequest(
-                messages,
-                runtime.Tools,
-                AllowToolCalls: false,
-                MaxTokens: cfg.SummaryMaxTokens);
-        }
+        var pressure = request.Plan?.Pressure;
+        var effectiveMaxChars = ResolveSummaryMaxChars(cfg, pressure, request.Force);
+        var effectiveMaxTokens = ResolveSummaryMaxTokens(cfg, pressure, request.Force);
+        var hygieneSettings = ResolveSummaryHygieneSettings(cfg, pressure, request.Force);
+        var runtime = request.RuntimeContext;
+        var environmentPrompt = runtime?.EnvironmentPrompt ?? string.Empty;
+        var calibrationMultiplier = runtime?.CalibrationMultiplier ?? 1.0;
 
         var formatted = ConversationSummaryFormatter.FormatMessages(prefix);
         summaryInputCharsBefore = formatted.Length;
         summaryInputCharsAfter = formatted.Length;
         hygieneSavingsEstimate = null;
-        var calibrationMultiplier = request.RuntimeContext?.CalibrationMultiplier ?? 1.0;
-        if (formatted.Length > cfg.MaxConversationCharsForSummary
-            || ContextTokenEstimator.EstimateTextTokens(formatted, calibrationMultiplier) > cfg.RequestHistoryHygiene.MaxToolResultTokens)
+
+        if (formatted.Length > effectiveMaxChars
+            || ContextTokenEstimator.EstimateTextTokens(formatted, calibrationMultiplier) > hygieneSettings.MaxToolResultTokens)
         {
-            var compacted = RequestHistoryHygiene.CompactTextForSummary(formatted, cfg.RequestHistoryHygiene);
+            var compacted = RequestHistoryHygiene.CompactTextForSummary(formatted, hygieneSettings);
             formatted = compacted.Text;
             summaryInputCharsBefore = compacted.CharsBefore;
             summaryInputCharsAfter = compacted.CharsAfter;
             hygieneSavingsEstimate = compacted.EstimatedSavingsTokens;
         }
 
-        if (formatted.Length > cfg.MaxConversationCharsForSummary)
+        if (formatted.Length > effectiveMaxChars)
         {
-            formatted = ConversationSummaryFormatter.FitToMaxChars(formatted, cfg.MaxConversationCharsForSummary);
+            formatted = ConversationSummaryFormatter.FitToMaxChars(formatted, effectiveMaxChars);
             summaryInputCharsAfter = formatted.Length;
         }
 
+        var built = ModelMessagesForApiBuilder.Build(
+            cache: null,
+            environmentPrompt,
+            prefix,
+            cfg);
+        var hygieneResult = RequestHistoryHygiene.ApplyToModelMessages(built.Messages, hygieneSettings);
+        var messages = hygieneResult.Messages.ToList();
+        hygieneSavingsEstimate = Math.Max(
+            hygieneSavingsEstimate ?? 0,
+            built.EstimatedSavingsTokens + hygieneResult.EstimatedSavingsTokens);
+
+        // Keep the summary instruction stable so providers can reuse as much prompt prefix as possible.
+        messages.Add(new AgentModelMessage(
+            "user",
+            BuildSummaryPrompt(
+                cfg.SummaryPrompt,
+                ConversationCompactionDefaults.PrecedingMessagesPlaceholder,
+                mustPreserve)));
+
         return new AgentModelRequest(
-            [new AgentModelMessage("user", BuildSummaryPrompt(cfg.SummaryPrompt, formatted, mustPreserve))],
-            Array.Empty<ToolDefinition>(),
+            messages,
+            runtime?.Tools ?? Array.Empty<ToolDefinition>(),
             AllowToolCalls: false,
-            MaxTokens: cfg.SummaryMaxTokens);
+            MaxTokens: effectiveMaxTokens);
+    }
+
+    private static int ResolveSummaryMaxTokens(
+        ContextCompactionSettings cfg,
+        ContextPressureLevel? pressure,
+        bool force) =>
+        force || pressure == ContextPressureLevel.Overflow
+            ? Math.Max(128, Math.Min(cfg.SummaryMaxTokens, cfg.SummaryMaxTokens / 2))
+            : cfg.SummaryMaxTokens;
+
+    private static int ResolveSummaryMaxChars(
+        ContextCompactionSettings cfg,
+        ContextPressureLevel? pressure,
+        bool force) =>
+        force || pressure == ContextPressureLevel.Overflow
+            ? Math.Max(1024, Math.Min(cfg.MaxConversationCharsForSummary, cfg.MaxConversationCharsForSummary / 4))
+            : cfg.MaxConversationCharsForSummary;
+
+    private static RequestHistoryHygieneSettings ResolveSummaryHygieneSettings(
+        ContextCompactionSettings cfg,
+        ContextPressureLevel? pressure,
+        bool force)
+    {
+        if (!force && pressure != ContextPressureLevel.Overflow)
+        {
+            return cfg.RequestHistoryHygiene;
+        }
+
+        return new RequestHistoryHygieneSettings
+        {
+            Enabled = cfg.RequestHistoryHygiene.Enabled,
+            MaxToolResultLines = Math.Max(16, Math.Min(cfg.RequestHistoryHygiene.MaxToolResultLines, cfg.RequestHistoryHygiene.MaxToolResultLines / 2)),
+            MaxToolResultBytes = Math.Max(1024, Math.Min(cfg.RequestHistoryHygiene.MaxToolResultBytes, cfg.RequestHistoryHygiene.MaxToolResultBytes / 2)),
+            MaxToolResultTokens = Math.Max(256, Math.Min(cfg.RequestHistoryHygiene.MaxToolResultTokens, cfg.RequestHistoryHygiene.MaxToolResultTokens / 2)),
+            MaxToolArgumentStringBytes = Math.Max(256, Math.Min(cfg.RequestHistoryHygiene.MaxToolArgumentStringBytes, cfg.RequestHistoryHygiene.MaxToolArgumentStringBytes / 2)),
+            MaxToolArgumentStringTokens = Math.Max(64, Math.Min(cfg.RequestHistoryHygiene.MaxToolArgumentStringTokens, cfg.RequestHistoryHygiene.MaxToolArgumentStringTokens / 2)),
+            MaxArrayItems = cfg.RequestHistoryHygiene.MaxArrayItems
+        };
     }
 
     private static string BuildSummaryPrompt(string template, string formattedMessages, string? mustPreserveAppendix)
