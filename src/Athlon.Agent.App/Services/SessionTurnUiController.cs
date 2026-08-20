@@ -211,6 +211,11 @@ public sealed partial class SessionTurnUiController
             }
             else
             {
+                // Materialize tokens already received while this session was visible before
+                // stopping the timer. Otherwise an immediate session switch can leave the
+                // latest assistant text only in the transient buffer instead of this
+                // session's UI cache.
+                FlushBufferedStreamingToUi();
                 _tokenBuffer.StopFlushTimer();
             }
         });

@@ -119,6 +119,22 @@ public sealed class SessionRuntimeStoreTests
     }
 
     [Fact]
+    public void UpdateSession_does_not_replace_newer_background_turn_with_stale_snapshot()
+    {
+        var storage = new RecordingStorage();
+        using var store = new SessionRuntimeStore(storage, enablePeriodicFlush: false);
+        var stale = AgentSession.Create("switching");
+        var latest = stale.WithMessage(ChatMessage.Create(MessageRole.User, "new turn"));
+        store.Attach(latest, hydrated: true);
+
+        store.UpdateSession(stale);
+
+        Assert.True(store.TryGetHydrated(stale.Id, out var live));
+        Assert.Same(latest, live.Session);
+        Assert.Single(live.Session!.Messages);
+    }
+
+    [Fact]
     public async Task DiscardPending_drops_queued_appends()
     {
         var storage = new RecordingStorage();

@@ -224,6 +224,25 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
+    public async Task SwitchingAway_flushes_already_received_text_into_session_cache()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.SetDisplayed(true);
+        var callbacks = ui.BuildCallbacks();
+        await EmitText(callbacks, MessageId1, "cached before switch");
+
+        Assert.Empty(await dispatcher.InvokeAsync(() => ui.Messages.ToList()));
+
+        ui.SetDisplayed(false);
+
+        var assistant = await dispatcher.InvokeAsync(() =>
+            ui.Messages.LastOrDefault(message => !message.IsUser && !message.IsTool));
+        Assert.NotNull(assistant);
+        Assert.Contains("cached before switch", assistant!.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task HiddenSession_finalize_turn_applies_persisted_assistant_message()
     {
         var dispatcher = await StartStaDispatcherAsync();

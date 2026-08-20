@@ -161,7 +161,26 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         }
     }
 
-    public void UpdateSession(AgentSession session) => Attach(session);
+    /// <summary>
+    /// Updates the live session without allowing a stale shell snapshot to replace a
+    /// newer session produced by a background turn while the user is switching chats.
+    /// Structural operations that intentionally replace history use <see cref="Attach"/>.
+    /// </summary>
+    public void UpdateSession(AgentSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var entry = _sessions.GetOrAdd(session.Id, _ => new RuntimeSessionEntry());
+        lock (_gate)
+        {
+            if (entry.Session is null
+                || session.UpdatedAt > entry.Session.UpdatedAt
+                || session.UpdatedAt == entry.Session.UpdatedAt
+                    && session.Messages.Count >= entry.Session.Messages.Count)
+            {
+                entry.Session = session;
+            }
+        }
+    }
 
     public void Remove(string sessionId)
     {
