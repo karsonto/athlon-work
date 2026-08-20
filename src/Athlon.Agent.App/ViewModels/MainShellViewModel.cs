@@ -2590,7 +2590,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private async Task LoadSessionInternalAsync(string sessionId)
     {
         var loadGeneration = Interlocked.Increment(ref _sessionLoadGeneration);
-        if (_runtime.TryGetHydrated(sessionId, out var live))
+        var hasRunningTurn = _sessionTurns.TurnHost.IsRunning(sessionId);
+        if (_runtime.TryGetHydrated(
+                sessionId,
+                out var live,
+                acceptNewerCachedSurface: hasRunningTurn))
         {
             var workspaceChanged = !SameSessionWorkspace(_session, live.Session!);
             SwitchDisplayedSession(live.Session!, renderExistingMessages: true);

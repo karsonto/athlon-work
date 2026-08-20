@@ -50,7 +50,10 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         }
     }
 
-    public bool TryGetHydrated(string sessionId, out RuntimeSessionEntry entry)
+    public bool TryGetHydrated(
+        string sessionId,
+        out RuntimeSessionEntry entry,
+        bool acceptNewerCachedSurface = false)
     {
         entry = null!;
         if (string.IsNullOrWhiteSpace(sessionId) || !_sessions.TryGetValue(sessionId, out var found))
@@ -68,12 +71,27 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             && _uiCache.TryGet(sessionId, out ui)
             && ui is { Messages.Count: > 0 };
 
+        var cachedSurfaceFingerprint = ui?.SurfaceFingerprint;
         if (hasDisplayMessages
-            && ui is not null
-            && found.SurfaceFingerprint is not null
-            && Equals(ui.SurfaceFingerprint, found.SurfaceFingerprint))
+            && cachedSurfaceFingerprint is not null
+            && (acceptNewerCachedSurface
+                || (found.SurfaceFingerprint is not null
+                    && Equals(cachedSurfaceFingerprint, found.SurfaceFingerprint))))
         {
-            found.Hydrated = true;
+            // A running background turn updates its per-session UI before the periodic
+            // transcript flush. In that case the cached surface is newer than both this
+            // fingerprint and disk, so switching sessions must keep it instead of cold
+            // loading an older snapshot over the live content.
+            lock (_gate)
+            {
+                if (acceptNewerCachedSurface)
+                {
+                    found.SurfaceFingerprint = cachedSurfaceFingerprint;
+                }
+
+                found.Hydrated = true;
+            }
+
             entry = found;
             return true;
         }

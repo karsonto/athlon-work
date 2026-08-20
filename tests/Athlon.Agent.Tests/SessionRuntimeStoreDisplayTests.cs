@@ -80,6 +80,68 @@ public sealed class SessionRuntimeStoreDisplayTests
     }
 
     [Fact]
+    public async Task TryGetHydrated_keeps_newer_cached_surface_for_running_turn()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var cache = new SessionUiCache(dispatcher, new AppSettings());
+        using var store = new SessionRuntimeStore(new NoOpStorage(), cache, enablePeriodicFlush: false);
+        var user = ChatMessage.Create(MessageRole.User, "inspect it");
+        var session = AgentSession.Create("running").WithMessage(user);
+
+        var ui = cache.GetOrCreate(session.Id);
+        await ui.HydrateDisplayAsync(
+            session,
+            session.Messages,
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: session.Messages);
+        store.Attach(session);
+        var initialFingerprint = await dispatcher.InvokeAsync(() => ui.SurfaceFingerprint);
+        store.MarkHydrated(session.Id, olderDisplayCursor: null, initialFingerprint);
+
+        var toolResult = ChatMessage.Create(MessageRole.Tool, "Tool `file_read` succeeded.");
+        await ui.BuildCallbacks().OnStreamEvent!(
+            new Athlon.Agent.Core.Streaming.AgentStreamEvent.ChatMessageAppended(toolResult));
+
+        Assert.NotEqual(initialFingerprint, await dispatcher.InvokeAsync(() => ui.SurfaceFingerprint));
+        Assert.False(store.TryGetHydrated(session.Id, out _));
+        Assert.True(store.TryGetHydrated(
+            session.Id,
+            out var live,
+            acceptNewerCachedSurface: true));
+        Assert.Equal(session.Id, live.Session!.Id);
+        Assert.Equal(
+            await dispatcher.InvokeAsync(() => ui.SurfaceFingerprint),
+            live.SurfaceFingerprint);
+    }
+
+    [Fact]
+    public async Task TryGetHydrated_keeps_running_turn_cache_without_prior_fingerprint()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var cache = new SessionUiCache(dispatcher, new AppSettings());
+        using var store = new SessionRuntimeStore(new NoOpStorage(), cache, enablePeriodicFlush: false);
+        var session = AgentSession.Create("new-running")
+            .WithMessage(ChatMessage.Create(MessageRole.User, "start"));
+
+        var ui = cache.GetOrCreate(session.Id);
+        await ui.HydrateDisplayAsync(
+            session,
+            session.Messages,
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: session.Messages);
+        store.Attach(session, hydrated: true);
+
+        Assert.False(store.TryGetHydrated(session.Id, out _));
+        Assert.True(store.TryGetHydrated(
+            session.Id,
+            out var live,
+            acceptNewerCachedSurface: true));
+        Assert.Equal(
+            await dispatcher.InvokeAsync(() => ui.SurfaceFingerprint),
+            live.SurfaceFingerprint);
+    }
+
+    [Fact]
     public async Task TryGetHydrated_is_true_for_empty_chat_with_empty_ui()
     {
         var dispatcher = await StartStaDispatcherAsync();
