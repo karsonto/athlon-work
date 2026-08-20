@@ -8,7 +8,7 @@ public sealed class ComputerObserveTool(IComputerUseAutomationHost host) : IAgen
 {
     public ToolDefinition Definition { get; } = new(
         "computer_observe",
-        "Capture the current desktop and return a screenshot, frame id, foreground window, cursor, display geometry, and an optional bounded UI Automation tree. Always observe before interacting.",
+        "Capture the current desktop and return a screenshot, frame id, foreground window, cursor, display geometry, and an optional bounded UI Automation tree. UI nodes keep physical bounds and also include image_bounds relative to the screenshot. Always observe before interacting.",
         ToolSchema.Object()
             .Boolean("include_ui_tree", "Include the bounded Windows UI Automation tree.", defaultValue: true)
             .Integer("max_tree_depth", "Maximum UI tree depth (1-10).", defaultValue: 4, minimum: 1, maximum: 10)
@@ -35,7 +35,7 @@ public sealed class ComputerInteractTool(IComputerUseAutomationHost host) : IAge
 {
     public ToolDefinition Definition { get; } = new(
         "computer_interact",
-        "Perform exactly one desktop action using a fresh frame. Prefer element_id; otherwise use image_x/image_y relative to the frame screenshot. Physical x/y are fallback only. The result includes a post-action screenshot (UI tree is omitted; observe again for new element ids).",
+        "Perform exactly one desktop action using a fresh frame. Prefer element_id; otherwise use image_x/image_y relative to the frame screenshot. Physical x/y are fallback only. The result includes a post-action screenshot, a fresh frame id, and a bounded UI tree for the next action.",
         ToolSchema.Object()
             .String("frame_id", "Latest frame id returned by computer_observe.", required: true, minLength: 1)
             .String(
@@ -168,7 +168,7 @@ public static class ComputerUseToolHelper
                 height = observation.ImageHeight
             },
             coordinate_hint =
-                "Prefer element_id. Otherwise pass image_x/image_y relative to this screenshot (top-left origin). Host maps them to physical desktop using capture vs image size. Physical x/y are fallback only.",
+                "Prefer element_id. UI tree bounds are physical desktop coordinates; image_bounds are relative to this screenshot. Otherwise pass image_x/image_y relative to the screenshot (top-left origin). Physical x/y are fallback only.",
             cursor = new { x = observation.CursorX, y = observation.CursorY },
             foreground_window = new
             {

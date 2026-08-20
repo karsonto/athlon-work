@@ -31,6 +31,22 @@ public sealed class ComputerUseFrameFreshnessTests
     }
 
     [Fact]
+    public void MatchesForegroundWindow_RequiresSameHandleWhenAvailable()
+    {
+        Assert.True(ComputerUseFrameFreshness.MatchesForegroundWindow(123, 123, "chrome", "Chrome"));
+        Assert.False(ComputerUseFrameFreshness.MatchesForegroundWindow(123, 456, "chrome", "chrome"));
+        Assert.False(ComputerUseFrameFreshness.MatchesForegroundWindow(123, 123, "chrome", "explorer"));
+    }
+
+    [Fact]
+    public void MatchesForegroundWindow_FallsBackToProcessWhenHandleUnavailable()
+    {
+        Assert.True(ComputerUseFrameFreshness.MatchesForegroundWindow(0, 456, "chrome", "Chrome"));
+        Assert.True(ComputerUseFrameFreshness.MatchesForegroundWindow(123, 0, "chrome", "Chrome"));
+        Assert.False(ComputerUseFrameFreshness.MatchesForegroundWindow(0, 0, string.Empty, string.Empty));
+    }
+
+    [Fact]
     public void ContainsPoint_UsesHalfOpenMonitorBounds()
     {
         Assert.True(ComputerUseFrameFreshness.ContainsPoint(0, 0, 100, 100, 0, 0));

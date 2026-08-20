@@ -114,27 +114,36 @@ public sealed class ComputerUseAutomationHost(
                 // Validate against the observed monitor, not wherever the cursor drifted.
                 var monitorX = frame.Left + Math.Max(0, frame.Width / 2);
                 var monitorY = frame.Top + Math.Max(0, frame.Height / 2);
-                var currentDesktop = await CaptureStateAsync(
-                    includeUiTree: false,
-                    maxDepth: 1,
-                    maxNodes: 20,
-                    ct,
-                    monitorX,
-                    monitorY).ConfigureAwait(false);
+                var currentDisplay = captureService.ProbeAt(monitorX, monitorY);
+                var currentForeground = await RunBoundedUiAutomationAsync(
+                    uiAutomationService.GetForegroundWindowIdentity,
+                    ct).ConfigureAwait(false);
                 if (!ComputerUseFrameFreshness.MatchesMonitor(
                         frame.Left,
                         frame.Top,
                         frame.Width,
                         frame.Height,
-                        currentDesktop.Desktop.Left,
-                        currentDesktop.Desktop.Top,
-                        currentDesktop.Desktop.Width,
-                        currentDesktop.Desktop.Height))
+                        currentDisplay.Left,
+                        currentDisplay.Top,
+                        currentDisplay.Width,
+                        currentDisplay.Height))
                 {
                     _latestFrame = null;
                     throw new ComputerUseException(
                         "stale_frame",
                         "The visible desktop changed since observation.");
+                }
+
+                if (!ComputerUseFrameFreshness.MatchesForegroundWindow(
+                        frame.ForegroundWindowHandle,
+                        currentForeground.Handle,
+                        frame.ForegroundProcessName,
+                        currentForeground.ProcessName))
+                {
+                    _latestFrame = null;
+                    throw new ComputerUseException(
+                        "stale_frame",
+                        "The foreground window changed since observation.");
                 }
 
                 var x = 0;
@@ -164,17 +173,6 @@ public sealed class ComputerUseAutomationHost(
                 }
                 else if (request.Action is ("click" or "double_click" or "right_click" or "scroll" or "drag"))
                 {
-                    // Coordinate fallback: require the same foreground process and on-monitor point.
-                    if (!ComputerUseFrameFreshness.MatchesForegroundProcess(
-                            frame.ForegroundProcessName,
-                            currentDesktop.Ui.ForegroundProcessName))
-                    {
-                        _latestFrame = null;
-                        throw new ComputerUseException(
-                            "stale_frame",
-                            "The visible desktop changed since observation.");
-                    }
-
                     if (hasImagePoint)
                     {
                         (x, y) = ComputerUseCoordinateMapper.ImageToPhysical(
@@ -261,11 +259,24 @@ public sealed class ComputerUseAutomationHost(
                     CancellationToken.None).ConfigureAwait(false);
                 // Once input starts, complete observation even if the caller cancels; never report a
                 // cancellable half-action that could be retried against the same frame.
-                await Task.Delay(250, CancellationToken.None).ConfigureAwait(false);
+                try
+                {
+                    await ComputerUsePostActionSettler.WaitForStableAsync(
+                            _ => Task.FromResult(captureService.CaptureSignatureAt(monitorX, monitorY)),
+                            CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+                catch
+                {
+                    // Stability probing is an optimization. Preserve the previous safe delay
+                    // when a display driver cannot provide sampled pixels.
+                    await Task.Delay(250, CancellationToken.None).ConfigureAwait(false);
+                }
+
                 return await CaptureStateAsync(
-                    includeUiTree: false,
-                    maxDepth: 1,
-                    maxNodes: 20,
+                    includeUiTree: true,
+                    maxDepth: 3,
+                    maxNodes: 40,
                     CancellationToken.None,
                     monitorX,
                     monitorY).ConfigureAwait(false);
@@ -385,7 +396,9 @@ public sealed class ComputerUseAutomationHost(
             desktop.Left,
             desktop.Top,
             desktop.Width,
-            desktop.Height);
+            desktop.Height,
+            desktop.ImageWidth,
+            desktop.ImageHeight);
         var ui = includeUiTree
             ? foreground
             : foreground with
@@ -477,6 +490,7 @@ public sealed class ComputerUseAutomationHost(
             state.Desktop.ImageHeight,
             state.Ui.ForegroundWindowTitle,
             state.Ui.ForegroundProcessName,
+            state.Ui.ForegroundWindowHandle,
             DateTimeOffset.UtcNow,
             state.Ui.Elements);
 
@@ -655,6 +669,7 @@ public sealed class ComputerUseAutomationHost(
         int ImageHeight,
         string ForegroundWindowTitle,
         string ForegroundProcessName,
+        nint ForegroundWindowHandle,
         DateTimeOffset CreatedAt,
         IReadOnlyDictionary<string, AutomationElement> Elements);
 

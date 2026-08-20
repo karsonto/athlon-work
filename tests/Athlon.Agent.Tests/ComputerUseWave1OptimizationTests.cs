@@ -44,6 +44,60 @@ public sealed class ComputerUseWave1OptimizationTests
     }
 
     [Fact]
+    public void PhysicalRectToImage_MapsScaledBoundsOnNegativeMonitor()
+    {
+        var bounds = ComputerUseCoordinateMapper.PhysicalRectToImage(
+            physicalX: -1728,
+            physicalY: 270,
+            physicalWidth: 384,
+            physicalHeight: 216,
+            monitorLeft: -1920,
+            monitorTop: 0,
+            captureWidth: 1920,
+            captureHeight: 1080,
+            imageWidth: 1600,
+            imageHeight: 900);
+
+        Assert.Equal((160, 225, 320, 180), bounds);
+    }
+
+    [Fact]
+    public void PhysicalRectToImage_ClipsPartiallyVisibleBounds()
+    {
+        var bounds = ComputerUseCoordinateMapper.PhysicalRectToImage(
+            physicalX: -50,
+            physicalY: 900,
+            physicalWidth: 200,
+            physicalHeight: 300,
+            monitorLeft: 0,
+            monitorTop: 0,
+            captureWidth: 1920,
+            captureHeight: 1080,
+            imageWidth: 1600,
+            imageHeight: 900);
+
+        Assert.Equal((0, 750, 125, 150), bounds);
+    }
+
+    [Fact]
+    public void PhysicalRectToImage_ReturnsEmptyBoundsOutsideScreenshot()
+    {
+        var bounds = ComputerUseCoordinateMapper.PhysicalRectToImage(
+            physicalX: 2200,
+            physicalY: 100,
+            physicalWidth: 100,
+            physicalHeight: 100,
+            monitorLeft: 0,
+            monitorTop: 0,
+            captureWidth: 1920,
+            captureHeight: 1080,
+            imageWidth: 1600,
+            imageHeight: 900);
+
+        Assert.Equal((1600, 83, 0, 84), bounds);
+    }
+
+    [Fact]
     public void FitWithin_DownscalesLongestEdge()
     {
         var (width, height) = ComputerUseScreenshotSizing.FitWithin(3840, 2160);

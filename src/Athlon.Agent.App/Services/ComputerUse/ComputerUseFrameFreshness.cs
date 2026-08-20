@@ -31,6 +31,25 @@ internal static class ComputerUseFrameFreshness
             actual ?? string.Empty,
             StringComparison.OrdinalIgnoreCase);
 
+    internal static bool MatchesForegroundWindow(
+        nint expectedHandle,
+        nint actualHandle,
+        string? expectedProcess,
+        string? actualProcess)
+    {
+        if (expectedHandle != 0 && actualHandle != 0)
+        {
+            return expectedHandle == actualHandle
+                   && (string.IsNullOrWhiteSpace(expectedProcess)
+                       || string.IsNullOrWhiteSpace(actualProcess)
+                       || MatchesForegroundProcess(expectedProcess, actualProcess));
+        }
+
+        return !string.IsNullOrWhiteSpace(expectedProcess)
+               && !string.IsNullOrWhiteSpace(actualProcess)
+               && MatchesForegroundProcess(expectedProcess, actualProcess);
+    }
+
     internal static bool ContainsPoint(
         int left,
         int top,

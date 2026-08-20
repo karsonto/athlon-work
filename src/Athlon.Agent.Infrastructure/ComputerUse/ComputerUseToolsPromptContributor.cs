@@ -23,7 +23,7 @@ public sealed class ComputerUseToolsPromptContributor(
         builder.AppendLine("2. Perform exactly one computer_interact action at a time. Prefer element_id; otherwise use image_x/image_y relative to the frame screenshot. Do not invent physical desktop pixels.");
         builder.AppendLine("3. Never reuse a stale frame_id. On stale_frame, off_monitor, or element_gone, call computer_observe again — do not blindly retry the same coordinates.");
         builder.AppendLine("4. Use computer_wait for asynchronous UI changes instead of fixed sleeps.");
-        builder.AppendLine("5. Verify every action from the post-action screenshot before continuing. Post-action results omit the full UI tree; call computer_observe when you need fresh element ids.");
+        builder.AppendLine("5. Verify every action from the post-action screenshot before continuing. The result has a fresh frame id and bounded UI tree; continue from those new element ids when the target is present, otherwise call computer_observe.");
         builder.AppendLine("6. Do not claim completion until the visible desktop state confirms the requested result.");
     }
 }

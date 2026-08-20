@@ -10,7 +10,13 @@ public sealed record ComputerUseUiSnapshot(
     string Json,
     IReadOnlyDictionary<string, AutomationElement> Elements,
     string ForegroundWindowTitle,
-    string ForegroundProcessName);
+    string ForegroundProcessName,
+    nint ForegroundWindowHandle);
+
+public sealed record ComputerUseForegroundWindow(
+    nint Handle,
+    string Title,
+    string ProcessName);
 
 public sealed class ComputerUseUiAutomationService
 {
@@ -20,7 +26,9 @@ public sealed class ComputerUseUiAutomationService
         int? monitorLeft = null,
         int? monitorTop = null,
         int? monitorWidth = null,
-        int? monitorHeight = null)
+        int? monitorHeight = null,
+        int? imageWidth = null,
+        int? imageHeight = null)
     {
         var foreground = GetForegroundWindow();
         if (foreground == IntPtr.Zero)
@@ -76,6 +84,35 @@ public sealed class ComputerUseUiAutomationService
                 {
                     id = $"ui_{nextId++}";
                     elements[id] = element;
+                    object? imageBounds = null;
+                    if (!bounds.IsEmpty
+                        && monitorLeft is int captureLeft
+                        && monitorTop is int captureTop
+                        && monitorWidth is int captureWidth
+                        && monitorHeight is int captureHeight
+                        && imageWidth is > 0
+                        && imageHeight is > 0)
+                    {
+                        var mapped = ComputerUseCoordinateMapper.PhysicalRectToImage(
+                            (int)Math.Round(bounds.Left),
+                            (int)Math.Round(bounds.Top),
+                            (int)Math.Round(bounds.Width),
+                            (int)Math.Round(bounds.Height),
+                            captureLeft,
+                            captureTop,
+                            captureWidth,
+                            captureHeight,
+                            imageWidth.Value,
+                            imageHeight.Value);
+                        imageBounds = new
+                        {
+                            x = mapped.X,
+                            y = mapped.Y,
+                            width = mapped.Width,
+                            height = mapped.Height
+                        };
+                    }
+
                     nodes.Add(new
                     {
                         element_id = id,
@@ -95,7 +132,8 @@ public sealed class ComputerUseUiAutomationService
                                 y = (int)Math.Round(bounds.Top),
                                 width = (int)Math.Round(bounds.Width),
                                 height = (int)Math.Round(bounds.Height)
-                            }
+                            },
+                        image_bounds = imageBounds
                     });
                 }
 
@@ -120,7 +158,8 @@ public sealed class ComputerUseUiAutomationService
             JsonSerializer.Serialize(nodes),
             elements,
             SafeCurrent(root, static current => current.Name),
-            ResolveProcessName(root));
+            ResolveProcessName(root),
+            foreground);
     }
 
     public bool TryGetClickablePoint(AutomationElement element, out int x, out int y)
@@ -195,20 +234,29 @@ public sealed class ComputerUseUiAutomationService
     }
 
     public string GetForegroundWindowTitle()
+        => GetForegroundWindowIdentity().Title;
+
+    public ComputerUseForegroundWindow GetForegroundWindowIdentity()
     {
         var handle = GetForegroundWindow();
         if (handle == IntPtr.Zero)
         {
-            return string.Empty;
+            return new ComputerUseForegroundWindow(0, string.Empty, string.Empty);
         }
 
         try
         {
-            return AutomationElement.FromHandle(handle)?.Current.Name ?? string.Empty;
+            var element = AutomationElement.FromHandle(handle);
+            return element is null
+                ? new ComputerUseForegroundWindow(handle, string.Empty, string.Empty)
+                : new ComputerUseForegroundWindow(
+                    handle,
+                    SafeCurrent(element, static current => current.Name),
+                    ResolveProcessName(element));
         }
         catch (ElementNotAvailableException)
         {
-            return string.Empty;
+            return new ComputerUseForegroundWindow(handle, string.Empty, string.Empty);
         }
     }
 
@@ -244,7 +292,7 @@ public sealed class ComputerUseUiAutomationService
     }
 
     private static ComputerUseUiSnapshot EmptySnapshot() =>
-        new("[]", new Dictionary<string, AutomationElement>(), string.Empty, string.Empty);
+        new("[]", new Dictionary<string, AutomationElement>(), string.Empty, string.Empty, 0);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();

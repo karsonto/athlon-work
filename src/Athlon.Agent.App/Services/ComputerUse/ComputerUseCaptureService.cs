@@ -18,6 +18,15 @@ public sealed record ComputerUseCapturedDesktop(
     int ImageHeight,
     string MimeType);
 
+public sealed record ComputerUseDisplayState(
+    int Left,
+    int Top,
+    int Width,
+    int Height,
+    double DpiScale,
+    int CursorX,
+    int CursorY);
+
 public sealed class ComputerUseCaptureService
 {
     public ComputerUseCapturedDesktop CaptureCursorMonitor()
@@ -32,31 +41,10 @@ public sealed class ComputerUseCaptureService
 
     public ComputerUseCapturedDesktop CaptureAt(int x, int y)
     {
-        if (!GetCursorPos(out var cursor))
-        {
-            cursor = new NativePoint { X = x, Y = y };
-        }
-
-        var probe = new NativePoint { X = x, Y = y };
-        var monitor = MonitorFromPoint(probe, MonitorDefaultToNearest);
-        if (monitor == IntPtr.Zero)
-        {
-            throw new InvalidOperationException("Unable to resolve the active monitor.");
-        }
-
-        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-        if (!GetMonitorInfo(monitor, ref info))
-        {
-            throw new InvalidOperationException("Unable to read monitor bounds.");
-        }
-
-        var bounds = info.Monitor;
-        var width = bounds.Right - bounds.Left;
-        var height = bounds.Bottom - bounds.Top;
-        if (width <= 0 || height <= 0)
-        {
-            throw new InvalidOperationException("The active monitor has invalid bounds.");
-        }
+        var resolved = ResolveAt(x, y);
+        var bounds = resolved.Bounds;
+        var width = resolved.State.Width;
+        var height = resolved.State.Height;
 
         var screenDc = GetDC(IntPtr.Zero);
         if (screenDc == IntPtr.Zero)
@@ -110,9 +98,9 @@ public sealed class ComputerUseCaptureService
                 bounds.Top,
                 width,
                 height,
-                ResolveDpiScale(monitor),
-                cursor.X,
-                cursor.Y,
+                resolved.State.DpiScale,
+                resolved.State.CursorX,
+                resolved.State.CursorY,
                 encoded.ImageWidth,
                 encoded.ImageHeight,
                 encoded.MimeType);
@@ -138,6 +126,102 @@ public sealed class ComputerUseCaptureService
         }
     }
 
+    public ComputerUseDisplayState ProbeAt(int x, int y) => ResolveAt(x, y).State;
+
+    public ulong CaptureSignatureAt(int x, int y)
+    {
+        const int columns = 24;
+        const int rows = 14;
+        const ulong offset = 14695981039346656037;
+        const ulong prime = 1099511628211;
+
+        var display = ResolveAt(x, y).State;
+        var screenDc = GetDC(IntPtr.Zero);
+        if (screenDc == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("Unable to acquire the desktop device context.");
+        }
+
+        try
+        {
+            var hash = offset;
+            var validSamples = 0;
+            for (var row = 0; row < rows; row++)
+            {
+                var sampleY = display.Top
+                    + Math.Clamp((row * display.Height + display.Height / 2) / rows, 0, display.Height - 1);
+                for (var column = 0; column < columns; column++)
+                {
+                    var sampleX = display.Left
+                        + Math.Clamp((column * display.Width + display.Width / 2) / columns, 0, display.Width - 1);
+                    var color = GetPixel(screenDc, sampleX, sampleY);
+                    if (color == InvalidColor)
+                    {
+                        continue;
+                    }
+
+                    validSamples++;
+                    // Sparse, quantized samples ignore tiny rendering noise without paying
+                    // for another full BitBlt + JPEG encode.
+                    hash = (hash ^ (color & 0xF0)) * prime;
+                    hash = (hash ^ ((color >> 8) & 0xF0)) * prime;
+                    hash = (hash ^ ((color >> 16) & 0xF0)) * prime;
+                }
+            }
+
+            if (validSamples == 0)
+            {
+                throw new InvalidOperationException("Unable to sample desktop pixels.");
+            }
+
+            return hash;
+        }
+        finally
+        {
+            ReleaseDC(IntPtr.Zero, screenDc);
+        }
+    }
+
+    private static ResolvedDisplay ResolveAt(int x, int y)
+    {
+        if (!GetCursorPos(out var cursor))
+        {
+            cursor = new NativePoint { X = x, Y = y };
+        }
+
+        var probe = new NativePoint { X = x, Y = y };
+        var monitor = MonitorFromPoint(probe, MonitorDefaultToNearest);
+        if (monitor == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("Unable to resolve the active monitor.");
+        }
+
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(monitor, ref info))
+        {
+            throw new InvalidOperationException("Unable to read monitor bounds.");
+        }
+
+        var bounds = info.Monitor;
+        var width = bounds.Right - bounds.Left;
+        var height = bounds.Bottom - bounds.Top;
+        if (width <= 0 || height <= 0)
+        {
+            throw new InvalidOperationException("The active monitor has invalid bounds.");
+        }
+
+        return new ResolvedDisplay(
+            bounds,
+            new ComputerUseDisplayState(
+                bounds.Left,
+                bounds.Top,
+                width,
+                height,
+                ResolveDpiScale(monitor),
+                cursor.X,
+                cursor.Y));
+    }
+
     private static double ResolveDpiScale(IntPtr monitor)
     {
         try
@@ -157,6 +241,7 @@ public sealed class ComputerUseCaptureService
     }
 
     private const uint MonitorDefaultToNearest = 0x00000002;
+    private const uint InvalidColor = 0xFFFFFFFF;
     private const int SourceCopy = 0x00CC0020;
     private const int CaptureBlt = 0x40000000;
 
@@ -185,6 +270,10 @@ public sealed class ComputerUseCaptureService
         public uint Flags;
     }
 
+    private sealed record ResolvedDisplay(
+        NativeRect Bounds,
+        ComputerUseDisplayState State);
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetCursorPos(out NativePoint point);
@@ -207,6 +296,9 @@ public sealed class ComputerUseCaptureService
 
     [DllImport("gdi32.dll")]
     private static extern bool DeleteDC(IntPtr deviceContext);
+
+    [DllImport("gdi32.dll")]
+    private static extern uint GetPixel(IntPtr deviceContext, int x, int y);
 
     [DllImport("gdi32.dll")]
     private static extern IntPtr CreateCompatibleBitmap(IntPtr deviceContext, int width, int height);
