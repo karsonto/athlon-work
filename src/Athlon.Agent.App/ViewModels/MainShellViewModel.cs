@@ -1460,18 +1460,43 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private void WireSessionUsageUi(SessionTurnUiController ui)
     {
+        var sessionId = _displayedSessionId;
         ui.OnUsageRecorded = snapshot =>
-            RunOnUi(() => SessionUsageLine = SessionUsageFormatter.Format(snapshot));
+            RunOnUi(() =>
+            {
+                if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+                {
+                    SessionUsageLine = SessionUsageFormatter.Format(snapshot);
+                }
+            });
         ui.OnContextBudgetUpdated = (budget, pressure) =>
-            RunOnUi(() => ContextOccupancy.Apply(budget, pressure));
+            RunOnUi(() =>
+            {
+                if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+                {
+                    ContextOccupancy.Apply(budget, pressure);
+                }
+            });
         ui.OnOverflowRetrySkipped = () =>
             RunOnUi(() =>
             {
+                if (!string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
                 ContextOccupancy.ApplyOverflow();
                 ShowShellToast(_loc["Chat_OverflowRetrySkipped"], ShellToastKind.Info);
             });
         SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
         RefreshContextOccupancy();
+    }
+
+    private static void UnwireSessionUsageUi(SessionTurnUiController ui)
+    {
+        ui.OnUsageRecorded = null;
+        ui.OnContextBudgetUpdated = null;
+        ui.OnOverflowRetrySkipped = null;
     }
 
     private static void RunOnUi(Action action)
@@ -1519,6 +1544,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private void SwitchDisplayedSession(AgentSession session, bool renderExistingMessages = true)
     {
+        UnwireSessionUsageUi(_activeUi);
         _activeUi.SetDisplayed(false);
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         UnwireModifiedFilesUi(_activeUi);
@@ -2590,11 +2616,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private async Task LoadSessionInternalAsync(string sessionId)
     {
         var loadGeneration = Interlocked.Increment(ref _sessionLoadGeneration);
-        var hasRunningTurn = _sessionTurns.TurnHost.IsRunning(sessionId);
-        if (_runtime.TryGetHydrated(
-                sessionId,
-                out var live,
-                acceptNewerCachedSurface: hasRunningTurn))
+        if (_runtime.TryGetHydrated(sessionId, out var live))
         {
             var workspaceChanged = !SameSessionWorkspace(_session, live.Session!);
             SwitchDisplayedSession(live.Session!, renderExistingMessages: true);

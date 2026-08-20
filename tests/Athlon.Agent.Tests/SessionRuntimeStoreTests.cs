@@ -67,6 +67,43 @@ public sealed class SessionRuntimeStoreTests
     }
 
     [Fact]
+    public async Task FlushSessionAsync_requeues_unwritten_messages_after_failure()
+    {
+        var storage = new RecordingStorage { RemainingAppendFailures = 1 };
+        using var store = new SessionRuntimeStore(storage, enablePeriodicFlush: false);
+        var session = AgentSession.Create("retry");
+        var message = ChatMessage.Create(MessageRole.Assistant, "keep me");
+        store.Attach(session.WithMessage(message), hydrated: true);
+        await store.AppendAsync(session.Id, message);
+
+        await Assert.ThrowsAsync<IOException>(() => store.FlushSessionAsync(session.Id));
+        await store.FlushSessionAsync(session.Id);
+
+        Assert.Equal(message.Id, Assert.Single(storage.Appended).Message.Id);
+    }
+
+    [Fact]
+    public async Task Concurrent_flushes_for_same_session_preserve_append_order()
+    {
+        var storage = new RecordingStorage { AppendDelay = TimeSpan.FromMilliseconds(50) };
+        using var store = new SessionRuntimeStore(storage, enablePeriodicFlush: false);
+        var session = AgentSession.Create("ordered");
+        var first = ChatMessage.Create(MessageRole.User, "first");
+        var second = ChatMessage.Create(MessageRole.Assistant, "second");
+        store.Attach(session.WithMessages([first, second]), hydrated: true);
+        await store.AppendAsync(session.Id, first);
+
+        var firstFlush = store.FlushSessionAsync(session.Id);
+        await Task.Delay(10);
+        await store.AppendAsync(session.Id, second);
+        var secondFlush = store.FlushSessionAsync(session.Id);
+        await Task.WhenAll(firstFlush, secondFlush);
+
+        Assert.Equal([first.Id, second.Id], storage.Appended.Select(item => item.Message.Id));
+        Assert.Equal(1, storage.MaxConcurrentAppends);
+    }
+
+    [Fact]
     public void TryGetHydrated_is_true_after_attach_and_false_before()
     {
         var storage = new RecordingStorage();
@@ -100,6 +137,10 @@ public sealed class SessionRuntimeStoreTests
     {
         public List<(string SessionId, ChatMessage Message)> Appended { get; } = [];
         public List<AgentSession> Saved { get; } = [];
+        public int RemainingAppendFailures { get; set; }
+        public TimeSpan AppendDelay { get; set; }
+        public int MaxConcurrentAppends { get; private set; }
+        private int _concurrentAppends;
 
         public string RootPath => "/tmp";
 
@@ -109,10 +150,32 @@ public sealed class SessionRuntimeStoreTests
             return Task.CompletedTask;
         }
 
-        public Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
+        public async Task AppendConversationMessageAsync(
+            string sessionId,
+            ChatMessage message,
+            CancellationToken cancellationToken = default)
         {
-            Appended.Add((sessionId, message));
-            return Task.CompletedTask;
+            var concurrent = Interlocked.Increment(ref _concurrentAppends);
+            MaxConcurrentAppends = Math.Max(MaxConcurrentAppends, concurrent);
+            try
+            {
+                if (RemainingAppendFailures > 0)
+                {
+                    RemainingAppendFailures--;
+                    throw new IOException("append failed");
+                }
+
+                if (AppendDelay > TimeSpan.Zero)
+                {
+                    await Task.Delay(AppendDelay, cancellationToken);
+                }
+
+                Appended.Add((sessionId, message));
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _concurrentAppends);
+            }
         }
 
         public Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default) =>

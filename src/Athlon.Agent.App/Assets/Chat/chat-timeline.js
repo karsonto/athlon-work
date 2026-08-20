@@ -1443,6 +1443,9 @@ function handleWebMessage(message) {
     resetTimeline();
     endBatch(false);
   }
+  if (command.replayComplete && Number.isInteger(command.renderGeneration)) {
+    post({ type: 'replayComplete', renderGeneration: command.renderGeneration });
+  }
 }
 
 if (window.chrome && window.chrome.webview) {

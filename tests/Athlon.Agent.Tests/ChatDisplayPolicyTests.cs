@@ -323,6 +323,20 @@ public sealed class ChatDisplayPolicyTests
     }
 
     [Fact]
+    public void SerializeEventsCommand_includes_replay_completion_generation()
+    {
+        using var document = JsonDocument.Parse(
+            ChatEventSerializer.SerializeEventsCommand(
+                "append",
+                Array.Empty<string>(),
+                renderGeneration: 42,
+                replayComplete: true));
+
+        Assert.Equal(42, document.RootElement.GetProperty("renderGeneration").GetInt32());
+        Assert.True(document.RootElement.GetProperty("replayComplete").GetBoolean());
+    }
+
+    [Fact]
     public void IsToolStreamEvent_matches_tool_stream_types()
     {
         Assert.True(ChatDisplayPolicy.IsToolStreamEvent(new AgentStreamEvent.ToolCallStart("id", "tool", 0)));

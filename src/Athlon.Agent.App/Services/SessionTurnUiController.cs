@@ -172,6 +172,22 @@ public sealed partial class SessionTurnUiController
     internal DisplaySurfaceFingerprint SurfaceFingerprint =>
         DisplaySurfaceFingerprint.From(_displayMessages, _activitySourceMessages, _olderDisplayCursor);
 
+    internal (ConversationDisplayCursor? OlderDisplayCursor, DisplaySurfaceFingerprint Fingerprint)
+        CaptureSurfaceSnapshot()
+    {
+        ConversationDisplayCursor? olderDisplayCursor = null;
+        var fingerprint = DisplaySurfaceFingerprint.Empty;
+        RunOnUiSync(() =>
+        {
+            olderDisplayCursor = _olderDisplayCursor;
+            fingerprint = DisplaySurfaceFingerprint.From(
+                _displayMessages,
+                _activitySourceMessages,
+                _olderDisplayCursor);
+        });
+        return (olderDisplayCursor, fingerprint);
+    }
+
     /// <summary>Test seam: activity source sliced to the displayed window for WebView replay.</summary>
     internal IReadOnlyList<ChatMessage> ReplayActivitySource => BuildReplayActivitySource();
 
@@ -217,12 +233,9 @@ public sealed partial class SessionTurnUiController
 
             if (ShouldRefreshDisplayAfterSessionReplace(session))
             {
-                if (!IsDisplayed)
-                {
-                    SyncActivitySourceFromSession(session);
-                    return Task.CompletedTask;
-                }
-
+                // Compaction replaces/removes transcript messages. Rebuild the
+                // per-session cache even while hidden so it cannot become an
+                // authoritative but stale surface when the user switches back.
                 return RebuildDisplayFromMessagesAsync(
                     session.Messages,
                     synthesizeInterruptedToolResults: true);

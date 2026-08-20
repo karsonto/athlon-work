@@ -165,6 +165,52 @@ public sealed class SessionTurnHostTests
         Assert.False(host.HasActiveWork);
     }
 
+    [Fact]
+    public async Task CompletedTurn_flushes_transcript_before_completion_event()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var transcript = new RecordingTranscriptWriter();
+        var host = new SessionTurnHost(
+            new SlowOrchestrator(TimeSpan.FromMilliseconds(1)),
+            RouterTestDependencies.CreateDebugTurnOrchestrator(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new NoOpStorage(),
+            new AppSettings(),
+            transcriptWriter: transcript);
+        var session = AgentSession.Create("durable");
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        host.TurnCompleted += (_, _) => completed.TrySetResult();
+
+        Assert.True(TryStart(host, dispatcher, session, out _));
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Contains(session.Id, transcript.FlushedSessionIds);
+    }
+
+    [Fact]
+    public async Task Finalization_failure_still_removes_running_session()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var transcript = new RecordingTranscriptWriter { ThrowOnMarkDirty = true };
+        var host = new SessionTurnHost(
+            new SlowOrchestrator(TimeSpan.FromMilliseconds(1)),
+            RouterTestDependencies.CreateDebugTurnOrchestrator(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new NoOpStorage(),
+            new AppSettings(),
+            transcriptWriter: transcript);
+        var session = AgentSession.Create("finalization-error");
+        var completed = new TaskCompletionSource<SessionTurnCompletedEventArgs>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        host.TurnCompleted += (_, args) => completed.TrySetResult(args);
+
+        Assert.True(TryStart(host, dispatcher, session, out _));
+        var result = await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(host.IsRunning(session.Id));
+        Assert.NotNull(result.Error);
+    }
+
     private static SessionTurnHost CreateHost(IAgentOrchestrator orchestrator) =>
         new(
             orchestrator,
@@ -215,6 +261,38 @@ public sealed class SessionTurnHostTests
         {
             await Task.Delay(delay, cancellationToken);
             return session.WithMessages(session.Messages.Append(ChatMessage.Create(MessageRole.Assistant, "ok")).ToArray());
+        }
+    }
+
+    private sealed class RecordingTranscriptWriter : IConversationTranscriptWriter
+    {
+        public List<string> FlushedSessionIds { get; } = [];
+        public bool ThrowOnMarkDirty { get; set; }
+
+        public Task AppendAsync(
+            string sessionId,
+            ChatMessage message,
+            CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task MarkSessionDirtyAsync(
+            AgentSession session,
+            CancellationToken cancellationToken = default)
+        {
+            if (ThrowOnMarkDirty)
+            {
+                throw new IOException("mark dirty failed");
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task FlushSessionAsync(
+            string sessionId,
+            CancellationToken cancellationToken = default)
+        {
+            FlushedSessionIds.Add(sessionId);
+            return Task.CompletedTask;
         }
     }
 

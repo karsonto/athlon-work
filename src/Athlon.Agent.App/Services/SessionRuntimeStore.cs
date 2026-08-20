@@ -31,6 +31,7 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
     private readonly IFileStorageService _storage;
     private readonly SessionUiCache? _uiCache;
     private readonly ConcurrentDictionary<string, RuntimeSessionEntry> _sessions = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionFlushLocks = new(StringComparer.Ordinal);
     private readonly object _gate = new();
     private readonly CancellationTokenSource _flushCts = new();
     private readonly Task? _flushLoop;
@@ -50,10 +51,7 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         }
     }
 
-    public bool TryGetHydrated(
-        string sessionId,
-        out RuntimeSessionEntry entry,
-        bool acceptNewerCachedSurface = false)
+    public bool TryGetHydrated(string sessionId, out RuntimeSessionEntry entry)
     {
         entry = null!;
         if (string.IsNullOrWhiteSpace(sessionId) || !_sessions.TryGetValue(sessionId, out var found))
@@ -71,24 +69,20 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             && _uiCache.TryGet(sessionId, out ui)
             && ui is { Messages.Count: > 0 };
 
-        var cachedSurfaceFingerprint = ui?.SurfaceFingerprint;
+        var cachedSurface = ui?.CaptureSurfaceSnapshot();
         if (hasDisplayMessages
-            && cachedSurfaceFingerprint is not null
-            && (acceptNewerCachedSurface
-                || (found.SurfaceFingerprint is not null
-                    && Equals(cachedSurfaceFingerprint, found.SurfaceFingerprint))))
+            && cachedSurface is not null
+            && found.Hydrated)
         {
-            // A running background turn updates its per-session UI before the periodic
-            // transcript flush. In that case the cached surface is newer than both this
-            // fingerprint and disk, so switching sessions must keep it instead of cold
-            // loading an older snapshot over the live content.
+            // Once a display surface has been hydrated, its per-session controller is
+            // authoritative for the lifetime of this process. Streaming and turn
+            // finalization update it before the periodic transcript flush, so a
+            // fingerprint mismatch means the cached surface is newer than disk rather
+            // than stale. Never cold-load an older snapshot over it.
             lock (_gate)
             {
-                if (acceptNewerCachedSurface)
-                {
-                    found.SurfaceFingerprint = cachedSurfaceFingerprint;
-                }
-
+                found.OlderDisplayCursor = cachedSurface.Value.OlderDisplayCursor;
+                found.SurfaceFingerprint = cachedSurface.Value.Fingerprint;
                 found.Hydrated = true;
             }
 
@@ -227,6 +221,20 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             return;
         }
 
+        var sessionFlushLock = _sessionFlushLocks.GetOrAdd(sessionId, static _ => new SemaphoreSlim(1, 1));
+        await sessionFlushLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await FlushSessionCoreAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            sessionFlushLock.Release();
+        }
+    }
+
+    private async Task FlushSessionCoreAsync(string sessionId, CancellationToken cancellationToken)
+    {
         ChatMessage[] pending;
         AgentSession? toSave;
         lock (_gate)
@@ -243,16 +251,45 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             entry.SessionJsonDirty = false;
         }
 
-        foreach (var message in pending)
+        var appendedCount = 0;
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            await _storage.AppendConversationMessageAsync(sessionId, message, cancellationToken)
-                .ConfigureAwait(false);
-        }
+            foreach (var message in pending)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await _storage.AppendConversationMessageAsync(sessionId, message, cancellationToken)
+                    .ConfigureAwait(false);
+                appendedCount++;
+            }
 
-        if (toSave is not null)
+            if (toSave is not null)
+            {
+                await _storage.SaveSessionAsync(toSave, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch
         {
-            await _storage.SaveSessionAsync(toSave, cancellationToken).ConfigureAwait(false);
+            lock (_gate)
+            {
+                if (_sessions.TryGetValue(sessionId, out var entry))
+                {
+                    for (var index = pending.Length - 1; index >= appendedCount; index--)
+                    {
+                        var message = pending[index];
+                        if (entry.PendingAppendIds.Add(message.Id))
+                        {
+                            entry.PendingAppends.Insert(0, message);
+                        }
+                    }
+
+                    if (toSave is not null)
+                    {
+                        entry.SessionJsonDirty = true;
+                    }
+                }
+            }
+
+            throw;
         }
     }
 

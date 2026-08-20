@@ -460,34 +460,66 @@ public sealed class SessionTurnHost
             }
             finally
             {
-                var errorMessage = error is null ? null : TurnFailureMessages.FormatModelCallFailure(error);
-                IReadOnlyList<ChatMessage> persistedTurnMessages = Array.Empty<ChatMessage>();
-                if (cancelled || timedOut || error is not null)
+                try
                 {
-                    var snapshot = _request.Ui.CaptureEndSnapshot(_session, cancelled, timedOut, errorMessage);
-                    var reconcileResult = SessionTurnReconciler.Reconcile(_session, snapshot);
-                    _session = reconcileResult.Session;
-                    persistedTurnMessages = reconcileResult.PersistedMessages;
-                    foreach (var message in persistedTurnMessages)
+                    var errorMessage = error is null ? null : TurnFailureMessages.FormatModelCallFailure(error);
+                    IReadOnlyList<ChatMessage> persistedTurnMessages = Array.Empty<ChatMessage>();
+                    if (cancelled || timedOut || error is not null)
                     {
-                        await _host._transcript.AppendAsync(_session.Id, message).ConfigureAwait(false);
+                        var snapshot = _request.Ui.CaptureEndSnapshot(_session, cancelled, timedOut, errorMessage);
+                        var reconcileResult = SessionTurnReconciler.Reconcile(_session, snapshot);
+                        _session = reconcileResult.Session;
+                        persistedTurnMessages = reconcileResult.PersistedMessages;
+                        foreach (var message in persistedTurnMessages)
+                        {
+                            await _host._transcript.AppendAsync(_session.Id, message).ConfigureAwait(false);
+                        }
+                    }
+
+                    _session = SessionHistoryCoordinator.DeriveSessionTitle(_session);
+                    await _host._transcript.MarkSessionDirtyAsync(_session).ConfigureAwait(false);
+                    _host._runtimeStore?.UpdateSession(_session);
+                    _request.Ui.FinalizeTurn(
+                        _session,
+                        persistedTurnMessages,
+                        cancelled,
+                        timedOut,
+                        _timeoutMinutes,
+                        errorMessage);
+                    var surface = _request.Ui.CaptureSurfaceSnapshot();
+                    _host._runtimeStore?.MarkHydrated(
+                        _session.Id,
+                        surface.OlderDisplayCursor,
+                        surface.Fingerprint);
+                    try
+                    {
+                        // A completed turn is a durability boundary. Do not leave its final
+                        // assistant/tool messages waiting for the periodic flush, otherwise
+                        // an immediate session switch or process restart can replay stale data.
+                        using var flushTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                        await _host._transcript.FlushSessionAsync(_session.Id, flushTimeout.Token)
+                            .WaitAsync(TimeSpan.FromSeconds(6))
+                            .ConfigureAwait(false);
+                    }
+                    catch (Exception flushError)
+                    {
+                        App.StartupTrace(
+                            $"Session turn flush failed for {_session.Id}: {flushError.Message}");
                     }
                 }
-
-                _session = SessionHistoryCoordinator.DeriveSessionTitle(_session);
-                await _host._transcript.MarkSessionDirtyAsync(_session).ConfigureAwait(false);
-                _host._runtimeStore?.UpdateSession(_session);
-                _request.Ui.FinalizeTurn(
-                    _session,
-                    persistedTurnMessages,
-                    cancelled,
-                    timedOut,
-                    _timeoutMinutes,
-                    errorMessage);
-                _linked?.Dispose();
-                _timeoutCancellation?.Dispose();
-                _cancellation?.Dispose();
-                _host.OnRunnerFinished(this, _session, cancelled, timedOut, error);
+                catch (Exception finalizationError)
+                {
+                    error ??= finalizationError;
+                    App.StartupTrace(
+                        $"Session turn finalization failed for {_session.Id}: {finalizationError}");
+                }
+                finally
+                {
+                    _linked?.Dispose();
+                    _timeoutCancellation?.Dispose();
+                    _cancellation?.Dispose();
+                    _host.OnRunnerFinished(this, _session, cancelled, timedOut, error);
+                }
             }
         }
     }

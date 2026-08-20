@@ -52,7 +52,7 @@ public sealed class SessionRuntimeStoreDisplayTests
     }
 
     [Fact]
-    public async Task TryGetHydrated_is_false_when_surface_fingerprint_mismatches()
+    public async Task TryGetHydrated_keeps_hydrated_ui_when_surface_fingerprint_changes()
     {
         var dispatcher = await StartStaDispatcherAsync();
         var cache = new SessionUiCache(dispatcher, new AppSettings());
@@ -76,7 +76,11 @@ public sealed class SessionRuntimeStoreDisplayTests
         store.Attach(session);
         store.MarkHydrated(session.Id, new ConversationDisplayCursor(10, Array.Empty<string>()), fingerprint);
 
-        Assert.False(store.TryGetHydrated(session.Id, out _));
+        Assert.True(store.TryGetHydrated(session.Id, out var live));
+        Assert.Equal(20, live.OlderDisplayCursor?.ByteOffset);
+        Assert.Equal(
+            await dispatcher.InvokeAsync(() => ui.SurfaceFingerprint),
+            live.SurfaceFingerprint);
     }
 
     [Fact]
@@ -103,11 +107,7 @@ public sealed class SessionRuntimeStoreDisplayTests
             new Athlon.Agent.Core.Streaming.AgentStreamEvent.ChatMessageAppended(toolResult));
 
         Assert.NotEqual(initialFingerprint, await dispatcher.InvokeAsync(() => ui.SurfaceFingerprint));
-        Assert.False(store.TryGetHydrated(session.Id, out _));
-        Assert.True(store.TryGetHydrated(
-            session.Id,
-            out var live,
-            acceptNewerCachedSurface: true));
+        Assert.True(store.TryGetHydrated(session.Id, out var live));
         Assert.Equal(session.Id, live.Session!.Id);
         Assert.Equal(
             await dispatcher.InvokeAsync(() => ui.SurfaceFingerprint),
@@ -131,11 +131,7 @@ public sealed class SessionRuntimeStoreDisplayTests
             activitySourceMessages: session.Messages);
         store.Attach(session, hydrated: true);
 
-        Assert.False(store.TryGetHydrated(session.Id, out _));
-        Assert.True(store.TryGetHydrated(
-            session.Id,
-            out var live,
-            acceptNewerCachedSurface: true));
+        Assert.True(store.TryGetHydrated(session.Id, out var live));
         Assert.Equal(
             await dispatcher.InvokeAsync(() => ui.SurfaceFingerprint),
             live.SurfaceFingerprint);

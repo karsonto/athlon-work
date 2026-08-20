@@ -266,6 +266,34 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
+    public async Task HiddenSession_rebuilds_cached_surface_after_compaction_replaces_history()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        var oldUser = ChatMessage.Create(MessageRole.User, "old");
+        var oldAssistant = ChatMessage.Create(MessageRole.Assistant, "old answer");
+        var original = AgentSession.Create("compact-hidden")
+            .WithMessages([oldUser, oldAssistant]);
+        await ui.HydrateDisplayAsync(
+            original,
+            original.Messages,
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: original.Messages);
+        ui.SetDisplayed(false);
+
+        var compaction = ChatMessage.Create(MessageRole.Compaction, "compacted");
+        var currentAssistant = ChatMessage.Create(MessageRole.Assistant, "current");
+        var compacted = AgentSession.Create("compact-hidden")
+            .WithMessages([compaction, currentAssistant]);
+        await ui.BuildCallbacks().OnSessionUpdated!(compacted);
+
+        var display = await dispatcher.InvokeAsync(() => ui.DisplayMessagesSnapshot.ToList());
+        Assert.DoesNotContain(display, message => message.Id == oldUser.Id);
+        Assert.Contains(display, message => message.Id == compaction.Id);
+        Assert.Contains(display, message => message.Id == currentAssistant.Id);
+    }
+
+    [Fact]
     public async Task HiddenSession_FinalizeTurn_does_not_require_ChatView_or_scroll()
     {
         var dispatcher = await StartStaDispatcherAsync();

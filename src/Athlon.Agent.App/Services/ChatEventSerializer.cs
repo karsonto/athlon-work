@@ -318,8 +318,16 @@ internal static class ChatEventSerializer
                 includeReset: false,
                 activitySourceMessages: activitySourceMessages));
 
-    public static string SerializeEventsCommand(string command, IReadOnlyList<string> events) =>
-        SerializeWebMessageCommand(command, events);
+    public static string SerializeEventsCommand(
+        string command,
+        IReadOnlyList<string> events,
+        int? renderGeneration = null,
+        bool replayComplete = false) =>
+        SerializeWebMessageCommand(
+            command,
+            events,
+            renderGeneration: renderGeneration,
+            replayComplete: replayComplete);
 
     public static string SerializeResetCommand() =>
         SerializeWebMessageCommand("reset", Array.Empty<string>());
@@ -885,7 +893,9 @@ internal static class ChatEventSerializer
     private static string SerializeWebMessageCommand(
         string command,
         IReadOnlyList<string> events,
-        bool? hasOlderMessages = null)
+        bool? hasOlderMessages = null,
+        int? renderGeneration = null,
+        bool replayComplete = false)
     {
         var buffer = new MemoryStream();
         using (var writer = new Utf8JsonWriter(buffer))
@@ -904,6 +914,16 @@ internal static class ChatEventSerializer
             if (hasOlderMessages is not null)
             {
                 writer.WriteBoolean("hasOlderMessages", hasOlderMessages.Value);
+            }
+
+            if (renderGeneration is not null)
+            {
+                writer.WriteNumber("renderGeneration", renderGeneration.Value);
+            }
+
+            if (replayComplete)
+            {
+                writer.WriteBoolean("replayComplete", true);
             }
 
             writer.WriteEndObject();
