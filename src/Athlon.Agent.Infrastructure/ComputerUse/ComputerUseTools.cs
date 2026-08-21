@@ -35,7 +35,7 @@ public sealed class ComputerInteractTool(IComputerUseAutomationHost host) : IAge
 {
     public ToolDefinition Definition { get; } = new(
         "computer_interact",
-        "Perform exactly one desktop action using a fresh frame. Prefer element_id; otherwise use image_x/image_y relative to the frame screenshot. Physical x/y are fallback only. The result includes a post-action screenshot, a fresh frame id, and a bounded UI tree for the next action.",
+        "Perform exactly one desktop action using a fresh frame. For click/double_click/right_click/scroll/drag prefer image_x/image_y in screenshot pixels (host maps them to the physical desktop). Use element_id mainly to focus controls for typing. The result includes a post-action screenshot and a fresh frame id; call computer_observe when you need an updated UI tree.",
         ToolSchema.Object()
             .String("frame_id", "Latest frame id returned by computer_observe.", required: true, minLength: 1)
             .String(
@@ -43,13 +43,13 @@ public sealed class ComputerInteractTool(IComputerUseAutomationHost host) : IAge
                 "One action: click, double_click, right_click, type_text, key, hotkey, scroll, or drag.",
                 required: true,
                 enumValues: ["click", "double_click", "right_click", "type_text", "key", "hotkey", "scroll", "drag"])
-            .String("element_id", "Preferred UI Automation element id from the latest frame.")
-            .Integer("image_x", "X coordinate relative to the top-left of the frame screenshot.")
-            .Integer("image_y", "Y coordinate relative to the top-left of the frame screenshot.")
-            .Integer("end_image_x", "Drag destination X relative to the frame screenshot.")
-            .Integer("end_image_y", "Drag destination Y relative to the frame screenshot.")
-            .Integer("x", "Fallback physical desktop X coordinate.")
-            .Integer("y", "Fallback physical desktop Y coordinate.")
+            .String("element_id", "UI Automation element id. Preferred for focusing type_text/key/hotkey; optional for pointer actions when image coordinates are unavailable.")
+            .Integer("image_x", "X in screenshot pixels (0 .. image.width-1). Required for accurate pointer actions.")
+            .Integer("image_y", "Y in screenshot pixels (0 .. image.height-1). Required for accurate pointer actions.")
+            .Integer("end_image_x", "Drag destination X in screenshot pixels.")
+            .Integer("end_image_y", "Drag destination Y in screenshot pixels.")
+            .Integer("x", "Fallback physical desktop X coordinate. Do not use screenshot pixels here.")
+            .Integer("y", "Fallback physical desktop Y coordinate. Do not use screenshot pixels here.")
             .Integer("end_x", "Drag destination physical desktop X coordinate.")
             .Integer("end_y", "Drag destination physical desktop Y coordinate.")
             .String("text", "Text for type_text.")
@@ -168,7 +168,7 @@ public static class ComputerUseToolHelper
                 height = observation.ImageHeight
             },
             coordinate_hint =
-                "Prefer element_id. UI tree bounds are physical desktop coordinates; image_bounds are relative to this screenshot. Otherwise pass image_x/image_y relative to the screenshot (top-left origin). Physical x/y are fallback only.",
+                "For pointer actions pass image_x/image_y in screenshot pixels (0..image.width-1, 0..image.height-1). Use image_bounds centers when helpful — never UI tree bounds (those are physical). The host maps screenshot pixels to the physical desktop using capture vs image size; do not multiply by dpi_scale. Physical x/y are fallback only. element_id is for focusing type_text/key/hotkey; when both element_id and image_x/image_y are set for a click, image coordinates win.",
             cursor = new { x = observation.CursorX, y = observation.CursorY },
             foreground_window = new
             {
@@ -177,14 +177,7 @@ public static class ComputerUseToolHelper
             },
             action = observation.AppliedAction is null
                 ? null
-                : new
-                {
-                    name = observation.AppliedAction,
-                    used_element_id = observation.UsedElementId,
-                    resolved_point = observation.ResolvedX is int rx && observation.ResolvedY is int ry
-                        ? new { x = rx, y = ry }
-                        : null
-                },
+                : BuildActionPayload(observation),
             ui_tree = ParseUiTree(observation.UiTreeJson)
         }, new JsonSerializerOptions { WriteIndented = true });
 
@@ -192,6 +185,42 @@ public static class ComputerUseToolHelper
             summary,
             content,
             imageAttachments: [observation.Screenshot]);
+    }
+
+    private static object? BuildActionPayload(ComputerUseObservation observation)
+    {
+        if (observation.ResolvedX is not int rx || observation.ResolvedY is not int ry)
+        {
+            return new
+            {
+                name = observation.AppliedAction,
+                used_element_id = observation.UsedElementId,
+                resolved_point = (object?)null
+            };
+        }
+
+        var (imageX, imageY) = ComputerUseCoordinateMapper.PhysicalToImage(
+            rx,
+            ry,
+            observation.Left,
+            observation.Top,
+            observation.Width,
+            observation.Height,
+            observation.ImageWidth,
+            observation.ImageHeight);
+
+        return new
+        {
+            name = observation.AppliedAction,
+            used_element_id = observation.UsedElementId,
+            resolved_point = new
+            {
+                physical_x = rx,
+                physical_y = ry,
+                image_x = imageX,
+                image_y = imageY
+            }
+        };
     }
 
     private static (string Code, string Message, string Hint) MapError(Exception ex) =>

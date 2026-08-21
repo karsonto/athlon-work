@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Athlon.Agent.App.Services.ComputerUse;
+using Athlon.Agent.Core;
 using Athlon.Agent.Core.ComputerUse;
 using Athlon.Agent.Infrastructure.ComputerUse;
 
@@ -41,6 +42,89 @@ public sealed class ComputerUseWave1OptimizationTests
 
         Assert.Equal(110, x);
         Assert.Equal(220, y);
+    }
+
+    [Fact]
+    public void PhysicalToImage_IsInverseOfImageToPhysical()
+    {
+        var (physicalX, physicalY) = ComputerUseCoordinateMapper.ImageToPhysical(
+            imageX: 800,
+            imageY: 450,
+            monitorLeft: 0,
+            monitorTop: 0,
+            captureWidth: 3840,
+            captureHeight: 2160,
+            imageWidth: 1600,
+            imageHeight: 900);
+
+        var (imageX, imageY) = ComputerUseCoordinateMapper.PhysicalToImage(
+            physicalX,
+            physicalY,
+            monitorLeft: 0,
+            monitorTop: 0,
+            captureWidth: 3840,
+            captureHeight: 2160,
+            imageWidth: 1600,
+            imageHeight: 900);
+
+        Assert.Equal(800, imageX);
+        Assert.Equal(450, imageY);
+    }
+
+    [Fact]
+    public void IsImagePointInFrame_RejectsPhysicalSizedCoordinates()
+    {
+        Assert.True(ComputerUseCoordinateMapper.IsImagePointInFrame(800, 450, 1600, 900));
+        Assert.False(ComputerUseCoordinateMapper.IsImagePointInFrame(1920, 1080, 1600, 900));
+        Assert.False(ComputerUseCoordinateMapper.IsImagePointInFrame(-1, 10, 1600, 900));
+        Assert.False(ComputerUseCoordinateMapper.IsImagePointInFrame(0, 900, 1600, 900));
+    }
+
+    [Fact]
+    public void PointerTargetPolicy_ImageWinsWhenBothPresent()
+    {
+        Assert.True(ComputerUsePointerTargetPolicy.PreferImagePoint(hasElementId: true, hasImagePoint: true));
+        Assert.False(ComputerUsePointerTargetPolicy.PreferElementClickablePoint(hasElementId: true, hasImagePoint: true));
+        Assert.True(ComputerUsePointerTargetPolicy.PreferElementClickablePoint(hasElementId: true, hasImagePoint: false));
+        Assert.False(ComputerUsePointerTargetPolicy.PreferImagePoint(hasElementId: true, hasImagePoint: false));
+    }
+
+    [Fact]
+    public void FromObservation_CoordinateHintPrefersScreenshotPixels()
+    {
+        var observation = new ComputerUseObservation(
+            FrameId: "frame-1",
+            Screenshot: new ImageAttachment("shot.jpg", "image/jpeg", DataUrl: "data:image/jpeg;base64,AA=="),
+            Left: 0,
+            Top: 0,
+            Width: 1920,
+            Height: 1080,
+            DpiScale: 1.5,
+            CursorX: 10,
+            CursorY: 20,
+            ForegroundWindowTitle: "App",
+            ForegroundProcessName: "app",
+            UiTreeJson: "[]",
+            ImageWidth: 1600,
+            ImageHeight: 900,
+            AppliedAction: "click",
+            UsedElementId: null,
+            ResolvedX: 960,
+            ResolvedY: 540);
+
+        var result = ComputerUseToolHelper.FromObservation("ok", observation);
+        using var document = JsonDocument.Parse(result.Content!);
+        var root = document.RootElement;
+        var hint = root.GetProperty("coordinate_hint").GetString();
+        Assert.Contains("screenshot pixels", hint, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("do not multiply by dpi_scale", hint, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("image coordinates win", hint, StringComparison.OrdinalIgnoreCase);
+
+        var resolved = root.GetProperty("action").GetProperty("resolved_point");
+        Assert.Equal(960, resolved.GetProperty("physical_x").GetInt32());
+        Assert.Equal(540, resolved.GetProperty("physical_y").GetInt32());
+        Assert.Equal(800, resolved.GetProperty("image_x").GetInt32());
+        Assert.Equal(450, resolved.GetProperty("image_y").GetInt32());
     }
 
     [Fact]

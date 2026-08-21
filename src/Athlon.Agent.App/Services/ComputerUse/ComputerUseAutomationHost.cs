@@ -80,10 +80,11 @@ public sealed class ComputerUseAutomationHost(
                     "The observation expired.");
             }
 
+            var hasElementId = !string.IsNullOrWhiteSpace(request.ElementId);
             AutomationElement? target = null;
-            if (!string.IsNullOrWhiteSpace(request.ElementId))
+            if (hasElementId)
             {
-                if (!frame.Elements.TryGetValue(request.ElementId, out target))
+                if (!frame.Elements.TryGetValue(request.ElementId!, out target))
                 {
                     throw new ComputerUseException(
                         "unknown_element",
@@ -93,7 +94,8 @@ public sealed class ComputerUseAutomationHost(
 
             var hasImagePoint = request.ImageX is not null && request.ImageY is not null;
             var hasPhysicalPoint = request.X is not null && request.Y is not null;
-            if (request.Action is ("click" or "double_click" or "right_click" or "scroll" or "drag")
+            var isPointerAction = request.Action is ("click" or "double_click" or "right_click" or "scroll" or "drag");
+            if (isPointerAction
                 && target is null
                 && !hasImagePoint
                 && !hasPhysicalPoint)
@@ -103,10 +105,42 @@ public sealed class ComputerUseAutomationHost(
                     $"{request.Action} requires element_id, image_x/image_y, or physical x/y coordinates.");
             }
 
+            if (hasImagePoint)
+            {
+                EnsureImagePointInFrame(
+                    request.ImageX!.Value,
+                    request.ImageY!.Value,
+                    frame.ImageWidth,
+                    frame.ImageHeight,
+                    "image_x/image_y");
+            }
+
+            if (request.EndImageX is int endImageX && request.EndImageY is int endImageY)
+            {
+                EnsureImagePointInFrame(
+                    endImageX,
+                    endImageY,
+                    frame.ImageWidth,
+                    frame.ImageHeight,
+                    "end_image_x/end_image_y");
+            }
+
+            var useImageForPointer = isPointerAction
+                && ComputerUsePointerTargetPolicy.PreferImagePoint(hasElementId, hasImagePoint);
+            var useElementForPointer = isPointerAction
+                && ComputerUsePointerTargetPolicy.PreferElementClickablePoint(hasElementId, hasImagePoint);
+            // Typing still focuses via element when available, even if image coords were also sent.
+            var useElementForTyping = !isPointerAction
+                && target is not null
+                && request.Action is "type_text" or "key" or "hotkey";
+
             int resolvedX = 0;
             int resolvedY = 0;
             int? resolvedEndX = request.EndX;
             int? resolvedEndY = request.EndY;
+            string? usedElementId = useElementForPointer || useElementForTyping
+                ? request.ElementId
+                : null;
 
             var result = await overlayRegistry.RunWithOverlayHiddenAsync(async ct =>
             {
@@ -150,9 +184,8 @@ public sealed class ComputerUseAutomationHost(
                 var y = 0;
                 int? endX = null;
                 int? endY = null;
-                if (target is not null
-                    && request.Action is ("click" or "double_click" or "right_click" or "scroll" or "drag"
-                        or "type_text" or "key" or "hotkey"))
+                if ((useElementForPointer || useElementForTyping)
+                    && target is not null)
                 {
                     // Resolve the click point after the overlay is hidden so focus/geometry are stable.
                     var point = await RunBoundedUiAutomationAsync(
@@ -171,9 +204,9 @@ public sealed class ComputerUseAutomationHost(
                     x = point.X;
                     y = point.Y;
                 }
-                else if (request.Action is ("click" or "double_click" or "right_click" or "scroll" or "drag"))
+                else if (isPointerAction)
                 {
-                    if (hasImagePoint)
+                    if (useImageForPointer)
                     {
                         (x, y) = ComputerUseCoordinateMapper.ImageToPhysical(
                             request.ImageX!.Value,
@@ -233,7 +266,7 @@ public sealed class ComputerUseAutomationHost(
                 _latestFrame = null;
 
                 ct.ThrowIfCancellationRequested();
-                if (target is not null && request.Action is "type_text" or "key" or "hotkey")
+                if (useElementForTyping)
                 {
                     await inputService.ExecuteAsync(
                         "click",
@@ -273,10 +306,13 @@ public sealed class ComputerUseAutomationHost(
                     await Task.Delay(250, CancellationToken.None).ConfigureAwait(false);
                 }
 
+                // Return a fresh screenshot + frame only. A shallow post-action UI tree pushed
+                // models onto coarse element_id clicks; prefer image_x/image_y next, and
+                // computer_observe when a full tree is needed.
                 return await CaptureStateAsync(
-                    includeUiTree: true,
-                    maxDepth: 3,
-                    maxNodes: 40,
+                    includeUiTree: false,
+                    maxDepth: 1,
+                    maxNodes: 1,
                     CancellationToken.None,
                     monitorX,
                     monitorY).ConfigureAwait(false);
@@ -289,6 +325,8 @@ public sealed class ComputerUseAutomationHost(
                     request.Action,
                     request.FrameId,
                     request.ElementId,
+                    used_element_id = usedElementId,
+                    used_image_point = useImageForPointer,
                     resolved_x = resolvedX,
                     resolved_y = resolvedY,
                     end_x = resolvedEndX,
@@ -300,7 +338,7 @@ public sealed class ComputerUseAutomationHost(
             return BuildObservation(
                 result,
                 appliedAction: request.Action,
-                usedElementId: request.ElementId,
+                usedElementId: usedElementId,
                 resolvedX: resolvedX,
                 resolvedY: resolvedY);
         }
@@ -308,6 +346,24 @@ public sealed class ComputerUseAutomationHost(
         {
             _operationGate.Release();
         }
+    }
+
+    private static void EnsureImagePointInFrame(
+        int imageX,
+        int imageY,
+        int imageWidth,
+        int imageHeight,
+        string parameterName)
+    {
+        if (ComputerUseCoordinateMapper.IsImagePointInFrame(imageX, imageY, imageWidth, imageHeight))
+        {
+            return;
+        }
+
+        throw new ComputerUseException(
+            "invalid_args",
+            $"{parameterName} must be screenshot pixels in [0,{imageWidth}) x [0,{imageHeight}). "
+            + "Do not pass UI tree bounds (physical) or dpi-scaled values as image coordinates.");
     }
 
     public async Task<string> WaitAsync(
