@@ -482,6 +482,20 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         _streamingContentBuilder.Append(token);
     }
 
+    public void ReplaceStreamingContent(string content, string? reasoningContent)
+    {
+        Content = content ?? string.Empty;
+        ReasoningContent = reasoningContent ?? string.Empty;
+        _streamingContentBuilder = new StringBuilder(Content);
+        _publishedStreamingContentLength = Content.Length;
+        _streamingReasoningBuilder = string.IsNullOrEmpty(ReasoningContent)
+            ? null
+            : new StringBuilder(ReasoningContent);
+        _publishedStreamingReasoningLength = ReasoningContent.Length;
+        IsStreaming = true;
+        IsReasoningStreaming = !string.IsNullOrWhiteSpace(ReasoningContent);
+    }
+
     public void AppendStreamingReasoningToken(string token)
     {
         if (string.IsNullOrEmpty(token))

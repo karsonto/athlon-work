@@ -13,8 +13,6 @@ public sealed class RuntimeSessionEntry
 
     public bool SessionJsonDirty { get; set; }
 
-    public DisplaySurfaceFingerprint? SurfaceFingerprint { get; set; }
-
     internal List<ChatMessage> PendingAppends { get; } = [];
 
     internal HashSet<string> PendingAppendIds { get; } = new(StringComparer.Ordinal);
@@ -51,6 +49,10 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         }
     }
 
+    /// <summary>
+    /// Returns the in-memory runtime entry when a session has been attached.
+    /// Display content is always loaded from disk on switch; this no longer gates cold loads.
+    /// </summary>
     public bool TryGetHydrated(string sessionId, out RuntimeSessionEntry entry)
     {
         entry = null!;
@@ -59,45 +61,24 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             return false;
         }
 
+        if (found.Session is null || !found.Hydrated)
+        {
+            return false;
+        }
+
+        entry = found;
+        return true;
+    }
+
+    public bool TryGetEntry(string sessionId, out RuntimeSessionEntry entry)
+    {
+        entry = null!;
+        if (string.IsNullOrWhiteSpace(sessionId) || !_sessions.TryGetValue(sessionId, out var found))
+        {
+            return false;
+        }
+
         if (found.Session is null)
-        {
-            return false;
-        }
-
-        SessionTurnUiController? ui = null;
-        var hasDisplayMessages = _uiCache is not null
-            && _uiCache.TryGet(sessionId, out ui)
-            && ui is { Messages.Count: > 0 };
-
-        var cachedSurface = ui?.CaptureSurfaceSnapshot();
-        if (hasDisplayMessages
-            && cachedSurface is not null
-            && found.Hydrated)
-        {
-            // Once a display surface has been hydrated, its per-session controller is
-            // authoritative for the lifetime of this process. Streaming and turn
-            // finalization update it before the periodic transcript flush, so a
-            // fingerprint mismatch means the cached surface is newer than disk rather
-            // than stale. Never cold-load an older snapshot over it.
-            lock (_gate)
-            {
-                found.OlderDisplayCursor = cachedSurface.Value.OlderDisplayCursor;
-                found.SurfaceFingerprint = cachedSurface.Value.Fingerprint;
-                found.Hydrated = true;
-            }
-
-            entry = found;
-            return true;
-        }
-
-        if (!found.Hydrated)
-        {
-            return false;
-        }
-
-        // Hydrated + empty UI is only reusable for a truly empty chat. A session with
-        // in-memory history but no display messages must reload from conversation.jsonl.
-        if (_uiCache is not null && found.Session.Messages.Count > 0)
         {
             return false;
         }
@@ -132,8 +113,7 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
 
     public void MarkHydrated(
         string sessionId,
-        ConversationDisplayCursor? olderDisplayCursor,
-        DisplaySurfaceFingerprint? surfaceFingerprint = null)
+        ConversationDisplayCursor? olderDisplayCursor)
     {
         if (!_sessions.TryGetValue(sessionId, out var entry))
         {
@@ -144,7 +124,6 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         {
             entry.Hydrated = true;
             entry.OlderDisplayCursor = olderDisplayCursor;
-            entry.SurfaceFingerprint = surfaceFingerprint;
         }
     }
 
@@ -203,7 +182,10 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         }
     }
 
-    public Task AppendAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
+    public Task AppendAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default) =>
+        UpsertAsync(sessionId, message, cancellationToken);
+
+    public Task UpsertAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(message.Id))
         {
@@ -213,10 +195,17 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         var entry = _sessions.GetOrAdd(sessionId, _ => new RuntimeSessionEntry());
         lock (_gate)
         {
-            if (entry.PendingAppendIds.Add(message.Id))
+            for (var index = 0; index < entry.PendingAppends.Count; index++)
             {
-                entry.PendingAppends.Add(message);
+                if (string.Equals(entry.PendingAppends[index].Id, message.Id, StringComparison.Ordinal))
+                {
+                    entry.PendingAppends[index] = message;
+                    return Task.CompletedTask;
+                }
             }
+
+            entry.PendingAppendIds.Add(message.Id);
+            entry.PendingAppends.Add(message);
         }
 
         return Task.CompletedTask;

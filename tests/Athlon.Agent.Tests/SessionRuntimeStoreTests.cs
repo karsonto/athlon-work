@@ -135,6 +135,45 @@ public sealed class SessionRuntimeStoreTests
     }
 
     [Fact]
+    public async Task UpsertAsync_replaces_pending_message_with_same_id()
+    {
+        var storage = new RecordingStorage();
+        using var store = new SessionRuntimeStore(storage, enablePeriodicFlush: false);
+        var session = AgentSession.Create("upsert");
+        store.Attach(session, hydrated: true);
+
+        var checkpoint = ChatMessage.CreateWithId("a1", MessageRole.Assistant, "partial");
+        var final = ChatMessage.CreateWithId("a1", MessageRole.Assistant, "partial and complete");
+        await store.UpsertAsync(session.Id, checkpoint);
+        await store.UpsertAsync(session.Id, final);
+        await store.FlushSessionAsync(session.Id);
+
+        var written = Assert.Single(storage.Appended);
+        Assert.Equal("a1", written.Message.Id);
+        Assert.Equal("partial and complete", written.Message.Content);
+    }
+
+    [Fact]
+    public async Task AppendAsync_after_flush_allows_same_id_second_line()
+    {
+        var storage = new RecordingStorage();
+        using var store = new SessionRuntimeStore(storage, enablePeriodicFlush: false);
+        var session = AgentSession.Create("dup");
+        store.Attach(session, hydrated: true);
+
+        var checkpoint = ChatMessage.CreateWithId("a1", MessageRole.Assistant, "partial");
+        var final = ChatMessage.CreateWithId("a1", MessageRole.Assistant, "final");
+        await store.UpsertAsync(session.Id, checkpoint);
+        await store.FlushSessionAsync(session.Id);
+        await store.AppendAsync(session.Id, final);
+        await store.FlushSessionAsync(session.Id);
+
+        Assert.Equal(2, storage.Appended.Count);
+        Assert.Equal("partial", storage.Appended[0].Message.Content);
+        Assert.Equal("final", storage.Appended[1].Message.Content);
+    }
+
+    [Fact]
     public async Task DiscardPending_drops_queued_appends()
     {
         var storage = new RecordingStorage();

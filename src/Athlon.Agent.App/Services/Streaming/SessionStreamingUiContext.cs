@@ -27,6 +27,17 @@ public sealed class SessionStreamingUiContext
 
     public IReadOnlyDictionary<int, ChatMessageViewModel> ToolBubblesByIndex => _toolBubblesByIndex;
 
+    public void AttachActiveAssistantBubble(ChatMessageViewModel bubble)
+    {
+        ArgumentNullException.ThrowIfNull(bubble);
+        if (string.IsNullOrWhiteSpace(bubble.MessageId))
+        {
+            return;
+        }
+
+        _assistantBubbles[bubble.MessageId] = bubble;
+    }
+
     public void Process(AgentStreamEvent streamEvent, ObservableCollection<ChatMessageViewModel> messages)
     {
         switch (streamEvent)

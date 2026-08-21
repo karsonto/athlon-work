@@ -49,8 +49,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly IChatScrollService _chatScroll;
     private readonly SessionUiCache _uiCache;
     private readonly SessionRuntimeStore _runtime;
-    private readonly IRuntimeDiagnosticEventSink _runtimeDiagnosticEventSink;
-    private readonly IAgentRunContextAccessor _runContextAccessor;
     private readonly ApplicationShutdownService _shutdownService;
     private readonly SessionHistoryCoordinator _sessionHistory;
     private readonly SessionNavigationStore _sessionNavigation;
@@ -117,9 +115,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ICredentialStore credentialStore,
         ISshWorkspaceClient sshClient,
         ILongTermMemory longTermMemory,
-        AppUpdateService updateService,
-        IRuntimeDiagnosticEventSink runtimeDiagnosticEventSink,
-        IAgentRunContextAccessor runContextAccessor)
+        AppUpdateService updateService)
     {
         _storage = storage;
         _workspaceContext = workspaceContext;
@@ -146,8 +142,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sshClient = sshClient;
         _sshTransfer = new SshWorkspaceTransferService(sshClient, notifier);
         _longTermMemory = longTermMemory;
-        _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
-        _runContextAccessor = runContextAccessor;
         _skillCatalog = skillCatalog;
         _appSettings = settings;
         _contextSidebarEdgeGutterWidth = 0;
@@ -1091,6 +1085,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         CancelPendingSessionLoad();
         IsLoadingSession = false;
         var previousSession = _session;
+        await FlushSessionForSwitchAsync(previousSession.Id).ConfigureAwait(true);
         _session = AgentSession.Create("New Chat");
         if (!string.IsNullOrWhiteSpace(workspacePath))
         {
@@ -1328,6 +1323,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         var previousSession = _session;
+        await FlushSessionForSwitchAsync(previousSession.Id).ConfigureAwait(true);
         await LoadSessionInternalAsync(item.Id);
         _runtime.UpdateSession(previousSession);
         CurrentPage = AppPage.Chat;
@@ -1445,7 +1441,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 _olderDisplayCursor,
                 _activeUi.ShowToolCalls,
                 _olderDisplayCursor is not null).ConfigureAwait(true);
-            _runtime.MarkHydrated(sessionId, _olderDisplayCursor, _activeUi.SurfaceFingerprint);
+            _runtime.MarkHydrated(sessionId, _olderDisplayCursor);
         }
         catch (Exception ex)
         {
@@ -1542,12 +1538,21 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ContextOccupancy.Apply(budget, pressure);
     }
 
-    private void SwitchDisplayedSession(AgentSession session, bool renderExistingMessages = true)
+    private void SwitchDisplayedSession(AgentSession session)
     {
+        var previousSessionId = _displayedSessionId;
         UnwireSessionUsageUi(_activeUi);
         _activeUi.SetDisplayed(false);
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
         UnwireModifiedFilesUi(_activeUi);
+
+        if (!string.IsNullOrWhiteSpace(previousSessionId)
+            && !string.Equals(previousSessionId, session.Id, StringComparison.Ordinal)
+            && !_sessionTurns.TurnHost.IsRunning(previousSessionId))
+        {
+            _uiCache.Remove(previousSessionId);
+        }
+
         _displayedSessionId = session.Id;
         _session = session;
         _runtime.Attach(session);
@@ -1555,66 +1560,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         WireSessionUsageUi(_activeUi);
         WireModifiedFilesUi(_activeUi);
         _activeUi.SetDisplayed(true);
-        // ??????????WebChatView??????????
         if (_activeUi.ChatView is null)
         {
             _activeUi.ChatView = _savedChatView;
-        }
-
-        if (renderExistingMessages && _savedChatView is not null)
-        {
-            // Reuse the paged UI cache. Do not merge AgentSession.Messages into the
-            // shared WebView — that replays the full transcript and freezes huge histories.
-            // Skip empty replay when the session still has history: LoadSessionInternalAsync
-            // will cold-load conversation.jsonl instead of wiping the previous transcript.
-            var cacheIsEmpty = _activeUi.Messages.Count == 0;
-                DisplaySurfaceFingerprint? liveFingerprint = null;
-                if (!cacheIsEmpty
-                    && _runtime.TryGetHydrated(session.Id, out var live)
-                    && live.SurfaceFingerprint is not null)
-                {
-                    liveFingerprint = live.SurfaceFingerprint;
-                }
-
-                var canReuseSurface = !cacheIsEmpty
-                                       && liveFingerprint is not null
-                                       && Equals(liveFingerprint, _activeUi.SurfaceFingerprint);
-
-                if (!canReuseSurface
-                    && !cacheIsEmpty
-                    && liveFingerprint is not null
-                    && !Equals(liveFingerprint, _activeUi.SurfaceFingerprint))
-                {
-                    var runContext = _runContextAccessor.Current;
-                    var runId = runContext?.RunId;
-                    var evt = new RuntimeDiagnosticEvent(
-                        eventId: "",
-                        ts: default,
-                        sequence: 0,
-                        sessionId: session.Id,
-                        runId: runId,
-                        turnId: null,
-                        attemptId: null,
-                        parentAttemptId: null,
-                        toolCallId: null,
-                        messageId: null,
-                        component: RuntimeDiagnosticComponent.UiSessionSwitch,
-                        phase: RuntimeDiagnosticPhase.Switch,
-                        eventType: RuntimeDiagnosticErrorCodes.UiSessionSwitchSurfaceMismatch,
-                        severity: RuntimeDiagnosticSeverity.Warning,
-                        errorCode: RuntimeDiagnosticErrorCodes.UiSessionSwitchSurfaceMismatch,
-                        message: $"surfaceFingerprint mismatch (live={liveFingerprint}, active={_activeUi.SurfaceFingerprint})");
-                    _ = _runtimeDiagnosticEventSink.EnqueueAsync(evt, CancellationToken.None);
-                }
-            if (canReuseSurface || !(cacheIsEmpty && session.Messages.Count > 0))
-            {
-                if (_activeUi.ActivitySourceMessages.Count == 0)
-                {
-                    _activeUi.SyncActivitySourceFromSession(session);
-                }
-
-                _ = _activeUi.ReloadChatViewAsync();
-            }
         }
 
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
@@ -1635,6 +1583,45 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
         DebugBar.RefreshFromActiveRun();
         RequestRefreshSessionHistory();
+    }
+
+    /// <summary>
+    /// Checkpoints mid-turn streaming text, flushes pending transcript rows, and invalidates
+    /// navigation cache so the next load reads durable disk state.
+    /// </summary>
+    private async Task FlushSessionForSwitchAsync(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        if (_uiCache.TryGet(sessionId, out var ui) && ui is not null)
+        {
+            if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+            {
+                ui.SetDisplayed(false);
+            }
+
+            if (_sessionTurns.TurnHost.IsRunning(sessionId))
+            {
+                foreach (var message in ui.CaptureStreamingCheckpoint())
+                {
+                    await _runtime.UpsertAsync(sessionId, message).ConfigureAwait(true);
+                }
+            }
+        }
+
+        try
+        {
+            await _runtime.FlushSessionAsync(sessionId).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Flush before session switch failed for {sessionId}: {ex.Message}");
+        }
+
+        _sessionNavigation.Invalidate(sessionId);
     }
 
     private void OnTurnStateChanged(object? sender, string sessionId)
@@ -2510,10 +2497,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public void CloseAtCompletion() => ChatPage.CloseAtCompletion();
 
-    private static bool SameSessionWorkspace(AgentSession current, AgentSession next) =>
-        string.Equals(current.ActiveWorkspaceId, next.ActiveWorkspaceId, StringComparison.Ordinal)
-        && string.Equals(current.ActiveWorkspace, next.ActiveWorkspace, StringComparison.OrdinalIgnoreCase);
-
     private void ApplySessionWorkspace() =>
         _ = ApplySessionWorkspaceAsync();
 
@@ -2604,6 +2587,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public async Task OpenSessionByIdAsync(string sessionId)
     {
         CurrentPage = AppPage.Chat;
+        if (!string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+        {
+            await FlushSessionForSwitchAsync(_session.Id).ConfigureAwait(true);
+        }
+
         await LoadSessionInternalAsync(sessionId);
     }
 
@@ -2616,49 +2604,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private async Task LoadSessionInternalAsync(string sessionId)
     {
         var loadGeneration = Interlocked.Increment(ref _sessionLoadGeneration);
-        if (_runtime.TryGetHydrated(sessionId, out var live))
-        {
-            var workspaceChanged = !SameSessionWorkspace(_session, live.Session!);
-            SwitchDisplayedSession(live.Session!, renderExistingMessages: true);
-            var displayedUi = _activeUi;
-            _olderDisplayCursor = live.OlderDisplayCursor;
-            displayedUi.UpdateSurfaceCursor(_olderDisplayCursor);
-            ApplyLoadedSessionChrome();
-            if (_savedChatView is not null)
-            {
-                await _savedChatView.SetOlderMessagesAvailableAsync(
-                    _olderDisplayCursor is not null).ConfigureAwait(true);
-            }
-
-            if (!IsSessionLoadCurrent(loadGeneration))
-            {
-                return;
-            }
-
-            if (ReferenceEquals(_activeUi, displayedUi))
-            {
-                await displayedUi.ReloadChatViewAsync().ConfigureAwait(true);
-            }
-
-            if (workspaceChanged)
-            {
-                ApplySessionWorkspace();
-            }
-
-            UpdateDisplayedBusyState();
-            NotifyCommandStatesChanged();
-            return;
-        }
-
         IsLoadingSession = true;
         SetComposerStatus(_loc["Shell_LoadingConversation"]);
         try
         {
-            if (_uiCache.TryGet(sessionId, out var staleUi) && staleUi is { Messages.Count: 0 })
-            {
-                _sessionNavigation.Invalidate(sessionId);
-            }
-
             var snapshot = await _sessionNavigation.LoadSnapshotAsync(sessionId).ConfigureAwait(true);
             if (!IsSessionLoadCurrent(loadGeneration))
             {
@@ -2672,8 +2621,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 return;
             }
 
+            var preserveActiveTurn = _sessionTurns.TurnHost.IsRunning(sessionId);
             _runtime.Attach(snapshot.Session);
-            SwitchDisplayedSession(snapshot.Session, renderExistingMessages: false);
+            SwitchDisplayedSession(snapshot.Session);
             _olderDisplayCursor = snapshot.OlderDisplayCursor;
             _activeUi.UpdateSurfaceCursor(_olderDisplayCursor);
             ApplyLoadedSessionChrome();
@@ -2689,7 +2639,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                     _session,
                     snapshot.DisplayMessages,
                     synthesizeInterruptedToolResults: false,
-                    activitySourceMessages: snapshot.ActivitySource).ConfigureAwait(true);
+                    activitySourceMessages: snapshot.ActivitySource,
+                    preserveActiveTurn: preserveActiveTurn).ConfigureAwait(true);
             }
             else
             {
@@ -2698,10 +2649,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 await _activeUi.HydrateDisplayAsync(
                     _session,
                     Array.Empty<ChatMessage>(),
-                    synthesizeInterruptedToolResults: false).ConfigureAwait(true);
+                    synthesizeInterruptedToolResults: false,
+                    preserveActiveTurn: preserveActiveTurn).ConfigureAwait(true);
             }
 
-            _runtime.MarkHydrated(sessionId, _olderDisplayCursor, snapshot.SurfaceFingerprint);
+            _runtime.MarkHydrated(sessionId, _olderDisplayCursor);
 
             if (_savedChatView is not null)
             {
@@ -2718,7 +2670,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             UpdateDisplayedBusyState();
             SetComposerStatus(null);
             ShowShellToast(_loc.Format("Shell_LoadConversationDone", _session.Title), ShellToastKind.Success);
-
         }
         finally
         {

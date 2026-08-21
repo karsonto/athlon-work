@@ -173,9 +173,9 @@ public sealed class FileStorageService(
                 return Array.Empty<ChatMessage>();
             }
 
-            // conversation.jsonl is append-only, lines are already roughly chronological.
-            // Use a list with duplicate tracking to avoid Dictionary+OrderBy overhead.
-            var seen = new HashSet<string>(StringComparer.Ordinal);
+            // conversation.jsonl is append-only. Later lines with the same Id win so a
+            // mid-turn streaming checkpoint can be overwritten by the final Persist.
+            var indexById = new Dictionary<string, int>(StringComparer.Ordinal);
             var messages = new List<ChatMessage>();
             foreach (var line in await File.ReadAllLinesAsync(path, cancellationToken).ConfigureAwait(false))
             {
@@ -185,11 +185,18 @@ public sealed class FileStorageService(
                 }
 
                 var message = ConversationDisplayLog.TryParseLine(line);
-                if (message is null || !seen.Add(message.Id))
+                if (message is null)
                 {
                     continue;
                 }
 
+                if (indexById.TryGetValue(message.Id, out var existingIndex))
+                {
+                    messages[existingIndex] = message;
+                    continue;
+                }
+
+                indexById[message.Id] = messages.Count;
                 messages.Add(message);
             }
 
@@ -327,7 +334,13 @@ public sealed class FileStorageService(
         }
 
         var line = Encoding.UTF8.GetString(CollectionsMarshal.AsSpan(reversedLine)[..count]);
+        if (line.Length > 0 && line[0] == '\uFEFF')
+        {
+            line = line[1..];
+        }
+
         var message = ConversationDisplayLog.TryParseLine(line);
+        // Reverse scan meets newer lines first, so first-seen Id is last-wins in file order.
         if (message is not null && seen.Add(message.Id))
         {
             messages.Add(message);

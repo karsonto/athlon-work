@@ -486,11 +486,8 @@ public sealed class SessionTurnHost
                         timedOut,
                         _timeoutMinutes,
                         errorMessage);
-                    var surface = _request.Ui.CaptureSurfaceSnapshot();
-                    _host._runtimeStore?.MarkHydrated(
-                        _session.Id,
-                        surface.OlderDisplayCursor,
-                        surface.Fingerprint);
+                    var olderCursor = _request.Ui.CaptureOlderDisplayCursor();
+                    _host._runtimeStore?.MarkHydrated(_session.Id, olderCursor);
                     try
                     {
                         // A completed turn is a durability boundary. Do not leave its final

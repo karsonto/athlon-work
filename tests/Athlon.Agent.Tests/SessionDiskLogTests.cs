@@ -30,7 +30,7 @@ public sealed class SessionDiskLogTests
     }
 
     [Fact]
-    public async Task FileStorage_WritesConversationToolAndSessionLogs()
+    public async Task FileStorage_WritesConversationAndSessionLogs()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-disk-logs-{Guid.NewGuid():N}");
         var paths = new TestAppPathProvider(root);
@@ -44,34 +44,11 @@ public sealed class SessionDiskLogTests
         try
         {
             await storage.AppendConversationMessageAsync(session.Id, user);
-            await storage.AppendToolCallLogAsync(
-                session.Id,
-                new SessionToolCallLogEntry(
-                    DateTimeOffset.UtcNow,
-                    "call-1",
-                    "file_list",
-                    ToolCallArguments.Empty,
-                    true,
-                    "listed",
-                    "ok",
-                    null,
-                    12));
-            await storage.FlushPendingToolCallLogsAsync();
-            var attempt = new AgentAttemptEvent(
-                DateTimeOffset.UtcNow, "attempt-1", session.Id, "turn-1", AgentAttemptKind.Tool,
-                ModelCallPurpose.Chat, "file_list", "schema-1", "model-1", 10, 2,
-                "success", null, 12);
-            await storage.AppendAttemptEventAsync(session.Id, attempt);
             await storage.SaveSessionAsync(session);
 
             var sessionDir = Path.Combine(paths.SessionsPath, session.Id);
             Assert.True(File.Exists(Path.Combine(sessionDir, "session.json")));
             Assert.True(File.Exists(Path.Combine(sessionDir, "conversation.jsonl")));
-            Assert.True(File.Exists(Path.Combine(sessionDir, "tool-calls", "calls.jsonl")));
-            Assert.True(File.Exists(Path.Combine(sessionDir, "attempts.jsonl")));
-            var attempts = await storage.LoadAttemptEventsAsync(session.Id);
-            Assert.Single(attempts);
-            Assert.Equal("turn-1", attempts[0].TurnId);
 
             var conversationLine = await File.ReadAllTextAsync(Path.Combine(sessionDir, "conversation.jsonl"));
             Assert.Contains("你好", conversationLine);
@@ -90,10 +67,6 @@ public sealed class SessionDiskLogTests
             Assert.Equal("reply", loadedAssistant.Content);
             Assert.Equal("thinking", loadedAssistant.ReasoningContent);
             Assert.Contains("call-2", loadedAssistant.ToolCallsJson, StringComparison.Ordinal);
-
-            var toolLine = await File.ReadAllTextAsync(Path.Combine(sessionDir, "tool-calls", "calls.jsonl"));
-            Assert.Contains("file_list", toolLine, StringComparison.Ordinal);
-            Assert.Contains("call-1", toolLine, StringComparison.Ordinal);
         }
         finally
         {
@@ -189,6 +162,43 @@ public sealed class SessionDiskLogTests
             Assert.Equal(1000, loaded.Select(message => message.Id).Distinct(StringComparer.Ordinal).Count());
             Assert.Equal(messages.Select(message => message.Id), loaded.Select(message => message.Id));
             Assert.Contains("🌏", loaded[123].Content, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task ConversationDisplay_Load_UsesLastWinsForDuplicateIds()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-last-wins-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var sessionId = "last-wins";
+        var checkpoint = ChatMessage.CreateWithId("a1", MessageRole.Assistant, "partial");
+        var final = ChatMessage.CreateWithId("a1", MessageRole.Assistant, "final complete");
+        await storage.AppendConversationMessageAsync(sessionId, ChatMessage.Create(MessageRole.User, "hi"));
+        await storage.AppendConversationMessageAsync(sessionId, checkpoint);
+        await storage.AppendConversationMessageAsync(sessionId, final);
+
+        try
+        {
+            var loaded = await storage.LoadConversationDisplayAsync(sessionId);
+            Assert.Equal(2, loaded.Count);
+            var assistant = Assert.Single(loaded, message => message.Role == MessageRole.Assistant);
+            Assert.Equal("final complete", assistant.Content);
+            Assert.DoesNotContain(loaded, message => message.Content == "partial");
+
+            var page = await storage.LoadConversationDisplayPageAsync(sessionId, pageSize: 10);
+            Assert.Equal(2, page.Messages.Count);
+            var pageAssistant = Assert.Single(page.Messages, message => message.Role == MessageRole.Assistant);
+            Assert.Equal("final complete", pageAssistant.Content);
+            Assert.DoesNotContain(page.Messages, message => message.Content == "partial");
         }
         finally
         {

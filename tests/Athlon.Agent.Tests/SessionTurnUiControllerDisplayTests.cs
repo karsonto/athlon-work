@@ -187,12 +187,10 @@ public sealed class SessionTurnUiControllerDisplayTests
 
         var visible = await dispatcher.InvokeAsync(() => ui.Messages.ToList());
         var displaySnapshot = await dispatcher.InvokeAsync(() => ui.DisplayMessagesSnapshot.ToList());
-        var fingerprint = await dispatcher.InvokeAsync(() => ui.SurfaceFingerprint);
 
         Assert.Equal(oldUser.Id, visible[0].MessageId);
         Assert.Equal(oldUser.Id, displaySnapshot[0].Id);
-        Assert.Equal(3, fingerprint.DisplayCount);
-        Assert.Equal(oldUser.Id, fingerprint.FirstDisplayMessageId);
+        Assert.Equal(3, displaySnapshot.Count);
     }
 
     [Fact]
@@ -536,6 +534,48 @@ public sealed class SessionTurnUiControllerDisplayTests
         var tool = await dispatcher.InvokeAsync(() =>
             ui.Messages.LastOrDefault(message => message.IsTool && !message.IsCompaction));
         Assert.Null(tool);
+    }
+
+    [Fact]
+    public async Task CaptureStreamingCheckpoint_includes_buffered_assistant_text()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.SetDisplayed(true);
+        var callbacks = ui.BuildCallbacks();
+        await EmitText(callbacks, MessageId1, "checkpoint text");
+
+        var checkpoint = ui.CaptureStreamingCheckpoint();
+        var assistant = Assert.Single(checkpoint);
+        Assert.Equal(MessageId1, assistant.Id);
+        Assert.Equal(MessageRole.Assistant, assistant.Role);
+        Assert.Contains("checkpoint text", assistant.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HydrateDisplayAsync_preserveActiveTurn_keeps_live_assistant_over_disk()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () => Task.CompletedTask;
+        ui.SetDisplayed(true);
+        var callbacks = ui.BuildCallbacks();
+        await EmitText(callbacks, MessageId1, "live newer");
+
+        var user = ChatMessage.Create(MessageRole.User, "q");
+        var diskAssistant = ChatMessage.CreateWithId(MessageId1, MessageRole.Assistant, "disk older");
+        await ui.HydrateDisplayAsync(
+            AgentSession.Create("preserve").WithMessages([user, diskAssistant]),
+            [user, diskAssistant],
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: [user, diskAssistant],
+            preserveActiveTurn: true);
+
+        var assistant = await dispatcher.InvokeAsync(() =>
+            ui.Messages.LastOrDefault(message => !message.IsUser && !message.IsTool));
+        Assert.NotNull(assistant);
+        Assert.Contains("live newer", assistant!.Content, StringComparison.Ordinal);
+        Assert.True(assistant.IsStreaming);
     }
 
     private static Task EmitText(AgentTurnCallbacks callbacks, string messageId, string delta) =>
