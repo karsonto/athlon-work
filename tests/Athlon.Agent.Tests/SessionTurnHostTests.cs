@@ -211,6 +211,38 @@ public sealed class SessionTurnHostTests
         Assert.NotNull(result.Error);
     }
 
+    [Fact]
+    public async Task ModelFailure_AfterUserAppend_TurnCompleted_retains_user_message()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        const string userInput = "问题2：请解释这个错误";
+        var host = CreateHost(new FailAfterAppendOrchestrator());
+        var prior = AgentSession.Create("q2-loss").WithMessages(
+        [
+            ChatMessage.Create(MessageRole.User, "问题1"),
+            ChatMessage.Create(MessageRole.Assistant, "回答1")
+        ]);
+        var completed = new TaskCompletionSource<SessionTurnCompletedEventArgs>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        host.TurnCompleted += (_, args) => completed.TrySetResult(args);
+
+        var ui = new SessionTurnUiController(dispatcher);
+        Assert.True(host.TryStart(
+            new SessionTurnRequest(prior.Id, prior, userInput, Array.Empty<ImageAttachment>(), ui),
+            out _));
+        var result = await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.NotNull(result.Error);
+        Assert.Contains(
+            result.Session.Messages,
+            message => message.Role == MessageRole.User
+                       && string.Equals(message.Content, userInput, StringComparison.Ordinal));
+        Assert.Contains(
+            result.Session.Messages,
+            message => message.Role == MessageRole.System
+                       && message.Content.Contains(TurnFailureMessages.ModelCallFailedPrefix, StringComparison.Ordinal));
+    }
+
     private static SessionTurnHost CreateHost(IAgentOrchestrator orchestrator) =>
         new(
             orchestrator,
@@ -261,6 +293,39 @@ public sealed class SessionTurnHostTests
         {
             await Task.Delay(delay, cancellationToken);
             return session.WithMessages(session.Messages.Append(ChatMessage.Create(MessageRole.Assistant, "ok")).ToArray());
+        }
+    }
+
+    /// <summary>
+    /// Mirrors AgentRuntime: append user, notify OnSessionUpdated, then fail mid-turn
+    /// (e.g. network drop) without returning the updated session.
+    /// </summary>
+    private sealed class FailAfterAppendOrchestrator : IAgentOrchestrator
+    {
+        public async Task<AgentSession> SendAsync(
+            AgentSession session,
+            string userInput,
+            IReadOnlyList<ImageAttachment>? imageAttachments = null,
+            AgentTurnCallbacks? callbacks = null,
+            CancellationToken cancellationToken = default,
+            bool computerUseActive = false,
+            bool appendUserMessage = true)
+        {
+            if (appendUserMessage)
+            {
+                var userMessage = ChatMessage.Create(
+                    MessageRole.User,
+                    userInput,
+                    session.Messages.LastOrDefault()?.Id,
+                    imageAttachments: imageAttachments);
+                session = session.WithMessage(userMessage);
+                if (callbacks?.OnSessionUpdated is { } onUpdated)
+                {
+                    await onUpdated(session).ConfigureAwait(false);
+                }
+            }
+
+            throw new HttpRequestException("connection reset by peer");
         }
     }
 

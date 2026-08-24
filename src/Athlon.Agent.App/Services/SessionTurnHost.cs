@@ -398,11 +398,13 @@ public sealed class SessionTurnHost
             var cancelled = false;
             Exception? error = null;
             var timedOut = false;
+            // Hoisted so failure/cancel paths can reconcile against messages already
+            // pushed via OnSessionUpdated (e.g. user input appended before network failure).
+            var liveSession = new LiveAgentSession(_session);
 
             try
             {
                 _request.Ui.ResetForTurn();
-                var liveSession = new LiveAgentSession(_session);
                 var eventBridge = new AgentRunEventBridge();
                 var callbacks = eventBridge.BuildCallbacks(_request.Ui, liveSession);
                 var innerUpdated = callbacks.OnSessionUpdated;
@@ -415,6 +417,9 @@ public sealed class SessionTurnHost
                             await innerUpdated(session).ConfigureAwait(false);
                         }
 
+                        // Keep runner state aligned with live updates so exception paths
+                        // do not fall back to the turn-start snapshot (missing user message).
+                        _session = session;
                         _host._runtimeStore?.UpdateSession(session);
                     },
                     OnUsageRecorded = callbacks.OnUsageRecorded,
@@ -446,6 +451,10 @@ public sealed class SessionTurnHost
                         turnToken,
                         _request.ComputerUseActive).ConfigureAwait(false);
                 }
+
+                // Keep live handle aligned with the successful return (orchestrators may not
+                // call OnSessionUpdated on every exit path).
+                liveSession.Value = _session;
             }
             catch (OperationCanceledException)
             {
@@ -462,6 +471,10 @@ public sealed class SessionTurnHost
             {
                 try
                 {
+                    // Prefer live memory: SendAsync may have appended the user message and
+                    // notified via OnSessionUpdated before throwing (network failure mid-turn).
+                    // On success, liveSession was synced to the return value above.
+                    _session = liveSession.Value;
                     var errorMessage = error is null ? null : TurnFailureMessages.FormatModelCallFailure(error);
                     IReadOnlyList<ChatMessage> persistedTurnMessages = Array.Empty<ChatMessage>();
                     if (cancelled || timedOut || error is not null)
