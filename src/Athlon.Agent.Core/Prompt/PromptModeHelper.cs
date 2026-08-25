@@ -34,6 +34,12 @@ public static class PromptModeHelper
 
 
 
+    public static bool IsPlanMode(EnvironmentPromptContext context) =>
+
+        context.AgentMode == SessionAgentMode.Plan;
+
+
+
     public static bool IsDebugMode(EnvironmentPromptContext context) =>
 
         context.AgentMode == SessionAgentMode.Debug;

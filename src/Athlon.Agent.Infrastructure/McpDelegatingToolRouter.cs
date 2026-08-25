@@ -4,6 +4,7 @@ using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.RuntimeDiagnostics;
 using Athlon.Agent.Core.Terminal;
 using Athlon.Agent.Core.Tools;
@@ -23,6 +24,7 @@ internal sealed class McpDelegatingToolRouter(
     WorkspaceGuard workspaceGuard,
     IBrowserWorkspaceState browserWorkspaceState,
     ITerminalWorkspaceState terminalWorkspaceState,
+    IPlanPhaseAccessor? planPhaseAccessor = null,
     Func<Task>? refreshMcpCatalogAsync = null,
     IAppLogger? logger = null,
     IRuntimeDiagnosticEventSink? runtimeDiagnosticEventSink = null) : IToolRouter
@@ -57,6 +59,9 @@ internal sealed class McpDelegatingToolRouter(
         var debugPhase = mode == SessionAgentMode.Debug
             ? debugPhaseAccessor.GetPhase(sessionId)
             : null;
+        var planPhase = mode == SessionAgentMode.Plan
+            ? planPhaseAccessor?.GetPhase(sessionId)
+            : null;
         return new ToolAvailabilityContext(
             ComputerUseActive: IsComputerUseMode,
             HasWorkspace: workspaceGuard.HasConfiguredWorkspace,
@@ -65,7 +70,8 @@ internal sealed class McpDelegatingToolRouter(
             BrowserTabOpen: browserWorkspaceState.HasOpenBrowserTab,
             TerminalTabOpen: terminalWorkspaceState.HasOpenTerminalTab,
             KnowledgeEnabled: sessionKnowledgeState.ShouldExposeKnowledgeTool(sessionId),
-            ActiveDebugPhase: debugPhase);
+            ActiveDebugPhase: debugPhase,
+            ActivePlanPhase: planPhase);
     }
 
     private SessionAgentMode ResolveSessionAgentMode()
@@ -78,6 +84,11 @@ internal sealed class McpDelegatingToolRouter(
         if (sessionHarnessState.IsAskModeForActiveRun(runContextAccessor))
         {
             return SessionAgentMode.Ask;
+        }
+
+        if (sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor))
+        {
+            return SessionAgentMode.Plan;
         }
 
         if (sessionHarnessState.IsDebugModeForActiveRun(runContextAccessor))
@@ -112,8 +123,10 @@ internal sealed class McpDelegatingToolRouter(
         var knowledge = sessionKnowledgeState.ShouldExposeKnowledgeTool(sessionId);
         var coding = sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor);
         var ask = sessionHarnessState.IsAskModeForActiveRun(runContextAccessor);
+        var plan = sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor);
         var debug = sessionHarnessState.IsDebugModeForActiveRun(runContextAccessor);
         var debugPhase = debug ? debugPhaseAccessor.GetPhase(sessionId)?.ToString() ?? "none" : "off";
+        var planPhase = plan ? planPhaseAccessor?.GetPhase(sessionId)?.ToString() ?? "none" : "off";
         var browser = browserWorkspaceState.HasOpenBrowserTab;
         var terminal = terminalWorkspaceState.HasOpenTerminalTab;
         var computerUse = IsComputerUseMode;
@@ -125,6 +138,8 @@ internal sealed class McpDelegatingToolRouter(
             knowledge,
             coding,
             ask,
+            plan,
+            planPhase,
             debug,
             debugPhase,
             browser,
@@ -135,7 +150,7 @@ internal sealed class McpDelegatingToolRouter(
     public IReadOnlyList<ToolDefinition> ListTools()
     {
         var local = GetOrCreateLocalRouter().ListTools();
-        if (IsComputerUseMode || IsChatOnlyMode || IsDebugMcpBlocked())
+        if (IsComputerUseMode || IsChatOnlyMode || IsDebugMcpBlocked() || IsPlanMcpBlocked())
         {
             return Canonicalize(local);
         }
@@ -173,7 +188,7 @@ internal sealed class McpDelegatingToolRouter(
             return local;
         }
 
-        if (IsComputerUseMode || IsChatOnlyMode || IsDebugMcpBlocked())
+        if (IsComputerUseMode || IsChatOnlyMode || IsDebugMcpBlocked() || IsPlanMcpBlocked())
         {
             return null;
         }
@@ -207,7 +222,7 @@ internal sealed class McpDelegatingToolRouter(
             return true;
         }
 
-        if (IsDebugMcpBlocked() || !ShouldUseMcpSearch())
+        if (IsDebugMcpBlocked() || IsPlanMcpBlocked() || !ShouldUseMcpSearch())
         {
             return false;
         }
@@ -250,6 +265,15 @@ internal sealed class McpDelegatingToolRouter(
             return Task.FromResult(ToolResult.Failure(
                 "Tool not available",
                 "MCP tools are not available during this Debug phase. Use file/grep tools, then diagnose_logs after the user reproduces."));
+        }
+
+        if (IsPlanMcpBlocked()
+            && (IsSearchGatewayTool(invocation.ToolName)
+                || McpToolNameCodec.TryDecode(invocation.ToolName, out _, out _)))
+        {
+            return Task.FromResult(ToolResult.Failure(
+                "Tool not available",
+                "MCP tools are not available while waiting for plan confirmation. Answer clarifying questions only."));
         }
 
         if (IsSearchGatewayTool(invocation.ToolName))
@@ -331,6 +355,17 @@ internal sealed class McpDelegatingToolRouter(
         }
 
         var phase = debugPhaseAccessor.GetPhase(activeSessionContext.SessionId);
+        return phase is null || phase.Value.BlocksMcp();
+    }
+
+    private bool IsPlanMcpBlocked()
+    {
+        if (ResolveSessionAgentMode() != SessionAgentMode.Plan)
+        {
+            return false;
+        }
+
+        var phase = planPhaseAccessor?.GetPhase(activeSessionContext.SessionId);
         return phase is null || phase.Value.BlocksMcp();
     }
 

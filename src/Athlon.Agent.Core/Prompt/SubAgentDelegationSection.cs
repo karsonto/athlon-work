@@ -16,6 +16,8 @@ public sealed class SubAgentDelegationSection(AppSettings settings) : IEnvironme
         if (!settings.SubAgent.Enabled
             || PromptModeHelper.IsChatOnly(context)
             || PromptModeHelper.IsAskMode(context)
+            || PromptModeHelper.IsPlanMode(context)
+            || PromptModeHelper.IsDebugMode(context)
             || !PromptModeHelper.HasAny(context, "sessions_spawn", "sessions_send", "sessions_list"))
         {
             return;

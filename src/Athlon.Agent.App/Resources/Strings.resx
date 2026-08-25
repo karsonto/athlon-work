@@ -614,6 +614,30 @@
   <data name="Harness_Mode_Coding_Tooltip" xml:space="preserve">
     <value>启用长期记忆与任务规划；可直接实现长任务</value>
   </data>
+  <data name="Harness_Mode_Plan" xml:space="preserve">
+    <value>Plan</value>
+  </data>
+  <data name="Harness_Mode_Plan_Tooltip" xml:space="preserve">
+    <value>只读探索并生成详细计划；确认后自动进入 Coding</value>
+  </data>
+  <data name="Harness_PlanBuild" xml:space="preserve">
+    <value>Build</value>
+  </data>
+  <data name="Harness_PlanBuildTooltip" xml:space="preserve">
+    <value>确认计划并开始实现</value>
+  </data>
+  <data name="Harness_PlanRevise" xml:space="preserve">
+    <value>修订</value>
+  </data>
+  <data name="Harness_ConfirmPlanPrompt" xml:space="preserve">
+    <value>按已批准的计划开始实现</value>
+  </data>
+  <data name="Plan_PhaseLabel" xml:space="preserve">
+    <value>Plan 阶段：{0}</value>
+  </data>
+  <data name="Plan_BusyCannotBuild" xml:space="preserve">
+    <value>请等待当前回合结束后再 Build</value>
+  </data>
   <data name="Harness_Mode_Debug" xml:space="preserve">
     <value>Debug</value>
   </data>

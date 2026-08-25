@@ -11,6 +11,7 @@ public sealed class SessionTurnQueueImageTests
         var host = new SessionTurnHost(
             new NoOpOrchestrator(),
             RouterTestDependencies.CreateDebugTurnOrchestrator(),
+            RouterTestDependencies.CreatePlanTurnOrchestrator(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new NoOpStorage(),
             new AppSettings());

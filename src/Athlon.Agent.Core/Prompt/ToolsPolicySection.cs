@@ -80,7 +80,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
 
 
-        if (PromptModeHelper.IsAskMode(context))
+        if (PromptModeHelper.IsAskMode(context) || PromptModeHelper.IsPlanMode(context))
 
         {
 
@@ -88,9 +88,19 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
             builder.AppendLine("  1. Mode gate: read-only tools only; use advertised readers (file_*, grep_files, glob_files, memory_*, knowledge_*) when present.");
 
-            builder.AppendLine("  2. Reject mutation: do not call write/patch/shell/sub-agent tools even if you remember them from other modes.");
+            if (PromptModeHelper.IsPlanMode(context))
+            {
+                builder.AppendLine("  2. In Draft only: call publish_plan once with a complete plan; do not edit project files or run shell.");
+                builder.AppendLine("  3. Reject other mutation: do not call write/patch/shell/sub-agent tools.");
+            }
+            else
+            {
+                builder.AppendLine("  2. Reject mutation: do not call write/patch/shell/sub-agent tools even if you remember them from other modes.");
+            }
 
-            builder.AppendLine("  3. Execute independent read-only calls in parallel; otherwise preserve dependency order.");
+            builder.AppendLine(PromptModeHelper.IsPlanMode(context)
+                ? "  4. Execute independent read-only calls in parallel; otherwise preserve dependency order."
+                : "  3. Execute independent read-only calls in parallel; otherwise preserve dependency order.");
 
             AppendMcpDecisionFlow(builder, context);
 

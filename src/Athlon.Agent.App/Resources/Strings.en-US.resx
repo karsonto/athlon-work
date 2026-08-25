@@ -620,6 +620,30 @@ Hold to talk</value>
   <data name="Harness_TaskPending" xml:space="preserve">
     <value>Pending</value>
   </data>
+  <data name="Harness_Mode_Plan" xml:space="preserve">
+    <value>Plan</value>
+  </data>
+  <data name="Harness_Mode_Plan_Tooltip" xml:space="preserve">
+    <value>Read-only explore and draft a detailed plan; Build switches to Coding</value>
+  </data>
+  <data name="Harness_PlanBuild" xml:space="preserve">
+    <value>Build</value>
+  </data>
+  <data name="Harness_PlanBuildTooltip" xml:space="preserve">
+    <value>Approve the plan and start implementing</value>
+  </data>
+  <data name="Harness_PlanRevise" xml:space="preserve">
+    <value>Revise</value>
+  </data>
+  <data name="Harness_ConfirmPlanPrompt" xml:space="preserve">
+    <value>Start implementing according to the approved plan</value>
+  </data>
+  <data name="Plan_PhaseLabel" xml:space="preserve">
+    <value>Plan phase: {0}</value>
+  </data>
+  <data name="Plan_BusyCannotBuild" xml:space="preserve">
+    <value>Wait for the current turn to finish before Build</value>
+  </data>
   <data name="Harness_Mode_Debug" xml:space="preserve">
     <value>Debug</value>
   </data>

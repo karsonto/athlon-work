@@ -1,5 +1,6 @@
 using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
+using Athlon.Agent.Core.Plan;
 
 namespace Athlon.Agent.Core.Tools;
 
@@ -65,6 +66,20 @@ public static class ToolAvailabilityPolicy
             "harness-todo-coding-only",
             static ctx => ctx.Mode != SessionAgentMode.Coding,
             static (_, facets) => facets.HasFlag(ToolFacet.HarnessTodo) ? false : null),
+        new(
+            "plan-document-draft-only",
+            static ctx => ctx.Mode != SessionAgentMode.Plan
+                || ctx.ActivePlanPhase is not PlanPhase.Draft,
+            static (_, facets) => facets.HasFlag(ToolFacet.PlanDocument) ? false : null),
+        new(
+            "plan-block-writes-shell-subagents",
+            static ctx => ctx.Mode == SessionAgentMode.Plan,
+            static (_, facets) =>
+                facets.HasFlag(ToolFacet.WriteFileOrShell)
+                || facets.HasFlag(ToolFacet.Shell)
+                || facets.HasFlag(ToolFacet.SubAgent)
+                    ? false
+                    : null),
         new(
             "browser-requires-tab",
             static ctx => !ctx.BrowserTabOpen,

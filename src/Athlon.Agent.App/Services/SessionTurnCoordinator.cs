@@ -2,6 +2,7 @@ using System.Windows;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Debug;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Skills;
 
@@ -85,6 +86,22 @@ public sealed class SessionTurnCoordinator
             ui,
             DebugContinuation: continuation);
         return _turnHost.TryStart(request, out var error) ? null : error ?? "无法继续 Debug 流程。";
+    }
+
+    public string? TryStartPlanContinuation(
+        string sessionId,
+        AgentSession session,
+        PlanContinuationKind continuation,
+        SessionTurnUiController ui)
+    {
+        var request = new SessionTurnRequest(
+            sessionId,
+            session,
+            string.Empty,
+            Array.Empty<ImageAttachment>(),
+            ui,
+            PlanContinuation: continuation);
+        return _turnHost.TryStart(request, out var error) ? null : error ?? "无法继续 Plan 流程。";
     }
 
     public void EnqueueTurn(

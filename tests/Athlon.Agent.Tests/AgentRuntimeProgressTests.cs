@@ -189,6 +189,7 @@ public sealed class AgentRuntimeProgressTests
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
             RouterTestDependencies.CreateDebugPhaseAccessor(),
+            RouterTestDependencies.CreatePlanPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             RouterTestDependencies.CreateTerminalWorkspaceState());

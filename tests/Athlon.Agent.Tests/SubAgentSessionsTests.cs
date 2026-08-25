@@ -107,6 +107,7 @@ public sealed class SubAgentSessionsTests
             RouterTestDependencies.CreateSessionHarnessState(),
             new AgentRunContextAccessor(),
             RouterTestDependencies.CreateDebugPhaseAccessor(),
+            RouterTestDependencies.CreatePlanPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             RouterTestDependencies.CreateTerminalWorkspaceState());
@@ -188,6 +189,7 @@ public sealed class SubAgentSessionsTests
                     RouterTestDependencies.CreateSessionHarnessState(),
                     new AgentRunContextAccessor(),
                     RouterTestDependencies.CreateDebugPhaseAccessor(),
+                    RouterTestDependencies.CreatePlanPhaseAccessor(),
                     RouterTestDependencies.CreateWorkspaceGuard(),
                     RouterTestDependencies.CreateBrowserWorkspaceState(),
                     RouterTestDependencies.CreateTerminalWorkspaceState()));

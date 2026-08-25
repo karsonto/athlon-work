@@ -27,6 +27,7 @@ using Athlon.Agent.Infrastructure.Ssh;
 using Athlon.Agent.Infrastructure.SubAgents;
 using Athlon.Agent.Core.Cli;
 using Athlon.Agent.Core.Debug;
+using Athlon.Agent.Core.Plan;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -89,6 +90,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDebugSessionState, DebugSessionState>();
         services.AddSingleton<IDebugRunStore, Athlon.Agent.Infrastructure.Debug.FileDebugRunStore>();
         services.AddSingleton<IDebugTurnOrchestrator, DebugTurnOrchestrator>();
+        services.AddSingleton<IPlanPhaseAccessor, PlanPhaseAccessor>();
+        services.AddSingleton<IPlanSessionState, PlanSessionState>();
+        services.AddSingleton<IPlanRunStore, Athlon.Agent.Infrastructure.Plan.FilePlanRunStore>();
+        services.AddSingleton<IPlanTurnOrchestrator, PlanTurnOrchestrator>();
         services.AddSingleton<IAgentRuntime, AgentRuntime>();
         services.AddSingleton<IImageAttachmentReader, ImageAttachmentReader>();
         services.AddSingleton<IImageAttachmentStore, ImageAttachmentStore>();
@@ -136,6 +141,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, GrepFilesTool>();
         services.AddSingleton<IAgentTool, GlobFilesTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.RuntimeDiagnostics.DiagnoseLogsTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Plan.PublishPlanTool>();
         services.AddSingleton<IAgentTool, ExecuteCommandTool>();
         services.AddSingleton<IAgentTool, SshFileListTool>();
         services.AddSingleton<IAgentTool, SshFileReadTool>();
@@ -175,6 +181,7 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<ISessionHarnessState>(),
                 sp.GetRequiredService<IAgentRunContextAccessor>(),
                 sp.GetRequiredService<IDebugPhaseAccessor>(),
+                sp.GetRequiredService<IPlanPhaseAccessor>(),
                 sp.GetRequiredService<WorkspaceGuard>(),
                 sp.GetRequiredService<Athlon.Agent.Core.Browser.IBrowserWorkspaceState>(),
                 sp.GetRequiredService<Athlon.Agent.Core.Terminal.ITerminalWorkspaceState>())));
@@ -217,6 +224,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, TodoWriteTool>();
         services.AddSingleton<IRuntimeContextContributor, HostWorkspaceRuntimeContributor>();
         services.AddSingleton<IRuntimeContextContributor, DebugRuntimeContextContributor>();
+        services.AddSingleton<IRuntimeContextContributor, PlanRuntimeContextContributor>();
+        services.AddSingleton<IRuntimeContextContributor, ApprovedPlanPromptContributor>();
         services.AddSingleton<IRuntimeContextContributor, MemoryPromptContributor>();
         services.AddSingleton<IRuntimeContextContributor, TaskListPromptContributor>();
         services.AddSingleton<CompactionTurnMiddleware>();

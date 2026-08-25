@@ -3,6 +3,7 @@ using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Core.Terminal;
 
@@ -17,6 +18,7 @@ public sealed class ChildAgentToolRouter(
     ISessionHarnessState sessionHarnessState,
     IAgentRunContextAccessor runContextAccessor,
     IDebugPhaseAccessor debugPhaseAccessor,
+    IPlanPhaseAccessor planPhaseAccessor,
     WorkspaceGuard workspaceGuard,
     IBrowserWorkspaceState browserWorkspaceState,
     ITerminalWorkspaceState terminalWorkspaceState) : IToolRouter
@@ -33,7 +35,8 @@ public sealed class ChildAgentToolRouter(
         debugPhaseAccessor,
         workspaceGuard,
         browserWorkspaceState,
-        terminalWorkspaceState);
+        terminalWorkspaceState,
+        planPhaseAccessor: planPhaseAccessor);
 
     public IReadOnlyList<ToolDefinition> ListTools() => _inner.ListTools();
 

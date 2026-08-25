@@ -1,0 +1,98 @@
+using System.Text;
+using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
+using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Infrastructure.Prompt;
+
+namespace Athlon.Agent.Tests.Plan;
+
+public sealed class PlanModePromptSectionTests
+{
+    [Fact]
+    public void Append_IncludesPublishPlanContract_InPlanMode()
+    {
+        var section = new PlanModePromptSection();
+        var sb = new StringBuilder();
+        section.Append(sb, CreateContext(SessionAgentMode.Plan));
+
+        var text = sb.ToString();
+        Assert.Contains("publish_plan", text, StringComparison.Ordinal);
+        Assert.Contains("Build", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Append_Skips_WhenNotPlanMode()
+    {
+        var section = new PlanModePromptSection();
+        var sb = new StringBuilder();
+        section.Append(sb, CreateContext(SessionAgentMode.Coding));
+        Assert.Equal(0, sb.Length);
+    }
+
+    [Fact]
+    public void AgentModeSection_MentionsPlanMode()
+    {
+        var sb = new StringBuilder();
+        new AgentModeSection().Append(sb, CreateContext(SessionAgentMode.Plan));
+        var text = sb.ToString();
+        Assert.Contains("Plan mode", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("publish_plan", text, StringComparison.Ordinal);
+    }
+
+    private static EnvironmentPromptContext CreateContext(SessionAgentMode mode) =>
+        new()
+        {
+            Session = AgentSession.Create("plan-prompt-test").WithWorkspace(@"C:\work\demo"),
+            WorkspaceRoot = @"C:\work\demo",
+            WorkspaceName = "demo",
+            IgnorePatterns = [".git"],
+            Tools =
+            [
+                new ToolDefinition("file_read", "Read", ToolSchema.Object().Build()),
+                new ToolDefinition("publish_plan", "Publish", ToolSchema.Object().Build())
+            ],
+            SkillsDirectory = @"C:\Users\test\.athlon-agent\skills",
+            Host = new PromptTestHelpers.FakeHostEnvironment(
+                @"C:\Users\test\.athlon-agent\skills",
+                @"C:\Users\test\.athlon-agent"),
+            PromptSettings = new PromptSettings(),
+            AgentMode = mode
+        };
+}
+
+public sealed class PlanDocumentParserTests
+{
+    [Fact]
+    public void LooksComplete_RequiresTitleStepsAcceptance()
+    {
+        Assert.False(Athlon.Agent.Core.Plan.PlanDocumentParser.LooksComplete("# Only title\n\nshort"));
+        Assert.True(Athlon.Agent.Core.Plan.PlanDocumentParser.LooksComplete("""
+            # Complete plan
+
+            Overview paragraph that is long enough for the length gate.
+
+            ## Steps
+            1. First
+            2. Second
+
+            ## Acceptance
+            - [ ] Done
+            """));
+    }
+
+    [Fact]
+    public void ParseTodos_FromCheckboxesAndSteps()
+    {
+        var todos = Athlon.Agent.Core.Plan.PlanDocumentParser.ParseTodos("""
+            # Plan
+
+            ## Steps
+            1. Implement feature
+            2. Add tests
+
+            ## Acceptance
+            - [ ] Feature works
+            """);
+        Assert.NotEmpty(todos);
+    }
+}

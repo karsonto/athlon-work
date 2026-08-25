@@ -11,6 +11,7 @@ using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Memory;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.RuntimeDiagnostics;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.App.Services;
@@ -56,6 +57,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly ISessionUsageAccumulator _sessionUsageAccumulator;
     private readonly PageViewFactory _pageViewFactory;
     private readonly ITaskListChangedNotifier _taskListChangedNotifier;
+    private readonly ISessionTaskListStore _taskListStore;
+    private readonly IPlanRunStore _planRunStore;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
     private readonly SshWorkspaceConnectionService _sshConnection;
@@ -74,6 +77,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private Controls.WebChatView? _savedChatView;
     private ConversationDisplayCursor? _olderDisplayCursor;
     private bool _olderHistoryLoadInProgress;
+    private bool _suppressPlanAbandonOnModeChange;
 
     public MainShellViewModel(
         IFileStorageService storage,
@@ -103,7 +107,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ComposerKnowledgeViewModel composerKnowledge,
         ComposerHarnessViewModel composerHarness,
         DebugActionBarViewModel debugBar,
+        PlanActionBarViewModel planBar,
         ITaskListChangedNotifier taskListChangedNotifier,
+        ISessionTaskListStore taskListStore,
+        IPlanRunStore planRunStore,
         PageViewFactory pageViewFactory,
         ChatPageViewModel chatPage,
         ScheduleViewModel schedulePageVm,
@@ -132,6 +139,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionUsageAccumulator = sessionUsageAccumulator;
         _pageViewFactory = pageViewFactory;
         _taskListChangedNotifier = taskListChangedNotifier;
+        _taskListStore = taskListStore;
+        _planRunStore = planRunStore;
         _loc = localization;
         _notifier = notifier;
         _sshConnection = sshConnection;
@@ -160,11 +169,20 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ComposerKnowledge = composerKnowledge;
         ComposerHarness = composerHarness;
         DebugBar = debugBar;
+        PlanBar = planBar;
         DebugBar.Configure(
             () => _displayedSessionId,
             () => _session,
             () => _activeUi,
             ShowShellToast);
+        PlanBar.Configure(
+            () => _displayedSessionId,
+            () => _session,
+            session => _session = session,
+            () => _activeUi,
+            ShowShellToast,
+            StartCodingFromApprovedPlanAsync,
+            path => _ = FileEditor.OpenFileAsync(path, workspaceRoot: null, readOnly: true));
         ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
         ComposerHarness.OnModeChangedAsync = OnComposerModeChangedAsync;
         ChatPage = chatPage;
@@ -629,6 +647,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public ComposerHarnessViewModel ComposerHarness { get; }
 
     public DebugActionBarViewModel DebugBar { get; }
+
+    public PlanActionBarViewModel PlanBar { get; }
 
     public ContextOccupancyViewModel ContextOccupancy { get; } = new();
 
@@ -1653,6 +1673,56 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         {
             await DebugBar.AbandonActiveRunAsync().ConfigureAwait(true);
         }
+
+        if (from == SessionAgentMode.Plan
+            && to != SessionAgentMode.Plan
+            && !_suppressPlanAbandonOnModeChange)
+        {
+            await PlanBar.AbandonActiveRunAsync().ConfigureAwait(true);
+        }
+    }
+
+    private async Task StartCodingFromApprovedPlanAsync()
+    {
+        var sessionId = _displayedSessionId;
+        var approved = await _planRunStore.LoadApprovedAsync(sessionId).ConfigureAwait(true);
+        if (approved?.Todos.Count > 0)
+        {
+            var list = new SessionTaskList
+            {
+                Items = approved.Todos
+                    .Where(t => !string.IsNullOrWhiteSpace(t.Id) && !string.IsNullOrWhiteSpace(t.Content))
+                    .Select(t => new AgentTaskItem
+                    {
+                        Id = t.Id,
+                        Content = t.Content,
+                        Status = AgentTaskStatuses.Pending
+                    })
+                    .ToList()
+            };
+            await _taskListStore.ReplaceAsync(sessionId, list).ConfigureAwait(true);
+            _taskListChangedNotifier.Notify(sessionId);
+        }
+
+        _suppressPlanAbandonOnModeChange = true;
+        try
+        {
+            if (ComposerHarness.SelectModeCommand.CanExecute(SessionAgentMode.Coding))
+            {
+                await ComposerHarness.SelectModeCommand.ExecuteAsync(SessionAgentMode.Coding).ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            _suppressPlanAbandonOnModeChange = false;
+        }
+
+        await PlanBar.AbandonActiveRunAsync().ConfigureAwait(true);
+        ComposerText = _loc["Harness_ConfirmPlanPrompt"];
+        if (SendCommand.CanExecute(null))
+        {
+            await SendCommand.ExecuteAsync(null).ConfigureAwait(true);
+        }
     }
 
     private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)
@@ -1666,6 +1736,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 UpdateDisplayedBusyState();
                 _ = ComposerHarness.RefreshTasksAsync();
                 DebugBar.RefreshFromActiveRun();
+                PlanBar.RefreshFromActiveRun();
             }
 
             _sessionNavigation.Invalidate(e.SessionId);

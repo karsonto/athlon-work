@@ -33,6 +33,11 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
                 builder.AppendLine("- The user selected Ask mode for this session — read-only Q&A about the workspace.");
                 builder.AppendLine("- Follow the tool decision tree below; unavailable mutating tools are not permitted.");
                 break;
+            case SessionAgentMode.Plan:
+                builder.AppendLine("- The user selected Plan mode — produce an implementation plan for review before coding.");
+                builder.AppendLine("- Explore with read/search tools only; publish the plan with publish_plan in Draft; never implement.");
+                builder.AppendLine("- After the plan is published, wait for the user to Build (switch to Coding) or Revise.");
+                break;
             case SessionAgentMode.Debug:
                 builder.AppendLine("- The user selected Debug mode — investigate a reproducible bug with runtime logs.");
                 builder.AppendLine("- Evidence gate: do not state a root cause and do not apply a fix until you have called diagnose_logs and cited matching evidence.");

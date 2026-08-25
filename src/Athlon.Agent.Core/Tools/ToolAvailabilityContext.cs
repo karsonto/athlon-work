@@ -1,5 +1,6 @@
 using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
+using Athlon.Agent.Core.Plan;
 
 namespace Athlon.Agent.Core.Tools;
 
@@ -12,4 +13,5 @@ public sealed record ToolAvailabilityContext(
     bool BrowserTabOpen,
     bool TerminalTabOpen,
     bool KnowledgeEnabled,
-    DebugPhase? ActiveDebugPhase = null);
+    DebugPhase? ActiveDebugPhase = null,
+    PlanPhase? ActivePlanPhase = null);

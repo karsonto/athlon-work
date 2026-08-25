@@ -60,6 +60,11 @@ public static class ToolFacetClassifier
             facets |= ToolFacet.HarnessTodo;
         }
 
+        if (tool is Athlon.Agent.Core.Plan.IPlanDocumentTool)
+        {
+            facets |= ToolFacet.PlanDocument;
+        }
+
         if (tool is ISubAgentTool)
         {
             facets |= ToolFacet.SubAgent;

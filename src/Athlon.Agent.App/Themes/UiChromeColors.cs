@@ -34,6 +34,10 @@ public sealed class UiChromeColors
     public required Color ModeAskBg { get; init; }
     public required Color ModeAskBorder { get; init; }
     public required Color ModeAskForeground { get; init; }
+    /// <summary>Composer mode pill: Plan (sky blue).</summary>
+    public required Color ModePlanBg { get; init; }
+    public required Color ModePlanBorder { get; init; }
+    public required Color ModePlanForeground { get; init; }
     /// <summary>Composer mode pill: Debug (rose red, Cursor-like).</summary>
     public required Color ModeDebugBg { get; init; }
     public required Color ModeDebugBorder { get; init; }

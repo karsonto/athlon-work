@@ -164,6 +164,7 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ILocalizationService>()));
 
         services.AddSingleton<DebugActionBarViewModel>();
+        services.AddSingleton<PlanActionBarViewModel>();
 
         services.AddSingleton<ChatPageViewModel>();
 

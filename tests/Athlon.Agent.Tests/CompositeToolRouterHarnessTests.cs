@@ -154,6 +154,7 @@ public sealed class CompositeToolRouterHarnessTests
             RouterTestDependencies.CreateSessionHarnessState(mode),
             RouterTestDependencies.CreateRunContextAccessor(mode),
             RouterTestDependencies.CreateDebugPhaseAccessor(),
+            RouterTestDependencies.CreatePlanPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(configured: workspaceConfigured),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
             RouterTestDependencies.CreateTerminalWorkspaceState());

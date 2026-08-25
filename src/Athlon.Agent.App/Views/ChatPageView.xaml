@@ -268,8 +268,10 @@
                                 </StackPanel>
                             </Button>
                         </StackPanel>
-                        <controls:DebugActionBar Grid.Row="2"
-                                                 DataContext="{Binding DebugBar}" />
+                        <StackPanel Grid.Row="2">
+                            <controls:DebugActionBar DataContext="{Binding DebugBar}" />
+                            <controls:PlanActionBar DataContext="{Binding PlanBar}" />
+                        </StackPanel>
                         <Grid Grid.Row="3">
                         <Border Style="{StaticResource ComposerInputShadowStyle}" />
                         <Border x:Name="ComposerInputWrapper"

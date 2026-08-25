@@ -21,6 +21,7 @@
     <Grid Margin="12,8,12,12">
         <StackPanel>
             <controls:DebugActionBar DataContext="{Binding DebugBar}" />
+            <controls:PlanActionBar DataContext="{Binding PlanBar}" />
             <Grid>
                 <Border Style="{StaticResource ComposerInputShadowStyle}" />
                 <Border Style="{StaticResource ComposerInputWrapperStyle}"

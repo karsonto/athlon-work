@@ -3,6 +3,7 @@ using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Core.Terminal;
 using Athlon.Agent.Infrastructure;
@@ -85,7 +86,11 @@ internal static class RouterTestDependencies
 
     public static IDebugPhaseAccessor CreateDebugPhaseAccessor() => new DebugPhaseAccessor();
 
+    public static IPlanPhaseAccessor CreatePlanPhaseAccessor() => new PlanPhaseAccessor();
+
     public static IDebugTurnOrchestrator CreateDebugTurnOrchestrator() => new NoOpDebugTurnOrchestrator();
+
+    public static IPlanTurnOrchestrator CreatePlanTurnOrchestrator() => new NoOpPlanTurnOrchestrator();
 
     public static WorkspaceGuard CreateWorkspaceGuard(bool configured = true, string? workspaceRoot = null)
     {
@@ -121,6 +126,8 @@ internal static class RouterTestDependencies
 
         public bool IsAskMode(string? sessionId) => snapshot.Mode == SessionAgentMode.Ask;
 
+        public bool IsPlanMode(string? sessionId) => snapshot.Mode == SessionAgentMode.Plan;
+
         public bool IsDebugMode(string? sessionId) => snapshot.Mode == SessionAgentMode.Debug;
 
         public bool IsEnabled(string? sessionId) => IsCodingMode(sessionId);
@@ -130,6 +137,9 @@ internal static class RouterTestDependencies
 
         public bool IsAskModeForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
             IsActiveRun(runContextAccessor) && IsAskMode(runContextAccessor.Current!.SessionId);
+
+        public bool IsPlanModeForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
+            IsActiveRun(runContextAccessor) && IsPlanMode(runContextAccessor.Current!.SessionId);
 
         public bool IsDebugModeForActiveRun(IAgentRunContextAccessor runContextAccessor) =>
             IsActiveRun(runContextAccessor) && IsDebugMode(runContextAccessor.Current!.SessionId);
@@ -200,6 +210,25 @@ internal static class RouterTestDependencies
         public Task<AgentSession> ContinueAsync(
             AgentSession session,
             DebugContinuationKind continuation,
+            AgentTurnCallbacks? callbacks,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(session);
+    }
+
+    private sealed class NoOpPlanTurnOrchestrator : IPlanTurnOrchestrator
+    {
+        public bool IsAwaitingUser(string sessionId) => false;
+
+        public Task<AgentSession> RunUserTurnAsync(
+            AgentSession session,
+            string userInput,
+            AgentTurnCallbacks? callbacks,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(session);
+
+        public Task<AgentSession> ContinueAsync(
+            AgentSession session,
+            PlanContinuationKind continuation,
             AgentTurnCallbacks? callbacks,
             CancellationToken cancellationToken) =>
             Task.FromResult(session);

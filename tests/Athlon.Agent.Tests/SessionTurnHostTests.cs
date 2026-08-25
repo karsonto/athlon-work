@@ -173,6 +173,7 @@ public sealed class SessionTurnHostTests
         var host = new SessionTurnHost(
             new SlowOrchestrator(TimeSpan.FromMilliseconds(1)),
             RouterTestDependencies.CreateDebugTurnOrchestrator(),
+            RouterTestDependencies.CreatePlanTurnOrchestrator(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new NoOpStorage(),
             new AppSettings(),
@@ -195,6 +196,7 @@ public sealed class SessionTurnHostTests
         var host = new SessionTurnHost(
             new SlowOrchestrator(TimeSpan.FromMilliseconds(1)),
             RouterTestDependencies.CreateDebugTurnOrchestrator(),
+            RouterTestDependencies.CreatePlanTurnOrchestrator(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new NoOpStorage(),
             new AppSettings(),
@@ -247,6 +249,7 @@ public sealed class SessionTurnHostTests
         new(
             orchestrator,
             RouterTestDependencies.CreateDebugTurnOrchestrator(),
+            RouterTestDependencies.CreatePlanTurnOrchestrator(),
             RouterTestDependencies.CreateSessionHarnessState(),
             new NoOpStorage(),
             new AppSettings());

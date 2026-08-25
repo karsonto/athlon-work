@@ -3,6 +3,7 @@ using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Debug;
 using Athlon.Agent.Core.Harness;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Infrastructure.BehaviorReport;
 
 namespace Athlon.Agent.App.Services;
@@ -15,7 +16,8 @@ public sealed record SessionTurnRequest(
     SessionTurnUiController Ui,
     bool IsAutoContinue = false,
     bool ComputerUseActive = false,
-    DebugContinuationKind? DebugContinuation = null);
+    DebugContinuationKind? DebugContinuation = null,
+    PlanContinuationKind? PlanContinuation = null);
 
 public enum SessionTurnState
 {
@@ -45,6 +47,7 @@ public sealed class SessionTurnHost
 
     private readonly IAgentOrchestrator _orchestrator;
     private readonly IDebugTurnOrchestrator _debugOrchestrator;
+    private readonly IPlanTurnOrchestrator _planOrchestrator;
     private readonly ISessionHarnessState _harnessState;
     private readonly AppSettings _settings;
     private readonly IConversationTranscriptWriter _transcript;
@@ -56,6 +59,7 @@ public sealed class SessionTurnHost
     public SessionTurnHost(
         IAgentOrchestrator orchestrator,
         IDebugTurnOrchestrator debugOrchestrator,
+        IPlanTurnOrchestrator planOrchestrator,
         ISessionHarnessState harnessState,
         IFileStorageService storage,
         AppSettings settings,
@@ -64,6 +68,7 @@ public sealed class SessionTurnHost
     {
         _orchestrator = orchestrator;
         _debugOrchestrator = debugOrchestrator;
+        _planOrchestrator = planOrchestrator;
         _harnessState = harnessState;
         _settings = settings;
         _transcript = transcriptWriter ?? new ImmediateConversationTranscriptWriter(storage);
@@ -436,6 +441,20 @@ public sealed class SessionTurnHost
                             callbacks,
                             turnToken).ConfigureAwait(false)
                         : await _host._debugOrchestrator.RunUserTurnAsync(
+                            _session,
+                            _request.UserInput,
+                            callbacks,
+                            turnToken).ConfigureAwait(false);
+                }
+                else if (_host._harnessState.IsPlanMode(SessionId))
+                {
+                    _session = _request.PlanContinuation is { } planContinuation
+                        ? await _host._planOrchestrator.ContinueAsync(
+                            _session,
+                            planContinuation,
+                            callbacks,
+                            turnToken).ConfigureAwait(false)
+                        : await _host._planOrchestrator.RunUserTurnAsync(
                             _session,
                             _request.UserInput,
                             callbacks,
