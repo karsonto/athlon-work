@@ -1109,6 +1109,18 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _olderDisplayCursor = null;
         _runtime.Attach(_session, hydrated: true);
         SwitchDisplayedSession(_session);
+        // Shared WebChatView keeps the previous session DOM unless we hydrate empty.
+        // Without this, the first send only appends and old history stays visible.
+        _activeUi.UpdateSurfaceCursor(null);
+        await _activeUi.HydrateDisplayAsync(
+            _session,
+            Array.Empty<ChatMessage>(),
+            synthesizeInterruptedToolResults: false).ConfigureAwait(true);
+        if (_savedChatView is not null)
+        {
+            await _savedChatView.SetOlderMessagesAvailableAsync(false).ConfigureAwait(true);
+        }
+
         CurrentSessionTitle = _session.Title;
         ComposerText = string.Empty;
         PendingImageAttachments.Clear();
@@ -1402,8 +1414,19 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         if (string.Equals(_session.Id, item.Id, StringComparison.Ordinal))
         {
             _session = AgentSession.Create("New Chat");
+            _olderDisplayCursor = null;
             _runtime.Attach(_session, hydrated: true);
             SwitchDisplayedSession(_session);
+            _activeUi.UpdateSurfaceCursor(null);
+            await _activeUi.HydrateDisplayAsync(
+                _session,
+                Array.Empty<ChatMessage>(),
+                synthesizeInterruptedToolResults: false).ConfigureAwait(true);
+            if (_savedChatView is not null)
+            {
+                await _savedChatView.SetOlderMessagesAvailableAsync(false).ConfigureAwait(true);
+            }
+
             CurrentSessionTitle = _session.Title;
             ComposerText = string.Empty;
             PendingImageAttachments.Clear();
