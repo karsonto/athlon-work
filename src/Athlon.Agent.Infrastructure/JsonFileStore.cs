@@ -37,7 +37,8 @@ public sealed class JsonFileStore : IJsonFileStore
         }
 
         await using var stream = File.OpenRead(path);
-        return await JsonSerializer.DeserializeAsync<T>(stream, Options, cancellationToken);
+        return await JsonSerializer.DeserializeAsync<T>(stream, Options, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public async Task AppendJsonLineAsync(string path, object value, CancellationToken cancellationToken = default, bool prettyPrint = false)

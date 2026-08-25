@@ -2,6 +2,7 @@ using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.Threading;
 
 namespace Athlon.Agent.Infrastructure.Harness;
 
@@ -20,7 +21,7 @@ public sealed class TaskListPromptContributor(
         }
 
         var sessionId = runContextAccessor.Current?.SessionId ?? context.Session.Id;
-        var list = taskListStore.GetAsync(sessionId).GetAwaiter().GetResult();
+        var list = SyncOverAsync.Run(() => taskListStore.GetAsync(sessionId));
         if (list.Items.Count == 0)
         {
             return;

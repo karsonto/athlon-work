@@ -393,7 +393,9 @@ public sealed class SessionTurnHost
                 _linked = CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token, _timeoutCancellation.Token);
             }
 
-            _runTask = RunAsync();
+            // Detach from WPF SynchronizationContext so BuildRuntimeContext / prompt
+            // contributors cannot deadlock the dispatcher (Plan→Coding was the hot path).
+            _runTask = Task.Run(RunAsync);
         }
 
         public void Cancel() => _cancellation?.Cancel();

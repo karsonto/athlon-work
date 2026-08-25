@@ -1,6 +1,7 @@
 using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.Threading;
 
 namespace Athlon.Agent.Infrastructure.Prompt;
 
@@ -133,12 +134,12 @@ public static class WorkspacePromptLoader
     {
         try
         {
-            if (!client.FileExistsAsync(remotePath).GetAwaiter().GetResult())
+            if (!SyncOverAsync.Run(() => client.FileExistsAsync(remotePath)))
             {
                 return null;
             }
 
-            var text = client.ReadTextAsync(remotePath).GetAwaiter().GetResult();
+            var text = SyncOverAsync.Run(() => client.ReadTextAsync(remotePath));
             if (string.IsNullOrEmpty(text))
             {
                 return text;

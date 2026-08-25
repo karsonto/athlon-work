@@ -3,6 +3,7 @@ using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.Threading;
 
 namespace Athlon.Agent.Infrastructure.Memory;
 
@@ -137,7 +138,8 @@ public sealed class MemoryPromptContributor(
 
         try
         {
-            _cachedMemoryContent = longTermMemory.ReadCuratedAsync().GetAwaiter().GetResult();
+            // Task.Run avoids WPF SynchronizationContext deadlock (same as other prompt contributors).
+            _cachedMemoryContent = SyncOverAsync.Run(() => longTermMemory.ReadCuratedAsync());
             _cachedScopeKey = scopeKey;
         }
         catch

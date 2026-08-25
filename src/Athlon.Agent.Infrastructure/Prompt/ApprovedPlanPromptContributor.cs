@@ -2,6 +2,7 @@ using System.Text;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Prompt;
+using Athlon.Agent.Core.Threading;
 
 namespace Athlon.Agent.Infrastructure.Prompt;
 
@@ -19,7 +20,7 @@ public sealed class ApprovedPlanPromptContributor(
             return;
         }
 
-        var run = planRunStore.LoadApprovedAsync(context.Session.Id).GetAwaiter().GetResult();
+        var run = SyncOverAsync.Run(() => planRunStore.LoadApprovedAsync(context.Session.Id));
         if (run is null)
         {
             return;
@@ -27,7 +28,7 @@ public sealed class ApprovedPlanPromptContributor(
 
         var content = !string.IsNullOrWhiteSpace(run.PlanMarkdown)
             ? run.PlanMarkdown
-            : planRunStore.ReadPlanMarkdownAsync(context.Session.Id).GetAwaiter().GetResult();
+            : SyncOverAsync.Run(() => planRunStore.ReadPlanMarkdownAsync(context.Session.Id));
         if (string.IsNullOrWhiteSpace(content))
         {
             return;
