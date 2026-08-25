@@ -32,7 +32,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         Content = message.Content;
         ReasoningContent = message.ReasoningContent ?? string.Empty;
         IsReasoningExpanded = true;
-        CreatedAt = AppTimeZone.ToChina(message.CreatedAt).ToString("HH:mm:ss");
+        SetCreatedAt(message.CreatedAt);
         IsStreaming = false;
         IsUser = message.Role == MessageRole.User;
         IsTool = message.Role == MessageRole.Tool;
@@ -115,7 +115,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         ReasoningContent = string.Empty;
         UserAttachmentSummary = string.Empty;
         ImageAttachments = Array.Empty<ImageAttachment>();
-        CreatedAt = AppTimeZone.Now.ToString("HH:mm:ss");
+        SetCreatedAt(DateTimeOffset.UtcNow);
         IsToolRunning = true;
         ToolCallStatus = ToolCallDisplayStatus.Running;
         IsExpanded = true;
@@ -136,7 +136,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         DisplayRole = Strings.Get("Chat_RoleTool");
         IsToolRunning = true;
         ToolCallStatus = ToolCallDisplayStatus.Running;
-        CreatedAt = AppTimeZone.Now.ToString("HH:mm:ss");
+        SetCreatedAt(DateTimeOffset.UtcNow);
         ToolHeader = $"Tool `{toolCall.Name}`";
         ToolArgumentsText = ToolMessageDisplayParser.FormatArgumentsFull(toolCall.Arguments, toolCall.Name);
         ToolSummary = string.Empty;
@@ -176,6 +176,9 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 
     [ObservableProperty]
     private string _createdAt = string.Empty;
+
+    /// <summary>Raw message timestamp used for turn duration math (typically UTC).</summary>
+    public DateTimeOffset CreatedAtUtc { get; private set; }
 
     [ObservableProperty]
     private bool _isStreaming;
@@ -337,7 +340,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         IsHiddenPlaceholder = false;
         DisplayRole = Strings.Get("Chat_RoleTool");
         ToolCallStatus = ToolCallDisplayStatus.Preparing;
-        CreatedAt = AppTimeZone.Now.ToString("HH:mm:ss");
+        SetCreatedAt(DateTimeOffset.UtcNow);
         ToolHeader = "Tool …";
         ToolSummary = string.Empty;
         ToolDetail = string.Empty;
@@ -543,7 +546,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         _streamingReasoningBuilder = null;
         Content = message.Content;
         ReasoningContent = message.ReasoningContent ?? ReasoningContent;
-        CreatedAt = AppTimeZone.ToChina(message.CreatedAt).ToString("HH:mm:ss");
+        SetCreatedAt(message.CreatedAt);
         IsStreaming = false;
         IsReasoningStreaming = false;
     }
@@ -583,7 +586,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         }
 
         Content = message.Content;
-        CreatedAt = AppTimeZone.ToChina(message.CreatedAt).ToString("HH:mm:ss");
+        SetCreatedAt(message.CreatedAt);
         IsStreaming = false;
         ToolMessageDisplayParser.ParseToolContent(message.Content, out var toolCallId, out var toolName, out var header, out var summary, out var detail, out var argumentsText, out var status);
         if (!string.IsNullOrWhiteSpace(toolCallId))
@@ -700,5 +703,11 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         && !string.IsNullOrWhiteSpace(message.ToolCallsJson)
         && string.IsNullOrWhiteSpace(message.Content)
         && string.IsNullOrWhiteSpace(message.ReasoningContent);
+
+    private void SetCreatedAt(DateTimeOffset instant)
+    {
+        CreatedAtUtc = instant;
+        CreatedAt = AppTimeZone.ToChina(instant).ToString("HH:mm:ss");
+    }
 
 }

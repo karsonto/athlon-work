@@ -92,8 +92,18 @@ internal static class ChatEventSerializer
         {
             messageId = message.MessageId,
             content,
-            images
+            images,
+            startedAt = FormatStartedAt(message.CreatedAtUtc)
         });
+    }
+
+    public static string FormatStartedAt(DateTimeOffset instant) =>
+        AppTimeZone.ToChina(instant).ToString("yyyy-MM-dd HH:mm:ss");
+
+    public static int? ComputeResponseDurationMs(DateTimeOffset turnStartedAt, DateTimeOffset finishedAt)
+    {
+        var ms = (int)Math.Round((finishedAt - turnStartedAt).TotalMilliseconds);
+        return ms > 0 ? ms : null;
     }
 
     public static string SerializeTurnActivity(TurnActivitySummary summary, bool upsert = false)
@@ -195,14 +205,18 @@ internal static class ChatEventSerializer
         return SerializeAgui("FILES_CHANGED", new { upsert, files = payload });
     }
 
-    public static string SerializeStaticAssistantHtml(ChatMessageViewModel message, bool streaming = false) =>
+    public static string SerializeStaticAssistantHtml(
+        ChatMessageViewModel message,
+        bool streaming = false,
+        int? responseDurationMs = null) =>
         SerializeAgui("STATIC_ASSISTANT_HTML", new
         {
             messageId = message.MessageId,
             markdown = message.Content,
             html = MarkdownHtmlRenderer.ToHtmlFragment(message.Content),
             createIfMissing = true,
-            streaming
+            streaming,
+            responseDurationMs = streaming ? null : responseDurationMs
         });
 
     public static string SerializeCompactionCheckpoint(ChatMessageViewModel message)
@@ -406,6 +420,7 @@ internal static class ChatEventSerializer
         var pendingToolCards = new List<string>();
         var pendingAssistants = new List<ChatMessageViewModel>();
         var finalAssistantMessageIds = FindFinalAssistantMessageIds(timeline);
+        DateTimeOffset? turnUserCreatedAt = null;
 
         void FlushTurnIntermediate()
         {
@@ -431,7 +446,10 @@ internal static class ChatEventSerializer
             var assistantEvents = new List<string>();
             foreach (var assistant in pendingAssistants)
             {
-                assistantEvents.AddRange(BuildReplayEventsForMessage(assistant));
+                var durationMs = turnUserCreatedAt is { } startedAt
+                    ? ComputeResponseDurationMs(startedAt, assistant.CreatedAtUtc)
+                    : null;
+                assistantEvents.AddRange(BuildReplayEventsForMessage(assistant, durationMs));
             }
 
             if (activityEvent is not null
@@ -462,6 +480,7 @@ internal static class ChatEventSerializer
             if (message.IsUser)
             {
                 FlushTurnIntermediate();
+                turnUserCreatedAt = message.CreatedAtUtc;
                 segments.Add(new ReplayTurnSegment(
                     UserEvents: BuildReplayEventsForMessage(message).ToArray(),
                     ActivityEvent: null,
@@ -477,6 +496,7 @@ internal static class ChatEventSerializer
                 if (ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(message))
                 {
                     FlushTurnIntermediate();
+                    turnUserCreatedAt = null;
                     segments.Add(new ReplayTurnSegment(
                         UserEvents: Array.Empty<string>(),
                         ActivityEvent: null,
@@ -516,18 +536,14 @@ internal static class ChatEventSerializer
 
             if (!string.IsNullOrWhiteSpace(message.Content))
             {
-                var assistantVm = new ChatMessageViewModel(
-                    ChatMessage.CreateWithId(
-                        message.MessageId,
-                        MessageRole.Assistant,
-                        message.Content));
                 if (finalAssistantMessageIds.Contains(message.MessageId))
                 {
-                    pendingAssistants.Add(assistantVm);
+                    // Keep the original ViewModel so CreatedAtUtc survives for turn duration.
+                    pendingAssistants.Add(message);
                 }
                 else
                 {
-                    activitySegment.Add(assistantVm);
+                    activitySegment.Add(message);
                 }
             }
         }
@@ -710,7 +726,9 @@ internal static class ChatEventSerializer
         return finals;
     }
 
-    private static IEnumerable<string> BuildReplayEventsForMessage(ChatMessageViewModel message)
+    private static IEnumerable<string> BuildReplayEventsForMessage(
+        ChatMessageViewModel message,
+        int? responseDurationMs = null)
     {
         if (message.IsUser)
         {
@@ -742,13 +760,7 @@ internal static class ChatEventSerializer
 
         if (!string.IsNullOrWhiteSpace(message.Content))
         {
-            yield return SerializeAgui("STATIC_ASSISTANT_HTML", new
-            {
-                messageId = message.MessageId,
-                markdown = message.Content,
-                html = MarkdownHtmlRenderer.ToHtmlFragment(message.Content),
-                createIfMissing = true
-            });
+            yield return SerializeStaticAssistantHtml(message, streaming: false, responseDurationMs);
         }
     }
 

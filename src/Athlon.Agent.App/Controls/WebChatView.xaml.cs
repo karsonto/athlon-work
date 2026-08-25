@@ -256,9 +256,12 @@ public partial class WebChatView : UserControl
         }
     }
 
-    public Task ApplyAssistantMarkdownAsync(ChatMessageViewModel message, bool streaming = false) =>
+    public Task ApplyAssistantMarkdownAsync(
+        ChatMessageViewModel message,
+        bool streaming = false,
+        int? responseDurationMs = null) =>
         ExecuteScriptWhenReadyAsync(
-            $"handleEvent({ChatEventSerializer.SerializeStaticAssistantHtml(message, streaming)});");
+            $"handleEvent({ChatEventSerializer.SerializeStaticAssistantHtml(message, streaming, responseDurationMs)});");
 
     public Task ApplyToolResultMarkdownAsync(ChatMessageViewModel message) =>
         ExecuteScriptWhenReadyAsync($"handleEvent({ChatEventSerializer.SerializeToolResultMarkdown(message)});");

@@ -222,7 +222,7 @@ function applyMarkdownHtml(node, html, enhance) {
   }
 }
 
-function applyAssistantHtml(messageId, html, createIfMissing, streaming) {
+function applyAssistantHtml(messageId, html, createIfMissing, streaming, responseDurationMs) {
   let row = findAssistantBubbleRow(messageId);
   if (!row && createIfMissing) {
     row = createAssistantRow(messageId);
@@ -233,6 +233,9 @@ function applyAssistantHtml(messageId, html, createIfMissing, streaming) {
   if (!row) return;
   // Query content on the row itself — do not re-query document (breaks DocumentFragment batches).
   applyMarkdownHtml(row.querySelector('.bubble > .message-content'), html, streaming !== true);
+  if (streaming !== true) {
+    setMessageMeta(row, formatResponseDuration(responseDurationMs));
+  }
   updateEmptyStateVisibility();
   scrollToBottom();
 }
@@ -435,7 +438,39 @@ function closeImagePreview() {
   document.body.style.overflow = '';
 }
 
-function createUserRow(content, images) {
+function createMessageMeta(text) {
+  const meta = document.createElement('div');
+  meta.className = 'message-meta';
+  meta.textContent = text || '';
+  return meta;
+}
+
+function setMessageMeta(row, text) {
+  if (!row) return;
+  const stack = row.querySelector('.message-stack');
+  if (!stack) return;
+  let meta = stack.querySelector('.message-meta');
+  if (!text) {
+    if (meta && meta.parentNode) meta.parentNode.removeChild(meta);
+    return;
+  }
+  if (!meta) {
+    meta = createMessageMeta(text);
+    const actions = stack.querySelector('.message-actions');
+    if (actions) stack.insertBefore(meta, actions);
+    else stack.appendChild(meta);
+  } else {
+    meta.textContent = text;
+  }
+}
+
+function formatResponseDuration(durationMs) {
+  if (!durationMs || durationMs <= 0) return '';
+  var secondsLabel = formatReasoningSeconds(durationMs);
+  return (t('responseDuration') || 'Took {0}').replace('{0}', secondsLabel);
+}
+
+function createUserRow(content, images, startedAt) {
   const row = document.createElement('div');
   row.className = 'message-row user';
   const stack = document.createElement('div');
@@ -471,6 +506,7 @@ function createUserRow(content, images) {
   }
 
   stack.appendChild(bubble);
+  if (startedAt) stack.appendChild(createMessageMeta(startedAt));
   stack.appendChild(createMessageActions(row));
   row.appendChild(stack);
   updateCopyText(row, content || '');
@@ -506,7 +542,7 @@ function createReasoningRow(messageId) {
   return row;
 }
 
-function appendMessage(role, content, append, images) {
+function appendMessage(role, content, append, images, startedAt) {
   if (append && role === 'assistant' && state.currentAssistantEl) {
     const el = state.currentAssistantEl.querySelector('.message-content');
     el.textContent += content;
@@ -521,7 +557,7 @@ function appendMessage(role, content, append, images) {
   }
 
   if (role === 'user') {
-    getMessageRoot().appendChild(createUserRow(content, images));
+    getMessageRoot().appendChild(createUserRow(content, images, startedAt));
   } else if (role === 'assistant') {
     const row = createAssistantRow('');
     row.querySelector('.message-content').textContent = content;
@@ -1183,7 +1219,7 @@ function handleEvent(event) {
           liveFiles.setAttribute('data-sealed', '1');
         }
       })();
-      appendMessage('user', event.content || '', false, event.images || []);
+      appendMessage('user', event.content || '', false, event.images || [], event.startedAt || '');
       break;
     case 'FILES_CHANGED':
       appendFilesChangedCard(event);
@@ -1223,7 +1259,8 @@ function handleEvent(event) {
         event.messageId,
         resolveRenderedHtml(event),
         event.createIfMissing !== false,
-        event.streaming === true);
+        event.streaming === true,
+        event.responseDurationMs);
       updateCopyText(
         findAssistantBubbleRow(event.messageId),
         resolveEventMarkdown(event));

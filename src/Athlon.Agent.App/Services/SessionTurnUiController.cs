@@ -1206,6 +1206,7 @@ public sealed partial class SessionTurnUiController
         if (!string.IsNullOrWhiteSpace(message.Content)
             && !_foldedAssistantMessageIds.Contains(message.MessageId))
         {
+            // Duration is attached only when sealing the final turn reply.
             _ = ChatView!.ApplyAssistantMarkdownAsync(message);
         }
     }
@@ -1230,6 +1231,7 @@ public sealed partial class SessionTurnUiController
             }
         }
 
+        ChatMessageViewModel? lastAssistant = null;
         for (var i = lastUserIndex + 1; i < Messages.Count; i++)
         {
             var message = Messages[i];
@@ -1256,9 +1258,45 @@ public sealed partial class SessionTurnUiController
             if (!string.IsNullOrWhiteSpace(message.Content)
                 && !_foldedAssistantMessageIds.Contains(message.MessageId))
             {
-                _ = ChatView.ApplyAssistantMarkdownAsync(message);
+                if (lastAssistant is not null)
+                {
+                    _ = ChatView.ApplyAssistantMarkdownAsync(lastAssistant, streaming: false);
+                }
+
+                lastAssistant = message;
             }
         }
+
+        if (lastAssistant is not null)
+        {
+            _ = ChatView.ApplyAssistantMarkdownAsync(
+                lastAssistant,
+                streaming: false,
+                ResolveTurnResponseDurationMs(lastAssistant));
+        }
+    }
+
+    private int? ResolveTurnResponseDurationMs(ChatMessageViewModel assistant)
+    {
+        ChatMessageViewModel? turnUser = null;
+        foreach (var message in Messages)
+        {
+            if (message.IsUser)
+            {
+                turnUser = message;
+                continue;
+            }
+
+            if (ReferenceEquals(message, assistant)
+                || string.Equals(message.MessageId, assistant.MessageId, StringComparison.Ordinal))
+            {
+                break;
+            }
+        }
+
+        return turnUser is null
+            ? null
+            : ChatEventSerializer.ComputeResponseDurationMs(turnUser.CreatedAtUtc, assistant.CreatedAtUtc);
     }
 
     private void SyncChatView(bool immediate = false)
@@ -1570,7 +1608,10 @@ public sealed partial class SessionTurnUiController
                 }
                 else
                 {
-                    _ = ChatView.ApplyAssistantMarkdownAsync(assistant);
+                    _ = ChatView.ApplyAssistantMarkdownAsync(
+                        assistant,
+                        streaming: false,
+                        ResolveTurnResponseDurationMs(assistant));
                 }
             }
 

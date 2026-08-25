@@ -211,6 +211,9 @@
   <data name="Chat_WorkedFor" xml:space="preserve">
     <value>Worked for {0}</value>
   </data>
+  <data name="Chat_ResponseDuration" xml:space="preserve">
+    <value>Took {0}</value>
+  </data>
   <data name="Chat_UnmodifiedLines" xml:space="preserve">
     <value>{0} unmodified lines</value>
   </data>

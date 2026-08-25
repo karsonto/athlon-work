@@ -211,6 +211,9 @@
   <data name="Chat_WorkedFor" xml:space="preserve">
     <value>工作了 {0}</value>
   </data>
+  <data name="Chat_ResponseDuration" xml:space="preserve">
+    <value>耗时 {0}</value>
+  </data>
   <data name="Chat_UnmodifiedLines" xml:space="preserve">
     <value>{0} 行未修改</value>
   </data>

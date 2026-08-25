@@ -30,6 +30,9 @@ public sealed class UserMessageImageBubbleTests
         Assert.Equal(
             "data:image/png;base64,AA==",
             doc.RootElement.GetProperty("images")[0].GetProperty("url").GetString());
+        Assert.Equal(
+            ChatEventSerializer.FormatStartedAt(message.CreatedAtUtc),
+            doc.RootElement.GetProperty("startedAt").GetString());
         Assert.DoesNotContain("image(s) attached", json, StringComparison.OrdinalIgnoreCase);
     }
 

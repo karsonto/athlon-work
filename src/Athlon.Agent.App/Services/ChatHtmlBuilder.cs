@@ -133,6 +133,7 @@ public sealed class ChatHtmlBuilder
             ["thoughtsOne"] = Strings.Get("Chat_ThoughtsOne"),
             ["thoughtsMany"] = Strings.Get("Chat_ThoughtsMany"),
             ["workedFor"] = Strings.Get("Chat_WorkedFor"),
+            ["responseDuration"] = Strings.Get("Chat_ResponseDuration"),
             ["said"] = Strings.Get("Chat_ActivityVerbNarration"),
             ["unmodifiedLines"] = Strings.Get("Chat_UnmodifiedLines"),
             ["noDiffAvailable"] = Strings.Get("Chat_NoDiffAvailable"),

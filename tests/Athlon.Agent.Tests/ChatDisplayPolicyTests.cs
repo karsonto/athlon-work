@@ -260,6 +260,44 @@ public sealed class ChatDisplayPolicyTests
             ChatEventSerializer.SerializeStaticAssistantHtml(assistant));
 
         Assert.False(document.RootElement.GetProperty("streaming").GetBoolean());
+        Assert.False(document.RootElement.TryGetProperty("responseDurationMs", out _));
+    }
+
+    [Fact]
+    public void SerializeStaticAssistantHtml_includes_response_duration_when_provided()
+    {
+        var assistant = new ChatMessageViewModel(
+            ChatMessage.Create(MessageRole.Assistant, "done"));
+
+        using var document = JsonDocument.Parse(
+            ChatEventSerializer.SerializeStaticAssistantHtml(assistant, streaming: false, responseDurationMs: 12345));
+
+        Assert.Equal(12345, document.RootElement.GetProperty("responseDurationMs").GetInt32());
+    }
+
+    [Fact]
+    public void BuildReplayEvents_includes_started_at_and_final_response_duration()
+    {
+        var userTime = DateTimeOffset.Parse("2026-08-25T01:30:00Z");
+        var assistantTime = userTime.AddSeconds(12);
+        var user = new ChatMessageViewModel(
+            ChatMessage.Create(MessageRole.User, "hello") with { CreatedAt = userTime });
+        var assistant = new ChatMessageViewModel(
+            ChatMessage.Create(MessageRole.Assistant, "world") with { CreatedAt = assistantTime });
+
+        var events = ChatEventSerializer.BuildReplayEvents([user, assistant], includeReset: false)
+            .Select(json => JsonDocument.Parse(json).RootElement.Clone())
+            .ToList();
+
+        var userEvent = Assert.Single(events, item => item.GetProperty("type").GetString() == "USER_MESSAGE");
+        Assert.Equal(
+            ChatEventSerializer.FormatStartedAt(userTime),
+            userEvent.GetProperty("startedAt").GetString());
+
+        var assistantEvent = Assert.Single(
+            events,
+            item => item.GetProperty("type").GetString() == "STATIC_ASSISTANT_HTML");
+        Assert.Equal(12000, assistantEvent.GetProperty("responseDurationMs").GetInt32());
     }
 
     [Fact]

@@ -76,6 +76,19 @@ html.replaying .message-row { animation: none; }
   max-width: 100%;
   width: 100%;
 }
+.message-meta {
+  margin-top: 4px;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--subtle-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  opacity: 0.85;
+  user-select: text;
+}
 .message-actions {
   display: flex;
   gap: 4px;
