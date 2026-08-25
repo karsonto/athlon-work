@@ -104,11 +104,11 @@ public sealed class ScheduleTimingTests
     }
 
     [Fact]
-    public void ResolveModeOptions_Plan_LimitsToolRounds()
+    public void ResolveModeOptions_Agent_AllowsToolCallsWithoutRoundLimit()
     {
-        var (allowToolCalls, maxRounds) = ScheduleTiming.ResolveModeOptions("plan");
+        var (allowToolCalls, maxRounds) = ScheduleTiming.ResolveModeOptions("agent");
 
         Assert.True(allowToolCalls);
-        Assert.Equal(ScheduleTiming.PlanModeMaxToolRounds, maxRounds);
+        Assert.Null(maxRounds);
     }
 }

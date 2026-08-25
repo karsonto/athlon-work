@@ -3,7 +3,6 @@ using System.IO;
 using System.Windows;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Infrastructure;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -33,7 +32,6 @@ public sealed partial class FileEditorViewModel : ObservableObject
         {
             OnPropertyChanged(nameof(HasOpenTabs));
             OnPropertyChanged(nameof(IsPaneVisible));
-            OnPropertyChanged(nameof(ShowPlanBuildButton));
         };
     }
 
@@ -49,22 +47,10 @@ public sealed partial class FileEditorViewModel : ObservableObject
                 return;
             }
 
-            if (_activeDocument is not null)
-            {
-                _activeDocument.PropertyChanged -= OnActiveDocumentPropertyChanged;
-            }
-
             if (!SetProperty(ref _activeDocument, value))
             {
                 return;
             }
-
-            if (_activeDocument is not null)
-            {
-                _activeDocument.PropertyChanged += OnActiveDocumentPropertyChanged;
-            }
-
-            OnPropertyChanged(nameof(ShowPlanBuildButton));
         }
     }
 
@@ -73,82 +59,6 @@ public sealed partial class FileEditorViewModel : ObservableObject
     public bool IsPaneVisible => HasOpenTabs;
 
     public bool HasUnsavedChanges => Tabs.Any(tab => tab.IsDirty);
-
-    public bool ShowPlanBuildButton => ActiveDocument?.CanBuild == true;
-
-    private void OnActiveDocumentPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(EditorDocumentViewModel.CanBuild)
-            or nameof(EditorDocumentViewModel.IsSessionPlan))
-        {
-            OnPropertyChanged(nameof(ShowPlanBuildButton));
-        }
-    }
-
-    public void OpenOrUpdateSessionPlan(SessionPlan plan, string sessionId, bool activateTab = true)
-    {
-        if (string.IsNullOrWhiteSpace(sessionId) || plan is null || !plan.HasContent)
-        {
-            return;
-        }
-
-        var path = EditorDocumentViewModel.BuildSessionPlanPath(sessionId);
-        var existing = Tabs.FirstOrDefault(tab =>
-            tab.IsSessionPlan
-            && string.Equals(tab.FilePath, path, StringComparison.OrdinalIgnoreCase));
-
-        if (existing is not null)
-        {
-            existing.ApplySessionPlan(plan);
-            if (activateTab || ReferenceEquals(ActiveDocument, existing))
-            {
-                ActiveDocument = existing;
-            }
-
-            OnPropertyChanged(nameof(ShowPlanBuildButton));
-            return;
-        }
-
-        var document = EditorDocumentViewModel.CreateSessionPlan(sessionId, plan);
-        Tabs.Add(document);
-        if (activateTab || ActiveDocument is null)
-        {
-            ActiveDocument = document;
-        }
-
-        OnPropertyChanged(nameof(ShowPlanBuildButton));
-    }
-
-    public void CloseSessionPlanTab(string? sessionId)
-    {
-        if (string.IsNullOrWhiteSpace(sessionId))
-        {
-            return;
-        }
-
-        var path = EditorDocumentViewModel.BuildSessionPlanPath(sessionId);
-        var document = Tabs.FirstOrDefault(tab =>
-            tab.IsSessionPlan
-            && string.Equals(tab.FilePath, path, StringComparison.OrdinalIgnoreCase));
-        if (document is null)
-        {
-            return;
-        }
-
-        var index = Tabs.IndexOf(document);
-        var wasActive = ReferenceEquals(ActiveDocument, document);
-        Tabs.RemoveAt(index);
-        if (Tabs.Count == 0)
-        {
-            ActiveDocument = null;
-            return;
-        }
-
-        if (wasActive)
-        {
-            ActiveDocument = Tabs[Math.Clamp(index, 0, Tabs.Count - 1)];
-        }
-    }
 
     public async Task<bool> OpenFileAsync(string path, string? workspaceRoot, bool readOnly = false)
     {
@@ -203,7 +113,7 @@ public sealed partial class FileEditorViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveActiveAsync()
     {
-        if (ActiveDocument is null || ActiveDocument.IsSessionPlan)
+        if (ActiveDocument is null)
         {
             return;
         }
@@ -225,7 +135,7 @@ public sealed partial class FileEditorViewModel : ObservableObject
             return;
         }
 
-        if (document.IsDirty && !document.IsSessionPlan)
+        if (document.IsDirty)
         {
             var answer = _notifier.AskYesNoCancel("Editor_UnsavedTitle", "Editor_UnsavedMessage", document.DisplayName);
             if (answer == MessageBoxResult.Cancel)
@@ -267,11 +177,6 @@ public sealed partial class FileEditorViewModel : ObservableObject
 
     public async Task<bool> SaveDocumentAsync(EditorDocumentViewModel document)
     {
-        if (document.IsSessionPlan)
-        {
-            return true;
-        }
-
         var result = await _editorService.SaveAsync(document.FilePath, document.Content).ConfigureAwait(true);
         if (!result.Succeeded)
         {
@@ -296,7 +201,7 @@ public sealed partial class FileEditorViewModel : ObservableObject
         while (Tabs.Count > 0)
         {
             var document = Tabs[0];
-            if (document.IsDirty && !document.IsSessionPlan)
+            if (document.IsDirty)
             {
                 var answer = _notifier.AskYesNoCancel("Editor_UnsavedTitle", "Editor_UnsavedMessage", document.DisplayName);
                 if (answer == MessageBoxResult.Cancel)
@@ -330,7 +235,7 @@ public sealed partial class FileEditorViewModel : ObservableObject
 
         var document = Tabs.FirstOrDefault(tab =>
             string.Equals(tab.FilePath, fullPath, StringComparison.OrdinalIgnoreCase));
-        if (document is null || document.IsSessionPlan || !File.Exists(fullPath))
+        if (document is null || !File.Exists(fullPath))
         {
             return;
         }
@@ -351,27 +256,18 @@ public sealed partial class FileEditorViewModel : ObservableObject
         }
     }
 
-    private string NormalizeEditorPath(string path)
-    {
-        if (EditorDocumentViewModel.IsSessionPlanPath(path))
-        {
-            return path;
-        }
-
-        return _guard.CurrentKind == WorkspaceKind.Ssh
+    private string NormalizeEditorPath(string path) =>
+        _guard.CurrentKind == WorkspaceKind.Ssh
             ? _guard.Normalize(path)
             : Path.GetFullPath(path);
-    }
 
     private bool PathsEqual(string left, string right) =>
-        EditorDocumentViewModel.IsSessionPlanPath(left) || EditorDocumentViewModel.IsSessionPlanPath(right)
-            ? string.Equals(left, right, StringComparison.OrdinalIgnoreCase)
-            : _guard.CurrentKind == WorkspaceKind.Ssh
-                ? string.Equals(
-                    RemotePathNormalizer.Collapse(RemotePathNormalizer.ForModel(left)),
-                    RemotePathNormalizer.Collapse(RemotePathNormalizer.ForModel(right)),
-                    StringComparison.Ordinal)
-                : string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
+        _guard.CurrentKind == WorkspaceKind.Ssh
+            ? string.Equals(
+                RemotePathNormalizer.Collapse(RemotePathNormalizer.ForModel(left)),
+                RemotePathNormalizer.Collapse(RemotePathNormalizer.ForModel(right)),
+                StringComparison.Ordinal)
+            : string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
 
     private string? TryGetRelativePath(string? workspaceRoot, string fullPath)
     {

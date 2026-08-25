@@ -18,8 +18,6 @@ public sealed class DefaultSessionHarnessState : ISessionHarnessState
 
     public bool IsAskMode(string? sessionId) => false;
 
-    public bool IsPlanMode(string? sessionId) => false;
-
     public bool IsDebugMode(string? sessionId) => false;
 
     public bool IsEnabled(string? sessionId) => false;
@@ -27,8 +25,6 @@ public sealed class DefaultSessionHarnessState : ISessionHarnessState
     public bool IsCodingModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => false;
 
     public bool IsAskModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => false;
-
-    public bool IsPlanModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => false;
 
     public bool IsDebugModeForActiveRun(IAgentRunContextAccessor runContextAccessor) => false;
 

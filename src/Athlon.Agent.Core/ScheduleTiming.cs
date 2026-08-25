@@ -2,8 +2,6 @@ namespace Athlon.Agent.Core;
 
 public static class ScheduleTiming
 {
-    public const int PlanModeMaxToolRounds = 3;
-
     public static bool IsDue(ScheduledTask task, DateTime? utcNow = null)
     {
         var now = utcNow ?? DateTime.UtcNow;
@@ -102,7 +100,6 @@ public static class ScheduleTiming
         mode.ToLowerInvariant() switch
         {
             "ask" => (false, null),
-            "plan" => (true, PlanModeMaxToolRounds),
             _ => (true, null)
         };
 

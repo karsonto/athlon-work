@@ -26,8 +26,6 @@ public sealed class CodingWorkflowSection : IEnvironmentPromptSection
 
             || PromptModeHelper.IsAskMode(context)
 
-            || PromptModeHelper.IsPlanMode(context)
-
             || PromptModeHelper.IsDebugMode(context))
 
         {
@@ -50,7 +48,7 @@ public sealed class CodingWorkflowSection : IEnvironmentPromptSection
 
             {
 
-                builder.AppendLine("- Planning: for multi-step or multi-file tasks, explore first; if an approved Session Plan is injected, follow it; otherwise use todo_write for structured steps before editing.");
+                builder.AppendLine("- Planning: for multi-step or multi-file tasks, explore first; use todo_write for structured steps before editing.");
 
             }
 
@@ -58,7 +56,7 @@ public sealed class CodingWorkflowSection : IEnvironmentPromptSection
 
             {
 
-                builder.AppendLine("- Planning: for multi-step or multi-file tasks, explore first; if an approved Session Plan is injected, follow it.");
+                builder.AppendLine("- Planning: for multi-step or multi-file tasks, explore first; state a brief plan before editing.");
 
             }
 

@@ -10,11 +10,7 @@
              x:Name="EditorRoot"
              Background="{DynamicResource Brush.Panel}"
              HorizontalAlignment="Stretch"
-             VerticalAlignment="Stretch"
-             PreviewKeyDown="OnPreviewKeyDown">
-    <UserControl.Resources>
-        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-    </UserControl.Resources>
+             VerticalAlignment="Stretch">
     <Grid HorizontalAlignment="Stretch"
           VerticalAlignment="Stretch">
         <Grid.RowDefinitions>
@@ -77,7 +73,6 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <Border Grid.Column="0"
@@ -124,24 +119,6 @@
                            Foreground="{DynamicResource Brush.SubtleText}"
                            TextTrimming="CharacterEllipsis"
                            Text="{Binding ActiveDocument.PathLabel}" />
-
-                <Button x:Name="PlanBuildButton"
-                        Grid.Column="2"
-                        Width="Auto"
-                        MinWidth="88"
-                        Height="26"
-                        Padding="14,0"
-                        FontSize="12"
-                        FontWeight="SemiBold"
-                        Content="{loc:Localize Key=Harness_PlanBuild}"
-                        ToolTip="{loc:Localize Key=Harness_PlanBuildTooltip}"
-                        Command="{Binding DataContext.ComposerHarness.ConfirmPlanCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                        Style="{StaticResource ComposerSendButtonStyle}">
-                    <Button.Visibility>
-                        <Binding Path="ShowPlanBuildButton"
-                                 Converter="{StaticResource BooleanToVisibilityConverter}" />
-                    </Button.Visibility>
-                </Button>
             </Grid>
         </Border>
 

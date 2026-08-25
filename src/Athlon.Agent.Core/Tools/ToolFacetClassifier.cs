@@ -60,11 +60,6 @@ public static class ToolFacetClassifier
             facets |= ToolFacet.HarnessTodo;
         }
 
-        if (tool is IPlanTool)
-        {
-            facets |= ToolFacet.Plan;
-        }
-
         if (tool is ISubAgentTool)
         {
             facets |= ToolFacet.SubAgent;

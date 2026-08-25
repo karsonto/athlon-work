@@ -84,7 +84,7 @@ public sealed class FileToolsPolicySection : IEnvironmentPromptSection
 
 
 
-        if (hasWrite && !PromptModeHelper.IsAskMode(context) && !PromptModeHelper.IsPlanMode(context))
+        if (hasWrite && !PromptModeHelper.IsAskMode(context))
 
         {
 
@@ -98,7 +98,7 @@ public sealed class FileToolsPolicySection : IEnvironmentPromptSection
 
         {
 
-            builder.AppendLine(PromptModeHelper.IsAskMode(context) || PromptModeHelper.IsPlanMode(context)
+            builder.AppendLine(PromptModeHelper.IsAskMode(context)
 
                 ? "- Paths from listing/search tools are exact on-disk names. Copy them character-for-character into available file tools."
 

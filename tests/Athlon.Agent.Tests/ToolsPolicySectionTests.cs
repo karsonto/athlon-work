@@ -15,8 +15,6 @@ public sealed class ToolsPolicySectionTests
         new("apply_patch", "p", ToolSchema.Object().Build()),
         new("execute_command", "x", ToolSchema.Object().Build()),
         new("todo_write", "t", ToolSchema.Object().Build()),
-        new("create_plan", "c", ToolSchema.Object().Build()),
-        new("update_plan", "u", ToolSchema.Object().Build()),
         new("mcp_search", "ms", ToolSchema.Object().Build()),
         new("mcp_call", "mc", ToolSchema.Object().Build()),
     ];
@@ -106,20 +104,6 @@ public sealed class ToolsPolicySectionTests
         var text = builder.ToString();
         Assert.DoesNotContain("maintain an accurate todo list", text, StringComparison.Ordinal);
         Assert.Contains("Shell:", text, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void Append_PlanMode_UsesReadOnlyPolicyWithCreatePlan()
-    {
-        var builder = new StringBuilder();
-        new ToolsPolicySection().Append(
-            builder,
-            CreateContext(hasWorkspace: true, tools: FullWorkspaceTools, mode: SessionAgentMode.Plan));
-
-        var text = builder.ToString();
-        Assert.Contains("read-only", text, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("create_plan", text, StringComparison.Ordinal);
-        Assert.DoesNotContain("cmd.exe", text, StringComparison.Ordinal);
     }
 
     private static EnvironmentPromptContext CreateContext(

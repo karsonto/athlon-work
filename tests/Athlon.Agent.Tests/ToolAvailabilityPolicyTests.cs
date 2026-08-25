@@ -75,30 +75,17 @@ public sealed class ToolAvailabilityPolicyTests
     [InlineData(SessionAgentMode.Agent, false)]
     [InlineData(SessionAgentMode.Coding, true)]
     [InlineData(SessionAgentMode.Ask, false)]
-    [InlineData(SessionAgentMode.Plan, false)]
+    [InlineData(SessionAgentMode.Debug, false)]
     public void TodoWrite_OnlyInCoding(SessionAgentMode mode, bool expected)
     {
         var ctx = AgentLocal with { Mode = mode };
         Assert.Equal(expected, ToolAvailabilityPolicy.IsEnabled(new StubHarness("todo_write"), ctx));
     }
 
-    [Theory]
-    [InlineData(SessionAgentMode.Agent, false)]
-    [InlineData(SessionAgentMode.Coding, false)]
-    [InlineData(SessionAgentMode.Ask, false)]
-    [InlineData(SessionAgentMode.Plan, true)]
-    public void PlanTools_OnlyInPlan(SessionAgentMode mode, bool expected)
+    [Fact]
+    public void Ask_BlocksWritesAndSubAgents()
     {
-        var ctx = AgentLocal with { Mode = mode };
-        Assert.Equal(expected, ToolAvailabilityPolicy.IsEnabled(new StubPlan("create_plan"), ctx));
-    }
-
-    [Theory]
-    [InlineData(SessionAgentMode.Ask)]
-    [InlineData(SessionAgentMode.Plan)]
-    public void AskOrPlan_BlocksWritesAndSubAgents(SessionAgentMode mode)
-    {
-        var ctx = AgentLocal with { Mode = mode };
+        var ctx = AgentLocal with { Mode = SessionAgentMode.Ask };
         Assert.False(ToolAvailabilityPolicy.IsEnabled(new StubLocalWrite("file_write"), ctx));
         Assert.False(ToolAvailabilityPolicy.IsEnabled(new StubLocalWrite("execute_command"), ctx));
         Assert.False(ToolAvailabilityPolicy.IsEnabled(new StubSubAgent("sessions_spawn"), ctx));
@@ -194,14 +181,6 @@ public sealed class ToolAvailabilityPolicyTests
     }
 
     private sealed class StubHarness(string name) : IAgentTool, IHarnessTool
-    {
-        public ToolDefinition Definition { get; } = new(name, name, ToolSchema.Object().Build());
-
-        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
-            Task.FromResult(ToolResult.Success("ok"));
-    }
-
-    private sealed class StubPlan(string name) : IAgentTool, IPlanTool
     {
         public ToolDefinition Definition { get; } = new(name, name, ToolSchema.Object().Build());
 

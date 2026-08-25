@@ -614,12 +614,6 @@
   <data name="Harness_Mode_Coding_Tooltip" xml:space="preserve">
     <value>启用长期记忆与任务规划；可直接实现长任务</value>
   </data>
-  <data name="Harness_Mode_Plan" xml:space="preserve">
-    <value>Plan</value>
-  </data>
-  <data name="Harness_Mode_Plan_Tooltip" xml:space="preserve">
-    <value>只读探索并生成详细计划；确认后自动进入 Coding</value>
-  </data>
   <data name="Harness_Mode_Debug" xml:space="preserve">
     <value>Debug</value>
   </data>
@@ -643,21 +637,6 @@
   </data>
   <data name="Debug_Reanalyze" xml:space="preserve">
     <value>重新分析</value>
-  </data>
-  <data name="Harness_ConfirmPlan" xml:space="preserve">
-    <value>确认并开始实现</value>
-  </data>
-  <data name="Harness_PlanBuild" xml:space="preserve">
-    <value>Build</value>
-  </data>
-  <data name="Harness_PlanBuildTooltip" xml:space="preserve">
-    <value>确认计划并开始实现 (Ctrl+Enter)</value>
-  </data>
-  <data name="Harness_ConfirmPlanPrompt" xml:space="preserve">
-    <value>按已批准的计划开始实现</value>
-  </data>
-  <data name="Harness_PlanDialogSubtitle" xml:space="preserve">
-    <value>审阅计划后确认，将切换到 Coding 并开始实现</value>
   </data>
   <data name="Harness_Picker_SelectMode" xml:space="preserve">
     <value>选择 Agent 模式</value>

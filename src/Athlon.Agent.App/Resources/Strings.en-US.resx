@@ -620,9 +620,6 @@ Hold to talk</value>
   <data name="Harness_TaskPending" xml:space="preserve">
     <value>Pending</value>
   </data>
-  <data name="Harness_PlanDialogSubtitle" xml:space="preserve">
-    <value>Review the plan, then confirm to switch to Coding and start implementing</value>
-  </data>
   <data name="Harness_Mode_Debug" xml:space="preserve">
     <value>Debug</value>
   </data>

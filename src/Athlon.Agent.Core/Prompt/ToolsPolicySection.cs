@@ -80,7 +80,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
 
 
-        if (PromptModeHelper.IsAskMode(context) || PromptModeHelper.IsPlanMode(context))
+        if (PromptModeHelper.IsAskMode(context))
 
         {
 
@@ -90,17 +90,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
             builder.AppendLine("  2. Reject mutation: do not call write/patch/shell/sub-agent tools even if you remember them from other modes.");
 
-            if (PromptModeHelper.IsPlanMode(context) && PromptModeHelper.HasAny(context, "create_plan", "update_plan"))
-
-            {
-
-                builder.AppendLine("  3. Session Plan: after enough exploration, call create_plan (or update_plan on revisions); then stop for user confirmation.");
-
-            }
-
-
-
-            builder.AppendLine("  4. Execute independent read-only calls in parallel; otherwise preserve dependency order.");
+            builder.AppendLine("  3. Execute independent read-only calls in parallel; otherwise preserve dependency order.");
 
             AppendMcpDecisionFlow(builder, context);
 

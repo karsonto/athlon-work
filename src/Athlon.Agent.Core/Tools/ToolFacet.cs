@@ -15,7 +15,6 @@ public enum ToolFacet
     /// <summary><c>terminal_open</c> — may open a tab; does not require an open tab.</summary>
     TerminalBootstrap = 1 << 6,
     HarnessTodo = 1 << 7,
-    Plan = 1 << 8,
     SubAgent = 1 << 9,
     Memory = 1 << 10,
     Knowledge = 1 << 11,

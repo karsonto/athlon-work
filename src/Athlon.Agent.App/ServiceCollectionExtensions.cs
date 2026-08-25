@@ -158,15 +158,9 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ILocalizationService>()));
 
         services.AddSingleton(sp => new ComposerHarnessViewModel(
-
             sp.GetRequiredService<ISessionHarnessState>(),
-
             sp.GetRequiredService<ISessionTaskListStore>(),
-
-            sp.GetRequiredService<ISessionPlanStore>(),
-
             sp.GetRequiredService<ITaskPlanCompletionNotifier>(),
-
             sp.GetRequiredService<ILocalizationService>()));
 
         services.AddSingleton<DebugActionBarViewModel>();

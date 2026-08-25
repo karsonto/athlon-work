@@ -80,11 +80,6 @@ internal sealed class McpDelegatingToolRouter(
             return SessionAgentMode.Ask;
         }
 
-        if (sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor))
-        {
-            return SessionAgentMode.Plan;
-        }
-
         if (sessionHarnessState.IsDebugModeForActiveRun(runContextAccessor))
         {
             return SessionAgentMode.Debug;
@@ -117,7 +112,6 @@ internal sealed class McpDelegatingToolRouter(
         var knowledge = sessionKnowledgeState.ShouldExposeKnowledgeTool(sessionId);
         var coding = sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor);
         var ask = sessionHarnessState.IsAskModeForActiveRun(runContextAccessor);
-        var plan = sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor);
         var debug = sessionHarnessState.IsDebugModeForActiveRun(runContextAccessor);
         var debugPhase = debug ? debugPhaseAccessor.GetPhase(sessionId)?.ToString() ?? "none" : "off";
         var browser = browserWorkspaceState.HasOpenBrowserTab;
@@ -131,7 +125,6 @@ internal sealed class McpDelegatingToolRouter(
             knowledge,
             coding,
             ask,
-            plan,
             debug,
             debugPhase,
             browser,

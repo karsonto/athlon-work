@@ -66,10 +66,6 @@ public static class ToolAvailabilityPolicy
             static ctx => ctx.Mode != SessionAgentMode.Coding,
             static (_, facets) => facets.HasFlag(ToolFacet.HarnessTodo) ? false : null),
         new(
-            "plan-tools-plan-only",
-            static ctx => ctx.Mode != SessionAgentMode.Plan,
-            static (_, facets) => facets.HasFlag(ToolFacet.Plan) ? false : null),
-        new(
             "browser-requires-tab",
             static ctx => !ctx.BrowserTabOpen,
             static (_, facets) =>
@@ -85,8 +81,8 @@ public static class ToolAvailabilityPolicy
                     : null),
         // Memory without workspace is already rejected by chat-only (never null there).
         new(
-            "ask-plan-block-writes-and-subagents",
-            static ctx => ctx.Mode is SessionAgentMode.Ask or SessionAgentMode.Plan,
+            "ask-block-writes-and-subagents",
+            static ctx => ctx.Mode == SessionAgentMode.Ask,
             static (_, facets) =>
                 facets.HasFlag(ToolFacet.WriteFileOrShell)
                 || facets.HasFlag(ToolFacet.Shell)

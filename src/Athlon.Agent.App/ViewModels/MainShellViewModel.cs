@@ -56,7 +56,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly ISessionUsageAccumulator _sessionUsageAccumulator;
     private readonly PageViewFactory _pageViewFactory;
     private readonly ITaskListChangedNotifier _taskListChangedNotifier;
-    private readonly IPlanChangedNotifier _planChangedNotifier;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
     private readonly SshWorkspaceConnectionService _sshConnection;
@@ -105,7 +104,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ComposerHarnessViewModel composerHarness,
         DebugActionBarViewModel debugBar,
         ITaskListChangedNotifier taskListChangedNotifier,
-        IPlanChangedNotifier planChangedNotifier,
         PageViewFactory pageViewFactory,
         ChatPageViewModel chatPage,
         ScheduleViewModel schedulePageVm,
@@ -134,7 +132,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionUsageAccumulator = sessionUsageAccumulator;
         _pageViewFactory = pageViewFactory;
         _taskListChangedNotifier = taskListChangedNotifier;
-        _planChangedNotifier = planChangedNotifier;
         _loc = localization;
         _notifier = notifier;
         _sshConnection = sshConnection;
@@ -159,7 +156,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         KnowledgePageVm = knowledgePageVm;
         KnowledgePageVm.KnowledgeDataChanged += OnKnowledgeDataChanged;
         _taskListChangedNotifier.TaskListChanged += OnTaskListChanged;
-        _planChangedNotifier.PlanChanged += OnPlanChanged;
         _composer.AtCompletionSourcesUpdated += OnAtCompletionSourcesUpdated;
         ComposerKnowledge = composerKnowledge;
         ComposerHarness = composerHarness;
@@ -170,9 +166,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             () => _activeUi,
             ShowShellToast);
         ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
-        ComposerHarness.OnPlanConfirmedAsync = StartCodingFromApprovedPlanAsync;
         ComposerHarness.OnModeChangedAsync = OnComposerModeChangedAsync;
-        ComposerHarness.PropertyChanged += OnComposerHarnessPropertyChanged;
         ChatPage = chatPage;
         ChatPage.Configure(
             () => _displayedSessionId,
@@ -1653,69 +1647,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         Application.Current?.Dispatcher.InvokeAsync(() => _ = ComposerHarness.RefreshTasksAsync());
     }
 
-    private void OnPlanChanged(string sessionId)
-    {
-        if (!string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        Application.Current?.Dispatcher.InvokeAsync(async () =>
-        {
-            await ComposerHarness.RefreshPlanAsync().ConfigureAwait(true);
-            // create_plan / update_plan: open or refresh the same editor tab (no popup).
-            SyncPlanInEditor();
-        });
-    }
-
     private async Task OnComposerModeChangedAsync(SessionAgentMode from, SessionAgentMode to)
     {
         if (from == SessionAgentMode.Debug && to != SessionAgentMode.Debug)
         {
             await DebugBar.AbandonActiveRunAsync().ConfigureAwait(true);
-        }
-    }
-
-    private void OnComposerHarnessPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        if (e.PropertyName is nameof(ComposerHarnessViewModel.ShowPlanPanel)
-            or nameof(ComposerHarnessViewModel.CurrentPlan)
-            or nameof(ComposerHarnessViewModel.IsPlanMode)
-            or nameof(ComposerHarnessViewModel.CanConfirmPlan))
-        {
-            Application.Current?.Dispatcher.InvokeAsync(SyncPlanInEditor);
-        }
-    }
-
-    private void SyncPlanInEditor()
-    {
-        if (!ComposerHarness.ShowPlanPanel || ComposerHarness.CurrentPlan is null)
-        {
-            FileEditor.CloseSessionPlanTab(_displayedSessionId);
-            OnPropertyChanged(nameof(HasOpenEditorTabs));
-            return;
-        }
-
-        var path = EditorDocumentViewModel.BuildSessionPlanPath(_displayedSessionId);
-        var alreadyOpen = FileEditor.Tabs.Any(tab =>
-            tab.IsSessionPlan
-            && string.Equals(tab.FilePath, path, StringComparison.OrdinalIgnoreCase));
-
-        // Re-open / first create activates the tab so the editor pane expands.
-        // update_plan on an existing tab refreshes content without stealing the active tab.
-        FileEditor.OpenOrUpdateSessionPlan(
-            ComposerHarness.CurrentPlan,
-            _displayedSessionId,
-            activateTab: !alreadyOpen);
-        OnPropertyChanged(nameof(HasOpenEditorTabs));
-    }
-
-    private async Task StartCodingFromApprovedPlanAsync()
-    {
-        ComposerText = _loc["Harness_ConfirmPlanPrompt"];
-        if (SendCommand.CanExecute(null))
-        {
-            await SendCommand.ExecuteAsync(null).ConfigureAwait(true);
         }
     }
 
@@ -2751,9 +2687,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionTurns.TurnHost.TurnStateChanged -= OnTurnStateChanged;
         KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;
         _taskListChangedNotifier.TaskListChanged -= OnTaskListChanged;
-        _planChangedNotifier.PlanChanged -= OnPlanChanged;
-        ComposerHarness.PropertyChanged -= OnComposerHarnessPropertyChanged;
-        FileEditor.CloseSessionPlanTab(_displayedSessionId);
         _composer.AtCompletionSourcesUpdated -= OnAtCompletionSourcesUpdated;
         if (_savedChatView is not null)
         {

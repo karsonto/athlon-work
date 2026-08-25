@@ -11,7 +11,7 @@ public sealed class AgentModeSectionTests
     [InlineData(SessionAgentMode.Agent, "Agent mode")]
     [InlineData(SessionAgentMode.Coding, "Coding mode")]
     [InlineData(SessionAgentMode.Ask, "Ask mode")]
-    [InlineData(SessionAgentMode.Plan, "Session Plan mode")]
+    [InlineData(SessionAgentMode.Debug, "Debug mode")]
     public void Append_WithWorkspace_IncludesModeDeclaration(SessionAgentMode mode, string expectedPhrase)
     {
         var builder = new StringBuilder();
@@ -23,13 +23,6 @@ public sealed class AgentModeSectionTests
         if (mode == SessionAgentMode.Coding)
         {
             Assert.Contains("maintain todos with todo_write", text, StringComparison.Ordinal);
-            Assert.Contains("Direct Coding without a prior Plan is allowed", text, StringComparison.Ordinal);
-        }
-
-        if (mode == SessionAgentMode.Plan)
-        {
-            Assert.Contains("create_plan", text, StringComparison.Ordinal);
-            Assert.Contains("wait for the user to confirm", text, StringComparison.Ordinal);
         }
     }
 
@@ -65,12 +58,6 @@ public sealed class AgentModeSectionTests
         if (mode == SessionAgentMode.Coding)
         {
             tools.Add(new ToolDefinition("todo_write", "t", ToolSchema.Object().Build()));
-        }
-
-        if (mode == SessionAgentMode.Plan)
-        {
-            tools.Add(new ToolDefinition("create_plan", "c", ToolSchema.Object().Build()));
-            tools.Add(new ToolDefinition("update_plan", "u", ToolSchema.Object().Build()));
         }
 
         return new EnvironmentPromptContext
