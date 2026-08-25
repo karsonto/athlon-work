@@ -4,6 +4,8 @@ using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Windows;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -14,6 +16,8 @@ public sealed partial class ScheduleViewModel : ObservableObject
     private readonly AppSettings _settings;
     private readonly IFileStorageService _storage;
     private readonly SchedulerService _scheduler;
+    private readonly IAgentSkillCatalog _skillCatalog;
+    private readonly IKnowledgeStore _knowledgeStore;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
     private readonly Func<string, Task>? _openSession;
@@ -23,6 +27,8 @@ public sealed partial class ScheduleViewModel : ObservableObject
         AppSettings settings,
         IFileStorageService storage,
         SchedulerService scheduler,
+        IAgentSkillCatalog skillCatalog,
+        IKnowledgeStore knowledgeStore,
         Lazy<ISessionHost> sessionHost,
         ILocalizationService localization,
         IUserNotifier notifier)
@@ -30,6 +36,8 @@ public sealed partial class ScheduleViewModel : ObservableObject
         _settings = settings;
         _storage = storage;
         _scheduler = scheduler;
+        _skillCatalog = skillCatalog;
+        _knowledgeStore = knowledgeStore;
         _loc = localization;
         _notifier = notifier;
         _openSession = id => sessionHost.Value.OpenSessionByIdAsync(id);
@@ -116,6 +124,8 @@ public sealed partial class ScheduleViewModel : ObservableObject
             _settings,
             _storage,
             _scheduler,
+            _skillCatalog,
+            _knowledgeStore,
             _loc,
             _notifier,
             onDeleted: HandleTaskDeleted,
@@ -215,11 +225,20 @@ public sealed partial class ScheduleViewModel : ObservableObject
             TimeOfDay = "09:00",
             Prompt = "",
             Mode = "agent",
+            Model = "auto",
+            WorkspaceRoot = "",
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UpdatedAt = DateTime.UtcNow.ToString("O")
         };
 
-        var window = new ScheduleTaskEditWindow(task, _notifier, _loc, isNew: true);
+        var window = new ScheduleTaskEditWindow(
+            task,
+            _settings,
+            _skillCatalog,
+            _knowledgeStore,
+            _notifier,
+            _loc,
+            isNew: true);
         window.Owner = Application.Current.MainWindow;
         if (window.ShowDialog() != true)
         {

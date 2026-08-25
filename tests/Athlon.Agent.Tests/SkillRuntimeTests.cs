@@ -25,6 +25,39 @@ public sealed class SkillRuntimeTests
     }
 
     [Fact]
+    public void SkillFilter_ScheduleScope_RestrictsEnabledSkills()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-skill-runtime", Guid.NewGuid().ToString("N"));
+        CreateSkillFolder(root, "alpha-skill", "alpha", "Alpha", "A.");
+        CreateSkillFolder(root, "beta-skill", "beta", "Beta", "B.");
+        try
+        {
+            var catalog = new AgentSkillCatalog(new FileSystemSkillRepository(root));
+            catalog.Reload();
+            var settings = new AppSettings();
+
+            using var scope = ScheduleTurnScope.Enter(new ScheduleTurnOptions(SkillNames: ["alpha"]));
+            var skills = SkillFilter.GetEnabledSkills(catalog, settings);
+
+            Assert.Single(skills);
+            Assert.Equal("alpha", skills[0].Name);
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+    }
+
+    [Fact]
+    public void ScheduleTurnScope_IsMcpServerAllowed_RespectsAllowList()
+    {
+        using var scope = ScheduleTurnScope.Enter(new ScheduleTurnOptions(McpServerNames: ["allowed"]));
+
+        Assert.True(ScheduleTurnScope.IsMcpServerAllowed("allowed"));
+        Assert.False(ScheduleTurnScope.IsMcpServerAllowed("other"));
+    }
+
+    [Fact]
     public void AgentSkillCatalog_GetSkillById_MatchesName()
     {
         var root = CreateSkillRoot("by-id-skill", "demo_skill", "Demo", "Body.");

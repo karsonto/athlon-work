@@ -122,6 +122,8 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<WorkspacePaneViewModel>(),
                 sp.GetRequiredService<Athlon.Agent.App.Services.Terminal.TerminalSessionRegistry>()));
         services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.ComputerUseOverlayRegistry>();
+        services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.IComputerUseDesktopCaptureSession,
+            Athlon.Agent.App.Services.ComputerUse.ComputerUseDesktopCaptureSession>();
         services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.ComputerUseCaptureService>();
         services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.ComputerUseUiAutomationService>();
         services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.ComputerUseInputService>();

@@ -90,8 +90,33 @@ public sealed class ScheduleTimingTests
     public void ResolveWorkspaceRoot_UsesTaskWorkspaceOnly()
     {
         var task = new ScheduledTask { WorkspaceRoot = @"C:\work" };
+        var schedule = new ScheduleSettings { DefaultWorkspaceRoot = @"C:\default" };
 
-        Assert.Equal(@"C:\work", ScheduleTiming.ResolveWorkspaceRoot(task));
+        Assert.Equal(@"C:\work", ScheduleTiming.ResolveWorkspaceRoot(task, schedule));
+    }
+
+    [Fact]
+    public void ResolveWorkspaceRoot_FallsBackToScheduleDefault()
+    {
+        var task = new ScheduledTask { WorkspaceRoot = "" };
+        var schedule = new ScheduleSettings { DefaultWorkspaceRoot = @"C:\default" };
+
+        Assert.Equal(@"C:\default", ScheduleTiming.ResolveWorkspaceRoot(task, schedule));
+    }
+
+    [Fact]
+    public void ResolveAllowList_EmptyTaskList_ReturnsNull()
+    {
+        Assert.Null(ScheduleTiming.ResolveAllowList([], ["a", "b"]));
+    }
+
+    [Fact]
+    public void ResolveAllowList_IntersectsWithGlobal()
+    {
+        var resolved = ScheduleTiming.ResolveAllowList(["a", "missing"], ["a", "b"]);
+
+        Assert.NotNull(resolved);
+        Assert.Equal(["a"], resolved);
     }
 
     [Fact]

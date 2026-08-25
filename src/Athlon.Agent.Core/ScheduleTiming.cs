@@ -115,6 +115,40 @@ public static class ScheduleTiming
         return string.IsNullOrWhiteSpace(prompt) ? prefix : $"{prefix}\n{prompt}";
     }
 
-    public static string ResolveWorkspaceRoot(ScheduledTask task) =>
-        task.WorkspaceRoot?.Trim() ?? "";
+    public static string ResolveWorkspaceRoot(ScheduledTask task, ScheduleSettings? schedule = null)
+    {
+        var taskRoot = task.WorkspaceRoot?.Trim() ?? "";
+        if (!string.IsNullOrWhiteSpace(taskRoot))
+        {
+            return taskRoot;
+        }
+
+        return schedule?.DefaultWorkspaceRoot?.Trim() ?? "";
+    }
+
+    /// <summary>
+    /// Empty task list = inherit all globally enabled names; non-empty = intersection.
+    /// Returns null when unrestricted (no schedule filter).
+    /// </summary>
+    public static IReadOnlyList<string>? ResolveAllowList(
+        IReadOnlyList<string>? taskNames,
+        IEnumerable<string> globallyEnabledNames)
+    {
+        var global = globallyEnabledNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (taskNames is null || taskNames.Count == 0)
+        {
+            return null;
+        }
+
+        var wanted = new HashSet<string>(
+            taskNames.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => n.Trim()),
+            StringComparer.OrdinalIgnoreCase);
+
+        return global.Where(wanted.Contains).ToArray();
+    }
 }

@@ -107,6 +107,13 @@ internal static class McpSearchGatewayTools
                         return ToolResult.Failure("Invalid tool id", $"unknown MCP tool: {toolId}");
                     }
 
+                    if (!ScheduleTurnScope.IsMcpServerAllowed(serverName))
+                    {
+                        return ToolResult.Failure(
+                            "Tool not available",
+                            $"MCP server '{serverName}' is not allowed for this scheduled turn.");
+                    }
+
                     if (!invocation.Arguments.TryGetObject("arguments", out var arguments))
                     {
                         return ToolResult.Failure("Invalid arguments", "mcp_call requires a native `arguments` object.");

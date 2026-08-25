@@ -1181,10 +1181,49 @@
 仍要保存吗？</value>
   </data>
   <data name="Schedule_WorkspaceRequired" xml:space="preserve">
-    <value>必填。Agent 将在此目录下执行任务。</value>
+    <value>可留空以使用页面默认工作目录；填写时 Agent 将在此目录执行。</value>
   </data>
   <data name="Schedule_WorkspaceRequiredPrompt" xml:space="preserve">
-    <value>请输入工作目录。</value>
+    <value>请输入工作目录，或先在定时任务页配置默认工作目录。</value>
+  </data>
+  <data name="Schedule_Mode" xml:space="preserve">
+    <value>运行模式</value>
+  </data>
+  <data name="Schedule_ModeAgent" xml:space="preserve">
+    <value>Agent（可调用工具）</value>
+  </data>
+  <data name="Schedule_ModeAsk" xml:space="preserve">
+    <value>Ask（只读）</value>
+  </data>
+  <data name="Schedule_ComputerUse" xml:space="preserve">
+    <value>启用 Computer Use</value>
+  </data>
+  <data name="Schedule_ComputerUseTooltip" xml:space="preserve">
+    <value>启用后运行时会最小化主窗口并对桌面截图（computer_observe / computer_interact），与手动 Computer Use 一致。</value>
+  </data>
+  <data name="Schedule_Model" xml:space="preserve">
+    <value>模型</value>
+  </data>
+  <data name="Schedule_ModelHint" xml:space="preserve">
+    <value>填写 auto 或留空则跟随定时任务页默认 / 全局模型。</value>
+  </data>
+  <data name="Schedule_Skills" xml:space="preserve">
+    <value>Skills</value>
+  </data>
+  <data name="Schedule_SkillsHint" xml:space="preserve">
+    <value>不勾选任何项 = 继承全局已启用 Skills；勾选后仅使用所选 Skills。</value>
+  </data>
+  <data name="Schedule_McpServers" xml:space="preserve">
+    <value>MCP 服务器</value>
+  </data>
+  <data name="Schedule_McpHint" xml:space="preserve">
+    <value>不勾选任何项 = 继承全局已启用 MCP；勾选后仅暴露所选服务器工具。</value>
+  </data>
+  <data name="Schedule_Knowledge" xml:space="preserve">
+    <value>知识库模块</value>
+  </data>
+  <data name="Schedule_KnowledgeHint" xml:space="preserve">
+    <value>不勾选 = 本次运行不启用 knowledge_search；勾选后启用所选模块。</value>
   </data>
   <data name="Settings_ApiKeyDpapiHint" xml:space="preserve">
     <value>API Key 使用 Windows DPAPI 加密保存在用户目录。已保存时显示 *****，可点右侧眼睛查看；更换 Provider 后请重新粘贴并点「保存设置」。留空时不发送 Authorization 请求头。</value>

@@ -2,6 +2,8 @@ using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Windows;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Skills;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -13,6 +15,8 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
     private readonly AppSettings _settings;
     private readonly IFileStorageService _storage;
     private readonly SchedulerService _scheduler;
+    private readonly IAgentSkillCatalog _skillCatalog;
+    private readonly IKnowledgeStore _knowledgeStore;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
     private readonly Action<ScheduleTaskItemViewModel>? _onDeleted;
@@ -23,6 +27,8 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
         AppSettings settings,
         IFileStorageService storage,
         SchedulerService scheduler,
+        IAgentSkillCatalog skillCatalog,
+        IKnowledgeStore knowledgeStore,
         ILocalizationService localization,
         IUserNotifier notifier,
         Action<ScheduleTaskItemViewModel>? onDeleted = null,
@@ -32,6 +38,8 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
         _settings = settings;
         _storage = storage;
         _scheduler = scheduler;
+        _skillCatalog = skillCatalog;
+        _knowledgeStore = knowledgeStore;
         _loc = localization;
         _notifier = notifier;
         _onDeleted = onDeleted;
@@ -174,7 +182,13 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
     [RelayCommand]
     private void Edit()
     {
-        var window = new ScheduleTaskEditWindow(_task, _notifier, _loc);
+        var window = new ScheduleTaskEditWindow(
+            _task,
+            _settings,
+            _skillCatalog,
+            _knowledgeStore,
+            _notifier,
+            _loc);
         window.Owner = System.Windows.Application.Current.MainWindow;
         if (window.ShowDialog() == true)
         {

@@ -1172,10 +1172,49 @@ Error: {1}</value>
 Save anyway?</value>
   </data>
   <data name="Schedule_WorkspaceRequired" xml:space="preserve">
-    <value>Required. The agent runs tasks in this directory.</value>
+    <value>Optional if a page-level default workspace is set; otherwise required.</value>
   </data>
   <data name="Schedule_WorkspaceRequiredPrompt" xml:space="preserve">
-    <value>Enter a working directory.</value>
+    <value>Enter a workspace, or set a default workspace on the Schedule page first.</value>
+  </data>
+  <data name="Schedule_Mode" xml:space="preserve">
+    <value>Mode</value>
+  </data>
+  <data name="Schedule_ModeAgent" xml:space="preserve">
+    <value>Agent (tools allowed)</value>
+  </data>
+  <data name="Schedule_ModeAsk" xml:space="preserve">
+    <value>Ask (read-only)</value>
+  </data>
+  <data name="Schedule_ComputerUse" xml:space="preserve">
+    <value>Enable Computer Use</value>
+  </data>
+  <data name="Schedule_ComputerUseTooltip" xml:space="preserve">
+    <value>When enabled, the run minimizes the app and captures the desktop via computer_observe / computer_interact, same as interactive Computer Use.</value>
+  </data>
+  <data name="Schedule_Model" xml:space="preserve">
+    <value>Model</value>
+  </data>
+  <data name="Schedule_ModelHint" xml:space="preserve">
+    <value>Use auto (or leave blank) to follow the Schedule page default / global model.</value>
+  </data>
+  <data name="Schedule_Skills" xml:space="preserve">
+    <value>Skills</value>
+  </data>
+  <data name="Schedule_SkillsHint" xml:space="preserve">
+    <value>Leave all unchecked to inherit globally enabled skills; checking any restricts to the selection.</value>
+  </data>
+  <data name="Schedule_McpServers" xml:space="preserve">
+    <value>MCP servers</value>
+  </data>
+  <data name="Schedule_McpHint" xml:space="preserve">
+    <value>Leave all unchecked to inherit globally enabled MCP servers; checking any restricts to those servers.</value>
+  </data>
+  <data name="Schedule_Knowledge" xml:space="preserve">
+    <value>Knowledge modules</value>
+  </data>
+  <data name="Schedule_KnowledgeHint" xml:space="preserve">
+    <value>Leave unchecked to disable knowledge_search for this run; check modules to enable them.</value>
   </data>
   <data name="Settings_ApiKeyDpapiHint" xml:space="preserve">
     <value>API keys are encrypted with Windows DPAPI in your user profile. Saved keys show as *****; use the eye icon to reveal. After changing provider, paste again and click Save settings. Leave blank to omit the Authorization header.</value>

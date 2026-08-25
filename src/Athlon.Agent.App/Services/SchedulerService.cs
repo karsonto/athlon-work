@@ -1,11 +1,17 @@
 using System.Collections.Concurrent;
+using Athlon.Agent.App.Services.ComputerUse;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.SubAgents;
+
 namespace Athlon.Agent.App.Services;
 
 public sealed class SchedulerService : IDisposable
 {
     private readonly IAgentRuntime _runtime;
     private readonly IFileStorageService _storage;
+    private readonly ISessionKnowledgeState _sessionKnowledgeState;
+    private readonly IComputerUseDesktopCaptureSession _computerUseDesktop;
     private readonly AppSettings _settings;
     private readonly IAppLogger _logger;
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _runningTasks = new();
@@ -19,11 +25,15 @@ public sealed class SchedulerService : IDisposable
     public SchedulerService(
         IAgentRuntime runtime,
         IFileStorageService storage,
+        ISessionKnowledgeState sessionKnowledgeState,
+        IComputerUseDesktopCaptureSession computerUseDesktop,
         AppSettings settings,
         IAppLogger logger)
     {
         _runtime = runtime;
         _storage = storage;
+        _sessionKnowledgeState = sessionKnowledgeState;
+        _computerUseDesktop = computerUseDesktop;
         _settings = settings;
         _logger = logger.ForContext("SchedulerService");
     }
@@ -110,7 +120,10 @@ public sealed class SchedulerService : IDisposable
             return;
         }
 
-        SystemKeepAwakeHelper.Acquire();
+        var keepAwake = _settings.Schedule.KeepAwake;
+        IAsyncDisposable? desktopCapture = null;
+        var acquiredKeepAwake = false;
+
         try
         {
             _logger.Information("Executing task: {Title}", task.Title);
@@ -120,7 +133,8 @@ public sealed class SchedulerService : IDisposable
             task.LastRunAt = DateTime.UtcNow.ToString("O");
             await PersistSettingsAsync();
 
-            var workspaceRoot = ScheduleTiming.ResolveWorkspaceRoot(task);
+            var schedule = _settings.Schedule;
+            var workspaceRoot = ScheduleTiming.ResolveWorkspaceRoot(task, schedule);
             if (string.IsNullOrWhiteSpace(workspaceRoot))
             {
                 task.LastStatus = "error";
@@ -129,17 +143,95 @@ public sealed class SchedulerService : IDisposable
                 return;
             }
 
+            var mode = ScheduleTiming.ResolveMode(task, schedule);
+            var (allowToolCalls, maxRounds) = ScheduleTiming.ResolveModeOptions(mode);
+            var computerUseActive = task.ComputerUse;
+            if (computerUseActive)
+            {
+                // Computer Use requires tool calls regardless of ask/agent mode.
+                allowToolCalls = true;
+                // Minimize shell so BitBlt captures the desktop (same as interactive CU).
+                desktopCapture = await _computerUseDesktop.BeginAsync(cts.Token).ConfigureAwait(false);
+                // Keep the machine awake while capturing / interacting with the desktop.
+                if (!keepAwake)
+                {
+                    SystemKeepAwakeHelper.Acquire();
+                    acquiredKeepAwake = true;
+                }
+            }
+
+            if (keepAwake && !acquiredKeepAwake)
+            {
+                SystemKeepAwakeHelper.Acquire();
+                acquiredKeepAwake = true;
+            }
+
+            var modelOverride = ScheduleTiming.ResolveModelName(task, schedule, _settings.Model.ModelName);
+            var prompt = ScheduleTiming.BuildPrompt(task, schedule);
+
+            var disabledSkillNames = _settings.Skills
+                .Where(s => !s.Enabled && !string.IsNullOrWhiteSpace(s.Name))
+                .Select(s => s.Name.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            IReadOnlyList<string>? skillAllowList;
+            if (task.SkillNames is { Count: > 0 })
+            {
+                skillAllowList = task.SkillNames
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Select(n => n.Trim())
+                    .Where(n => !disabledSkillNames.Contains(n))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            else
+            {
+                skillAllowList = null;
+            }
+
+            var globallyEnabledMcp = _settings.McpServers
+                .Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.Name))
+                .Select(s => s.Name);
+            var mcpAllowList = ScheduleTiming.ResolveAllowList(task.McpServerNames, globallyEnabledMcp);
+
             var session = AgentSession.Create($"定时任务: {task.Title}")
                 .WithWorkspace(workspaceRoot);
 
+            var knowledgeIds = (task.KnowledgeModuleIds ?? [])
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id.Trim())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            await _sessionKnowledgeState.SaveAsync(
+                session.Id,
+                new SessionKnowledgeSnapshot(
+                    Enabled: knowledgeIds.Count > 0,
+                    ModuleIds: knowledgeIds),
+                cts.Token).ConfigureAwait(false);
+
+            using var scope = ScheduleTurnScope.Enter(new ScheduleTurnOptions(
+                ModelNameOverride: modelOverride,
+                AllowToolCalls: allowToolCalls,
+                MaxModelToolRounds: maxRounds,
+                SkillNames: skillAllowList,
+                McpServerNames: mcpAllowList));
+
+            var loopOptions = maxRounds is null
+                ? null
+                : new AgentLoopOptions { MaxModelToolRounds = maxRounds };
+
             var result = await _runtime.SendAsync(
                 session,
-                task.Prompt,
+                prompt,
                 callbacks: new AgentTurnCallbacks
                 {
-                    OnSessionUpdated = _ => Task.CompletedTask
+                    OnSessionUpdated = _ => Task.CompletedTask,
+                    // Unattended schedule: auto-approve (e.g. computer_interact).
+                    OnToolApprovalRequested = static (_, _) =>
+                        Task.FromResult(ToolApprovalDecision.Approved)
                 },
-                cancellationToken: cts.Token);
+                cancellationToken: cts.Token,
+                computerUseActive: computerUseActive,
+                loopOptions: loopOptions);
 
             await _storage.SaveSessionAsync(result);
 
@@ -169,6 +261,11 @@ public sealed class SchedulerService : IDisposable
         }
         finally
         {
+            if (desktopCapture is not null)
+            {
+                await desktopCapture.DisposeAsync().ConfigureAwait(false);
+            }
+
             if (_runningTasks.TryRemove(task.Id, out var removedCts))
             {
                 removedCts.Dispose();
@@ -179,7 +276,11 @@ public sealed class SchedulerService : IDisposable
                 task.LastRunEndedAt = DateTime.UtcNow.ToString("O");
             }
 
-            SystemKeepAwakeHelper.Release();
+            if (acquiredKeepAwake)
+            {
+                SystemKeepAwakeHelper.Release();
+            }
+
             task.NextRunAt = ScheduleTiming.ComputeNextRun(task);
             await PersistSettingsAsync();
         }

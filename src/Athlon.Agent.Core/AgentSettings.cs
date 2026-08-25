@@ -43,6 +43,18 @@ public sealed class ScheduledTask
     public string LastStatus { get; set; } = "idle";
     public string LastMessage { get; set; } = "";
     public string LastThreadId { get; set; } = "";
+
+    /// <summary>Empty = inherit all globally enabled skills; non-empty = intersection.</summary>
+    public List<string> SkillNames { get; set; } = new();
+
+    /// <summary>Empty = inherit all globally enabled MCP servers; non-empty = intersection.</summary>
+    public List<string> McpServerNames { get; set; } = new();
+
+    /// <summary>Empty = knowledge tool off for this run; non-empty = enable those modules.</summary>
+    public List<string> KnowledgeModuleIds { get; set; } = new();
+
+    /// <summary>When true, the scheduled turn runs with Computer Use tools active.</summary>
+    public bool ComputerUse { get; set; }
 }
 
 public sealed class AppSettings

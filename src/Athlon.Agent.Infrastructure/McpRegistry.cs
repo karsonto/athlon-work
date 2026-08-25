@@ -72,6 +72,11 @@ public sealed class McpRegistry(
         var definitions = new List<ToolDefinition>();
         foreach (var (serverName, tools) in _tools)
         {
+            if (!ScheduleTurnScope.IsMcpServerAllowed(serverName))
+            {
+                continue;
+            }
+
             foreach (var tool in tools)
             {
                 var encoded = McpToolNameCodec.Encode(serverName, tool.Name);
@@ -88,8 +93,18 @@ public sealed class McpRegistry(
         return definitions.OrderBy(definition => definition.Name, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    public IReadOnlyList<McpCatalogEntry> ListCatalogEntries() =>
-        _catalogCache ??= BuildCatalogEntries();
+    public IReadOnlyList<McpCatalogEntry> ListCatalogEntries()
+    {
+        var entries = _catalogCache ??= BuildCatalogEntries();
+        if (ScheduleTurnScope.Current?.McpServerNames is null)
+        {
+            return entries;
+        }
+
+        return entries
+            .Where(entry => ScheduleTurnScope.IsMcpServerAllowed(entry.ServerName))
+            .ToArray();
+    }
 
     public IReadOnlyList<McpSearchIndex.SearchResult> SearchCatalog(
         string query,
@@ -499,6 +514,13 @@ public sealed class McpRegistry(
 
     public async Task<ToolResult> InvokeAsync(string serverName, string toolName, ToolCallArguments args, CancellationToken cancellationToken = default)
     {
+        if (!ScheduleTurnScope.IsMcpServerAllowed(serverName))
+        {
+            return ToolResult.Failure(
+                "Tool not available",
+                $"MCP server '{serverName}' is not allowed for this scheduled turn.");
+        }
+
         var catalogTool = _tools.TryGetValue(serverName, out var serverTools)
             ? serverTools.FirstOrDefault(tool => string.Equals(tool.Name, toolName, StringComparison.OrdinalIgnoreCase))
             : null;

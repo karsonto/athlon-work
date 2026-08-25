@@ -290,6 +290,13 @@ internal sealed class McpDelegatingToolRouter(
 
         if (McpToolNameCodec.TryDecode(invocation.ToolName, out var serverName, out var toolName))
         {
+            if (!ScheduleTurnScope.IsMcpServerAllowed(serverName))
+            {
+                return Task.FromResult(ToolResult.Failure(
+                    "Tool not available",
+                    $"MCP server '{serverName}' is not allowed for this scheduled turn."));
+            }
+
             if (ShouldUseMcpSearch())
             {
                 return Task.FromResult(ToolResult.Failure(
