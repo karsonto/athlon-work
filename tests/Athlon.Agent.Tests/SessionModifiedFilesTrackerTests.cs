@@ -257,6 +257,7 @@ public sealed class SessionModifiedFilesTrackerTests
         Assert.Equal(2, first.Count);
         Assert.False(tracker.HasCurrentTurnPaths);
         Assert.Empty(tracker.TakeCurrentTurnSucceededFiles());
+        Assert.Empty(tracker.ModifiedFiles);
 
         ProcessSucceededFileEdit(
             tracker,
@@ -272,6 +273,49 @@ public sealed class SessionModifiedFilesTrackerTests
         var second = tracker.TakeCurrentTurnSucceededFiles();
         Assert.Single(second);
         Assert.Equal("c.java", second[0].RelativePath);
+        Assert.Single(tracker.ModifiedFiles);
+    }
+
+    [Fact]
+    public void BeginTurn_clears_prior_turn_file_entries()
+    {
+        var tracker = new SessionModifiedFilesTracker();
+        ProcessSucceededFileEdit(
+            tracker,
+            "call-1",
+            "a.ts",
+            string.Join(
+                Environment.NewLine,
+                "--- a/a.ts",
+                "+++ b/a.ts",
+                "@@ -1,1 +1,1 @@",
+                "-a",
+                "+b"));
+
+        Assert.Single(tracker.ModifiedFiles);
+        Assert.True(tracker.HasCurrentTurnPaths);
+
+        tracker.BeginTurn();
+
+        Assert.Empty(tracker.ModifiedFiles);
+        Assert.False(tracker.HasCurrentTurnPaths);
+        Assert.Empty(tracker.TakeCurrentTurnSucceededFiles());
+
+        ProcessSucceededFileEdit(
+            tracker,
+            "call-2",
+            "b.ts",
+            string.Join(
+                Environment.NewLine,
+                "--- a/b.ts",
+                "+++ b/b.ts",
+                "@@ -1,1 +1,1 @@",
+                "-x",
+                "+y"));
+
+        var files = tracker.TakeCurrentTurnSucceededFiles();
+        Assert.Single(files);
+        Assert.Equal("b.ts", files[0].RelativePath);
     }
 
     [Fact]

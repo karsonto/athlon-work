@@ -231,7 +231,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ContextOccupancy.ClearCommand = ClearContextCommand;
         ContextOccupancy.IsCompacting = IsCompacting;
         _activeUi.Messages.CollectionChanged += OnMessagesCollectionChanged;
-        WireModifiedFilesUi(_activeUi);
         ChatPage.PendingImageAttachments.CollectionChanged += (_, _) =>
         {
             ChatPage.OnPendingImagesChanged();
@@ -466,14 +465,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages => _activeUi.Messages;
-
-    public ObservableCollection<ModifiedFileViewModel> ModifiedFiles => _activeUi.ModifiedFiles;
-
-    public bool HasModifiedFiles => _activeUi.HasModifiedFiles;
-
-    public int ModifiedFilesCount => ModifiedFiles.Count;
-
-    public string ModifiedFilesHeader => _loc.Format("Shell_ModifiedFilesHeader", ModifiedFilesCount);
 
     public ObservableCollection<AgentRecordGroupViewModel> AgentRecordGroups => _sessionHistory.AgentRecordGroups;
     public ObservableCollection<QueuedTurnViewModel> QueuedTurns => _sessionTurns.QueuedTurnPresenter.GetForSession(_displayedSessionId);
@@ -933,7 +924,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         ShutdownStatusText = _loc["Shell_ShuttingDown"];
         OnPropertyChanged(nameof(ThemeToggleToolTip));
-        OnPropertyChanged(nameof(ModifiedFilesHeader));
         OnPropertyChanged(nameof(ContextSidebarToggleToolTip));
         OnPropertyChanged(nameof(NavigationSidebarToggleToolTip));
         if (string.IsNullOrWhiteSpace(_session.ActiveWorkspace))
@@ -1304,25 +1294,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
     }
 
-    private void OnModifiedFilesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        OnPropertyChanged(nameof(HasModifiedFiles));
-        OnPropertyChanged(nameof(ModifiedFilesCount));
-        OnPropertyChanged(nameof(ModifiedFilesHeader));
-    }
-
-    private void WireModifiedFilesUi(SessionTurnUiController ui)
-    {
-        ui.ModifiedFiles.CollectionChanged += OnModifiedFilesCollectionChanged;
-        OnPropertyChanged(nameof(ModifiedFiles));
-        OnPropertyChanged(nameof(HasModifiedFiles));
-        OnPropertyChanged(nameof(ModifiedFilesCount));
-        OnPropertyChanged(nameof(ModifiedFilesHeader));
-    }
-
-    private void UnwireModifiedFilesUi(SessionTurnUiController ui) =>
-        ui.ModifiedFiles.CollectionChanged -= OnModifiedFilesCollectionChanged;
-
     private void NotifyCommandStatesChanged()
     {
         SendCommand.NotifyCanExecuteChanged();
@@ -1581,7 +1552,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         UnwireSessionUsageUi(_activeUi);
         _activeUi.SetDisplayed(false);
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
-        UnwireModifiedFilesUi(_activeUi);
 
         if (!string.IsNullOrWhiteSpace(previousSessionId)
             && !string.Equals(previousSessionId, session.Id, StringComparison.Ordinal)
@@ -1595,7 +1565,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _runtime.Attach(session);
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         WireSessionUsageUi(_activeUi);
-        WireModifiedFilesUi(_activeUi);
         _activeUi.SetDisplayed(true);
         if (_activeUi.ChatView is null)
         {
@@ -2319,17 +2288,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         return FileEditor.OpenFileAsync(fullPath, _session.ActiveWorkspace, readOnly: true);
     }
 
-    [RelayCommand]
-    private Task OpenModifiedFileAsync(ModifiedFileViewModel? file)
-    {
-        if (file is null)
-        {
-            return Task.CompletedTask;
-        }
-
-        return OpenWorkspaceFileForPreviewAsync(file.RelativePath);
-    }
-
     private string? ResolveWorkspaceFilePath(string relativeOrFullPath)
     {
         if (string.IsNullOrWhiteSpace(relativeOrFullPath))
@@ -2789,7 +2747,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
-        UnwireModifiedFilesUi(_activeUi);
         WorkspacePane.PropertyChanged -= OnWorkspacePanePropertyChanged;
         StatusFeedback.CancelPendingHide();
         UpdateBanner.Dispose();

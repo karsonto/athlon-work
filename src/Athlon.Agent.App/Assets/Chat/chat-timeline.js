@@ -852,6 +852,47 @@ function findFilesChangedTargetCard(upsert) {
   return null;
 }
 
+/**
+ * Place the files-changed row after the current turn's activity (or user),
+ * and before the first final assistant bubble — so it scrolls with history.
+ */
+function placeFilesChangedRow(row) {
+  var root = getMessageRoot();
+  if (!root || !row) return;
+  var rows = Array.prototype.slice.call(root.querySelectorAll('.message-row'));
+  var lastUserIdx = -1;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].classList.contains('user')) lastUserIdx = i;
+  }
+
+  var insertAfter = lastUserIdx >= 0 ? rows[lastUserIdx] : null;
+  var insertBefore = null;
+  for (var j = lastUserIdx + 1; j < rows.length; j++) {
+    var candidate = rows[j];
+    if (candidate === row) continue;
+    if (candidate.querySelector('.turn-activity')) {
+      insertAfter = candidate;
+      continue;
+    }
+    if (candidate.querySelector('.files-changed-card')) continue;
+    if (candidate.classList.contains('assistant')
+        && candidate.querySelector('.bubble > .message-content')) {
+      insertBefore = candidate;
+      break;
+    }
+  }
+
+  if (insertBefore && insertBefore.parentNode === root) {
+    root.insertBefore(row, insertBefore);
+    return;
+  }
+  if (insertAfter && insertAfter.parentNode === root) {
+    root.insertBefore(row, insertAfter.nextSibling);
+    return;
+  }
+  root.appendChild(row);
+}
+
 function appendFilesChangedCard(event) {
   state.currentAssistantEl = null;
   state.currentReasoningEl = null;
@@ -862,20 +903,21 @@ function appendFilesChangedCard(event) {
   var card = existing;
   var sealingLiveCard = !!(existing && existing.getAttribute('data-live') === '1');
   var openPaths = {};
+  var row = null;
   if (existing) {
     existing.querySelectorAll('.files-changed-item.open').forEach(function (item) {
       var path = item.getAttribute('data-path') || '';
       if (path) openPaths[path] = true;
     });
     card.innerHTML = '';
+    row = existing.closest('.message-row') || existing.parentNode;
   } else {
-    var row = document.createElement('div');
-    row.className = 'message-row assistant';
+    row = document.createElement('div');
+    row.className = 'message-row assistant files-changed-host';
     card = document.createElement('div');
     card.className = 'files-changed-card';
     if (event.upsert) card.setAttribute('data-live', '1');
     row.appendChild(card);
-    getMessageRoot().appendChild(row);
   }
 
   var title = document.createElement('div');
@@ -942,6 +984,7 @@ function appendFilesChangedCard(event) {
     // live upsert can reuse them instead of stacking duplicates.
     if (sealingLiveCard) card.setAttribute('data-sealed', '1');
   }
+  placeFilesChangedRow(row);
   updateEmptyStateVisibility();
   scrollToBottom();
 }

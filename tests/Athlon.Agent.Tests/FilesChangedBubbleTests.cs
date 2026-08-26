@@ -514,6 +514,79 @@ public sealed class FilesChangedBubbleTests
     }
 
     [Fact]
+    public void BuildReplayEvents_multi_turn_emits_independent_files_changed_in_order()
+    {
+        var user1 = ChatMessage.Create(MessageRole.User, "edit a");
+        var edit1 = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-1",
+                "Tool `file_edit` succeeded.",
+                "",
+                "Arguments: path = a.ts",
+                "Summary: Edited",
+                "",
+                "--- a/a.ts",
+                "+++ b/a.ts",
+                "@@ -1,1 +1,1 @@",
+                "-old",
+                "+new"));
+        var assistant1 = ChatMessage.Create(MessageRole.Assistant, "done a");
+
+        var user2 = ChatMessage.Create(MessageRole.User, "edit b");
+        var edit2 = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-2",
+                "Tool `file_edit` succeeded.",
+                "",
+                "Arguments: path = b.ts",
+                "Summary: Edited",
+                "",
+                "--- a/b.ts",
+                "+++ b/b.ts",
+                "@@ -1,1 +1,1 @@",
+                "-x",
+                "+y"));
+        var assistant2 = ChatMessage.Create(MessageRole.Assistant, "done b");
+
+        var display = new List<ChatMessageViewModel>
+        {
+            new(user1),
+            new(assistant1),
+            new(user2),
+            new(assistant2)
+        };
+        var source = new List<ChatMessage> { user1, edit1, assistant1, user2, edit2, assistant2 };
+
+        var events = ChatEventSerializer.BuildReplayEvents(display, showToolCalls: false, activitySourceMessages: source)
+            .ToList();
+
+        var fileEvents = events.Where(json => json.Contains("FILES_CHANGED", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, fileEvents.Count);
+
+        using var first = JsonDocument.Parse(fileEvents[0]);
+        using var second = JsonDocument.Parse(fileEvents[1]);
+        Assert.Equal("a.ts", first.RootElement.GetProperty("files")[0].GetProperty("path").GetString());
+        Assert.Equal("b.ts", second.RootElement.GetProperty("files")[0].GetProperty("path").GetString());
+        Assert.Equal(1, first.RootElement.GetProperty("files").GetArrayLength());
+        Assert.Equal(1, second.RootElement.GetProperty("files").GetArrayLength());
+
+        var activities = events.Where(json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal)).ToList();
+        var assistants = events.Where(json => json.Contains("STATIC_ASSISTANT_HTML", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, activities.Count);
+        Assert.Equal(2, assistants.Count);
+
+        Assert.True(events.IndexOf(activities[0]) < events.IndexOf(fileEvents[0]));
+        Assert.True(events.IndexOf(fileEvents[0]) < events.IndexOf(assistants[0]));
+        Assert.True(events.IndexOf(activities[1]) < events.IndexOf(fileEvents[1]));
+        Assert.True(events.IndexOf(fileEvents[1]) < events.IndexOf(assistants[1]));
+        Assert.True(events.IndexOf(assistants[0]) < events.IndexOf(activities[1]));
+    }
+
+    [Fact]
     public void BuildReplayEvents_folds_reasoning_into_turn_activity()
     {
         var user = ChatMessage.Create(MessageRole.User, "think");

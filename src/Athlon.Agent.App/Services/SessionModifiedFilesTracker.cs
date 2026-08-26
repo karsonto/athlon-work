@@ -29,7 +29,13 @@ public sealed class SessionModifiedFilesTracker
         ModifiedFiles.Clear();
     }
 
-    public void BeginTurn() => _currentTurnPaths.Clear();
+    /// <summary>Starts a new user turn: drop prior-turn file entries so the list is per-turn only.</summary>
+    public void BeginTurn()
+    {
+        _currentTurnPaths.Clear();
+        _byPath.Clear();
+        ModifiedFiles.Clear();
+    }
 
     public IReadOnlyList<ModifiedFileViewModel> TakeCurrentTurnSucceededFiles()
     {
@@ -52,6 +58,8 @@ public sealed class SessionModifiedFilesTracker
         foreach (var file in files)
         {
             _currentTurnPaths.Remove(file.RelativePath);
+            _byPath.Remove(file.RelativePath);
+            ModifiedFiles.Remove(file);
         }
 
         return files;
