@@ -1,8 +1,9 @@
 namespace Athlon.Agent.Core.Knowledge;
 
 /// <summary>
-/// Vision/OCR backend for knowledge PDF pages. Callers pass at most
+/// Vision/OCR backend for knowledge PDF images. Callers pass at most
 /// <see cref="KnowledgeOcrSettings.BatchSize"/> images per call.
+/// PageNumber may be a batch slot id used only for response headers.
 /// </summary>
 public interface IKnowledgePageOcr
 {

@@ -766,10 +766,10 @@ Error: {1}</value>
     <value>Knowledge spaces</value>
   </data>
   <data name="Knowledge_OcrEnabled" xml:space="preserve">
-    <value>OCR scanned pages on upload</value>
+    <value>OCR PDF images on upload</value>
   </data>
   <data name="Knowledge_OcrEnabledHint" xml:space="preserve">
-    <value>When on, sparse PDF pages are rendered and transcribed by the vision chat model (up to 3 pages per request). When off, only the PDF text layer is indexed.</value>
+    <value>When on, embedded PDF images are OCR'd by the vision model and merged with the text layer on the same page; pages with no text and no images fall back to full-page OCR. When off, only the PDF text layer is indexed.</value>
   </data>
   <data name="Knowledge_SplitByPage" xml:space="preserve">
     <value>Split chunks by page</value>

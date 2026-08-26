@@ -2,6 +2,7 @@ using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Knowledge;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.Content;
 
 namespace Athlon.Agent.Infrastructure.Knowledge;
 
@@ -9,8 +10,11 @@ public sealed record ExtractedKnowledgeDocument(string Text, string Title);
 
 public sealed class KnowledgeDocumentExtractor(
     AppSettings settings,
-    IKnowledgePageOcr pageOcr)
+    IKnowledgePageOcr pageOcr,
+    IAppLogger logger)
 {
+    private readonly IAppLogger _logger = logger.ForContext("KnowledgeExtractor");
+
     public Task<ExtractedKnowledgeDocument> ExtractAsync(
         string path,
         CancellationToken cancellationToken = default) =>
@@ -60,14 +64,15 @@ public sealed class KnowledgeDocumentExtractor(
         CancellationToken cancellationToken)
     {
         var ocr = settings.Knowledge.Ocr;
-        var minChars = Math.Max(1, ocr.MinCharsPerPage);
         var batchSize = Math.Clamp(ocr.BatchSize <= 0 ? 3 : ocr.BatchSize, 1, 8);
         var pdfBytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
         var baseName = Path.GetFileNameWithoutExtension(path);
-        var builder = new StringBuilder();
-        var pending = new List<KnowledgeOcrPageImage>();
         var tempDirectory = Path.Combine(Path.GetTempPath(), "athlon-knowledge-ocr", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(tempDirectory);
+
+        var pageWorks = new List<PageWork>();
+        var pendingOcr = new List<PendingOcrItem>();
+        var nextSlot = 1;
 
         try
         {
@@ -80,32 +85,47 @@ public sealed class KnowledgeDocumentExtractor(
                 pageIndex++;
                 var pageNumber = page.Number;
                 var pageText = DocumentTextExtraction.NormalizeText(page.Text ?? "");
-                if (pageText.Length >= minChars)
+                var exported = ExportPageImages(page, baseName, pageNumber, tempDirectory);
+                var work = new PageWork(pageNumber, pageText);
+
+                if (exported.Count > 0)
                 {
-                    AppendPage(builder, pageNumber, pageText);
-                    Report(progress, pageIndex, pageCount, $"已抽取第 {pageNumber} 页文本");
-                    continue;
+                    foreach (var (imageIndex, attachment) in exported)
+                    {
+                        pendingOcr.Add(new PendingOcrItem(nextSlot++, pageNumber, imageIndex, attachment));
+                    }
+
+                    Report(progress, pageIndex, pageCount, $"第 {pageNumber} 页：文字 + {exported.Count} 张图待 OCR");
+                }
+                else if (string.IsNullOrWhiteSpace(pageText))
+                {
+                    var fallback = await PdfPageJpegRenderer
+                        .RenderPageAsync(pdfBytes, baseName, pageNumber, tempDirectory, ocr.RenderDpi, cancellationToken)
+                        .ConfigureAwait(false);
+                    pendingOcr.Add(new PendingOcrItem(nextSlot++, pageNumber, 0, fallback));
+                    Report(progress, pageIndex, pageCount, $"第 {pageNumber} 页无字无图，整页 OCR");
+                }
+                else
+                {
+                    Report(progress, pageIndex, pageCount, $"第 {pageNumber} 页仅文字层");
                 }
 
-                var image = await PdfPageJpegRenderer
-                    .RenderPageAsync(pdfBytes, baseName, pageNumber, tempDirectory, ocr.RenderDpi, cancellationToken)
-                    .ConfigureAwait(false);
-                pending.Add(new KnowledgeOcrPageImage(pageNumber, image));
-                Report(progress, pageIndex, pageCount, $"第 {pageNumber} 页待 OCR（队列 {pending.Count}/{batchSize}）");
+                pageWorks.Add(work);
 
-                if (pending.Count >= batchSize)
+                while (pendingOcr.Count >= batchSize)
                 {
-                    await FlushOcrBatchAsync(builder, pending, progress, pageIndex, pageCount, cancellationToken)
+                    var batch = pendingOcr.GetRange(0, batchSize);
+                    pendingOcr.RemoveRange(0, batchSize);
+                    await FlushOcrBatchAsync(batch, pageWorks, progress, pageIndex, pageCount, cancellationToken)
                         .ConfigureAwait(false);
-                    pending.Clear();
                 }
             }
 
-            if (pending.Count > 0)
+            if (pendingOcr.Count > 0)
             {
-                await FlushOcrBatchAsync(builder, pending, progress, pageIndex, pageCount, cancellationToken)
+                await FlushOcrBatchAsync(pendingOcr, pageWorks, progress, pageIndex, pageCount, cancellationToken)
                     .ConfigureAwait(false);
-                pending.Clear();
+                pendingOcr.Clear();
             }
         }
         finally
@@ -113,12 +133,78 @@ public sealed class KnowledgeDocumentExtractor(
             TryDeleteDirectory(tempDirectory);
         }
 
+        var builder = new StringBuilder();
+        foreach (var work in pageWorks.OrderBy(p => p.PageNumber))
+        {
+            var merged = MergePageContent(work);
+            AppendPage(builder, work.PageNumber, merged);
+        }
+
         return builder.ToString();
     }
 
+    private List<(int ImageIndex, ImageAttachment Attachment)> ExportPageImages(
+        Page page,
+        string baseName,
+        int pageNumber,
+        string tempDirectory)
+    {
+        var result = new List<(int, ImageAttachment)>();
+        IReadOnlyList<IPdfImage> images;
+        try
+        {
+            images = page.GetImages().ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("Failed to enumerate images on PDF page {Page}: {Message}", pageNumber, ex.Message);
+            return result;
+        }
+
+        var imageIndex = 0;
+        foreach (var image in images)
+        {
+            imageIndex++;
+            if (!PdfEmbeddedImageExporter.IsLargeEnough(image))
+            {
+                continue;
+            }
+
+            try
+            {
+                var attachment = PdfEmbeddedImageExporter.TryExport(
+                    image,
+                    baseName,
+                    pageNumber,
+                    imageIndex,
+                    tempDirectory);
+                if (attachment is null)
+                {
+                    _logger.Warning(
+                        "Skipping undecodable image {ImageIndex} on PDF page {Page}",
+                        imageIndex,
+                        pageNumber);
+                    continue;
+                }
+
+                result.Add((imageIndex, attachment));
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    "Failed to export image {ImageIndex} on PDF page {Page}: {Message}",
+                    imageIndex,
+                    pageNumber,
+                    ex.Message);
+            }
+        }
+
+        return result;
+    }
+
     private async Task FlushOcrBatchAsync(
-        StringBuilder builder,
-        List<KnowledgeOcrPageImage> batch,
+        List<PendingOcrItem> batch,
+        List<PageWork> pageWorks,
         IProgress<KnowledgeIndexingProgress>? progress,
         int processedPages,
         int totalPages,
@@ -131,20 +217,58 @@ public sealed class KnowledgeDocumentExtractor(
 
         var first = batch[0].PageNumber;
         var last = batch[^1].PageNumber;
-        Report(progress, processedPages, totalPages, $"OCR 第 {first}–{last} 页（{batch.Count} 张）");
+        Report(progress, processedPages, totalPages, $"OCR 图批（页 {first}–{last}，{batch.Count} 张）");
 
+        var request = batch
+            .Select(item => new KnowledgeOcrPageImage(item.Slot, item.Attachment))
+            .ToArray();
         var recognized = await pageOcr
-            .RecognizePagesAsync(batch, cancellationToken)
+            .RecognizePagesAsync(request, cancellationToken)
             .ConfigureAwait(false);
 
-        foreach (var page in batch)
+        var byPage = pageWorks.ToDictionary(p => p.PageNumber);
+        foreach (var item in batch)
         {
-            if (recognized.TryGetValue(page.PageNumber, out var text)
-                && !string.IsNullOrWhiteSpace(text))
+            if (!recognized.TryGetValue(item.Slot, out var text) || string.IsNullOrWhiteSpace(text))
             {
-                AppendPage(builder, page.PageNumber, DocumentTextExtraction.NormalizeText(text));
+                continue;
             }
+
+            if (!byPage.TryGetValue(item.PageNumber, out var work))
+            {
+                continue;
+            }
+
+            work.OcrFragments.Add(DocumentTextExtraction.NormalizeText(text));
         }
+    }
+
+    private static string MergePageContent(PageWork work)
+    {
+        var builder = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(work.Text))
+        {
+            builder.AppendLine(work.Text.Trim());
+        }
+
+        foreach (var fragment in work.OcrFragments)
+        {
+            if (string.IsNullOrWhiteSpace(fragment))
+            {
+                continue;
+            }
+
+            if (builder.Length > 0)
+            {
+                builder.AppendLine();
+                builder.AppendLine("---");
+                builder.AppendLine();
+            }
+
+            builder.AppendLine(fragment.Trim());
+        }
+
+        return builder.ToString().Trim();
     }
 
     private static void AppendPage(StringBuilder builder, int pageNumber, string text)
@@ -193,4 +317,17 @@ public sealed class KnowledgeDocumentExtractor(
             // Best-effort cleanup of OCR temp JPEGs.
         }
     }
+
+    private sealed class PageWork(int pageNumber, string text)
+    {
+        public int PageNumber { get; } = pageNumber;
+        public string Text { get; } = text;
+        public List<string> OcrFragments { get; } = [];
+    }
+
+    private sealed record PendingOcrItem(
+        int Slot,
+        int PageNumber,
+        int ImageIndex,
+        ImageAttachment Attachment);
 }

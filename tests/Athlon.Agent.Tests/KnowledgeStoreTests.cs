@@ -166,7 +166,7 @@ public sealed class KnowledgeStoreTests
             settings,
             store,
             new FakeEmbeddingClient([1, 0]),
-            new KnowledgeDocumentExtractor(settings, new NoKnowledgeOcr()),
+            new KnowledgeDocumentExtractor(settings, new NoKnowledgeOcr(), new NoOpLogger()),
             new KnowledgeChunker(settings),
             new NoOpLogger());
         var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "??" });
@@ -200,7 +200,7 @@ public sealed class KnowledgeStoreTests
             settings,
             store,
             new FakeEmbeddingClient([1, 0]),
-            new KnowledgeDocumentExtractor(settings, new NoKnowledgeOcr()),
+            new KnowledgeDocumentExtractor(settings, new NoKnowledgeOcr(), new NoOpLogger()),
             new KnowledgeChunker(settings),
             new NoOpLogger());
         var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "??" });

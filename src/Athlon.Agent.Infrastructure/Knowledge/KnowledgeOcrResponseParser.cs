@@ -55,13 +55,14 @@ public static partial class KnowledgeOcrResponseParser
     public static string BuildUserPrompt(IReadOnlyList<int> pageNumbers)
     {
         var builder = new StringBuilder();
-        builder.AppendLine("Extract all readable text from the attached page image(s) for knowledge indexing.");
+        builder.AppendLine("Extract all readable text from the attached image(s) for knowledge indexing.");
         builder.AppendLine("Rules:");
         builder.AppendLine("- Output plain text only (no chat, no apologies).");
-        builder.AppendLine("- Preserve reading order; keep numbers and table cell text.");
-        builder.AppendLine("- For each image use exactly this header then the page text:");
+        builder.AppendLine("- Preserve reading order; keep numbers and table/chart labels.");
+        builder.AppendLine("- Images may be cropped figures from a PDF page, not full pages.");
+        builder.AppendLine("- For each image use exactly this header then the transcribed text:");
         builder.AppendLine("### Page N");
-        builder.Append("Pages in order: ");
+        builder.Append("Images in order (N values): ");
         builder.Append(string.Join(", ", pageNumbers));
         builder.AppendLine(".");
         return builder.ToString();

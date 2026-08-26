@@ -106,7 +106,7 @@ public sealed class ChatDocumentAttachmentExtractorTests
         await File.WriteAllTextAsync(temp, "# Title\n\nbody");
         try
         {
-            var knowledge = new KnowledgeDocumentExtractor(new AppSettings(), new NoOcr());
+            var knowledge = new KnowledgeDocumentExtractor(new AppSettings(), new NoOcr(), new NoOpChatAttachmentLogger());
             var extracted = await knowledge.ExtractAsync(temp);
             Assert.Contains("body", extracted.Text);
             Assert.Equal(Path.GetFileNameWithoutExtension(temp), extracted.Title);
@@ -123,5 +123,14 @@ public sealed class ChatDocumentAttachmentExtractorTests
             IReadOnlyList<Athlon.Agent.Core.Knowledge.KnowledgeOcrPageImage> pages,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyDictionary<int, string>>(new Dictionary<int, string>());
+    }
+
+    private sealed class NoOpChatAttachmentLogger : IAppLogger
+    {
+        public void Debug(string messageTemplate, params object[] values) { }
+        public void Information(string messageTemplate, params object[] values) { }
+        public void Warning(string messageTemplate, params object[] values) { }
+        public void Error(Exception exception, string messageTemplate, params object[] values) { }
+        public IAppLogger ForContext(string sourceContext) => this;
     }
 }

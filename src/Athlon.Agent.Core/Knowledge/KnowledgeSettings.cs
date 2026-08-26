@@ -15,7 +15,9 @@ public sealed class KnowledgeOcrSettings
     /// <summary>When false, PDF import uses PdfPig text only (legacy behavior).</summary>
     public bool Enabled { get; set; }
 
-    /// <summary>Pages with fewer characters than this are rendered and sent to the vision model.</summary>
+    /// <summary>
+    /// Deprecated: ignored. OCR runs for embedded page images (and full-page fallback when a page has no text and no images), not based on text length.
+    /// </summary>
     public int MinCharsPerPage { get; set; } = 40;
 
     /// <summary>Max page images included in a single vision OCR request.</summary>

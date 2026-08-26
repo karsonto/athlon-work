@@ -9,7 +9,9 @@ public sealed class VisionChatKnowledgeOcr(
 {
     private const string SystemPrompt =
         "You are an OCR engine for financial and business documents. "
-        + "Transcribe visible text faithfully. Never invent content that is not in the image.";
+        + "Transcribe visible text from the attached image(s) faithfully. "
+        + "Images may be embedded charts, tables, or full-page scans — not always an entire PDF page. "
+        + "Never invent content that is not in the image.";
 
     private readonly IAppLogger _logger = logger.ForContext("KnowledgeOcr");
 

@@ -775,10 +775,10 @@
     <value>知识空间</value>
   </data>
   <data name="Knowledge_OcrEnabled" xml:space="preserve">
-    <value>上传时对扫描页做 OCR</value>
+    <value>上传时对 PDF 图片做 OCR</value>
   </data>
   <data name="Knowledge_OcrEnabledHint" xml:space="preserve">
-    <value>开启后，文本不足的 PDF 页会渲成图片并用当前视觉模型识别（每批最多 3 页）。关闭则保持仅抽取 PDF 文字层。</value>
+    <value>开启后：PDF 页内嵌入图用视觉模型 OCR，正文仍抽文字层，二者写入同一页；无字无图页则整页渲图 OCR。关闭则仅抽取文字层。</value>
   </data>
   <data name="Knowledge_SplitByPage" xml:space="preserve">
     <value>按页分割切片</value>

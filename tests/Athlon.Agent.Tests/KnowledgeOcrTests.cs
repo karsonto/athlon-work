@@ -79,7 +79,7 @@ public sealed class KnowledgeOcrTests
         var settings = new AppSettings();
         settings.Knowledge.Ocr.Enabled = false;
         var ocr = new RecordingOcr();
-        var extractor = new KnowledgeDocumentExtractor(settings, ocr);
+        var extractor = new KnowledgeDocumentExtractor(settings, ocr, new NoOpLogger());
 
         var extracted = await extractor.ExtractAsync(Fixture("sample-3pages.pdf"));
 
@@ -93,7 +93,7 @@ public sealed class KnowledgeOcrTests
         var settings = new AppSettings();
         settings.Knowledge.Ocr.Enabled = false;
         var ocr = new RecordingOcr();
-        var extractor = new KnowledgeDocumentExtractor(settings, ocr);
+        var extractor = new KnowledgeDocumentExtractor(settings, ocr, new NoOpLogger());
         var path = Path.Combine(Path.GetTempPath(), "athlon-blank-" + Guid.NewGuid().ToString("N") + ".pdf");
         await File.WriteAllBytesAsync(path, CreateBlankPdfBytes(pageCount: 1));
         try
@@ -110,20 +110,42 @@ public sealed class KnowledgeOcrTests
     }
 
     [Fact]
-    public async Task ExtractAsync_WhenOcrEnabled_BatchesByConfiguredSize()
+    public async Task ExtractAsync_WhenOcrEnabled_TextOnlyPdf_DoesNotCallOcr()
     {
         var settings = new AppSettings();
         settings.Knowledge.Ocr.Enabled = true;
-        settings.Knowledge.Ocr.MinCharsPerPage = int.MaxValue;
-        settings.Knowledge.Ocr.BatchSize = 2;
         var ocr = new RecordingOcr();
-        var extractor = new KnowledgeDocumentExtractor(settings, ocr);
+        var extractor = new KnowledgeDocumentExtractor(settings, ocr, new NoOpLogger());
 
         var extracted = await extractor.ExtractAsync(Fixture("sample-3pages.pdf"));
 
         Assert.Contains("# Page 1", extracted.Text);
-        Assert.Contains("ocr-page-3", extracted.Text);
-        Assert.Equal([2, 1], ocr.BatchSizes);
+        Assert.Empty(ocr.BatchSizes);
+        Assert.DoesNotContain("ocr-page-", extracted.Text);
+    }
+
+    [Fact]
+    public async Task ExtractAsync_WhenOcrEnabled_BlankPages_FallbackFullPageOcr_BatchesBySize()
+    {
+        var settings = new AppSettings();
+        settings.Knowledge.Ocr.Enabled = true;
+        settings.Knowledge.Ocr.BatchSize = 2;
+        var ocr = new RecordingOcr();
+        var extractor = new KnowledgeDocumentExtractor(settings, ocr, new NoOpLogger());
+        var path = Path.Combine(Path.GetTempPath(), "athlon-blank3-" + Guid.NewGuid().ToString("N") + ".pdf");
+        await File.WriteAllBytesAsync(path, CreateBlankPdfBytes(pageCount: 3));
+        try
+        {
+            var extracted = await extractor.ExtractAsync(path);
+
+            Assert.Contains("# Page 1", extracted.Text);
+            Assert.Contains("ocr-page-", extracted.Text);
+            Assert.Equal([2, 1], ocr.BatchSizes);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]
@@ -131,28 +153,65 @@ public sealed class KnowledgeOcrTests
     {
         var settings = new AppSettings();
         settings.Knowledge.Ocr.Enabled = true;
-        settings.Knowledge.Ocr.MinCharsPerPage = int.MaxValue;
         var ocr = new EmptyOcr();
-        var extractor = new KnowledgeDocumentExtractor(settings, ocr);
-
-        var error = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => extractor.ExtractAsync(Fixture("sample-3pages.pdf")));
-        Assert.Contains("视觉 OCR", error.Message);
+        var extractor = new KnowledgeDocumentExtractor(settings, ocr, new NoOpLogger());
+        var path = Path.Combine(Path.GetTempPath(), "athlon-blank-emptyocr-" + Guid.NewGuid().ToString("N") + ".pdf");
+        await File.WriteAllBytesAsync(path, CreateBlankPdfBytes(pageCount: 1));
+        try
+        {
+            var error = await Assert.ThrowsAsync<InvalidOperationException>(() => extractor.ExtractAsync(path));
+            Assert.Contains("视觉 OCR", error.Message);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     [Fact]
-    public async Task ExtractAsync_WhenOcrEnabled_DefaultBatchSizeThree()
+    public async Task ExtractAsync_WhenOcrEnabled_DefaultBatchSizeThree_OnBlankPages()
     {
         var settings = new AppSettings();
         settings.Knowledge.Ocr.Enabled = true;
-        settings.Knowledge.Ocr.MinCharsPerPage = int.MaxValue;
         Assert.Equal(3, settings.Knowledge.Ocr.BatchSize);
         var ocr = new RecordingOcr();
-        var extractor = new KnowledgeDocumentExtractor(settings, ocr);
+        var extractor = new KnowledgeDocumentExtractor(settings, ocr, new NoOpLogger());
+        var path = Path.Combine(Path.GetTempPath(), "athlon-blank-batch3-" + Guid.NewGuid().ToString("N") + ".pdf");
+        await File.WriteAllBytesAsync(path, CreateBlankPdfBytes(pageCount: 3));
+        try
+        {
+            await extractor.ExtractAsync(path);
+            Assert.Equal([3], ocr.BatchSizes);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 
-        await extractor.ExtractAsync(Fixture("sample-3pages.pdf"));
-
-        Assert.Equal([3], ocr.BatchSizes);
+    [Fact]
+    public async Task ExtractAsync_WhenOcrEnabled_MergesTextAndOcrOnSamePage()
+    {
+        // Blank page → full-page OCR fallback; RecordingOcr returns text keyed by slot.
+        // Also verify text-only pages keep # Page markers without forcing MinChars.
+        var settings = new AppSettings();
+        settings.Knowledge.Ocr.Enabled = true;
+        var ocr = new RecordingOcr();
+        var extractor = new KnowledgeDocumentExtractor(settings, ocr, new NoOpLogger());
+        var path = Path.Combine(Path.GetTempPath(), "athlon-blank-merge-" + Guid.NewGuid().ToString("N") + ".pdf");
+        await File.WriteAllBytesAsync(path, CreateBlankPdfBytes(pageCount: 1));
+        try
+        {
+            var extracted = await extractor.ExtractAsync(path);
+            Assert.Contains("# Page 1", extracted.Text);
+            Assert.Contains("ocr-page-1", extracted.Text);
+            // Single page block (no second # Page for OCR)
+            Assert.Single(extracted.Text.Split("# Page ", StringSplitOptions.RemoveEmptyEntries));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     /// <summary>Minimal multi-page PDF with no extractable text layer (PdfPig only; no rasterization).</summary>
