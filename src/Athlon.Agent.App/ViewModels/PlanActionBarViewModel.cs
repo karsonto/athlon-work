@@ -26,6 +26,8 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
     private Action<string?, ShellToastKind>? _showToast;
     private Func<Task>? _onBuildApprovedAsync;
     private Action<string>? _openPlanPreview;
+    private Action? _focusComposer;
+    private Action<string?>? _setComposerHint;
 
     public PlanActionBarViewModel(
         SessionTurnCoordinator sessionTurns,
@@ -51,7 +53,9 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         Func<SessionTurnUiController> getActiveUi,
         Action<string?, ShellToastKind> showToast,
         Func<Task> onBuildApprovedAsync,
-        Action<string> openPlanPreview)
+        Action<string> openPlanPreview,
+        Action? focusComposer = null,
+        Action<string?>? setComposerHint = null)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
@@ -60,6 +64,8 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         _showToast = showToast;
         _onBuildApprovedAsync = onBuildApprovedAsync;
         _openPlanPreview = openPlanPreview;
+        _focusComposer = focusComposer;
+        _setComposerHint = setComposerHint;
         RequestRefreshFromActiveRun();
     }
 
@@ -77,6 +83,9 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _showRevise;
+
+    [ObservableProperty]
+    private bool _isRevisePending;
 
     private void OnRunChanged(object? sender, PlanRunChangedEventArgs e)
     {
@@ -107,6 +116,7 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
             Summary = string.Empty;
             ShowBuild = false;
             ShowRevise = false;
+            ClearRevisePending();
             NotifyActionCommands();
             return;
         }
@@ -133,10 +143,34 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
             _sessionTurns.Cancel(sessionId);
         }
 
+        ClearRevisePending();
         _planPhaseAccessor.Clear(sessionId);
         await _planRunStore.ClearActiveAsync(sessionId).ConfigureAwait(true);
         _planSessionState.NotifyChanged(null);
         RequestRefreshFromActiveRun();
+    }
+
+    /// <summary>If revise is pending, clears it and returns true so Send can start PlanContinuation.Revise.</summary>
+    public bool TryConsumeRevisePending()
+    {
+        if (!IsRevisePending)
+        {
+            return false;
+        }
+
+        ClearRevisePending();
+        return true;
+    }
+
+    public void ClearRevisePending()
+    {
+        if (!IsRevisePending)
+        {
+            return;
+        }
+
+        IsRevisePending = false;
+        _setComposerHint?.Invoke(null);
     }
 
     [RelayCommand(CanExecute = nameof(CanBuild))]
@@ -154,6 +188,7 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
             return;
         }
 
+        ClearRevisePending();
         try
         {
             var session = await _planOrchestrator.ContinueAsync(
@@ -175,7 +210,25 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
     }
 
     [RelayCommand(CanExecute = nameof(CanRevise))]
-    private void Revise() => StartContinuation(PlanContinuationKind.Revise);
+    private void Revise()
+    {
+        if (!ShowRevise)
+        {
+            return;
+        }
+
+        if (IsRevisePending)
+        {
+            ClearRevisePending();
+            _showToast?.Invoke(_loc["Plan_ReviseCancelled"], ShellToastKind.Info);
+            return;
+        }
+
+        IsRevisePending = true;
+        _setComposerHint?.Invoke(_loc["Plan_ReviseComposerHint"]);
+        _showToast?.Invoke(_loc["Plan_ReviseComposerHint"], ShellToastKind.Info);
+        _focusComposer?.Invoke();
+    }
 
     private bool CanBuild() => ShowBuild;
 
@@ -185,24 +238,6 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
     {
         BuildCommand.NotifyCanExecuteChanged();
         ReviseCommand.NotifyCanExecuteChanged();
-    }
-
-    private void StartContinuation(PlanContinuationKind kind)
-    {
-        if (_getDisplayedSessionId is null || _getSession is null || _getActiveUi is null)
-        {
-            return;
-        }
-
-        var error = _sessionTurns.TryStartPlanContinuation(
-            _getDisplayedSessionId(),
-            _getSession(),
-            kind,
-            _getActiveUi());
-        if (error is not null)
-        {
-            _showToast?.Invoke(error, ShellToastKind.Error);
-        }
     }
 
     private void TryOpenPlanPreview(PlanRun? run)

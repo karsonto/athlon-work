@@ -12,11 +12,12 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, A
     public ToolDefinition Definition { get; } = new(
         "grep_files",
         "Search file contents. Literal matching by default (case-insensitive); set regex true for .NET regular expressions. "
+            + "Paths may be inside or outside the workspace. "
             + "Use for simple strings or patterns/class names before file_read on large files. "
             + $"Scans up to {MaxFilesToScan} files, returns up to {MaxMatches} matches.",
         ToolSchema.Object()
             .String("pattern", "Text pattern (literal or regex). Regex example with regex true: class\\s+\\w+", required: true, minLength: 1)
-            .String("path", ToolPathDescriptions.OptionalWorkspaceRelativeDirectory)
+            .String("path", ToolPathDescriptions.OptionalReadDirectory)
             .String("glob", "File glob filter, e.g. *.cs", defaultValue: "*", minLength: 1)
             .Boolean("regex", "Treat pattern as .NET regular expression (default: false, literal case-insensitive)", defaultValue: false)
             .Build());
@@ -24,7 +25,15 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, A
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
         if (!ToolArguments.TryGetRequired(invocation, "pattern", out var pattern, out var error)) return error;
-        if (!WorkspaceToolHelper.TryResolveOptionalNormalizedPath(invocation, guard, out var fullPath, out error)) return error;
+        if (!WorkspaceToolHelper.TryResolveOptionalNormalizedPath(
+                invocation,
+                guard,
+                out var fullPath,
+                out error,
+                requireInsideWorkspace: false))
+        {
+            return error;
+        }
 
         var useRegex = invocation.Arguments.GetBoolean("regex");
         if (!GrepLineMatcher.TryCreate(pattern, useRegex, out var matcher, out var regexError))

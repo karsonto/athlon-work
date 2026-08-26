@@ -25,7 +25,38 @@ public partial class ChatPageView : UserControl, IChatLayoutSurface
             Interval = LongPressThreshold
         };
         _longPressTimer.Tick += LongPressTimer_OnTick;
+        DataContextChanged += OnDataContextChanged;
+        Unloaded += OnUnloaded;
     }
+
+    private ChatPageViewModel? _subscribedChatPage;
+
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (_subscribedChatPage is not null)
+        {
+            _subscribedChatPage.FocusComposerRequested -= OnFocusComposerRequested;
+            _subscribedChatPage = null;
+        }
+
+        if (e.NewValue is MainShellViewModel shell)
+        {
+            _subscribedChatPage = shell.ChatPage;
+            _subscribedChatPage.FocusComposerRequested += OnFocusComposerRequested;
+        }
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_subscribedChatPage is not null)
+        {
+            _subscribedChatPage.FocusComposerRequested -= OnFocusComposerRequested;
+            _subscribedChatPage = null;
+        }
+    }
+
+    private void OnFocusComposerRequested(object? sender, EventArgs e) =>
+        ComposerInput.FocusInput();
 
     WebChatView IChatLayoutSurface.ChatWebView => ChatWebView;
 

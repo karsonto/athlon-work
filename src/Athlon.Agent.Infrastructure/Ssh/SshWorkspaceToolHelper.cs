@@ -21,7 +21,8 @@ internal static class SshWorkspaceToolHelper
         WorkspaceGuard guard,
         ISshWorkspaceClient client,
         out string fullPath,
-        out ToolResult error)
+        out ToolResult error,
+        bool requireInsideWorkspace = true)
     {
         if (!TryEnsureConnected(client, out error))
         {
@@ -36,6 +37,12 @@ internal static class SshWorkspaceToolHelper
         }
 
         fullPath = guard.Normalize(path);
+        if (!requireInsideWorkspace)
+        {
+            error = ToolResult.Success("OK");
+            return true;
+        }
+
         return TryEnsureInsideWorkspace(guard, ref fullPath, out error);
     }
 
@@ -45,7 +52,8 @@ internal static class SshWorkspaceToolHelper
         ISshWorkspaceClient client,
         out string fullPath,
         out ToolResult error,
-        string defaultPath = ".")
+        string defaultPath = ".",
+        bool requireInsideWorkspace = true)
     {
         if (!TryEnsureConnected(client, out error))
         {
@@ -60,6 +68,12 @@ internal static class SshWorkspaceToolHelper
         }
 
         fullPath = guard.Normalize(path);
+        if (!requireInsideWorkspace)
+        {
+            error = ToolResult.Success("OK");
+            return true;
+        }
+
         return TryEnsureInsideWorkspace(guard, ref fullPath, out error);
     }
 

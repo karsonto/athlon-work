@@ -18,11 +18,12 @@ public sealed class SshGrepFilesTool(
     public ToolDefinition Definition { get; } = new(
         "grep_files",
         "Search file contents. Literal matching by default (case-insensitive); set regex true for .NET regular expressions. "
+            + "Paths may be inside or outside the workspace. "
             + "Use for simple strings or patterns/class names before file_read on large files. "
             + $"Scans up to {MaxFilesToScan} files, returns up to {MaxMatches} matches.",
         ToolSchema.Object()
             .String("pattern", "Text pattern (literal or regex). Regex example with regex true: class\\s+\\w+", required: true, minLength: 1)
-            .String("path", ToolPathDescriptions.OptionalWorkspaceRelativeDirectory)
+            .String("path", ToolPathDescriptions.OptionalReadDirectory)
             .String("glob", "File glob filter, e.g. *.cs", defaultValue: "*", minLength: 1)
             .Boolean("regex", "Treat pattern as .NET regular expression (default: false, literal case-insensitive)", defaultValue: false)
             .Build());
@@ -34,7 +35,13 @@ public sealed class SshGrepFilesTool(
             return error;
         }
 
-        if (!SshWorkspaceToolHelper.TryResolveOptionalNormalizedPath(invocation, guard, client, out var fullPath, out error))
+        if (!SshWorkspaceToolHelper.TryResolveOptionalNormalizedPath(
+                invocation,
+                guard,
+                client,
+                out var fullPath,
+                out error,
+                requireInsideWorkspace: false))
         {
             return error;
         }

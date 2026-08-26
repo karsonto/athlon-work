@@ -153,20 +153,20 @@ public sealed class FileReadToolTests
     }
 
     [Fact]
-    public async Task InvokeAsync_RejectsAbsolutePathOutsideWorkspace()
+    public async Task InvokeAsync_AllowsAbsolutePathOutsideWorkspace()
     {
         await using var env = await FileReadTestEnvironment.CreateAsync();
         var outsideFile = Path.Combine(Path.GetTempPath(), "athlon-file-read-outside", Guid.NewGuid().ToString("N"), "outside.txt");
         Directory.CreateDirectory(Path.GetDirectoryName(outsideFile)!);
-        await File.WriteAllTextAsync(outsideFile, "outside");
+        await File.WriteAllTextAsync(outsideFile, "outside-content");
 
         try
         {
             var result = await env.Tool.InvokeAsync(
                 new ToolInvocation("file_read", new Dictionary<string, string> { ["path"] = outsideFile }));
 
-            Assert.False(result.Succeeded);
-            Assert.Equal("Outside workspace", result.Summary);
+            Assert.True(result.Succeeded);
+            Assert.Contains("outside-content", result.Content, StringComparison.Ordinal);
         }
         finally
         {

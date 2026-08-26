@@ -7,6 +7,7 @@ using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.App.Services.Speech;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Plan;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -35,6 +36,10 @@ public sealed partial class ChatPageViewModel : ObservableObject
     private Func<IReadOnlyList<string>>? _getIgnorePatterns;
     private Func<bool>? _tryCancelCompaction;
     private Func<ComposerSlashCommandContext>? _createSlashCommandContext;
+    private Func<bool>? _isPlanRevisePending;
+    private Func<bool>? _tryConsumePlanRevisePending;
+
+    public event EventHandler? FocusComposerRequested;
 
     public ChatPageViewModel(
         ComposerCoordinator composer,
@@ -73,7 +78,9 @@ public sealed partial class ChatPageViewModel : ObservableObject
         Action<bool> setIsBusy,
         Func<IReadOnlyList<string>> getIgnorePatterns,
         Func<bool> tryCancelCompaction,
-        Func<ComposerSlashCommandContext> createSlashCommandContext)
+        Func<ComposerSlashCommandContext> createSlashCommandContext,
+        Func<bool>? isPlanRevisePending = null,
+        Func<bool>? tryConsumePlanRevisePending = null)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
@@ -86,7 +93,11 @@ public sealed partial class ChatPageViewModel : ObservableObject
         _getIgnorePatterns = getIgnorePatterns;
         _tryCancelCompaction = tryCancelCompaction;
         _createSlashCommandContext = createSlashCommandContext;
+        _isPlanRevisePending = isPlanRevisePending;
+        _tryConsumePlanRevisePending = tryConsumePlanRevisePending;
     }
+
+    public void RequestFocusComposer() => FocusComposerRequested?.Invoke(this, EventArgs.Empty);
 
     [ObservableProperty]
     private string composerText = string.Empty;
@@ -369,6 +380,19 @@ public sealed partial class ChatPageViewModel : ObservableObject
         }
 
         var imageAttachments = _composer.PersistPendingImages(displayedSessionId, PendingImageAttachments);
+        var revisePending = _isPlanRevisePending?.Invoke() == true;
+        if (revisePending && string.IsNullOrWhiteSpace(input))
+        {
+            _showShellToast!.Invoke(_loc["Plan_ReviseRequiresInput"], ShellToastKind.Error);
+            return;
+        }
+
+        if (revisePending && _sessionTurns.IsRunning(displayedSessionId))
+        {
+            _showShellToast!.Invoke(_loc["Plan_BusyCannotRevise"], ShellToastKind.Error);
+            return;
+        }
+
         ComposerText = string.Empty;
         _syncWorkspaceContext!();
 
@@ -386,7 +410,21 @@ public sealed partial class ChatPageViewModel : ObservableObject
         }
 
         ui.AddUserMessage(input, imageAttachments);
-        var error = _sessionTurns.TryStartTurn(displayedSessionId, session, input, imageAttachments, ui);
+        string? error;
+        if (revisePending && _tryConsumePlanRevisePending?.Invoke() == true)
+        {
+            error = _sessionTurns.TryStartPlanContinuation(
+                displayedSessionId,
+                session,
+                PlanContinuationKind.Revise,
+                ui,
+                input);
+        }
+        else
+        {
+            error = _sessionTurns.TryStartTurn(displayedSessionId, session, input, imageAttachments, ui);
+        }
+
         if (error is not null)
         {
             _showShellToast!.Invoke(error, ShellToastKind.Error);

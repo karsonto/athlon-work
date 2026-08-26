@@ -182,7 +182,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             () => _activeUi,
             ShowShellToast,
             StartCodingFromApprovedPlanAsync,
-            path => _ = FileEditor.OpenFileAsync(path, workspaceRoot: null, readOnly: true));
+            path => _ = FileEditor.OpenFileAsync(path, workspaceRoot: null, readOnly: true),
+            focusComposer: () => ChatPage.RequestFocusComposer(),
+            setComposerHint: SetComposerStatus);
         ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
         ComposerHarness.OnModeChangedAsync = OnComposerModeChangedAsync;
         ChatPage = chatPage;
@@ -197,7 +199,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             busy => IsBusy = busy,
             () => _workspaceContext.IgnorePatterns,
             TryCancelCompaction,
-            CreateSlashCommandContext);
+            CreateSlashCommandContext,
+            isPlanRevisePending: () => PlanBar.IsRevisePending,
+            tryConsumePlanRevisePending: () => PlanBar.TryConsumeRevisePending());
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Settings.SettingsSaved += async (_, _) => await OnSettingsSavedAsync();

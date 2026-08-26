@@ -71,7 +71,8 @@ public sealed class PlanTurnOrchestrator(
         AgentSession session,
         PlanContinuationKind continuation,
         AgentTurnCallbacks? callbacks,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? userInput = null)
     {
         var run = phaseAccessor.GetActiveRun(session.Id)
             ?? await runStore.LoadActiveAsync(session.Id, cancellationToken).ConfigureAwait(false)
@@ -102,13 +103,14 @@ public sealed class PlanTurnOrchestrator(
                 run.Status = PlanRunStatuses.Draft;
                 run.UpdatedAt = DateTimeOffset.UtcNow;
                 await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
+                var revisionInput = userInput?.Trim() ?? string.Empty;
                 session = await RunPhaseAsync(
                     session,
                     run,
-                    string.Empty,
+                    revisionInput,
                     callbacks,
                     cancellationToken,
-                    appendUserMessage: false).ConfigureAwait(false);
+                    appendUserMessage: revisionInput.Length > 0).ConfigureAwait(false);
                 run = phaseAccessor.GetActiveRun(session.Id)!;
                 if (run.Phase == PlanPhase.Draft)
                 {

@@ -177,12 +177,18 @@ public sealed class PlanTurnOrchestratorTests
         };
 
         var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
-        session = await sut.ContinueAsync(session, PlanContinuationKind.Revise, null, CancellationToken.None);
+        session = await sut.ContinueAsync(
+            session,
+            PlanContinuationKind.Revise,
+            null,
+            CancellationToken.None,
+            userInput: "Please revise the overview");
 
         var after = phaseAccessor.GetActiveRun(session.Id);
         Assert.NotNull(after);
         Assert.Equal(PlanPhase.AwaitConfirm, after.Phase);
         Assert.Contains("Revised", after.PlanMarkdown, StringComparison.Ordinal);
+        Assert.Contains(true, orchestrator.AppendUserMessageFlags);
     }
 
     private sealed class StubAgentOrchestrator(Func<int, IReadOnlyList<string>> responses) : IAgentOrchestrator

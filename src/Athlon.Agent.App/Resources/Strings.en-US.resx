@@ -644,6 +644,18 @@ Hold to talk</value>
   <data name="Plan_BusyCannotBuild" xml:space="preserve">
     <value>Wait for the current turn to finish before Build</value>
   </data>
+  <data name="Plan_BusyCannotRevise" xml:space="preserve">
+    <value>Wait for the current turn to finish before sending revision notes</value>
+  </data>
+  <data name="Plan_ReviseComposerHint" xml:space="preserve">
+    <value>Describe the revision in the composer, then send</value>
+  </data>
+  <data name="Plan_ReviseRequiresInput" xml:space="preserve">
+    <value>Enter revision notes before sending</value>
+  </data>
+  <data name="Plan_ReviseCancelled" xml:space="preserve">
+    <value>Revision cancelled — click Revise again when ready</value>
+  </data>
   <data name="Harness_Mode_Debug" xml:space="preserve">
     <value>Debug</value>
   </data>

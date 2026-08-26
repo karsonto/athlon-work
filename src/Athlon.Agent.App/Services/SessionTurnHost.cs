@@ -455,7 +455,8 @@ public sealed class SessionTurnHost
                             _session,
                             planContinuation,
                             callbacks,
-                            turnToken).ConfigureAwait(false)
+                            turnToken,
+                            _request.UserInput).ConfigureAwait(false)
                         : await _host._planOrchestrator.RunUserTurnAsync(
                             _session,
                             _request.UserInput,

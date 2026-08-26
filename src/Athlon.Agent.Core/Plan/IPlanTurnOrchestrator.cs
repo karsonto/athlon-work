@@ -20,5 +20,6 @@ public interface IPlanTurnOrchestrator
         AgentSession session,
         PlanContinuationKind continuation,
         AgentTurnCallbacks? callbacks,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        string? userInput = null);
 }

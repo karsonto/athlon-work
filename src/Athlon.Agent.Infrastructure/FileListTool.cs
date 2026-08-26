@@ -18,16 +18,22 @@ public sealed class FileListTool(WorkspaceGuard guard, AuditLogService audit) : 
     public ToolDefinition Definition { get; } = new(
         "file_list",
         "List files and directories (top-level only, up to 200 entries). "
+            + "Paths may be inside or outside the workspace. "
             + "Directories listed first, then files, both alphabetically. "
             + "Output format: [FILE] relative/path (bytes) or [DIR] relative/path/. "
             + "Respects workspace ignore rules.",
         ToolSchema.Object()
-            .String("path", ToolPathDescriptions.OptionalWorkspaceRelativeDirectory)
+            .String("path", ToolPathDescriptions.OptionalReadDirectory)
             .Build());
 
     public async Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default)
     {
-        if (!WorkspaceToolHelper.TryResolveOptionalNormalizedPath(invocation, guard, out var fullPath, out var error))
+        if (!WorkspaceToolHelper.TryResolveOptionalNormalizedPath(
+                invocation,
+                guard,
+                out var fullPath,
+                out var error,
+                requireInsideWorkspace: false))
         {
             return error;
         }

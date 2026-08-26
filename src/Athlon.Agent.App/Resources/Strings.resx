@@ -638,6 +638,18 @@
   <data name="Plan_BusyCannotBuild" xml:space="preserve">
     <value>请等待当前回合结束后再 Build</value>
   </data>
+  <data name="Plan_BusyCannotRevise" xml:space="preserve">
+    <value>请等待当前回合结束后再发送修订说明</value>
+  </data>
+  <data name="Plan_ReviseComposerHint" xml:space="preserve">
+    <value>请在输入框说明修订要求，然后发送</value>
+  </data>
+  <data name="Plan_ReviseRequiresInput" xml:space="preserve">
+    <value>请先输入修订说明再发送</value>
+  </data>
+  <data name="Plan_ReviseCancelled" xml:space="preserve">
+    <value>已取消修订，可重新点击「修订」</value>
+  </data>
   <data name="Harness_Mode_Debug" xml:space="preserve">
     <value>Debug</value>
   </data>

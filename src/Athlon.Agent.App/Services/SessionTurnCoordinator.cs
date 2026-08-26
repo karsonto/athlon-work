@@ -92,12 +92,13 @@ public sealed class SessionTurnCoordinator
         string sessionId,
         AgentSession session,
         PlanContinuationKind continuation,
-        SessionTurnUiController ui)
+        SessionTurnUiController ui,
+        string userInput = "")
     {
         var request = new SessionTurnRequest(
             sessionId,
             session,
-            string.Empty,
+            userInput,
             Array.Empty<ImageAttachment>(),
             ui,
             PlanContinuation: continuation);

@@ -8,7 +8,8 @@ internal static class WorkspaceToolHelper
         ToolInvocation invocation,
         WorkspaceGuard guard,
         out string fullPath,
-        out ToolResult error)
+        out ToolResult error,
+        bool requireInsideWorkspace = true)
     {
         if (!ToolArguments.TryGetNormalizedPath(invocation, out var path, out error))
         {
@@ -17,6 +18,12 @@ internal static class WorkspaceToolHelper
         }
 
         fullPath = guard.Normalize(path);
+        if (!requireInsideWorkspace)
+        {
+            error = ToolResult.Success("OK");
+            return true;
+        }
+
         return TryEnsureInsideWorkspace(guard, ref fullPath, out error);
     }
 
@@ -25,7 +32,8 @@ internal static class WorkspaceToolHelper
         WorkspaceGuard guard,
         out string fullPath,
         out ToolResult error,
-        string defaultPath = ".")
+        string defaultPath = ".",
+        bool requireInsideWorkspace = true)
     {
         if (!ToolArguments.TryGetOptionalNormalizedPath(invocation, out var path, out error, defaultPath))
         {
@@ -34,6 +42,12 @@ internal static class WorkspaceToolHelper
         }
 
         fullPath = guard.Normalize(path);
+        if (!requireInsideWorkspace)
+        {
+            error = ToolResult.Success("OK");
+            return true;
+        }
+
         return TryEnsureInsideWorkspace(guard, ref fullPath, out error);
     }
 

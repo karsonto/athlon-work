@@ -230,7 +230,8 @@ internal static class RouterTestDependencies
             AgentSession session,
             PlanContinuationKind continuation,
             AgentTurnCallbacks? callbacks,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken,
+            string? userInput = null) =>
             Task.FromResult(session);
     }
 }
