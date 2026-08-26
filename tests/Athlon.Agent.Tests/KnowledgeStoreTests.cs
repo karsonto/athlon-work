@@ -166,7 +166,7 @@ public sealed class KnowledgeStoreTests
             settings,
             store,
             new FakeEmbeddingClient([1, 0]),
-            new KnowledgeDocumentExtractor(),
+            new KnowledgeDocumentExtractor(settings, new NoKnowledgeOcr()),
             new KnowledgeChunker(settings),
             new NoOpLogger());
         var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "??" });
@@ -200,7 +200,7 @@ public sealed class KnowledgeStoreTests
             settings,
             store,
             new FakeEmbeddingClient([1, 0]),
-            new KnowledgeDocumentExtractor(),
+            new KnowledgeDocumentExtractor(settings, new NoKnowledgeOcr()),
             new KnowledgeChunker(settings),
             new NoOpLogger());
         var module = await store.SaveModuleAsync(new KnowledgeModule { Name = "??" });
@@ -261,6 +261,14 @@ public sealed class KnowledgeStoreTests
     {
         public Task<IReadOnlyList<EmbeddingVector>> EmbedAsync(IReadOnlyList<string> texts, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<EmbeddingVector>>(texts.Select(text => new EmbeddingVector(text, vector)).ToArray());
+    }
+
+    private sealed class NoKnowledgeOcr : IKnowledgePageOcr
+    {
+        public Task<IReadOnlyDictionary<int, string>> RecognizePagesAsync(
+            IReadOnlyList<KnowledgeOcrPageImage> pages,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<int, string>>(new Dictionary<int, string>());
     }
 
     private sealed class NoOpLogger : IAppLogger

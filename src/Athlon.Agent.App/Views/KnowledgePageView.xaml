@@ -59,6 +59,46 @@
                                            FontWeight="SemiBold"
                                            Margin="0,0,0,10" />
 
+                                <DockPanel Margin="0,0,0,12" LastChildFill="True">
+                                    <CheckBox DockPanel.Dock="Right"
+                                              VerticalAlignment="Center"
+                                              Margin="12,0,0,0"
+                                              Style="{StaticResource McpToggleSwitchStyle}"
+                                              IsChecked="{Binding OcrEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              ToolTip="{loc:Localize Key=Knowledge_OcrEnabledHint}" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Localize Key=Knowledge_OcrEnabled}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Text="{loc:Localize Key=Knowledge_OcrEnabledHint}"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </DockPanel>
+
+                                <DockPanel Margin="0,0,0,12" LastChildFill="True">
+                                    <CheckBox DockPanel.Dock="Right"
+                                              VerticalAlignment="Center"
+                                              Margin="12,0,0,0"
+                                              Style="{StaticResource McpToggleSwitchStyle}"
+                                              IsChecked="{Binding SplitByPageEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                              ToolTip="{loc:Localize Key=Knowledge_SplitByPageHint}" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="{loc:Localize Key=Knowledge_SplitByPage}"
+                                                   FontSize="13"
+                                                   FontWeight="SemiBold"
+                                                   TextWrapping="Wrap" />
+                                        <TextBlock Text="{loc:Localize Key=Knowledge_SplitByPageHint}"
+                                                   FontSize="11"
+                                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                                   TextWrapping="Wrap"
+                                                   Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </DockPanel>
+
                                 <!-- Empty state: no module selected -->
                                 <Border x:Name="KnowledgeModuleEmptyState"
                                         BorderThickness="2"

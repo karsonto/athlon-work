@@ -97,7 +97,9 @@ public sealed class KnowledgeIndexerService(
         CancellationToken cancellationToken)
     {
         Report(progress, "抽取文本", $"正在抽取 {document.FileName}", 0, 1, 10);
-        var extracted = await extractor.ExtractAsync(document.OriginalPath, cancellationToken).ConfigureAwait(false);
+        var extracted = await extractor
+            .ExtractAsync(document.OriginalPath, cancellationToken, progress)
+            .ConfigureAwait(false);
         var extractedDir = Path.Combine(KnowledgeRoot, "extracted", document.ModuleId);
         Directory.CreateDirectory(extractedDir);
         document.ExtractedPath = Path.Combine(extractedDir, $"{document.Id}.md");

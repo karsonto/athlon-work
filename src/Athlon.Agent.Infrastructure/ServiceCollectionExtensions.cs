@@ -118,6 +118,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISshWorkspaceClient, SshWorkspaceClient>();
         services.AddSingleton<SshWorkspaceConnectionService>();
         services.AddSingleton<WorkspaceFileEditorService>();
+        services.AddSingleton<IKnowledgePageOcr, VisionChatKnowledgeOcr>();
         services.AddSingleton<KnowledgeDocumentExtractor>();
         services.AddSingleton<KnowledgeChunker>();
         services.AddSingleton<IKnowledgeStore, SqliteKnowledgeStore>();

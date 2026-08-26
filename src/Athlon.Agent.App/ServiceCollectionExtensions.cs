@@ -138,15 +138,12 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<AuditLogService>()));
 
         services.AddSingleton(sp => new KnowledgeViewModel(
-
             sp.GetRequiredService<IKnowledgeStore>(),
-
             sp.GetRequiredService<IKnowledgeIndexer>(),
-
             sp.GetRequiredService<IKnowledgeSearchService>(),
-
+            sp.GetRequiredService<IFileStorageService>(),
+            sp.GetRequiredService<AppSettings>(),
             sp.GetRequiredService<ILocalizationService>(),
-
             sp.GetRequiredService<IUserNotifier>()));
 
         services.AddSingleton(sp => new ComposerKnowledgeViewModel(

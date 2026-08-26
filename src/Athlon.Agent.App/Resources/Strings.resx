@@ -774,6 +774,18 @@
   <data name="Knowledge_Modules" xml:space="preserve">
     <value>知识空间</value>
   </data>
+  <data name="Knowledge_OcrEnabled" xml:space="preserve">
+    <value>上传时对扫描页做 OCR</value>
+  </data>
+  <data name="Knowledge_OcrEnabledHint" xml:space="preserve">
+    <value>开启后，文本不足的 PDF 页会渲成图片并用当前视觉模型识别（每批最多 3 页）。关闭则保持仅抽取 PDF 文字层。</value>
+  </data>
+  <data name="Knowledge_SplitByPage" xml:space="preserve">
+    <value>按页分割切片</value>
+  </data>
+  <data name="Knowledge_SplitByPageHint" xml:space="preserve">
+    <value>开启后，带「# Page N」标记的文档（如 PDF）按页切成检索切片并记录页码；单页过长时仍按字符窗口继续切分。关闭则整篇按固定窗口切分。</value>
+  </data>
   <data name="Knowledge_Name" xml:space="preserve">
     <value>名称</value>
   </data>

@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
+using Athlon.Agent.Core;
 using Athlon.Agent.Core.Knowledge;
 using Microsoft.Win32;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -18,6 +19,8 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private readonly IKnowledgeStore _store;
     private readonly IKnowledgeIndexer _indexer;
     private readonly IKnowledgeSearchService _searchService;
+    private readonly IFileStorageService _storage;
+    private readonly AppSettings _settings;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
     private string _sessionId = "";
@@ -31,18 +34,24 @@ public sealed partial class KnowledgeViewModel : ObservableObject
         IKnowledgeStore store,
         IKnowledgeIndexer indexer,
         IKnowledgeSearchService searchService,
+        IFileStorageService storage,
+        AppSettings settings,
         ILocalizationService localization,
         IUserNotifier notifier)
     {
         _store = store;
         _indexer = indexer;
         _searchService = searchService;
+        _storage = storage;
+        _settings = settings;
         _loc = localization;
         _notifier = notifier;
         AppCultureManager.CultureChanged += OnCultureChanged;
         StatusText = _loc["Knowledge_DefaultStatus"];
         SearchResults = _loc["Knowledge_SearchResultsHint"];
         DocumentPreview = _loc["Knowledge_SelectDocumentPreview"];
+        _ocrEnabled = settings.Knowledge.Ocr.Enabled;
+        _splitByPageEnabled = settings.Knowledge.Chunking.SplitByPage;
         RefreshLocalizedStrings();
     }
 
@@ -76,6 +85,46 @@ public sealed partial class KnowledgeViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isIndexing;
+
+    [ObservableProperty]
+    private bool _ocrEnabled;
+
+    [ObservableProperty]
+    private bool _splitByPageEnabled;
+
+    partial void OnOcrEnabledChanged(bool value)
+    {
+        if (_settings.Knowledge.Ocr.Enabled == value)
+        {
+            return;
+        }
+
+        _settings.Knowledge.Ocr.Enabled = value;
+        _ = PersistKnowledgeSettingAsync();
+    }
+
+    partial void OnSplitByPageEnabledChanged(bool value)
+    {
+        if (_settings.Knowledge.Chunking.SplitByPage == value)
+        {
+            return;
+        }
+
+        _settings.Knowledge.Chunking.SplitByPage = value;
+        _ = PersistKnowledgeSettingAsync();
+    }
+
+    private async Task PersistKnowledgeSettingAsync()
+    {
+        try
+        {
+            await _storage.SaveSettingsAsync(_settings).ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            _notifier.Warning("Knowledge_TitleDialog", "Knowledge_ModuleSaveFailed", exception.Message);
+        }
+    }
 
     [ObservableProperty]
     private bool _isLoading;

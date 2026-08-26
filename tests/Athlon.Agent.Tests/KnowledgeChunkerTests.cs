@@ -85,11 +85,77 @@ public sealed class KnowledgeChunkerTests
         Assert.Equal([0, 1, 2, 3], chunks.Select(chunk => chunk.ChunkIndex).ToArray());
     }
 
+    [Fact]
+    public void Chunk_splitByPage_creates_one_chunk_per_page_with_page_number()
+    {
+        var settings = CreateSettings(targetChars: 4000, overlapChars: 0);
+        settings.Knowledge.Chunking.SplitByPage = true;
+        var chunker = new KnowledgeChunker(settings);
+        var text =
+            """
+            # Page 1
+            first page body
+
+            # Page 2
+            second page body
+            """;
+
+        var chunks = chunker.Chunk("doc", "module", text, "Report");
+
+        Assert.Equal(2, chunks.Count);
+        Assert.Equal(1, chunks[0].PageNumber);
+        Assert.Equal(2, chunks[1].PageNumber);
+        Assert.Equal("Report / Page 1", chunks[0].TitlePath);
+        Assert.Equal("Report / Page 2", chunks[1].TitlePath);
+        Assert.Contains("first page body", chunks[0].Content);
+        Assert.Contains("second page body", chunks[1].Content);
+        Assert.DoesNotContain("# Page", chunks[0].Content);
+    }
+
+    [Fact]
+    public void Chunk_splitByPage_subchunks_oversized_page()
+    {
+        var settings = CreateSettings(targetChars: 100, overlapChars: 0);
+        settings.Knowledge.Chunking.SplitByPage = true;
+        var chunker = new KnowledgeChunker(settings);
+        var text = "# Page 3\n" + new string('x', 250);
+
+        var chunks = chunker.Chunk("doc", "module", text, "Doc");
+
+        Assert.Equal(3, chunks.Count);
+        Assert.All(chunks, chunk => Assert.Equal(3, chunk.PageNumber));
+        Assert.Equal([0, 1, 2], chunks.Select(chunk => chunk.ChunkIndex).ToArray());
+    }
+
+    [Fact]
+    public void Chunk_splitByPage_disabled_ignores_page_headers()
+    {
+        var settings = CreateSettings(targetChars: 4000, overlapChars: 0);
+        settings.Knowledge.Chunking.SplitByPage = false;
+        var chunker = new KnowledgeChunker(settings);
+        var text =
+            """
+            # Page 1
+            aaa
+
+            # Page 2
+            bbb
+            """;
+
+        var chunks = chunker.Chunk("doc", "module", text, "Doc");
+
+        Assert.Single(chunks);
+        Assert.Null(chunks[0].PageNumber);
+        Assert.Equal("Doc", chunks[0].TitlePath);
+        Assert.Contains("# Page 1", chunks[0].Content);
+    }
+
     private static AppSettings CreateSettings(int targetChars, int overlapChars)
     {
         var settings = new AppSettings();
         settings.Knowledge.Chunking.TargetChars = targetChars;
         settings.Knowledge.Chunking.OverlapChars = overlapChars;
+        settings.Knowledge.Chunking.SplitByPage = false;
         return settings;
     }
 }
