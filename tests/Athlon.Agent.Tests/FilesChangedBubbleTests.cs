@@ -47,6 +47,17 @@ public sealed class FilesChangedBubbleTests
     }
 
     [Fact]
+    public void SerializeFilesChanged_empty_list_emits_seal_payload()
+    {
+        var json = ChatEventSerializer.SerializeFilesChanged([], upsert: false);
+        using var doc = JsonDocument.Parse(json);
+
+        Assert.Equal("FILES_CHANGED", doc.RootElement.GetProperty("type").GetString());
+        Assert.False(doc.RootElement.GetProperty("upsert").GetBoolean());
+        Assert.Equal(0, doc.RootElement.GetProperty("files").GetArrayLength());
+    }
+
+    [Fact]
     public void SerializeFilesChanged_emits_independent_files_changed_event()
     {
         var file = new ModifiedFileViewModel("src/App.tsx", "file_edit", ModifiedFileStatus.Succeeded);
@@ -128,8 +139,8 @@ public sealed class FilesChangedBubbleTests
             events.IndexOf(activity) < events.IndexOf(assistantHtml),
             "Activity bubble should appear above the model text output.");
         Assert.True(
-            events.IndexOf(files) < events.IndexOf(assistantHtml),
-            "Files-changed bubble should appear above the model text output.");
+            events.IndexOf(assistantHtml) < events.IndexOf(files),
+            "Files-changed bubble should appear after the model text output.");
 
         using var activityDoc = JsonDocument.Parse(activity);
         Assert.Equal(0, activityDoc.RootElement.GetProperty("editedFileCount").GetInt32());
@@ -579,11 +590,11 @@ public sealed class FilesChangedBubbleTests
         Assert.Equal(2, activities.Count);
         Assert.Equal(2, assistants.Count);
 
-        Assert.True(events.IndexOf(activities[0]) < events.IndexOf(fileEvents[0]));
-        Assert.True(events.IndexOf(fileEvents[0]) < events.IndexOf(assistants[0]));
-        Assert.True(events.IndexOf(activities[1]) < events.IndexOf(fileEvents[1]));
-        Assert.True(events.IndexOf(fileEvents[1]) < events.IndexOf(assistants[1]));
-        Assert.True(events.IndexOf(assistants[0]) < events.IndexOf(activities[1]));
+        Assert.True(events.IndexOf(activities[0]) < events.IndexOf(assistants[0]));
+        Assert.True(events.IndexOf(assistants[0]) < events.IndexOf(fileEvents[0]));
+        Assert.True(events.IndexOf(activities[1]) < events.IndexOf(assistants[1]));
+        Assert.True(events.IndexOf(assistants[1]) < events.IndexOf(fileEvents[1]));
+        Assert.True(events.IndexOf(fileEvents[0]) < events.IndexOf(activities[1]));
     }
 
     [Fact]
@@ -624,7 +635,7 @@ public sealed class FilesChangedBubbleTests
         var files = Assert.Single(events, json => json.Contains("FILES_CHANGED", StringComparison.Ordinal));
         var assistantHtml = Assert.Single(events, json => json.Contains("STATIC_ASSISTANT_HTML", StringComparison.Ordinal));
         Assert.True(events.IndexOf(activity) < events.IndexOf(assistantHtml));
-        Assert.True(events.IndexOf(files) < events.IndexOf(assistantHtml));
+        Assert.True(events.IndexOf(assistantHtml) < events.IndexOf(files));
         using var activityDoc = JsonDocument.Parse(activity);
         Assert.Equal(1, activityDoc.RootElement.GetProperty("thoughtCount").GetInt32());
         Assert.Equal(0, activityDoc.RootElement.GetProperty("editedFileCount").GetInt32());

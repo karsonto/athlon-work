@@ -235,6 +235,12 @@ function applyAssistantHtml(messageId, html, createIfMissing, streaming, respons
   applyMarkdownHtml(row.querySelector('.bubble > .message-content'), html, streaming !== true);
   if (streaming !== true) {
     setMessageMeta(row, formatResponseDuration(responseDurationMs));
+    // Final assistant landed after a live files card — move the card below this reply.
+    var filesCard = findLatestFilesChangedCardInCurrentTurn();
+    if (filesCard && !filesCard.hasAttribute('data-sealed')) {
+      var filesRow = filesCard.closest('.message-row') || filesCard.parentNode;
+      placeFilesChangedRow(filesRow);
+    }
   }
   updateEmptyStateVisibility();
   scrollToBottom();
@@ -841,20 +847,26 @@ function findLatestFilesChangedCardInCurrentTurn() {
   return latest;
 }
 
+function findLiveFilesChangedCardInCurrentTurn() {
+  var latest = findLatestFilesChangedCardInCurrentTurn();
+  if (latest && latest.getAttribute('data-live') === '1') return latest;
+  return null;
+}
+
 function findFilesChangedTargetCard(upsert) {
-  var live = document.querySelector('.files-changed-card[data-live="1"]');
+  // Scope to the current turn only — never steal a prior turn's live card.
+  var live = findLiveFilesChangedCardInCurrentTurn();
   if (live) return live;
-  if (!upsert) return null;
-  // Live upsert after a timeline reload: reuse the latest unsealed card so we do not
-  // stack a second card that repeats the same paths.
   var latest = findLatestFilesChangedCardInCurrentTurn();
   if (latest && !latest.hasAttribute('data-sealed')) return latest;
+  // Seal with no current-turn card: nothing to finalize.
+  if (!upsert) return null;
   return null;
 }
 
 /**
- * Place the files-changed row after the current turn's activity (or user),
- * and before the first final assistant bubble — so it scrolls with history.
+ * Place the files-changed row after the current turn's final assistant bubble
+ * (or after activity/user when no assistant yet) so it scrolls with history.
  */
 function placeFilesChangedRow(row) {
   var root = getMessageRoot();
@@ -866,7 +878,6 @@ function placeFilesChangedRow(row) {
   }
 
   var insertAfter = lastUserIdx >= 0 ? rows[lastUserIdx] : null;
-  var insertBefore = null;
   for (var j = lastUserIdx + 1; j < rows.length; j++) {
     var candidate = rows[j];
     if (candidate === row) continue;
@@ -875,17 +886,15 @@ function placeFilesChangedRow(row) {
       continue;
     }
     if (candidate.querySelector('.files-changed-card')) continue;
-    if (candidate.classList.contains('assistant')
+    if (candidate.classList.contains('tool-row')) continue;
+    // Prefer real assistant reply bubbles (assistant-row), not host wrappers.
+    if (candidate.classList.contains('assistant-row')
         && candidate.querySelector('.bubble > .message-content')) {
-      insertBefore = candidate;
-      break;
+      insertAfter = candidate;
+      continue;
     }
   }
 
-  if (insertBefore && insertBefore.parentNode === root) {
-    root.insertBefore(row, insertBefore);
-    return;
-  }
   if (insertAfter && insertAfter.parentNode === root) {
     root.insertBefore(row, insertAfter.nextSibling);
     return;
@@ -893,13 +902,31 @@ function placeFilesChangedRow(row) {
   root.appendChild(row);
 }
 
+function sealFilesChangedCard(card) {
+  if (!card) return;
+  card.removeAttribute('data-live');
+  card.setAttribute('data-sealed', '1');
+  var row = card.closest('.message-row') || card.parentNode;
+  placeFilesChangedRow(row);
+  updateEmptyStateVisibility();
+  scrollToBottom();
+}
+
 function appendFilesChangedCard(event) {
   state.currentAssistantEl = null;
   state.currentReasoningEl = null;
   var files = event.files || [];
-  if (!files.length) return;
+  var upsert = event.upsert === true;
 
-  var existing = findFilesChangedTargetCard(event.upsert === true);
+  // Empty upsert: nothing to show. Empty seal: finalize existing live card in place.
+  if (!files.length) {
+    if (upsert) return;
+    var liveToSeal = findFilesChangedTargetCard(false);
+    if (liveToSeal) sealFilesChangedCard(liveToSeal);
+    return;
+  }
+
+  var existing = findFilesChangedTargetCard(upsert);
   var card = existing;
   var sealingLiveCard = !!(existing && existing.getAttribute('data-live') === '1');
   var openPaths = {};
@@ -916,7 +943,7 @@ function appendFilesChangedCard(event) {
     row.className = 'message-row assistant files-changed-host';
     card = document.createElement('div');
     card.className = 'files-changed-card';
-    if (event.upsert) card.setAttribute('data-live', '1');
+    if (upsert) card.setAttribute('data-live', '1');
     row.appendChild(card);
   }
 
@@ -975,7 +1002,7 @@ function appendFilesChangedCard(event) {
   });
 
   card.appendChild(list);
-  if (event.upsert) {
+  if (upsert) {
     card.setAttribute('data-live', '1');
     card.removeAttribute('data-sealed');
   } else {

@@ -694,10 +694,9 @@ public sealed partial class SessionTurnUiController
         }
 
         var files = _modifiedFilesTracker.TakeAndClearSegmentSucceededFiles();
-        if (files.Count > 0)
-        {
-            _ = ChatView!.DispatchFilesChangedAsync(files, upsert: false);
-        }
+        // Always dispatch seal (even with empty files) so a live card is finalized and
+        // cannot be stolen by the next turn's upsert via data-live.
+        _ = ChatView!.DispatchFilesChangedAsync(files, upsert: false);
 
         _turnActivityTracker.BeginSegment();
     }

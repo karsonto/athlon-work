@@ -570,13 +570,14 @@ internal static class ChatEventSerializer
                 events.Add(segment.ActivityEvent);
             }
 
+            events.AddRange(segment.ToolEvents);
+            events.AddRange(segment.AssistantEvents);
+
             if (segment.FilesChangedEvent is not null)
             {
                 events.Add(segment.FilesChangedEvent);
             }
 
-            events.AddRange(segment.ToolEvents);
-            events.AddRange(segment.AssistantEvents);
             if (segment.CompactionEvent is not null)
             {
                 events.Add(segment.CompactionEvent);
