@@ -43,7 +43,8 @@ public partial class SkillHubPageView : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         AppThemeManager.ThemeChanged -= OnAppThemeChanged;
-        UnhookHub();
+        // Keep hub hooked: ContentControl can Unload/Load while the WebView is still
+        // interactive; clearing _hub here silently drops add/manage messages.
     }
 
     private void OnAppThemeChanged(object? sender, EventArgs e)
@@ -198,17 +199,20 @@ public partial class SkillHubPageView : UserControl
 
     private void OnWebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
+        // Always prefer WebMessageAsJson — JS posts objects via chrome.webview.postMessage({...}).
+        // TryGetWebMessageAsString throws (or mis-reads) for non-string payloads.
         string json;
         try
         {
-            json = e.TryGetWebMessageAsString();
+            json = UnwrapWebMessageJson(e.WebMessageAsJson);
         }
-        catch (InvalidOperationException)
+        catch (Exception ex)
         {
-            json = e.WebMessageAsJson;
+            App.StartupTrace($"SkillHub read message failed: {ex.Message}");
+            return;
         }
 
-        if (string.IsNullOrWhiteSpace(json) || _hub is null)
+        if (string.IsNullOrWhiteSpace(json))
         {
             return;
         }
@@ -217,39 +221,110 @@ public partial class SkillHubPageView : UserControl
         {
             try
             {
+                var hub = _hub ?? ResolveHub(DataContext);
+                if (hub is null)
+                {
+                    App.StartupTrace("SkillHub message dropped: hub is null.");
+                    await PostInstallFailureFromMessageAsync(json, "Skill Hub is not ready.").ConfigureAwait(true);
+                    return;
+                }
+
+                HookHub(hub);
+
                 // Apply theme first when the page signals ready.
                 if (json.Contains("\"ready\"", StringComparison.Ordinal))
                 {
                     await ApplyThemeStylesAsync().ConfigureAwait(true);
                 }
 
-                await _hub.HandleWebMessageAsync(json).ConfigureAwait(true);
+                await hub.HandleWebMessageAsync(json).ConfigureAwait(true);
             }
             catch (Exception ex)
             {
                 App.StartupTrace($"SkillHub message failed: {ex.Message}");
+                await PostInstallFailureFromMessageAsync(json, ex.Message).ConfigureAwait(true);
             }
         });
     }
 
-    private void OnCatalogJsonReady(object? sender, string json)
+    private void OnCatalogJsonReady(object? sender, string json) =>
+        _ = Dispatcher.InvokeAsync(() => PostJsonToWebViewAsync(json));
+
+    private async Task PostJsonToWebViewAsync(string json)
     {
-        _ = Dispatcher.InvokeAsync(async () =>
+        if (SkillHubWebView.CoreWebView2 is null)
         {
-            if (SkillHubWebView.CoreWebView2 is null)
+            return;
+        }
+
+        try
+        {
+            await SkillHubWebView.EnsureCoreWebView2Async().ConfigureAwait(true);
+            SkillHubWebView.CoreWebView2?.PostWebMessageAsJson(json);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"SkillHub post failed: {ex.Message}");
+        }
+    }
+
+    private async Task PostInstallFailureFromMessageAsync(string requestJson, string error)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(requestJson);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("type", out var typeEl)
+                || !string.Equals(typeEl.GetString(), "add", StringComparison.Ordinal))
             {
                 return;
             }
 
-            try
+            var id = SkillHubViewModel.ReadWireId(root);
+            if (string.IsNullOrWhiteSpace(id))
             {
-                await SkillHubWebView.EnsureCoreWebView2Async().ConfigureAwait(true);
-                SkillHubWebView.CoreWebView2?.PostWebMessageAsJson(json);
+                return;
             }
-            catch (Exception ex)
+
+            var payload = JsonSerializer.Serialize(new
             {
-                App.StartupTrace($"SkillHub post failed: {ex.Message}");
+                type = "installResult",
+                id,
+                ok = false,
+                error
+            });
+            await PostJsonToWebViewAsync(payload).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"SkillHub install-failure post failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// If the web content posted a stringified JSON payload, <see cref="CoreWebView2WebMessageReceivedEventArgs.WebMessageAsJson"/>
+    /// is a JSON string literal — unwrap it so <see cref="JsonDocument.Parse"/> yields an object.
+    /// </summary>
+    internal static string UnwrapWebMessageJson(string webMessageAsJson)
+    {
+        if (string.IsNullOrWhiteSpace(webMessageAsJson))
+        {
+            return webMessageAsJson;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(webMessageAsJson);
+            if (doc.RootElement.ValueKind == JsonValueKind.String)
+            {
+                return doc.RootElement.GetString() ?? webMessageAsJson;
             }
-        });
+        }
+        catch (JsonException)
+        {
+            // return raw
+        }
+
+        return webMessageAsJson;
     }
 }

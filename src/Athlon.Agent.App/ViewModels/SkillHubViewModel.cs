@@ -89,6 +89,19 @@ public sealed partial class SkillHubViewModel : ObservableObject
     {
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
+        // Host may pass an already-unwrapped object; tolerate a stringified payload too.
+        if (root.ValueKind == JsonValueKind.String)
+        {
+            var inner = root.GetString();
+            if (string.IsNullOrWhiteSpace(inner))
+            {
+                return;
+            }
+
+            await HandleWebMessageAsync(inner, cancellationToken).ConfigureAwait(true);
+            return;
+        }
+
         if (!root.TryGetProperty("type", out var typeEl))
         {
             return;
@@ -107,33 +120,64 @@ public sealed partial class SkillHubViewModel : ObservableObject
             return;
         }
 
-        if (string.Equals(type, "add", StringComparison.Ordinal)
-            && root.TryGetProperty("id", out var idEl))
+        if (string.Equals(type, "add", StringComparison.Ordinal))
         {
-            var id = idEl.GetString();
-            if (!string.IsNullOrWhiteSpace(id))
+            var id = ReadWireId(root);
+            if (string.IsNullOrWhiteSpace(id))
             {
-                await InstallAsync(id, cancellationToken).ConfigureAwait(true);
+                EmitInstallResult("", ok: false, error: _localization["SkillHub_SkillNotFound"]);
+                _notifier.WarningText("SkillHub_Title", _localization["SkillHub_SkillNotFound"]);
+                return;
             }
+
+            await InstallAsync(id, cancellationToken).ConfigureAwait(true);
         }
+    }
+
+    /// <summary>Reads <c>id</c> from a web message whether it is a JSON string or number.</summary>
+    public static string? ReadWireId(JsonElement root)
+    {
+        if (!root.TryGetProperty("id", out var idEl))
+        {
+            return null;
+        }
+
+        return idEl.ValueKind switch
+        {
+            JsonValueKind.String => idEl.GetString(),
+            JsonValueKind.Number => idEl.GetRawText(),
+            JsonValueKind.True or JsonValueKind.False => idEl.GetRawText(),
+            _ => idEl.ToString()
+        };
     }
 
     private async Task InstallAsync(string skillId, CancellationToken cancellationToken)
     {
         var skill = _items.FirstOrDefault(item =>
-            string.Equals(item.Id, skillId, StringComparison.Ordinal));
+            string.Equals(item.Id, skillId, StringComparison.Ordinal)
+            || string.Equals(item.EnglishName, skillId, StringComparison.OrdinalIgnoreCase));
         if (skill is null)
         {
-            EmitInstallResult(skillId, ok: false, error: _localization["SkillHub_SkillNotFound"]);
+            var notFound = _localization["SkillHub_SkillNotFound"];
+            EmitInstallResult(skillId, ok: false, error: notFound);
+            _notifier.WarningText("SkillHub_Title", notFound);
             return;
         }
 
         try
         {
             await _installer.InstallAsync(skill, cancellationToken).ConfigureAwait(true);
-            _onSkillsInstalled();
+            // Notify WebView before sidebar refresh so Adding cannot stick if UI work is slow.
             EmitInstallResult(skillId, ok: true, englishName: skill.EnglishName, name: skill.Name);
             _notifier.InfoText("SkillHub_Title", _localization.Format("SkillHub_InstallSuccess", skill.Name));
+            try
+            {
+                _onSkillsInstalled();
+            }
+            catch (Exception ex)
+            {
+                App.StartupTrace($"SkillHub post-install refresh failed: {ex.Message}");
+            }
         }
         catch (Exception ex)
         {

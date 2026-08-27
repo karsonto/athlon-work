@@ -113,4 +113,25 @@ public sealed class SkillHubTests
         Assert.True(SkillHubClient.MatchesSha256([1, 2, 3], null));
         Assert.True(SkillHubClient.MatchesSha256([1, 2, 3], ""));
     }
+
+    [Fact]
+    public void ReadWireId_supports_string_and_number()
+    {
+        using var stringDoc = JsonDocument.Parse("""{"type":"add","id":"abc-1"}""");
+        Assert.Equal("abc-1", Athlon.Agent.App.ViewModels.SkillHubViewModel.ReadWireId(stringDoc.RootElement));
+
+        using var numberDoc = JsonDocument.Parse("""{"type":"add","id":42}""");
+        Assert.Equal("42", Athlon.Agent.App.ViewModels.SkillHubViewModel.ReadWireId(numberDoc.RootElement));
+    }
+
+    [Fact]
+    public void UnwrapWebMessageJson_unwraps_stringified_payload()
+    {
+        var wrapped = JsonSerializer.Serialize("""{"type":"add","id":"s1"}""");
+        var unwrapped = Athlon.Agent.App.Views.SkillHubPageView.UnwrapWebMessageJson(wrapped);
+        Assert.Equal("""{"type":"add","id":"s1"}""", unwrapped);
+
+        var objectJson = """{"type":"ready"}""";
+        Assert.Equal(objectJson, Athlon.Agent.App.Views.SkillHubPageView.UnwrapWebMessageJson(objectJson));
+    }
 }

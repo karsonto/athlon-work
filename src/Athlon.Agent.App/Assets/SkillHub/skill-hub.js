@@ -260,6 +260,9 @@
   }
 
   function onHostMessage(data) {
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch (e) { return; }
+    }
     if (!data || !data.type) return;
     if (data.type === 'theme' && data.tokensB64) {
       applyThemeUpdate(data.tokensB64);
@@ -268,6 +271,7 @@
     if (data.type === 'catalog') {
       state.items = data.items || [];
       state.installed = {};
+      state.installing = {};
       (data.installed || []).forEach(function (name) {
         var key = String(name || '').trim().toLowerCase();
         if (key) state.installed[key] = true;
@@ -296,7 +300,12 @@
       return;
     }
     if (data.type === 'installResult') {
-      delete state.installing[data.id];
+      var resultId = data.id == null ? '' : String(data.id);
+      if (resultId) {
+        delete state.installing[resultId];
+      } else {
+        state.installing = {};
+      }
       if (data.ok) {
         var keys = [data.englishName, data.name, data.id];
         keys.forEach(function (name) {
@@ -304,7 +313,7 @@
           if (key) state.installed[key] = true;
         });
         state.items.forEach(function (item) {
-          if (item && item.id === data.id) item.installed = true;
+          if (item && String(item.id) === resultId) item.installed = true;
         });
       } else if (data.error) {
         setStatus(data.error, true);

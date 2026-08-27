@@ -8,11 +8,11 @@
   --accent: var(--hub-accent, #4F46E5);
   --accent-hover: var(--hub-accent-hover, #4338CA);
   --accent-fg: var(--hub-accent-fg, #FFFFFF);
-  --btn: var(--hub-btn, #EEF2FF);
-  --btn-hover: var(--hub-btn-hover, #4338CA);
-  --btn-fg: var(--hub-btn-fg, #4F46E5);
+  --btn: var(--hub-btn, #F1F5F9);
+  --btn-hover: var(--hub-btn-hover, #E2E8F0);
+  --btn-fg: var(--hub-btn-fg, #0F172A);
   --icon-bg: var(--hub-icon-bg, #E2E8F0);
-  --badge-bg: var(--hub-badge-bg, #EEF2FF);
+  --badge-bg: var(--hub-badge-bg, #F1F5F9);
   --radius: 12px;
   --font: "Segoe UI", system-ui, -apple-system, sans-serif;
 }
@@ -213,7 +213,7 @@ html, body {
   text-overflow: ellipsis;
 }
 .add-btn {
-  border: 0;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 6px 12px;
   background: var(--btn);
@@ -226,7 +226,7 @@ html, body {
 }
 .add-btn:hover:not(:disabled) {
   background: var(--btn-hover);
-  color: var(--accent-fg);
+  color: var(--btn-fg);
 }
 .add-btn:disabled {
   opacity: 0.7;

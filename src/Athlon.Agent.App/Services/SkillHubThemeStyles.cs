@@ -13,7 +13,12 @@ internal static class SkillHubThemeStyles
         var chrome = AppThemeManager.Current.Chrome;
         var accentFg = isLight ? "#FFFFFF" : AppThemeColor.ToHex(chrome.Text);
         var iconBg = AppThemeColor.ToHex(isLight ? chrome.PanelAlt : chrome.SurfaceHover);
-        var badgeBg = AppThemeColor.ToHex(isLight ? chrome.AccentSubtle : chrome.PanelAlt);
+        // Badges stay neutral in both themes (no AccentSubtle blue wash).
+        var badgeBg = AppThemeColor.ToHex(chrome.PanelAlt);
+        // Light Add button: neutral slate; dark keeps accent-tint for contrast on dark panels.
+        var btnBg = AppThemeColor.ToHex(isLight ? chrome.PanelAlt : chrome.AccentSubtle);
+        var btnHover = AppThemeColor.ToHex(isLight ? chrome.SurfaceHover : chrome.AccentHover);
+        var btnFg = AppThemeColor.ToHex(chrome.Text);
 
         return $$"""
             :root {
@@ -26,9 +31,9 @@ internal static class SkillHubThemeStyles
               --hub-accent: {{AppThemeColor.ToHex(chrome.Accent)}};
               --hub-accent-hover: {{AppThemeColor.ToHex(chrome.AccentHover)}};
               --hub-accent-fg: {{accentFg}};
-              --hub-btn: {{AppThemeColor.ToHex(chrome.AccentSubtle)}};
-              --hub-btn-hover: {{AppThemeColor.ToHex(chrome.AccentHover)}};
-              --hub-btn-fg: {{AppThemeColor.ToHex(isLight ? chrome.Accent : chrome.Text)}};
+              --hub-btn: {{btnBg}};
+              --hub-btn-hover: {{btnHover}};
+              --hub-btn-fg: {{btnFg}};
               --hub-icon-bg: {{iconBg}};
               --hub-badge-bg: {{badgeBg}};
             }
