@@ -1,7 +1,11 @@
 using System.IO;
+using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Microsoft.Web.WebView2.Core;
 
@@ -29,11 +33,24 @@ public partial class SkillHubPageView : UserControl
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        AppThemeManager.ThemeChanged -= OnAppThemeChanged;
+        AppThemeManager.ThemeChanged += OnAppThemeChanged;
         HookHub(ResolveHub(DataContext));
+        ApplyThemeBackground();
         _ = EnsureInitializedAsync();
     }
 
-    private void OnUnloaded(object sender, RoutedEventArgs e) => UnhookHub();
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        AppThemeManager.ThemeChanged -= OnAppThemeChanged;
+        UnhookHub();
+    }
+
+    private void OnAppThemeChanged(object? sender, EventArgs e)
+    {
+        ApplyThemeBackground();
+        _ = ApplyThemeStylesAsync();
+    }
 
     private SkillHubViewModel? ResolveHub(object? dataContext)
     {
@@ -80,6 +97,7 @@ public partial class SkillHubPageView : UserControl
     {
         if (_initialized)
         {
+            await ApplyThemeStylesAsync().ConfigureAwait(true);
             if (_hub is not null)
             {
                 await _hub.RefreshAsync().ConfigureAwait(true);
@@ -116,16 +134,21 @@ public partial class SkillHubPageView : UserControl
                 SkillHubAssets.VirtualHost,
                 assetsDir,
                 CoreWebView2HostResourceAccessKind.Allow);
+            ApplyThemeBackground();
             core.NavigationCompleted += async (_, args) =>
             {
-                if (!args.IsSuccess || _hub is null)
+                if (!args.IsSuccess)
                 {
                     return;
                 }
 
                 try
                 {
-                    await _hub.RefreshAsync().ConfigureAwait(true);
+                    await ApplyThemeStylesAsync().ConfigureAwait(true);
+                    if (_hub is not null)
+                    {
+                        await _hub.RefreshAsync().ConfigureAwait(true);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -138,6 +161,38 @@ public partial class SkillHubPageView : UserControl
         catch (Exception ex)
         {
             App.StartupTrace($"SkillHub WebView init failed: {ex.Message}");
+        }
+    }
+
+    private void ApplyThemeBackground()
+    {
+        var bg = AppThemeManager.Current.Chrome.ChatBackgroundTop;
+        SkillHubWebView.DefaultBackgroundColor = System.Drawing.Color.FromArgb(bg.A, bg.R, bg.G, bg.B);
+        Background = new SolidColorBrush(bg);
+    }
+
+    private async Task ApplyThemeStylesAsync()
+    {
+        if (SkillHubWebView.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await SkillHubWebView.EnsureCoreWebView2Async().ConfigureAwait(true);
+            var tokensB64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(SkillHubThemeStyles.GetThemeTokenStyles()));
+            var payload = JsonSerializer.Serialize(new { type = "theme", tokensB64 });
+            SkillHubWebView.CoreWebView2?.PostWebMessageAsJson(payload);
+
+            // Also apply via script in case the page missed the postMessage race.
+            await SkillHubWebView.CoreWebView2!
+                .ExecuteScriptAsync(SkillHubThemeStyles.BuildThemeUpdateScript())
+                .ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"SkillHub ApplyThemeStyles failed: {ex.Message}");
         }
     }
 
@@ -162,6 +217,12 @@ public partial class SkillHubPageView : UserControl
         {
             try
             {
+                // Apply theme first when the page signals ready.
+                if (json.Contains("\"ready\"", StringComparison.Ordinal))
+                {
+                    await ApplyThemeStylesAsync().ConfigureAwait(true);
+                }
+
                 await _hub.HandleWebMessageAsync(json).ConfigureAwait(true);
             }
             catch (Exception ex)

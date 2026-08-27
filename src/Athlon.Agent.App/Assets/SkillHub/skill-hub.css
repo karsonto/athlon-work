@@ -1,13 +1,18 @@
 :root {
-  --bg: #1a1a1a;
-  --panel: #242424;
-  --panel-hover: #2e2e2e;
-  --border: #333;
-  --text: #ececec;
-  --muted: #9a9a9a;
-  --accent: #f5f5f5;
-  --btn: #3a3a3a;
-  --btn-hover: #4a4a4a;
+  --bg: var(--hub-bg, #F8FAFC);
+  --panel: var(--hub-panel, #FFFFFF);
+  --panel-hover: var(--hub-panel-hover, #F1F5F9);
+  --border: var(--hub-border, #E2E8F0);
+  --text: var(--hub-text, #0F172A);
+  --muted: var(--hub-muted, #64748B);
+  --accent: var(--hub-accent, #4F46E5);
+  --accent-hover: var(--hub-accent-hover, #4338CA);
+  --accent-fg: var(--hub-accent-fg, #FFFFFF);
+  --btn: var(--hub-btn, #EEF2FF);
+  --btn-hover: var(--hub-btn-hover, #4338CA);
+  --btn-fg: var(--hub-btn-fg, #4F46E5);
+  --icon-bg: var(--hub-icon-bg, #E2E8F0);
+  --badge-bg: var(--hub-badge-bg, #EEF2FF);
   --radius: 12px;
   --font: "Segoe UI", system-ui, -apple-system, sans-serif;
 }
@@ -73,12 +78,12 @@ html, body {
   border-radius: 999px;
   padding: 8px 16px;
   background: var(--accent);
-  color: #111;
+  color: var(--accent-fg);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
-.manage-btn:hover { filter: brightness(0.95); }
+.manage-btn:hover { background: var(--accent-hover); }
 .content {
   flex: 1;
   overflow: auto;
@@ -120,7 +125,7 @@ html, body {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: #3d3d3d;
+  background: var(--icon-bg);
   display: grid;
   place-items: center;
   font-size: 16px;
@@ -130,6 +135,14 @@ html, body {
 .discover-name {
   font-size: 15px;
   font-weight: 600;
+}
+.discover-en {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .discover-desc {
   font-size: 12px;
@@ -145,7 +158,7 @@ html, body {
   align-self: flex-start;
   font-size: 11px;
   color: var(--muted);
-  background: #303030;
+  background: var(--badge-bg);
   border-radius: 999px;
   padding: 3px 8px;
 }
@@ -169,7 +182,7 @@ html, body {
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  background: #3a3a3a;
+  background: var(--icon-bg);
   display: grid;
   place-items: center;
   font-size: 13px;
@@ -180,6 +193,14 @@ html, body {
 .skill-row-name {
   font-size: 13px;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.skill-row-en {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -196,22 +217,20 @@ html, body {
   border-radius: 8px;
   padding: 6px 12px;
   background: var(--btn);
-  color: var(--text);
+  color: var(--btn-fg);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   flex-shrink: 0;
   min-width: 64px;
 }
-.add-btn:hover:not(:disabled) { background: var(--btn-hover); }
+.add-btn:hover:not(:disabled) {
+  background: var(--btn-hover);
+  color: var(--accent-fg);
+}
 .add-btn:disabled {
   opacity: 0.7;
   cursor: default;
-}
-.add-btn.installed {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--border);
 }
 .installed-label {
   flex-shrink: 0;

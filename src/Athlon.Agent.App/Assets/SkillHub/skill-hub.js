@@ -28,6 +28,29 @@
     return name ? name.charAt(0).toUpperCase() : '?';
   }
 
+  function displayName(item) {
+    return (item.name || item.englishName || '').trim();
+  }
+
+  function englishNameSuffix(item) {
+    var en = (item.englishName || '').trim();
+    if (!en) return '';
+    var primary = displayName(item);
+    // Avoid duplicating when name already is / equals the english id.
+    if (!primary || primary.toLowerCase() === en.toLowerCase()) return '';
+    return en;
+  }
+
+  function nameHtml(item, nameClass, enClass) {
+    var primary = displayName(item);
+    var en = englishNameSuffix(item);
+    var html = '<div class="' + nameClass + '">' + escapeHtml(primary) + '</div>';
+    if (en) {
+      html += '<div class="' + enClass + '">' + escapeHtml(en) + '</div>';
+    }
+    return html;
+  }
+
   function isInstalled(item) {
     if (item && item.installed === true) return true;
     var keys = [item.englishName, item.name, item.id];
@@ -76,7 +99,7 @@
     grid.innerHTML = discover.map(function (item) {
       return '<article class="discover-card">' +
         '<div class="discover-icon">' + escapeHtml(initial(item)) + '</div>' +
-        '<div class="discover-name">' + escapeHtml(item.name || item.englishName) + '</div>' +
+        nameHtml(item, 'discover-name', 'discover-en') +
         '<div class="discover-desc">' + escapeHtml(item.description || '') + '</div>' +
         '<div class="discover-badge">' + escapeHtml(item.category || 'Skill') + '</div>' +
         '</article>';
@@ -99,7 +122,7 @@
     return '<div class="skill-row" data-id="' + escapeHtml(item.id) + '">' +
       '<div class="skill-row-icon">' + escapeHtml(initial(item)) + '</div>' +
       '<div class="skill-row-body">' +
-      '<div class="skill-row-name">' + escapeHtml(item.name || item.englishName) + '</div>' +
+      nameHtml(item, 'skill-row-name', 'skill-row-en') +
       '<div class="skill-row-desc">' + escapeHtml(item.description || '') + '</div>' +
       '</div>' +
       actionHtml +
@@ -198,8 +221,50 @@
     renderCategories(items);
   }
 
+  function decodeBase64Utf8(b64) {
+    var binary = atob(b64 || '');
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+
+  function applyThemeTokensToRoot(tokensCss) {
+    var root = document.documentElement;
+    tokensCss.replace(/(--[\w-]+)\s*:\s*([^;]+);/g, function (_, name, value) {
+      root.style.setProperty(name.trim(), value.trim());
+    });
+  }
+
+  function syncThemeSurfaces() {
+    var bg = getComputedStyle(document.documentElement).getPropertyValue('--hub-bg').trim()
+      || getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    var text = getComputedStyle(document.documentElement).getPropertyValue('--hub-text').trim()
+      || getComputedStyle(document.documentElement).getPropertyValue('--text').trim();
+    if (bg) {
+      document.documentElement.style.backgroundColor = bg;
+      document.body.style.backgroundColor = bg;
+    }
+    if (text) {
+      document.body.style.color = text;
+    }
+  }
+
+  function applyThemeUpdate(tokensB64) {
+    var tokensCss = decodeBase64Utf8(tokensB64);
+    var tokensEl = document.getElementById('skill-hub-theme-tokens');
+    if (tokensEl) {
+      tokensEl.textContent = tokensCss;
+    }
+    applyThemeTokensToRoot(tokensCss);
+    syncThemeSurfaces();
+  }
+
   function onHostMessage(data) {
     if (!data || !data.type) return;
+    if (data.type === 'theme' && data.tokensB64) {
+      applyThemeUpdate(data.tokensB64);
+      return;
+    }
     if (data.type === 'catalog') {
       state.items = data.items || [];
       state.installed = {};
