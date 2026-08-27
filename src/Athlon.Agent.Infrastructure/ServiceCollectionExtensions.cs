@@ -65,6 +65,10 @@ public static class ServiceCollectionExtensions
             static client => client.Timeout = TimeSpan.FromSeconds(30));
         services.AddSingleton<IAppLogger>(logger);
         services.AddHttpClient("BehaviorReport", static client => client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddHttpClient("SkillHub", static client => client.Timeout = TimeSpan.FromSeconds(60));
+        services.AddSingleton<Athlon.Agent.Infrastructure.SkillHub.ISkillHubClient,
+            Athlon.Agent.Infrastructure.SkillHub.SkillHubClient>();
+        services.AddSingleton<Athlon.Agent.Infrastructure.SkillHub.SkillPackageInstaller>();
         services.AddSingleton<IEventManager>(sp =>
         {
             var httpFactory = sp.GetRequiredService<IHttpClientFactory>();

@@ -1,0 +1,37 @@
+<UserControl x:Class="Athlon.Agent.App.Views.SkillHubPageView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:app="clr-namespace:Athlon.Agent.App"
+             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
+    <Grid Background="{DynamicResource Brush.ChatBackground}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0"
+                Height="{x:Static app:AppLayoutMetrics.PanelHeaderHeight}"
+                Background="{DynamicResource Brush.Chrome}"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,0,0,1"
+                Padding="24,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Command="{Binding NavigateCommand}"
+                        CommandParameter="Chat"
+                        Style="{StaticResource GhostIconButtonStyle}"
+                        Margin="0,0,8,0"
+                        ToolTip="{loc:Localize Key=Common_BackToChat}"
+                        Content="←" />
+                <TextBlock Text="{loc:Localize Key=SkillHub_Title}"
+                           FontSize="20"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+        </Border>
+
+        <wv2:WebView2 x:Name="SkillHubWebView"
+                      Grid.Row="1"
+                      DefaultBackgroundColor="Transparent" />
+    </Grid>
+</UserControl>

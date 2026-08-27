@@ -5,7 +5,8 @@ public enum AppPage
     Chat,
     Settings,
     Knowledge,
-    Schedule
+    Schedule,
+    SkillHub
 }
 
 public static class AppPageExtensions
@@ -16,6 +17,7 @@ public static class AppPageExtensions
             nameof(AppPage.Settings) => AppPage.Settings,
             nameof(AppPage.Knowledge) => AppPage.Knowledge,
             nameof(AppPage.Schedule) => AppPage.Schedule,
+            nameof(AppPage.SkillHub) => AppPage.SkillHub,
             _ => AppPage.Chat
         };
 

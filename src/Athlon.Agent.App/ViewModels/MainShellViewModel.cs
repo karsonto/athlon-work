@@ -114,6 +114,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         PageViewFactory pageViewFactory,
         ChatPageViewModel chatPage,
         ScheduleViewModel schedulePageVm,
+        SkillHubViewModel skillHubVm,
         ILocalizationService localization,
         IUserNotifier notifier,
         SshWorkspaceConnectionService sshConnection,
@@ -162,6 +163,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionTurns.QueuedTurnPresenter.QueueChanged += OnQueuedTurnsChanged;
         Settings = settingsViewModel;
         SchedulePageVm = schedulePageVm;
+        SkillHubVm = skillHubVm;
+        SkillHubVm.Configure(
+            onSkillsInstalled: OnSkillConfigurationChanged,
+            navigateToSettings: () => CurrentPage = AppPage.Settings);
         KnowledgePageVm = knowledgePageVm;
         KnowledgePageVm.KnowledgeDataChanged += OnKnowledgeDataChanged;
         _taskListChangedNotifier.TaskListChanged += OnTaskListChanged;
@@ -636,6 +641,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public ScheduleViewModel SchedulePageVm { get; }
     public KnowledgeViewModel KnowledgePageVm { get; }
+    public SkillHubViewModel SkillHubVm { get; }
 
     public ComposerKnowledgeViewModel ComposerKnowledge { get; }
 
@@ -2765,7 +2771,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     partial void OnCurrentPageChanged(AppPage value)
     {
         CurrentPageView = _pageViewFactory.GetOrCreate(value);
-        _navigation.HandlePageChanged(value.ToPageKey(), Settings, SchedulePageVm, KnowledgePageVm);
+        _navigation.HandlePageChanged(
+            value.ToPageKey(),
+            Settings,
+            SchedulePageVm,
+            KnowledgePageVm,
+            SkillHubVm);
     }
 
     private void OnSkillConfigurationChanged()

@@ -27,6 +27,7 @@ public sealed class PageViewFactory
             AppPage.Settings => new SettingsPageView(),
             AppPage.Knowledge => new KnowledgePageView(),
             AppPage.Schedule => new SchedulePageView(),
+            AppPage.SkillHub => new SkillHubPageView(),
             _ => new ChatPageView()
         };
 }

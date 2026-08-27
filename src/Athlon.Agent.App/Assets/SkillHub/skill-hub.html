@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Skill Hub</title>
+  <link rel="stylesheet" href="skill-hub.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input id="search" type="search" placeholder="Search Skills..." autocomplete="off" />
+        <select id="categoryFilter" aria-label="Category">
+          <option value="">All</option>
+        </select>
+      </div>
+      <button id="manageBtn" type="button" class="manage-btn">Manage</button>
+    </header>
+    <main id="content" class="content">
+      <div id="status" class="status" hidden></div>
+      <section id="discover" class="section" hidden>
+        <h2 class="section-title">Discover</h2>
+        <div id="discoverGrid" class="discover-grid"></div>
+      </section>
+      <section id="featured" class="section" hidden>
+        <h2 class="section-title">Featured</h2>
+        <div id="featuredList" class="skill-list"></div>
+        <button id="featuredMore" type="button" class="show-more" hidden></button>
+      </section>
+      <div id="categorySections"></div>
+    </main>
+  </div>
+  <script src="skill-hub.js"></script>
+</body>
+</html>

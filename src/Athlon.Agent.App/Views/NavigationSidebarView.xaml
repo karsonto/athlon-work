@@ -46,6 +46,23 @@
                                    VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
+                <Button Command="{Binding NavigateCommand}"
+                        CommandParameter="SkillHub"
+                        ToolTip="{loc:Localize Key=Nav_SkillHub}"
+                        Style="{StaticResource NewSessionButtonStyle}"
+                        Margin="0,8,0,0">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                        <TextBlock Text="&#xE8F1;"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0" />
+                        <TextBlock Text="{loc:Localize Key=Nav_SkillHub}"
+                                   FontSize="13"
+                                   FontWeight="Medium"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="12,8">

@@ -169,6 +169,8 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ScheduleViewModel>();
 
+        services.AddSingleton<SkillHubViewModel>();
+
         services.AddSingleton<PageViewFactory>();
 
         services.AddSingleton<MainShellViewModel>();

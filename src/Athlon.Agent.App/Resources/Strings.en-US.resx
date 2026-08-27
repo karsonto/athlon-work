@@ -957,6 +957,24 @@ Error: {1}</value>
   <data name="Nav_NewAgent" xml:space="preserve">
     <value>New Agent</value>
   </data>
+  <data name="Nav_SkillHub" xml:space="preserve">
+    <value>Skill Hub</value>
+  </data>
+  <data name="SkillHub_Title" xml:space="preserve">
+    <value>Skill Hub</value>
+  </data>
+  <data name="SkillHub_NoServer" xml:space="preserve">
+    <value>Report server is not configured; remote skills are unavailable.</value>
+  </data>
+  <data name="SkillHub_Empty" xml:space="preserve">
+    <value>No skills available.</value>
+  </data>
+  <data name="SkillHub_SkillNotFound" xml:space="preserve">
+    <value>Skill not found.</value>
+  </data>
+  <data name="SkillHub_InstallSuccess" xml:space="preserve">
+    <value>Installed skill: {0}</value>
+  </data>
   <data name="Nav_NewSessionTooltip" xml:space="preserve">
     <value>New session</value>
   </data>

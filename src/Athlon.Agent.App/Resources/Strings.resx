@@ -966,6 +966,24 @@
   <data name="Nav_NewAgent" xml:space="preserve">
     <value>New Agent</value>
   </data>
+  <data name="Nav_SkillHub" xml:space="preserve">
+    <value>Skill Hub</value>
+  </data>
+  <data name="SkillHub_Title" xml:space="preserve">
+    <value>Skill Hub</value>
+  </data>
+  <data name="SkillHub_NoServer" xml:space="preserve">
+    <value>未配置上报服务器，无法加载远程 Skill。</value>
+  </data>
+  <data name="SkillHub_Empty" xml:space="preserve">
+    <value>暂无可用 Skill。</value>
+  </data>
+  <data name="SkillHub_SkillNotFound" xml:space="preserve">
+    <value>未找到该 Skill。</value>
+  </data>
+  <data name="SkillHub_InstallSuccess" xml:space="preserve">
+    <value>已安装 Skill：{0}</value>
+  </data>
   <data name="Nav_NewSessionTooltip" xml:space="preserve">
     <value>新建会话</value>
   </data>
