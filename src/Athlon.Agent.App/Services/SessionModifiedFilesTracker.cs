@@ -106,11 +106,19 @@ public sealed class SessionModifiedFilesTracker
         }
     }
 
+    /// <summary>
+    /// Rebuilds live tracking from the <em>current turn only</em> (messages after the last
+    /// user / visible compaction). Prior turns are rendered by FILES_CHANGED replay; putting
+    /// them in <see cref="_currentTurnPaths"/> would make RestoreLive upsert overwrite the
+    /// last card with a session-wide file list.
+    /// </summary>
     public void RebuildFromMessages(IReadOnlyList<ChatMessageViewModel> messages)
     {
         Clear();
-        foreach (var message in messages)
+        var start = IndexAfterLastTurnBoundary(messages);
+        for (var i = start; i < messages.Count; i++)
         {
+            var message = messages[i];
             if (!message.IsTool || !ModifiedFilePathExtractor.IsFileTool(message.ToolName))
             {
                 continue;
@@ -142,6 +150,26 @@ public sealed class SessionModifiedFilesTracker
                 TryAttachDiff(file, message.ToolName, argsText, message.Content);
             }
         }
+    }
+
+    /// <summary>Index of the first message belonging to the current turn (after last user/compaction).</summary>
+    internal static int IndexAfterLastTurnBoundary(IReadOnlyList<ChatMessageViewModel> messages)
+    {
+        for (var i = messages.Count - 1; i >= 0; i--)
+        {
+            if (messages[i].IsUser)
+            {
+                return i + 1;
+            }
+
+            if (messages[i].IsCompaction
+                && ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(messages[i]))
+            {
+                return i + 1;
+            }
+        }
+
+        return 0;
     }
 
     /// <summary>Builds per-turn file-change groups from display messages (for WebChat replay).</summary>

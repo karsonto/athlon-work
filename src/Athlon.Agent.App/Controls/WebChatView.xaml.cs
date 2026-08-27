@@ -271,7 +271,9 @@ public partial class WebChatView : UserControl
 
     public Task DispatchFilesChangedAsync(IReadOnlyList<ModifiedFileViewModel> files, bool upsert = true)
     {
-        if (files.Count == 0)
+        // Empty upsert: nothing to show. Empty seal must still reach JS so a live card
+        // is finalized and cannot be stolen by the next turn.
+        if (files.Count == 0 && upsert)
         {
             return Task.CompletedTask;
         }

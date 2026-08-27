@@ -344,6 +344,61 @@ public sealed class SessionModifiedFilesTrackerTests
     }
 
     [Fact]
+    public void RebuildFromMessages_keeps_only_current_turn_paths()
+    {
+        static ChatMessageViewModel Edit(string id, string path) =>
+            new(ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    $"ToolCallId: {id}",
+                    "Tool `file_edit` succeeded.",
+                    "",
+                    $"Arguments: path = {path}",
+                    "Summary: Edited",
+                    "",
+                    $"--- a/{path}",
+                    $"+++ b/{path}",
+                    "@@ -1,1 +1,1 @@",
+                    "-old",
+                    "+new")));
+
+        var messages = new List<ChatMessageViewModel>
+        {
+            new(ChatMessage.Create(MessageRole.User, "edit a")),
+            Edit("call-1", "a.ts"),
+            new(ChatMessage.Create(MessageRole.Assistant, "done a")),
+            new(ChatMessage.Create(MessageRole.User, "edit b")),
+            Edit("call-2", "b.ts"),
+            new(ChatMessage.Create(MessageRole.Assistant, "done b"))
+        };
+
+        var tracker = new SessionModifiedFilesTracker();
+        tracker.RebuildFromMessages(messages);
+
+        Assert.Single(tracker.ModifiedFiles);
+        Assert.Equal("b.ts", tracker.ModifiedFiles[0].RelativePath);
+        var current = tracker.TakeCurrentTurnSucceededFiles();
+        Assert.Single(current);
+        Assert.Equal("b.ts", current[0].RelativePath);
+        Assert.DoesNotContain(current, file => file.RelativePath == "a.ts");
+    }
+
+    [Fact]
+    public void IndexAfterLastTurnBoundary_returns_index_after_last_user()
+    {
+        var messages = new List<ChatMessageViewModel>
+        {
+            new(ChatMessage.Create(MessageRole.User, "one")),
+            new(ChatMessage.Create(MessageRole.Assistant, "a")),
+            new(ChatMessage.Create(MessageRole.User, "two")),
+            new(ChatMessage.Create(MessageRole.Assistant, "b"))
+        };
+
+        Assert.Equal(3, SessionModifiedFilesTracker.IndexAfterLastTurnBoundary(messages));
+    }
+
+    [Fact]
     public void FileWriteToolCallArgs_with_partial_json_still_extracts_path()
     {
         var tracker = new SessionModifiedFilesTracker();

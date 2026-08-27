@@ -1026,6 +1026,18 @@ public sealed partial class SessionTurnUiController
             ? _activitySourceMessages.Select(message => new ChatMessageViewModel(message)).ToList()
             : viewModels;
         _modifiedFilesTracker.RebuildFromMessages(fileSource);
+
+        // Idle / history hydrate: replay owns sealed-per-turn cards. Keep live paths only
+        // while a turn is still in flight so RestoreLive can adopt the current-turn card.
+        var liveTurnActive = preserveActiveTurn
+            || _streaming.ActiveAssistantBubble is not null
+            || _streaming.ToolBubblesByIndex.Count > 0
+            || _turnActivityTracker.HasSegmentContent;
+        if (!liveTurnActive)
+        {
+            _modifiedFilesTracker.Clear();
+        }
+
         _bulkChatViewSyncDepth--;
         if (preserveActiveTurn)
         {
@@ -1435,7 +1447,12 @@ public sealed partial class SessionTurnUiController
 
     private void RestoreLiveTurnCardsAfterReload()
     {
-        PublishFilesChanged(upsert: true);
+        // Tracker is current-turn-only after RebuildFromMessages. Re-publish so a mid-turn
+        // reload can adopt the replayed card as data-live without pulling prior-turn paths.
+        if (_modifiedFilesTracker.HasCurrentTurnPaths)
+        {
+            PublishFilesChanged(upsert: true);
+        }
 
         var live = _turnActivityTracker.Snapshot();
         if (live is not { HasContent: true } || !CanTouchChatView)

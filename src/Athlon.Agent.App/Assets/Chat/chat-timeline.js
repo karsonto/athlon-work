@@ -857,10 +857,14 @@ function findFilesChangedTargetCard(upsert) {
   // Scope to the current turn only — never steal a prior turn's live card.
   var live = findLiveFilesChangedCardInCurrentTurn();
   if (live) return live;
-  var latest = findLatestFilesChangedCardInCurrentTurn();
-  if (latest && !latest.hasAttribute('data-sealed')) return latest;
-  // Seal with no current-turn card: nothing to finalize.
-  if (!upsert) return null;
+  if (upsert) {
+    // After a full timeline reload, replay emits an unsealed card for the current turn.
+    // Adopt it as the live card instead of stacking a duplicate with the same paths.
+    var latest = findLatestFilesChangedCardInCurrentTurn();
+    if (latest && !latest.hasAttribute('data-sealed')) return latest;
+    return null;
+  }
+  // Seal with no live card: nothing to finalize (do not rewrite sealed history cards).
   return null;
 }
 
@@ -1007,9 +1011,12 @@ function appendFilesChangedCard(event) {
     card.removeAttribute('data-sealed');
   } else {
     card.removeAttribute('data-live');
-    // Only mark sealed when closing a live card; replay creates plain cards so a later
-    // live upsert can reuse them instead of stacking duplicates.
-    if (sealingLiveCard) card.setAttribute('data-sealed', '1');
+    // Seal live cards and completed replay cards. Leave the card unsealed only when
+    // this is a non-live replay placeholder that RestoreLive may still adopt (no
+    // data-live was ever set — sealingLiveCard is false and we are not mid-seal).
+    if (sealingLiveCard) {
+      card.setAttribute('data-sealed', '1');
+    }
   }
   placeFilesChangedRow(row);
   updateEmptyStateVisibility();
