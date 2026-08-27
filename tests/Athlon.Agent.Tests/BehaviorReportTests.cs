@@ -224,6 +224,52 @@ public sealed class BehaviorReportTests : IDisposable
     }
 
     [Fact]
+    public async Task EventManager_UploadCycle_UploadsPendingAfterRecord()
+    {
+        var paths = new TestPaths(_root);
+        paths.EnsureCreated();
+        var settings = new AppSettings
+        {
+            BehaviorReport = new BehaviorReportSettings
+            {
+                Enabled = true,
+                BaseUrl = "https://example.com",
+                UploadIntervalMinutes = 60
+            }
+        };
+
+        var capturing = new CapturingHandler();
+        var em = BehaviorEventManager.Instance;
+        em.Configure(settings, paths, new HttpClient(capturing), new NoOpLogger());
+        em.Start();
+        try
+        {
+            em.Record(
+                BehaviorEventIds.AppStart,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.AppStart);
+
+            var pending = Path.Combine(paths.BehaviorPath, "pending.jsonl");
+            for (var i = 0; i < 40 && !File.Exists(pending); i++)
+            {
+                await Task.Delay(50);
+            }
+
+            Assert.True(File.Exists(pending));
+
+            var uploaded = await em.RunUploadCycleAsync();
+            Assert.Equal(1, uploaded);
+            Assert.Equal(1, capturing.RequestCount);
+            Assert.Contains("/agent/report", capturing.LastRequestUri, StringComparison.Ordinal);
+            Assert.False(File.Exists(pending));
+        }
+        finally
+        {
+            em.Stop();
+        }
+    }
+
+    [Fact]
     public async Task Uploader_Success_RemovesPendingEvents()
     {
         var paths = new TestPaths(_root);

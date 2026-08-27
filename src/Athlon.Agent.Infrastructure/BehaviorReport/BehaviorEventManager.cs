@@ -6,8 +6,8 @@ using System.Threading.Channels;
 namespace Athlon.Agent.Infrastructure.BehaviorReport;
 
 /// <summary>
-/// Legacy compatibility shim.
-/// The old behavior-reporting pipeline is retired; keep a no-op surface so existing call sites compile safely.
+/// Collects behavior events locally and uploads pending batches on a timer
+/// (<see cref="BehaviorReportSettings.UploadIntervalMinutes"/>), plus on explicit <see cref="FlushAsync"/>.
 /// </summary>
 public sealed class BehaviorEventManager : IEventManager, IDisposable
 {
@@ -26,6 +26,8 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
     private readonly Channel<BehaviorEvent> _channel = Channel.CreateUnbounded<BehaviorEvent>();
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _workerTask;
+    private CancellationTokenSource? _uploadCts;
+    private Task? _uploadTask;
 
     private BehaviorEventManager()
     {
@@ -34,7 +36,9 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
 
     public static void ResetForTests()
     {
+        Singleton.StopUploadLoop();
         Singleton.StartedAt = DateTimeOffset.UtcNow;
+        Singleton._started = false;
     }
 
     public BehaviorEventManager Configure(
@@ -115,11 +119,7 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
 
     public async Task FlushAsync(CancellationToken cancellationToken = default)
     {
-        while (_channel.Reader.Count > 0)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            await Task.Delay(10, cancellationToken).ConfigureAwait(false);
-        }
+        await DrainChannelAsync(cancellationToken).ConfigureAwait(false);
 
         BehaviorReportUploader? uploader;
         lock (_gate)
@@ -137,15 +137,18 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
     {
         StartedAt = DateTimeOffset.UtcNow;
         _started = true;
+        StartUploadLoop();
     }
 
     public void Stop()
     {
         _started = false;
+        StopUploadLoop();
     }
 
     public void Dispose()
     {
+        StopUploadLoop();
         _cts.Cancel();
         try
         {
@@ -154,6 +157,140 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
         catch
         {
             // ignore
+        }
+    }
+
+    private void StartUploadLoop()
+    {
+        lock (_gate)
+        {
+            if (_uploadTask is { IsCompleted: false })
+            {
+                return;
+            }
+
+            _uploadCts?.Dispose();
+            _uploadCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+            var ct = _uploadCts.Token;
+            _uploadTask = Task.Run(() => RunUploadLoopAsync(ct), ct);
+        }
+    }
+
+    private void StopUploadLoop()
+    {
+        CancellationTokenSource? cts;
+        Task? task;
+        lock (_gate)
+        {
+            cts = _uploadCts;
+            task = _uploadTask;
+            _uploadCts = null;
+            _uploadTask = null;
+        }
+
+        try
+        {
+            cts?.Cancel();
+        }
+        catch
+        {
+            // ignore
+        }
+
+        try
+        {
+            task?.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch
+        {
+            // ignore shutdown races
+        }
+
+        cts?.Dispose();
+    }
+
+    private async Task RunUploadLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                int minutes;
+                lock (_gate)
+                {
+                    minutes = Math.Max(1, _settings.BehaviorReport.UploadIntervalMinutes);
+                }
+
+                using var timer = new PeriodicTimer(TimeSpan.FromMinutes(minutes));
+                while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    try
+                    {
+                        await RunUploadCycleAsync(cancellationToken).ConfigureAwait(false);
+
+                        // Recreate timer if the configured interval changed.
+                        int latestMinutes;
+                        lock (_gate)
+                        {
+                            latestMinutes = Math.Max(1, _settings.BehaviorReport.UploadIntervalMinutes);
+                        }
+
+                        if (latestMinutes != minutes)
+                        {
+                            break;
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning("Behavior upload cycle failed: {Error}", ex.Message);
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // normal stop
+        }
+    }
+
+    /// <summary>Runs one drain + upload cycle (used by the timer and tests).</summary>
+    internal async Task<int> RunUploadCycleAsync(CancellationToken cancellationToken = default)
+    {
+        await DrainChannelAsync(cancellationToken).ConfigureAwait(false);
+
+        BehaviorReportUploader? uploader;
+        lock (_gate)
+        {
+            uploader = _uploader;
+        }
+
+        if (uploader is null)
+        {
+            return 0;
+        }
+
+        var uploaded = await uploader.UploadPendingAsync(cancellationToken).ConfigureAwait(false);
+        if (uploaded > 0)
+        {
+            _logger.Information("Behavior report uploaded {Count} pending event(s).", uploaded);
+        }
+
+        return uploaded;
+    }
+
+    private async Task DrainChannelAsync(CancellationToken cancellationToken)
+    {
+        // Let the writer drain queued events into the local store before upload.
+        var spins = 0;
+        while (_channel.Reader.Count > 0 && spins < 500)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Delay(10, cancellationToken).ConfigureAwait(false);
+            spins++;
         }
     }
 
@@ -201,4 +338,3 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
         public void Error(Exception exception, string messageTemplate, params object[] values) { }
     }
 }
-
