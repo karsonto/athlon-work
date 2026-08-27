@@ -384,6 +384,13 @@ public sealed class FilesChangedBubbleTests
         Assert.Contains(
             summary.Items,
             item => item.Status == "succeeded" && item.Detail.Contains("present.txt", StringComparison.Ordinal));
+        Assert.All(
+            summary.Items.Where(item => item.Kind == TurnActivityKind.Command),
+            item =>
+            {
+                Assert.False(string.IsNullOrWhiteSpace(item.MessageId));
+                Assert.False(string.IsNullOrWhiteSpace(item.ToolCallId));
+            });
     }
 
     [Fact]
@@ -585,16 +592,13 @@ public sealed class FilesChangedBubbleTests
         Assert.Equal(1, first.RootElement.GetProperty("files").GetArrayLength());
         Assert.Equal(1, second.RootElement.GetProperty("files").GetArrayLength());
 
-        var activities = events.Where(json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal)).ToList();
         var assistants = events.Where(json => json.Contains("STATIC_ASSISTANT_HTML", StringComparison.Ordinal)).ToList();
-        Assert.Equal(2, activities.Count);
         Assert.Equal(2, assistants.Count);
 
-        Assert.True(events.IndexOf(activities[0]) < events.IndexOf(assistants[0]));
+        // Successful edits fold into FILES_CHANGED only (no TURN_ACTIVITY rows).
         Assert.True(events.IndexOf(assistants[0]) < events.IndexOf(fileEvents[0]));
-        Assert.True(events.IndexOf(activities[1]) < events.IndexOf(assistants[1]));
         Assert.True(events.IndexOf(assistants[1]) < events.IndexOf(fileEvents[1]));
-        Assert.True(events.IndexOf(fileEvents[0]) < events.IndexOf(activities[1]));
+        Assert.True(events.IndexOf(fileEvents[0]) < events.IndexOf(assistants[1]));
     }
 
     [Fact]

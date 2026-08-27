@@ -115,6 +115,67 @@ public sealed class FileStorageService(
         }
     }
 
+    public async Task<string?> TryReadEvictedToolResultAsync(
+        string sessionId,
+        string toolCallId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(toolCallId))
+        {
+            return null;
+        }
+
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            var path = Path.Combine(GetSessionDirectory(sessionId), "evicted", $"{toolCallId}.txt");
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            return await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    public async Task<ChatMessage?> TryLoadConversationMessageAsync(
+        string sessionId,
+        string messageId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(messageId))
+        {
+            return null;
+        }
+
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            var path = GetConversationDisplayPath(sessionId);
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            ChatMessage? latest = null;
+            foreach (var line in await File.ReadAllLinesAsync(path, cancellationToken).ConfigureAwait(false))
+            {
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    continue;
+                }
+
+                var message = ConversationDisplayLog.TryParseLine(line);
+                if (message is null || !string.Equals(message.Id, messageId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                latest = message;
+            }
+
+            return latest;
+        }
+    }
+
     public async Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sessionId))

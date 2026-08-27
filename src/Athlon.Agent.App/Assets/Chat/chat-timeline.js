@@ -88,6 +88,94 @@ function post(payload) {
   }
 }
 
+var pendingToolDetailRequests = Object.create(null);
+var toolDetailRequestSeq = 0;
+
+function requestToolDetailForEntry(entry, detailPanel) {
+  if (!entry || entry.dataset.hydrated === '1' || entry.dataset.loading === '1') return;
+  var messageId = entry.dataset.messageId || '';
+  var toolCallId = entry.dataset.toolCallId || '';
+  if (!messageId && !toolCallId) return;
+  entry.dataset.loading = '1';
+  if (detailPanel) detailPanel.textContent = '…';
+  var requestId = 'td-' + (++toolDetailRequestSeq);
+  pendingToolDetailRequests[requestId] = { entry: entry, panel: detailPanel };
+  post({
+    type: 'requestToolDetail',
+    requestId: requestId,
+    messageId: messageId || null,
+    toolCallId: toolCallId || null
+  });
+}
+
+function applyToolDetailPayload(payload) {
+  if (!payload) return;
+  var requestId = payload.requestId || '';
+  var pending = requestId ? pendingToolDetailRequests[requestId] : null;
+  var text = payload.content || '';
+  if (pending) {
+    delete pendingToolDetailRequests[requestId];
+    if (pending.panel) {
+      pending.panel.textContent = text || '(empty)';
+    } else if (pending.entry && pending.entry.classList.contains('tool')) {
+      var result = pending.entry.querySelector('.tool-result');
+      var html = pending.entry.querySelector('.tool-result-html');
+      if (result && html) {
+        result.style.display = 'block';
+        html.textContent = text;
+      }
+    }
+    if (pending.entry) {
+      pending.entry.dataset.hydrated = '1';
+      delete pending.entry.dataset.loading;
+    }
+    return;
+  }
+
+  var toolCallId = payload.toolCallId || '';
+  if (toolCallId) {
+    var card = getToolCard(toolCallId);
+    if (card) {
+      var cardResult = card.querySelector('.tool-result');
+      var cardHtml = card.querySelector('.tool-result-html');
+      if (cardResult && cardHtml) {
+        cardResult.style.display = 'block';
+        cardHtml.textContent = text;
+      }
+      card.dataset.hydrated = '1';
+      delete card.dataset.loading;
+      if (payload.messageId) card.dataset.messageId = payload.messageId;
+    }
+  }
+
+  if (payload.messageId) {
+    var entries = document.querySelectorAll(
+      '.turn-activity-item[data-message-id="' + payload.messageId + '"]');
+    entries.forEach(function (entry) {
+      var panel = entry.querySelector('.turn-activity-tool-detail');
+      if (panel) panel.textContent = text || '(empty)';
+      entry.dataset.hydrated = '1';
+      delete entry.dataset.loading;
+    });
+  }
+}
+
+function requestToolDetailForToolCard(card) {
+  if (!card || card.dataset.hydrated === '1' || card.dataset.loading === '1') return;
+  var messageId = card.dataset.messageId || '';
+  var toolCallId = card.getAttribute('data-tool-call-id') || '';
+  if (!messageId && !toolCallId) return;
+  card.dataset.loading = '1';
+  var requestId = 'td-' + (++toolDetailRequestSeq);
+  pendingToolDetailRequests[requestId] = { entry: card, panel: null };
+  post({
+    type: 'requestToolDetail',
+    requestId: requestId,
+    messageId: messageId || null,
+    toolCallId: toolCallId || null
+  });
+}
+
 const copyIconSvg =
   '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
     '<rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.25"></rect>' +
@@ -1198,6 +1286,29 @@ function appendTurnActivityCard(event) {
         scrollToBottom();
       });
       entry.appendChild(diff);
+    } else if (item.body || item.messageId || item.toolCallId) {
+      var detailPanel = document.createElement('pre');
+      detailPanel.className = 'turn-activity-tool-detail';
+      if (item.body) {
+        detailPanel.textContent = item.body;
+        entry.dataset.hydrated = '1';
+      } else {
+        detailPanel.textContent = '…';
+        entry.dataset.hydrated = '0';
+      }
+      if (item.messageId) entry.dataset.messageId = item.messageId;
+      if (item.toolCallId) entry.dataset.toolCallId = item.toolCallId;
+      button.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var opening = !entry.classList.contains('open');
+        entry.classList.toggle('open');
+        if (opening && entry.dataset.hydrated !== '1') {
+          requestToolDetailForEntry(entry, detailPanel);
+        }
+        scrollToBottom();
+      });
+      entry.appendChild(detailPanel);
     }
 
     body.appendChild(entry);
@@ -1402,6 +1513,7 @@ function handleEvent(event) {
     case 'TOOL_CALL_RESULT': {
       const card = getToolCard(event.toolCallId);
       if (!card) break;
+      if (event.messageId) card.dataset.messageId = event.messageId;
       applyToolStatusBadge(card.querySelector('.tool-status'), event.status || 'succeeded');
       if (event.header) {
         let header = card.querySelector('.tool-header');
@@ -1426,6 +1538,22 @@ function handleEvent(event) {
       if (result && html) {
         result.style.display = 'block';
         applyMarkdownHtml(html, resolveRenderedHtml(event, event.content || ''));
+      }
+      var contentText = event.content || '';
+      var needsHydration = !!(event.messageId || event.toolCallId)
+        && (contentText.indexOf('[Tool result evicted') >= 0 || contentText.length < 80);
+      if (needsHydration) {
+        card.dataset.hydrated = '0';
+        if (!card.dataset.bindHydrate) {
+          card.dataset.bindHydrate = '1';
+          card.addEventListener('toggle', function () {
+            if (card.open && card.dataset.hydrated !== '1') {
+              requestToolDetailForToolCard(card);
+            }
+          });
+        }
+      } else {
+        card.dataset.hydrated = '1';
       }
       scrollToBottom();
       break;
@@ -1504,7 +1632,7 @@ function appendEvents(events) {
   state.batchTarget = null;
   state.trackReasoningDuration = true;
   root.appendChild(fragment);
-  endBatch(true);
+  endBatch(false);
 }
 
 function setOlderMessagesAvailable(available) {
@@ -1552,6 +1680,8 @@ function handleWebMessage(message) {
       !!command.hasOlderMessages);
   } else if (command.command === 'historyAvailability') {
     setOlderMessagesAvailable(!!command.hasOlderMessages);
+  } else if (command.command === 'toolDetail') {
+    applyToolDetailPayload(command);
   } else if (command.command === 'reset') {
     beginBatch();
     resetTimeline();
@@ -1573,6 +1703,12 @@ const chatScroller = getChatScroller();
 if (chatScroller) {
   chatScroller.addEventListener('scroll', function () {
     state.autoScrollEnabled = isNearBottom();
+  }, { passive: true });
+  chatScroller.addEventListener('wheel', function (e) {
+    if (e.deltaY < 0) state.autoScrollEnabled = false;
+  }, { passive: true });
+  chatScroller.addEventListener('touchmove', function () {
+    if (!isNearBottom()) state.autoScrollEnabled = false;
   }, { passive: true });
 }
 const loadOlderButton = document.getElementById('load-older');

@@ -184,6 +184,11 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("state.autoScrollEnabled", surface, StringComparison.Ordinal);
         Assert.Contains("selectionchange", surface, StringComparison.Ordinal);
         Assert.Contains("hasActiveSelection()", surface, StringComparison.Ordinal);
+        Assert.Contains("e.deltaY < 0", surface, StringComparison.Ordinal);
+        Assert.Contains("requestToolDetail", surface, StringComparison.Ordinal);
+        Assert.Contains("command.command === 'toolDetail'", surface, StringComparison.Ordinal);
+        Assert.Contains("turn-activity-tool-detail", surface, StringComparison.Ordinal);
+        Assert.Contains("endBatch(false)", surface, StringComparison.Ordinal);
     }
 
     [Fact]

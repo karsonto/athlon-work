@@ -65,6 +65,53 @@ public sealed class FileStorageServiceTests
         Assert.DoesNotContain(sessions, item => item.Id == session.Id);
     }
 
+    [Fact]
+    public async Task TryLoadConversationMessageAsync_returns_unstripped_latest_line()
+    {
+        using var temp = new TempDirectoryScope("athlon-session-readback");
+        var paths = new TestAppPathProvider(temp.Root);
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var sessionId = "readback-session";
+        await storage.SaveSessionAsync(AgentSession.Create(sessionId));
+
+        var fullBody = string.Join(
+            '\n',
+            "ToolCallId: call-read",
+            "Tool `file_read` succeeded.",
+            "",
+            "Arguments: path = huge.log",
+            "Summary: Read huge.log",
+            "",
+            "1|line one",
+            "2|line two");
+        var message = ChatMessage.Create(MessageRole.Tool, fullBody);
+        await storage.AppendConversationMessageAsync(sessionId, message);
+
+        var display = await storage.LoadConversationDisplayAsync(sessionId);
+        Assert.Single(display);
+        Assert.DoesNotContain("line one", display[0].Content, StringComparison.Ordinal);
+
+        var loaded = await storage.TryLoadConversationMessageAsync(sessionId, message.Id);
+        Assert.NotNull(loaded);
+        Assert.Contains("line one", loaded!.Content, StringComparison.Ordinal);
+        Assert.Contains("line two", loaded.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TryReadEvictedToolResultAsync_returns_archived_body()
+    {
+        using var temp = new TempDirectoryScope("athlon-session-evicted-read");
+        var paths = new TestAppPathProvider(temp.Root);
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var sessionId = "evict-read-session";
+        await storage.SaveSessionAsync(AgentSession.Create(sessionId));
+
+        await storage.SaveEvictedToolResultAsync(sessionId, "call-9", "full-evicted-output");
+        var body = await storage.TryReadEvictedToolResultAsync(sessionId, "call-9");
+        Assert.Equal("full-evicted-output", body);
+        Assert.Null(await storage.TryReadEvictedToolResultAsync(sessionId, "missing"));
+    }
+
     private sealed class TestAppPathProvider(string root) : IAppPathProvider
     {
         public string RootPath { get; } = root;

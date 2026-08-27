@@ -1021,11 +1021,13 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         {
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
+            _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
         }
 
         _savedChatView = chatView;
         chatView.OlderMessagesRequested += OnOlderMessagesRequested;
         chatView.ExternalLinkRequested += OnChatExternalLinkRequested;
+        chatView.ToolDetailRequested += OnToolDetailRequested;
         _uiCache.AttachChatViewToAll(chatView);
         _activeUi.ChatView = chatView;
         _ = _activeUi.ReloadChatViewAsync();
@@ -1042,6 +1044,44 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         {
             App.StartupTrace($"Open chat link in browser failed: {ex.Message}");
             ShowShellToast(ex.Message, ShellToastKind.Error);
+        }
+    }
+
+    private async void OnToolDetailRequested(object? sender, Controls.ToolDetailRequestEventArgs e)
+    {
+        if (_savedChatView is not { } chatView)
+        {
+            return;
+        }
+
+        var sessionId = _displayedSessionId;
+        try
+        {
+            var detail = await ToolDetailReadback.LoadDisplayDetailAsync(
+                _storage,
+                sessionId,
+                e.MessageId,
+                e.ToolCallId,
+                CancellationToken.None).ConfigureAwait(true);
+            if (!string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            await chatView.PostToolDetailAsync(
+                e.RequestId,
+                e.MessageId,
+                e.ToolCallId,
+                detail ?? string.Empty).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Tool detail readback failed: {ex.Message}");
+            await chatView.PostToolDetailAsync(
+                e.RequestId,
+                e.MessageId,
+                e.ToolCallId,
+                string.Empty).ConfigureAwait(true);
         }
     }
 
@@ -2754,6 +2794,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         {
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
+            _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
         }
 
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;

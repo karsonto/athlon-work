@@ -69,6 +69,13 @@ public interface IFileStorageService
     Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default);
     Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default);
     Task<string> SaveEvictedToolResultAsync(string sessionId, string toolCallId, string content, CancellationToken cancellationToken = default);
+    Task<string?> TryReadEvictedToolResultAsync(string sessionId, string toolCallId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<string?>(null);
+    /// <summary>
+    /// Loads the latest unstripped conversation.jsonl line for <paramref name="messageId"/> (last-wins).
+    /// </summary>
+    Task<ChatMessage?> TryLoadConversationMessageAsync(string sessionId, string messageId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<ChatMessage?>(null);
     Task AppendConversationMessageAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ChatMessage>> LoadConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default);
     async Task<ConversationDisplayPage> LoadConversationDisplayPageAsync(

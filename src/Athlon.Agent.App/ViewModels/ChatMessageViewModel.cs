@@ -13,7 +13,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
 {
     public const string PendingManualCompactionMessageId = "pending-manual-compaction";
 
-    public const int MaxToolDetailDisplayChars = 16_384;
+    public const int MaxToolDetailDisplayChars = 262_144;
     private const int ToolDetailPreviewChars = 4_096;
 
     private string _toolDetailFull = string.Empty;

@@ -28,7 +28,9 @@ public sealed record TurnActivityItem(
     int Removed = 0,
     IReadOnlyList<TurnActivityDiffLine>? DiffLines = null,
     string? Body = null,
-    string? Status = null);
+    string? Status = null,
+    string? MessageId = null,
+    string? ToolCallId = null);
 
 public sealed record TurnActivitySummary
 {
@@ -183,6 +185,10 @@ public static class TurnActivitySummaryBuilder
             var toolName = message.ToolName;
             var args = message.ToolArgumentsText;
 
+            var messageId = message.MessageId;
+            var toolCallId = message.ToolCallId;
+            var detailBody = ResolveActivityBody(message);
+
             // Successful edits render in FILES_CHANGED; show in-flight / failed edits here.
             if (EditTools.Contains(toolName))
             {
@@ -197,7 +203,10 @@ public static class TurnActivitySummaryBuilder
                     inFlight ? "Writing" : "Edited",
                     editPath,
                     editPath,
-                    Status: statusKey));
+                    Body: detailBody,
+                    Status: statusKey,
+                    MessageId: messageId,
+                    ToolCallId: toolCallId));
                 continue;
             }
 
@@ -223,7 +232,10 @@ public static class TurnActivitySummaryBuilder
                     inFlight ? "Reading" : "Read",
                     detail,
                     path == "…" ? null : path,
-                    Status: statusKey));
+                    Body: detailBody,
+                    Status: statusKey,
+                    MessageId: messageId,
+                    ToolCallId: toolCallId));
                 continue;
             }
 
@@ -243,7 +255,10 @@ public static class TurnActivitySummaryBuilder
                     TurnActivityKind.Searched,
                     inFlight ? "Searching" : "Searched",
                     detail,
-                    Status: statusKey));
+                    Body: detailBody,
+                    Status: statusKey,
+                    MessageId: messageId,
+                    ToolCallId: toolCallId));
                 continue;
             }
 
@@ -262,7 +277,10 @@ public static class TurnActivitySummaryBuilder
                     inFlight ? "Exploring" : "Explored",
                     detail,
                     path == "…" ? null : path,
-                    Status: statusKey));
+                    Body: detailBody,
+                    Status: statusKey,
+                    MessageId: messageId,
+                    ToolCallId: toolCallId));
                 continue;
             }
 
@@ -273,15 +291,17 @@ public static class TurnActivitySummaryBuilder
                     ?? FirstNonEmptyLine(args)
                     ?? (inFlight ? "…" : "execute_command");
                 var detail = Truncate(FlattenWhitespace(command), 72);
-                var body = string.IsNullOrWhiteSpace(message.ToolDetail)
-                    ? command
-                    : message.ToolDetail;
+                var body = !string.IsNullOrWhiteSpace(detailBody)
+                    ? detailBody
+                    : command;
                 items.Add(new TurnActivityItem(
                     TurnActivityKind.Command,
                     inFlight ? "Running" : "Ran",
                     detail,
                     Body: body,
-                    Status: statusKey));
+                    Status: statusKey,
+                    MessageId: messageId,
+                    ToolCallId: toolCallId));
                 continue;
             }
 
@@ -298,7 +318,10 @@ public static class TurnActivitySummaryBuilder
                 TurnActivityKind.Tool,
                 toolName,
                 genericDetail,
-                Status: statusKey));
+                Body: detailBody,
+                Status: statusKey,
+                MessageId: messageId,
+                ToolCallId: toolCallId));
         }
 
         if (items.Count == 0)
@@ -382,6 +405,27 @@ public static class TurnActivitySummaryBuilder
             "Said",
             preview,
             Body: trimmed);
+    }
+
+    private static string? ResolveActivityBody(ChatMessageViewModel message)
+    {
+        if (!string.IsNullOrWhiteSpace(message.ToolDetail))
+        {
+            var args = message.ToolArgumentsText;
+            if (string.IsNullOrWhiteSpace(args))
+            {
+                return message.ToolDetail;
+            }
+
+            return "Arguments:\n" + args.Trim() + "\n\nResult:\n" + message.ToolDetail.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(message.ToolArgumentsText))
+        {
+            return "Arguments:\n" + message.ToolArgumentsText.Trim();
+        }
+
+        return null;
     }
 
     private static string FirstLine(string text)

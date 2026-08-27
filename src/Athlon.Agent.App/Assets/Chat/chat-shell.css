@@ -668,6 +668,23 @@ html.replaying .message-row { animation: none; }
   background: var(--chat-bg);
 }
 .turn-activity-item.open .turn-activity-diff { display: block; }
+.turn-activity-tool-detail {
+  display: none;
+  margin: 2px 0 6px 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--chat-bg);
+  color: var(--assistant-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.turn-activity-item.open .turn-activity-tool-detail { display: block; }
 .turn-activity-thought-label {
   color: var(--subtle-text);
   opacity: 0.8;

@@ -55,6 +55,7 @@ public partial class WebChatView : UserControl
     public event EventHandler? OlderMessagesRequested;
     public event EventHandler<string>? ExternalLinkRequested;
     public event EventHandler<ToolApprovalDecisionEventArgs>? ToolApprovalDecisionReceived;
+    public event EventHandler<ToolDetailRequestEventArgs>? ToolDetailRequested;
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
@@ -641,6 +642,27 @@ public partial class WebChatView : UserControl
                         }
 
                         break;
+                    case "requestToolDetail":
+                    {
+                        var detailMessageId = root.TryGetProperty("messageId", out var detailMessageIdElement)
+                            ? detailMessageIdElement.GetString()
+                            : null;
+                        var detailToolCallId = root.TryGetProperty("toolCallId", out var detailToolCallIdElement)
+                            ? detailToolCallIdElement.GetString()
+                            : null;
+                        var requestId = root.TryGetProperty("requestId", out var requestIdElement)
+                            ? requestIdElement.GetString()
+                            : null;
+                        if (!string.IsNullOrWhiteSpace(detailMessageId)
+                            || !string.IsNullOrWhiteSpace(detailToolCallId))
+                        {
+                            ToolDetailRequested?.Invoke(
+                                this,
+                                new ToolDetailRequestEventArgs(detailMessageId, detailToolCallId, requestId));
+                        }
+
+                        break;
+                    }
                 }
             }
         }
@@ -840,7 +862,40 @@ public partial class WebChatView : UserControl
     }
 
     public Task ScrollToBottomAsync() =>
+        ExecuteScriptWhenReadyAsync("scrollToBottom();");
+
+    public Task ScrollToBottomImmediateAsync() =>
         ExecuteScriptWhenReadyAsync("scrollToBottom(true);");
+
+    public async Task PostToolDetailAsync(
+        string? requestId,
+        string? messageId,
+        string? toolCallId,
+        string? content)
+    {
+        try
+        {
+            await EnsureReadyAsync().ConfigureAwait(true);
+            if (ChatWebView.CoreWebView2 is null)
+            {
+                return;
+            }
+
+            var payload = JsonSerializer.Serialize(new
+            {
+                command = "toolDetail",
+                requestId,
+                messageId,
+                toolCallId,
+                content = content ?? string.Empty
+            });
+            ChatWebView.CoreWebView2.PostWebMessageAsJson(payload);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"WebChatView PostToolDetail failed: {ex.Message}");
+        }
+    }
 
     public async Task PrependMessagesAsync(
         IReadOnlyList<ChatMessageViewModel> messages,
@@ -961,3 +1016,8 @@ public partial class WebChatView : UserControl
 public sealed record ToolApprovalDecisionEventArgs(
     string ToolCallId,
     ToolApprovalDecision Decision);
+
+public sealed record ToolDetailRequestEventArgs(
+    string? MessageId,
+    string? ToolCallId,
+    string? RequestId);

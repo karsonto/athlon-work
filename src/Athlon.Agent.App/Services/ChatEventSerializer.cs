@@ -121,6 +121,8 @@ internal static class ChatEventSerializer
             body = item.Body,
             status = item.Status,
             statusLabel = item.Status is null ? null : LocalizeActivityStatus(item.Status),
+            messageId = item.MessageId,
+            toolCallId = item.ToolCallId,
             lines = item.DiffLines?.Select(line => new
             {
                 kind = line.Kind,

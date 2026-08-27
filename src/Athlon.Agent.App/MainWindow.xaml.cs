@@ -202,7 +202,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         var chatScrollService = services.GetService<IChatScrollService>();
         chatScrollService?.Register(
             () => _ = webChat.ScrollToBottomAsync(),
-            () => _ = webChat.ScrollToBottomAsync());
+            () => _ = webChat.ScrollToBottomImmediateAsync());
     }
 
     private void OnMainWindowClosed(object? sender, EventArgs e)
