@@ -180,11 +180,11 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
 
 
-        if (PromptModeHelper.HasAny(context, "browser_navigate", "browser_find_aria_nodes"))
+        if (PromptModeHelper.HasAny(context, "browser_navigate", "browser_find_aria_nodes", "browser_network_list"))
 
         {
 
-            builder.AppendLine("- Browser tab tools: see runtime context for ARIA find → act → verify rules.");
+            builder.AppendLine("- Browser tab tools: see runtime context for ARIA find → act → verify rules and DevTools network/console tools.");
 
         }
 

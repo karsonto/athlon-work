@@ -22,4 +22,20 @@ public sealed class NullBrowserAutomationHost : IBrowserAutomationHost
 
     public Task<string> ExecuteAriaAsync(string operation, string? argsJson = null, CancellationToken cancellationToken = default) =>
         Task.FromException<string>(new InvalidOperationException("Browser automation host is not available."));
+
+    public Task<BrowserNetworkListResult> ListNetworkEntriesAsync(
+        int limit,
+        string? urlContains,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<BrowserNetworkListResult>(new InvalidOperationException("Browser automation host is not available."));
+
+    public Task<BrowserNetworkEntryDetail> GetNetworkEntryAsync(
+        string requestId,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<BrowserNetworkEntryDetail>(new InvalidOperationException("Browser automation host is not available."));
+
+    public Task<BrowserConsoleReadResult> ReadConsoleAsync(
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<BrowserConsoleReadResult>(new InvalidOperationException("Browser automation host is not available."));
 }

@@ -16,13 +16,16 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
 
     private readonly WorkspacePaneViewModel _pane;
     private readonly BrowserWebViewRegistry _registry;
+    private readonly BrowserDevToolsRegistry _devToolsRegistry;
 
     public BrowserAutomationHost(
         WorkspacePaneViewModel pane,
-        BrowserWebViewRegistry registry)
+        BrowserWebViewRegistry registry,
+        BrowserDevToolsRegistry devToolsRegistry)
     {
         _pane = pane;
         _registry = registry;
+        _devToolsRegistry = devToolsRegistry;
     }
 
     public Task EnsureBrowserTabAsync(CancellationToken cancellationToken = default) =>
@@ -125,6 +128,42 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
             return UnwrapExecuteScriptJson(raw);
         }, cancellationToken);
 
+    public Task<BrowserNetworkListResult> ListNetworkEntriesAsync(
+        int limit,
+        string? urlContains,
+        CancellationToken cancellationToken = default) =>
+        InvokeOnUiAsync(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var session = await ResolveDevToolsSessionAsync(cancellationToken).ConfigureAwait(true);
+            return session.ListNetworkEntries(limit, urlContains);
+        }, cancellationToken);
+
+    public Task<BrowserNetworkEntryDetail> GetNetworkEntryAsync(
+        string requestId,
+        CancellationToken cancellationToken = default) =>
+        InvokeOnUiAsync(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (string.IsNullOrWhiteSpace(requestId))
+            {
+                throw new ArgumentException("requestId is required.", nameof(requestId));
+            }
+
+            var session = await ResolveDevToolsSessionAsync(cancellationToken).ConfigureAwait(true);
+            return await session.GetNetworkEntryAsync(requestId.Trim(), cancellationToken).ConfigureAwait(true);
+        }, cancellationToken);
+
+    public Task<BrowserConsoleReadResult> ReadConsoleAsync(
+        int limit,
+        CancellationToken cancellationToken = default) =>
+        InvokeOnUiAsync(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var session = await ResolveDevToolsSessionAsync(cancellationToken).ConfigureAwait(true);
+            return session.ReadConsoleEntries(limit);
+        }, cancellationToken);
+
     private BrowserWorkspaceTabViewModel EnsureBrowserTabCore()
     {
         var existing = ResolveTargetTab();
@@ -167,6 +206,19 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         }
 
         throw new InvalidOperationException("Browser WebView2 is not ready yet.");
+    }
+
+    private async Task<BrowserDevToolsSession> ResolveDevToolsSessionAsync(CancellationToken cancellationToken)
+    {
+        var tab = EnsureBrowserTabCore();
+        await WaitForWebViewAsync(tab.Id, cancellationToken).ConfigureAwait(true);
+
+        if (_devToolsRegistry.TryGet(tab.Id, out var session) && session is not null)
+        {
+            return session;
+        }
+
+        throw new InvalidOperationException("Browser DevTools session is not ready yet.");
     }
 
     private static async Task EnsureAriaHostInjectedAsync(CoreWebView2 webView)

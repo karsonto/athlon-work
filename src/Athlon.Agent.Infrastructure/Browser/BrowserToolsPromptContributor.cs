@@ -21,6 +21,8 @@ public sealed class BrowserToolsPromptContributor(IBrowserWorkspaceState browser
             builder.AppendLine("4. Use browser_read_aria_tree with filter=\"interactive\" when you need page structure; avoid repeatedly reading the full tree.");
             builder.AppendLine("5. Use full refs exactly as returned (e.g. aria_1). Do not invent CSS selectors first.");
             builder.AppendLine("6. One action tool at a time; verify after each action before the next step.");
+            builder.AppendLine("7. For API or page errors: browser_network_list → browser_network_get (one requestId at a time); use browser_console_read for JS errors.");
+            builder.AppendLine("8. UI interaction uses browser_aria_*; network and console analysis uses browser_network_* and browser_console_read.");
             return;
         }
 

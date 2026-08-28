@@ -166,6 +166,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserAriaInspectTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserAriaInteractTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserWaitForAriaTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserNetworkListTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserNetworkGetTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserConsoleReadTool>();
         services.AddSingleton<IRuntimeContextContributor, Athlon.Agent.Infrastructure.Browser.BrowserToolsPromptContributor>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Terminal.TerminalOpenTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Terminal.TerminalSendInputTool>();

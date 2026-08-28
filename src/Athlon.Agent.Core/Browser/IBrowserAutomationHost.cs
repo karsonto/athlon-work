@@ -24,4 +24,17 @@ public interface IBrowserAutomationHost
     /// Returns a JSON object string (not double-encoded) with at least { "ok": bool, ... }.
     /// </summary>
     Task<string> ExecuteAriaAsync(string operation, string? argsJson = null, CancellationToken cancellationToken = default);
+
+    Task<BrowserNetworkListResult> ListNetworkEntriesAsync(
+        int limit,
+        string? urlContains,
+        CancellationToken cancellationToken = default);
+
+    Task<BrowserNetworkEntryDetail> GetNetworkEntryAsync(
+        string requestId,
+        CancellationToken cancellationToken = default);
+
+    Task<BrowserConsoleReadResult> ReadConsoleAsync(
+        int limit,
+        CancellationToken cancellationToken = default);
 }

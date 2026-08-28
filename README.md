@@ -52,7 +52,7 @@ Most AI coding assistants are either web-only or Electron-heavy. Athlon Agent is
 - **Sub-agent delegation** (`sessions_spawn` / `sessions_send` / `sessions_list` / `sessions_history` / `sessions_pending_completions` / `task_output`) with configurable nesting depth and background execution
 - **Long-term memory**: search, get, and consolidating memory via `ILongTermMemory` with periodic flush
 - **Knowledge RAG**: SQLite vector store with OpenAI-compatible embeddings, document ingestion (PDF, text, Markdown), and turn-scoped knowledge search
-- **Browser automation**: WebView2-hosted Browser tab with ARIA page tools (`browser_navigate`, `computer_interact`, `computer_observe`) for exploring and driving web pages
+- **Browser automation**: WebView2-hosted Browser tab with ARIA page tools and DevTools capture (`browser_network_list`, `browser_network_get`, `browser_console_read`) for exploring and driving web pages
 - **Computer Use**: desktop automation (observe/interact) with coordinate mapping and UI Automation tree
 - **ConPTY Terminal**: workspace Terminal tab with `terminal_open` / `terminal_send_input` / `terminal_read_output`
 - **SSH workspaces**: connect to remote hosts, browse remote file trees, and run file tools over SSH
@@ -304,6 +304,7 @@ Runtime data lives under `%USERPROFILE%\.athlon-agent\`:
 | `sessions_spawn` / `sessions_send` / … | Sub-agent delegation (when enabled) |
 | `todo_write` | Task plan management |
 | `browser_navigate` / ARIA tools | Explore and drive the built-in Browser tab (WebView2) |
+| `browser_network_list` / `browser_network_get` / `browser_console_read` | Inspect captured network traffic and console output from the Browser tab |
 | `computer_observe` / `computer_interact` | Desktop automation (Computer Use, when active) |
 | `terminal_open` / `terminal_send_input` / `terminal_read_output` | Interactive workspace Terminal (ConPTY) |
 | MCP tools | Dynamic tool discovery via configured MCP servers |

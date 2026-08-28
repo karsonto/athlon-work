@@ -17,6 +17,9 @@ public sealed class BrowserToolRouterTests
         Assert.DoesNotContain("browser_read_aria_tree", names);
         Assert.DoesNotContain("browser_find_aria_nodes", names);
         Assert.DoesNotContain("browser_aria_interact", names);
+        Assert.DoesNotContain("browser_network_list", names);
+        Assert.DoesNotContain("browser_network_get", names);
+        Assert.DoesNotContain("browser_console_read", names);
     }
 
     [Fact]
@@ -32,6 +35,9 @@ public sealed class BrowserToolRouterTests
         Assert.Contains("browser_aria_inspect", names);
         Assert.Contains("browser_aria_interact", names);
         Assert.Contains("browser_wait_for_aria", names);
+        Assert.Contains("browser_network_list", names);
+        Assert.Contains("browser_network_get", names);
+        Assert.Contains("browser_console_read", names);
     }
 
     [Fact]
@@ -106,6 +112,17 @@ public sealed class BrowserToolRouterTests
     }
 
     [Fact]
+    public async Task NetworkGet_MissingRequestId_FailsBeforeHost()
+    {
+        var tool = new BrowserNetworkGetTool(NullBrowserAutomationHost.Instance);
+        var result = await tool.InvokeAsync(
+            new ToolInvocation("browser_network_get", ToolCallArguments.Empty));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("Missing requestId", result.Summary);
+    }
+
+    [Fact]
     public void AriaHostScript_IsEmbeddedOrCopied()
     {
         var script = Athlon.Agent.App.Services.Browser.BrowserAutomationHost.TryLoadAriaHostScript();
@@ -143,6 +160,9 @@ public sealed class BrowserToolRouterTests
             new BrowserAriaInspectTool(NullBrowserAutomationHost.Instance),
             new BrowserAriaInteractTool(NullBrowserAutomationHost.Instance),
             new BrowserWaitForAriaTool(NullBrowserAutomationHost.Instance),
+            new BrowserNetworkListTool(NullBrowserAutomationHost.Instance),
+            new BrowserNetworkGetTool(NullBrowserAutomationHost.Instance),
+            new BrowserConsoleReadTool(NullBrowserAutomationHost.Instance),
         ];
 
         return new McpDelegatingToolRouter(

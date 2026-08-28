@@ -106,13 +106,15 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<AppSettings>()));
 
         services.AddSingleton<Athlon.Agent.App.Services.Browser.BrowserWebViewRegistry>();
+        services.AddSingleton<Athlon.Agent.App.Services.Browser.BrowserDevToolsRegistry>();
         services.AddSingleton<Athlon.Agent.Core.Browser.IBrowserWorkspaceState>(sp =>
             new Athlon.Agent.App.Services.Browser.BrowserWorkspaceState(
                 sp.GetRequiredService<WorkspacePaneViewModel>()));
         services.AddSingleton<Athlon.Agent.Core.Browser.IBrowserAutomationHost>(sp =>
             new Athlon.Agent.App.Services.Browser.BrowserAutomationHost(
                 sp.GetRequiredService<WorkspacePaneViewModel>(),
-                sp.GetRequiredService<Athlon.Agent.App.Services.Browser.BrowserWebViewRegistry>()));
+                sp.GetRequiredService<Athlon.Agent.App.Services.Browser.BrowserWebViewRegistry>(),
+                sp.GetRequiredService<Athlon.Agent.App.Services.Browser.BrowserDevToolsRegistry>()));
         services.AddSingleton<Athlon.Agent.App.Services.Terminal.TerminalSessionRegistry>();
         services.AddSingleton<Athlon.Agent.Core.Terminal.ITerminalWorkspaceState>(sp =>
             new Athlon.Agent.App.Services.Terminal.TerminalWorkspaceState(

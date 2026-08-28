@@ -16,6 +16,7 @@ public partial class BrowserWorkspaceView : UserControl
     private bool _webViewReady;
     private bool _ariaScriptInstalled;
     private BrowserWebViewRegistry? _registry;
+    private BrowserDevToolsRegistry? _devToolsRegistry;
 
     public BrowserWorkspaceView()
     {
@@ -43,6 +44,7 @@ public partial class BrowserWorkspaceView : UserControl
         if (_tab is not null)
         {
             _registry?.Unregister(_tab.Id);
+            _devToolsRegistry?.Detach(_tab.Id);
         }
     }
 
@@ -59,6 +61,7 @@ public partial class BrowserWorkspaceView : UserControl
         if (_tab is not null)
         {
             _registry?.Unregister(_tab.Id);
+            _devToolsRegistry?.Detach(_tab.Id);
         }
 
         DetachTab(_tab);
@@ -211,6 +214,25 @@ public partial class BrowserWorkspaceView : UserControl
 
         _registry ??= TryResolveRegistry();
         _registry?.Register(_tab.Id, BrowserWebView.CoreWebView2);
+        _ = AttachDevToolsAsync(_tab.Id, BrowserWebView.CoreWebView2);
+    }
+
+    private async Task AttachDevToolsAsync(Guid tabId, CoreWebView2 webView)
+    {
+        try
+        {
+            _devToolsRegistry ??= TryResolveDevToolsRegistry();
+            if (_devToolsRegistry is null)
+            {
+                return;
+            }
+
+            await _devToolsRegistry.AttachAsync(tabId, webView).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Browser DevTools attach failed: {ex.Message}");
+        }
     }
 
     private static BrowserWebViewRegistry? TryResolveRegistry()
@@ -220,6 +242,23 @@ public partial class BrowserWorkspaceView : UserControl
             if (Application.Current is App app)
             {
                 return app.Services?.GetService<BrowserWebViewRegistry>();
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return null;
+    }
+
+    private static BrowserDevToolsRegistry? TryResolveDevToolsRegistry()
+    {
+        try
+        {
+            if (Application.Current is App app)
+            {
+                return app.Services?.GetService<BrowserDevToolsRegistry>();
             }
         }
         catch
