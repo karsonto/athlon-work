@@ -119,6 +119,12 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("id=\"chat-code-syntax\"", surface, StringComparison.Ordinal);
         Assert.Contains("chat-shell.css", surface, StringComparison.Ordinal);
         Assert.Contains("--chat-bg:", surface, StringComparison.Ordinal);
+        Assert.Contains("--file-chip-bg:", surface, StringComparison.Ordinal);
+        Assert.Contains("--skill-chip-bg:", surface, StringComparison.Ordinal);
+        Assert.Contains("--mcp-chip-bg:", surface, StringComparison.Ordinal);
+        Assert.Contains("fillUserText", surface, StringComparison.Ordinal);
+        Assert.Contains(".file-chip {", surface, StringComparison.Ordinal);
+        Assert.Contains("createTypedMentionChip", surface, StringComparison.Ordinal);
         Assert.Contains("function applyThemeUpdate", surface, StringComparison.Ordinal);
     }
 

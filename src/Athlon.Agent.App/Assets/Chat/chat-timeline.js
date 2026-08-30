@@ -564,7 +564,7 @@ function formatResponseDuration(durationMs) {
   return (t('responseDuration') || 'Took {0}').replace('{0}', secondsLabel);
 }
 
-function createUserRow(content, images, startedAt) {
+function createUserRow(content, images, startedAt, mentions) {
   const row = document.createElement('div');
   row.className = 'message-row user';
   const stack = document.createElement('div');
@@ -595,7 +595,7 @@ function createUserRow(content, images, startedAt) {
   if (content) {
     const text = document.createElement('div');
     text.className = 'message-content user-text';
-    text.textContent = content;
+    fillUserText(text, content, mentions);
     bubble.appendChild(text);
   }
 
@@ -605,6 +605,133 @@ function createUserRow(content, images, startedAt) {
   row.appendChild(stack);
   updateCopyText(row, content || '');
   return row;
+}
+
+var FILE_CHIP_DOCUMENT = 'M4,2 L4,14 L12,14 L12,6 L8,6 L6,4 L4,4 Z M6,4 L6,6 L8,6';
+var FILE_CHIP_FOLDER = 'M2,5 L2,14 L14,14 L14,7 L9,7 L7,5 Z';
+var FILE_CHIP_GIT = 'M8,2 C5.2,2 3,4.2 3,7 C3,9.8 5.2,12 8,12 C10.8,12 13,9.8 13,7 C13,4.2 10.8,2 8,2 Z M8,4.5 L9.8,6.3 L7.5,8.6 L6.2,7.3 L8,5.5 Z';
+var FILE_CHIP_MSBUILD = 'M3,12 L6,4 L9,12 M11,4 L14,12 M10.5,10 L11.5,10';
+var FILE_CHIP_BADGES = {
+  CSharp: 'C#',
+  Project: 'P',
+  Solution: 'S',
+  Markdown: 'M',
+  Json: '{}',
+  Xml: '</>',
+  Html: '<>',
+  Css: '#',
+  JavaScript: 'JS',
+  TypeScript: 'TS',
+  Python: 'Py',
+  Shell: '\u25B6',
+  PowerShell: '>_',
+  Yaml: 'Y',
+  Docker: 'D',
+  Image: '\u25A3',
+  Config: 'cfg'
+};
+
+function fileChipColorVar(kind) {
+  var key = String(kind || 'File').toLowerCase();
+  if (key === 'powershell') key = 'shell';
+  return 'var(--file-icon-' + key + ', var(--file-icon-file))';
+}
+
+function createFileChipIcon(kind) {
+  var wrap = document.createElement('span');
+  wrap.className = 'file-chip-icon';
+  wrap.setAttribute('aria-hidden', 'true');
+  wrap.style.color = fileChipColorVar(kind);
+  var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  var normalized = String(kind || 'File');
+  if (normalized === 'Folder') {
+    path.setAttribute('d', FILE_CHIP_FOLDER);
+    path.setAttribute('fill', 'currentColor');
+  } else if (normalized === 'Git') {
+    path.setAttribute('d', FILE_CHIP_GIT);
+    path.setAttribute('fill', 'currentColor');
+  } else if (normalized === 'MsBuild') {
+    path.setAttribute('d', FILE_CHIP_MSBUILD);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('stroke', 'currentColor');
+    path.setAttribute('stroke-width', '1.15');
+    path.setAttribute('stroke-linecap', 'round');
+  } else {
+    path.setAttribute('d', FILE_CHIP_DOCUMENT);
+    path.setAttribute('fill', 'currentColor');
+    if (FILE_CHIP_BADGES[normalized]) path.setAttribute('opacity', '0.35');
+    else if (normalized === 'Placeholder') path.setAttribute('opacity', '0.7');
+  }
+  svg.appendChild(path);
+  wrap.appendChild(svg);
+  var badgeText = FILE_CHIP_BADGES[normalized];
+  if (badgeText) {
+    var badge = document.createElement('span');
+    badge.className = 'file-chip-badge' + (badgeText.length > 2 ? ' is-long' : '');
+    badge.textContent = badgeText;
+    wrap.appendChild(badge);
+  }
+  return wrap;
+}
+
+function createFileChip(mention) {
+  var kind = String((mention && mention.kind) || 'file').toLowerCase();
+  if (kind === 'skill' || kind === 'mcp') {
+    return createTypedMentionChip(kind, mention);
+  }
+
+  var chip = document.createElement('span');
+  chip.className = 'file-chip';
+  var path = (mention && (mention.path || mention.fileName)) || '';
+  if (path) chip.title = path;
+  chip.appendChild(createFileChipIcon(mention && mention.iconKind));
+  var name = document.createElement('span');
+  name.className = 'file-chip-name';
+  name.textContent = (mention && mention.fileName) || path;
+  chip.appendChild(name);
+  return chip;
+}
+
+function createTypedMentionChip(kind, mention) {
+  var chip = document.createElement('span');
+  chip.className = 'file-chip file-chip-' + kind;
+  var path = (mention && (mention.path || mention.fileName)) || '';
+  var insert = kind === 'skill' ? '//skill:' + path : '//mcp:' + path;
+  chip.title = insert;
+  var type = document.createElement('span');
+  type.className = 'file-chip-type';
+  type.textContent = kind === 'skill' ? '技能' : 'MCP';
+  chip.appendChild(type);
+  var name = document.createElement('span');
+  name.className = 'file-chip-name';
+  name.textContent = (mention && mention.fileName) || path;
+  chip.appendChild(name);
+  return chip;
+}
+
+function fillUserText(el, content, mentions) {
+  var text = content || '';
+  var items = Array.isArray(mentions)
+    ? mentions.slice().sort(function (a, b) { return (a.start || 0) - (b.start || 0); })
+    : [];
+  if (!items.length) {
+    el.textContent = text;
+    return;
+  }
+
+  var last = 0;
+  items.forEach(function (mention) {
+    var start = Math.max(0, mention.start | 0);
+    var length = Math.max(0, mention.length | 0);
+    if (start < last || length <= 0 || start >= text.length) return;
+    if (start > last) el.appendChild(document.createTextNode(text.slice(last, start)));
+    el.appendChild(createFileChip(mention));
+    last = Math.min(text.length, start + length);
+  });
+  if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
+  if (!el.childNodes.length) el.textContent = text;
 }
 
 function createAssistantRow(messageId) {
@@ -636,7 +763,7 @@ function createReasoningRow(messageId) {
   return row;
 }
 
-function appendMessage(role, content, append, images, startedAt) {
+function appendMessage(role, content, append, images, startedAt, mentions) {
   if (append && role === 'assistant' && state.currentAssistantEl) {
     const el = state.currentAssistantEl.querySelector('.message-content');
     el.textContent += content;
@@ -651,7 +778,7 @@ function appendMessage(role, content, append, images, startedAt) {
   }
 
   if (role === 'user') {
-    getMessageRoot().appendChild(createUserRow(content, images, startedAt));
+    getMessageRoot().appendChild(createUserRow(content, images, startedAt, mentions));
   } else if (role === 'assistant') {
     const row = createAssistantRow('');
     row.querySelector('.message-content').textContent = content;
@@ -1407,7 +1534,7 @@ function handleEvent(event) {
           liveFiles.setAttribute('data-sealed', '1');
         }
       })();
-      appendMessage('user', event.content || '', false, event.images || [], event.startedAt || '');
+      appendMessage('user', event.content || '', false, event.images || [], event.startedAt || '', event.mentions || []);
       break;
     case 'FILES_CHANGED':
       appendFilesChangedCard(event);

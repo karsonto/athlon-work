@@ -69,4 +69,18 @@ public sealed class ComposerCompletionQueryTests
         Assert.Equal(ComposerCompletionTrigger.At, trigger);
         Assert.Equal("rea", query);
     }
+
+    [Theory]
+    [InlineData("//skill:demo", 13, true)]
+    [InlineData("//mcp:server", 13, true)]
+    [InlineData("use //skill:demo", 16, true)]
+    [InlineData("/clear", 6, false)]
+    [InlineData("src/foo/bar", 11, false)]
+    public void Double_slash_mention_span_detects_skill_and_mcp_tokens(
+        string text,
+        int caret,
+        bool expected)
+    {
+        Assert.Equal(expected, ComposerCompletionQuery.TryGetDoubleSlashMentionSpan(text, caret, out _, out _));
+    }
 }

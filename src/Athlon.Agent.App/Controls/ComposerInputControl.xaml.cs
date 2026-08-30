@@ -1,6 +1,8 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -19,6 +21,7 @@ public partial class ComposerInputControl : UserControl
     private bool _isReplayingPaste;
     private bool _isHandlingPaste;
     private bool _isAdjustingHeight;
+    private bool _isSyncingDocument;
 
     public ComposerInputControl()
     {
@@ -27,14 +30,19 @@ public partial class ComposerInputControl : UserControl
         ApplyPlaceholderText();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
-        SizeChanged += (_, _) => AdjustComposerTextHeight();
-        DataContextChanged += (_, _) =>
+        SizeChanged += (_, _) =>
         {
-            _viewModel = DataContext as MainShellViewModel;
-            UpdatePlaceholderVisibility();
+            UpdateDocumentPageWidth();
+            AdjustComposerTextHeight();
         };
-        ComposerTextBox.GotFocus += (_, _) => UpdatePlaceholderVisibility();
-        ComposerTextBox.LostFocus += (_, _) => UpdatePlaceholderVisibility();
+        DataContextChanged += OnDataContextChanged;
+        if (ComposerTextBox is not null)
+        {
+            ComposerTextBox.TextChanged += ComposerTextBox_OnTextChanged;
+            ComposerTextBox.GotFocus += (_, _) => UpdatePlaceholderVisibility();
+            ComposerTextBox.LostFocus += (_, _) => UpdatePlaceholderVisibility();
+            DataObject.AddPastingHandler(ComposerTextBox, OnComposerPasting);
+        }
     }
 
     public ClipboardImageAttachmentReader? ClipboardImageReader { get; set; }
@@ -54,6 +62,11 @@ public partial class ComposerInputControl : UserControl
 
     public void FocusInput()
     {
+        if (ComposerTextBox is null)
+        {
+            return;
+        }
+
         ComposerTextBox.Focus();
         Keyboard.Focus(ComposerTextBox);
     }
@@ -61,27 +74,83 @@ public partial class ComposerInputControl : UserControl
     private static void OnPlaceholderChanged(DependencyObject d, DependencyPropertyChangedEventArgs e) =>
         ((ComposerInputControl)d).ApplyPlaceholderText();
 
+    private bool IsComposerVisualReady =>
+        ComposerTextBox is not null && PlaceholderText is not null;
+
     private void ApplyPlaceholderText()
     {
+        if (PlaceholderText is null)
+        {
+            return;
+        }
+
         PlaceholderText.Text = string.IsNullOrEmpty(Placeholder)
             ? Localization.LocalizationHub.Instance["Chat_ComposerPlaceholder"]
             : Placeholder!;
     }
 
+    private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (e.OldValue is MainShellViewModel oldVm)
+        {
+            oldVm.PropertyChanged -= OnViewModelPropertyChanged;
+        }
+
+        _viewModel = DataContext as MainShellViewModel;
+        if (_viewModel is not null)
+        {
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+            SyncDocumentFromComposerText();
+        }
+
+        if (IsComposerVisualReady)
+        {
+            UpdatePlaceholderVisibility();
+        }
+    }
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         _viewModel ??= DataContext as MainShellViewModel;
-        ComposerTextBox.AddHandler(
-            CommandManager.PreviewExecutedEvent,
-            _pasteHandler,
-            handledEventsToo: true);
+        if (_viewModel is not null)
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        }
+
+        if (ComposerTextBox is not null)
+        {
+            ComposerTextBox.AddHandler(
+                CommandManager.PreviewExecutedEvent,
+                _pasteHandler,
+                handledEventsToo: true);
+        }
+
+        UpdateDocumentPageWidth();
+        SyncDocumentFromComposerText();
         UpdatePlaceholderVisibility();
         AdjustComposerTextHeight();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        ComposerTextBox.RemoveHandler(CommandManager.PreviewExecutedEvent, _pasteHandler);
+        if (ComposerTextBox is not null)
+        {
+            ComposerTextBox.RemoveHandler(CommandManager.PreviewExecutedEvent, _pasteHandler);
+        }
+
+        if (_viewModel is not null)
+        {
+            _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainShellViewModel.ComposerText))
+        {
+            SyncDocumentFromComposerText();
+        }
     }
 
     private void ComposerTextBox_OnPreviewKeyDown(object sender, KeyEventArgs e)
@@ -159,6 +228,14 @@ public partial class ComposerInputControl : UserControl
         await HandleImagePasteAsync().ConfigureAwait(true);
     }
 
+    private static void OnComposerPasting(object sender, DataObjectPastingEventArgs e)
+    {
+        if (e.DataObject.GetDataPresent(DataFormats.UnicodeText))
+        {
+            e.FormatToApply = DataFormats.UnicodeText;
+        }
+    }
+
     private bool TryBeginImagePaste(RoutedEventArgs e)
     {
         if (_isReplayingPaste || _isHandlingPaste)
@@ -230,19 +307,185 @@ public partial class ComposerInputControl : UserControl
 
     private void ComposerTextBox_OnTextChanged(object sender, TextChangedEventArgs e)
     {
-        UpdatePlaceholderVisibility();
-        AdjustComposerTextHeight();
-
-        if (_viewModel is null || sender is not TextBox textBox)
+        if (!IsComposerVisualReady)
         {
             return;
         }
 
-        _viewModel.UpdateComposerCompletion(textBox.Text, textBox.CaretIndex);
+        UpdatePlaceholderVisibility();
+        UpdateDocumentPageWidth();
+        AdjustComposerTextHeight();
+
+        if (_isSyncingDocument || _viewModel is null)
+        {
+            return;
+        }
+
+        var document = EnsureComposerDocument();
+        if (document is null)
+        {
+            return;
+        }
+
+        var serialized = ComposerMentionDocument.Serialize(document);
+        var caret = ComposerMentionDocument.GetSerializedOffset(
+            document,
+            ComposerTextBox.CaretPosition);
+        _isSyncingDocument = true;
+        try
+        {
+            if (!string.Equals(_viewModel.ComposerText, serialized, StringComparison.Ordinal))
+            {
+                _viewModel.ComposerText = serialized;
+            }
+
+            TryHydratePlainMentions(serialized, caret);
+        }
+        finally
+        {
+            _isSyncingDocument = false;
+        }
+
+        serialized = ComposerMentionDocument.Serialize(document);
+        caret = ComposerMentionDocument.GetSerializedOffset(
+            document,
+            ComposerTextBox.CaretPosition);
+        _viewModel.UpdateComposerCompletion(serialized, caret);
         if (_viewModel.IsAtCompletionOpen)
         {
             Dispatcher.BeginInvoke(SyncActiveCompletionListSelection, DispatcherPriority.Loaded);
         }
+    }
+
+    private void SyncDocumentFromComposerText()
+    {
+        if (_isSyncingDocument || _viewModel is null)
+        {
+            return;
+        }
+
+        var document = EnsureComposerDocument();
+        if (document is null)
+        {
+            return;
+        }
+
+        var composerText = _viewModel.ComposerText ?? string.Empty;
+        var serialized = ComposerMentionDocument.Serialize(document);
+        if (string.Equals(serialized, composerText, StringComparison.Ordinal))
+        {
+            UpdatePlaceholderVisibility();
+            AdjustComposerTextHeight();
+            return;
+        }
+
+        var caret = Math.Clamp(
+            ComposerMentionDocument.GetSerializedOffset(
+                document,
+                ComposerTextBox.CaretPosition),
+            0,
+            composerText.Length);
+        _isSyncingDocument = true;
+        try
+        {
+            ComposerTextBox.BeginChange();
+            ComposerMentionDocument.Hydrate(document, composerText);
+            ComposerTextBox.CaretPosition = ComposerMentionDocument.GetPointerAtOffset(
+                document,
+                caret);
+            ComposerTextBox.EndChange();
+        }
+        finally
+        {
+            _isSyncingDocument = false;
+        }
+
+        UpdatePlaceholderVisibility();
+        UpdateDocumentPageWidth();
+        AdjustComposerTextHeight();
+    }
+
+    private void TryHydratePlainMentions(string serialized, int caret)
+    {
+        var document = EnsureComposerDocument();
+        if (document is null)
+        {
+            return;
+        }
+
+        var excludeStart = -1;
+        var excludeEnd = -1;
+        if (ComposerCompletionQuery.TryGetAtQuerySpan(serialized, caret, out var atStart, out var atEnd))
+        {
+            excludeStart = atStart;
+            excludeEnd = atEnd;
+        }
+        else if (ComposerCompletionQuery.TryGetDoubleSlashMentionSpan(
+                     serialized,
+                     caret,
+                     out var slashStart,
+                     out var slashEnd))
+        {
+            excludeStart = slashStart;
+            excludeEnd = slashEnd;
+        }
+
+        var mentions = ComposerMentionDocument.ParseMentions(serialized, excludeStart, excludeEnd);
+        if (mentions.Count == 0
+            || mentions.Count == ComposerMentionDocument.CountChips(document))
+        {
+            return;
+        }
+
+        ComposerTextBox.BeginChange();
+        ComposerMentionDocument.Hydrate(document, serialized, excludeStart, excludeEnd);
+        ComposerTextBox.CaretPosition = ComposerMentionDocument.GetPointerAtOffset(
+            document,
+            caret);
+        ComposerTextBox.EndChange();
+    }
+
+    private void UpdateDocumentPageWidth()
+    {
+        if (ComposerTextBox is null)
+        {
+            return;
+        }
+
+        var document = EnsureComposerDocument();
+        if (document is null)
+        {
+            return;
+        }
+
+        var width = ComposerTextBox.ActualWidth
+            - ComposerTextBox.Padding.Left
+            - ComposerTextBox.Padding.Right
+            - 4;
+        if (width > 1)
+        {
+            document.PageWidth = width;
+        }
+    }
+
+    private FlowDocument? EnsureComposerDocument()
+    {
+        if (ComposerTextBox is null)
+        {
+            return null;
+        }
+
+        if (ComposerTextBox.Document is { } existing)
+        {
+            return existing;
+        }
+
+        var document = new FlowDocument(new Paragraph { Margin = new Thickness(0) })
+        {
+            PagePadding = new Thickness(0)
+        };
+        ComposerTextBox.Document = document;
+        return document;
     }
 
     private void AdjustComposerTextHeight()
@@ -287,16 +530,37 @@ public partial class ComposerInputControl : UserControl
 
     private double MeasureComposerTextHeight(double availableWidth)
     {
-        var text = ComposerTextBox.Text ?? string.Empty;
-        if (string.IsNullOrEmpty(text))
+        var document = EnsureComposerDocument();
+        if (document is null)
         {
             return MinComposerTextHeight;
         }
 
-        // Trailing newline does not advance FormattedText height by itself.
-        var measureText = text.EndsWith('\n') || text.EndsWith('\r')
-            ? text + " "
-            : text;
+        var serialized = ComposerMentionDocument.Serialize(document);
+        if (string.IsNullOrEmpty(serialized)
+            && ComposerMentionDocument.CountChips(document) == 0)
+        {
+            return MinComposerTextHeight;
+        }
+
+        var start = document.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+        var end = document.ContentEnd.GetCharacterRect(LogicalDirection.Backward);
+        var documentHeight = Math.Max(end.Bottom - start.Top, 0);
+        if (documentHeight > 1)
+        {
+            return documentHeight
+                + ComposerTextBox.Padding.Top
+                + ComposerTextBox.Padding.Bottom
+                + 4;
+        }
+
+        var measureText = serialized.EndsWith('\n') || serialized.EndsWith('\r')
+            ? serialized + " "
+            : serialized;
+        if (string.IsNullOrEmpty(measureText))
+        {
+            measureText = " ";
+        }
 
         var contentWidth = Math.Max(
             availableWidth - ComposerTextBox.Padding.Left - ComposerTextBox.Padding.Right,
@@ -329,7 +593,17 @@ public partial class ComposerInputControl : UserControl
 
     private void UpdatePlaceholderVisibility()
     {
-        var showPlaceholder = string.IsNullOrWhiteSpace(ComposerTextBox.Text)
+        if (!IsComposerVisualReady)
+        {
+            return;
+        }
+
+        var document = EnsureComposerDocument();
+        var serialized = document is null
+            ? string.Empty
+            : ComposerMentionDocument.Serialize(document);
+        var showPlaceholder = string.IsNullOrWhiteSpace(serialized)
+            && (document is null || ComposerMentionDocument.CountChips(document) == 0)
             && !ComposerTextBox.IsKeyboardFocusWithin;
         PlaceholderText.Visibility = showPlaceholder ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -367,13 +641,35 @@ public partial class ComposerInputControl : UserControl
             return false;
         }
 
-        if (!_viewModel.TryAcceptAtCompletion(ComposerTextBox.CaretIndex, out var newCaretIndex))
+        var document = EnsureComposerDocument();
+        if (document is null)
+        {
+            return false;
+        }
+
+        var caret = ComposerMentionDocument.GetSerializedOffset(
+            document,
+            ComposerTextBox.CaretPosition);
+        if (!_viewModel.TryAcceptAtCompletion(caret, out var newCaretIndex))
         {
             return false;
         }
 
         ComposerTextBox.Focus();
-        ComposerTextBox.CaretIndex = newCaretIndex;
+        Dispatcher.BeginInvoke(
+            () =>
+            {
+                var liveDocument = EnsureComposerDocument();
+                if (liveDocument is null)
+                {
+                    return;
+                }
+
+                ComposerTextBox.CaretPosition = ComposerMentionDocument.GetPointerAtOffset(
+                    liveDocument,
+                    newCaretIndex);
+            },
+            DispatcherPriority.Loaded);
         return true;
     }
 }

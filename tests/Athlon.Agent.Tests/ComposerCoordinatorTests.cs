@@ -37,7 +37,8 @@ public sealed class ComposerCoordinatorTests
             out var newCaret);
 
         Assert.True(accepted);
-        Assert.Contains("readme.md", composerText);
+        Assert.Contains("@readme.md", composerText, StringComparison.Ordinal);
+        Assert.StartsWith("see @readme.md", composerText, StringComparison.Ordinal);
         Assert.True(newCaret > 0);
     }
 
@@ -120,7 +121,58 @@ public sealed class ComposerCoordinatorTests
             Assert.Equal("feature-dir", folder.PrimaryText);
             Assert.Equal("@feature-dir/", folder.InsertText);
             Assert.Equal(WorkspaceFileIconKind.Folder, folder.IconKind);
-            Assert.Contains(items, item => item.Kind == ComposerCompletionItemKind.File && item.PrimaryText == "a.txt");
+            var file = Assert.Single(items, item => item.Kind == ComposerCompletionItemKind.File && item.PrimaryText == "a.txt");
+            Assert.Equal(WorkspaceFileIconKind.File, file.IconKind);
+        }
+        finally
+        {
+            Directory.Delete(workspace, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateAtCompletion_At_ResolvesCsharpFileIcon()
+    {
+        var workspace = Path.Combine(Path.GetTempPath(), "composer-cs-icon-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workspace);
+        await File.WriteAllTextAsync(Path.Combine(workspace, "Program.cs"), "class P;");
+
+        try
+        {
+            var service = ComposerTestFactory.CreateCompletionService();
+            var coordinator = ComposerTestFactory.CreateCoordinator(completionService: service);
+            var indexCompleted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var updateCount = 0;
+            service.SourcesUpdated += () =>
+            {
+                if (Interlocked.Increment(ref updateCount) >= 2)
+                {
+                    indexCompleted.TrySetResult();
+                }
+            };
+
+            service.EnsureFileIndexBuilt(
+                new ComposerTestFactory.StubSkillCatalog([]),
+                new AppSettings(),
+                workspace,
+                ignorePatterns: [".git"]);
+
+            await indexCompleted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            var items = new ObservableCollection<AtCompletionItemViewModel>();
+            coordinator.UpdateAtCompletion(
+                "@Program",
+                caretIndex: "@Program".Length,
+                activeWorkspace: workspace,
+                ignorePatterns: [".git"],
+                items,
+                _ => { },
+                _ => { },
+                -1);
+
+            var file = Assert.Single(items, item => item.PrimaryText == "Program.cs");
+            Assert.Equal("@Program.cs", file.InsertText);
+            Assert.Equal(WorkspaceFileIconKind.CSharp, file.IconKind);
         }
         finally
         {

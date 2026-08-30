@@ -82,4 +82,38 @@ public static partial class McpComposerExpander
 
         return builder.ToString();
     }
+
+    /// <summary>
+    /// Removes MCP expansion blocks and warnings, leaving the original composer text.
+    /// </summary>
+    public static string StripForDisplay(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return content;
+        }
+
+        var remaining = content;
+        while (true)
+        {
+            var next = ComposerExpansionDisplay.StripLeadingBlocks(
+                remaining,
+                "[MCP reference:",
+                "to invoke this MCP tool when needed.");
+            next = ComposerExpansionDisplay.StripLeadingBlocks(
+                next,
+                "[MCP server reference:",
+                "for tools on that server.");
+            if (next.Length == remaining.Length)
+            {
+                break;
+            }
+
+            remaining = next;
+        }
+
+        return ComposerExpansionDisplay.StripTrailingPrefixedLines(
+            remaining,
+            "Unknown MCP reference '");
+    }
 }

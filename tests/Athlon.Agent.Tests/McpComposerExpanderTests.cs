@@ -21,6 +21,36 @@ public sealed class McpComposerExpanderTests
     }
 
     [Fact]
+    public void StripForDisplay_removes_mcp_preamble_keeps_composer_text()
+    {
+        var encoded = McpToolNameCodec.Encode("demo-server", "browser_navigate");
+        var registry = new ComposerTestFactory.ConnectedMcpRegistry("demo-server", "browser_navigate");
+        const string originalPrefix = "Use ";
+        var original = $"{originalPrefix}//mcp:{encoded} here.";
+        var expanded = McpComposerExpander.Expand(original, registry);
+
+        var display = McpComposerExpander.StripForDisplay(expanded);
+
+        Assert.Equal(original, display);
+        Assert.DoesNotContain("[MCP reference:", display, StringComparison.Ordinal);
+        Assert.DoesNotContain("mcp_call", display, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void StripForDisplay_removes_mcp_server_preamble()
+    {
+        var registry = new ComposerTestFactory.ConnectedMcpRegistry("demo-server", "browser_navigate");
+        const string original = "Use //mcp:demo-server here.";
+        var expanded = McpComposerExpander.Expand(original, registry);
+
+        var display = McpComposerExpander.StripForDisplay(expanded);
+
+        Assert.Equal(original, display);
+        Assert.DoesNotContain("[MCP server reference:", display, StringComparison.Ordinal);
+        Assert.DoesNotContain("Prefer MCP tools", display, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Expand_AddsKnownMcpServerReferenceBlock()
     {
         var registry = new ComposerTestFactory.ConnectedMcpRegistry("demo-server", "browser_navigate");

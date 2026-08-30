@@ -126,6 +126,37 @@ internal static class ComposerCompletionQuery
         return true;
     }
 
+    public static bool TryGetDoubleSlashMentionSpan(
+        string text,
+        int caretIndex,
+        out int start,
+        out int endExclusive)
+    {
+        start = -1;
+        endExclusive = -1;
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        var safeCaret = Math.Clamp(caretIndex, 0, text.Length);
+        if (!TryGetCurrentWordSpan(text, safeCaret, out var wordStart, out var wordEndExclusive))
+        {
+            return false;
+        }
+
+        var word = text.AsSpan(wordStart, wordEndExclusive - wordStart);
+        if (!word.StartsWith("//skill:", StringComparison.Ordinal)
+            && !word.StartsWith("//mcp:", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        start = wordStart;
+        endExclusive = wordEndExclusive;
+        return true;
+    }
+
     private static bool IsExactSlashCommand(string text, IComposerSlashCommandRegistry slashRegistry, string query)
     {
         var trimmed = text.Trim();

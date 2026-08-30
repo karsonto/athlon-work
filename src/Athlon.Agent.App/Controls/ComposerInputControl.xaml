@@ -9,11 +9,13 @@
              d:DesignHeight="120"
              d:DesignWidth="600">
     <Grid>
-        <TextBox x:Name="ComposerTextBox"
-                 Text="{Binding ComposerText, UpdateSourceTrigger=PropertyChanged}"
-                 Style="{StaticResource ComposerTextBoxStyle}"
-                 TextChanged="ComposerTextBox_OnTextChanged"
-                 PreviewKeyDown="ComposerTextBox_OnPreviewKeyDown" />
+        <RichTextBox x:Name="ComposerTextBox"
+                     Style="{StaticResource ComposerRichTextBoxStyle}"
+                     PreviewKeyDown="ComposerTextBox_OnPreviewKeyDown">
+            <FlowDocument PagePadding="0">
+                <Paragraph Margin="0" />
+            </FlowDocument>
+        </RichTextBox>
         <TextBlock x:Name="PlaceholderText"
                    Foreground="{DynamicResource Brush.SubtleText}"
                    IsHitTestVisible="False"

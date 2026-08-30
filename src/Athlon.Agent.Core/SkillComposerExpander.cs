@@ -64,4 +64,23 @@ public static partial class SkillComposerExpander
 
         return builder.ToString();
     }
+
+    /// <summary>
+    /// Removes skill expansion blocks and warnings, leaving the original composer text.
+    /// </summary>
+    public static string StripForDisplay(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return content;
+        }
+
+        var remaining = ComposerExpansionDisplay.StripLeadingBlocks(
+            content,
+            "[Skill reference:",
+            "to load full instructions before proceeding.");
+        return ComposerExpansionDisplay.StripTrailingPrefixedLines(
+            remaining,
+            "Unknown skill '");
+    }
 }

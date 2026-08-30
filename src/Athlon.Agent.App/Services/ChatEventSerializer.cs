@@ -80,7 +80,7 @@ internal static class ChatEventSerializer
             .ToList();
 
         // Prefer rendering real thumbnails; omit the "N image(s) attached" text fallback.
-        var content = message.Content;
+        var content = ToTimelineUserContent(message.Content);
         if (images.Count == 0 && !string.IsNullOrWhiteSpace(message.UserAttachmentSummary))
         {
             content = string.IsNullOrWhiteSpace(content)
@@ -92,9 +92,58 @@ internal static class ChatEventSerializer
         {
             messageId = message.MessageId,
             content,
+            mentions = BuildUserMentions(content) is { Length: > 0 } fileMentions ? fileMentions : null,
             images,
             startedAt = FormatStartedAt(message.CreatedAtUtc)
         });
+    }
+
+    private sealed record UserMentionDto(
+        int Start,
+        int Length,
+        string FileName,
+        string Path,
+        string Kind,
+        string? IconKind);
+
+    private static UserMentionDto[] BuildUserMentions(string? content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return [];
+        }
+
+        var spans = ComposerMentionDocument.ParseMentions(content);
+        if (spans.Count == 0)
+        {
+            return [];
+        }
+
+        var mentions = new UserMentionDto[spans.Count];
+        for (var i = 0; i < spans.Count; i++)
+        {
+            var span = spans[i];
+            mentions[i] = new UserMentionDto(
+                span.Start,
+                span.Length,
+                span.DisplayName,
+                span.RelativePath,
+                span.Kind.ToString().ToLowerInvariant(),
+                span.Kind == ComposerMentionKind.File ? span.IconKind.ToString() : null);
+        }
+
+        return mentions;
+    }
+
+    private static string ToTimelineUserContent(string? content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return content ?? string.Empty;
+        }
+
+        var stripped = SkillComposerExpander.StripForDisplay(content);
+        return McpComposerExpander.StripForDisplay(stripped);
     }
 
     public static string FormatStartedAt(DateTimeOffset instant) =>

@@ -141,6 +141,68 @@ html.replaying .message-row { animation: none; }
   line-height: 1.75;
   color: var(--user-bubble-text);
 }
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  gap: 5px;
+  max-width: 100%;
+  margin: 0 2px 0 0;
+  padding: 1px 8px;
+  border: 1px solid var(--file-chip-border);
+  border-radius: 11px;
+  background: var(--file-chip-bg);
+  color: var(--file-chip-text);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.file-chip-icon {
+  position: relative;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+}
+.file-chip-icon svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+.file-chip-badge {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 7.5px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  pointer-events: none;
+}
+.file-chip-badge.is-long {
+  font-size: 5.5px;
+}
+.file-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: inherit;
+}
+.file-chip-type {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+}
+.file-chip-skill {
+  background: var(--skill-chip-bg);
+  border-color: var(--skill-chip-border);
+  color: var(--skill-chip-text);
+}
+.file-chip-mcp {
+  background: var(--mcp-chip-bg);
+  border-color: var(--mcp-chip-border);
+  color: var(--mcp-chip-text);
+}
 .user-images {
   display: flex;
   flex-wrap: wrap;

@@ -150,6 +150,7 @@ public sealed class ChatHtmlBuilder
     {
         var isLight = AppThemeManager.CurrentKind == AppThemeKind.Light;
         var chrome = AppThemeManager.Current.Chrome;
+        var fileIcons = AppThemeManager.Current.FileIcons;
         var md = ThemeHtmlStyles.GetMarkdownPalette(assistantTone: true);
         var scrollThumb = AppThemeColor.ToRgba(chrome.ScrollThumb, chrome.ScrollThumbOpacity);
 
@@ -160,6 +161,36 @@ public sealed class ChatHtmlBuilder
               --scroll-thumb: {{scrollThumb}};
               --user-bubble: {{AppThemeColor.ToHex(chrome.UserBubble)}};
               --user-bubble-text: {{AppThemeColor.ToHex(chrome.Text)}};
+              --file-chip-bg: {{AppThemeColor.ToHex(chrome.AtCompletionFileBadgeBg)}};
+              --file-chip-border: {{AppThemeColor.ToHex(chrome.AtCompletionFileBadgeBorder)}};
+              --file-chip-text: {{AppThemeColor.ToHex(chrome.AtCompletionFileBadgeText)}};
+              --skill-chip-bg: {{AppThemeColor.ToHex(chrome.AtCompletionSkillBadgeBg)}};
+              --skill-chip-border: {{AppThemeColor.ToHex(chrome.AtCompletionSkillBadgeBorder)}};
+              --skill-chip-text: {{AppThemeColor.ToHex(chrome.AtCompletionSkillBadgeText)}};
+              --mcp-chip-bg: {{AppThemeColor.ToHex(chrome.AtCompletionMcpBadgeBg)}};
+              --mcp-chip-border: {{AppThemeColor.ToHex(chrome.AtCompletionMcpBadgeBorder)}};
+              --mcp-chip-text: {{AppThemeColor.ToHex(chrome.AtCompletionMcpBadgeText)}};
+              --file-icon-placeholder: {{AppThemeColor.ToHex(fileIcons.Placeholder)}};
+              --file-icon-folder: {{AppThemeColor.ToHex(fileIcons.Folder)}};
+              --file-icon-file: {{AppThemeColor.ToHex(fileIcons.File)}};
+              --file-icon-csharp: {{AppThemeColor.ToHex(fileIcons.CSharp)}};
+              --file-icon-project: {{AppThemeColor.ToHex(fileIcons.Project)}};
+              --file-icon-solution: {{AppThemeColor.ToHex(fileIcons.Solution)}};
+              --file-icon-markdown: {{AppThemeColor.ToHex(fileIcons.Markdown)}};
+              --file-icon-json: {{AppThemeColor.ToHex(fileIcons.Json)}};
+              --file-icon-xml: {{AppThemeColor.ToHex(fileIcons.Xml)}};
+              --file-icon-html: {{AppThemeColor.ToHex(fileIcons.Html)}};
+              --file-icon-css: {{AppThemeColor.ToHex(fileIcons.Css)}};
+              --file-icon-javascript: {{AppThemeColor.ToHex(fileIcons.JavaScript)}};
+              --file-icon-typescript: {{AppThemeColor.ToHex(fileIcons.TypeScript)}};
+              --file-icon-python: {{AppThemeColor.ToHex(fileIcons.Python)}};
+              --file-icon-shell: {{AppThemeColor.ToHex(fileIcons.Shell)}};
+              --file-icon-git: {{AppThemeColor.ToHex(fileIcons.Git)}};
+              --file-icon-yaml: {{AppThemeColor.ToHex(fileIcons.Yaml)}};
+              --file-icon-docker: {{AppThemeColor.ToHex(fileIcons.Docker)}};
+              --file-icon-image: {{AppThemeColor.ToHex(fileIcons.Image)}};
+              --file-icon-msbuild: {{AppThemeColor.ToHex(fileIcons.MsBuild)}};
+              --file-icon-config: {{AppThemeColor.ToHex(fileIcons.Config)}};
               --reasoning-border: {{(isLight ? "rgba(221,214,254,0.7)" : "rgba(139,92,246,0.25)")}};
               --reasoning-bg: {{(isLight ? "rgba(245,243,255,0.5)" : "rgba(46,16,101,0.3)")}};
               --reasoning-ring: {{(isLight ? "rgba(237,233,254,0.6)" : "rgba(139,92,246,0.15)")}};

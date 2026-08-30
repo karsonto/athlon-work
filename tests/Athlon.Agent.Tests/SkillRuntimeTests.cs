@@ -258,6 +258,34 @@ public sealed class SkillRuntimeTests
     }
 
     [Fact]
+    public void SkillComposerExpander_StripForDisplay_removes_preamble_keeps_composer_text()
+    {
+        const string original = "Please use //skill:demo_skill for this task.";
+        var expanded = SkillComposerExpander.Expand(
+            original,
+            [new AvailableSkillInfo("demo_skill", "Demo", "demo_skill")]);
+
+        var display = SkillComposerExpander.StripForDisplay(expanded);
+
+        Assert.Equal(original, display);
+        Assert.DoesNotContain("[Skill reference:", display, StringComparison.Ordinal);
+        Assert.DoesNotContain("load_skill_through_path", display, StringComparison.Ordinal);
+        Assert.DoesNotContain("SKILL.md", display, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SkillComposerExpander_StripForDisplay_removes_unknown_skill_warning()
+    {
+        const string original = "//skill:missing_skill";
+        var expanded = SkillComposerExpander.Expand(original, Array.Empty<AvailableSkillInfo>());
+
+        var display = SkillComposerExpander.StripForDisplay(expanded);
+
+        Assert.Equal(original, display);
+        Assert.DoesNotContain("Unknown skill", display, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void SkillComposerExpander_AppendsWarningForUnknownSkill()
     {
         var expanded = SkillComposerExpander.Expand(

@@ -397,7 +397,11 @@ public sealed class ComposerAtCompletionService
                         InsertText: $"@{relative}",
                         MatchText: $"{relative} {Path.GetFileName(path)}",
                         Kind: ComposerCompletionItemKind.File,
-                        IconKind: WorkspaceFileIconKind.File),
+                        IconKind: WorkspaceFileIconResolver.Resolve(
+                            Path.GetFileName(path),
+                            relative,
+                            isDirectory: false,
+                            isPlaceholder: false)),
                     depth,
                     lastWriteUtc));
 
@@ -481,7 +485,11 @@ public sealed class ComposerAtCompletionService
                                 InsertText: $"@{childRelative}",
                                 MatchText: $"{childRelative} {entry.Name}",
                                 Kind: ComposerCompletionItemKind.File,
-                                IconKind: WorkspaceFileIconKind.File),
+                                IconKind: WorkspaceFileIconResolver.Resolve(
+                                    entry.Name,
+                                    childRelative,
+                                    isDirectory: false,
+                                    isPlaceholder: false)),
                             depth,
                             DateTime.MinValue));
                     }
