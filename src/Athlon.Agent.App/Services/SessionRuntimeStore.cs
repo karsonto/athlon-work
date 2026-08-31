@@ -180,15 +180,18 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         var entry = _sessions.GetOrAdd(sessionId, _ => new RuntimeSessionEntry());
         lock (_gate)
         {
+            var replaced = false;
             for (var index = 0; index < entry.PendingAppends.Count; index++)
             {
                 if (string.Equals(entry.PendingAppends[index].Id, message.Id, StringComparison.Ordinal))
                 {
                     entry.PendingAppends[index] = message;
+                    replaced = true;
                     break;
                 }
             }
-            else
+
+            if (!replaced)
             {
                 entry.PendingAppendIds.Add(message.Id);
                 entry.PendingAppends.Add(message);
