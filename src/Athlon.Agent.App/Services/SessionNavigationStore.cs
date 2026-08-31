@@ -7,15 +7,20 @@ namespace Athlon.Agent.App.Services;
 public sealed class SessionNavigationStore
 {
     private readonly IFileStorageService _storage;
+    private readonly IConversationTranscriptWriter? _transcriptWriter;
     private readonly int _capacity;
     private readonly object _cacheLock = new();
     private readonly Dictionary<string, CacheEntry> _cache = new(StringComparer.Ordinal);
     private readonly LinkedList<string> _lru = new();
 
-    public SessionNavigationStore(IFileStorageService storage, int capacity = 8)
+    public SessionNavigationStore(
+        IFileStorageService storage,
+        IConversationTranscriptWriter? transcriptWriter = null,
+        int capacity = 8)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
         _storage = storage;
+        _transcriptWriter = transcriptWriter;
         _capacity = capacity;
     }
 
@@ -154,7 +159,15 @@ public sealed class SessionNavigationStore
         }
 
         var toSave = SessionHistoryCoordinator.DeriveSessionTitle(session);
-        await _storage.SaveSessionAsync(toSave).ConfigureAwait(true);
+        if (_transcriptWriter is not null)
+        {
+            await _transcriptWriter.MarkSessionDirtyAsync(toSave).ConfigureAwait(true);
+        }
+        else
+        {
+            await _storage.SaveSessionAsync(toSave).ConfigureAwait(true);
+        }
+
         Invalidate(toSave.Id);
         return toSave;
     }

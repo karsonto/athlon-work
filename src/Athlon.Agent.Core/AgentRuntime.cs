@@ -534,6 +534,7 @@ public sealed class AgentRuntime(
     private async Task PersistMessageAsync(AgentSession session, ChatMessage message, CancellationToken cancellationToken)
     {
         await _transcript.AppendAsync(session.Id, message, cancellationToken).ConfigureAwait(false);
+        await _transcript.MarkSessionDirtyAsync(session, cancellationToken).ConfigureAwait(false);
     }
 
     internal static async Task PublishStreamEventsAsync(

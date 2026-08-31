@@ -11,42 +11,28 @@ public sealed class RuntimeSessionEntry
 
     public ConversationDisplayCursor? OlderDisplayCursor { get; set; }
 
-    public bool SessionJsonDirty { get; set; }
-
     internal List<ChatMessage> PendingAppends { get; } = [];
 
     internal HashSet<string> PendingAppendIds { get; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>
-/// Process-wide conversation manager: opened sessions stay in memory; disk is flushed
-/// on a timer, shutdown, or structural mutations (compact / clear / delete / workspace).
+/// Process-wide conversation manager: each message append sync-flushes
+/// conversation.jsonl and session.json through a single pipeline.
 /// </summary>
 public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDisposable
 {
-    public static readonly TimeSpan DefaultFlushInterval = TimeSpan.FromSeconds(15);
-
     private readonly IFileStorageService _storage;
     private readonly SessionUiCache? _uiCache;
     private readonly ConcurrentDictionary<string, RuntimeSessionEntry> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionFlushLocks = new(StringComparer.Ordinal);
     private readonly object _gate = new();
-    private readonly CancellationTokenSource _flushCts = new();
-    private readonly Task? _flushLoop;
     private bool _disposed;
 
-    public SessionRuntimeStore(
-        IFileStorageService storage,
-        SessionUiCache? uiCache = null,
-        bool enablePeriodicFlush = true,
-        TimeSpan? flushInterval = null)
+    public SessionRuntimeStore(IFileStorageService storage, SessionUiCache? uiCache = null)
     {
         _storage = storage;
         _uiCache = uiCache;
-        if (enablePeriodicFlush)
-        {
-            _flushLoop = RunFlushLoopAsync(flushInterval ?? DefaultFlushInterval, _flushCts.Token);
-        }
     }
 
     /// <summary>
@@ -178,18 +164,17 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         {
             entry.PendingAppends.Clear();
             entry.PendingAppendIds.Clear();
-            entry.SessionJsonDirty = false;
         }
     }
 
     public Task AppendAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default) =>
         UpsertAsync(sessionId, message, cancellationToken);
 
-    public Task UpsertAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
+    public async Task UpsertAsync(string sessionId, ChatMessage message, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(message.Id))
         {
-            return Task.CompletedTask;
+            return;
         }
 
         var entry = _sessions.GetOrAdd(sessionId, _ => new RuntimeSessionEntry());
@@ -200,26 +185,53 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
                 if (string.Equals(entry.PendingAppends[index].Id, message.Id, StringComparison.Ordinal))
                 {
                     entry.PendingAppends[index] = message;
-                    return Task.CompletedTask;
+                    break;
+                }
+            }
+            else
+            {
+                entry.PendingAppendIds.Add(message.Id);
+                entry.PendingAppends.Add(message);
+            }
+        }
+
+        await FlushSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task MarkSessionDirtyAsync(AgentSession session, CancellationToken cancellationToken = default)
+    {
+        Attach(session);
+        await FlushSessionAsync(session.Id, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task ReplaceDisplayAsync(
+        AgentSession session,
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        Attach(session);
+        var sessionFlushLock = _sessionFlushLocks.GetOrAdd(session.Id, static _ => new SemaphoreSlim(1, 1));
+        await sessionFlushLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            lock (_gate)
+            {
+                if (_sessions.TryGetValue(session.Id, out var entry))
+                {
+                    entry.PendingAppends.Clear();
+                    entry.PendingAppendIds.Clear();
                 }
             }
 
-            entry.PendingAppendIds.Add(message.Id);
-            entry.PendingAppends.Add(message);
+            await _storage.ReplaceConversationDisplayAsync(session.Id, messages, cancellationToken)
+                .ConfigureAwait(false);
+            await _storage.SaveSessionAsync(session, cancellationToken).ConfigureAwait(false);
         }
-
-        return Task.CompletedTask;
-    }
-
-    public Task MarkSessionDirtyAsync(AgentSession session, CancellationToken cancellationToken = default)
-    {
-        var entry = Attach(session);
-        lock (_gate)
+        finally
         {
-            entry.SessionJsonDirty = true;
+            sessionFlushLock.Release();
         }
-
-        return Task.CompletedTask;
     }
 
     public async Task FlushSessionAsync(string sessionId, CancellationToken cancellationToken = default)
@@ -255,8 +267,12 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             pending = entry.PendingAppends.ToArray();
             entry.PendingAppends.Clear();
             entry.PendingAppendIds.Clear();
-            toSave = entry.SessionJsonDirty ? entry.Session : null;
-            entry.SessionJsonDirty = false;
+            toSave = entry.Session;
+        }
+
+        if (pending.Length == 0 && toSave is null)
+        {
+            return;
         }
 
         var appendedCount = 0;
@@ -289,11 +305,6 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
                             entry.PendingAppends.Insert(0, message);
                         }
                     }
-
-                    if (toSave is not null)
-                    {
-                        entry.SessionJsonDirty = true;
-                    }
                 }
             }
 
@@ -323,34 +334,5 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         }
 
         _disposed = true;
-        _flushCts.Cancel();
-        _flushCts.Dispose();
-    }
-
-    private async Task RunFlushLoopAsync(TimeSpan interval, CancellationToken cancellationToken)
-    {
-        using var timer = new PeriodicTimer(interval);
-        try
-        {
-            while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
-            {
-                try
-                {
-                    await FlushAllAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    break;
-                }
-                catch
-                {
-                    // Best-effort background flush; next tick retries.
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Shutdown.
-        }
     }
 }

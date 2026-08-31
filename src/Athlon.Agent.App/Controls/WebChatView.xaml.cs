@@ -447,7 +447,8 @@ public partial class WebChatView : UserControl
                     messages,
                     showToolCalls,
                     includeReset: true,
-                    activitySourceMessages: activitySource))
+                    activitySourceMessages: activitySource,
+                    mode: TimelineProjectionMode.HighFidelity))
             .ConfigureAwait(true);
         if (expectedGeneration != _renderGeneration)
         {

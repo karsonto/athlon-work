@@ -173,6 +173,43 @@ public sealed class SessionDiskLogTests
     }
 
     [Fact]
+    public async Task ImmediateTranscriptWriter_append_is_readable_without_manual_flush()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-sync-append-{Guid.NewGuid():N}");
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var writer = new ImmediateConversationTranscriptWriter(storage);
+        var session = AgentSession.Create("sync-session");
+        var tool = ChatMessage.Create(
+            MessageRole.Tool,
+            "Tool `grep` (id: `call-1`)\nSummary: 2 matches");
+
+        try
+        {
+            session = session.WithMessages([
+                ChatMessage.Create(MessageRole.User, "search"),
+                tool
+            ]);
+            await writer.AppendAsync(session.Id, tool);
+            await writer.MarkSessionDirtyAsync(session);
+
+            var loaded = await storage.LoadConversationDisplayAsync(session.Id);
+            Assert.Contains(loaded, message => message.Role == MessageRole.Tool);
+            var loadedSession = await storage.LoadSessionAsync(session.Id);
+            Assert.NotNull(loadedSession);
+            Assert.Equal(2, loadedSession!.Messages.Count);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task ConversationDisplay_Load_UsesLastWinsForDuplicateIds()
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-last-wins-{Guid.NewGuid():N}");

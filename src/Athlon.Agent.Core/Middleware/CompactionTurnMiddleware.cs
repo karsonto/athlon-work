@@ -158,11 +158,28 @@ public sealed class CompactionTurnMiddleware(
             await AgentRuntime.PublishStreamEventsAsync(
                 invocation.Callbacks,
                 [new AgentStreamEvent.ChatMessageAppended(message)]).ConfigureAwait(false);
-            await storage.AppendConversationMessageAsync(invocation.Session.Id, message, cancellationToken)
-                .ConfigureAwait(false);
+            if (transcriptWriter is not null)
+            {
+                await transcriptWriter.AppendAsync(invocation.Session.Id, message, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await storage.AppendConversationMessageAsync(invocation.Session.Id, message, cancellationToken)
+                    .ConfigureAwait(false);
+            }
         }
 
-        await storage.SaveSessionAsync(invocation.Session, cancellationToken).ConfigureAwait(false);
+        if (transcriptWriter is not null)
+        {
+            await transcriptWriter.MarkSessionDirtyAsync(invocation.Session, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            await storage.SaveSessionAsync(invocation.Session, cancellationToken).ConfigureAwait(false);
+        }
+
         return invocation.Session;
     }
 

@@ -13,7 +13,7 @@ public sealed class SessionRuntimeStoreDisplayTests
     {
         var dispatcher = await StartStaDispatcherAsync();
         var cache = new SessionUiCache(dispatcher, new AppSettings());
-        using var store = new SessionRuntimeStore(new NoOpStorage(), cache, enablePeriodicFlush: false);
+        using var store = new SessionRuntimeStore(new NoOpStorage(), cache);
         var session = AgentSession.Create("hist")
             .WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
 
@@ -27,7 +27,7 @@ public sealed class SessionRuntimeStoreDisplayTests
     [Fact]
     public async Task TryGetHydrated_is_false_before_mark_hydrated()
     {
-        using var store = new SessionRuntimeStore(new NoOpStorage(), enablePeriodicFlush: false);
+        using var store = new SessionRuntimeStore(new NoOpStorage());
         var session = AgentSession.Create("hist")
             .WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
 
@@ -44,7 +44,7 @@ public sealed class SessionRuntimeStoreDisplayTests
     {
         var dispatcher = await StartStaDispatcherAsync();
         var cache = new SessionUiCache(dispatcher, new AppSettings());
-        using var store = new SessionRuntimeStore(new NoOpStorage(), cache, enablePeriodicFlush: false);
+        using var store = new SessionRuntimeStore(new NoOpStorage(), cache);
         var session = AgentSession.Create("New Chat");
 
         await dispatcher.InvokeAsync(() => cache.GetOrCreate(session.Id));

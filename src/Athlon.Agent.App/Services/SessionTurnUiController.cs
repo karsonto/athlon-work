@@ -184,8 +184,9 @@ public sealed partial class SessionTurnUiController
     internal int SyncChatViewGeneration => Volatile.Read(ref _syncChatViewGeneration);
 
     /// <summary>
-    /// Materializes buffered tokens and returns assistant/tool rows that are not yet
-    /// durable on disk so a session switch can checkpoint them before flush.
+    /// Materializes buffered tokens and returns the in-flight assistant row that is not yet
+    /// durable on disk so a session switch can checkpoint it before flush.
+    /// Tool messages are sync-flushed at message boundaries and do not need checkpointing.
     /// </summary>
     public IReadOnlyList<ChatMessage> CaptureStreamingCheckpoint()
     {
@@ -221,24 +222,6 @@ public sealed partial class SessionTurnUiController
                     MessageRole.Assistant,
                     assistantContent,
                     reasoningContent: string.IsNullOrWhiteSpace(assistantReasoning) ? null : assistantReasoning));
-            }
-
-            foreach (var tool in Messages.Where(static message => message.IsTool))
-            {
-                if (string.IsNullOrWhiteSpace(tool.MessageId) || string.IsNullOrWhiteSpace(tool.Content))
-                {
-                    continue;
-                }
-
-                if (tool.IsToolRunning && string.IsNullOrWhiteSpace(tool.ToolDetail) && string.IsNullOrWhiteSpace(tool.ToolSummary))
-                {
-                    continue;
-                }
-
-                messages.Add(ChatMessage.CreateWithId(
-                    tool.MessageId,
-                    MessageRole.Tool,
-                    tool.Content));
             }
 
             checkpoint = messages;
@@ -1447,6 +1430,13 @@ public sealed partial class SessionTurnUiController
 
     private void RestoreLiveTurnCardsAfterReload()
     {
+        if (_streaming.ActiveAssistantBubble is null
+            && _streaming.ToolBubblesByIndex.Count == 0
+            && !_turnActivityTracker.HasSegmentContent)
+        {
+            return;
+        }
+
         // Tracker is current-turn-only after RebuildFromMessages. Re-publish so a mid-turn
         // reload can adopt the replayed card as data-live without pulling prior-turn paths.
         if (_modifiedFilesTracker.HasCurrentTurnPaths)

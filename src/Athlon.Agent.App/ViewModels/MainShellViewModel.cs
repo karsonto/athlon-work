@@ -1263,7 +1263,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
             _session = result.Session;
             _runtime.DiscardPending(_session.Id);
-            await _storage.ReplaceConversationDisplayAsync(_session.Id, _session.Messages).ConfigureAwait(true);
+            await _runtime.ReplaceDisplayAsync(_session, _session.Messages).ConfigureAwait(true);
             _runtime.Attach(_session, hydrated: true, _olderDisplayCursor);
             _sessionNavigation.Invalidate(_session.Id);
             var audit = _session.Messages.LastOrDefault(message => message.Role == MessageRole.Compaction);
@@ -2671,19 +2671,28 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 return;
             }
 
-            if (snapshot.DisplayMessages.Count > 0)
+            var displayMessages = snapshot.DisplayMessages;
+            if (displayMessages.Count == 0 && snapshot.Session.Messages.Count > 0)
+            {
+                await _runtime.ReplaceDisplayAsync(snapshot.Session, snapshot.Session.Messages)
+                    .ConfigureAwait(true);
+                _sessionNavigation.Invalidate(sessionId);
+                displayMessages = snapshot.Session.Messages
+                    .TakeLast(ConversationDisplayLimits.PageSize)
+                    .ToArray();
+            }
+
+            if (displayMessages.Count > 0)
             {
                 await _activeUi.HydrateDisplayAsync(
                     _session,
-                    snapshot.DisplayMessages,
+                    displayMessages,
                     synthesizeInterruptedToolResults: false,
                     activitySourceMessages: snapshot.ActivitySource,
                     preserveActiveTurn: preserveActiveTurn).ConfigureAwait(true);
             }
             else
             {
-                // Never hydrate the full session.Messages into the chat UI — that freezes on huge histories
-                // when conversation.jsonl is missing/empty. Show an empty timeline instead.
                 await _activeUi.HydrateDisplayAsync(
                     _session,
                     Array.Empty<ChatMessage>(),
