@@ -5,7 +5,8 @@ namespace Athlon.Agent.App.Services;
 
 /// <summary>
 /// Controls how tool calls are projected into the chat timeline during replay.
-/// Live streaming uses <see cref="LiveFold"/>; hydrate/switch/restart uses <see cref="HighFidelity"/>.
+/// Activity tools fold into <c>TURN_ACTIVITY</c> in both modes; <see cref="HighFidelity"/>
+/// is used for session hydrate/switch replay.
 /// </summary>
 internal enum TimelineProjectionMode
 {
@@ -105,8 +106,7 @@ internal static class ChatTimelineProjector
                     continue;
                 }
 
-                if (mode == TimelineProjectionMode.LiveFold
-                    && TurnActivityClassifier.IsActivityTool(message.ToolName))
+                if (TurnActivityClassifier.IsActivityTool(message.ToolName))
                 {
                     activitySegment.Add(message);
                 }
@@ -145,15 +145,10 @@ internal static class ChatTimelineProjector
         TimelineProjectionMode mode,
         ChatMessageViewModel message)
     {
+        _ = mode;
         if (!showToolCalls)
         {
             return false;
-        }
-
-        if (mode == TimelineProjectionMode.HighFidelity)
-        {
-            return ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: true, message)
-                || TurnActivityClassifier.IsActivityTool(message.ToolName);
         }
 
         return ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls, message);
@@ -163,6 +158,7 @@ internal static class ChatTimelineProjector
         IReadOnlyList<ChatMessageViewModel> timeline,
         TimelineProjectionMode mode)
     {
+        _ = mode;
         var finals = new HashSet<string>(StringComparer.Ordinal);
         var turnHasActivity = false;
         var turnAssistantIds = new List<string>();
@@ -203,11 +199,7 @@ internal static class ChatTimelineProjector
 
             if (message.IsTool)
             {
-                if (mode == TimelineProjectionMode.HighFidelity)
-                {
-                    turnHasActivity = true;
-                }
-                else if (TurnActivityClassifier.IsActivityTool(message.ToolName))
+                if (TurnActivityClassifier.IsActivityTool(message.ToolName))
                 {
                     turnHasActivity = true;
                 }
