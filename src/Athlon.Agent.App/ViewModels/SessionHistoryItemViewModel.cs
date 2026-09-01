@@ -24,6 +24,8 @@ public sealed partial class SessionHistoryItemViewModel : ObservableObject
         ActiveWorkspace = entry.ActiveWorkspace;
         IsActive = isActive;
         IsRunning = isRunning;
+        RunningBrushKey = isRunning ? RunningSessionPalette.GetBrushResourceKey(entry.Id) : null;
+        RunningColorIndex = isRunning ? RunningSessionPalette.GetColorIndex(entry.Id) : null;
         _stopSession = stopSession;
         _messageCount = entry.MessageCount ?? SessionMetaReader.TryReadMessageCount(entry.Path);
     }
@@ -38,6 +40,15 @@ public sealed partial class SessionHistoryItemViewModel : ObservableObject
 
     [ObservableProperty]
     private bool isRunning;
+
+    public int? RunningColorIndex { get; }
+
+    public string? RunningBrushKey { get; }
+
+    public string MetaForegroundBrushKey =>
+        IsRunning && RunningBrushKey is not null
+            ? RunningBrushKey
+            : "Brush.SubtleText";
 
     public bool CanStop => IsRunning;
 

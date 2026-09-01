@@ -151,6 +151,22 @@ public sealed class SessionNavigationStore
         return page;
     }
 
+    /// <summary>
+    /// Empty sessions that were never saved (for example the startup shell) should not be
+    /// flushed into the history index when the user switches away.
+    /// </summary>
+    public async Task<bool> ShouldPersistOnSwitchAsync(
+        AgentSession session,
+        CancellationToken cancellationToken = default)
+    {
+        if (session.Messages.Count > 0)
+        {
+            return true;
+        }
+
+        return await _storage.LoadSessionAsync(session.Id, cancellationToken).ConfigureAwait(false) is not null;
+    }
+
     public async Task<AgentSession?> SaveIfNotEmptyAsync(AgentSession session)
     {
         if (session.Messages.Count == 0)

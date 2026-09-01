@@ -77,6 +77,7 @@ public static class AgentRecordGrouping
                 group.Items.Add(item);
             }
 
+            group.ApplyRunningSummary();
             result.Add(group);
         }
 

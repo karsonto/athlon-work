@@ -44,6 +44,46 @@ public sealed class SessionNavigationStoreTests
     }
 
     [Fact]
+    public async Task ShouldPersistOnSwitchAsync_returns_false_for_empty_unsaved_session()
+    {
+        var storage = new CapturingStorage
+        {
+            SessionToLoad = null
+        };
+        var store = new SessionNavigationStore(storage);
+        var session = AgentSession.Create("New Chat");
+
+        Assert.False(await store.ShouldPersistOnSwitchAsync(session));
+        Assert.Equal(1, storage.LoadSessionCount);
+    }
+
+    [Fact]
+    public async Task ShouldPersistOnSwitchAsync_returns_true_for_empty_saved_session()
+    {
+        var storage = new CapturingStorage();
+        var session = AgentSession.Create("New Chat");
+        storage.SessionToLoad = session;
+        var store = new SessionNavigationStore(storage);
+
+        Assert.True(await store.ShouldPersistOnSwitchAsync(session));
+    }
+
+    [Fact]
+    public async Task ShouldPersistOnSwitchAsync_returns_true_when_messages_present()
+    {
+        var storage = new CapturingStorage
+        {
+            SessionToLoad = null
+        };
+        var store = new SessionNavigationStore(storage);
+        var session = AgentSession.Create("New Chat")
+            .WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
+
+        Assert.True(await store.ShouldPersistOnSwitchAsync(session));
+        Assert.Equal(0, storage.LoadSessionCount);
+    }
+
+    [Fact]
     public async Task SaveIfNotEmptyAsync_DerivesTitleAndInvalidatesCaches()
     {
         var storage = new CapturingStorage();

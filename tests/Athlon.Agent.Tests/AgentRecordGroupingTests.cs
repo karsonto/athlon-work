@@ -124,4 +124,51 @@ public sealed class AgentRecordGroupingTests
         Assert.Equal("2h", SessionHistoryItemViewModel.FormatRelativeTime(now.AddHours(-2)));
         Assert.Equal("3d", SessionHistoryItemViewModel.FormatRelativeTime(now.AddDays(-3)));
     }
+
+    [Fact]
+    public void Build_assigns_running_colors_across_workspaces()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var entries = new[]
+        {
+            new SessionIndexEntry("run-a", "Chat A", "/sessions/run-a", now, 1, @"F:\athlon-work"),
+            new SessionIndexEntry("run-b", "Chat B", "/sessions/run-b", now.AddMinutes(-1), 1, @"D:\repos\OpenHarness")
+        };
+
+        var groups = AgentRecordGrouping.Build(
+            entries,
+            activeSessionId: "run-a",
+            id => id is "run-a" or "run-b",
+            null);
+
+        var athlon = Assert.Single(groups, group => group.Title == "athlon-work");
+        var openHarness = Assert.Single(groups, group => group.Title == "OpenHarness");
+        Assert.True(athlon.HasRunningSessions);
+        Assert.True(openHarness.HasRunningSessions);
+        Assert.NotNull(athlon.Items[0].RunningBrushKey);
+        Assert.NotNull(openHarness.Items[0].RunningBrushKey);
+        Assert.NotEqual(athlon.RunningBrushKey, openHarness.RunningBrushKey);
+    }
+
+    [Fact]
+    public void Build_assigns_distinct_running_colors_within_same_workspace()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var entries = new[]
+        {
+            new SessionIndexEntry("run-1", "Chat 1", "/sessions/run-1", now, 1, @"F:\athlon-work"),
+            new SessionIndexEntry("run-2", "Chat 2", "/sessions/run-2", now.AddMinutes(-1), 1, @"F:\athlon-work")
+        };
+
+        var groups = AgentRecordGrouping.Build(
+            entries,
+            activeSessionId: "run-1",
+            id => id is "run-1" or "run-2",
+            null);
+
+        var group = Assert.Single(groups);
+        Assert.Equal(2, group.RunningSessionCount);
+        Assert.Equal(group.Items[0].RunningBrushKey, group.RunningBrushKey);
+        Assert.NotEqual(group.Items[0].RunningBrushKey, group.Items[1].RunningBrushKey);
+    }
 }

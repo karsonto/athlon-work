@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -30,6 +31,35 @@ public sealed partial class AgentRecordGroupViewModel : ObservableObject
     public ObservableCollection<SessionHistoryItemViewModel> Items { get; } = new();
     public bool HasItems => Items.Count > 0;
     public bool HasWorkspace => !string.IsNullOrWhiteSpace(WorkspacePath);
+
+    public bool HasRunningSessions { get; private set; }
+
+    public int RunningSessionCount { get; private set; }
+
+    public string? RunningBrushKey { get; private set; }
+
+    public void ApplyRunningSummary()
+    {
+        var running = Items.Where(item => item.IsRunning).ToList();
+        HasRunningSessions = running.Count > 0;
+        RunningSessionCount = running.Count;
+        RunningBrushKey = running.FirstOrDefault()?.RunningBrushKey;
+        OnPropertyChanged(nameof(HasRunningSessions));
+        OnPropertyChanged(nameof(RunningSessionCount));
+        OnPropertyChanged(nameof(RunningBrushKey));
+        OnPropertyChanged(nameof(HeaderForegroundBrushKey));
+        OnPropertyChanged(nameof(FolderGlyphBrushKey));
+    }
+
+    public string HeaderForegroundBrushKey =>
+        HasRunningSessions && RunningBrushKey is not null
+            ? RunningBrushKey
+            : "Brush.Text";
+
+    public string FolderGlyphBrushKey =>
+        HasRunningSessions && RunningBrushKey is not null
+            ? RunningBrushKey
+            : "Brush.SubtleText";
 
     [ObservableProperty]
     private bool isExpanded;

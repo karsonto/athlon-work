@@ -1139,7 +1139,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         CancelPendingSessionLoad();
         IsLoadingSession = false;
         var previousSession = _session;
-        await FlushSessionForSwitchAsync(previousSession.Id).ConfigureAwait(true);
+        var preservePrevious = await PrepareSessionForSwitchAsync(previousSession).ConfigureAwait(true);
         _session = AgentSession.Create("New Chat");
         if (!string.IsNullOrWhiteSpace(workspacePath))
         {
@@ -1171,7 +1171,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
         _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
         ApplySessionWorkspace();
-        _runtime.UpdateSession(previousSession);
+        if (preservePrevious)
+        {
+            _runtime.UpdateSession(previousSession);
+        }
+
         await _storage.SaveSessionAsync(_session);
         _sessionNavigation.Invalidate(_session.Id);
         await RefreshSessionHistoryAsync();
@@ -1370,9 +1374,13 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         var previousSession = _session;
-        await FlushSessionForSwitchAsync(previousSession.Id).ConfigureAwait(true);
+        var preservePrevious = await PrepareSessionForSwitchAsync(previousSession).ConfigureAwait(true);
         await LoadSessionInternalAsync(item.Id);
-        _runtime.UpdateSession(previousSession);
+        if (preservePrevious)
+        {
+            _runtime.UpdateSession(previousSession);
+        }
+
         CurrentPage = AppPage.Chat;
     }
 
@@ -1639,6 +1647,41 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
         DebugBar.RefreshFromActiveRun();
         RequestRefreshSessionHistory();
+    }
+
+    /// <summary>
+    /// Flushes durable state before leaving a session. Ephemeral startup shells (empty and never
+    /// saved) are dropped so history navigation does not add a spurious "New Chat" index entry.
+    /// </summary>
+    /// <returns>True when the session remains in the runtime store after preparation.</returns>
+    private async Task<bool> PrepareSessionForSwitchAsync(AgentSession session)
+    {
+        if (string.IsNullOrWhiteSpace(session.Id))
+        {
+            return false;
+        }
+
+        if (!await _sessionNavigation.ShouldPersistOnSwitchAsync(session).ConfigureAwait(true))
+        {
+            DiscardEphemeralSession(session.Id);
+            return false;
+        }
+
+        await FlushSessionForSwitchAsync(session.Id).ConfigureAwait(true);
+        return true;
+    }
+
+    private void DiscardEphemeralSession(string sessionId)
+    {
+        if (_uiCache.TryGet(sessionId, out var ui)
+            && ui is not null
+            && string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+        {
+            ui.SetDisplayed(false);
+        }
+
+        _runtime.Remove(sessionId);
+        _sessionNavigation.Invalidate(sessionId);
     }
 
     /// <summary>
@@ -2627,7 +2670,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         CurrentPage = AppPage.Chat;
         if (!string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
         {
-            await FlushSessionForSwitchAsync(_session.Id).ConfigureAwait(true);
+            await PrepareSessionForSwitchAsync(_session).ConfigureAwait(true);
         }
 
         await LoadSessionInternalAsync(sessionId);
