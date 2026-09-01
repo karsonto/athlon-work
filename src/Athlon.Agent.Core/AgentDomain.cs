@@ -64,6 +64,12 @@ public sealed record ChatMessage(
             AssistantToolCallsCodec.Serialize(toolCalls ?? Array.Empty<AgentToolCall>()),
             reasoningContent,
             imageAttachments);
+
+    /// <summary>
+    /// Stable id for a tool result row so a running placeholder can be upserted into the final result.
+    /// </summary>
+    public static string ToolResultMessageId(string toolCallId) =>
+        "tool:" + toolCallId;
 }
 public sealed record AgentSession(
     string Id,
@@ -94,6 +100,31 @@ public sealed record AgentSession(
         UpdatedAt = DateTimeOffset.UtcNow,
         Messages = Messages.Concat(new[] { message }).ToArray()
     };
+
+    /// <summary>Replaces an existing message with the same Id, or appends when absent.</summary>
+    public AgentSession WithUpsertedMessage(ChatMessage message)
+    {
+        var messages = Messages.ToList();
+        for (var index = 0; index < messages.Count; index++)
+        {
+            if (string.Equals(messages[index].Id, message.Id, StringComparison.Ordinal))
+            {
+                messages[index] = message;
+                return this with
+                {
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                    Messages = messages.ToArray()
+                };
+            }
+        }
+
+        messages.Add(message);
+        return this with
+        {
+            UpdatedAt = DateTimeOffset.UtcNow,
+            Messages = messages.ToArray()
+        };
+    }
 
     public AgentSession WithWorkspace(string? workspaceRootPath, string? workspaceId = null) => this with
     {

@@ -5,6 +5,41 @@ namespace Athlon.Agent.Tests;
 public sealed class SessionTurnReconcilerTests
 {
     [Fact]
+    public void Reconcile_ReplacesRunningPlaceholder_WithInterruptedFailure()
+    {
+        var callId = "call_running";
+        var session = AgentSession.Create("test");
+        session = session.WithMessage(ChatMessage.Create(MessageRole.User, "run"));
+        session = session.WithMessage(ChatMessage.Create(
+            MessageRole.Assistant,
+            string.Empty,
+            toolCalls: [new AgentToolCall(callId, "grep", new Dictionary<string, string>())]));
+        var placeholder = ChatMessage.CreateWithId(
+            ChatMessage.ToolResultMessageId(callId),
+            MessageRole.Tool,
+            ModelMessageBuilder.FormatRunningToolPlaceholder(
+                new AgentToolCall(callId, "grep", new Dictionary<string, string>())),
+            session.Messages[0].Id);
+        session = session.WithUpsertedMessage(placeholder);
+
+        var snapshot = new SessionTurnEndSnapshot(
+            null,
+            null,
+            [new AgentToolCall(callId, "grep", new Dictionary<string, string>())],
+            WasCancelled: true,
+            TimedOut: false,
+            ErrorMessage: null);
+
+        var result = SessionTurnReconciler.Reconcile(session, snapshot);
+
+        var tool = Assert.Single(result.Session.Messages, message => message.Role == MessageRole.Tool);
+        Assert.Equal(ChatMessage.ToolResultMessageId(callId), tool.Id);
+        Assert.False(ModelMessageBuilder.IsRunningToolResult(tool.Content));
+        Assert.Contains("用户停止", tool.Content, StringComparison.Ordinal);
+        Assert.Equal(1, result.Session.Messages.Count(message => message.Role == MessageRole.Tool));
+    }
+
+    [Fact]
     public void Reconcile_CancelMidStream_PersistsPartialAssistantAndNotice()
     {
         var session = AgentSession.Create("test");

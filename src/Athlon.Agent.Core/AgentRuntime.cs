@@ -284,8 +284,12 @@ public sealed class AgentRuntime(
                             "Max model tool rounds reached",
                             $"Tool was not executed because the session reached the max model tool rounds limit ({maxModelToolRounds}).");
                         var content = FormatToolResult(toolCall, failure);
-                        var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
-                        session = session.WithMessage(toolMessage);
+                        var toolMessage = ChatMessage.CreateWithId(
+                            ChatMessage.ToolResultMessageId(toolCall.Id),
+                            MessageRole.Tool,
+                            content,
+                            parentMessageId);
+                        session = session.WithUpsertedMessage(toolMessage);
                         await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall)).ConfigureAwait(false);
                         await PersistMessageAsync(session, toolMessage, cancellationToken).ConfigureAwait(false);
                     }
@@ -402,8 +406,12 @@ public sealed class AgentRuntime(
                 "Duplicate tool call suppressed",
                 reason ?? "repeat-loop guard suppressed the duplicate tool call.");
             var content = FormatToolResult(toolCall, suppressed);
-            var toolMessage = ChatMessage.Create(MessageRole.Tool, content, parentMessageId);
-            session = session.WithMessage(toolMessage);
+            var toolMessage = ChatMessage.CreateWithId(
+                ChatMessage.ToolResultMessageId(toolCall.Id),
+                MessageRole.Tool,
+                content,
+                parentMessageId);
+            session = session.WithUpsertedMessage(toolMessage);
             await PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall)).ConfigureAwait(false);
             await PersistMessageAsync(session, toolMessage, cancellationToken).ConfigureAwait(false);
             invocation.Session = session;
@@ -456,6 +464,19 @@ public sealed class AgentRuntime(
             await turnPipeline.OnBeforeToolInvokeAsync(invocation, item.Call, cancellationToken).ConfigureAwait(false);
         }
 
+        var session = invocation.Session;
+        foreach (var item in pending)
+        {
+            session = await _toolPipeline.PersistRunningToolPlaceholderAsync(
+                session,
+                parentMessageId,
+                item.Call,
+                PersistMessageAsync,
+                cancellationToken).ConfigureAwait(false);
+        }
+
+        invocation.Session = session;
+
         if (pending.Count > 0)
         {
             var maxDegree = Math.Max(1, settings.ParallelToolExecution.MaxDegreeOfParallelism);
@@ -477,7 +498,6 @@ public sealed class AgentRuntime(
                 }).ConfigureAwait(false);
         }
 
-        var session = invocation.Session;
         for (var index = 0; index < toolCalls.Count; index++)
         {
             var toolCall = toolCalls[index];

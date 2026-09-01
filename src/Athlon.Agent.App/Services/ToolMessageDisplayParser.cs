@@ -80,6 +80,11 @@ internal static class ToolMessageDisplayParser
             return ToolCallDisplayStatus.Failed;
         }
 
+        if (header.Contains("running", StringComparison.OrdinalIgnoreCase))
+        {
+            return ToolCallDisplayStatus.Running;
+        }
+
         if (header.Contains("succeeded", StringComparison.OrdinalIgnoreCase))
         {
             return ToolCallDisplayStatus.Succeeded;

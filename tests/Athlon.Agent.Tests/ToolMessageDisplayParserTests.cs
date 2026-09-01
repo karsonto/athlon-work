@@ -1,10 +1,19 @@
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Tests;
 
 public sealed class ToolMessageDisplayParserTests
 {
+    [Fact]
+    public void ParseToolStatus_RunningHeader_ReturnsRunning()
+    {
+        Assert.Equal(
+            ToolCallDisplayStatus.Running,
+            ToolMessageDisplayParser.ParseToolStatus("Tool `grep` running."));
+    }
+
     [Fact]
     public void ParseToolContent_StripsMetadataAndPrettyPrintsJsonBody()
     {

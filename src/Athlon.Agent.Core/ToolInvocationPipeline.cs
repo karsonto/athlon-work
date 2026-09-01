@@ -248,6 +248,23 @@ internal sealed class ToolInvocationPipeline(
             .ConfigureAwait(false);
     }
 
+    public async Task<AgentSession> PersistRunningToolPlaceholderAsync(
+        AgentSession session,
+        string? parentMessageId,
+        AgentToolCall toolCall,
+        Func<AgentSession, ChatMessage, CancellationToken, Task> persistMessageAsync,
+        CancellationToken cancellationToken)
+    {
+        var toolMessage = ChatMessage.CreateWithId(
+            ChatMessage.ToolResultMessageId(toolCall.Id),
+            MessageRole.Tool,
+            ModelMessageBuilder.FormatRunningToolPlaceholder(toolCall),
+            parentMessageId);
+        session = session.WithUpsertedMessage(toolMessage);
+        await persistMessageAsync(session, toolMessage, cancellationToken).ConfigureAwait(false);
+        return session;
+    }
+
     public async Task<AgentSession> PersistToolResultAsync(
         AgentSession session,
         string? parentMessageId,
@@ -266,12 +283,13 @@ internal sealed class ToolInvocationPipeline(
             content,
             cancellationToken).ConfigureAwait(false);
 
-        var toolMessage = ChatMessage.Create(
+        var toolMessage = ChatMessage.CreateWithId(
+            ChatMessage.ToolResultMessageId(toolCall.Id),
             MessageRole.Tool,
             content,
             parentMessageId,
             imageAttachments: result.ImageAttachments);
-        session = session.WithMessage(toolMessage);
+        session = session.WithUpsertedMessage(toolMessage);
         await AgentRuntime.PublishStreamEventsAsync(callbacks, streamAdapter.OnToolResult(toolMessage, toolCall)).ConfigureAwait(false);
         await persistMessageAsync(session, toolMessage, cancellationToken).ConfigureAwait(false);
         return session;
@@ -286,6 +304,12 @@ internal sealed class ToolInvocationPipeline(
         Func<AgentSession, ChatMessage, CancellationToken, Task> persistMessageAsync,
         CancellationToken cancellationToken)
     {
+        session = await PersistRunningToolPlaceholderAsync(
+            session,
+            parentMessageId,
+            toolCall,
+            persistMessageAsync,
+            cancellationToken).ConfigureAwait(false);
         var outcome = await InvokeCoreAsync(session.Id, toolCall, callbacks, cancellationToken).ConfigureAwait(false);
         return await PersistToolResultAsync(
             session,

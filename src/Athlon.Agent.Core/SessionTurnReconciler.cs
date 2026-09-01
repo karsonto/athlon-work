@@ -42,6 +42,32 @@ public static class SessionTurnReconciler
             })
             .ToList();
 
+        // Running placeholders must be replaced with interrupted failures, not treated as answered.
+        foreach (var toolCall in snapshot.IncompleteToolCalls
+                     .Where(call => !string.IsNullOrWhiteSpace(call.Id))
+                     .GroupBy(call => call.Id, StringComparer.Ordinal)
+                     .Select(group => group.Last()))
+        {
+            var runningIndex = FindRunningToolIndex(messages, toolCall.Id);
+            if (runningIndex < 0)
+            {
+                continue;
+            }
+
+            var toolMessage = ChatMessage.CreateWithId(
+                ChatMessage.ToolResultMessageId(toolCall.Id),
+                MessageRole.Tool,
+                AgentRuntime.FormatToolResult(toolCall, BuildInterruptedToolResult(snapshot)),
+                parentId);
+            messages[runningIndex] = toolMessage;
+            UpsertPersisted(persisted, toolMessage);
+            answeredToolCallIds.Add(toolCall.Id);
+        }
+
+        incompleteTools = incompleteTools
+            .Where(call => !answeredToolCallIds.Contains(call.Id))
+            .ToList();
+
         var hasAssistantText = !string.IsNullOrWhiteSpace(snapshot.AssistantContent)
             || !string.IsNullOrWhiteSpace(snapshot.AssistantReasoning);
         var tailAssistant = FindTailAssistantAfterLastUser(messages);
@@ -71,12 +97,13 @@ public static class SessionTurnReconciler
                 continue;
             }
 
-            var toolMessage = ChatMessage.Create(
+            var toolMessage = ChatMessage.CreateWithId(
+                ChatMessage.ToolResultMessageId(toolCall.Id),
                 MessageRole.Tool,
                 AgentRuntime.FormatToolResult(toolCall, BuildInterruptedToolResult(snapshot)),
                 parentId);
             messages.Add(toolMessage);
-            persisted.Add(toolMessage);
+            UpsertPersisted(persisted, toolMessage);
             answeredToolCallIds.Add(toolCall.Id);
         }
 
@@ -94,6 +121,45 @@ public static class SessionTurnReconciler
         }
 
         return new SessionTurnReconcileResult(session.WithMessages(messages), persisted);
+    }
+
+    private static void UpsertPersisted(List<ChatMessage> persisted, ChatMessage message)
+    {
+        for (var index = 0; index < persisted.Count; index++)
+        {
+            if (string.Equals(persisted[index].Id, message.Id, StringComparison.Ordinal))
+            {
+                persisted[index] = message;
+                return;
+            }
+        }
+
+        persisted.Add(message);
+    }
+
+    private static int FindRunningToolIndex(IReadOnlyList<ChatMessage> messages, string toolCallId)
+    {
+        for (var index = 0; index < messages.Count; index++)
+        {
+            var message = messages[index];
+            if (message.Role != MessageRole.Tool)
+            {
+                continue;
+            }
+
+            if (!ModelMessageBuilder.IsRunningToolResult(message.Content))
+            {
+                continue;
+            }
+
+            var id = ModelMessageBuilder.ExtractToolCallId(message.Content);
+            if (string.Equals(id, toolCallId, StringComparison.Ordinal))
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private static bool NeedsReconcile(SessionTurnEndSnapshot snapshot) =>
@@ -186,12 +252,21 @@ public static class SessionTurnReconciler
     private static bool IsRealUserMessage(ChatMessage message) =>
         message.Role == MessageRole.User && !SummaryMessageBuilder.IsSummaryMessage(message);
 
+    /// <summary>
+    /// Tool rows that already have a final (non-running) result for a toolCallId.
+    /// Running placeholders are intentionally excluded so reconcile can replace them.
+    /// </summary>
     private static HashSet<string> BuildAnsweredToolCallIds(IReadOnlyList<ChatMessage> messages)
     {
         var answered = new HashSet<string>(StringComparer.Ordinal);
         foreach (var message in messages)
         {
             if (message.Role != MessageRole.Tool)
+            {
+                continue;
+            }
+
+            if (ModelMessageBuilder.IsRunningToolResult(message.Content))
             {
                 continue;
             }

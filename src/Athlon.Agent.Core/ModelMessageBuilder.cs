@@ -200,6 +200,11 @@ internal static class ModelMessageBuilder
                 return AppendAssistantModelMessages(messages, history, index, includeReasoningInModelContext);
             case MessageRole.Tool:
             {
+                if (IsRunningToolResult(message.Content))
+                {
+                    return index;
+                }
+
                 var toolCallId = ExtractToolCallId(message.Content);
                 if (toolCallId is not null)
                 {
@@ -239,6 +244,39 @@ internal static class ModelMessageBuilder
             "",
             result.Content ?? result.Error ?? string.Empty
         });
+    }
+
+    public static string FormatRunningToolPlaceholder(AgentToolCall call) =>
+        string.Join(Environment.NewLine, new[]
+        {
+            $"ToolCallId: {call.Id}",
+            $"Tool `{call.Name}` running.",
+            "",
+            $"Arguments: {FormatArguments(call)}",
+            "Summary: 执行中",
+            "",
+            string.Empty
+        });
+
+    public static bool IsRunningToolResult(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return false;
+        }
+
+        foreach (var line in content.Replace("\r\n", "\n").Split('\n'))
+        {
+            if (!line.StartsWith("Tool `", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            return line.Contains(" running.", StringComparison.OrdinalIgnoreCase)
+                || line.EndsWith(" running", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
     }
 
     public static string? ExtractToolCallId(string? content)
@@ -336,6 +374,11 @@ internal static class ModelMessageBuilder
         var toolByCallId = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
         foreach (var toolMessage in toolMessages)
         {
+            if (IsRunningToolResult(toolMessage.Content))
+            {
+                continue;
+            }
+
             var toolCallId = ExtractToolCallId(toolMessage.Content);
             if (!string.IsNullOrWhiteSpace(toolCallId))
             {
