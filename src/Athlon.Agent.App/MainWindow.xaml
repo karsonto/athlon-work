@@ -104,7 +104,8 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{loc:Localize Key=Shell_AthlonWeb}"
                                        VerticalAlignment="Center" />
-                            <materialDesign:PackIcon Style="{StaticResource AthlonWebExternalLinkPackIconStyle}" />
+                            <ContentControl ContentTemplate="{StaticResource AthlonWebExternalLinkIconTemplate}"
+                                            VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                     <Button ToolTip="{loc:Localize Key=Common_Minimize}"

@@ -36,7 +36,7 @@
                         ToolTip="{loc:Localize Key=Nav_NewSessionTooltip}"
                         Style="{StaticResource NewSessionButtonStyle}">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                        <materialDesign:PackIcon Kind="ImageOutline"
+                        <materialDesign:PackIcon Kind="SendOutline"
                                                  Style="{StaticResource NavPackIconStyle}"
                                                  Margin="0,0,8,0" />
                         <TextBlock Text="{loc:Localize Key=Nav_NewAgent}"
