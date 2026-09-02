@@ -46,12 +46,14 @@
         <Setter Property="Height" Value="18" />
         <Setter Property="HorizontalAlignment" Value="Center" />
         <Setter Property="VerticalAlignment" Value="Center" />
-        <!-- Dark theme: show sun (switch to light). -->
+        <!-- Dark theme: pale-yellow sun (switch to light). -->
         <Setter Property="Kind" Value="WhiteBalanceSunny" />
+        <Setter Property="Foreground" Value="#FFFDE68A" />
         <Style.Triggers>
-            <!-- Light theme: show moon (switch to dark). -->
+            <!-- Light theme: blue moon (switch to dark). -->
             <DataTrigger Binding="{Binding IsLightTheme}" Value="True">
                 <Setter Property="Kind" Value="WeatherNight" />
+                <Setter Property="Foreground" Value="#FF2563EB" />
             </DataTrigger>
         </Style.Triggers>
     </Style>

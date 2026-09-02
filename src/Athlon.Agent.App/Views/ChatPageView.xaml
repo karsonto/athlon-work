@@ -70,11 +70,9 @@
                             <Button Command="{Binding ToggleThemeCommand}"
                                     ToolTip="{Binding ThemeToggleToolTip}"
                                     Style="{StaticResource HeaderIconButtonStyle}"
-                                    Foreground="#FF2563EB"
                                     VerticalAlignment="Center"
                                     AutomationProperties.Name="{Binding ThemeToggleToolTip}">
-                                <materialDesign:PackIcon Style="{StaticResource ThemeTogglePackIconStyle}"
-                                                         Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                                <materialDesign:PackIcon Style="{StaticResource ThemeTogglePackIconStyle}" />
                             </Button>
                             <Button Command="{Binding ToggleContextSidebarCommand}"
                                     Style="{StaticResource RightSidebarToggleButtonStyle}"
