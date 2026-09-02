@@ -609,10 +609,10 @@
     </DataTemplate>
 
     <DataTemplate x:Key="AthlonWebExternalLinkIconTemplate">
-        <Viewbox Width="11"
-                 Height="11"
+        <Viewbox Width="12"
+                 Height="12"
                  Stretch="Uniform"
-                 Margin="6,0,0,0">
+                 Margin="4,0,0,0">
             <Canvas Width="16"
                     Height="16">
                 <Path Data="M9.2 6.8 L12.5 3.5 M12.5 3.5 L10.3 3.5 M12.5 3.5 L12.5 5.7"
@@ -627,15 +627,15 @@
     </DataTemplate>
 
     <Style x:Key="AthlonWebCaptionButtonStyle" TargetType="Button">
-        <Setter Property="MinHeight" Value="24" />
-        <Setter Property="Padding" Value="10,4,8,4" />
-        <Setter Property="Margin" Value="0,0,8,0" />
-        <Setter Property="FontSize" Value="12" />
+        <Setter Property="MinHeight" Value="20" />
+        <Setter Property="Padding" Value="8,2,6,2" />
+        <Setter Property="Margin" Value="0,0,6,0" />
+        <Setter Property="FontSize" Value="11" />
         <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="FontFamily" Value="Segoe UI" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="VerticalAlignment" Value="Center" />
-        <Setter Property="Background" Value="{DynamicResource Brush.ModeAgentBg}" />
+        <Setter Property="Background" Value="{DynamicResource Brush.AccentSubtle}" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="SnapsToDevicePixels" Value="False" />
@@ -646,7 +646,7 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Root"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="12"
+                            CornerRadius="10"
                             Padding="{TemplateBinding Padding}"
                             SnapsToDevicePixels="False">
                         <ContentPresenter HorizontalAlignment="Center"
