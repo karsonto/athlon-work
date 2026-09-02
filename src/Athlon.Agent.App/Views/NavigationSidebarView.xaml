@@ -4,7 +4,8 @@
              xmlns:app="clr-namespace:Athlon.Agent.App"
              xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
              xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
-             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization">
+             xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -35,11 +36,9 @@
                         ToolTip="{loc:Localize Key=Nav_NewSessionTooltip}"
                         Style="{StaticResource NewSessionButtonStyle}">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                        <TextBlock Text="&#xE91B;"
-                                   FontFamily="Segoe MDL2 Assets"
-                                   FontSize="12"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,8,0" />
+                        <materialDesign:PackIcon Kind="ImageOutline"
+                                                 Style="{StaticResource NavPackIconStyle}"
+                                                 Margin="0,0,8,0" />
                         <TextBlock Text="{loc:Localize Key=Nav_NewAgent}"
                                    FontSize="13"
                                    FontWeight="Medium"
@@ -52,9 +51,9 @@
                         Style="{StaticResource NewSessionButtonStyle}"
                         Margin="0,8,0,0">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                        <ContentControl ContentTemplate="{StaticResource SkillHubNavIconTemplate}"
-                                        VerticalAlignment="Center"
-                                        Margin="0,0,8,0" />
+                        <materialDesign:PackIcon Kind="ViewGridOutline"
+                                                 Style="{StaticResource NavPackIconStyle}"
+                                                 Margin="0,0,8,0" />
                         <TextBlock Text="{loc:Localize Key=Nav_SkillHub}"
                                    FontSize="13"
                                    FontWeight="Medium"
@@ -164,13 +163,12 @@
                                                     <ColumnDefinition Width="Auto" />
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0"
-                                                           Text="{Binding FolderGlyph}"
-                                                           FontFamily="Segoe Fluent Icons"
-                                                           FontSize="13"
-                                                           Margin="0,0,8,0"
-                                                           Foreground="{Binding FolderGlyphBrushKey, Converter={StaticResource ResourceKeyToBrush}}"
-                                                           VerticalAlignment="Center" />
+                                                <materialDesign:PackIcon Grid.Column="0"
+                                                                         Kind="{Binding FolderIconKind}"
+                                                                         Style="{StaticResource SidebarPackIconStyle}"
+                                                                         Margin="0,0,8,0"
+                                                                         Foreground="{Binding FolderGlyphBrushKey, Converter={StaticResource ResourceKeyToBrush}}"
+                                                                         VerticalAlignment="Center" />
                                                 <TextBlock Grid.Column="1"
                                                            Text="{Binding Title}"
                                                            FontSize="12"
@@ -576,11 +574,8 @@
                                 Style="{StaticResource SidebarAccountSettingsButtonStyle}"
                                 ToolTip="{loc:Localize Key=Chat_SettingsTooltip}"
                                 VerticalAlignment="Center">
-                            <TextBlock Text="&#xE713;"
-                                       FontFamily="Segoe MDL2 Assets"
-                                       FontSize="14"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center" />
+                            <materialDesign:PackIcon Kind="Cog"
+                                                     Style="{StaticResource SettingsPackIconStyle}" />
                         </Button>
                     </Grid>
             </Border>

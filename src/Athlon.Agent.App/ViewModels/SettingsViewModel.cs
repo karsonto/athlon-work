@@ -81,7 +81,6 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowApiKeyMask))]
-    [NotifyPropertyChangedFor(nameof(ApiKeyRevealGlyph))]
     private bool isApiKeyRevealed;
 
     [ObservableProperty]
@@ -94,7 +93,6 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowKnowledgeEmbeddingApiKeyMask))]
-    [NotifyPropertyChangedFor(nameof(KnowledgeEmbeddingApiKeyRevealGlyph))]
     private bool isKnowledgeEmbeddingApiKeyRevealed;
 
     public bool ShowApiKeyMask =>
@@ -104,12 +102,6 @@ public sealed partial class SettingsViewModel : ObservableObject
         HasStoredKnowledgeEmbeddingApiKey
         && !IsKnowledgeEmbeddingApiKeyRevealed
         && string.IsNullOrWhiteSpace(KnowledgeEmbeddingApiKey);
-
-    /// <summary>Segoe MDL2: RedEye when masked, Hide when revealed.</summary>
-    public string ApiKeyRevealGlyph => IsApiKeyRevealed ? "\uE8F5" : "\uE890";
-
-    public string KnowledgeEmbeddingApiKeyRevealGlyph =>
-        IsKnowledgeEmbeddingApiKeyRevealed ? "\uE8F5" : "\uE890";
 
     public string McpConfigPath => SettingsConfigPath;
 

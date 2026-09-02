@@ -1,5 +1,6 @@
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using MaterialDesignThemes.Wpf;
 
 namespace Athlon.Agent.Tests;
 
@@ -29,13 +30,13 @@ public sealed class AgentRecordGroupingTests
         Assert.Equal("s1", athlon.Items[0].Id);
         Assert.True(athlon.IsExpanded);
         Assert.False(athlon.IsRemote);
-        Assert.Equal("\uE838", athlon.FolderGlyph);
+        Assert.Equal(PackIconKind.FolderOpenOutline, athlon.FolderIconKind);
 
         var openHarness = Assert.Single(groups, group => group.Title == "OpenHarness");
         Assert.Single(openHarness.Items);
         Assert.False(openHarness.IsExpanded);
         Assert.False(openHarness.IsRemote);
-        Assert.Equal("\uE8B7", openHarness.FolderGlyph);
+        Assert.Equal(PackIconKind.FolderOutline, openHarness.FolderIconKind);
     }
 
     [Fact]
@@ -82,7 +83,7 @@ public sealed class AgentRecordGroupingTests
         Assert.True(remote.IsRemote);
         Assert.Equal("athlon-work", remote.Title);
         Assert.Equal("ssh-workspace-1", remote.ActiveWorkspaceId);
-        Assert.Equal("\uE753", remote.FolderGlyph);
+        Assert.Equal(PackIconKind.CloudOutline, remote.FolderIconKind);
         Assert.StartsWith("ssh:ssh-workspace-1:", remote.Key, StringComparison.OrdinalIgnoreCase);
     }
 
@@ -111,8 +112,8 @@ public sealed class AgentRecordGroupingTests
         Assert.Equal("demo", local.Title);
         Assert.Equal("demo", remote.Title);
         Assert.NotEqual(local.Key, remote.Key, StringComparer.OrdinalIgnoreCase);
-        Assert.Equal("\uE838", local.FolderGlyph);
-        Assert.Equal("\uE753", remote.FolderGlyph);
+        Assert.Equal(PackIconKind.FolderOpenOutline, local.FolderIconKind);
+        Assert.Equal(PackIconKind.CloudOutline, remote.FolderIconKind);
     }
 
     [Fact]

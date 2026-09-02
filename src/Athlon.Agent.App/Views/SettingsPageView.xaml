@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:behaviors="clr-namespace:Athlon.Agent.App.Behaviors"
              xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              DataContext="{Binding Settings}">
     <ScrollViewer Padding="40,32" VerticalScrollBarVisibility="Auto" Background="{DynamicResource Brush.ChatBackground}">
                 <StackPanel MaxWidth="760">
@@ -103,11 +104,18 @@
                                         Height="36"
                                         VerticalAlignment="Center"
                                         Style="{StaticResource GhostIconButtonStyle}">
-                                    <TextBlock Text="{Binding ApiKeyRevealGlyph}"
-                                               FontFamily="Segoe MDL2 Assets"
-                                               FontSize="14"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center" />
+                                    <materialDesign:PackIcon>
+                                        <materialDesign:PackIcon.Style>
+                                            <Style TargetType="materialDesign:PackIcon" BasedOn="{StaticResource SettingsPackIconStyle}">
+                                                <Setter Property="Kind" Value="Eye" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsApiKeyRevealed}" Value="True">
+                                                        <Setter Property="Kind" Value="EyeOff" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </materialDesign:PackIcon.Style>
+                                    </materialDesign:PackIcon>
                                 </Button>
                             </Grid>
                             <TextBlock Text="{Binding HasStoredApiKey, StringFormat=已保存 Model API Key：{0}}"
@@ -303,11 +311,18 @@
                                         Margin="8,0,0,0"
                                         VerticalAlignment="Center"
                                         Style="{StaticResource GhostIconButtonStyle}">
-                                    <TextBlock Text="{Binding KnowledgeEmbeddingApiKeyRevealGlyph}"
-                                               FontFamily="Segoe MDL2 Assets"
-                                               FontSize="14"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center" />
+                                    <materialDesign:PackIcon>
+                                        <materialDesign:PackIcon.Style>
+                                            <Style TargetType="materialDesign:PackIcon" BasedOn="{StaticResource SettingsPackIconStyle}">
+                                                <Setter Property="Kind" Value="Eye" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsKnowledgeEmbeddingApiKeyRevealed}" Value="True">
+                                                        <Setter Property="Kind" Value="EyeOff" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </materialDesign:PackIcon.Style>
+                                    </materialDesign:PackIcon>
                                 </Button>
                             </Grid>
                             <TextBlock Text="{Binding HasStoredKnowledgeEmbeddingApiKey, StringFormat=已保存知识库 Embedding API Key：{0}}"

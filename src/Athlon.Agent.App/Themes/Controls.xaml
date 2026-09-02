@@ -608,24 +608,6 @@
         </Viewbox>
     </DataTemplate>
 
-    <DataTemplate x:Key="AthlonWebExternalLinkIconTemplate">
-        <Viewbox Width="14"
-                 Height="14"
-                 Stretch="Uniform"
-                 Margin="5,0,0,0">
-            <Canvas Width="16"
-                    Height="16">
-                <Path Data="M4.5 11.5 L11.5 4.5 M11.5 4.5 H8 M11.5 4.5 V8"
-                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                      StrokeThickness="1.6"
-                      StrokeStartLineCap="Round"
-                      StrokeEndLineCap="Round"
-                      StrokeLineJoin="Round"
-                      Fill="Transparent" />
-            </Canvas>
-        </Viewbox>
-    </DataTemplate>
-
     <Style x:Key="AthlonWebCaptionButtonStyle" TargetType="Button">
         <Setter Property="MinHeight" Value="20" />
         <Setter Property="Padding" Value="8,2,6,2" />

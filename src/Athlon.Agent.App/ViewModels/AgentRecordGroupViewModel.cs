@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MaterialDesignThemes.Wpf;
 
 namespace Athlon.Agent.App.ViewModels;
 
@@ -66,15 +67,15 @@ public sealed partial class AgentRecordGroupViewModel : ObservableObject
 
     public string ExpandGlyph => IsExpanded ? "▾" : "▸";
 
-    /// <summary>Segoe Fluent Icons: Cloud for remote; OpenFolder / Folder for local.</summary>
-    public string FolderGlyph => IsRemote
-        ? "\uE753"
-        : IsExpanded ? "\uE838" : "\uE8B7";
+    /// <summary>Material icon for remote cloud vs local folder state.</summary>
+    public PackIconKind FolderIconKind => IsRemote
+        ? PackIconKind.CloudOutline
+        : IsExpanded ? PackIconKind.FolderOpenOutline : PackIconKind.FolderOutline;
 
     partial void OnIsExpandedChanged(bool value)
     {
         OnPropertyChanged(nameof(ExpandGlyph));
-        OnPropertyChanged(nameof(FolderGlyph));
+        OnPropertyChanged(nameof(FolderIconKind));
     }
 
     [RelayCommand]

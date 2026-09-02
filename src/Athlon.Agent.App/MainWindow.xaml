@@ -10,6 +10,7 @@
         xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
         xmlns:views="clr-namespace:Athlon.Agent.App.Views"
         xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="{loc:Localize Key=Common_ProductName}"
@@ -103,8 +104,7 @@
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="{loc:Localize Key=Shell_AthlonWeb}"
                                        VerticalAlignment="Center" />
-                            <ContentControl ContentTemplate="{StaticResource AthlonWebExternalLinkIconTemplate}"
-                                            VerticalAlignment="Center" />
+                            <materialDesign:PackIcon Style="{StaticResource AthlonWebExternalLinkPackIconStyle}" />
                         </StackPanel>
                     </Button>
                     <Button ToolTip="{loc:Localize Key=Common_Minimize}"

@@ -31,6 +31,7 @@ using Athlon.Agent.App.Navigation;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.Windows;
 using Athlon.Agent.Infrastructure.Ssh;
+using MaterialDesignThemes.Wpf;
 
 namespace Athlon.Agent.App.ViewModels;
 
@@ -1900,7 +1901,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         var thisPc = new MenuItem
         {
             Header = CreateRunOnRowHeader(
-                glyph: "\uE7F8",
+                iconKind: PackIconKind.Laptop,
                 text: _loc["Shell_RunOnThisPc"],
                 trailing: isLocalActive ? RunOnTrailing.Check : RunOnTrailing.None),
             Style = itemStyle
@@ -1911,7 +1912,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         var remote = new MenuItem
         {
             Header = CreateRunOnRowHeader(
-                glyph: "\uE7F4",
+                iconKind: PackIconKind.Monitor,
                 text: _loc["Shell_RunOnRemoteConnection"],
                 trailing: RunOnTrailing.Chevron),
             Style = itemStyle
@@ -1959,7 +1960,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         var sshItem = new MenuItem
         {
             Header = CreateRunOnRowHeader(
-                glyph: "\uE710",
+                iconKind: PackIconKind.Plus,
                 text: _loc["Shell_RunOnConnectSshAction"],
                 trailing: RunOnTrailing.None),
             Style = itemStyle
@@ -1974,7 +1975,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             var remove = new MenuItem
             {
                 Header = CreateRunOnRowHeader(
-                    glyph: "\uE74D",
+                    iconKind: PackIconKind.LinkOff,
                     text: _loc["Context_RemoveWorkspace"],
                     trailing: RunOnTrailing.None),
                 Style = itemStyle
@@ -2079,16 +2080,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var icon = new TextBlock
-        {
-            Text = "\uE7F4",
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 14,
-            Margin = new Thickness(0, 0, 10, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            Opacity = 0.88,
-            Foreground = TryFindBrush("Brush.Text") ?? Brushes.Black
-        };
+        var icon = AppPackIconHelper.Create(
+            PackIconKind.ServerNetwork,
+            size: 14,
+            foreground: TryFindBrush("Brush.Text") ?? Brushes.Black,
+            opacity: 0.88);
         Grid.SetColumn(icon, 0);
         grid.Children.Add(icon);
 
@@ -2105,16 +2101,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         if (selected)
         {
-            var check = new TextBlock
-            {
-                Text = "\uE73E",
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 12,
-                Margin = new Thickness(4, 0, 6, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                Opacity = 0.95,
-                Foreground = TryFindBrush("Brush.SubtleText") ?? Brushes.Gray
-            };
+            var check = AppPackIconHelper.Create(
+                PackIconKind.Check,
+                size: 12,
+                foreground: TryFindBrush("Brush.SubtleText") ?? Brushes.Gray,
+                margin: new Thickness(4, 0, 6, 0),
+                opacity: 0.95);
             Grid.SetColumn(check, 2);
             grid.Children.Add(check);
         }
@@ -2131,16 +2123,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             Focusable = false,
             ToolTip = _loc["Shell_SshDeleteConnection"],
             VerticalAlignment = VerticalAlignment.Center,
-            Content = new TextBlock
-            {
-                Text = "\uE74D",
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = 12,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Opacity = 0.7,
-                Foreground = TryFindBrush("Brush.SubtleText") ?? Brushes.Gray
-            }
+            Content = AppPackIconHelper.Create(
+                PackIconKind.DeleteOutline,
+                size: 12,
+                foreground: TryFindBrush("Brush.SubtleText") ?? Brushes.Gray,
+                margin: new Thickness(0),
+                opacity: 0.7)
         };
         deleteButton.PreviewMouseLeftButtonDown += (_, e) =>
         {
@@ -2153,23 +2141,18 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         return grid;
     }
 
-    private static UIElement CreateRunOnRowHeader(string glyph, string text, RunOnTrailing trailing)
+    private static UIElement CreateRunOnRowHeader(PackIconKind iconKind, string text, RunOnTrailing trailing)
     {
         var grid = new Grid { MinWidth = 188 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        var icon = new TextBlock
-        {
-            Text = glyph,
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 14,
-            Margin = new Thickness(0, 0, 10, 0),
-            VerticalAlignment = VerticalAlignment.Center,
-            Opacity = 0.88,
-            Foreground = TryFindBrush("Brush.Text") ?? Brushes.Black
-        };
+        var icon = AppPackIconHelper.Create(
+            iconKind,
+            size: 14,
+            foreground: TryFindBrush("Brush.Text") ?? Brushes.Black,
+            opacity: 0.88);
         Grid.SetColumn(icon, 0);
         grid.Children.Add(icon);
 
@@ -2185,19 +2168,14 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         if (trailing != RunOnTrailing.None)
         {
-            var trailingGlyph = trailing == RunOnTrailing.Check ? "\uE73E" : "\uE76C";
-            var trailingBlock = new TextBlock
-            {
-                Text = trailingGlyph,
-                FontFamily = new FontFamily("Segoe MDL2 Assets"),
-                FontSize = trailing == RunOnTrailing.Check ? 12 : 10,
-                Margin = new Thickness(12, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                Opacity = trailing == RunOnTrailing.Check ? 0.95 : 0.55,
-                Foreground = TryFindBrush("Brush.SubtleText") ?? Brushes.Gray
-            };
-            Grid.SetColumn(trailingBlock, 2);
-            grid.Children.Add(trailingBlock);
+            var trailingIcon = AppPackIconHelper.Create(
+                trailing == RunOnTrailing.Check ? PackIconKind.Check : PackIconKind.ChevronRight,
+                size: trailing == RunOnTrailing.Check ? 12 : 10,
+                foreground: TryFindBrush("Brush.SubtleText") ?? Brushes.Gray,
+                margin: new Thickness(12, 0, 0, 0),
+                opacity: trailing == RunOnTrailing.Check ? 0.95 : 0.55);
+            Grid.SetColumn(trailingIcon, 2);
+            grid.Children.Add(trailingIcon);
         }
 
         return grid;
