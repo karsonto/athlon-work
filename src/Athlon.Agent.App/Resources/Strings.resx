@@ -650,6 +650,36 @@
   <data name="Plan_ReviseCancelled" xml:space="preserve">
     <value>已取消修订，可重新点击「修订」</value>
   </data>
+  <data name="Plan_ConfirmComposerHint" xml:space="preserve">
+    <value>发送即修订计划</value>
+  </data>
+  <data name="Plan_ClarifyComposerHint" xml:space="preserve">
+    <value>选择上方选项，或在此补充</value>
+  </data>
+  <data name="Plan_ClarifyCardTitle" xml:space="preserve">
+    <value>请选择后再继续规划</value>
+  </data>
+  <data name="Plan_ClarifyNotesPlaceholder" xml:space="preserve">
+    <value>可选：补充说明</value>
+  </data>
+  <data name="Plan_ClarifySubmit" xml:space="preserve">
+    <value>提交</value>
+  </data>
+  <data name="Plan_ClarifyAnswered" xml:space="preserve">
+    <value>已回答</value>
+  </data>
+  <data name="Plan_ReadyCardTitle" xml:space="preserve">
+    <value>计划</value>
+  </data>
+  <data name="Plan_TodosHeading" xml:space="preserve">
+    <value>待办</value>
+  </data>
+  <data name="Plan_OpenInEditor" xml:space="preserve">
+    <value>在编辑器打开</value>
+  </data>
+  <data name="Plan_ClarifyEmptyAnswer" xml:space="preserve">
+    <value>请选择选项或输入补充说明</value>
+  </data>
   <data name="Harness_Mode_Debug" xml:space="preserve">
     <value>Debug</value>
   </data>

@@ -59,7 +59,8 @@ public sealed class SessionTurnCoordinator
         string input,
         ImageAttachment[] imageAttachments,
         SessionTurnUiController ui,
-        bool computerUseActive = false)
+        bool computerUseActive = false,
+        bool appendUserMessage = true)
     {
         var request = new SessionTurnRequest(
             sessionId,
@@ -68,7 +69,8 @@ public sealed class SessionTurnCoordinator
             imageAttachments,
             ui,
             IsAutoContinue: false,
-            ComputerUseActive: computerUseActive);
+            ComputerUseActive: computerUseActive,
+            AppendUserMessage: appendUserMessage);
         return _turnHost.TryStart(request, out var error) ? null : error ?? "无法开始生成。";
     }
 

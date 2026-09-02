@@ -883,3 +883,95 @@ html.replaying .message-row { animation: none; }
 .tool-approval-result.approved { color: var(--tool-success-text); }
 .tool-approval-result.denied { color: var(--tool-failure-text); }
 
+.plan-row { margin: 8px 0 12px; }
+.plan-clarify-card,
+.plan-ready-card {
+  width: 100%;
+  max-width: 720px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.plan-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--assistant-text);
+}
+.plan-card-subtitle {
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--subtle-text);
+}
+.plan-clarify-question { margin-top: 12px; }
+.plan-clarify-prompt {
+  font-size: 13px;
+  color: var(--assistant-text);
+  margin-bottom: 8px;
+}
+.plan-clarify-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.plan-clarify-option,
+.plan-card-button {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  background: var(--panel);
+  color: var(--assistant-text);
+}
+.plan-clarify-option.selected,
+.plan-card-button.primary {
+  border-color: var(--tool-success-text);
+  background: var(--tool-success-text);
+  color: #FFFFFF;
+}
+.plan-clarify-option:disabled,
+.plan-card-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.plan-clarify-notes {
+  width: 100%;
+  margin-top: 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12px;
+  background: var(--chat-bg);
+  color: var(--assistant-text);
+  resize: vertical;
+}
+.plan-clarify-result {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tool-success-text);
+}
+.plan-ready-body {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--assistant-text);
+}
+.plan-ready-todos ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--assistant-text);
+}
+.plan-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
+}
+

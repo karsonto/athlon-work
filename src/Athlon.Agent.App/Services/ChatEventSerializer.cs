@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.App.Services;
@@ -333,6 +334,41 @@ internal static class ChatEventSerializer
         {
             toolCallId,
             approved = decision == ToolApprovalDecision.Approved
+        });
+
+    public static string SerializePlanClarifyRequest(PlanClarification clarification, bool resolved = false, string? summary = null) =>
+        SerializeAgui("PLAN_CLARIFY_REQUEST", new
+        {
+            requestId = clarification.RequestId,
+            allowFreeText = clarification.AllowFreeText,
+            resolved,
+            summary,
+            questions = clarification.Questions.Select(q => new
+            {
+                id = q.Id,
+                prompt = q.Prompt,
+                allowMultiple = q.AllowMultiple,
+                options = q.Options.Select(o => new { id = o.Id, label = o.Label }).ToList()
+            }).ToList()
+        });
+
+    public static string SerializePlanClarifyResolved(string requestId, string? summary = null) =>
+        SerializeAgui("PLAN_CLARIFY_RESOLVED", new
+        {
+            requestId,
+            summary
+        });
+
+    public static string SerializePlanReady(PlanRun run) =>
+        SerializeAgui("PLAN_READY", new
+        {
+            runId = run.Id,
+            title = run.Title,
+            overview = run.Overview,
+            planPath = run.PlanPath,
+            markdown = run.PlanMarkdown,
+            html = MarkdownHtmlRenderer.ToHtmlFragment(run.PlanMarkdown),
+            todos = run.Todos.Select(t => new { id = t.Id, content = t.Content }).ToList()
         });
 
     private static string RenderToolResultHtml(ChatMessageViewModel message, string detail) =>
@@ -714,6 +750,20 @@ internal static class ChatEventSerializer
         var toolCallId = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;
         var toolName = string.IsNullOrWhiteSpace(message.ToolName) ? "tool" : message.ToolName;
 
+        if (string.Equals(toolName, "ask_plan_clarification", StringComparison.OrdinalIgnoreCase)
+            && TryReplayPlanClarify(message, out var clarifyEvent))
+        {
+            yield return clarifyEvent;
+            yield break;
+        }
+
+        if (string.Equals(toolName, "publish_plan", StringComparison.OrdinalIgnoreCase)
+            && TryReplayPlanReady(message, out var planReadyEvent))
+        {
+            yield return planReadyEvent;
+            yield break;
+        }
+
         yield return SerializeAgui("TOOL_CALL_START", new { toolCallId, toolCallName = toolName });
 
         if (!string.IsNullOrWhiteSpace(message.ToolArgumentsText) && message.ToolArgumentsText != "…")
@@ -773,6 +823,154 @@ internal static class ChatEventSerializer
                 markdown = detail,
                 html = RenderToolResultHtml(message, detail)
             });
+        }
+    }
+
+    private static bool TryReplayPlanClarify(ChatMessageViewModel message, out string eventJson)
+    {
+        eventJson = string.Empty;
+        if (!TryParseToolArguments(message.ToolArgumentsText, out var root))
+        {
+            return false;
+        }
+
+        if (!root.TryGetProperty("questions", out var questionsEl) || questionsEl.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        var clarification = new PlanClarification
+        {
+            RequestId = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId,
+            AllowFreeText = !root.TryGetProperty("allow_free_text", out var freeEl)
+                || freeEl.ValueKind != JsonValueKind.False
+        };
+
+        foreach (var item in questionsEl.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var question = new PlanClarificationQuestion
+            {
+                Id = item.TryGetProperty("id", out var idEl) ? idEl.GetString()?.Trim() ?? "" : "",
+                Prompt = item.TryGetProperty("prompt", out var promptEl) ? promptEl.GetString()?.Trim() ?? "" : "",
+                AllowMultiple = item.TryGetProperty("allow_multiple", out var multiEl)
+                    && multiEl.ValueKind == JsonValueKind.True
+            };
+            if (item.TryGetProperty("options", out var optionsEl) && optionsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var optionEl in optionsEl.EnumerateArray())
+                {
+                    if (optionEl.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+
+                    var optionId = optionEl.TryGetProperty("id", out var oid) ? oid.GetString()?.Trim() : null;
+                    var label = optionEl.TryGetProperty("label", out var olabel) ? olabel.GetString()?.Trim() : null;
+                    if (string.IsNullOrWhiteSpace(optionId) || string.IsNullOrWhiteSpace(label))
+                    {
+                        continue;
+                    }
+
+                    question.Options.Add(new PlanClarificationOption { Id = optionId, Label = label });
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(question.Id) && !string.IsNullOrWhiteSpace(question.Prompt) && question.Options.Count >= 2)
+            {
+                clarification.Questions.Add(question);
+            }
+        }
+
+        if (clarification.Questions.Count == 0)
+        {
+            return false;
+        }
+
+        eventJson = SerializePlanClarifyRequest(clarification, resolved: !message.IsToolRunning);
+        return true;
+    }
+
+    private static bool TryReplayPlanReady(ChatMessageViewModel message, out string eventJson)
+    {
+        eventJson = string.Empty;
+        if (!TryParseToolArguments(message.ToolArgumentsText, out var root))
+        {
+            return false;
+        }
+
+        var title = root.TryGetProperty("title", out var titleEl) ? titleEl.GetString() : null;
+        var overview = root.TryGetProperty("overview", out var overviewEl) ? overviewEl.GetString() : null;
+        var body = root.TryGetProperty("body", out var bodyEl) ? bodyEl.GetString() : null;
+        if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(body))
+        {
+            return false;
+        }
+
+        var markdown = PlanDocumentParser.ComposeMarkdown(title, overview, body);
+        var todos = new List<PlanTodoItem>();
+        if (root.TryGetProperty("todos", out var todosEl) && todosEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in todosEl.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                var id = item.TryGetProperty("id", out var idEl) ? idEl.GetString()?.Trim() : null;
+                var content = item.TryGetProperty("content", out var contentEl) ? contentEl.GetString()?.Trim() : null;
+                if (!string.IsNullOrWhiteSpace(id) && !string.IsNullOrWhiteSpace(content))
+                {
+                    todos.Add(new PlanTodoItem { Id = id, Content = content });
+                }
+            }
+        }
+
+        if (todos.Count == 0)
+        {
+            todos.AddRange(PlanDocumentParser.ParseTodos(markdown));
+        }
+
+        var run = new PlanRun
+        {
+            Id = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId,
+            SessionId = "",
+            Title = title,
+            Overview = overview,
+            PlanMarkdown = markdown,
+            Todos = todos
+        };
+        eventJson = SerializePlanReady(run);
+        return true;
+    }
+
+    private static bool TryParseToolArguments(string? text, out JsonElement root)
+    {
+        root = default;
+        if (string.IsNullOrWhiteSpace(text) || text == "…")
+        {
+            return false;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            root = doc.RootElement.Clone();
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 

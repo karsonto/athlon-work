@@ -16,6 +16,7 @@ public enum ToolFacet
     TerminalBootstrap = 1 << 6,
     HarnessTodo = 1 << 7,
     PlanDocument = 1 << 8,
+    PlanClarify = 1 << 13,
     SubAgent = 1 << 9,
     Memory = 1 << 10,
     Knowledge = 1 << 11,

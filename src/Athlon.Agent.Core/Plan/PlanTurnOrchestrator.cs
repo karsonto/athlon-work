@@ -22,7 +22,26 @@ public sealed class PlanTurnOrchestrator(
             ?? await runStore.LoadActiveAsync(session.Id, cancellationToken).ConfigureAwait(false);
         if (existing is not null && existing.Phase != PlanPhase.Done)
         {
-            // Follow-up while a run is active (including AwaitConfirm Q&A): stay on phase.
+            if (existing.Phase == PlanPhase.AwaitClarify)
+            {
+                return await ResumeAfterClarificationAsync(
+                    session,
+                    existing,
+                    userInput,
+                    callbacks,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            if (existing.Phase == PlanPhase.AwaitConfirm)
+            {
+                return await ContinueAsync(
+                    session,
+                    PlanContinuationKind.Revise,
+                    callbacks,
+                    cancellationToken,
+                    userInput).ConfigureAwait(false);
+            }
+
             return await RunPhaseAsync(session, existing, userInput, callbacks, cancellationToken, appendUserMessage: true)
                 .ConfigureAwait(false);
         }
@@ -43,28 +62,7 @@ public sealed class PlanTurnOrchestrator(
 
         session = await RunPhaseAsync(session, run, userInput, callbacks, cancellationToken, appendUserMessage: true)
             .ConfigureAwait(false);
-        run = phaseAccessor.GetActiveRun(session.Id)!;
-
-        if (run.Phase == PlanPhase.Explore)
-        {
-            run.Phase = PlanPhase.Draft;
-            await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
-            session = await RunPhaseAsync(
-                session,
-                run,
-                string.Empty,
-                callbacks,
-                cancellationToken,
-                appendUserMessage: false).ConfigureAwait(false);
-            run = phaseAccessor.GetActiveRun(session.Id)!;
-        }
-
-        if (run.Phase == PlanPhase.Draft)
-        {
-            session = await SealDraftAsync(session, run, callbacks, cancellationToken).ConfigureAwait(false);
-        }
-
-        return session;
+        return await AdvanceAfterExploreAsync(session, callbacks, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<AgentSession> ContinueAsync(
@@ -81,13 +79,21 @@ public sealed class PlanTurnOrchestrator(
         switch (continuation)
         {
             case PlanContinuationKind.Build when run.Phase == PlanPhase.AwaitConfirm:
-                run.Status = PlanRunStatuses.Approved;
-                run.Phase = PlanPhase.Done;
-                run.UpdatedAt = DateTimeOffset.UtcNow;
-                if (string.IsNullOrWhiteSpace(run.PlanMarkdown))
+                var disk = await runStore.ReadPlanMarkdownAsync(session.Id, cancellationToken)
+                    .ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(disk))
                 {
-                    run.PlanMarkdown = await runStore.ReadPlanMarkdownAsync(session.Id, cancellationToken)
-                        .ConfigureAwait(false);
+                    run.PlanMarkdown = disk;
+                    run.Title = PlanDocumentParser.ParseTitle(disk) ?? run.Title ?? "Plan";
+                    var parsedTodos = PlanDocumentParser.ParseTodos(disk).ToList();
+                    if (parsedTodos.Count > 0)
+                    {
+                        run.Todos = parsedTodos;
+                    }
+                }
+                else if (string.IsNullOrWhiteSpace(run.PlanMarkdown))
+                {
+                    run.PlanMarkdown = disk;
                 }
 
                 if (run.Todos.Count == 0 && !string.IsNullOrWhiteSpace(run.PlanMarkdown))
@@ -95,6 +101,9 @@ public sealed class PlanTurnOrchestrator(
                     run.Todos = PlanDocumentParser.ParseTodos(run.PlanMarkdown).ToList();
                 }
 
+                run.Status = PlanRunStatuses.Approved;
+                run.Phase = PlanPhase.Done;
+                run.UpdatedAt = DateTimeOffset.UtcNow;
                 await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
                 break;
 
@@ -121,6 +130,71 @@ public sealed class PlanTurnOrchestrator(
 
             default:
                 throw new InvalidOperationException($"Invalid plan continuation {continuation} for phase {run.Phase}.");
+        }
+
+        return session;
+    }
+
+    private async Task<AgentSession> ResumeAfterClarificationAsync(
+        AgentSession session,
+        PlanRun run,
+        string userInput,
+        AgentTurnCallbacks? callbacks,
+        CancellationToken cancellationToken)
+    {
+        run.PendingClarification = null;
+        run.Phase = PlanPhase.Explore;
+        run.Status = PlanRunStatuses.Draft;
+        run.UpdatedAt = DateTimeOffset.UtcNow;
+        await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
+
+        session = await RunPhaseAsync(
+            session,
+            run,
+            userInput,
+            callbacks,
+            cancellationToken,
+            appendUserMessage: true).ConfigureAwait(false);
+        return await AdvanceAfterExploreAsync(session, callbacks, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<AgentSession> AdvanceAfterExploreAsync(
+        AgentSession session,
+        AgentTurnCallbacks? callbacks,
+        CancellationToken cancellationToken)
+    {
+        var run = phaseAccessor.GetActiveRun(session.Id);
+        if (run is null)
+        {
+            return session;
+        }
+
+        if (run.PendingClarification is not null || run.Phase == PlanPhase.AwaitClarify)
+        {
+            run.Phase = PlanPhase.AwaitClarify;
+            run.Status = PlanRunStatuses.AwaitingClarification;
+            run.UpdatedAt = DateTimeOffset.UtcNow;
+            await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
+            return session;
+        }
+
+        if (run.Phase == PlanPhase.Explore)
+        {
+            run.Phase = PlanPhase.Draft;
+            await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
+            session = await RunPhaseAsync(
+                session,
+                run,
+                string.Empty,
+                callbacks,
+                cancellationToken,
+                appendUserMessage: false).ConfigureAwait(false);
+            run = phaseAccessor.GetActiveRun(session.Id)!;
+        }
+
+        if (run.Phase == PlanPhase.Draft)
+        {
+            session = await SealDraftAsync(session, run, callbacks, cancellationToken).ConfigureAwait(false);
         }
 
         return session;
@@ -158,7 +232,12 @@ public sealed class PlanTurnOrchestrator(
         run.PlanMarkdown = markdown;
         run.PlanPath = runStore.GetPlanMarkdownPath(session.Id);
         run.Title = PlanDocumentParser.ParseTitle(markdown) ?? run.Title ?? "Plan";
-        run.Todos = PlanDocumentParser.ParseTodos(markdown).ToList();
+        if (run.Todos.Count == 0)
+        {
+            run.Todos = PlanDocumentParser.ParseTodos(markdown).ToList();
+        }
+
+        run.PendingClarification = null;
         run.Status = PlanRunStatuses.AwaitingConfirmation;
         run.Phase = PlanPhase.AwaitConfirm;
         run.UpdatedAt = DateTimeOffset.UtcNow;

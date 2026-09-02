@@ -23,6 +23,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
     private readonly IChatScrollService _chatScroll;
     private readonly ISpeechToTextService _speechToText;
     private readonly ILocalizationService _loc;
+    private readonly IPlanPhaseAccessor _planPhaseAccessor;
     private string? _speechDraftBase;
 
     private Func<string>? _getDisplayedSessionId;
@@ -36,8 +37,6 @@ public sealed partial class ChatPageViewModel : ObservableObject
     private Func<IReadOnlyList<string>>? _getIgnorePatterns;
     private Func<bool>? _tryCancelCompaction;
     private Func<ComposerSlashCommandContext>? _createSlashCommandContext;
-    private Func<bool>? _isPlanRevisePending;
-    private Func<bool>? _tryConsumePlanRevisePending;
 
     public event EventHandler? FocusComposerRequested;
 
@@ -48,7 +47,8 @@ public sealed partial class ChatPageViewModel : ObservableObject
         IChatDocumentAttachmentExtractor documentExtractor,
         IChatScrollService chatScroll,
         ISpeechToTextService speechToText,
-        ILocalizationService localization)
+        ILocalizationService localization,
+        IPlanPhaseAccessor planPhaseAccessor)
     {
         _composer = composer;
         _sessionTurns = sessionTurns;
@@ -57,6 +57,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         _chatScroll = chatScroll;
         _speechToText = speechToText;
         _loc = localization;
+        _planPhaseAccessor = planPhaseAccessor;
 
         _speechToText.AvailabilityChanged += OnSpeechAvailabilityChanged;
         _speechToText.PartialText += OnSpeechPartialText;
@@ -78,9 +79,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         Action<bool> setIsBusy,
         Func<IReadOnlyList<string>> getIgnorePatterns,
         Func<bool> tryCancelCompaction,
-        Func<ComposerSlashCommandContext> createSlashCommandContext,
-        Func<bool>? isPlanRevisePending = null,
-        Func<bool>? tryConsumePlanRevisePending = null)
+        Func<ComposerSlashCommandContext> createSlashCommandContext)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
@@ -93,8 +92,6 @@ public sealed partial class ChatPageViewModel : ObservableObject
         _getIgnorePatterns = getIgnorePatterns;
         _tryCancelCompaction = tryCancelCompaction;
         _createSlashCommandContext = createSlashCommandContext;
-        _isPlanRevisePending = isPlanRevisePending;
-        _tryConsumePlanRevisePending = tryConsumePlanRevisePending;
     }
 
     public void RequestFocusComposer() => FocusComposerRequested?.Invoke(this, EventArgs.Empty);
@@ -380,14 +377,15 @@ public sealed partial class ChatPageViewModel : ObservableObject
         }
 
         var imageAttachments = _composer.PersistPendingImages(displayedSessionId, PendingImageAttachments);
-        var revisePending = _isPlanRevisePending?.Invoke() == true;
-        if (revisePending && string.IsNullOrWhiteSpace(input))
+        var planPhase = _planPhaseAccessor.GetPhase(displayedSessionId);
+        var revisePlan = planPhase == PlanPhase.AwaitConfirm;
+        if (revisePlan && string.IsNullOrWhiteSpace(input))
         {
             _showShellToast!.Invoke(_loc["Plan_ReviseRequiresInput"], ShellToastKind.Error);
             return;
         }
 
-        if (revisePending && _sessionTurns.IsRunning(displayedSessionId))
+        if (revisePlan && _sessionTurns.IsRunning(displayedSessionId))
         {
             _showShellToast!.Invoke(_loc["Plan_BusyCannotRevise"], ShellToastKind.Error);
             return;
@@ -410,20 +408,14 @@ public sealed partial class ChatPageViewModel : ObservableObject
         }
 
         ui.AddUserMessage(input, imageAttachments);
-        string? error;
-        if (revisePending && _tryConsumePlanRevisePending?.Invoke() == true)
-        {
-            error = _sessionTurns.TryStartPlanContinuation(
+        var error = revisePlan
+            ? _sessionTurns.TryStartPlanContinuation(
                 displayedSessionId,
                 session,
                 PlanContinuationKind.Revise,
                 ui,
-                input);
-        }
-        else
-        {
-            error = _sessionTurns.TryStartTurn(displayedSessionId, session, input, imageAttachments, ui);
-        }
+                input)
+            : _sessionTurns.TryStartTurn(displayedSessionId, session, input, imageAttachments, ui);
 
         if (error is not null)
         {
@@ -434,6 +426,46 @@ public sealed partial class ChatPageViewModel : ObservableObject
 
         UpdateDisplayedBusyState();
         _notifyCommandStatesChanged!();
+    }
+
+    public bool TrySubmitPlanInput(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)
+            || _getDisplayedSessionId is null
+            || _getSession is null
+            || _getActiveUi is null)
+        {
+            return false;
+        }
+
+        var displayedSessionId = _getDisplayedSessionId();
+        if (_sessionTurns.IsRunning(displayedSessionId))
+        {
+            _showShellToast?.Invoke(_loc["Plan_BusyCannotRevise"], ShellToastKind.Error);
+            return false;
+        }
+
+        var trimmed = input.Trim();
+        var session = _getSession();
+        _syncWorkspaceContext?.Invoke();
+        var ui = _sessionTurns.GetOrCreateUi(displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
+        ui.AddUserMessage(trimmed, Array.Empty<ImageAttachment>());
+        var error = _sessionTurns.TryStartTurn(
+            displayedSessionId,
+            session,
+            trimmed,
+            Array.Empty<ImageAttachment>(),
+            ui);
+        if (error is not null)
+        {
+            _showShellToast?.Invoke(error, ShellToastKind.Error);
+            _notifyCommandStatesChanged?.Invoke();
+            return false;
+        }
+
+        UpdateDisplayedBusyState();
+        _notifyCommandStatesChanged?.Invoke();
+        return true;
     }
 
     public Task<bool> SendComputerUseAsync(string prompt)

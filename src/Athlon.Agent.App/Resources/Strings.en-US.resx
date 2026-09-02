@@ -656,6 +656,36 @@ Hold to talk</value>
   <data name="Plan_ReviseCancelled" xml:space="preserve">
     <value>Revision cancelled — click Revise again when ready</value>
   </data>
+  <data name="Plan_ConfirmComposerHint" xml:space="preserve">
+    <value>Send to revise the plan</value>
+  </data>
+  <data name="Plan_ClarifyComposerHint" xml:space="preserve">
+    <value>Pick an option above, or type extra notes here</value>
+  </data>
+  <data name="Plan_ClarifyCardTitle" xml:space="preserve">
+    <value>Choose before planning continues</value>
+  </data>
+  <data name="Plan_ClarifyNotesPlaceholder" xml:space="preserve">
+    <value>Optional notes</value>
+  </data>
+  <data name="Plan_ClarifySubmit" xml:space="preserve">
+    <value>Submit</value>
+  </data>
+  <data name="Plan_ClarifyAnswered" xml:space="preserve">
+    <value>Answered</value>
+  </data>
+  <data name="Plan_ReadyCardTitle" xml:space="preserve">
+    <value>Plan</value>
+  </data>
+  <data name="Plan_TodosHeading" xml:space="preserve">
+    <value>Todos</value>
+  </data>
+  <data name="Plan_OpenInEditor" xml:space="preserve">
+    <value>Open in editor</value>
+  </data>
+  <data name="Plan_ClarifyEmptyAnswer" xml:space="preserve">
+    <value>Select an option or add a note first</value>
+  </data>
   <data name="Harness_Mode_Debug" xml:space="preserve">
     <value>Debug</value>
   </data>

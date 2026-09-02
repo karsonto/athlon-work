@@ -137,6 +137,14 @@ public sealed class ChatHtmlBuilder
             ["said"] = Strings.Get("Chat_ActivityVerbNarration"),
             ["unmodifiedLines"] = Strings.Get("Chat_UnmodifiedLines"),
             ["noDiffAvailable"] = Strings.Get("Chat_NoDiffAvailable"),
+            ["planClarifyTitle"] = Strings.Get("Plan_ClarifyCardTitle"),
+            ["planClarifyNotes"] = Strings.Get("Plan_ClarifyNotesPlaceholder"),
+            ["planClarifySubmit"] = Strings.Get("Plan_ClarifySubmit"),
+            ["planClarifyAnswered"] = Strings.Get("Plan_ClarifyAnswered"),
+            ["planReadyTitle"] = Strings.Get("Plan_ReadyCardTitle"),
+            ["planTodos"] = Strings.Get("Plan_TodosHeading"),
+            ["planOpenEditor"] = Strings.Get("Plan_OpenInEditor"),
+            ["planBuild"] = Strings.Get("Harness_PlanBuild"),
         };
 
     private static string BuildEmptyStateHtml(string? ssoDisplayName)

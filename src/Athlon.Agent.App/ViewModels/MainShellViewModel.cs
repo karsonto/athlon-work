@@ -79,7 +79,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private Controls.WebChatView? _savedChatView;
     private ConversationDisplayCursor? _olderDisplayCursor;
     private bool _olderHistoryLoadInProgress;
-    private bool _suppressPlanAbandonOnModeChange;
 
     public MainShellViewModel(
         IFileStorageService storage,
@@ -188,11 +187,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             () => _displayedSessionId,
             () => _session,
             session => _session = session,
-            () => _activeUi,
             ShowShellToast,
             StartCodingFromApprovedPlanAsync,
-            path => _ = FileEditor.OpenFileAsync(path, workspaceRoot: null, readOnly: true),
-            focusComposer: () => ChatPage.RequestFocusComposer(),
+            onPlanTimeline: OnPlanTimeline,
+            onPlanClarifyResolved: requestId => _ = _savedChatView?.ResolvePlanClarifyAsync(requestId),
             setComposerHint: SetComposerStatus);
         ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
         ComposerHarness.OnModeChangedAsync = OnComposerModeChangedAsync;
@@ -208,9 +206,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             busy => IsBusy = busy,
             () => _workspaceContext.IgnorePatterns,
             TryCancelCompaction,
-            CreateSlashCommandContext,
-            isPlanRevisePending: () => PlanBar.IsRevisePending,
-            tryConsumePlanRevisePending: () => PlanBar.TryConsumeRevisePending());
+            CreateSlashCommandContext);
         Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
         Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
         Settings.SettingsSaved += async (_, _) => await OnSettingsSavedAsync();
@@ -1044,12 +1040,18 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
+            _savedChatView.PlanClarifyAnswerReceived -= OnPlanClarifyAnswerReceived;
+            _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
+            _savedChatView.PlanOpenEditorRequested -= OnPlanOpenEditorRequested;
         }
 
         _savedChatView = chatView;
         chatView.OlderMessagesRequested += OnOlderMessagesRequested;
         chatView.ExternalLinkRequested += OnChatExternalLinkRequested;
         chatView.ToolDetailRequested += OnToolDetailRequested;
+        chatView.PlanClarifyAnswerReceived += OnPlanClarifyAnswerReceived;
+        chatView.PlanBuildRequested += OnPlanBuildRequested;
+        chatView.PlanOpenEditorRequested += OnPlanOpenEditorRequested;
         _uiCache.AttachChatViewToAll(chatView);
         _activeUi.ChatView = chatView;
         _ = _activeUi.ReloadChatViewAsync();
@@ -1781,12 +1783,68 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             await DebugBar.AbandonActiveRunAsync().ConfigureAwait(true);
         }
 
-        if (from == SessionAgentMode.Plan
-            && to != SessionAgentMode.Plan
-            && !_suppressPlanAbandonOnModeChange)
+        if (to == SessionAgentMode.Plan)
         {
-            await PlanBar.AbandonActiveRunAsync().ConfigureAwait(true);
+            PlanBar.RefreshFromActiveRun();
+            var run = PlanBar.GetActiveRun();
+            if (run is not null)
+            {
+                OnPlanTimeline(run);
+            }
         }
+    }
+
+    private void OnPlanTimeline(PlanRun run)
+    {
+        if (_savedChatView is null)
+        {
+            return;
+        }
+
+        if (run.Phase == PlanPhase.AwaitClarify && run.PendingClarification is not null)
+        {
+            _ = _savedChatView.ShowPlanClarifyAsync(run.PendingClarification);
+            return;
+        }
+
+        if (run.Phase == PlanPhase.AwaitConfirm)
+        {
+            _ = _savedChatView.ShowPlanReadyAsync(run);
+        }
+    }
+
+    private void OnPlanClarifyAnswerReceived(object? sender, Controls.PlanClarifyAnswerEventArgs e)
+    {
+        var run = PlanBar.GetActiveRun();
+        if (run?.PendingClarification is null
+            || !string.Equals(run.PendingClarification.RequestId, e.RequestId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var text = PlanClarification.FormatUserAnswer(run.PendingClarification, e.Selections, e.FreeText);
+        if (string.IsNullOrWhiteSpace(text)
+            || (e.Selections.Count == 0 && string.IsNullOrWhiteSpace(e.FreeText)))
+        {
+            ShowShellToast(_loc["Plan_ClarifyEmptyAnswer"], ShellToastKind.Error);
+            return;
+        }
+
+        _ = _savedChatView?.ResolvePlanClarifyAsync(e.RequestId, text);
+        ChatPage.TrySubmitPlanInput(text);
+    }
+
+    private void OnPlanBuildRequested(object? sender, EventArgs e)
+    {
+        if (PlanBar.BuildCommand.CanExecute(null))
+        {
+            PlanBar.BuildCommand.Execute(null);
+        }
+    }
+
+    private void OnPlanOpenEditorRequested(object? sender, string path)
+    {
+        _ = FileEditor.OpenFileAsync(path, _session.ActiveWorkspace, readOnly: false);
     }
 
     private async Task StartCodingFromApprovedPlanAsync()
@@ -1811,24 +1869,27 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _taskListChangedNotifier.Notify(sessionId);
         }
 
-        _suppressPlanAbandonOnModeChange = true;
-        try
+        if (ComposerHarness.SelectModeCommand.CanExecute(SessionAgentMode.Coding))
         {
-            if (ComposerHarness.SelectModeCommand.CanExecute(SessionAgentMode.Coding))
-            {
-                await ComposerHarness.SelectModeCommand.ExecuteAsync(SessionAgentMode.Coding).ConfigureAwait(true);
-            }
-        }
-        finally
-        {
-            _suppressPlanAbandonOnModeChange = false;
+            await ComposerHarness.SelectModeCommand.ExecuteAsync(SessionAgentMode.Coding).ConfigureAwait(true);
         }
 
-        await PlanBar.AbandonActiveRunAsync().ConfigureAwait(true);
-        ComposerText = _loc["Harness_ConfirmPlanPrompt"];
-        if (SendCommand.CanExecute(null))
+        var prompt = _loc["Harness_ConfirmPlanPrompt"];
+        var ui = _sessionTurns.GetOrCreateUi(
+            sessionId,
+            _chatScroll.ScrollToBottom,
+            _chatScroll.ScrollToBottomImmediate);
+        ui.ResetForTurn();
+        var error = _sessionTurns.TryStartTurn(
+            sessionId,
+            _session,
+            prompt,
+            Array.Empty<ImageAttachment>(),
+            ui,
+            appendUserMessage: false);
+        if (error is not null)
         {
-            await SendCommand.ExecuteAsync(null).ConfigureAwait(true);
+            ShowShellToast(error, ShellToastKind.Error);
         }
     }
 

@@ -34,6 +34,7 @@ public sealed class ApprovedPlanPromptContributor(
             return;
         }
 
+        builder.AppendLine("The user clicked Build and approved this plan. Start implementing it now; do not wait for another user message.");
         builder.AppendLine("Approved Session Plan (source of truth — implement this; update todos if scope changes):");
         builder.AppendLine("<approved_session_plan>");
         builder.AppendLine(content.Trim());

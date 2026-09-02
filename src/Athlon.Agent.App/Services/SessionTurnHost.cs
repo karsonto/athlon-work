@@ -17,7 +17,8 @@ public sealed record SessionTurnRequest(
     bool IsAutoContinue = false,
     bool ComputerUseActive = false,
     DebugContinuationKind? DebugContinuation = null,
-    PlanContinuationKind? PlanContinuation = null);
+    PlanContinuationKind? PlanContinuation = null,
+    bool AppendUserMessage = true);
 
 public enum SessionTurnState
 {
@@ -471,7 +472,8 @@ public sealed class SessionTurnHost
                         _request.ImageAttachments,
                         callbacks,
                         turnToken,
-                        _request.ComputerUseActive).ConfigureAwait(false);
+                        _request.ComputerUseActive,
+                        appendUserMessage: _request.AppendUserMessage).ConfigureAwait(false);
                 }
 
                 // Keep live handle aligned with the successful return (orchestrators may not

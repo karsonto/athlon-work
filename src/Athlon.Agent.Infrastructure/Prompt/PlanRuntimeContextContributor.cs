@@ -56,14 +56,18 @@ internal static class PlanPhaseInstructions
     {
         PlanPhase.Explore =>
             "Phase Explore: read/search the workspace to understand scope. Do not call publish_plan yet. "
-            + "Do not edit files or run shell. Summarize findings briefly; the next phase will draft the plan.",
+            + "If the goal or approach is unclear, call ask_plan_clarification with 1–3 questions and concrete options, then stop. "
+            + "Do not edit files or run shell. If information is sufficient, summarize briefly; the next phase will draft the plan.",
+        PlanPhase.AwaitClarify =>
+            "Phase AwaitClarify: you already asked the user. Do not call publish_plan or ask_plan_clarification again. "
+            + "Wait for the user's selection or notes.",
         PlanPhase.Draft =>
             "Phase Draft: call publish_plan with title, overview, and a markdown body that includes "
             + "`## Steps` (numbered) and `## Acceptance` (checklist). Optional todos array seeds Coding tasks after Build. "
             + "Do not implement code.",
         PlanPhase.AwaitConfirm =>
-            "Phase AwaitConfirm: the plan is waiting for the user. Answer clarifying questions only. "
-            + "Do not call publish_plan, edit files, or start implementation.",
+            "Phase AwaitConfirm: the plan is waiting for the user. If they send new instructions, treat them as a revision request. "
+            + "Do not call publish_plan, edit files, or start implementation unless this turn is a revision Draft.",
         PlanPhase.Done =>
             "Phase Done: this plan run is finished. Do not continue planning.",
         _ => "Follow Plan mode rules."

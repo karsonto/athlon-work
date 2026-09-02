@@ -1,4 +1,3 @@
-using System.IO;
 using System.Windows;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
@@ -22,12 +21,12 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
     private Func<string>? _getDisplayedSessionId;
     private Func<AgentSession>? _getSession;
     private Action<AgentSession>? _setSession;
-    private Func<SessionTurnUiController>? _getActiveUi;
     private Action<string?, ShellToastKind>? _showToast;
     private Func<Task>? _onBuildApprovedAsync;
-    private Action<string>? _openPlanPreview;
-    private Action? _focusComposer;
+    private Action<PlanRun>? _onPlanTimeline;
+    private Action<string>? _onPlanClarifyResolved;
     private Action<string?>? _setComposerHint;
+    private string? _lastTimelineKey;
 
     public PlanActionBarViewModel(
         SessionTurnCoordinator sessionTurns,
@@ -50,21 +49,19 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         Func<string> getDisplayedSessionId,
         Func<AgentSession> getSession,
         Action<AgentSession> setSession,
-        Func<SessionTurnUiController> getActiveUi,
         Action<string?, ShellToastKind> showToast,
         Func<Task> onBuildApprovedAsync,
-        Action<string> openPlanPreview,
-        Action? focusComposer = null,
+        Action<PlanRun>? onPlanTimeline = null,
+        Action<string>? onPlanClarifyResolved = null,
         Action<string?>? setComposerHint = null)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
         _setSession = setSession;
-        _getActiveUi = getActiveUi;
         _showToast = showToast;
         _onBuildApprovedAsync = onBuildApprovedAsync;
-        _openPlanPreview = openPlanPreview;
-        _focusComposer = focusComposer;
+        _onPlanTimeline = onPlanTimeline;
+        _onPlanClarifyResolved = onPlanClarifyResolved;
         _setComposerHint = setComposerHint;
         RequestRefreshFromActiveRun();
     }
@@ -79,18 +76,15 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
     private string _summary = string.Empty;
 
     [ObservableProperty]
+    private string _todosSummary = string.Empty;
+
+    [ObservableProperty]
     private bool _showBuild;
-
-    [ObservableProperty]
-    private bool _showRevise;
-
-    [ObservableProperty]
-    private bool _isRevisePending;
 
     private void OnRunChanged(object? sender, PlanRunChangedEventArgs e)
     {
         RequestRefreshFromActiveRun();
-        TryOpenPlanPreview(e.Run);
+        DispatchPlanTimeline(e.Run);
     }
 
     private void RequestRefreshFromActiveRun()
@@ -109,14 +103,18 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
     {
         var sessionId = _getDisplayedSessionId?.Invoke();
         var run = string.IsNullOrWhiteSpace(sessionId) ? null : _planPhaseAccessor.GetActiveRun(sessionId);
+        if (run is null && !string.IsNullOrWhiteSpace(sessionId))
+        {
+            _ = HydrateActiveRunAsync(sessionId);
+        }
+        ApplyComposerHint(run);
         IsVisible = run is not null && run.Phase == PlanPhase.AwaitConfirm;
         if (run is null || run.Phase != PlanPhase.AwaitConfirm)
         {
             PhaseLabel = string.Empty;
             Summary = string.Empty;
+            TodosSummary = string.Empty;
             ShowBuild = false;
-            ShowRevise = false;
-            ClearRevisePending();
             NotifyActionCommands();
             return;
         }
@@ -125,9 +123,19 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         Summary = !string.IsNullOrWhiteSpace(run.Overview)
             ? run.Overview!
             : (run.Title ?? run.Goal ?? string.Empty);
+        TodosSummary = run.Todos.Count == 0
+            ? string.Empty
+            : string.Join(
+                Environment.NewLine,
+                run.Todos.Select(t => "• " + t.Content));
         ShowBuild = true;
-        ShowRevise = true;
         NotifyActionCommands();
+    }
+
+    public PlanRun? GetActiveRun()
+    {
+        var sessionId = _getDisplayedSessionId?.Invoke();
+        return string.IsNullOrWhiteSpace(sessionId) ? null : _planPhaseAccessor.GetActiveRun(sessionId);
     }
 
     public async Task AbandonActiveRunAsync()
@@ -143,34 +151,12 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
             _sessionTurns.Cancel(sessionId);
         }
 
-        ClearRevisePending();
         _planPhaseAccessor.Clear(sessionId);
         await _planRunStore.ClearActiveAsync(sessionId).ConfigureAwait(true);
         _planSessionState.NotifyChanged(null);
-        RequestRefreshFromActiveRun();
-    }
-
-    /// <summary>If revise is pending, clears it and returns true so Send can start PlanContinuation.Revise.</summary>
-    public bool TryConsumeRevisePending()
-    {
-        if (!IsRevisePending)
-        {
-            return false;
-        }
-
-        ClearRevisePending();
-        return true;
-    }
-
-    public void ClearRevisePending()
-    {
-        if (!IsRevisePending)
-        {
-            return;
-        }
-
-        IsRevisePending = false;
+        _lastTimelineKey = null;
         _setComposerHint?.Invoke(null);
+        RequestRefreshFromActiveRun();
     }
 
     [RelayCommand(CanExecute = nameof(CanBuild))]
@@ -188,7 +174,6 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
             return;
         }
 
-        ClearRevisePending();
         try
         {
             var session = await _planOrchestrator.ContinueAsync(
@@ -209,59 +194,97 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         }
     }
 
-    [RelayCommand(CanExecute = nameof(CanRevise))]
-    private void Revise()
-    {
-        if (!ShowRevise)
-        {
-            return;
-        }
-
-        if (IsRevisePending)
-        {
-            ClearRevisePending();
-            _showToast?.Invoke(_loc["Plan_ReviseCancelled"], ShellToastKind.Info);
-            return;
-        }
-
-        IsRevisePending = true;
-        _setComposerHint?.Invoke(_loc["Plan_ReviseComposerHint"]);
-        _showToast?.Invoke(_loc["Plan_ReviseComposerHint"], ShellToastKind.Info);
-        _focusComposer?.Invoke();
-    }
-
     private bool CanBuild() => ShowBuild;
 
-    private bool CanRevise() => ShowRevise;
+    private void NotifyActionCommands() => BuildCommand.NotifyCanExecuteChanged();
 
-    private void NotifyActionCommands()
+    private async Task HydrateActiveRunAsync(string sessionId)
     {
-        BuildCommand.NotifyCanExecuteChanged();
-        ReviseCommand.NotifyCanExecuteChanged();
+        try
+        {
+            var stored = await _planRunStore.LoadActiveAsync(sessionId).ConfigureAwait(true);
+            if (stored is null || !string.Equals(sessionId, _getDisplayedSessionId?.Invoke(), StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _planPhaseAccessor.SetActiveRun(stored);
+            _planSessionState.NotifyChanged(stored);
+        }
+        catch
+        {
+            // Hydration is best-effort; the next user turn reloads from the store.
+        }
     }
 
-    private void TryOpenPlanPreview(PlanRun? run)
+    private void ApplyComposerHint(PlanRun? run)
     {
-        if (run is null
-            || string.IsNullOrWhiteSpace(run.PlanPath)
-            || run.Phase is not (PlanPhase.Draft or PlanPhase.AwaitConfirm))
+        if (run is null)
+        {
+            _setComposerHint?.Invoke(null);
+            return;
+        }
+
+        if (run.Phase == PlanPhase.AwaitConfirm)
+        {
+            _setComposerHint?.Invoke(_loc["Plan_ConfirmComposerHint"]);
+            return;
+        }
+
+        if (run.Phase == PlanPhase.AwaitClarify)
+        {
+            _setComposerHint?.Invoke(_loc["Plan_ClarifyComposerHint"]);
+            return;
+        }
+
+        _setComposerHint?.Invoke(null);
+    }
+
+    private void DispatchPlanTimeline(PlanRun? run)
+    {
+        if (run is null)
         {
             return;
         }
 
-        if (!File.Exists(run.PlanPath))
-        {
-            return;
-        }
-
-        var path = run.PlanPath;
         var dispatcher = Application.Current?.Dispatcher;
+        if (_lastTimelineKey is not null
+            && _lastTimelineKey.StartsWith("clarify:", StringComparison.Ordinal)
+            && run.Phase != PlanPhase.AwaitClarify)
+        {
+            var requestId = _lastTimelineKey["clarify:".Length..];
+            _lastTimelineKey = null;
+            var resolve = _onPlanClarifyResolved;
+            if (resolve is not null)
+            {
+                if (dispatcher is not null && !dispatcher.CheckAccess())
+                {
+                    dispatcher.InvokeAsync(() => resolve(requestId));
+                }
+                else
+                {
+                    resolve(requestId);
+                }
+            }
+        }
+
+        var key = run.Phase == PlanPhase.AwaitClarify
+            ? "clarify:" + (run.PendingClarification?.RequestId ?? run.Id)
+            : run.Phase == PlanPhase.AwaitConfirm
+                ? "ready:" + run.Id + ":" + run.UpdatedAt.ToUnixTimeMilliseconds()
+                : null;
+        if (key is null || string.Equals(key, _lastTimelineKey, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastTimelineKey = key;
         if (dispatcher is not null && !dispatcher.CheckAccess())
         {
-            dispatcher.InvokeAsync(() => _openPlanPreview?.Invoke(path));
+            dispatcher.InvokeAsync(() => _onPlanTimeline?.Invoke(run));
             return;
         }
 
-        _openPlanPreview?.Invoke(path);
+        _onPlanTimeline?.Invoke(run);
     }
 }

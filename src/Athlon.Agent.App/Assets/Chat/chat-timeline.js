@@ -1503,6 +1503,231 @@ function upsertCompactionCheckpoint(event) {
   scrollToBottom();
 }
 
+function isPlanSpecialTool(name) {
+  return name === 'ask_plan_clarification' || name === 'publish_plan';
+}
+
+function getPlanClarifyCard(requestId) {
+  if (!requestId) return null;
+  return document.querySelector('.plan-clarify-card[data-request-id="' + cssEscape(requestId) + '"]');
+}
+
+function getPlanReadyCard(runId) {
+  if (!runId) return null;
+  return document.querySelector('.plan-ready-card[data-run-id="' + cssEscape(runId) + '"]');
+}
+
+function showPlanClarify(event) {
+  if (!event || !event.requestId || !event.questions || !event.questions.length) return;
+  var existing = getPlanClarifyCard(event.requestId);
+  var card;
+  if (existing) {
+    card = existing;
+  } else {
+    state.currentAssistantEl = null;
+    state.currentReasoningEl = null;
+    var row = document.createElement('div');
+    row.className = 'message-row assistant plan-row';
+    card = document.createElement('div');
+    card.className = 'plan-clarify-card';
+    row.appendChild(card);
+    getMessageRoot().appendChild(row);
+    updateEmptyStateVisibility();
+  }
+  card.dataset.requestId = event.requestId;
+  card.innerHTML = '';
+
+  var title = document.createElement('div');
+  title.className = 'plan-card-title';
+  title.dataset.i18n = 'planClarifyTitle';
+  title.textContent = t('planClarifyTitle');
+  card.appendChild(title);
+
+  (event.questions || []).forEach(function (question) {
+    var block = document.createElement('div');
+    block.className = 'plan-clarify-question';
+    block.dataset.questionId = question.id || '';
+    block.dataset.allowMultiple = question.allowMultiple ? '1' : '0';
+    var prompt = document.createElement('div');
+    prompt.className = 'plan-clarify-prompt';
+    prompt.textContent = question.prompt || '';
+    block.appendChild(prompt);
+    var options = document.createElement('div');
+    options.className = 'plan-clarify-options';
+    (question.options || []).forEach(function (option) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'plan-clarify-option';
+      btn.dataset.optionId = option.id || '';
+      btn.textContent = option.label || option.id || '';
+      btn.addEventListener('click', function () {
+        if (card.dataset.resolved === '1') return;
+        if (block.dataset.allowMultiple === '1') {
+          btn.classList.toggle('selected');
+        } else {
+          options.querySelectorAll('.plan-clarify-option').forEach(function (other) {
+            other.classList.toggle('selected', other === btn);
+          });
+        }
+      });
+      options.appendChild(btn);
+    });
+    block.appendChild(options);
+    card.appendChild(block);
+  });
+
+  if (event.allowFreeText !== false) {
+    var note = document.createElement('textarea');
+    note.className = 'plan-clarify-notes';
+    note.rows = 2;
+    note.placeholder = t('planClarifyNotes');
+    note.dataset.i18nPlaceholder = 'planClarifyNotes';
+    card.appendChild(note);
+  }
+
+  var actions = document.createElement('div');
+  actions.className = 'plan-card-actions';
+  var submit = document.createElement('button');
+  submit.type = 'button';
+  submit.className = 'plan-card-button primary';
+  submit.dataset.i18n = 'planClarifySubmit';
+  submit.textContent = t('planClarifySubmit');
+  submit.addEventListener('click', function () {
+    submitPlanClarify(card);
+  });
+  actions.appendChild(submit);
+  card.appendChild(actions);
+
+  if (event.resolved) {
+    applyPlanClarifyResolved(card, event.summary);
+  }
+  scrollToBottom(true);
+}
+
+function submitPlanClarify(card) {
+  if (!card || card.dataset.resolved === '1') return;
+  var selections = {};
+  var hasSelection = false;
+  card.querySelectorAll('.plan-clarify-question').forEach(function (block) {
+    var qid = block.dataset.questionId || '';
+    var ids = [];
+    block.querySelectorAll('.plan-clarify-option.selected').forEach(function (btn) {
+      if (btn.dataset.optionId) ids.push(btn.dataset.optionId);
+    });
+    if (qid && ids.length) {
+      selections[qid] = ids;
+      hasSelection = true;
+    }
+  });
+  var notes = card.querySelector('.plan-clarify-notes');
+  var freeText = notes && notes.value ? String(notes.value).trim() : '';
+  if (!hasSelection && !freeText) return;
+  post({
+    type: 'planClarifyAnswer',
+    requestId: card.dataset.requestId,
+    selections: selections,
+    freeText: freeText
+  });
+}
+
+function applyPlanClarifyResolved(card, summary) {
+  if (!card) return;
+  card.dataset.resolved = '1';
+  card.querySelectorAll('button, textarea').forEach(function (el) {
+    el.disabled = true;
+  });
+  var result = card.querySelector('.plan-clarify-result');
+  if (!result) {
+    result = document.createElement('div');
+    result.className = 'plan-clarify-result';
+    card.appendChild(result);
+  }
+  result.textContent = summary || t('planClarifyAnswered');
+  result.dataset.i18n = summary ? '' : 'planClarifyAnswered';
+}
+
+function resolvePlanClarify(event) {
+  var card = getPlanClarifyCard(event && event.requestId);
+  if (!card) return;
+  applyPlanClarifyResolved(card, event && event.summary);
+}
+
+function showPlanReady(event) {
+  if (!event) return;
+  var runId = event.runId || 'plan';
+  var existing = getPlanReadyCard(runId);
+  var card;
+  if (existing) {
+    card = existing;
+    card.innerHTML = '';
+  } else {
+    state.currentAssistantEl = null;
+    state.currentReasoningEl = null;
+    var row = document.createElement('div');
+    row.className = 'message-row assistant plan-row';
+    card = document.createElement('div');
+    card.className = 'plan-ready-card';
+    row.appendChild(card);
+    getMessageRoot().appendChild(row);
+    updateEmptyStateVisibility();
+  }
+  card.dataset.runId = runId;
+  if (event.planPath) card.dataset.planPath = event.planPath;
+
+  var title = document.createElement('div');
+  title.className = 'plan-card-title';
+  title.textContent = event.title || t('planReadyTitle');
+  card.appendChild(title);
+
+  var body = document.createElement('div');
+  body.className = 'plan-ready-body md-root';
+  applyMarkdownHtml(body, resolveRenderedHtml(event, event.overview || ''));
+  card.appendChild(body);
+
+  if (event.todos && event.todos.length) {
+    var todosWrap = document.createElement('div');
+    todosWrap.className = 'plan-ready-todos';
+    var todosTitle = document.createElement('div');
+    todosTitle.className = 'plan-card-subtitle';
+    todosTitle.dataset.i18n = 'planTodos';
+    todosTitle.textContent = t('planTodos');
+    todosWrap.appendChild(todosTitle);
+    var list = document.createElement('ul');
+    event.todos.forEach(function (todo) {
+      var item = document.createElement('li');
+      item.textContent = todo.content || todo.id || '';
+      list.appendChild(item);
+    });
+    todosWrap.appendChild(list);
+    card.appendChild(todosWrap);
+  }
+
+  var actions = document.createElement('div');
+  actions.className = 'plan-card-actions';
+  if (event.planPath) {
+    var openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.className = 'plan-card-button';
+    openBtn.dataset.i18n = 'planOpenEditor';
+    openBtn.textContent = t('planOpenEditor');
+    openBtn.addEventListener('click', function () {
+      post({ type: 'planOpenEditor', path: card.dataset.planPath });
+    });
+    actions.appendChild(openBtn);
+  }
+  var buildBtn = document.createElement('button');
+  buildBtn.type = 'button';
+  buildBtn.className = 'plan-card-button primary';
+  buildBtn.dataset.i18n = 'planBuild';
+  buildBtn.textContent = t('planBuild');
+  buildBtn.addEventListener('click', function () {
+    post({ type: 'planBuild' });
+  });
+  actions.appendChild(buildBtn);
+  card.appendChild(actions);
+  scrollToBottom(true);
+}
+
 function appendOverflowSkipped(event) {
   state.currentAssistantEl = null;
   state.currentReasoningEl = null;
@@ -1592,6 +1817,10 @@ function handleEvent(event) {
       break;
     }
     case 'TOOL_CALL_START':
+      if (isPlanSpecialTool(event.toolCallName)) {
+        state.currentAssistantEl = null;
+        break;
+      }
       createToolCard(event.toolCallId, event.toolCallName);
       break;
     case 'TOOL_CALL_ARGS': {
@@ -1625,6 +1854,15 @@ function handleEvent(event) {
       break;
     case 'TOOL_APPROVAL_RESOLVED':
       resolveToolApproval(event);
+      break;
+    case 'PLAN_CLARIFY_REQUEST':
+      showPlanClarify(event);
+      break;
+    case 'PLAN_CLARIFY_RESOLVED':
+      resolvePlanClarify(event);
+      break;
+    case 'PLAN_READY':
+      showPlanReady(event);
       break;
     case 'TOOL_CALL_OUTPUT': {
       const card = getToolCard(event.toolCallId);

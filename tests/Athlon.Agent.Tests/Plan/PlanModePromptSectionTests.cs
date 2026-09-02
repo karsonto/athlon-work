@@ -1,6 +1,7 @@
 using System.Text;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Harness;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Infrastructure.Prompt;
 
@@ -16,6 +17,7 @@ public sealed class PlanModePromptSectionTests
         section.Append(sb, CreateContext(SessionAgentMode.Plan));
 
         var text = sb.ToString();
+        Assert.Contains("ask_plan_clarification", text, StringComparison.Ordinal);
         Assert.Contains("publish_plan", text, StringComparison.Ordinal);
         Assert.Contains("Build", text, StringComparison.Ordinal);
     }
@@ -37,6 +39,7 @@ public sealed class PlanModePromptSectionTests
         var text = sb.ToString();
         Assert.Contains("Plan mode", text, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("publish_plan", text, StringComparison.Ordinal);
+        Assert.Contains("ask_plan_clarification", text, StringComparison.Ordinal);
     }
 
     private static EnvironmentPromptContext CreateContext(SessionAgentMode mode) =>
@@ -94,5 +97,49 @@ public sealed class PlanDocumentParserTests
             - [ ] Feature works
             """);
         Assert.NotEmpty(todos);
+    }
+}
+
+public sealed class PlanClarificationTests
+{
+    [Fact]
+    public void FormatUserAnswer_IncludesSelectedLabelsAndNotes()
+    {
+        var clarification = new Athlon.Agent.Core.Plan.PlanClarification
+        {
+            RequestId = "r1",
+            Questions =
+            [
+                new()
+                {
+                    Id = "platform",
+                    Prompt = "Which platform?",
+                    Options =
+                    [
+                        new() { Id = "web", Label = "Web" },
+                        new() { Id = "desktop", Label = "Desktop" }
+                    ]
+                }
+            ]
+        };
+
+        var text = Athlon.Agent.Core.Plan.PlanClarification.FormatUserAnswer(
+            clarification,
+            new Dictionary<string, IReadOnlyList<string>> { ["platform"] = ["desktop"] },
+            "Use toasts");
+
+        Assert.Contains("Which platform?: Desktop", text, StringComparison.Ordinal);
+        Assert.Contains("Use toasts", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AwaitClarify_IsAwaitingUserAndReadOnly()
+    {
+        Assert.True(Athlon.Agent.Core.Plan.PlanPhase.AwaitClarify.IsAwaitingUser());
+        Assert.True(Athlon.Agent.Core.Plan.PlanPhase.AwaitClarify.IsReadOnly());
+        Assert.True(Athlon.Agent.Core.Plan.PlanPhase.AwaitClarify.BlocksMcp());
+        Assert.False(Athlon.Agent.Core.Plan.PlanPhase.AwaitClarify.AllowsPublishPlan());
+        Assert.True(Athlon.Agent.Core.Plan.PlanPhase.Explore.AllowsAskClarification());
+        Assert.False(Athlon.Agent.Core.Plan.PlanPhase.Draft.AllowsAskClarification());
     }
 }

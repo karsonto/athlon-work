@@ -72,6 +72,11 @@ public static class ToolAvailabilityPolicy
                 || ctx.ActivePlanPhase is not PlanPhase.Draft,
             static (_, facets) => facets.HasFlag(ToolFacet.PlanDocument) ? false : null),
         new(
+            "plan-clarify-explore-only",
+            static ctx => ctx.Mode != SessionAgentMode.Plan
+                || ctx.ActivePlanPhase is not PlanPhase.Explore,
+            static (_, facets) => facets.HasFlag(ToolFacet.PlanClarify) ? false : null),
+        new(
             "plan-block-writes-shell-subagents",
             static ctx => ctx.Mode == SessionAgentMode.Plan,
             static (_, facets) =>

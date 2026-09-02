@@ -22,6 +22,7 @@ public sealed class PlanToolAvailabilityPolicyTests
     [InlineData(PlanPhase.Explore, false)]
     [InlineData(PlanPhase.Draft, false)]
     [InlineData(PlanPhase.AwaitConfirm, false)]
+    [InlineData(PlanPhase.AwaitClarify, false)]
     public void PlanMode_BlocksWrites(PlanPhase phase, bool expectedWrite)
     {
         var ctx = PlanCtx(phase);
@@ -32,6 +33,7 @@ public sealed class PlanToolAvailabilityPolicyTests
     [InlineData(PlanPhase.Explore, false)]
     [InlineData(PlanPhase.Draft, true)]
     [InlineData(PlanPhase.AwaitConfirm, false)]
+    [InlineData(PlanPhase.AwaitClarify, false)]
     public void PlanMode_PublishPlan_DraftOnly(PlanPhase phase, bool expected)
     {
         var ctx = PlanCtx(phase);
@@ -46,11 +48,29 @@ public sealed class PlanToolAvailabilityPolicyTests
         Assert.False(ToolAvailabilityPolicy.IsEnabled(new StubSubAgent("sessions_spawn"), ctx));
     }
 
+    [Theory]
+    [InlineData(PlanPhase.Explore, true)]
+    [InlineData(PlanPhase.Draft, false)]
+    [InlineData(PlanPhase.AwaitConfirm, false)]
+    [InlineData(PlanPhase.AwaitClarify, false)]
+    public void PlanMode_AskClarification_ExploreOnly(PlanPhase phase, bool expected)
+    {
+        var ctx = PlanCtx(phase);
+        Assert.Equal(expected, ToolAvailabilityPolicy.IsEnabled(new StubPlanClarify("ask_plan_clarification"), ctx));
+    }
+
     [Fact]
     public void Classifier_TagsPlanDocumentFacet()
     {
         Assert.True(ToolFacetClassifier.Classify(new StubPlanDocument("publish_plan")).HasFlag(ToolFacet.PlanDocument));
         Assert.False(ToolFacetClassifier.Classify(new StubNamed("file_read")).HasFlag(ToolFacet.PlanDocument));
+    }
+
+    [Fact]
+    public void Classifier_TagsPlanClarifyFacet()
+    {
+        Assert.True(ToolFacetClassifier.Classify(new StubPlanClarify("ask_plan_clarification")).HasFlag(ToolFacet.PlanClarify));
+        Assert.False(ToolFacetClassifier.Classify(new StubPlanDocument("publish_plan")).HasFlag(ToolFacet.PlanClarify));
     }
 
     private sealed class StubNamed(string name) : IAgentTool
@@ -62,6 +82,14 @@ public sealed class PlanToolAvailabilityPolicyTests
     }
 
     private sealed class StubLocalWrite(string name) : IAgentTool, ILocalWorkspaceTool
+    {
+        public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
+
+        public Task<ToolResult> InvokeAsync(ToolInvocation invocation, CancellationToken cancellationToken = default) =>
+            Task.FromResult(ToolResult.Success("ok"));
+    }
+
+    private sealed class StubPlanClarify(string name) : IAgentTool, IPlanClarifyTool
     {
         public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
 

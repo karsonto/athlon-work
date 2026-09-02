@@ -35,8 +35,9 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
                 break;
             case SessionAgentMode.Plan:
                 builder.AppendLine("- The user selected Plan mode — produce an implementation plan for review before coding.");
-                builder.AppendLine("- Explore with read/search tools only; publish the plan with publish_plan in Draft; never implement.");
-                builder.AppendLine("- After the plan is published, wait for the user to Build (switch to Coding) or Revise.");
+                builder.AppendLine("- Explore with read/search tools only; if the request is ambiguous, ask with ask_plan_clarification before drafting.");
+                builder.AppendLine("- Publish the plan with publish_plan in Draft; never implement.");
+                builder.AppendLine("- After the plan is published, wait for the user to Build (switch to Coding) or send a revision.");
                 break;
             case SessionAgentMode.Debug:
                 builder.AppendLine("- The user selected Debug mode — investigate a reproducible bug with runtime logs.");

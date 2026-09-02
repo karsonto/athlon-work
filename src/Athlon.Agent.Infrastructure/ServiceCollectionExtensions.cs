@@ -147,6 +147,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, GlobFilesTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.RuntimeDiagnostics.DiagnoseLogsTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Plan.PublishPlanTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Plan.AskPlanClarificationTool>();
         services.AddSingleton<IAgentTool, ExecuteCommandTool>();
         services.AddSingleton<IAgentTool, SshFileListTool>();
         services.AddSingleton<IAgentTool, SshFileReadTool>();

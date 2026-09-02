@@ -29,6 +29,8 @@ public sealed class PlanRun
 
     public List<PlanTodoItem> Todos { get; set; } = [];
 
+    public PlanClarification? PendingClarification { get; set; }
+
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -51,6 +53,7 @@ public sealed class PlanRun
         PlanMarkdown = PlanMarkdown,
         PlanPath = PlanPath,
         Todos = Todos.Select(t => new PlanTodoItem { Id = t.Id, Content = t.Content }).ToList(),
+        PendingClarification = PendingClarification?.Clone(),
         CreatedAt = CreatedAt,
         UpdatedAt = UpdatedAt
     };
@@ -59,6 +62,7 @@ public sealed class PlanRun
 public static class PlanRunStatuses
 {
     public const string Draft = "draft";
+    public const string AwaitingClarification = "awaiting_clarification";
     public const string AwaitingConfirmation = "awaiting_confirmation";
     public const string Approved = "approved";
 
@@ -69,6 +73,7 @@ public static class PlanRunStatuses
             {
                 "approved" => Approved,
                 "awaiting_confirmation" or "awaiting" or "ready" => AwaitingConfirmation,
+                "awaiting_clarification" or "clarifying" => AwaitingClarification,
                 _ => Draft
             };
 }

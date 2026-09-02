@@ -54,7 +54,7 @@ public sealed class PlanTurnOrchestratorTests
     }
 
     [Fact]
-    public async Task RunUserTurnAsync_FollowUpInAwaitConfirm_DoesNotAdvancePhase()
+    public async Task RunUserTurnAsync_FollowUpInAwaitConfirm_RevisesPlan()
     {
         var session = AgentSession.Create("plan-session");
         var store = new InMemoryPlanRunStore();
@@ -67,6 +67,17 @@ public sealed class PlanTurnOrchestratorTests
 
             ## Steps
             1. Do A
+
+            ## Acceptance
+            - [ ] Done
+            """;
+        var revised = """
+            # Feature X
+
+            Prefer option B.
+
+            ## Steps
+            1. Do B
 
             ## Acceptance
             - [ ] Done
@@ -85,28 +96,163 @@ public sealed class PlanTurnOrchestratorTests
         await store.SaveActiveAsync(run);
         phaseAccessor.SetActiveRun(run);
 
-        var orchestrator = new StubAgentOrchestrator(_ => ["Clarifying: we will use option B."]);
+        var orchestrator = new StubAgentOrchestrator(_ => ["Republishing with option B."]);
+        orchestrator.OnTurn = _ =>
+        {
+            store.WritePlanMarkdownAsync(session.Id, revised).GetAwaiter().GetResult();
+        };
         var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
         session = await sut.RunUserTurnAsync(session, "Prefer option B", null, CancellationToken.None);
 
         var followUp = phaseAccessor.GetActiveRun(session.Id);
         Assert.NotNull(followUp);
         Assert.Equal(PlanPhase.AwaitConfirm, followUp.Phase);
+        Assert.Contains("option B", followUp.PlanMarkdown, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(run.Id, followUp.Id);
         Assert.Equal(1, orchestrator.TurnCount);
     }
 
     [Fact]
-    public async Task ContinueAsync_Build_ApprovesAndCompletes()
+    public async Task RunUserTurnAsync_ExploreAsksClarification_StopsBeforeDraft()
     {
         var session = AgentSession.Create("plan-session");
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
-        var markdown = """
+        var orchestrator = new StubAgentOrchestrator(_ => ["Need to know the target platform."]);
+        orchestrator.OnTurn = turn =>
+        {
+            if (turn != 0)
+            {
+                return;
+            }
+
+            var current = phaseAccessor.GetActiveRun(session.Id);
+            Assert.NotNull(current);
+            current.PendingClarification = new PlanClarification
+            {
+                RequestId = "q1",
+                Questions =
+                [
+                    new PlanClarificationQuestion
+                    {
+                        Id = "platform",
+                        Prompt = "Which platform?",
+                        Options =
+                        [
+                            new PlanClarificationOption { Id = "web", Label = "Web" },
+                            new PlanClarificationOption { Id = "desktop", Label = "Desktop" }
+                        ]
+                    }
+                ]
+            };
+            current.Phase = PlanPhase.AwaitClarify;
+            current.Status = PlanRunStatuses.AwaitingClarification;
+            phaseAccessor.SetActiveRun(current);
+            store.SaveActiveAsync(current).GetAwaiter().GetResult();
+        };
+
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        session = await sut.RunUserTurnAsync(session, "Add notifications", null, CancellationToken.None);
+
+        var run = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(run);
+        Assert.Equal(PlanPhase.AwaitClarify, run.Phase);
+        Assert.Equal(PlanRunStatuses.AwaitingClarification, PlanRunStatuses.Normalize(run.Status));
+        Assert.NotNull(run.PendingClarification);
+        Assert.True(sut.IsAwaitingUser(session.Id));
+        Assert.Equal(1, orchestrator.TurnCount);
+    }
+
+    [Fact]
+    public async Task RunUserTurnAsync_AnswerClarification_ThenDraftsPlan()
+    {
+        var session = AgentSession.Create("plan-session");
+        var store = new InMemoryPlanRunStore();
+        var phaseAccessor = new PlanPhaseAccessor();
+        var sessionState = new PlanSessionState();
+        var completePlan = """
+            # Desktop notifications
+
+            Use Windows toasts.
+
+            ## Steps
+            1. Add toast helper
+
+            ## Acceptance
+            - [ ] Toasts appear
+            """;
+        var run = new PlanRun
+        {
+            Id = "run1",
+            SessionId = session.Id,
+            Phase = PlanPhase.AwaitClarify,
+            Status = PlanRunStatuses.AwaitingClarification,
+            Goal = "Add notifications",
+            PlanPath = store.GetPlanMarkdownPath(session.Id),
+            PendingClarification = new PlanClarification
+            {
+                RequestId = "q1",
+                Questions =
+                [
+                    new PlanClarificationQuestion
+                    {
+                        Id = "platform",
+                        Prompt = "Which platform?",
+                        Options =
+                        [
+                            new PlanClarificationOption { Id = "web", Label = "Web" },
+                            new PlanClarificationOption { Id = "desktop", Label = "Desktop" }
+                        ]
+                    }
+                ]
+            }
+        };
+        await store.SaveActiveAsync(run);
+        phaseAccessor.SetActiveRun(run);
+
+        var orchestrator = new StubAgentOrchestrator(_ =>
+        [
+            "Explored desktop toast APIs.",
+            "Calling publish_plan."
+        ]);
+        orchestrator.OnTurn = turn =>
+        {
+            if (turn == 1)
+            {
+                store.WritePlanMarkdownAsync(session.Id, completePlan).GetAwaiter().GetResult();
+            }
+        };
+
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        session = await sut.RunUserTurnAsync(
+            session,
+            PlanClarification.FormatUserAnswer(
+                run.PendingClarification!,
+                new Dictionary<string, IReadOnlyList<string>> { ["platform"] = ["desktop"] },
+                null),
+            null,
+            CancellationToken.None);
+
+        var after = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(after);
+        Assert.Equal(PlanPhase.AwaitConfirm, after.Phase);
+        Assert.Null(after.PendingClarification);
+        Assert.Contains("toast", after.PlanMarkdown, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(new List<bool> { true, false }, orchestrator.AppendUserMessageFlags);
+    }
+
+    [Fact]
+    public async Task ContinueAsync_Build_RereadsPlanMarkdownFromDisk()
+    {
+        var session = AgentSession.Create("plan-session");
+        var store = new InMemoryPlanRunStore();
+        var phaseAccessor = new PlanPhaseAccessor();
+        var sessionState = new PlanSessionState();
+        var stale = """
             # Ship feature
 
-            Overview.
+            Stale overview.
 
             ## Steps
             1. Implement
@@ -114,14 +260,25 @@ public sealed class PlanTurnOrchestratorTests
             ## Acceptance
             - [ ] Works
             """;
-        await store.WritePlanMarkdownAsync(session.Id, markdown);
+        var edited = """
+            # Ship feature
+
+            Edited on disk.
+
+            ## Steps
+            1. Implement edited step
+
+            ## Acceptance
+            - [ ] Edited works
+            """;
+        await store.WritePlanMarkdownAsync(session.Id, edited);
         var run = new PlanRun
         {
             Id = "run1",
             SessionId = session.Id,
             Phase = PlanPhase.AwaitConfirm,
             Status = PlanRunStatuses.AwaitingConfirmation,
-            PlanMarkdown = markdown,
+            PlanMarkdown = stale,
             PlanPath = store.GetPlanMarkdownPath(session.Id),
             Todos = [new PlanTodoItem { Id = "impl", Content = "Implement feature" }]
         };
@@ -136,8 +293,8 @@ public sealed class PlanTurnOrchestratorTests
         Assert.NotNull(done);
         Assert.Equal(PlanPhase.Done, done.Phase);
         Assert.Equal(PlanRunStatuses.Approved, PlanRunStatuses.Normalize(done.Status));
-        Assert.Equal(0, orchestrator.TurnCount);
-        Assert.False(sut.IsAwaitingUser(session.Id));
+        Assert.Contains("Edited on disk", done.PlanMarkdown, StringComparison.Ordinal);
+        Assert.Contains("Edited works", done.Todos.Select(t => t.Content));
     }
 
     [Fact]

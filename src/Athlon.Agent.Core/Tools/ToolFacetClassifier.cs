@@ -65,6 +65,11 @@ public static class ToolFacetClassifier
             facets |= ToolFacet.PlanDocument;
         }
 
+        if (tool is Athlon.Agent.Core.Plan.IPlanClarifyTool)
+        {
+            facets |= ToolFacet.PlanClarify;
+        }
+
         if (tool is ISubAgentTool)
         {
             facets |= ToolFacet.SubAgent;

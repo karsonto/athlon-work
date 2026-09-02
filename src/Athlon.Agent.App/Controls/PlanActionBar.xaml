@@ -52,32 +52,36 @@
                           MaxHeight="180"
                           VerticalScrollBarVisibility="Auto"
                           HorizontalScrollBarVisibility="Disabled">
-                <TextBlock Text="{Binding Summary}"
-                           TextWrapping="Wrap"
-                           FontSize="12"
-                           LineHeight="18"
-                           Foreground="{DynamicResource Brush.Text}"
-                           Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}" />
+                <StackPanel>
+                    <TextBlock Text="{Binding Summary}"
+                               TextWrapping="Wrap"
+                               FontSize="12"
+                               LineHeight="18"
+                               Foreground="{DynamicResource Brush.Text}"
+                               Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}" />
+                    <TextBlock Text="{Binding TodosSummary}"
+                               TextWrapping="Wrap"
+                               FontSize="12"
+                               LineHeight="18"
+                               Margin="0,8,0,0"
+                               Foreground="{DynamicResource Brush.SubtleText}"
+                               Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding TodosSummary}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
             </ScrollViewer>
             <StackPanel Grid.Row="2"
                         Orientation="Horizontal"
                         HorizontalAlignment="Right">
-                <Button Content="{loc:Localize Key=Harness_PlanRevise}"
-                        Command="{Binding ReviseCommand}">
-                    <Button.Style>
-                        <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Setter Property="Padding" Value="12,6" />
-                            <Setter Property="FontSize" Value="12" />
-                            <Setter Property="Margin" Value="0,0,8,0" />
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding ShowRevise}" Value="True">
-                                    <Setter Property="Visibility" Value="Visible" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </Button.Style>
-                </Button>
                 <Button Content="{loc:Localize Key=Harness_PlanBuild}"
                         ToolTip="{loc:Localize Key=Harness_PlanBuildTooltip}"
                         Command="{Binding BuildCommand}">
