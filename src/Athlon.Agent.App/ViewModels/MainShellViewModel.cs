@@ -66,6 +66,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly ISshWorkspaceClient _sshClient;
     private readonly SshWorkspaceTransferService _sshTransfer;
     private readonly ILongTermMemory _longTermMemory;
+    private readonly AthlonWebStaticServer _athlonWebServer;
 
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
@@ -121,7 +122,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ICredentialStore credentialStore,
         ISshWorkspaceClient sshClient,
         ILongTermMemory longTermMemory,
-        AppUpdateService updateService)
+        AppUpdateService updateService,
+        AthlonWebStaticServer athlonWebServer)
     {
         _storage = storage;
         _workspaceContext = workspaceContext;
@@ -149,6 +151,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sshClient = sshClient;
         _sshTransfer = new SshWorkspaceTransferService(sshClient, notifier);
         _longTermMemory = longTermMemory;
+        _athlonWebServer = athlonWebServer;
         _skillCatalog = skillCatalog;
         _appSettings = settings;
         _contextSidebarEdgeGutterWidth = 0;
@@ -901,6 +904,24 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         WorkspacePane.AddBrowserTabCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private async Task OpenAthlonWebAsync()
+    {
+        try
+        {
+            var url = await _athlonWebServer.EnsureStartedAsync().ConfigureAwait(true);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception exception)
+        {
+            _notifier.Warning("Shell_AthlonWeb", "Shell_AthlonWebStartFailed", exception.Message);
+        }
     }
 
     /// <summary>Opens an http(s) URL from chat markdown links in a right-side Browser workspace tab.</summary>

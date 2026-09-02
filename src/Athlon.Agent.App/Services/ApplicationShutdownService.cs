@@ -14,6 +14,7 @@ namespace Athlon.Agent.App.Services;
 public sealed class ApplicationShutdownService(
     SessionTurnHost turnHost,
     CliIpcServer cliIpcServer,
+    AthlonWebStaticServer athlonWebServer,
     SchedulerService scheduler,
     ExecuteCommandProcessRegistry processRegistry,
     IMcpRegistry mcpRegistry,
@@ -66,6 +67,7 @@ public sealed class ApplicationShutdownService(
 
         progress?.Report(Strings.Get("Shutdown_StoppingTurns"));
         await cliIpcServer.StopAsync().ConfigureAwait(false);
+        await athlonWebServer.StopAsync().ConfigureAwait(false);
         await turnHost
             .ShutdownAsync(turnWaitTimeout ?? DefaultTurnWaitTimeout, cancellationToken)
             .ConfigureAwait(false);

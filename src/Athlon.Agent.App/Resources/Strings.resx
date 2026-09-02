@@ -1523,6 +1523,15 @@
   <data name="Shell_CompactingContext" xml:space="preserve">
     <value>正在压缩上下文…</value>
   </data>
+  <data name="Shell_AthlonWeb" xml:space="preserve">
+    <value>Athlon Web</value>
+  </data>
+  <data name="Shell_AthlonWebTooltip" xml:space="preserve">
+    <value>在浏览器中打开 Athlon Web</value>
+  </data>
+  <data name="Shell_AthlonWebStartFailed" xml:space="preserve">
+    <value>无法启动 Athlon Web 本地服务：{0}</value>
+  </data>
   <data name="Shell_ContextSidebarClose" xml:space="preserve">
     <value>关闭右侧栏 (Ctrl+Alt+B)</value>
   </data>

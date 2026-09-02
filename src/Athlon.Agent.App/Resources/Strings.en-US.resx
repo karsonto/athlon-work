@@ -1514,6 +1514,15 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   <data name="Shell_CompactingContext" xml:space="preserve">
     <value>Compressing context…</value>
   </data>
+  <data name="Shell_AthlonWeb" xml:space="preserve">
+    <value>Athlon Web</value>
+  </data>
+  <data name="Shell_AthlonWebTooltip" xml:space="preserve">
+    <value>Open Athlon Web in your browser</value>
+  </data>
+  <data name="Shell_AthlonWebStartFailed" xml:space="preserve">
+    <value>Unable to start the Athlon Web local service: {0}</value>
+  </data>
   <data name="Shell_ContextSidebarClose" xml:space="preserve">
     <value>Close right sidebar (Ctrl+Alt+B)</value>
   </data>

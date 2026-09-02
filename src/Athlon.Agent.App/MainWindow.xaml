@@ -97,6 +97,16 @@
                             VerticalAlignment="Center"
                             Margin="0,0,2,0"
                             shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                    <Button Style="{StaticResource AthlonWebCaptionButtonStyle}"
+                            Command="{Binding OpenAthlonWebCommand}"
+                            ToolTip="{loc:Localize Key=Shell_AthlonWebTooltip}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{loc:Localize Key=Shell_AthlonWeb}"
+                                       VerticalAlignment="Center" />
+                            <ContentControl ContentTemplate="{StaticResource AthlonWebExternalLinkIconTemplate}"
+                                            VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                     <Button ToolTip="{loc:Localize Key=Common_Minimize}"
                             ContentTemplate="{StaticResource WindowCaptionMinimizeIconTemplate}"
                             Style="{StaticResource WindowCaptionButtonStyle}">

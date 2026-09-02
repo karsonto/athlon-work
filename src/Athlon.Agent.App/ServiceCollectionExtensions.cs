@@ -175,6 +175,8 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<PageViewFactory>();
 
+        services.AddSingleton<AthlonWebStaticServer>();
+
         services.AddSingleton<MainShellViewModel>();
 
         services.AddSingleton<ISessionHost>(sp => sp.GetRequiredService<MainShellViewModel>());
