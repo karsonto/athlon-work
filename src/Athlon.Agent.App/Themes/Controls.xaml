@@ -609,8 +609,8 @@
     </DataTemplate>
 
     <DataTemplate x:Key="AthlonWebExternalLinkIconTemplate">
-        <Viewbox Width="12"
-                 Height="12"
+        <Viewbox Width="15"
+                 Height="15"
                  Stretch="Uniform"
                  Margin="4,0,0,0">
             <Canvas Width="16"

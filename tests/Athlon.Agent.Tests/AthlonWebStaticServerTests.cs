@@ -67,7 +67,7 @@ public sealed class AthlonWebStaticServerTests
         var html = "<html><body>Athlon Web test</body></html>";
         await File.WriteAllTextAsync(Path.Combine(temp.Root, "index.html"), html, Encoding.UTF8);
 
-        await using var server = new AthlonWebStaticServer(temp.Root);
+        await using var server = new AthlonWebStaticServer(temp.Root, port: 0);
         var baseUrl = await server.EnsureStartedAsync();
 
         Assert.False(string.IsNullOrWhiteSpace(baseUrl));
@@ -90,7 +90,7 @@ public sealed class AthlonWebStaticServerTests
         using var temp = new TempDirectoryScope("athlon-web");
         await File.WriteAllTextAsync(Path.Combine(temp.Root, "index.html"), "ok", Encoding.UTF8);
 
-        await using var server = new AthlonWebStaticServer(temp.Root);
+        await using var server = new AthlonWebStaticServer(temp.Root, port: 0);
         var baseUrl = await server.EnsureStartedAsync();
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
@@ -108,7 +108,7 @@ public sealed class AthlonWebStaticServerTests
         using var temp = new TempDirectoryScope("athlon-web");
         await File.WriteAllTextAsync(Path.Combine(temp.Root, "index.html"), "ok", Encoding.UTF8);
 
-        var server = new AthlonWebStaticServer(temp.Root);
+        var server = new AthlonWebStaticServer(temp.Root, port: 0);
         var baseUrl = await server.EnsureStartedAsync();
         await server.StopAsync();
 

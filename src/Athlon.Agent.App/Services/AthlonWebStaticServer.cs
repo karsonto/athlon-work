@@ -8,6 +8,8 @@ namespace Athlon.Agent.App.Services;
 
 public sealed class AthlonWebStaticServer : IAsyncDisposable
 {
+    /// <summary>Loopback port for the bundled Athlon Web static site.</summary>
+    public const int FixedPort = 6888;
     private static readonly FrozenDictionary<string, string> MimeTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         [".html"] = "text/html; charset=utf-8",
@@ -32,6 +34,7 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
     }.ToFrozenDictionary(StringComparer.OrdinalIgnoreCase);
 
     private readonly string _contentRoot;
+    private readonly int _port;
     private readonly SemaphoreSlim _startLock = new(1, 1);
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -39,13 +42,14 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
     private int _started;
 
     public AthlonWebStaticServer()
-        : this(AthlonWebAssets.AssetsDirectory)
+        : this(AthlonWebAssets.AssetsDirectory, FixedPort)
     {
     }
 
-    internal AthlonWebStaticServer(string contentRoot)
+    internal AthlonWebStaticServer(string contentRoot, int port = FixedPort)
     {
         _contentRoot = Path.GetFullPath(contentRoot);
+        _port = port;
     }
 
     public string? BaseUrl { get; private set; }
@@ -75,7 +79,7 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
                 throw new DirectoryNotFoundException($"Athlon Web assets directory not found: {_contentRoot}");
             }
 
-            var bound = BindListener();
+            var bound = BindListener(_port);
             _listener = bound.Listener;
             BaseUrl = bound.Url;
             _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -143,31 +147,30 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
 
     public ValueTask DisposeAsync() => new(StopAsync());
 
-    private static (HttpListener Listener, string Url) BindListener()
+    private static (HttpListener Listener, string Url) BindListener(int port)
     {
+        var bindPort = port > 0 ? port : GetEphemeralPort();
         HttpListenerException? last = null;
-        for (var attempt = 0; attempt < 8; attempt++)
+        foreach (var host in new[] { "127.0.0.1", "localhost" })
         {
-            var port = GetEphemeralPort();
-            foreach (var host in new[] { "127.0.0.1", "localhost" })
+            var url = $"http://{host}:{bindPort}/";
+            var candidate = new HttpListener();
+            candidate.Prefixes.Add(url);
+            try
             {
-                var url = $"http://{host}:{port}/";
-                var candidate = new HttpListener();
-                candidate.Prefixes.Add(url);
-                try
-                {
-                    candidate.Start();
-                    return (candidate, url);
-                }
-                catch (HttpListenerException ex)
-                {
-                    last = ex;
-                    candidate.Close();
-                }
+                candidate.Start();
+                return (candidate, url);
+            }
+            catch (HttpListenerException ex)
+            {
+                last = ex;
+                candidate.Close();
             }
         }
 
-        throw new InvalidOperationException("Unable to bind Athlon Web listener on loopback.", last);
+        throw new InvalidOperationException(
+            $"Unable to bind Athlon Web listener on loopback port {bindPort}.",
+            last);
     }
 
     private static int GetEphemeralPort()
