@@ -609,15 +609,15 @@
     </DataTemplate>
 
     <DataTemplate x:Key="AthlonWebExternalLinkIconTemplate">
-        <Viewbox Width="15"
-                 Height="15"
+        <Viewbox Width="14"
+                 Height="14"
                  Stretch="Uniform"
-                 Margin="4,0,0,0">
+                 Margin="5,0,0,0">
             <Canvas Width="16"
                     Height="16">
-                <Path Data="M9.2 6.8 L12.5 3.5 M12.5 3.5 L10.3 3.5 M12.5 3.5 L12.5 5.7"
+                <Path Data="M4.5 11.5 L11.5 4.5 M11.5 4.5 H8 M11.5 4.5 V8"
                       Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                      StrokeThickness="1.35"
+                      StrokeThickness="1.6"
                       StrokeStartLineCap="Round"
                       StrokeEndLineCap="Round"
                       StrokeLineJoin="Round"

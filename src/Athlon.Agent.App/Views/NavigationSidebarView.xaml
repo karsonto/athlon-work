@@ -35,7 +35,7 @@
                         ToolTip="{loc:Localize Key=Nav_NewSessionTooltip}"
                         Style="{StaticResource NewSessionButtonStyle}">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                        <TextBlock Text="&#xE710;"
+                        <TextBlock Text="&#xE91B;"
                                    FontFamily="Segoe MDL2 Assets"
                                    FontSize="12"
                                    VerticalAlignment="Center"
@@ -52,11 +52,9 @@
                         Style="{StaticResource NewSessionButtonStyle}"
                         Margin="0,8,0,0">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                        <TextBlock Text="&#xE8F1;"
-                                   FontFamily="Segoe MDL2 Assets"
-                                   FontSize="12"
-                                   VerticalAlignment="Center"
-                                   Margin="0,0,8,0" />
+                        <ContentControl ContentTemplate="{StaticResource SkillHubNavIconTemplate}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,8,0" />
                         <TextBlock Text="{loc:Localize Key=Nav_SkillHub}"
                                    FontSize="13"
                                    FontWeight="Medium"
