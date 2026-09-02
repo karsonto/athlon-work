@@ -40,9 +40,7 @@
                                                  Style="{StaticResource NavPackIconStyle}"
                                                  Margin="0,0,8,0" />
                         <TextBlock Text="{loc:Localize Key=Nav_NewAgent}"
-                                   FontSize="13"
-                                   FontWeight="Medium"
-                                   VerticalAlignment="Center" />
+                                   Style="{StaticResource AppTextNav}" />
                     </StackPanel>
                 </Button>
                 <Button Command="{Binding NavigateCommand}"
@@ -55,9 +53,7 @@
                                                  Style="{StaticResource NavPackIconStyle}"
                                                  Margin="0,0,8,0" />
                         <TextBlock Text="{loc:Localize Key=Nav_SkillHub}"
-                                   FontSize="13"
-                                   FontWeight="Medium"
-                                   VerticalAlignment="Center" />
+                                   Style="{StaticResource AppTextNav}" />
                     </StackPanel>
                 </Button>
             </StackPanel>
@@ -65,11 +61,9 @@
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="12,8">
                 <StackPanel>
                     <TextBlock Text="{loc:Localize Key=Nav_NoAgentRecords}"
-                               FontSize="12"
-                               Foreground="{DynamicResource Brush.SubtleText}"
                                Margin="4,8">
                         <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource AppTextSecondary}">
                                 <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding HasAgentRecords}" Value="False">
@@ -81,12 +75,9 @@
                     </TextBlock>
 
                     <TextBlock Text="{loc:Localize Key=Nav_Repositories}"
-                               FontSize="11"
-                               FontWeight="SemiBold"
-                               Foreground="{DynamicResource Brush.DisabledText}"
                                Margin="4,4,4,8">
                         <TextBlock.Style>
-                            <Style TargetType="TextBlock">
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource AppTextSection}">
                                 <Setter Property="Visibility" Value="Visible" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding HasAgentRecords}" Value="False">
@@ -171,10 +162,8 @@
                                                                          VerticalAlignment="Center" />
                                                 <TextBlock Grid.Column="1"
                                                            Text="{Binding Title}"
-                                                           FontSize="12"
-                                                           FontWeight="Medium"
+                                                           Style="{StaticResource AppTextSecondary}"
                                                            Foreground="{Binding HeaderForegroundBrushKey, Converter={StaticResource ResourceKeyToBrush}}"
-                                                           TextTrimming="CharacterEllipsis"
                                                            VerticalAlignment="Center" />
                                             </Grid>
                                         </Button>
@@ -331,8 +320,7 @@
                     </Border.Style>
                     <StackPanel>
                         <TextBlock Text="{loc:Localize Key=Nav_Queued}"
-                                   FontSize="10"
-                                   FontWeight="SemiBold"
+                                   Style="{StaticResource AppTextSection}"
                                    Foreground="{DynamicResource Brush.SubtleText}"
                                    Margin="0,0,0,6" />
                         <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
@@ -352,13 +340,11 @@
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel Grid.Column="0">
                                                     <TextBlock Text="{Binding PreviewText}"
-                                                               FontSize="12"
-                                                               Foreground="{DynamicResource Brush.Text}"
-                                                               TextWrapping="Wrap"
-                                                               TextTrimming="CharacterEllipsis"
                                                                MaxHeight="40">
                                                         <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
+                                                            <Style TargetType="TextBlock" BasedOn="{StaticResource AppTextSecondary}">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                                                <Setter Property="TextWrapping" Value="Wrap" />
                                                                 <Style.Triggers>
                                                                     <DataTrigger Binding="{Binding PreviewText}" Value="">
                                                                         <Setter Property="Visibility" Value="Collapsed" />
@@ -436,8 +422,7 @@
                     </Border.Style>
                     <StackPanel>
                         <TextBlock Text="{loc:Localize Key=Nav_TaskPlan}"
-                                   FontSize="10"
-                                   FontWeight="SemiBold"
+                                   Style="{StaticResource AppTextSection}"
                                    Foreground="{DynamicResource Brush.SubtleText}"
                                    Margin="0,0,0,6" />
                         <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
@@ -470,9 +455,7 @@
                         </TextBlock>
                         <TextBlock Grid.Column="1"
                                    Text="{loc:Localize Key=Nav_More}"
-                                   FontSize="12"
-                                   FontWeight="Medium"
-                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                   Style="{StaticResource AppTextSecondary}"
                                    VerticalAlignment="Center" />
                     </Grid>
                 </Button>
@@ -492,7 +475,7 @@
                                 <ContentControl Style="{StaticResource KnowledgeNavIconStyle}"
                                                 Margin="0,0,10,0"
                                                 VerticalAlignment="Center" />
-                                <TextBlock Text="{loc:Localize Key=Nav_Knowledge}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Nav_Knowledge}" Style="{StaticResource AppTextNav}" />
                             </StackPanel>
                         </Button>
                         <Button Command="{Binding NavigateCommand}"
@@ -503,7 +486,7 @@
                                 <ContentControl Style="{StaticResource ScheduleNavIconStyle}"
                                                 Margin="0,0,10,0"
                                                 VerticalAlignment="Center" />
-                                <TextBlock Text="{loc:Localize Key=Nav_Schedule}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center" />
+                                <TextBlock Text="{loc:Localize Key=Nav_Schedule}" Style="{StaticResource AppTextNav}" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -549,21 +532,16 @@
                                     <TextBlock Text="{Binding SsoAvatarInitial}"
                                                Foreground="White"
                                                FontSize="12"
-                                               FontWeight="SemiBold"
+                                               FontWeight="Medium"
                                                HorizontalAlignment="Center"
                                                VerticalAlignment="Center" />
                                 </Border>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding SidebarAccountTitle}"
-                                               FontSize="13"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource Brush.Text}"
-                                               TextTrimming="CharacterEllipsis" />
+                                               Style="{StaticResource AppTextNav}" />
                                     <TextBlock Text="{Binding SidebarAccountSubtitle}"
-                                               FontSize="11"
-                                               Foreground="{DynamicResource Brush.SubtleText}"
-                                               Margin="0,2,0,0"
-                                               TextTrimming="CharacterEllipsis" />
+                                               Style="{StaticResource AppTextCaption}"
+                                               Margin="0,2,0,0" />
                                 </StackPanel>
                             </Grid>
                         </Button>

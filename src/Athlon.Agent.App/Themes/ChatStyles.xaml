@@ -134,7 +134,7 @@
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
         <Setter Property="FontSize" Value="13" />
-        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
@@ -163,7 +163,7 @@
 
     <Style x:Key="SessionSectionTitleStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="11" />
-        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="FontWeight" Value="Medium" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.DisabledText}" />
         <Setter Property="Margin" Value="12,16,12,8" />
     </Style>
@@ -189,7 +189,7 @@
 
     <Style x:Key="SessionNameTextStyle" TargetType="TextBlock">
         <Setter Property="FontSize" Value="12" />
-        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         <Style.Triggers>
@@ -262,9 +262,9 @@
         </Style.Triggers>
     </Style>
 
-    <!-- Codex-like empty hero: large centered display title, regular weight -->
+    <!-- Empty hero: large centered display title, regular weight -->
     <Style x:Key="ComposerWelcomeTitleStyle" TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, PingFang SC" />
+        <Setter Property="FontFamily" Value="{DynamicResource AppFontFamilyDisplay}" />
         <Setter Property="FontSize" Value="26" />
         <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
@@ -279,7 +279,7 @@
 
     <Style x:Key="ComposerWelcomeDescriptionStyle" TargetType="TextBlock">
         <Setter Property="Visibility" Value="Collapsed" />
-        <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, PingFang SC" />
+        <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="LineHeight" Value="20" />
@@ -507,8 +507,8 @@
         <Setter Property="MinHeight" Value="28" />
         <Setter Property="Padding" Value="9,4,8,4" />
         <Setter Property="Margin" Value="0,0,8,0" />
-        <Setter Property="FontSize" Value="12.5" />
-        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Normal" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="VerticalAlignment" Value="Center" />
         <Setter Property="Background" Value="{DynamicResource Brush.ModeAgentBg}" />
@@ -692,7 +692,7 @@
                         </Trigger>
                         <Trigger Property="IsChecked" Value="True">
                             <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
-                            <Setter Property="FontWeight" Value="SemiBold" />
+                            <Setter Property="FontWeight" Value="Medium" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

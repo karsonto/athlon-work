@@ -47,14 +47,12 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding CurrentSessionTitle}"
-                                   FontSize="14"
-                                   FontWeight="Medium"
                                    Foreground="{DynamicResource Brush.TextSecondary}"
                                    VerticalAlignment="Center"
-                                   TextTrimming="CharacterEllipsis"
                                    Margin="0,0,12,0">
                             <TextBlock.Style>
-                                <Style TargetType="TextBlock">
+                                <Style TargetType="TextBlock" BasedOn="{StaticResource AppTextTitle}">
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.TextSecondary}" />
                                     <Setter Property="Visibility" Value="Visible" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
@@ -134,7 +132,8 @@
                                Opacity="0.7"
                                Margin="0,0,0,12" />
                     <TextBlock Text="{loc:Localize Key=Chat_LoadingConversation}"
-                               FontSize="16"
+                               Style="{StaticResource AppTextTitle}"
+                               FontWeight="Normal"
                                Foreground="{DynamicResource Brush.SubtleText}"
                                HorizontalAlignment="Center" />
                 </StackPanel>
