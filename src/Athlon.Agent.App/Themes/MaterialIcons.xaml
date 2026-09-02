@@ -20,4 +20,50 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
+    <Style x:Key="WorkspacePackIconStyle" TargetType="materialDesign:PackIcon">
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="16" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Opacity" Value="0.88" />
+    </Style>
+
+    <Style x:Key="WorkspaceTabPackIconStyle" TargetType="materialDesign:PackIcon" BasedOn="{StaticResource WorkspacePackIconStyle}">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="WorkspaceCaptionPackIconStyle" TargetType="materialDesign:PackIcon">
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="ThemeTogglePackIconStyle" TargetType="materialDesign:PackIcon">
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <!-- Dark theme: show sun (switch to light). -->
+        <Setter Property="Kind" Value="WhiteBalanceSunny" />
+        <Style.Triggers>
+            <!-- Light theme: show moon (switch to dark). -->
+            <DataTrigger Binding="{Binding IsLightTheme}" Value="True">
+                <Setter Property="Kind" Value="WeatherNight" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <DataTemplate x:Key="WorkspaceMaximizeIconTemplate">
+        <materialDesign:PackIcon Kind="ArrowExpand"
+                                 Style="{StaticResource WorkspaceCaptionPackIconStyle}" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="WorkspaceRestoreIconTemplate">
+        <materialDesign:PackIcon Kind="ArrowCollapse"
+                                 Style="{StaticResource WorkspaceCaptionPackIconStyle}" />
+    </DataTemplate>
+
 </ResourceDictionary>

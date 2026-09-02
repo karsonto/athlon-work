@@ -7,9 +7,9 @@
     <!-- Palette brushes are injected at index 0 by AppThemeManager.Apply. -->
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesign3.Defaults.xaml" />
+        <ResourceDictionary Source="MaterialIcons.xaml" />
         <ResourceDictionary Source="Controls.xaml" />
         <ResourceDictionary Source="ChatStyles.xaml" />
-        <ResourceDictionary Source="MaterialIcons.xaml" />
         <ResourceDictionary Source="ChatNavIconStyles.xaml" />
         <ResourceDictionary Source="TaskListStyles.xaml" />
         <ResourceDictionary Source="Overlays.xaml" />

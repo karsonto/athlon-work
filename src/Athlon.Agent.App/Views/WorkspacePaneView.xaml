@@ -4,6 +4,7 @@
              xmlns:app="clr-namespace:Athlon.Agent.App"
              xmlns:controls="clr-namespace:Athlon.Agent.App.Controls"
              xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
              Background="{DynamicResource Brush.AppBackground}">
     <UserControl.Resources>
@@ -19,18 +20,6 @@
         <DataTemplate DataType="{x:Type vm:TerminalWorkspaceTabViewModel}">
             <controls:TerminalWorkspaceView />
         </DataTemplate>
-
-        <!-- Codex-like monoline icons -->
-        <Style x:Key="WorkspaceIconStroke" TargetType="Shape">
-            <Setter Property="Stroke" Value="{DynamicResource Brush.Text}" />
-            <Setter Property="StrokeThickness" Value="1.4" />
-            <Setter Property="StrokeStartLineCap" Value="Round" />
-            <Setter Property="StrokeEndLineCap" Value="Round" />
-            <Setter Property="StrokeLineJoin" Value="Round" />
-            <Setter Property="Fill" Value="Transparent" />
-            <Setter Property="SnapsToDevicePixels" Value="False" />
-            <Setter Property="Opacity" Value="0.88" />
-        </Style>
 
         <Style x:Key="WorkspaceShortcutPillStyle" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource Brush.PanelAlt}" />
@@ -111,86 +100,28 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
-                                        <!-- Kind icon (Codex-style monoline) -->
-                                        <Grid Grid.Column="0"
-                                              Width="16"
-                                              Height="16"
-                                              Margin="10,0,0,0"
-                                              VerticalAlignment="Center">
-                                            <Viewbox Width="15" Height="15">
-                                                <Viewbox.Style>
-                                                    <Style TargetType="Viewbox">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Kind}" Value="Browser">
-                                                                <Setter Property="Visibility" Value="Visible" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Viewbox.Style>
-                                                <Canvas Width="16" Height="16">
-                                                    <Ellipse Canvas.Left="1.5" Canvas.Top="1.5" Width="13" Height="13"
-                                                             Style="{StaticResource WorkspaceIconStroke}" />
-                                                    <Ellipse Canvas.Left="5.25" Canvas.Top="1.5" Width="5.5" Height="13"
-                                                             Style="{StaticResource WorkspaceIconStroke}" />
-                                                    <Line X1="1.5" Y1="8" X2="14.5" Y2="8"
-                                                          Style="{StaticResource WorkspaceIconStroke}" />
-                                                </Canvas>
-                                            </Viewbox>
-                                            <Viewbox Width="14" Height="14">
-                                                <Viewbox.Style>
-                                                    <Style TargetType="Viewbox">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Kind}" Value="Terminal">
-                                                                <Setter Property="Visibility" Value="Visible" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Viewbox.Style>
-                                                <Canvas Width="16" Height="16">
-                                                    <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="12"
-                                                               RadiusX="2" RadiusY="2"
-                                                               Style="{StaticResource WorkspaceIconStroke}" />
-                                                    <Polyline Points="4.5,6 6.5,8 4.5,10"
-                                                              Style="{StaticResource WorkspaceIconStroke}" />
-                                                    <Line X1="8" Y1="10.5" X2="11.5" Y2="10.5"
-                                                          Style="{StaticResource WorkspaceIconStroke}" />
-                                                </Canvas>
-                                            </Viewbox>
-                                            <Viewbox Width="14" Height="14">
-                                                <Viewbox.Style>
-                                                    <Style TargetType="Viewbox">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Kind}" Value="Files">
-                                                                <Setter Property="Visibility" Value="Visible" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Viewbox.Style>
-                                                <Canvas Width="16" Height="16">
-                                                    <Path Data="M2,3.5 H6.2 L7.6,5.2 H14 V13.5 H2 Z"
-                                                          Style="{StaticResource WorkspaceIconStroke}" />
-                                                </Canvas>
-                                            </Viewbox>
-                                            <Viewbox Width="13" Height="13">
-                                                <Viewbox.Style>
-                                                    <Style TargetType="Viewbox">
-                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding Kind}" Value="Skills">
-                                                                <Setter Property="Visibility" Value="Visible" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Viewbox.Style>
-                                                <Canvas Width="16" Height="16">
-                                                    <Path Data="M8,1.5 L9.6,6.2 L14.5,6.2 L10.5,9.1 L12.1,13.8 L8,11 L3.9,13.8 L5.5,9.1 L1.5,6.2 L6.4,6.2 Z"
-                                                          Style="{StaticResource WorkspaceIconStroke}" />
-                                                </Canvas>
-                                            </Viewbox>
-                                        </Grid>
+                                        <materialDesign:PackIcon Grid.Column="0"
+                                                                 Margin="10,0,0,0">
+                                            <materialDesign:PackIcon.Style>
+                                                <Style TargetType="materialDesign:PackIcon" BasedOn="{StaticResource WorkspaceTabPackIconStyle}">
+                                                    <Setter Property="Kind" Value="FolderOutline" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Kind}" Value="Browser">
+                                                            <Setter Property="Kind" Value="Earth" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Kind}" Value="Terminal">
+                                                            <Setter Property="Kind" Value="Console" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Kind}" Value="Files">
+                                                            <Setter Property="Kind" Value="FolderOutline" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Kind}" Value="Skills">
+                                                            <Setter Property="Kind" Value="StarOutline" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </materialDesign:PackIcon.Style>
+                                        </materialDesign:PackIcon>
 
                                         <TextBlock Grid.Column="1"
                                                    Text="{Binding Title}"
@@ -263,16 +194,8 @@
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
-                                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                                        <Canvas Width="16" Height="16">
-                                                            <Ellipse Canvas.Left="1.5" Canvas.Top="1.5" Width="13" Height="13"
-                                                                     Style="{StaticResource WorkspaceIconStroke}" />
-                                                            <Ellipse Canvas.Left="5.25" Canvas.Top="1.5" Width="5.5" Height="13"
-                                                                     Style="{StaticResource WorkspaceIconStroke}" />
-                                                            <Line X1="1.5" Y1="8" X2="14.5" Y2="8"
-                                                                  Style="{StaticResource WorkspaceIconStroke}" />
-                                                        </Canvas>
-                                                    </Viewbox>
+                                                    <materialDesign:PackIcon Kind="Earth"
+                                                                             Style="{StaticResource WorkspacePackIconStyle}" />
                                                     <TextBlock Grid.Column="1"
                                                                Text="{loc:Localize Key=Workspace_Browser}"
                                                                Style="{StaticResource WorkspaceEmptyLabelStyle}"
@@ -294,17 +217,8 @@
                                                         <ColumnDefinition Width="28" />
                                                         <ColumnDefinition Width="*" />
                                                     </Grid.ColumnDefinitions>
-                                                    <Viewbox Width="15" Height="15" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                                        <Canvas Width="16" Height="16">
-                                                            <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="12"
-                                                                       RadiusX="2" RadiusY="2"
-                                                                       Style="{StaticResource WorkspaceIconStroke}" />
-                                                            <Polyline Points="4.5,6 6.5,8 4.5,10"
-                                                                      Style="{StaticResource WorkspaceIconStroke}" />
-                                                            <Line X1="8" Y1="10.5" X2="11.5" Y2="10.5"
-                                                                  Style="{StaticResource WorkspaceIconStroke}" />
-                                                        </Canvas>
-                                                    </Viewbox>
+                                                    <materialDesign:PackIcon Kind="Console"
+                                                                             Style="{StaticResource WorkspacePackIconStyle}" />
                                                     <TextBlock Grid.Column="1"
                                                                Text="{loc:Localize Key=Workspace_Terminal}"
                                                                Style="{StaticResource WorkspaceEmptyLabelStyle}"
@@ -321,12 +235,8 @@
                                                         <ColumnDefinition Width="28" />
                                                         <ColumnDefinition Width="*" />
                                                     </Grid.ColumnDefinitions>
-                                                    <Viewbox Width="15" Height="15" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                                        <Canvas Width="16" Height="16">
-                                                            <Path Data="M2,3.5 H6.2 L7.6,5.2 H14 V13.5 H2 Z"
-                                                                  Style="{StaticResource WorkspaceIconStroke}" />
-                                                        </Canvas>
-                                                    </Viewbox>
+                                                    <materialDesign:PackIcon Kind="FolderOutline"
+                                                                             Style="{StaticResource WorkspacePackIconStyle}" />
                                                     <TextBlock Grid.Column="1"
                                                                Text="{loc:Localize Key=Context_TabFiles}"
                                                                Style="{StaticResource WorkspaceEmptyLabelStyle}"
@@ -343,12 +253,8 @@
                                                         <ColumnDefinition Width="28" />
                                                         <ColumnDefinition Width="*" />
                                                     </Grid.ColumnDefinitions>
-                                                    <Viewbox Width="14" Height="14" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                                        <Canvas Width="16" Height="16">
-                                                            <Path Data="M8,1.5 L9.6,6.2 L14.5,6.2 L10.5,9.1 L12.1,13.8 L8,11 L3.9,13.8 L5.5,9.1 L1.5,6.2 L6.4,6.2 Z"
-                                                                  Style="{StaticResource WorkspaceIconStroke}" />
-                                                        </Canvas>
-                                                    </Viewbox>
+                                                    <materialDesign:PackIcon Kind="StarOutline"
+                                                                             Style="{StaticResource WorkspacePackIconStyle}" />
                                                     <TextBlock Grid.Column="1"
                                                                Text="{loc:Localize Key=Context_TabSkills}"
                                                                Style="{StaticResource WorkspaceEmptyLabelStyle}"
@@ -365,17 +271,8 @@
                                                         <ColumnDefinition Width="28" />
                                                         <ColumnDefinition Width="*" />
                                                     </Grid.ColumnDefinitions>
-                                                    <Viewbox Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                                        <Canvas Width="16" Height="16">
-                                                            <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="9"
-                                                                       RadiusX="1.5" RadiusY="1.5"
-                                                                       Style="{StaticResource WorkspaceIconStroke}" />
-                                                            <Line X1="5.5" Y1="11" X2="10.5" Y2="11"
-                                                                  Style="{StaticResource WorkspaceIconStroke}" />
-                                                            <Line X1="8" Y1="11" X2="8" Y2="13.5"
-                                                                  Style="{StaticResource WorkspaceIconStroke}" />
-                                                        </Canvas>
-                                                    </Viewbox>
+                                                    <materialDesign:PackIcon Kind="Monitor"
+                                                                             Style="{StaticResource WorkspacePackIconStyle}" />
                                                     <TextBlock Grid.Column="1"
                                                                Text="{loc:Localize Key=ComputerUse_MenuStart}"
                                                                Style="{StaticResource WorkspaceEmptyLabelStyle}"
@@ -414,7 +311,7 @@
             </Grid>
         </Border>
 
-        <!-- Empty state: Codex-like launcher rows -->
+        <!-- Empty state: launcher rows -->
         <Grid Grid.Row="1" Background="{DynamicResource Brush.AppBackground}">
             <Grid.Style>
                 <Style TargetType="Grid">
@@ -438,16 +335,8 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <Viewbox Width="18" Height="18" VerticalAlignment="Center" HorizontalAlignment="Left">
-                            <Canvas Width="16" Height="16">
-                                <Ellipse Canvas.Left="1.5" Canvas.Top="1.5" Width="13" Height="13"
-                                         Style="{StaticResource WorkspaceIconStroke}" />
-                                <Ellipse Canvas.Left="5.25" Canvas.Top="1.5" Width="5.5" Height="13"
-                                         Style="{StaticResource WorkspaceIconStroke}" />
-                                <Line X1="1.5" Y1="8" X2="14.5" Y2="8"
-                                      Style="{StaticResource WorkspaceIconStroke}" />
-                            </Canvas>
-                        </Viewbox>
+                        <materialDesign:PackIcon Kind="Earth"
+                                                 Style="{StaticResource WorkspacePackIconStyle}" />
                         <TextBlock Grid.Column="1"
                                    Text="{loc:Localize Key=Workspace_Browser}"
                                    Style="{StaticResource WorkspaceEmptyLabelStyle}" />
@@ -464,17 +353,8 @@
                             <ColumnDefinition Width="28" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Viewbox Width="17" Height="17" VerticalAlignment="Center" HorizontalAlignment="Left">
-                            <Canvas Width="16" Height="16">
-                                <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="12"
-                                           RadiusX="2" RadiusY="2"
-                                           Style="{StaticResource WorkspaceIconStroke}" />
-                                <Polyline Points="4.5,6 6.5,8 4.5,10"
-                                          Style="{StaticResource WorkspaceIconStroke}" />
-                                <Line X1="8" Y1="10.5" X2="11.5" Y2="10.5"
-                                      Style="{StaticResource WorkspaceIconStroke}" />
-                            </Canvas>
-                        </Viewbox>
+                        <materialDesign:PackIcon Kind="Console"
+                                                 Style="{StaticResource WorkspacePackIconStyle}" />
                         <TextBlock Grid.Column="1"
                                    Text="{loc:Localize Key=Workspace_Terminal}"
                                    Style="{StaticResource WorkspaceEmptyLabelStyle}" />
@@ -488,12 +368,8 @@
                             <ColumnDefinition Width="28" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Viewbox Width="17" Height="17" VerticalAlignment="Center" HorizontalAlignment="Left">
-                            <Canvas Width="16" Height="16">
-                                <Path Data="M2,3.5 H6.2 L7.6,5.2 H14 V13.5 H2 Z"
-                                      Style="{StaticResource WorkspaceIconStroke}" />
-                            </Canvas>
-                        </Viewbox>
+                        <materialDesign:PackIcon Kind="FolderOutline"
+                                                 Style="{StaticResource WorkspacePackIconStyle}" />
                         <TextBlock Grid.Column="1"
                                    Text="{loc:Localize Key=Context_TabFiles}"
                                    Style="{StaticResource WorkspaceEmptyLabelStyle}" />
@@ -507,12 +383,8 @@
                             <ColumnDefinition Width="28" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Viewbox Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left">
-                            <Canvas Width="16" Height="16">
-                                <Path Data="M8,1.5 L9.6,6.2 L14.5,6.2 L10.5,9.1 L12.1,13.8 L8,11 L3.9,13.8 L5.5,9.1 L1.5,6.2 L6.4,6.2 Z"
-                                      Style="{StaticResource WorkspaceIconStroke}" />
-                            </Canvas>
-                        </Viewbox>
+                        <materialDesign:PackIcon Kind="StarOutline"
+                                                 Style="{StaticResource WorkspacePackIconStyle}" />
                         <TextBlock Grid.Column="1"
                                    Text="{loc:Localize Key=Context_TabSkills}"
                                    Style="{StaticResource WorkspaceEmptyLabelStyle}" />
@@ -526,17 +398,8 @@
                             <ColumnDefinition Width="28" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
-                        <Viewbox Width="16" Height="16" VerticalAlignment="Center" HorizontalAlignment="Left">
-                            <Canvas Width="16" Height="16">
-                                <Rectangle Canvas.Left="1.5" Canvas.Top="2" Width="13" Height="9"
-                                           RadiusX="1.5" RadiusY="1.5"
-                                           Style="{StaticResource WorkspaceIconStroke}" />
-                                <Line X1="5.5" Y1="11" X2="10.5" Y2="11"
-                                      Style="{StaticResource WorkspaceIconStroke}" />
-                                <Line X1="8" Y1="11" X2="8" Y2="13.5"
-                                      Style="{StaticResource WorkspaceIconStroke}" />
-                            </Canvas>
-                        </Viewbox>
+                        <materialDesign:PackIcon Kind="Monitor"
+                                                 Style="{StaticResource WorkspacePackIconStyle}" />
                         <TextBlock Grid.Column="1"
                                    Text="{loc:Localize Key=ComputerUse_MenuStart}"
                                    Style="{StaticResource WorkspaceEmptyLabelStyle}" />

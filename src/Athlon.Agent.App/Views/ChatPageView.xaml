@@ -7,6 +7,7 @@
              xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
              xmlns:vm="clr-namespace:Athlon.Agent.App.ViewModels"
              xmlns:loc="clr-namespace:Athlon.Agent.App.Localization"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              xmlns:harness="clr-namespace:Athlon.Agent.Core.Harness;assembly=Athlon.Agent.Core">
     <Grid Background="{DynamicResource Brush.ChatBackground}" ClipToBounds="True">
                 <Grid.ColumnDefinitions>
@@ -72,8 +73,8 @@
                                     Foreground="#FF2563EB"
                                     VerticalAlignment="Center"
                                     AutomationProperties.Name="{Binding ThemeToggleToolTip}">
-                                <controls:ThemeToggleIcon Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                          IsLightTheme="{Binding IsLightTheme}" />
+                                <materialDesign:PackIcon Style="{StaticResource ThemeTogglePackIconStyle}"
+                                                         Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
                             </Button>
                             <Button Command="{Binding ToggleContextSidebarCommand}"
                                     Style="{StaticResource RightSidebarToggleButtonStyle}"
