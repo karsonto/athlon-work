@@ -31,7 +31,7 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
                 break;
             case SessionAgentMode.Ask:
                 builder.AppendLine("- The user selected Ask mode for this session — read-only Q&A about the workspace.");
-                builder.AppendLine("- Follow the tool decision tree below; unavailable mutating tools are not permitted.");
+                builder.AppendLine("- Follow the tool decision tree below; write/patch/shell/terminal/MCP/sub-agent tools are not permitted.");
                 break;
             case SessionAgentMode.Plan:
                 builder.AppendLine("- The user selected Plan mode — produce an implementation plan for review before coding.");

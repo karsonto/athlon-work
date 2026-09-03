@@ -180,6 +180,53 @@ public sealed class McpDelegatingToolRouterSearchModeTests
         Assert.Contains("Debug phase", result.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void ListTools_HidesMcp_InAskMode()
+    {
+        var registry = new TestMcpRegistry(CreateCatalog(3));
+        var settings = new AppSettings
+        {
+            McpSearch = new McpSearchSettings { Enabled = true, Mode = "direct" }
+        };
+
+        var names = CreateAskRouter(registry, settings).ListTools().Select(tool => tool.Name).ToArray();
+        Assert.DoesNotContain(McpSearchGatewayTools.SearchToolName, names);
+        Assert.DoesNotContain(names, name => name.StartsWith("mcp_", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task InvokeAsync_RejectsMcp_InAskMode()
+    {
+        var registry = new TestMcpRegistry(CreateCatalog(1));
+        var settings = new AppSettings
+        {
+            McpSearch = new McpSearchSettings { Enabled = true, Mode = "direct" }
+        };
+
+        var result = await CreateAskRouter(registry, settings).InvokeAsync(new ToolInvocation(
+            McpToolNameCodec.Encode("server", "tool_0"),
+            new Dictionary<string, string>()));
+        Assert.False(result.Succeeded);
+        Assert.Contains("Ask mode", result.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static McpDelegatingToolRouter CreateAskRouter(
+        IMcpRegistry registry,
+        AppSettings settings) =>
+        new(
+            static tools => tools,
+            Array.Empty<IAgentTool>(),
+            registry,
+            settings,
+            RouterTestDependencies.CreateSessionContext(),
+            RouterTestDependencies.CreateSessionKnowledgeState(),
+            RouterTestDependencies.CreateSessionHarnessState(SessionAgentMode.Ask),
+            RouterTestDependencies.CreateRunContextAccessor(SessionAgentMode.Ask),
+            RouterTestDependencies.CreateDebugPhaseAccessor(),
+            RouterTestDependencies.CreateWorkspaceGuard(),
+            RouterTestDependencies.CreateBrowserWorkspaceState(),
+            RouterTestDependencies.CreateTerminalWorkspaceState());
+
     private static McpDelegatingToolRouter CreateDebugRouter(
         IMcpRegistry registry,
         AppSettings settings,

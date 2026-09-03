@@ -150,7 +150,7 @@ internal sealed class McpDelegatingToolRouter(
     public IReadOnlyList<ToolDefinition> ListTools()
     {
         var local = GetOrCreateLocalRouter().ListTools();
-        if (IsComputerUseMode || IsChatOnlyMode || IsDebugMcpBlocked() || IsPlanMcpBlocked())
+        if (IsComputerUseMode || IsChatOnlyMode || IsAskMcpBlocked() || IsDebugMcpBlocked() || IsPlanMcpBlocked())
         {
             return Canonicalize(local);
         }
@@ -188,7 +188,7 @@ internal sealed class McpDelegatingToolRouter(
             return local;
         }
 
-        if (IsComputerUseMode || IsChatOnlyMode || IsDebugMcpBlocked() || IsPlanMcpBlocked())
+        if (IsComputerUseMode || IsChatOnlyMode || IsAskMcpBlocked() || IsDebugMcpBlocked() || IsPlanMcpBlocked())
         {
             return null;
         }
@@ -222,7 +222,7 @@ internal sealed class McpDelegatingToolRouter(
             return true;
         }
 
-        if (IsDebugMcpBlocked() || IsPlanMcpBlocked() || !ShouldUseMcpSearch())
+        if (IsAskMcpBlocked() || IsDebugMcpBlocked() || IsPlanMcpBlocked() || !ShouldUseMcpSearch())
         {
             return false;
         }
@@ -256,6 +256,15 @@ internal sealed class McpDelegatingToolRouter(
                     "Tool not available",
                     "This tool is not available without a configured workspace."));
             }
+        }
+
+        if (IsAskMcpBlocked()
+            && (IsSearchGatewayTool(invocation.ToolName)
+                || McpToolNameCodec.TryDecode(invocation.ToolName, out _, out _)))
+        {
+            return Task.FromResult(ToolResult.Failure(
+                "Tool not available",
+                "MCP tools are not available in Ask mode. Use read-only workspace tools only."));
         }
 
         if (IsDebugMcpBlocked()
@@ -353,6 +362,8 @@ internal sealed class McpDelegatingToolRouter(
 
         return localRouter.InvokeAsync(invocation, cancellationToken);
     }
+
+    private bool IsAskMcpBlocked() => ResolveSessionAgentMode() == SessionAgentMode.Ask;
 
     private bool IsDebugMcpBlocked()
     {

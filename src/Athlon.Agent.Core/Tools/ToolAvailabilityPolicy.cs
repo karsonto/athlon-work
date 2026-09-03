@@ -31,6 +31,16 @@ public static class ToolAvailabilityPolicy
             static ctx => !ctx.HasWorkspace,
             static (ctx, facets) =>
             {
+                // Ask mode is read-only: never unlock Terminal / shell bootstrap without a workspace.
+                if (ctx.Mode == SessionAgentMode.Ask
+                    && (facets.HasFlag(ToolFacet.Terminal)
+                        || facets.HasFlag(ToolFacet.TerminalBootstrap)
+                        || facets.HasFlag(ToolFacet.Shell)
+                        || facets.HasFlag(ToolFacet.WriteFileOrShell)))
+                {
+                    return false;
+                }
+
                 if (facets.HasFlag(ToolFacet.BrowserBootstrap)
                     || facets.HasFlag(ToolFacet.TerminalBootstrap))
                 {
@@ -101,11 +111,13 @@ public static class ToolAvailabilityPolicy
                     : null),
         // Memory without workspace is already rejected by chat-only (never null there).
         new(
-            "ask-block-writes-and-subagents",
+            "ask-block-writes-shell-terminal-subagents",
             static ctx => ctx.Mode == SessionAgentMode.Ask,
             static (_, facets) =>
                 facets.HasFlag(ToolFacet.WriteFileOrShell)
                 || facets.HasFlag(ToolFacet.Shell)
+                || facets.HasFlag(ToolFacet.Terminal)
+                || facets.HasFlag(ToolFacet.TerminalBootstrap)
                 || facets.HasFlag(ToolFacet.SubAgent)
                     ? false
                     : null),

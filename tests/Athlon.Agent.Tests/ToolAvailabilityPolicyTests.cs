@@ -83,13 +83,24 @@ public sealed class ToolAvailabilityPolicyTests
     }
 
     [Fact]
-    public void Ask_BlocksWritesAndSubAgents()
+    public void Ask_BlocksWritesShellTerminalAndSubAgents()
     {
-        var ctx = AgentLocal with { Mode = SessionAgentMode.Ask };
+        var ctx = AgentLocal with { Mode = SessionAgentMode.Ask, TerminalTabOpen = true };
         Assert.False(ToolAvailabilityPolicy.IsEnabled(new StubLocalWrite("file_write"), ctx));
         Assert.False(ToolAvailabilityPolicy.IsEnabled(new StubLocalWrite("execute_command"), ctx));
         Assert.False(ToolAvailabilityPolicy.IsEnabled(new StubSubAgent("sessions_spawn"), ctx));
+        Assert.False(ToolAvailabilityPolicy.IsEnabled(new StubNamed("terminal_open"), ctx));
+        Assert.False(ToolAvailabilityPolicy.IsEnabled(new StubTerminal("terminal_send_input"), ctx));
+        Assert.False(ToolAvailabilityPolicy.IsEnabled(new StubTerminal("terminal_read_output"), ctx));
         Assert.True(ToolAvailabilityPolicy.IsEnabled(new StubLocal("file_read"), ctx));
+    }
+
+    [Fact]
+    public void Ask_ChatOnly_BlocksTerminalBootstrap()
+    {
+        var ctx = AgentLocal with { Mode = SessionAgentMode.Ask, HasWorkspace = false };
+        Assert.False(ToolAvailabilityPolicy.IsEnabled(new StubNamed("terminal_open"), ctx));
+        Assert.True(ToolAvailabilityPolicy.IsEnabled(new StubNamed("browser_navigate"), ctx));
     }
 
     [Fact]

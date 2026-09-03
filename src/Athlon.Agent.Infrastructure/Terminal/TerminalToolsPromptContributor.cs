@@ -10,6 +10,11 @@ public sealed class TerminalToolsPromptContributor(ITerminalWorkspaceState termi
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
+        if (PromptModeHelper.IsAskMode(context) || PromptModeHelper.IsPlanMode(context))
+        {
+            return;
+        }
+
         if (terminalWorkspaceState.HasOpenTerminalTab)
         {
             builder.AppendLine("Workspace Terminal tools are available for the open Terminal tab.");

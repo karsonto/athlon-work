@@ -95,7 +95,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
             }
             else
             {
-                builder.AppendLine("  2. Reject mutation: do not call write/patch/shell/sub-agent tools even if you remember them from other modes.");
+                builder.AppendLine("  2. Reject mutation: do not call write/patch/shell/terminal/MCP/sub-agent tools even if you remember them from other modes.");
             }
 
             builder.AppendLine(PromptModeHelper.IsPlanMode(context)

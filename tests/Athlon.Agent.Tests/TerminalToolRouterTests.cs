@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Terminal;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.Terminal;
@@ -86,12 +87,38 @@ public sealed class TerminalToolRouterTests
         Assert.False(result.Succeeded);
     }
 
-    private static McpDelegatingToolRouter CreateRouter(bool hasTerminalTab, bool configuredWorkspace = true) =>
-        CreateRouter(RouterTestDependencies.CreateTerminalWorkspaceState(hasTerminalTab), configuredWorkspace);
+    [Fact]
+    public void ListTools_AskMode_ExcludesAllTerminalTools_EvenWithOpenTab()
+    {
+        var router = CreateRouter(hasTerminalTab: true, mode: SessionAgentMode.Ask);
+        var names = router.ListTools().Select(t => t.Name).ToArray();
+        Assert.DoesNotContain("terminal_open", names);
+        Assert.DoesNotContain("terminal_send_input", names);
+        Assert.DoesNotContain("terminal_read_output", names);
+        Assert.DoesNotContain("terminal_get_session_info", names);
+    }
+
+    [Fact]
+    public void ListTools_AskMode_ChatOnly_ExcludesTerminalOpen()
+    {
+        var router = CreateRouter(hasTerminalTab: false, configuredWorkspace: false, mode: SessionAgentMode.Ask);
+        var names = router.ListTools().Select(t => t.Name).ToArray();
+        Assert.DoesNotContain("terminal_open", names);
+    }
+
+    private static McpDelegatingToolRouter CreateRouter(
+        bool hasTerminalTab,
+        bool configuredWorkspace = true,
+        SessionAgentMode mode = SessionAgentMode.Agent) =>
+        CreateRouter(
+            RouterTestDependencies.CreateTerminalWorkspaceState(hasTerminalTab),
+            configuredWorkspace,
+            mode);
 
     private static McpDelegatingToolRouter CreateRouter(
         ITerminalWorkspaceState terminalWorkspaceState,
-        bool configuredWorkspace = true)
+        bool configuredWorkspace = true,
+        SessionAgentMode mode = SessionAgentMode.Agent)
     {
         IAgentTool[] tools =
         [
@@ -108,8 +135,8 @@ public sealed class TerminalToolRouterTests
             new AppSettings(),
             RouterTestDependencies.CreateSessionContext(),
             RouterTestDependencies.CreateSessionKnowledgeState(),
-            RouterTestDependencies.CreateSessionHarnessState(),
-            new AgentRunContextAccessor(),
+            RouterTestDependencies.CreateSessionHarnessState(mode),
+            RouterTestDependencies.CreateRunContextAccessor(mode),
             RouterTestDependencies.CreateDebugPhaseAccessor(),
             RouterTestDependencies.CreateWorkspaceGuard(configuredWorkspace),
             RouterTestDependencies.CreateBrowserWorkspaceState(),
