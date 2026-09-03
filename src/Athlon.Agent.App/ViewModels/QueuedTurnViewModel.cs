@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -6,6 +7,10 @@ namespace Athlon.Agent.App.ViewModels;
 
 public sealed partial class QueuedTurnViewModel : ObservableObject
 {
+    private IReadOnlyList<ImageAttachment> _images = Array.Empty<ImageAttachment>();
+    private QueuedTurnImageViewModel[] _imageItems = Array.Empty<QueuedTurnImageViewModel>();
+    private int _imageCount;
+
     public QueuedTurnViewModel(
         string queueId,
         string previewText,
@@ -16,9 +21,7 @@ public sealed partial class QueuedTurnViewModel : ObservableObject
         PreviewText = previewText;
         TextContent = textContent;
         DraftText = textContent;
-        Images = images;
-        ImageCount = images.Count;
-        ImageItems = images.Select(image => new QueuedTurnImageViewModel(image)).ToArray();
+        SetImages(images);
     }
 
     public string QueueId { get; }
@@ -35,30 +38,73 @@ public sealed partial class QueuedTurnViewModel : ObservableObject
     [ObservableProperty]
     private bool isEditing;
 
-    public IReadOnlyList<ImageAttachment> Images { get; }
-    public IReadOnlyList<QueuedTurnImageViewModel> ImageItems { get; }
-    public int ImageCount { get; }
+    public ObservableCollection<PendingImageAttachmentViewModel> DraftImages { get; } = new();
+
+    public IReadOnlyList<ImageAttachment> Images => _images;
+
+    public IReadOnlyList<QueuedTurnImageViewModel> ImageItems => _imageItems;
+
+    public int ImageCount => _imageCount;
+
     public bool HasImages => ImageCount > 0;
+
+    public bool HasDraftImages => DraftImages.Count > 0;
+
     public bool HasText => !string.IsNullOrWhiteSpace(TextContent);
 
     public void BeginEdit()
     {
         DraftText = TextContent;
+        DraftImages.Clear();
+        foreach (var image in Images)
+        {
+            DraftImages.Add(new PendingImageAttachmentViewModel(image));
+        }
+
         IsEditing = true;
     }
 
     public void CancelEdit()
     {
         DraftText = TextContent;
+        DraftImages.Clear();
         IsEditing = false;
     }
 
-    public void ApplySavedText(string text)
+    public void ApplySaved(string text, IReadOnlyList<ImageAttachment> images)
     {
         TextContent = text;
-        PreviewText = BuildPreview(text, ImageCount);
+        SetImages(images);
+        PreviewText = BuildPreview(text, images.Count);
         DraftText = text;
+        DraftImages.Clear();
         IsEditing = false;
+    }
+
+    public void AddDraftImages(IEnumerable<ImageAttachment> images)
+    {
+        foreach (var image in images)
+        {
+            if (DraftImages.Any(existing => ImageAttachmentsMatch(existing.Attachment, image)))
+            {
+                continue;
+            }
+
+            DraftImages.Add(new PendingImageAttachmentViewModel(image));
+        }
+
+        OnPropertyChanged(nameof(HasDraftImages));
+    }
+
+    public void RemoveDraftImage(PendingImageAttachmentViewModel? image)
+    {
+        if (image is null)
+        {
+            return;
+        }
+
+        DraftImages.Remove(image);
+        OnPropertyChanged(nameof(HasDraftImages));
     }
 
     public static QueuedTurnViewModel Create(
@@ -94,16 +140,35 @@ public sealed partial class QueuedTurnViewModel : ObservableObject
 
         return trimmed[..budget] + "…" + suffix;
     }
+
+    private void SetImages(IReadOnlyList<ImageAttachment> images)
+    {
+        _images = images;
+        _imageCount = images.Count;
+        _imageItems = images.Select(image => new QueuedTurnImageViewModel(image)).ToArray();
+        OnPropertyChanged(nameof(Images));
+        OnPropertyChanged(nameof(ImageItems));
+        OnPropertyChanged(nameof(ImageCount));
+        OnPropertyChanged(nameof(HasImages));
+    }
+
+    private static bool ImageAttachmentsMatch(ImageAttachment left, ImageAttachment right) =>
+        (!string.IsNullOrWhiteSpace(left.LocalPath)
+            && string.Equals(left.LocalPath, right.LocalPath, StringComparison.OrdinalIgnoreCase))
+        || (!string.IsNullOrWhiteSpace(left.DataUrl)
+            && string.Equals(left.DataUrl, right.DataUrl, StringComparison.Ordinal));
 }
 
 public sealed class QueuedTurnImageViewModel
 {
     public QueuedTurnImageViewModel(ImageAttachment attachment)
     {
+        Attachment = attachment;
         FileName = attachment.FileName;
         Thumbnail = ImageAttachmentUi.TryCreateThumbnail(attachment);
     }
 
+    public ImageAttachment Attachment { get; }
     public string FileName { get; }
     public System.Windows.Media.ImageSource? Thumbnail { get; }
 }

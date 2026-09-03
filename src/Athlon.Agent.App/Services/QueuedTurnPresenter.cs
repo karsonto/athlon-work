@@ -52,9 +52,13 @@ public sealed class QueuedTurnPresenter(SessionTurnHost turnHost)
     }
 
     /// <summary>
-    /// Updates queued text. Returns false when the item is missing or the new text is empty with no images.
+    /// Updates queued text and images. Returns false when the item is missing or both text and images are empty.
     /// </summary>
-    public bool UpdateText(string sessionId, string queueId, string text)
+    public bool Update(
+        string sessionId,
+        string queueId,
+        string text,
+        IReadOnlyList<ImageAttachment> images)
     {
         var collection = GetForSession(sessionId);
         var item = collection.FirstOrDefault(turn => string.Equals(turn.QueueId, queueId, StringComparison.Ordinal));
@@ -64,17 +68,18 @@ public sealed class QueuedTurnPresenter(SessionTurnHost turnHost)
         }
 
         var trimmed = text?.Trim() ?? string.Empty;
-        if (trimmed.Length == 0 && !item.HasImages)
+        var imageList = images?.ToArray() ?? Array.Empty<ImageAttachment>();
+        if (trimmed.Length == 0 && imageList.Length == 0)
         {
             return false;
         }
 
-        if (!turnHost.UpdateUserInput(sessionId, queueId, trimmed))
+        if (!turnHost.UpdateQueuedTurn(sessionId, queueId, trimmed, imageList))
         {
             return false;
         }
 
-        item.ApplySavedText(trimmed);
+        item.ApplySaved(trimmed, imageList);
         QueueChanged?.Invoke(sessionId);
         return true;
     }

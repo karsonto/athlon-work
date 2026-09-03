@@ -114,7 +114,7 @@ public sealed class SessionTurnHostTests
     }
 
     [Fact]
-    public void UpdateUserInput_UpdatesMatchingItem_PreservesOrder()
+    public void UpdateQueuedTurn_UpdatesMatchingItem_PreservesOrder()
     {
         var host = CreateHost(new SlowOrchestrator(TimeSpan.FromMilliseconds(1)));
         var sessionId = "update";
@@ -122,8 +122,8 @@ public sealed class SessionTurnHostTests
         host.Enqueue(new QueuedTurnPayload("b", sessionId, "two", Array.Empty<ImageAttachment>(), null!));
         host.Enqueue(new QueuedTurnPayload("c", sessionId, "three", Array.Empty<ImageAttachment>(), null!));
 
-        Assert.True(host.UpdateUserInput(sessionId, "b", "  two-edited  "));
-        Assert.False(host.UpdateUserInput(sessionId, "missing", "nope"));
+        Assert.True(host.UpdateQueuedTurn(sessionId, "b", "  two-edited  ", Array.Empty<ImageAttachment>()));
+        Assert.False(host.UpdateQueuedTurn(sessionId, "missing", "nope", Array.Empty<ImageAttachment>()));
 
         Assert.True(host.TryDequeue(sessionId, out var first));
         Assert.Equal("a", first!.QueueId);
@@ -134,6 +134,32 @@ public sealed class SessionTurnHostTests
         Assert.True(host.TryDequeue(sessionId, out var third));
         Assert.Equal("c", third!.QueueId);
         Assert.Equal("three", third.UserInput);
+    }
+
+    [Fact]
+    public void UpdateQueuedTurn_ReplacesTextAndImagesTogether()
+    {
+        var host = CreateHost(new SlowOrchestrator(TimeSpan.FromMilliseconds(1)));
+        var sessionId = "update-images";
+        var originalImages = new[]
+        {
+            new ImageAttachment("old.png", "image/png", "data:image/png;base64,AA=="),
+        };
+        var replacementImages = new[]
+        {
+            new ImageAttachment("new-a.png", "image/png", "data:image/png;base64,BB=="),
+            new ImageAttachment("new-b.png", "image/png", "data:image/png;base64,CC=="),
+        };
+
+        host.Enqueue(new QueuedTurnPayload("q1", sessionId, "caption", originalImages, null!));
+
+        Assert.True(host.UpdateQueuedTurn(sessionId, "q1", "updated", replacementImages));
+        Assert.True(host.TryDequeue(sessionId, out var payload));
+
+        Assert.Equal("updated", payload!.UserInput);
+        Assert.Equal(2, payload.ImageAttachments.Count);
+        Assert.Equal("new-a.png", payload.ImageAttachments[0].FileName);
+        Assert.Equal("new-b.png", payload.ImageAttachments[1].FileName);
     }
 
     [Fact]

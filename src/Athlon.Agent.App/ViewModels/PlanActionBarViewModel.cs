@@ -119,15 +119,6 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
             return;
         }
 
-        PhaseLabel = string.Format(Strings.Get("Plan_PhaseLabel"), run.Phase);
-        Summary = !string.IsNullOrWhiteSpace(run.Overview)
-            ? run.Overview!
-            : (run.Title ?? run.Goal ?? string.Empty);
-        TodosSummary = run.Todos.Count == 0
-            ? string.Empty
-            : string.Join(
-                Environment.NewLine,
-                run.Todos.Select(t => "• " + t.Content));
         ShowBuild = true;
         NotifyActionCommands();
     }

@@ -78,6 +78,46 @@ public partial class NavigationSidebarView : UserControl
         _shell.SaveQueuedTurnCommand.Execute(item);
     }
 
+    private async void QueuedTurnAddImage_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement element
+            || element.DataContext is not QueuedTurnViewModel item
+            || _shell is null)
+        {
+            return;
+        }
+
+        _suppressQueuedTurnLostFocusSave = true;
+        try
+        {
+            await _shell.AddImagesToQueuedTurnAsync(item).ConfigureAwait(true);
+        }
+        finally
+        {
+            _suppressQueuedTurnLostFocusSave = false;
+        }
+    }
+
+    private void QueuedTurnRemoveDraftImage_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button
+            || button.DataContext is not PendingImageAttachmentViewModel image
+            || _shell is null)
+        {
+            return;
+        }
+
+        _suppressQueuedTurnLostFocusSave = true;
+        try
+        {
+            _shell.RemoveQueuedTurnImageCommand.Execute(image);
+        }
+        finally
+        {
+            _suppressQueuedTurnLostFocusSave = false;
+        }
+    }
+
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         if (_shell is not null)

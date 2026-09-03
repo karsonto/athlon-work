@@ -1652,23 +1652,65 @@ function resolvePlanClarify(event) {
   applyPlanClarifyResolved(card, event && event.summary);
 }
 
+function placePlanReadyRow(row) {
+  var root = getMessageRoot();
+  if (!root || !row) return;
+  var rows = Array.prototype.slice.call(root.querySelectorAll('.message-row'));
+  var lastUserIdx = -1;
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].classList.contains('user')) lastUserIdx = i;
+  }
+
+  var insertAfter = lastUserIdx >= 0 ? rows[lastUserIdx] : null;
+  for (var j = lastUserIdx + 1; j < rows.length; j++) {
+    var candidate = rows[j];
+    if (candidate === row) continue;
+    if (candidate.querySelector('.turn-activity')) {
+      insertAfter = candidate;
+      continue;
+    }
+    if (candidate.classList.contains('plan-row')) continue;
+    if (candidate.classList.contains('tool-row')) continue;
+    if (candidate.classList.contains('assistant-row')
+        && candidate.querySelector('.bubble > .message-content')) {
+      insertAfter = candidate;
+      continue;
+    }
+  }
+
+  if (insertAfter && insertAfter.parentNode === root) {
+    root.insertBefore(row, insertAfter.nextSibling);
+    return;
+  }
+  root.appendChild(row);
+}
+
+function resolvePlanMarkdown(event) {
+  if (event && event.markdownB64) return decodeBase64Utf8(event.markdownB64);
+  if (event && event.markdown) return event.markdown;
+  if (event && event.overview) return event.overview;
+  return '';
+}
+
 function showPlanReady(event) {
   if (!event) return;
   var runId = event.runId || 'plan';
   var existing = getPlanReadyCard(runId);
+  var row;
   var card;
   if (existing) {
     card = existing;
+    row = card.closest('.message-row');
     card.innerHTML = '';
   } else {
     state.currentAssistantEl = null;
     state.currentReasoningEl = null;
-    var row = document.createElement('div');
+    row = document.createElement('div');
     row.className = 'message-row assistant plan-row';
     card = document.createElement('div');
     card.className = 'plan-ready-card';
     row.appendChild(card);
-    getMessageRoot().appendChild(row);
+    placePlanReadyRow(row);
     updateEmptyStateVisibility();
   }
   card.dataset.runId = runId;
@@ -1681,26 +1723,8 @@ function showPlanReady(event) {
 
   var body = document.createElement('div');
   body.className = 'plan-ready-body md-root';
-  applyMarkdownHtml(body, resolveRenderedHtml(event, event.overview || ''));
+  applyMarkdownHtml(body, resolveRenderedHtml(event, resolvePlanMarkdown(event)));
   card.appendChild(body);
-
-  if (event.todos && event.todos.length) {
-    var todosWrap = document.createElement('div');
-    todosWrap.className = 'plan-ready-todos';
-    var todosTitle = document.createElement('div');
-    todosTitle.className = 'plan-card-subtitle';
-    todosTitle.dataset.i18n = 'planTodos';
-    todosTitle.textContent = t('planTodos');
-    todosWrap.appendChild(todosTitle);
-    var list = document.createElement('ul');
-    event.todos.forEach(function (todo) {
-      var item = document.createElement('li');
-      item.textContent = todo.content || todo.id || '';
-      list.appendChild(item);
-    });
-    todosWrap.appendChild(list);
-    card.appendChild(todosWrap);
-  }
 
   var actions = document.createElement('div');
   actions.className = 'plan-card-actions';
@@ -1725,7 +1749,7 @@ function showPlanReady(event) {
   });
   actions.appendChild(buildBtn);
   card.appendChild(actions);
-  scrollToBottom(true);
+  if (row) placePlanReadyRow(row);
 }
 
 function appendOverflowSkipped(event) {

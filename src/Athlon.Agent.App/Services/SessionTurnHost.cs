@@ -238,9 +238,14 @@ public sealed class SessionTurnHost
         }
     }
 
-    public bool UpdateUserInput(string sessionId, string queueId, string userInput)
+    public bool UpdateQueuedTurn(
+        string sessionId,
+        string queueId,
+        string userInput,
+        IReadOnlyList<ImageAttachment> imageAttachments)
     {
         var trimmed = userInput?.Trim() ?? string.Empty;
+        var images = imageAttachments?.ToArray() ?? Array.Empty<ImageAttachment>();
         lock (_startGate)
         {
             if (!_queues.TryGetValue(sessionId, out var queue) || queue.Count == 0)
@@ -255,7 +260,11 @@ public sealed class SessionTurnHost
                 return false;
             }
 
-            items[index] = items[index] with { UserInput = trimmed };
+            items[index] = items[index] with
+            {
+                UserInput = trimmed,
+                ImageAttachments = images,
+            };
             queue.Clear();
             foreach (var item in items)
             {

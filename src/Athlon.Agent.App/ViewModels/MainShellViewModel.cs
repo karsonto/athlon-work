@@ -718,6 +718,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public IRelayCommand BeginEditQueuedTurnCommand => ChatPage.BeginEditQueuedTurnCommand;
     public IRelayCommand SaveQueuedTurnCommand => ChatPage.SaveQueuedTurnCommand;
     public IRelayCommand CancelEditQueuedTurnCommand => ChatPage.CancelEditQueuedTurnCommand;
+    public IAsyncRelayCommand AddImagesToQueuedTurnCommand => ChatPage.AddImagesToQueuedTurnCommand;
+    public IRelayCommand RemoveQueuedTurnImageCommand => ChatPage.RemoveQueuedTurnImageCommand;
+
+    public Task AddImagesToQueuedTurnAsync(QueuedTurnViewModel item) =>
+        ChatPage.AddImagesToQueuedTurnCommand.ExecuteAsync(item);
 
     [RelayCommand]
     private void TogglePlusMenu()

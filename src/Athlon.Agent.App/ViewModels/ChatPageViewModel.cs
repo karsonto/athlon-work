@@ -543,12 +543,68 @@ public sealed partial class ChatPageViewModel : ObservableObject
         }
 
         var sessionId = _getDisplayedSessionId!();
-        if (_sessionTurns.QueuedTurnPresenter.UpdateText(sessionId, item.QueueId, item.DraftText))
+        var trimmed = item.DraftText?.Trim() ?? string.Empty;
+        if (trimmed.Length == 0 && item.DraftImages.Count == 0)
+        {
+            _showShellToast?.Invoke(_loc["Nav_QueuedEmptyText"], ShellToastKind.Error);
+            return;
+        }
+
+        var imageAttachments = _composer.PersistPendingImages(sessionId, item.DraftImages);
+        if (!_sessionTurns.QueuedTurnPresenter.Update(sessionId, item.QueueId, trimmed, imageAttachments))
+        {
+            _showShellToast?.Invoke(_loc["Nav_QueuedEmptyText"], ShellToastKind.Error);
+        }
+    }
+
+    [RelayCommand]
+    private async Task AddImagesToQueuedTurnAsync(QueuedTurnViewModel? item)
+    {
+        if (item is null || !item.IsEditing)
         {
             return;
         }
 
-        _showShellToast?.Invoke(_loc["Nav_QueuedEmptyText"], ShellToastKind.Error);
+        var dialog = new OpenFileDialog
+        {
+            Title = Strings.Get("Chat_SelectImages"),
+            Multiselect = true,
+            Filter = Strings.Get("Chat_SelectFilesFilter"),
+        };
+
+        if (dialog.ShowDialog() != true || dialog.FileNames.Length == 0)
+        {
+            return;
+        }
+
+        var imagePaths = dialog.FileNames
+            .Where(path => !string.IsNullOrWhiteSpace(path)
+                && File.Exists(path)
+                && _documentExtractor.IsImageFile(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (imagePaths.Length == 0)
+        {
+            return;
+        }
+
+        var images = await _imageAttachmentReader.ReadImagesAsync(imagePaths).ConfigureAwait(true);
+        item.AddDraftImages(images);
+    }
+
+    [RelayCommand]
+    private void RemoveQueuedTurnImage(PendingImageAttachmentViewModel? image)
+    {
+        if (image is null)
+        {
+            return;
+        }
+
+        var sessionId = _getDisplayedSessionId!();
+        var turn = _sessionTurns.QueuedTurnPresenter
+            .GetForSession(sessionId)
+            .FirstOrDefault(item => item.IsEditing && item.DraftImages.Contains(image));
+        turn?.RemoveDraftImage(image);
     }
 
     [RelayCommand]

@@ -398,9 +398,13 @@
                                                             <Style TargetType="ItemsControl">
                                                                 <Setter Property="Visibility" Value="Collapsed" />
                                                                 <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding HasImages}" Value="True">
+                                                                    <MultiDataTrigger>
+                                                                        <MultiDataTrigger.Conditions>
+                                                                            <Condition Binding="{Binding HasImages}" Value="True" />
+                                                                            <Condition Binding="{Binding IsEditing}" Value="False" />
+                                                                        </MultiDataTrigger.Conditions>
                                                                         <Setter Property="Visibility" Value="Visible" />
-                                                                    </DataTrigger>
+                                                                    </MultiDataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
                                                         </ItemsControl.Style>
@@ -428,6 +432,90 @@
                                                             </DataTemplate>
                                                         </ItemsControl.ItemTemplate>
                                                     </ItemsControl>
+                                                    <StackPanel Margin="0,6,0,0">
+                                                        <StackPanel.Style>
+                                                            <Style TargetType="StackPanel">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </StackPanel.Style>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <ItemsControl ItemsSource="{Binding DraftImages}">
+                                                                <ItemsControl.ItemsPanel>
+                                                                    <ItemsPanelTemplate>
+                                                                        <WrapPanel Orientation="Horizontal" />
+                                                                    </ItemsPanelTemplate>
+                                                                </ItemsControl.ItemsPanel>
+                                                                <ItemsControl.ItemTemplate>
+                                                                    <DataTemplate DataType="{x:Type vm:PendingImageAttachmentViewModel}">
+                                                                        <Border Style="{StaticResource ComposerPendingChipBorderStyle}"
+                                                                                Margin="0,0,8,8">
+                                                                            <Grid>
+                                                                                <Grid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="Auto" />
+                                                                                    <ColumnDefinition Width="Auto" />
+                                                                                    <ColumnDefinition Width="Auto" />
+                                                                                </Grid.ColumnDefinitions>
+                                                                                <Border Grid.Column="0"
+                                                                                        Width="40"
+                                                                                        Height="40"
+                                                                                        CornerRadius="8"
+                                                                                        BorderBrush="{DynamicResource Brush.Border}"
+                                                                                        BorderThickness="1"
+                                                                                        Background="{DynamicResource Brush.Panel}"
+                                                                                        Margin="0,0,8,0">
+                                                                                    <Image Source="{Binding Thumbnail}"
+                                                                                           Stretch="UniformToFill"
+                                                                                           Margin="2" />
+                                                                                </Border>
+                                                                                <TextBlock Grid.Column="1"
+                                                                                           Text="{Binding FileName}"
+                                                                                           FontSize="12"
+                                                                                           TextTrimming="CharacterEllipsis"
+                                                                                           MaxWidth="120"
+                                                                                           VerticalAlignment="Center" />
+                                                                                <Button Grid.Column="2"
+                                                                                        Content="×"
+                                                                                        Click="QueuedTurnRemoveDraftImage_Click"
+                                                                                        Style="{StaticResource SessionDeleteButtonStyle}" />
+                                                                            </Grid>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ItemsControl.ItemTemplate>
+                                                            </ItemsControl>
+                                                            <Button VerticalAlignment="Top"
+                                                                    Margin="0,0,0,8"
+                                                                    Click="QueuedTurnAddImage_Click"
+                                                                    ToolTip="{loc:Localize Key=Nav_QueuedAddImage}"
+                                                                    Style="{StaticResource ComposerToolButtonStyle}">
+                                                                <Canvas Width="10"
+                                                                        Height="10"
+                                                                        HorizontalAlignment="Center"
+                                                                        VerticalAlignment="Center"
+                                                                        SnapsToDevicePixels="True"
+                                                                        UseLayoutRounding="True">
+                                                                    <Rectangle Canvas.Left="0"
+                                                                               Canvas.Top="4"
+                                                                               Width="10"
+                                                                               Height="2"
+                                                                               RadiusX="1"
+                                                                               RadiusY="1"
+                                                                               Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
+                                                                    <Rectangle Canvas.Left="4"
+                                                                               Canvas.Top="0"
+                                                                               Width="2"
+                                                                               Height="10"
+                                                                               RadiusX="1"
+                                                                               RadiusY="1"
+                                                                               Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
+                                                                </Canvas>
+                                                            </Button>
+                                                        </StackPanel>
+                                                    </StackPanel>
                                                 </StackPanel>
                                                 <Button Grid.Column="1"
                                                         Content="×"

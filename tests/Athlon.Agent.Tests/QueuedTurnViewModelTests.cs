@@ -53,6 +53,25 @@ public sealed class QueuedTurnViewModelTests
     }
 
     [Fact]
+    public void BeginEdit_CopiesDraftImages()
+    {
+        var images = new[]
+        {
+            new ImageAttachment("a.png", "image/png", "data:image/png;base64,AA=="),
+            new ImageAttachment("b.png", "image/png", "data:image/png;base64,BB=="),
+        };
+        var vm = QueuedTurnViewModel.Create("q1", "caption", images);
+
+        vm.BeginEdit();
+
+        Assert.True(vm.IsEditing);
+        Assert.Equal("caption", vm.DraftText);
+        Assert.Equal(2, vm.DraftImages.Count);
+        Assert.Equal("a.png", vm.DraftImages[0].FileName);
+        Assert.Equal("b.png", vm.DraftImages[1].FileName);
+    }
+
+    [Fact]
     public void BeginEdit_And_CancelEdit_RestoreDraft()
     {
         var vm = QueuedTurnViewModel.Create("q1", "original", Array.Empty<ImageAttachment>());
@@ -60,20 +79,62 @@ public sealed class QueuedTurnViewModelTests
         Assert.True(vm.IsEditing);
         Assert.Equal("original", vm.DraftText);
         vm.DraftText = "changed";
+        vm.AddDraftImages([new ImageAttachment("x.png", "image/png", "data:image/png;base64,XX==")]);
         vm.CancelEdit();
         Assert.False(vm.IsEditing);
         Assert.Equal("original", vm.TextContent);
         Assert.Equal("original", vm.DraftText);
+        Assert.Empty(vm.DraftImages);
+        Assert.Equal(0, vm.ImageCount);
     }
 
     [Fact]
-    public void ApplySavedText_UpdatesPreviewAndExitsEdit()
+    public void ApplySaved_UpdatesPreviewImagesAndExitsEdit()
     {
         var vm = QueuedTurnViewModel.Create("q1", "old", Array.Empty<ImageAttachment>());
+        var savedImages = new[]
+        {
+            new ImageAttachment("saved.png", "image/png", "data:image/png;base64,CC=="),
+        };
+
         vm.BeginEdit();
-        vm.ApplySavedText("new text");
+        vm.ApplySaved("new text", savedImages);
+
         Assert.False(vm.IsEditing);
         Assert.Equal("new text", vm.TextContent);
-        Assert.Equal("new text", vm.PreviewText);
+        Assert.Equal("new text · 1 张图片", vm.PreviewText);
+        Assert.Single(vm.Images);
+        Assert.Equal("saved.png", vm.ImageItems[0].FileName);
+        Assert.Empty(vm.DraftImages);
+    }
+
+    [Fact]
+    public void AddDraftImages_DeduplicatesByDataUrl()
+    {
+        var image = new ImageAttachment("a.png", "image/png", "data:image/png;base64,AA==");
+        var vm = QueuedTurnViewModel.Create("q1", "text", Array.Empty<ImageAttachment>());
+        vm.BeginEdit();
+
+        vm.AddDraftImages([image, image]);
+
+        Assert.Single(vm.DraftImages);
+    }
+
+    [Fact]
+    public void RemoveDraftImage_RemovesMatchingItem()
+    {
+        var images = new[]
+        {
+            new ImageAttachment("a.png", "image/png", "data:image/png;base64,AA=="),
+            new ImageAttachment("b.png", "image/png", "data:image/png;base64,BB=="),
+        };
+        var vm = QueuedTurnViewModel.Create("q1", "text", images);
+        vm.BeginEdit();
+        var toRemove = vm.DraftImages[0];
+
+        vm.RemoveDraftImage(toRemove);
+
+        Assert.Single(vm.DraftImages);
+        Assert.Equal("b.png", vm.DraftImages[0].FileName);
     }
 }

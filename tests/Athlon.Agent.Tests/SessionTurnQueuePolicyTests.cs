@@ -37,7 +37,7 @@ public sealed class SessionTurnQueuePolicyTests
     }
 
     [Fact]
-    public void Presenter_UpdateText_RejectsEmptyWithoutImages_AllowsWithImages()
+    public void Presenter_Update_RejectsEmptyWithoutImages_AllowsWithImages()
     {
         var host = new SessionTurnHost(
             new NoOpOrchestrator(),
@@ -52,19 +52,25 @@ public sealed class SessionTurnQueuePolicyTests
         {
             new ImageAttachment("a.png", "image/png", "data:image/png;base64,AA=="),
         };
+        var replacementImages = new[]
+        {
+            new ImageAttachment("b.png", "image/png", "data:image/png;base64,BB=="),
+        };
 
         presenter.Enqueue(sessionId, "text-only", "hello", Array.Empty<ImageAttachment>(), null!);
-        Assert.False(presenter.UpdateText(sessionId, "text-only", "   "));
-        Assert.True(presenter.UpdateText(sessionId, "text-only", "updated"));
+        Assert.False(presenter.Update(sessionId, "text-only", "   ", Array.Empty<ImageAttachment>()));
+        Assert.True(presenter.Update(sessionId, "text-only", "updated", Array.Empty<ImageAttachment>()));
 
         presenter.Enqueue(sessionId, "with-image", "caption", images, null!);
-        Assert.True(presenter.UpdateText(sessionId, "with-image", "  "));
+        Assert.True(presenter.Update(sessionId, "with-image", "  ", images));
+        Assert.True(presenter.Update(sessionId, "with-image", string.Empty, replacementImages));
 
         Assert.True(host.TryDequeue(sessionId, out var first));
         Assert.Equal("updated", first!.UserInput);
         Assert.True(host.TryDequeue(sessionId, out var second));
         Assert.Equal(string.Empty, second!.UserInput);
         Assert.Single(second.ImageAttachments);
+        Assert.Equal("b.png", second.ImageAttachments[0].FileName);
     }
 
     private sealed class NoOpOrchestrator : IAgentOrchestrator
