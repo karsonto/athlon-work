@@ -295,7 +295,7 @@ internal sealed class ToolInvocationPipeline(
         return session;
     }
 
-    public async Task<AgentSession> InvokeAndPersistAsync(
+    public async Task<(AgentSession Session, ToolResult Result)> InvokeAndPersistAsync(
         AgentSession session,
         string? parentMessageId,
         AgentToolCall toolCall,
@@ -311,7 +311,7 @@ internal sealed class ToolInvocationPipeline(
             persistMessageAsync,
             cancellationToken).ConfigureAwait(false);
         var outcome = await InvokeCoreAsync(session.Id, toolCall, callbacks, cancellationToken).ConfigureAwait(false);
-        return await PersistToolResultAsync(
+        session = await PersistToolResultAsync(
             session,
             parentMessageId,
             toolCall,
@@ -320,6 +320,7 @@ internal sealed class ToolInvocationPipeline(
             callbacks,
             persistMessageAsync,
             cancellationToken).ConfigureAwait(false);
+        return (session, outcome.Result);
     }
 
     private static string DescribeInvalidArgumentsActual(AgentToolCall toolCall)

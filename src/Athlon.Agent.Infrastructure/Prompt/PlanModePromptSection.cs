@@ -21,11 +21,10 @@ public sealed class PlanModePromptSection : IEnvironmentPromptSection
         builder.AppendLine("- You are producing an implementation plan for the user to review before any coding.");
         builder.AppendLine("- Follow the active plan phase instructions injected in runtime context.");
         builder.AppendLine("- Explore with read/search tools only; never edit project files or run shell in Plan mode.");
-        builder.AppendLine("- If the goal, stack, scope, or approach is ambiguous, call ask_plan_clarification with concrete options and wait. Do not guess silently.");
-        builder.AppendLine("- If there is enough information, do not ask; continue to Draft.");
-        builder.AppendLine("- In Draft, call publish_plan exactly once with a complete plan (title, overview, ## Steps, ## Acceptance).");
+        builder.AppendLine("- You own a multi-turn consulting loop: ask with ask_plan_clarification when ambiguous, or reply with a short follow-up question in plain text when a card is unnecessary.");
+        builder.AppendLine("- When information is sufficient, call publish_plan yourself (title, overview, ## Steps, ## Acceptance). Nothing auto-advances to drafting.");
         builder.AppendLine("- Prefer mermaid flowcharts for multi-step architecture when helpful.");
-        builder.AppendLine("- After publishing, stop and wait — the user will Build (switch to Coding) or send a revision.");
+        builder.AppendLine("- After publishing, stop — the user will Build (switch to Coding) or send a revision.");
         builder.AppendLine("- Do not start implementing, applying patches, or claiming the work is done.");
         builder.AppendLine();
     }

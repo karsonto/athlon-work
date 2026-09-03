@@ -77,9 +77,9 @@ public static class ToolAvailabilityPolicy
             static ctx => ctx.Mode != SessionAgentMode.Coding,
             static (_, facets) => facets.HasFlag(ToolFacet.HarnessTodo) ? false : null),
         new(
-            "plan-document-draft-only",
+            "plan-document-explore-or-draft",
             static ctx => ctx.Mode != SessionAgentMode.Plan
-                || ctx.ActivePlanPhase is not PlanPhase.Draft,
+                || ctx.ActivePlanPhase is not (PlanPhase.Explore or PlanPhase.Draft),
             static (_, facets) => facets.HasFlag(ToolFacet.PlanDocument) ? false : null),
         new(
             "plan-clarify-explore-only",

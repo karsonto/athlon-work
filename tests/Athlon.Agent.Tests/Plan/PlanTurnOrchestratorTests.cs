@@ -5,43 +5,35 @@ namespace Athlon.Agent.Tests.Plan;
 
 public sealed class PlanTurnOrchestratorTests
 {
+    private const string CompleteAuthPlan = """
+        # Fix auth token refresh
+
+        Refresh OAuth tokens before expiry.
+
+        ## Steps
+        1. Read token store
+        2. Add refresh timer
+        3. Cover with tests
+
+        ## Acceptance
+        - [ ] Tokens refresh before expiry
+        - [ ] Tests pass
+        """;
+
     [Fact]
-    public async Task RunUserTurnAsync_ExploreThenDraftThenAwaitConfirm()
+    public async Task RunUserTurnAsync_ExplorePublishes_SealsAwaitConfirm()
     {
         var session = AgentSession.Create("plan-session");
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
-        var completePlan = """
-            # Fix auth token refresh
-
-            Refresh OAuth tokens before expiry.
-
-            ## Steps
-            1. Read token store
-            2. Add refresh timer
-            3. Cover with tests
-
-            ## Acceptance
-            - [ ] Tokens refresh before expiry
-            - [ ] Tests pass
-            """;
-        var orchestrator = new StubAgentOrchestrator(_ =>
-        [
-            "Explored the auth module; token refresh is missing.",
-            "Calling publish_plan with the plan."
-        ]);
-
-        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
-        // Seed publish_plan content after explore, before draft seal by writing during draft turn.
-        orchestrator.OnTurn = turn =>
+        var orchestrator = new StubAgentOrchestrator(_ => ["Explored and publishing."]);
+        orchestrator.OnTurn = _ =>
         {
-            if (turn == 1)
-            {
-                store.WritePlanMarkdownAsync(session.Id, completePlan).GetAwaiter().GetResult();
-            }
+            store.WritePlanMarkdownAsync(session.Id, CompleteAuthPlan).GetAwaiter().GetResult();
         };
 
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
         session = await sut.RunUserTurnAsync(session, "Add token refresh", null, CancellationToken.None);
 
         var run = phaseAccessor.GetActiveRun(session.Id);
@@ -50,7 +42,62 @@ public sealed class PlanTurnOrchestratorTests
         Assert.Equal(PlanRunStatuses.AwaitingConfirmation, PlanRunStatuses.Normalize(run.Status));
         Assert.Contains("token", run.PlanMarkdown, StringComparison.OrdinalIgnoreCase);
         Assert.True(sut.IsAwaitingUser(session.Id));
-        Assert.Equal(new List<bool> { true, false }, orchestrator.AppendUserMessageFlags);
+        Assert.Equal(1, orchestrator.TurnCount);
+        Assert.Equal(new List<bool> { true }, orchestrator.AppendUserMessageFlags);
+    }
+
+    [Fact]
+    public async Task RunUserTurnAsync_ExploreWithoutPlan_StaysExplore()
+    {
+        var session = AgentSession.Create("plan-session");
+        var store = new InMemoryPlanRunStore();
+        var phaseAccessor = new PlanPhaseAccessor();
+        var sessionState = new PlanSessionState();
+        var orchestrator = new StubAgentOrchestrator(_ => ["Still gathering context."]);
+
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        session = await sut.RunUserTurnAsync(session, "Add notifications", null, CancellationToken.None);
+
+        var run = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(run);
+        Assert.Equal(PlanPhase.Explore, run.Phase);
+        Assert.False(sut.IsAwaitingUser(session.Id));
+        Assert.Equal(1, orchestrator.TurnCount);
+    }
+
+    [Fact]
+    public async Task RunUserTurnAsync_FollowUpInExplore_PublishesAwaitConfirm()
+    {
+        var session = AgentSession.Create("plan-session");
+        var store = new InMemoryPlanRunStore();
+        var phaseAccessor = new PlanPhaseAccessor();
+        var sessionState = new PlanSessionState();
+        var run = new PlanRun
+        {
+            Id = "run1",
+            SessionId = session.Id,
+            Phase = PlanPhase.Explore,
+            Status = PlanRunStatuses.Draft,
+            Goal = "Add token refresh",
+            PlanPath = store.GetPlanMarkdownPath(session.Id)
+        };
+        await store.SaveActiveAsync(run);
+        phaseAccessor.SetActiveRun(run);
+
+        var orchestrator = new StubAgentOrchestrator(_ => ["Ready to publish."]);
+        orchestrator.OnTurn = _ =>
+        {
+            store.WritePlanMarkdownAsync(session.Id, CompleteAuthPlan).GetAwaiter().GetResult();
+        };
+
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        session = await sut.RunUserTurnAsync(session, "Use sliding refresh", null, CancellationToken.None);
+
+        var after = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(after);
+        Assert.Equal(PlanPhase.AwaitConfirm, after.Phase);
+        Assert.Contains("token", after.PlanMarkdown, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, orchestrator.TurnCount);
     }
 
     [Fact]
@@ -113,7 +160,7 @@ public sealed class PlanTurnOrchestratorTests
     }
 
     [Fact]
-    public async Task RunUserTurnAsync_ExploreAsksClarification_StopsBeforeDraft()
+    public async Task RunUserTurnAsync_ExploreAsksClarification_StopsBeforePublish()
     {
         var session = AgentSession.Create("plan-session");
         var store = new InMemoryPlanRunStore();
@@ -165,7 +212,7 @@ public sealed class PlanTurnOrchestratorTests
     }
 
     [Fact]
-    public async Task RunUserTurnAsync_AnswerClarification_ThenDraftsPlan()
+    public async Task RunUserTurnAsync_AnswerClarification_ThenPublishesPlan()
     {
         var session = AgentSession.Create("plan-session");
         var store = new InMemoryPlanRunStore();
@@ -211,17 +258,10 @@ public sealed class PlanTurnOrchestratorTests
         await store.SaveActiveAsync(run);
         phaseAccessor.SetActiveRun(run);
 
-        var orchestrator = new StubAgentOrchestrator(_ =>
-        [
-            "Explored desktop toast APIs.",
-            "Calling publish_plan."
-        ]);
-        orchestrator.OnTurn = turn =>
+        var orchestrator = new StubAgentOrchestrator(_ => ["Publishing desktop plan."]);
+        orchestrator.OnTurn = _ =>
         {
-            if (turn == 1)
-            {
-                store.WritePlanMarkdownAsync(session.Id, completePlan).GetAwaiter().GetResult();
-            }
+            store.WritePlanMarkdownAsync(session.Id, completePlan).GetAwaiter().GetResult();
         };
 
         var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
@@ -239,7 +279,63 @@ public sealed class PlanTurnOrchestratorTests
         Assert.Equal(PlanPhase.AwaitConfirm, after.Phase);
         Assert.Null(after.PendingClarification);
         Assert.Contains("toast", after.PlanMarkdown, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(new List<bool> { true, false }, orchestrator.AppendUserMessageFlags);
+        Assert.Equal(1, orchestrator.TurnCount);
+        Assert.Equal(new List<bool> { true }, orchestrator.AppendUserMessageFlags);
+    }
+
+    [Fact]
+    public async Task RunUserTurnAsync_AnswerClarification_WithoutPlan_StaysExplore()
+    {
+        var session = AgentSession.Create("plan-session");
+        var store = new InMemoryPlanRunStore();
+        var phaseAccessor = new PlanPhaseAccessor();
+        var sessionState = new PlanSessionState();
+        var run = new PlanRun
+        {
+            Id = "run1",
+            SessionId = session.Id,
+            Phase = PlanPhase.AwaitClarify,
+            Status = PlanRunStatuses.AwaitingClarification,
+            Goal = "Add notifications",
+            PlanPath = store.GetPlanMarkdownPath(session.Id),
+            PendingClarification = new PlanClarification
+            {
+                RequestId = "q1",
+                Questions =
+                [
+                    new PlanClarificationQuestion
+                    {
+                        Id = "platform",
+                        Prompt = "Which platform?",
+                        Options =
+                        [
+                            new PlanClarificationOption { Id = "web", Label = "Web" },
+                            new PlanClarificationOption { Id = "desktop", Label = "Desktop" }
+                        ]
+                    }
+                ]
+            }
+        };
+        await store.SaveActiveAsync(run);
+        phaseAccessor.SetActiveRun(run);
+
+        var orchestrator = new StubAgentOrchestrator(_ => ["Thanks; I'll dig into toast APIs next."]);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        await sut.RunUserTurnAsync(
+            session,
+            PlanClarification.FormatUserAnswer(
+                run.PendingClarification!,
+                new Dictionary<string, IReadOnlyList<string>> { ["platform"] = ["desktop"] },
+                null),
+            null,
+            CancellationToken.None);
+
+        var after = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(after);
+        Assert.Equal(PlanPhase.Explore, after.Phase);
+        Assert.Null(after.PendingClarification);
+        Assert.False(sut.IsAwaitingUser(session.Id));
+        Assert.Equal(1, orchestrator.TurnCount);
     }
 
     [Fact]

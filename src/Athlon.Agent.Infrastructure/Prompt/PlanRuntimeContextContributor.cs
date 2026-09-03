@@ -1,4 +1,5 @@
 using System.Text;
+using Athlon.Agent.Core;
 using Athlon.Agent.Core.Harness;
 using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Prompt;
@@ -46,7 +47,30 @@ public sealed class PlanRuntimeContextContributor(
 
         builder.AppendLine();
         builder.AppendLine(PlanPhaseInstructions.For(run.Phase));
+        if (run.Phase == PlanPhase.Explore && HasClarificationAnswers(context.Session))
+        {
+            builder.AppendLine(
+                "The user just submitted clarification answers in this turn. Do not idle or say you are waiting. "
+                + "If answers are still insufficient, call ask_plan_clarification again; otherwise explore the workspace or call publish_plan.");
+        }
+
         builder.AppendLine();
+    }
+
+    private static bool HasClarificationAnswers(AgentSession session)
+    {
+        for (var i = session.Messages.Count - 1; i >= 0; i--)
+        {
+            var message = session.Messages[i];
+            if (message.Role != MessageRole.User)
+            {
+                continue;
+            }
+
+            return message.Content.StartsWith("Plan clarification answers:", StringComparison.Ordinal);
+        }
+
+        return false;
     }
 }
 
@@ -55,12 +79,13 @@ internal static class PlanPhaseInstructions
     internal static string For(PlanPhase phase) => phase switch
     {
         PlanPhase.Explore =>
-            "Phase Explore: read/search the workspace to understand scope. Do not call publish_plan yet. "
-            + "If the goal or approach is unclear, call ask_plan_clarification with 1–3 questions and concrete options, then stop. "
-            + "Do not edit files or run shell. If information is sufficient, summarize briefly; the next phase will draft the plan.",
+            "Phase Explore (consulting): You control the loop. Read/search the workspace as needed. "
+            + "When the goal, stack, scope, or approach is still ambiguous, call ask_plan_clarification (1–3 questions with concrete options) and stop. "
+            + "You may ask across multiple user turns. When you have enough information, call publish_plan yourself — nothing auto-drafts for you. "
+            + "Do not edit files or run shell. Do not pretend to wait without calling ask_plan_clarification.",
         PlanPhase.AwaitClarify =>
-            "Phase AwaitClarify: you already asked the user. Do not call publish_plan or ask_plan_clarification again. "
-            + "Wait for the user's selection or notes.",
+            "Phase AwaitClarify: a clarification card was already shown and this turn should have ended. "
+            + "Do not call publish_plan or ask_plan_clarification again, and do not generate waiting copy.",
         PlanPhase.Draft =>
             "Phase Draft: call publish_plan with title, overview, and a markdown body that includes "
             + "`## Steps` (numbered) and `## Acceptance` (checklist). Optional todos array seeds Coding tasks after Build. "

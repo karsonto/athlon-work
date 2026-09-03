@@ -89,8 +89,9 @@ public sealed class AskPlanClarificationTool(
             clarification.Questions.Count,
             sessionId);
         return ToolResult.Success(
-            "Waiting for user",
-            $"Paused Plan Explore with {clarification.Questions.Count} question(s). Wait for the user's selection or notes.");
+            "Clarification card shown",
+            $"Showed {clarification.Questions.Count} clarification question(s). End this turn.",
+            endsTurn: true);
     }
 
     private static bool TryParseClarification(

@@ -32,16 +32,19 @@ public sealed record ToolResult(
     string? Content = null,
     string? Error = null,
     TimeSpan? Duration = null,
-    IReadOnlyList<ImageAttachment>? ImageAttachments = null)
+    IReadOnlyList<ImageAttachment>? ImageAttachments = null,
+    bool EndsTurn = false)
 {
     public static ToolResult Success(
         string summary,
         string? content = null,
         TimeSpan? duration = null,
-        IReadOnlyList<ImageAttachment>? imageAttachments = null) =>
-        new(true, summary, content, null, duration, imageAttachments);
+        IReadOnlyList<ImageAttachment>? imageAttachments = null,
+        bool endsTurn = false) =>
+        new(true, summary, content, null, duration, imageAttachments, endsTurn);
 
-    public static ToolResult Failure(string summary, string error, TimeSpan? duration = null) => new(false, summary, null, error, duration);
+    public static ToolResult Failure(string summary, string error, TimeSpan? duration = null) =>
+        new(false, summary, null, error, duration);
 }
 
 public interface IAgentTool

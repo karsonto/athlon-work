@@ -17,8 +17,9 @@ public sealed class PublishPlanTool(
     public ToolDefinition Definition => new(
         Name: "publish_plan",
         Description:
-            "Publish or replace the Session Plan markdown document for the current Plan-mode draft. "
-            + "Call once you have explored enough and are ready for the user to review. "
+            "Publish or replace the Session Plan markdown document for the current Plan-mode run. "
+            + "Call once you have explored or clarified enough and are ready for the user to review. "
+            + "Available during Explore (consulting) and Draft (revision). "
             + "Provide a clear title, short overview, and a detailed body with ## Steps and ## Acceptance sections. "
             + "Optional todos become Coding task seeds after the user clicks Build.",
         ParametersSchema: ToolSchema.Object()
@@ -48,11 +49,11 @@ public sealed class PublishPlanTool(
         }
 
         var phase = phaseAccessor.GetPhase(sessionId);
-        if (phase is not PlanPhase.Draft)
+        if (phase is not (PlanPhase.Explore or PlanPhase.Draft))
         {
             return ToolResult.Failure(
                 "Wrong phase",
-                $"publish_plan is only available in Draft (current: {phase?.ToString() ?? "none"}).");
+                $"publish_plan is only available in Explore or Draft (current: {phase?.ToString() ?? "none"}).");
         }
 
         var title = invocation.Arguments.GetString("title")?.Trim();
@@ -90,7 +91,8 @@ public sealed class PublishPlanTool(
         _logger.Information("Published plan for session {SessionId} ({Chars} chars)", sessionId, markdown.Length);
         return ToolResult.Success(
             "Plan published",
-            $"Wrote plan.md ({markdown.Length} chars). Wait for the user to Build or Revise.");
+            $"Wrote plan.md ({markdown.Length} chars). User can Build or send a revision.",
+            endsTurn: true);
     }
 
     private static List<PlanTodoItem> ParseTodos(ToolInvocation invocation)

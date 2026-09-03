@@ -21,7 +21,7 @@ public static class PlanPhaseRules
         phase is PlanPhase.Explore or PlanPhase.AwaitConfirm or PlanPhase.AwaitClarify or PlanPhase.Done;
 
     public static bool AllowsPublishPlan(this PlanPhase phase) =>
-        phase == PlanPhase.Draft;
+        phase is PlanPhase.Explore or PlanPhase.Draft;
 
     public static bool AllowsAskClarification(this PlanPhase phase) =>
         phase == PlanPhase.Explore;

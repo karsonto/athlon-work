@@ -307,13 +307,14 @@ public sealed class AgentRuntime(
                     return session;
                 }
 
+                var endsTurn = false;
                 if (ParallelToolPolicy.CanParallelizeBatch(
                     response.ToolCalls,
                     settings.ParallelToolExecution,
                     ResolveToolRouter()))
                 {
                     turnInvocation.Session = session;
-                    session = await InvokeParallelToolBatchAsync(
+                    (session, endsTurn) = await InvokeParallelToolBatchAsync(
                         turnInvocation,
                         parentMessageId,
                         response.ToolCalls,
@@ -324,12 +325,30 @@ public sealed class AgentRuntime(
                     foreach (var toolCall in response.ToolCalls)
                     {
                         turnInvocation.Session = session;
-                        session = await InvokeToolAndPersistAsync(
+                        bool toolEndsTurn;
+                        (session, toolEndsTurn) = await InvokeToolAndPersistAsync(
                             turnInvocation,
                             parentMessageId,
                             toolCall,
                             cancellationToken).ConfigureAwait(false);
+                        endsTurn |= toolEndsTurn;
                     }
+                }
+
+                if (endsTurn)
+                {
+                    await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
+                    await PublishStreamEventsAsync(callbacks, streamAdapter.FinishRun()).ConfigureAwait(false);
+                    _logger.Information(
+                        "Tool ended turn for session {SessionId} with {MessageCount} messages",
+                        session.Id,
+                        session.Messages.Count);
+                    turnInvocation.Session = session;
+                    await turnPipeline.OnTurnCompletedAsync(turnInvocation, cancellationToken).ConfigureAwait(false);
+                    await PublishTurnFinishedAsync(callbacks, runContext, session, TurnOutcomeKind.Completed, cancellationToken)
+                        .ConfigureAwait(false);
+                    await RecordTrainingDataAsync(session, cancellationToken).ConfigureAwait(false);
+                    return session;
                 }
             }
         }
@@ -388,7 +407,7 @@ public sealed class AgentRuntime(
             pressureOverride).ConfigureAwait(false);
     }
 
-    private async Task<AgentSession> InvokeToolAndPersistAsync(
+    private async Task<(AgentSession Session, bool EndsTurn)> InvokeToolAndPersistAsync(
         AgentTurnInvocation invocation,
         string? parentMessageId,
         AgentToolCall toolCall,
@@ -417,10 +436,11 @@ public sealed class AgentRuntime(
             invocation.Session = session;
             await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
             await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
-            return session;
+            return (session, false);
         }
 
-        session = await _toolPipeline.InvokeAndPersistAsync(
+        ToolResult result;
+        (session, result) = await _toolPipeline.InvokeAndPersistAsync(
             session,
             parentMessageId,
             toolCall,
@@ -431,10 +451,10 @@ public sealed class AgentRuntime(
         invocation.Session = session;
         await turnPipeline.OnAfterToolInvokeAsync(invocation, toolCall, cancellationToken).ConfigureAwait(false);
         await NotifySessionUpdatedAsync(callbacks, session).ConfigureAwait(false);
-        return session;
+        return (session, result is { Succeeded: true, EndsTurn: true });
     }
 
-    private async Task<AgentSession> InvokeParallelToolBatchAsync(
+    private async Task<(AgentSession Session, bool EndsTurn)> InvokeParallelToolBatchAsync(
         AgentTurnInvocation invocation,
         string? parentMessageId,
         IReadOnlyList<AgentToolCall> toolCalls,
@@ -498,11 +518,13 @@ public sealed class AgentRuntime(
                 }).ConfigureAwait(false);
         }
 
+        var endsTurn = false;
         for (var index = 0; index < toolCalls.Count; index++)
         {
             var toolCall = toolCalls[index];
             var result = results[index]
                 ?? ToolResult.Failure("Tool invocation failed", "No result was produced for this tool call.");
+            endsTurn |= result is { Succeeded: true, EndsTurn: true };
             session = await _toolPipeline.PersistToolResultAsync(
                 session,
                 parentMessageId,
@@ -517,7 +539,7 @@ public sealed class AgentRuntime(
         }
 
         await NotifySessionUpdatedAsync(invocation.Callbacks, session).ConfigureAwait(false);
-        return session;
+        return (session, endsTurn);
     }
 
     private void LogToolCatalogDrift(string sessionId, string fingerprint)

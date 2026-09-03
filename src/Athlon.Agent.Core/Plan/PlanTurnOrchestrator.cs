@@ -42,8 +42,16 @@ public sealed class PlanTurnOrchestrator(
                     userInput).ConfigureAwait(false);
             }
 
-            return await RunPhaseAsync(session, existing, userInput, callbacks, cancellationToken, appendUserMessage: true)
+            // Explore or leftover Draft: one consulting turn, then finalize (no auto-Draft).
+            session = await RunPhaseAsync(
+                    session,
+                    existing,
+                    userInput,
+                    callbacks,
+                    cancellationToken,
+                    appendUserMessage: true)
                 .ConfigureAwait(false);
+            return await FinalizeConsultingAsync(session, callbacks, cancellationToken).ConfigureAwait(false);
         }
 
         var runId = Guid.NewGuid().ToString("N");
@@ -62,7 +70,7 @@ public sealed class PlanTurnOrchestrator(
 
         session = await RunPhaseAsync(session, run, userInput, callbacks, cancellationToken, appendUserMessage: true)
             .ConfigureAwait(false);
-        return await AdvanceAfterExploreAsync(session, callbacks, cancellationToken).ConfigureAwait(false);
+        return await FinalizeConsultingAsync(session, callbacks, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<AgentSession> ContinueAsync(
@@ -155,10 +163,14 @@ public sealed class PlanTurnOrchestrator(
             callbacks,
             cancellationToken,
             appendUserMessage: true).ConfigureAwait(false);
-        return await AdvanceAfterExploreAsync(session, callbacks, cancellationToken).ConfigureAwait(false);
+        return await FinalizeConsultingAsync(session, callbacks, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<AgentSession> AdvanceAfterExploreAsync(
+    /// <summary>
+    /// After an Explore (or leftover Draft) consulting turn: pause on clarification,
+    /// seal when publish_plan wrote a complete plan, otherwise stay in Explore.
+    /// </summary>
+    private async Task<AgentSession> FinalizeConsultingAsync(
         AgentSession session,
         AgentTurnCallbacks? callbacks,
         CancellationToken cancellationToken)
@@ -178,25 +190,48 @@ public sealed class PlanTurnOrchestrator(
             return session;
         }
 
-        if (run.Phase == PlanPhase.Explore)
+        if (run.Phase is PlanPhase.AwaitConfirm or PlanPhase.Done)
         {
-            run.Phase = PlanPhase.Draft;
+            return session;
+        }
+
+        var markdown = await runStore.ReadPlanMarkdownAsync(session.Id, cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(markdown) && PlanDocumentParser.LooksComplete(markdown))
+        {
+            return await SealToAwaitConfirmAsync(session, run, markdown, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Stay in Explore so the model can ask again or publish on a later user turn.
+        if (run.Phase != PlanPhase.Explore)
+        {
+            run.Phase = PlanPhase.Explore;
+            run.Status = PlanRunStatuses.Draft;
+            run.UpdatedAt = DateTimeOffset.UtcNow;
             await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
-            session = await RunPhaseAsync(
-                session,
-                run,
-                string.Empty,
-                callbacks,
-                cancellationToken,
-                appendUserMessage: false).ConfigureAwait(false);
-            run = phaseAccessor.GetActiveRun(session.Id)!;
         }
 
-        if (run.Phase == PlanPhase.Draft)
+        return session;
+    }
+
+    private async Task<AgentSession> SealToAwaitConfirmAsync(
+        AgentSession session,
+        PlanRun run,
+        string markdown,
+        CancellationToken cancellationToken)
+    {
+        run.PlanMarkdown = markdown;
+        run.PlanPath = runStore.GetPlanMarkdownPath(session.Id);
+        run.Title = PlanDocumentParser.ParseTitle(markdown) ?? run.Title ?? "Plan";
+        if (run.Todos.Count == 0)
         {
-            session = await SealDraftAsync(session, run, callbacks, cancellationToken).ConfigureAwait(false);
+            run.Todos = PlanDocumentParser.ParseTodos(markdown).ToList();
         }
 
+        run.PendingClarification = null;
+        run.Status = PlanRunStatuses.AwaitingConfirmation;
+        run.Phase = PlanPhase.AwaitConfirm;
+        run.UpdatedAt = DateTimeOffset.UtcNow;
+        await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
         return session;
     }
 
@@ -206,7 +241,7 @@ public sealed class PlanTurnOrchestrator(
         AgentTurnCallbacks? callbacks,
         CancellationToken cancellationToken)
     {
-        // Prefer content written by publish_plan during the Draft turn.
+        // Prefer content written by publish_plan during the Draft (revise) turn.
         var markdown = await runStore.ReadPlanMarkdownAsync(session.Id, cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(markdown) || !PlanDocumentParser.LooksComplete(markdown))
         {
@@ -229,20 +264,7 @@ public sealed class PlanTurnOrchestrator(
             await runStore.WritePlanMarkdownAsync(session.Id, markdown, cancellationToken).ConfigureAwait(false);
         }
 
-        run.PlanMarkdown = markdown;
-        run.PlanPath = runStore.GetPlanMarkdownPath(session.Id);
-        run.Title = PlanDocumentParser.ParseTitle(markdown) ?? run.Title ?? "Plan";
-        if (run.Todos.Count == 0)
-        {
-            run.Todos = PlanDocumentParser.ParseTodos(markdown).ToList();
-        }
-
-        run.PendingClarification = null;
-        run.Status = PlanRunStatuses.AwaitingConfirmation;
-        run.Phase = PlanPhase.AwaitConfirm;
-        run.UpdatedAt = DateTimeOffset.UtcNow;
-        await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
-        return session;
+        return await SealToAwaitConfirmAsync(session, run, markdown, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<AgentSession> RunPhaseAsync(

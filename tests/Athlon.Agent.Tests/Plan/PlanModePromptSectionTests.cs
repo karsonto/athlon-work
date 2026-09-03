@@ -20,6 +20,8 @@ public sealed class PlanModePromptSectionTests
         Assert.Contains("ask_plan_clarification", text, StringComparison.Ordinal);
         Assert.Contains("publish_plan", text, StringComparison.Ordinal);
         Assert.Contains("Build", text, StringComparison.Ordinal);
+        Assert.Contains("multi-turn consulting", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("auto-advances", text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -139,6 +141,8 @@ public sealed class PlanClarificationTests
         Assert.True(Athlon.Agent.Core.Plan.PlanPhase.AwaitClarify.IsReadOnly());
         Assert.True(Athlon.Agent.Core.Plan.PlanPhase.AwaitClarify.BlocksMcp());
         Assert.False(Athlon.Agent.Core.Plan.PlanPhase.AwaitClarify.AllowsPublishPlan());
+        Assert.True(Athlon.Agent.Core.Plan.PlanPhase.Explore.AllowsPublishPlan());
+        Assert.True(Athlon.Agent.Core.Plan.PlanPhase.Draft.AllowsPublishPlan());
         Assert.True(Athlon.Agent.Core.Plan.PlanPhase.Explore.AllowsAskClarification());
         Assert.False(Athlon.Agent.Core.Plan.PlanPhase.Draft.AllowsAskClarification());
     }

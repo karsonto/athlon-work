@@ -30,11 +30,11 @@ public sealed class PlanToolAvailabilityPolicyTests
     }
 
     [Theory]
-    [InlineData(PlanPhase.Explore, false)]
+    [InlineData(PlanPhase.Explore, true)]
     [InlineData(PlanPhase.Draft, true)]
     [InlineData(PlanPhase.AwaitConfirm, false)]
     [InlineData(PlanPhase.AwaitClarify, false)]
-    public void PlanMode_PublishPlan_DraftOnly(PlanPhase phase, bool expected)
+    public void PlanMode_PublishPlan_ExploreOrDraft(PlanPhase phase, bool expected)
     {
         var ctx = PlanCtx(phase);
         Assert.Equal(expected, ToolAvailabilityPolicy.IsEnabled(new StubPlanDocument("publish_plan"), ctx));
