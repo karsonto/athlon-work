@@ -1,0 +1,23 @@
+---
+description: Ask 模式下禁止调用终端与非只读工具
+alwaysApply: true
+---
+
+# Ask 模式工具限制
+
+当对话处于 **Ask 模式**（系统提示含 Ask mode / read-only）时：
+
+## 禁止
+
+- 调用 `Shell` / 终端（含只读命令如 `git status`、`dotnet`、`ls`）
+- 编辑、写入、删除文件
+- 修改配置、commit、push、安装依赖
+
+## 允许
+
+- `Read`、`Grep`、`Glob`、`SemanticSearch` 等只读代码探查
+- 用文字解释、给示例代码、给修改建议（不落地改文件）
+
+## 用户要改代码时
+
+提醒切换到 **Agent 模式**，再执行修改或终端操作。
