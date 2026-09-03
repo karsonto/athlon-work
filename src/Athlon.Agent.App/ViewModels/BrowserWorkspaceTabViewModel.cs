@@ -72,15 +72,21 @@ public sealed partial class BrowserWorkspaceTabViewModel : WorkspaceTabViewModel
     public static string NormalizeUrl(string? input)
     {
         var text = (input ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(text) || text is "https://" or "http://")
+        if (string.IsNullOrWhiteSpace(text)
+            || text is "https://" or "http://" or "file://")
         {
             return string.Empty;
         }
 
         if (Uri.TryCreate(text, UriKind.Absolute, out var absolute)
-            && (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps))
+            && IsAllowedBrowserScheme(absolute.Scheme))
         {
             return absolute.AbsoluteUri;
+        }
+
+        if (TryCreateFileUriFromLocalPath(text, out var fileUri))
+        {
+            return fileUri;
         }
 
         if (text.Contains(' ', StringComparison.Ordinal))
@@ -89,6 +95,54 @@ public sealed partial class BrowserWorkspaceTabViewModel : WorkspaceTabViewModel
         }
 
         return "https://" + text.TrimStart('/');
+    }
+
+    private static bool IsAllowedBrowserScheme(string scheme) =>
+        scheme is not null
+        && (string.Equals(scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scheme, Uri.UriSchemeFile, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Maps absolute local paths (e.g. C:\page.html) to file:// URIs so they are not prefixed with https://.
+    /// </summary>
+    private static bool TryCreateFileUriFromLocalPath(string text, out string fileUri)
+    {
+        fileUri = string.Empty;
+        if (text.Contains(' ', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var looksLikeWindowsPath = text.Length >= 3
+            && char.IsLetter(text[0])
+            && text[1] == ':'
+            && (text[2] is '\\' or '/');
+        var looksLikeUnc = text.StartsWith(@"\\", StringComparison.Ordinal)
+            || text.StartsWith("//", StringComparison.Ordinal);
+        var looksLikeUnixAbsolute = text.StartsWith('/')
+            && text.Length > 1
+            && text[1] != '/';
+        if (!looksLikeWindowsPath && !looksLikeUnc && !looksLikeUnixAbsolute)
+        {
+            return false;
+        }
+
+        try
+        {
+            var uri = new Uri(text, UriKind.Absolute);
+            if (!uri.IsFile)
+            {
+                return false;
+            }
+
+            fileUri = uri.AbsoluteUri;
+            return true;
+        }
+        catch (UriFormatException)
+        {
+            return false;
+        }
     }
 }
 

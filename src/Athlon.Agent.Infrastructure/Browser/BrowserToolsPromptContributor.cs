@@ -27,6 +27,6 @@ public sealed class BrowserToolsPromptContributor(IBrowserWorkspaceState browser
         }
 
         builder.AppendLine(
-            "No Browser tab is open yet. Call browser_navigate to open a page; after it succeeds, ARIA page tools unlock on the next model step in the same turn.");
+            "No Browser tab is open yet. Call browser_navigate with an https:// or file:/// URL (or a local absolute path); after it succeeds, ARIA page tools unlock on the next model step in the same turn.");
     }
 }

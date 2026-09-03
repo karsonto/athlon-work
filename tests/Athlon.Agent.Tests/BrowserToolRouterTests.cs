@@ -143,6 +143,22 @@ public sealed class BrowserToolRouterTests
         Assert.StartsWith("https://www.bing.com/search?q=", search, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void NormalizeUrl_AllowsFileScheme_AndLocalPaths()
+    {
+        var fromScheme = Athlon.Agent.App.ViewModels.BrowserWorkspaceTabViewModel.NormalizeUrl(
+            "file:///C:/temp/demo.html");
+        Assert.StartsWith("file://", fromScheme, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("demo.html", fromScheme, StringComparison.OrdinalIgnoreCase);
+
+        var fromWindowsPath = Athlon.Agent.App.ViewModels.BrowserWorkspaceTabViewModel.NormalizeUrl(
+            @"C:\temp\demo.html");
+        Assert.StartsWith("file://", fromWindowsPath, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("demo.html", fromWindowsPath, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(string.Empty, Athlon.Agent.App.ViewModels.BrowserWorkspaceTabViewModel.NormalizeUrl("file://"));
+    }
+
     private static McpDelegatingToolRouter CreateRouter(bool hasBrowserTab, bool configuredWorkspace = true) =>
         CreateRouter(RouterTestDependencies.CreateBrowserWorkspaceState(hasBrowserTab), configuredWorkspace);
 

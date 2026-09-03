@@ -93,7 +93,7 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
         var normalized = BrowserWorkspaceTabViewModel.NormalizeUrl(url);
         if (string.IsNullOrWhiteSpace(normalized))
         {
-            throw new ArgumentException("A valid http(s) URL is required.", nameof(url));
+            throw new ArgumentException("A valid http(s) or file:// URL is required.", nameof(url));
         }
 
         _browserSerial++;

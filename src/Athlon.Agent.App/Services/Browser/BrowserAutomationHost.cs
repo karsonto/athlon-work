@@ -67,7 +67,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
                     var normalized = BrowserWorkspaceTabViewModel.NormalizeUrl(url);
                     if (string.IsNullOrWhiteSpace(normalized))
                     {
-                        throw new InvalidOperationException("A valid http(s) URL is required.");
+                        throw new InvalidOperationException("A valid http(s) or file:// URL is required.");
                     }
 
                     tab.AddressText = normalized;

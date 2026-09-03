@@ -12,7 +12,7 @@ public sealed class BrowserNavigateTool(IBrowserAutomationHost host) : IAgentToo
         ToolSchema.Object()
             .String(
                 "url",
-                "Absolute or host URL (https://…), or back/forward/reload.",
+                "Absolute URL (https://… or file:///…), host name, or back/forward/reload.",
                 required: true,
                 minLength: 1)
             .Build(),
