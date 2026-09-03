@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using Athlon.Agent.App.ViewModels;
@@ -11,6 +12,7 @@ public partial class NavigationSidebarView : UserControl
 {
     private MainShellViewModel? _shell;
     private bool _toolsNavReady;
+    private bool _suppressQueuedTurnLostFocusSave;
 
     public NavigationSidebarView()
     {
@@ -18,6 +20,62 @@ public partial class NavigationSidebarView : UserControl
         DataContextChanged += OnDataContextChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+    }
+
+    private void QueuedTurnEditBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not TextBox box || box.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        box.Dispatcher.BeginInvoke(() =>
+        {
+            if (box.IsVisible)
+            {
+                box.Focus();
+                box.SelectAll();
+            }
+        });
+    }
+
+    private void QueuedTurnEditBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox box || box.DataContext is not QueuedTurnViewModel item || _shell is null)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            _suppressQueuedTurnLostFocusSave = true;
+            _shell.SaveQueuedTurnCommand.Execute(item);
+            _suppressQueuedTurnLostFocusSave = false;
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            _suppressQueuedTurnLostFocusSave = true;
+            _shell.CancelEditQueuedTurnCommand.Execute(item);
+            _suppressQueuedTurnLostFocusSave = false;
+        }
+    }
+
+    private void QueuedTurnEditBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_suppressQueuedTurnLostFocusSave
+            || sender is not TextBox box
+            || box.DataContext is not QueuedTurnViewModel item
+            || !item.IsEditing
+            || _shell is null)
+        {
+            return;
+        }
+
+        _shell.SaveQueuedTurnCommand.Execute(item);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)

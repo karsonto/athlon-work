@@ -51,4 +51,29 @@ public sealed class QueuedTurnViewModelTests
 
         Assert.Equal(input, vm.TextContent);
     }
+
+    [Fact]
+    public void BeginEdit_And_CancelEdit_RestoreDraft()
+    {
+        var vm = QueuedTurnViewModel.Create("q1", "original", Array.Empty<ImageAttachment>());
+        vm.BeginEdit();
+        Assert.True(vm.IsEditing);
+        Assert.Equal("original", vm.DraftText);
+        vm.DraftText = "changed";
+        vm.CancelEdit();
+        Assert.False(vm.IsEditing);
+        Assert.Equal("original", vm.TextContent);
+        Assert.Equal("original", vm.DraftText);
+    }
+
+    [Fact]
+    public void ApplySavedText_UpdatesPreviewAndExitsEdit()
+    {
+        var vm = QueuedTurnViewModel.Create("q1", "old", Array.Empty<ImageAttachment>());
+        vm.BeginEdit();
+        vm.ApplySavedText("new text");
+        Assert.False(vm.IsEditing);
+        Assert.Equal("new text", vm.TextContent);
+        Assert.Equal("new text", vm.PreviewText);
+    }
 }

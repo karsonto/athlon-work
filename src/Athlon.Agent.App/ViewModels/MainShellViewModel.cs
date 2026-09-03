@@ -715,6 +715,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     public IRelayCommand RemovePendingDocumentCommand => ChatPage.RemovePendingDocumentCommand;
 
     public IRelayCommand RemoveQueuedTurnCommand => ChatPage.RemoveQueuedTurnCommand;
+    public IRelayCommand BeginEditQueuedTurnCommand => ChatPage.BeginEditQueuedTurnCommand;
+    public IRelayCommand SaveQueuedTurnCommand => ChatPage.SaveQueuedTurnCommand;
+    public IRelayCommand CancelEditQueuedTurnCommand => ChatPage.CancelEditQueuedTurnCommand;
 
     [RelayCommand]
     private void TogglePlusMenu()

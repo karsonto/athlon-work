@@ -339,20 +339,60 @@
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
                                                 <StackPanel Grid.Column="0">
-                                                    <TextBlock Text="{Binding PreviewText}"
-                                                               MaxHeight="40">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock" BasedOn="{StaticResource AppTextSecondary}">
-                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
-                                                                <Setter Property="TextWrapping" Value="Wrap" />
+                                                    <Button HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Left"
+                                                            Background="Transparent"
+                                                            BorderThickness="0"
+                                                            Padding="0"
+                                                            Cursor="Hand"
+                                                            Command="{Binding DataContext.BeginEditQueuedTurnCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}"
+                                                            ToolTip="{loc:Localize Key=Nav_EditQueued}">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button">
+                                                                <Setter Property="Visibility" Value="Visible" />
                                                                 <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                                    </DataTrigger>
                                                                     <DataTrigger Binding="{Binding PreviewText}" Value="">
                                                                         <Setter Property="Visibility" Value="Collapsed" />
                                                                     </DataTrigger>
                                                                 </Style.Triggers>
                                                             </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
+                                                        </Button.Style>
+                                                        <TextBlock Text="{Binding PreviewText}"
+                                                                   MaxHeight="40"
+                                                                   Style="{StaticResource AppTextSecondary}"
+                                                                   Foreground="{DynamicResource Brush.Text}"
+                                                                   TextWrapping="Wrap" />
+                                                    </Button>
+                                                    <TextBox Text="{Binding DraftText, UpdateSourceTrigger=PropertyChanged}"
+                                                             AcceptsReturn="False"
+                                                             TextWrapping="Wrap"
+                                                             MinHeight="28"
+                                                             MaxHeight="80"
+                                                             VerticalScrollBarVisibility="Auto"
+                                                             Margin="0,0,4,0"
+                                                             IsVisibleChanged="QueuedTurnEditBox_IsVisibleChanged"
+                                                             KeyDown="QueuedTurnEditBox_KeyDown"
+                                                             LostFocus="QueuedTurnEditBox_LostFocus">
+                                                        <TextBox.Style>
+                                                            <Style TargetType="TextBox">
+                                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                                                <Setter Property="Background" Value="{DynamicResource Brush.PanelAlt}" />
+                                                                <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+                                                                <Setter Property="BorderThickness" Value="1" />
+                                                                <Setter Property="Padding" Value="6,4" />
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                                        <Setter Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBox.Style>
+                                                    </TextBox>
                                                     <ItemsControl ItemsSource="{Binding ImageItems}" Margin="0,6,0,0">
                                                         <ItemsControl.Style>
                                                             <Style TargetType="ItemsControl">

@@ -1026,6 +1026,12 @@
   <data name="Nav_Queued" xml:space="preserve">
     <value>排队中</value>
   </data>
+  <data name="Nav_EditQueued" xml:space="preserve">
+    <value>编辑排队内容</value>
+  </data>
+  <data name="Nav_QueuedEmptyText" xml:space="preserve">
+    <value>请输入内容，或保留图片附件</value>
+  </data>
   <data name="Nav_RemoveFromQueue" xml:space="preserve">
     <value>从队列移除</value>
   </data>

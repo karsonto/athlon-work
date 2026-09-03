@@ -524,6 +524,40 @@ public sealed partial class ChatPageViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void BeginEditQueuedTurn(QueuedTurnViewModel? item)
+    {
+        if (item is null || item.IsEditing)
+        {
+            return;
+        }
+
+        item.BeginEdit();
+    }
+
+    [RelayCommand]
+    private void SaveQueuedTurn(QueuedTurnViewModel? item)
+    {
+        if (item is null || !item.IsEditing)
+        {
+            return;
+        }
+
+        var sessionId = _getDisplayedSessionId!();
+        if (_sessionTurns.QueuedTurnPresenter.UpdateText(sessionId, item.QueueId, item.DraftText))
+        {
+            return;
+        }
+
+        _showShellToast?.Invoke(_loc["Nav_QueuedEmptyText"], ShellToastKind.Error);
+    }
+
+    [RelayCommand]
+    private void CancelEditQueuedTurn(QueuedTurnViewModel? item)
+    {
+        item?.CancelEdit();
+    }
+
+    [RelayCommand]
     private void Stop()
     {
         if (_tryCancelCompaction?.Invoke() == true)

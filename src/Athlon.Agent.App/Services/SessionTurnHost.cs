@@ -238,6 +238,34 @@ public sealed class SessionTurnHost
         }
     }
 
+    public bool UpdateUserInput(string sessionId, string queueId, string userInput)
+    {
+        var trimmed = userInput?.Trim() ?? string.Empty;
+        lock (_startGate)
+        {
+            if (!_queues.TryGetValue(sessionId, out var queue) || queue.Count == 0)
+            {
+                return false;
+            }
+
+            var items = queue.ToList();
+            var index = items.FindIndex(item => string.Equals(item.QueueId, queueId, StringComparison.Ordinal));
+            if (index < 0)
+            {
+                return false;
+            }
+
+            items[index] = items[index] with { UserInput = trimmed };
+            queue.Clear();
+            foreach (var item in items)
+            {
+                queue.Enqueue(item);
+            }
+
+            return true;
+        }
+    }
+
     public void ClearQueue(string sessionId)
     {
         lock (_startGate)

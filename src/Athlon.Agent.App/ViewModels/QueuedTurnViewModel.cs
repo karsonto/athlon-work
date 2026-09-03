@@ -1,9 +1,10 @@
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Athlon.Agent.App.ViewModels;
 
-public sealed class QueuedTurnViewModel
+public sealed partial class QueuedTurnViewModel : ObservableObject
 {
     public QueuedTurnViewModel(
         string queueId,
@@ -14,19 +15,51 @@ public sealed class QueuedTurnViewModel
         QueueId = queueId;
         PreviewText = previewText;
         TextContent = textContent;
+        DraftText = textContent;
         Images = images;
         ImageCount = images.Count;
         ImageItems = images.Select(image => new QueuedTurnImageViewModel(image)).ToArray();
     }
 
     public string QueueId { get; }
-    public string PreviewText { get; }
-    public string TextContent { get; }
+
+    [ObservableProperty]
+    private string previewText;
+
+    [ObservableProperty]
+    private string textContent;
+
+    [ObservableProperty]
+    private string draftText;
+
+    [ObservableProperty]
+    private bool isEditing;
+
     public IReadOnlyList<ImageAttachment> Images { get; }
     public IReadOnlyList<QueuedTurnImageViewModel> ImageItems { get; }
     public int ImageCount { get; }
     public bool HasImages => ImageCount > 0;
     public bool HasText => !string.IsNullOrWhiteSpace(TextContent);
+
+    public void BeginEdit()
+    {
+        DraftText = TextContent;
+        IsEditing = true;
+    }
+
+    public void CancelEdit()
+    {
+        DraftText = TextContent;
+        IsEditing = false;
+    }
+
+    public void ApplySavedText(string text)
+    {
+        TextContent = text;
+        PreviewText = BuildPreview(text, ImageCount);
+        DraftText = text;
+        IsEditing = false;
+    }
 
     public static QueuedTurnViewModel Create(
         string queueId,

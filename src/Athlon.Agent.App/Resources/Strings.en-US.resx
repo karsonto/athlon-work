@@ -1017,6 +1017,12 @@ Error: {1}</value>
   <data name="Nav_Queued" xml:space="preserve">
     <value>Queued</value>
   </data>
+  <data name="Nav_EditQueued" xml:space="preserve">
+    <value>Edit queued message</value>
+  </data>
+  <data name="Nav_QueuedEmptyText" xml:space="preserve">
+    <value>Enter text, or keep the image attachments</value>
+  </data>
   <data name="Nav_RemoveFromQueue" xml:space="preserve">
     <value>Remove from queue</value>
   </data>

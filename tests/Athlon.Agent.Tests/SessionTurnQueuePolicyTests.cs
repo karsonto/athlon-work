@@ -36,6 +36,37 @@ public sealed class SessionTurnQueuePolicyTests
         Assert.False(host.HasQueuedTurns(sessionId));
     }
 
+    [Fact]
+    public void Presenter_UpdateText_RejectsEmptyWithoutImages_AllowsWithImages()
+    {
+        var host = new SessionTurnHost(
+            new NoOpOrchestrator(),
+            RouterTestDependencies.CreateDebugTurnOrchestrator(),
+            RouterTestDependencies.CreatePlanTurnOrchestrator(),
+            RouterTestDependencies.CreateSessionHarnessState(),
+            new NoOpStorage(),
+            new AppSettings());
+        var presenter = new QueuedTurnPresenter(host);
+        var sessionId = "edit-queue";
+        var images = new[]
+        {
+            new ImageAttachment("a.png", "image/png", "data:image/png;base64,AA=="),
+        };
+
+        presenter.Enqueue(sessionId, "text-only", "hello", Array.Empty<ImageAttachment>(), null!);
+        Assert.False(presenter.UpdateText(sessionId, "text-only", "   "));
+        Assert.True(presenter.UpdateText(sessionId, "text-only", "updated"));
+
+        presenter.Enqueue(sessionId, "with-image", "caption", images, null!);
+        Assert.True(presenter.UpdateText(sessionId, "with-image", "  "));
+
+        Assert.True(host.TryDequeue(sessionId, out var first));
+        Assert.Equal("updated", first!.UserInput);
+        Assert.True(host.TryDequeue(sessionId, out var second));
+        Assert.Equal(string.Empty, second!.UserInput);
+        Assert.Single(second.ImageAttachments);
+    }
+
     private sealed class NoOpOrchestrator : IAgentOrchestrator
     {
         public Task<AgentSession> SendAsync(

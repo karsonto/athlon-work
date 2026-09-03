@@ -114,6 +114,29 @@ public sealed class SessionTurnHostTests
     }
 
     [Fact]
+    public void UpdateUserInput_UpdatesMatchingItem_PreservesOrder()
+    {
+        var host = CreateHost(new SlowOrchestrator(TimeSpan.FromMilliseconds(1)));
+        var sessionId = "update";
+        host.Enqueue(new QueuedTurnPayload("a", sessionId, "one", Array.Empty<ImageAttachment>(), null!));
+        host.Enqueue(new QueuedTurnPayload("b", sessionId, "two", Array.Empty<ImageAttachment>(), null!));
+        host.Enqueue(new QueuedTurnPayload("c", sessionId, "three", Array.Empty<ImageAttachment>(), null!));
+
+        Assert.True(host.UpdateUserInput(sessionId, "b", "  two-edited  "));
+        Assert.False(host.UpdateUserInput(sessionId, "missing", "nope"));
+
+        Assert.True(host.TryDequeue(sessionId, out var first));
+        Assert.Equal("a", first!.QueueId);
+        Assert.Equal("one", first.UserInput);
+        Assert.True(host.TryDequeue(sessionId, out var second));
+        Assert.Equal("b", second!.QueueId);
+        Assert.Equal("two-edited", second.UserInput);
+        Assert.True(host.TryDequeue(sessionId, out var third));
+        Assert.Equal("c", third!.QueueId);
+        Assert.Equal("three", third.UserInput);
+    }
+
+    [Fact]
     public async Task Cancel_OnlyStopsTargetSession()
     {
         var dispatcher = await StartStaDispatcherAsync();
