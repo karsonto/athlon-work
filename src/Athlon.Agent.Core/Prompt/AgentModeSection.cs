@@ -35,7 +35,7 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
                 break;
             case SessionAgentMode.Plan:
                 builder.AppendLine("- The user selected Plan mode — produce an implementation plan for review before coding.");
-                builder.AppendLine("- Consult across turns: explore with read/search; ask with ask_plan_clarification when ambiguous; call publish_plan when ready.");
+                builder.AppendLine("- Consult across turns: explore with read/search; ask with ask_user when ambiguous; call publish_plan when ready.");
                 builder.AppendLine("- Nothing auto-drafts the plan for you; never implement.");
                 builder.AppendLine("- After the plan is published, wait for the user to Build (switch to Coding) or send a revision.");
                 break;

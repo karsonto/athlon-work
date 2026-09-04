@@ -2,43 +2,53 @@ using System.Text;
 
 namespace Athlon.Agent.Core.Plan;
 
-public sealed class PlanClarificationOption
+/// <summary>A single selectable option inside an <see cref="UserQuestionItem"/>.</summary>
+public sealed class UserQuestionOption
 {
     public string Id { get; set; } = "";
 
     public string Label { get; set; } = "";
+
+    public UserQuestionOption Clone() => new()
+    {
+        Id = Id,
+        Label = Label
+    };
 }
 
-public sealed class PlanClarificationQuestion
+/// <summary>One multiple-choice question rendered in the composer QuestionBar.</summary>
+public sealed class UserQuestionItem
 {
     public string Id { get; set; } = "";
 
     public string Prompt { get; set; } = "";
 
-    public List<PlanClarificationOption> Options { get; set; } = [];
+    public List<UserQuestionOption> Options { get; set; } = [];
 
     public bool AllowMultiple { get; set; }
 
-    public PlanClarificationQuestion Clone() => new()
+    public UserQuestionItem Clone() => new()
     {
         Id = Id,
         Prompt = Prompt,
         AllowMultiple = AllowMultiple,
-        Options = Options
-            .Select(o => new PlanClarificationOption { Id = o.Id, Label = o.Label })
-            .ToList()
+        Options = Options.Select(o => o.Clone()).ToList()
     };
 }
 
-public sealed class PlanClarification
+/// <summary>
+/// A question set the agent asked via the <c>ask_user</c> tool. Held in process
+/// memory (never persisted) until the user answers in the QuestionBar.
+/// </summary>
+public sealed class UserQuestion
 {
     public string RequestId { get; set; } = "";
 
-    public List<PlanClarificationQuestion> Questions { get; set; } = [];
+    public List<UserQuestionItem> Questions { get; set; } = [];
 
     public bool AllowFreeText { get; set; } = true;
 
-    public PlanClarification Clone() => new()
+    public UserQuestion Clone() => new()
     {
         RequestId = RequestId,
         AllowFreeText = AllowFreeText,
@@ -46,23 +56,23 @@ public sealed class PlanClarification
     };
 
     public static string FormatUserAnswer(
-        PlanClarification clarification,
+        UserQuestion question,
         IReadOnlyDictionary<string, IReadOnlyList<string>> selections,
         string? freeText)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("Plan clarification answers:");
-        foreach (var question in clarification.Questions)
+        sb.AppendLine("Clarification answers:");
+        foreach (var item in question.Questions)
         {
-            sb.Append("- ").Append(question.Prompt).Append(": ");
-            if (!selections.TryGetValue(question.Id, out var ids) || ids.Count == 0)
+            sb.Append("- ").Append(item.Prompt).Append(": ");
+            if (!selections.TryGetValue(item.Id, out var ids) || ids.Count == 0)
             {
                 sb.AppendLine("(no option selected)");
                 continue;
             }
 
             var labels = ids
-                .Select(id => question.Options.FirstOrDefault(o =>
+                .Select(id => item.Options.FirstOrDefault(o =>
                     string.Equals(o.Id, id, StringComparison.OrdinalIgnoreCase))?.Label ?? id)
                 .ToList();
             sb.AppendLine(string.Join(", ", labels));

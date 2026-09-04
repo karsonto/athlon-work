@@ -336,29 +336,6 @@ internal static class ChatEventSerializer
             approved = decision == ToolApprovalDecision.Approved
         });
 
-    public static string SerializePlanClarifyRequest(PlanClarification clarification, bool resolved = false, string? summary = null) =>
-        SerializeAgui("PLAN_CLARIFY_REQUEST", new
-        {
-            requestId = clarification.RequestId,
-            allowFreeText = clarification.AllowFreeText,
-            resolved,
-            summary,
-            questions = clarification.Questions.Select(q => new
-            {
-                id = q.Id,
-                prompt = q.Prompt,
-                allowMultiple = q.AllowMultiple,
-                options = q.Options.Select(o => new { id = o.Id, label = o.Label }).ToList()
-            }).ToList()
-        });
-
-    public static string SerializePlanClarifyResolved(string requestId, string? summary = null) =>
-        SerializeAgui("PLAN_CLARIFY_RESOLVED", new
-        {
-            requestId,
-            summary
-        });
-
     public static string SerializePlanReady(PlanRun run) =>
         SerializeAgui("PLAN_READY", new
         {
@@ -750,13 +727,6 @@ internal static class ChatEventSerializer
         var toolCallId = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;
         var toolName = string.IsNullOrWhiteSpace(message.ToolName) ? "tool" : message.ToolName;
 
-        if (string.Equals(toolName, "ask_plan_clarification", StringComparison.OrdinalIgnoreCase)
-            && TryReplayPlanClarify(message, out var clarifyEvent))
-        {
-            yield return clarifyEvent;
-            yield break;
-        }
-
         if (string.Equals(toolName, "publish_plan", StringComparison.OrdinalIgnoreCase)
             && TryReplayPlanReady(message, out var planReadyEvent))
         {
@@ -824,75 +794,6 @@ internal static class ChatEventSerializer
                 html = RenderToolResultHtml(message, detail)
             });
         }
-    }
-
-    private static bool TryReplayPlanClarify(ChatMessageViewModel message, out string eventJson)
-    {
-        eventJson = string.Empty;
-        if (!TryParseToolArguments(message.ToolArgumentsText, out var root))
-        {
-            return false;
-        }
-
-        if (!root.TryGetProperty("questions", out var questionsEl) || questionsEl.ValueKind != JsonValueKind.Array)
-        {
-            return false;
-        }
-
-        var clarification = new PlanClarification
-        {
-            RequestId = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId,
-            AllowFreeText = !root.TryGetProperty("allow_free_text", out var freeEl)
-                || freeEl.ValueKind != JsonValueKind.False
-        };
-
-        foreach (var item in questionsEl.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.Object)
-            {
-                continue;
-            }
-
-            var question = new PlanClarificationQuestion
-            {
-                Id = item.TryGetProperty("id", out var idEl) ? idEl.GetString()?.Trim() ?? "" : "",
-                Prompt = item.TryGetProperty("prompt", out var promptEl) ? promptEl.GetString()?.Trim() ?? "" : "",
-                AllowMultiple = item.TryGetProperty("allow_multiple", out var multiEl)
-                    && multiEl.ValueKind == JsonValueKind.True
-            };
-            if (item.TryGetProperty("options", out var optionsEl) && optionsEl.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var optionEl in optionsEl.EnumerateArray())
-                {
-                    if (optionEl.ValueKind != JsonValueKind.Object)
-                    {
-                        continue;
-                    }
-
-                    var optionId = optionEl.TryGetProperty("id", out var oid) ? oid.GetString()?.Trim() : null;
-                    var label = optionEl.TryGetProperty("label", out var olabel) ? olabel.GetString()?.Trim() : null;
-                    if (string.IsNullOrWhiteSpace(optionId) || string.IsNullOrWhiteSpace(label))
-                    {
-                        continue;
-                    }
-
-                    question.Options.Add(new PlanClarificationOption { Id = optionId, Label = label });
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(question.Id) && !string.IsNullOrWhiteSpace(question.Prompt) && question.Options.Count >= 2)
-            {
-                clarification.Questions.Add(question);
-            }
-        }
-
-        if (clarification.Questions.Count == 0)
-        {
-            return false;
-        }
-
-        eventJson = SerializePlanClarifyRequest(clarification, resolved: !message.IsToolRunning);
-        return true;
     }
 
     private static bool TryReplayPlanReady(ChatMessageViewModel message, out string eventJson)

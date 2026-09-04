@@ -16,6 +16,7 @@ public sealed class SessionTurnCoordinator
     private readonly IAgentSkillCatalog _skillCatalog;
     private readonly ISkillRuntime _skillRuntime;
     private readonly IMcpRegistry _mcpRegistry;
+    private readonly IUserQuestionState _userQuestions;
 
     public SessionTurnCoordinator(
         SessionTurnHost turnHost,
@@ -23,7 +24,8 @@ public sealed class SessionTurnCoordinator
         SessionUiCache uiCache,
         IAgentSkillCatalog skillCatalog,
         ISkillRuntime skillRuntime,
-        IMcpRegistry mcpRegistry)
+        IMcpRegistry mcpRegistry,
+        IUserQuestionState userQuestions)
     {
         _turnHost = turnHost;
         _queuedTurnPresenter = queuedTurnPresenter;
@@ -31,6 +33,7 @@ public sealed class SessionTurnCoordinator
         _skillCatalog = skillCatalog;
         _skillRuntime = skillRuntime;
         _mcpRegistry = mcpRegistry;
+        _userQuestions = userQuestions;
     }
 
     public SessionTurnHost TurnHost => _turnHost;
@@ -71,7 +74,14 @@ public sealed class SessionTurnCoordinator
             IsAutoContinue: false,
             ComputerUseActive: computerUseActive,
             AppendUserMessage: appendUserMessage);
-        return _turnHost.TryStart(request, out var error) ? null : error ?? "无法开始生成。";
+        if (_turnHost.TryStart(request, out var error))
+        {
+            // The turn consumed (or abandoned) any pending ask_user question.
+            _userQuestions.Clear(sessionId);
+            return null;
+        }
+
+        return error ?? "无法开始生成。";
     }
 
     public string? TryStartDebugContinuation(
@@ -104,7 +114,14 @@ public sealed class SessionTurnCoordinator
             Array.Empty<ImageAttachment>(),
             ui,
             PlanContinuation: continuation);
-        return _turnHost.TryStart(request, out var error) ? null : error ?? "无法继续 Plan 流程。";
+        if (_turnHost.TryStart(request, out var error))
+        {
+            // The plan continuation consumed any pending ask_user question.
+            _userQuestions.Clear(sessionId);
+            return null;
+        }
+
+        return error ?? "无法继续 Plan 流程。";
     }
 
     public void EnqueueTurn(

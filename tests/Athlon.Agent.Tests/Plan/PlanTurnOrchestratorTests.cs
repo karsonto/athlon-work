@@ -27,13 +27,14 @@ public sealed class PlanTurnOrchestratorTests
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
         var orchestrator = new StubAgentOrchestrator(_ => ["Explored and publishing."]);
         orchestrator.OnTurn = _ =>
         {
             store.WritePlanMarkdownAsync(session.Id, CompleteAuthPlan).GetAwaiter().GetResult();
         };
 
-        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
         session = await sut.RunUserTurnAsync(session, "Add token refresh", null, CancellationToken.None);
 
         var run = phaseAccessor.GetActiveRun(session.Id);
@@ -53,9 +54,10 @@ public sealed class PlanTurnOrchestratorTests
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
         var orchestrator = new StubAgentOrchestrator(_ => ["Still gathering context."]);
 
-        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
         session = await sut.RunUserTurnAsync(session, "Add notifications", null, CancellationToken.None);
 
         var run = phaseAccessor.GetActiveRun(session.Id);
@@ -72,6 +74,7 @@ public sealed class PlanTurnOrchestratorTests
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
         var run = new PlanRun
         {
             Id = "run1",
@@ -90,7 +93,7 @@ public sealed class PlanTurnOrchestratorTests
             store.WritePlanMarkdownAsync(session.Id, CompleteAuthPlan).GetAwaiter().GetResult();
         };
 
-        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
         session = await sut.RunUserTurnAsync(session, "Use sliding refresh", null, CancellationToken.None);
 
         var after = phaseAccessor.GetActiveRun(session.Id);
@@ -107,6 +110,7 @@ public sealed class PlanTurnOrchestratorTests
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
         var completePlan = """
             # Feature X
 
@@ -148,7 +152,7 @@ public sealed class PlanTurnOrchestratorTests
         {
             store.WritePlanMarkdownAsync(session.Id, revised).GetAwaiter().GetResult();
         };
-        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
         session = await sut.RunUserTurnAsync(session, "Prefer option B", null, CancellationToken.None);
 
         var followUp = phaseAccessor.GetActiveRun(session.Id);
@@ -166,6 +170,7 @@ public sealed class PlanTurnOrchestratorTests
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
         var orchestrator = new StubAgentOrchestrator(_ => ["Need to know the target platform."]);
         orchestrator.OnTurn = turn =>
         {
@@ -174,39 +179,43 @@ public sealed class PlanTurnOrchestratorTests
                 return;
             }
 
+            // Mirrors AskUserTool.InvokeAsync: park the run in AwaitClarify and hold
+            // the question set in the in-memory UserQuestionState.
+            userQuestions.SetPending(
+                session.Id,
+                new UserQuestion
+                {
+                    RequestId = "q1",
+                    Questions =
+                    [
+                        new UserQuestionItem
+                        {
+                            Id = "platform",
+                            Prompt = "Which platform?",
+                            Options =
+                            [
+                                new UserQuestionOption { Id = "web", Label = "Web" },
+                                new UserQuestionOption { Id = "desktop", Label = "Desktop" }
+                            ]
+                        }
+                    ]
+                });
             var current = phaseAccessor.GetActiveRun(session.Id);
             Assert.NotNull(current);
-            current.PendingClarification = new PlanClarification
-            {
-                RequestId = "q1",
-                Questions =
-                [
-                    new PlanClarificationQuestion
-                    {
-                        Id = "platform",
-                        Prompt = "Which platform?",
-                        Options =
-                        [
-                            new PlanClarificationOption { Id = "web", Label = "Web" },
-                            new PlanClarificationOption { Id = "desktop", Label = "Desktop" }
-                        ]
-                    }
-                ]
-            };
             current.Phase = PlanPhase.AwaitClarify;
             current.Status = PlanRunStatuses.AwaitingClarification;
             phaseAccessor.SetActiveRun(current);
             store.SaveActiveAsync(current).GetAwaiter().GetResult();
         };
 
-        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
         session = await sut.RunUserTurnAsync(session, "Add notifications", null, CancellationToken.None);
 
         var run = phaseAccessor.GetActiveRun(session.Id);
         Assert.NotNull(run);
         Assert.Equal(PlanPhase.AwaitClarify, run.Phase);
         Assert.Equal(PlanRunStatuses.AwaitingClarification, PlanRunStatuses.Normalize(run.Status));
-        Assert.NotNull(run.PendingClarification);
+        Assert.NotNull(userQuestions.GetPending(session.Id));
         Assert.True(sut.IsAwaitingUser(session.Id));
         Assert.Equal(1, orchestrator.TurnCount);
     }
@@ -218,6 +227,7 @@ public sealed class PlanTurnOrchestratorTests
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
         var completePlan = """
             # Desktop notifications
 
@@ -229,6 +239,24 @@ public sealed class PlanTurnOrchestratorTests
             ## Acceptance
             - [ ] Toasts appear
             """;
+        var question = new UserQuestion
+        {
+            RequestId = "q1",
+            Questions =
+            [
+                new UserQuestionItem
+                {
+                    Id = "platform",
+                    Prompt = "Which platform?",
+                    Options =
+                    [
+                        new UserQuestionOption { Id = "web", Label = "Web" },
+                        new UserQuestionOption { Id = "desktop", Label = "Desktop" }
+                    ]
+                }
+            ]
+        };
+        userQuestions.SetPending(session.Id, question);
         var run = new PlanRun
         {
             Id = "run1",
@@ -236,24 +264,7 @@ public sealed class PlanTurnOrchestratorTests
             Phase = PlanPhase.AwaitClarify,
             Status = PlanRunStatuses.AwaitingClarification,
             Goal = "Add notifications",
-            PlanPath = store.GetPlanMarkdownPath(session.Id),
-            PendingClarification = new PlanClarification
-            {
-                RequestId = "q1",
-                Questions =
-                [
-                    new PlanClarificationQuestion
-                    {
-                        Id = "platform",
-                        Prompt = "Which platform?",
-                        Options =
-                        [
-                            new PlanClarificationOption { Id = "web", Label = "Web" },
-                            new PlanClarificationOption { Id = "desktop", Label = "Desktop" }
-                        ]
-                    }
-                ]
-            }
+            PlanPath = store.GetPlanMarkdownPath(session.Id)
         };
         await store.SaveActiveAsync(run);
         phaseAccessor.SetActiveRun(run);
@@ -264,11 +275,11 @@ public sealed class PlanTurnOrchestratorTests
             store.WritePlanMarkdownAsync(session.Id, completePlan).GetAwaiter().GetResult();
         };
 
-        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
         session = await sut.RunUserTurnAsync(
             session,
-            PlanClarification.FormatUserAnswer(
-                run.PendingClarification!,
+            UserQuestion.FormatUserAnswer(
+                question,
                 new Dictionary<string, IReadOnlyList<string>> { ["platform"] = ["desktop"] },
                 null),
             null,
@@ -277,7 +288,7 @@ public sealed class PlanTurnOrchestratorTests
         var after = phaseAccessor.GetActiveRun(session.Id);
         Assert.NotNull(after);
         Assert.Equal(PlanPhase.AwaitConfirm, after.Phase);
-        Assert.Null(after.PendingClarification);
+        Assert.Null(userQuestions.GetPending(session.Id));
         Assert.Contains("toast", after.PlanMarkdown, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, orchestrator.TurnCount);
         Assert.Equal(new List<bool> { true }, orchestrator.AppendUserMessageFlags);
@@ -290,6 +301,25 @@ public sealed class PlanTurnOrchestratorTests
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
+        var question = new UserQuestion
+        {
+            RequestId = "q1",
+            Questions =
+            [
+                new UserQuestionItem
+                {
+                    Id = "platform",
+                    Prompt = "Which platform?",
+                    Options =
+                    [
+                        new UserQuestionOption { Id = "web", Label = "Web" },
+                        new UserQuestionOption { Id = "desktop", Label = "Desktop" }
+                    ]
+                }
+            ]
+        };
+        userQuestions.SetPending(session.Id, question);
         var run = new PlanRun
         {
             Id = "run1",
@@ -297,34 +327,17 @@ public sealed class PlanTurnOrchestratorTests
             Phase = PlanPhase.AwaitClarify,
             Status = PlanRunStatuses.AwaitingClarification,
             Goal = "Add notifications",
-            PlanPath = store.GetPlanMarkdownPath(session.Id),
-            PendingClarification = new PlanClarification
-            {
-                RequestId = "q1",
-                Questions =
-                [
-                    new PlanClarificationQuestion
-                    {
-                        Id = "platform",
-                        Prompt = "Which platform?",
-                        Options =
-                        [
-                            new PlanClarificationOption { Id = "web", Label = "Web" },
-                            new PlanClarificationOption { Id = "desktop", Label = "Desktop" }
-                        ]
-                    }
-                ]
-            }
+            PlanPath = store.GetPlanMarkdownPath(session.Id)
         };
         await store.SaveActiveAsync(run);
         phaseAccessor.SetActiveRun(run);
 
         var orchestrator = new StubAgentOrchestrator(_ => ["Thanks; I'll dig into toast APIs next."]);
-        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
         await sut.RunUserTurnAsync(
             session,
-            PlanClarification.FormatUserAnswer(
-                run.PendingClarification!,
+            UserQuestion.FormatUserAnswer(
+                question,
                 new Dictionary<string, IReadOnlyList<string>> { ["platform"] = ["desktop"] },
                 null),
             null,
@@ -333,7 +346,7 @@ public sealed class PlanTurnOrchestratorTests
         var after = phaseAccessor.GetActiveRun(session.Id);
         Assert.NotNull(after);
         Assert.Equal(PlanPhase.Explore, after.Phase);
-        Assert.Null(after.PendingClarification);
+        Assert.Null(userQuestions.GetPending(session.Id));
         Assert.False(sut.IsAwaitingUser(session.Id));
         Assert.Equal(1, orchestrator.TurnCount);
     }
@@ -345,6 +358,7 @@ public sealed class PlanTurnOrchestratorTests
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
         var stale = """
             # Ship feature
 
@@ -382,7 +396,7 @@ public sealed class PlanTurnOrchestratorTests
         phaseAccessor.SetActiveRun(run);
 
         var orchestrator = new StubAgentOrchestrator(_ => []);
-        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
         await sut.ContinueAsync(session, PlanContinuationKind.Build, null, CancellationToken.None);
 
         var done = phaseAccessor.GetActiveRun(session.Id);
@@ -400,6 +414,7 @@ public sealed class PlanTurnOrchestratorTests
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
         var revised = """
             # Revised plan
 
@@ -429,7 +444,7 @@ public sealed class PlanTurnOrchestratorTests
             store.WritePlanMarkdownAsync(session.Id, revised).GetAwaiter().GetResult();
         };
 
-        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
         session = await sut.ContinueAsync(
             session,
             PlanContinuationKind.Revise,

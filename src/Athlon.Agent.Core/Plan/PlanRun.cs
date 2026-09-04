@@ -29,8 +29,6 @@ public sealed class PlanRun
 
     public List<PlanTodoItem> Todos { get; set; } = [];
 
-    public PlanClarification? PendingClarification { get; set; }
-
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -53,7 +51,6 @@ public sealed class PlanRun
         PlanMarkdown = PlanMarkdown,
         PlanPath = PlanPath,
         Todos = Todos.Select(t => new PlanTodoItem { Id = t.Id, Content = t.Content }).ToList(),
-        PendingClarification = PendingClarification?.Clone(),
         CreatedAt = CreatedAt,
         UpdatedAt = UpdatedAt
     };

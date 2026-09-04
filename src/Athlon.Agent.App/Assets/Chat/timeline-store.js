@@ -41,7 +41,6 @@ function estimateHeight(type, event) {
       return HEIGHT.FILES_CHANGED + ((event.files && event.files.length) || 0) * 28;
     case 'COMPACTION_CHECKPOINT':
       return HEIGHT.COMPACTION;
-    case 'PLAN_CLARIFY':
     case 'PLAN_READY':
       return HEIGHT.PLAN;
     case 'OVERFLOW_RETRY_SKIPPED':
@@ -278,7 +277,8 @@ export class TimelineItemStore {
       }
 
       case 'TOOL_CALL_START': {
-        if (event.toolCallName === 'ask_plan_clarification' || event.toolCallName === 'publish_plan') {
+        // ask_user and publish_plan render outside the normal tool bubble flow.
+        if (event.toolCallName === 'ask_user' || event.toolCallName === 'publish_plan') {
           return {};
         }
         const toolCallId = event.toolCallId || '';
@@ -330,30 +330,6 @@ export class TimelineItemStore {
           live: false
         });
         return { scrollBottom: true };
-      }
-
-      case 'PLAN_CLARIFY_REQUEST': {
-        const requestId = event.requestId || 'plan';
-        this.upsertItem('plan-clarify:' + requestId, {
-          type: 'PLAN_CLARIFY',
-          event: cloneEvent(event),
-          turnId: this.currentTurnId,
-          live: !event.resolved
-        });
-        return { scrollBottom: true };
-      }
-
-      case 'PLAN_CLARIFY_RESOLVED': {
-        const requestId = event.requestId || '';
-        const id = 'plan-clarify:' + requestId;
-        const index = this.indexById.get(id);
-        if (index != null) {
-          const item = this.items[index];
-          item.event = { ...item.event, ...cloneEvent(event), resolved: true };
-          item.live = false;
-          item.version += 1;
-        }
-        return {};
       }
 
       case 'PLAN_READY': {

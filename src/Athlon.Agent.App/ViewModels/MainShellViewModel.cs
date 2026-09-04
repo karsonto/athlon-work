@@ -109,6 +109,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ComposerHarnessViewModel composerHarness,
         DebugActionBarViewModel debugBar,
         PlanActionBarViewModel planBar,
+        QuestionBarViewModel questionBar,
         ITaskListChangedNotifier taskListChangedNotifier,
         ISessionTaskListStore taskListStore,
         IPlanRunStore planRunStore,
@@ -178,6 +179,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ComposerHarness = composerHarness;
         DebugBar = debugBar;
         PlanBar = planBar;
+        QuestionBar = questionBar;
         DebugBar.Configure(
             () => _displayedSessionId,
             () => _session,
@@ -190,8 +192,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             ShowShellToast,
             StartCodingFromApprovedPlanAsync,
             onPlanTimeline: OnPlanTimeline,
-            onPlanClarifyResolved: requestId => _ = _savedChatView?.ResolvePlanClarifyAsync(requestId),
             setComposerHint: SetComposerStatus);
+        QuestionBar.Configure(
+            () => _displayedSessionId,
+            ShowShellToast,
+            OnUserQuestionAnswered);
         ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
         ComposerHarness.OnModeChangedAsync = OnComposerModeChangedAsync;
         ChatPage = chatPage;
@@ -651,6 +656,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public PlanActionBarViewModel PlanBar { get; }
 
+    public QuestionBarViewModel QuestionBar { get; }
+
     public ContextOccupancyViewModel ContextOccupancy { get; } = new();
 
     public ChatPageViewModel ChatPage { get; }
@@ -1048,7 +1055,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
-            _savedChatView.PlanClarifyAnswerReceived -= OnPlanClarifyAnswerReceived;
             _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
             _savedChatView.PlanOpenEditorRequested -= OnPlanOpenEditorRequested;
         }
@@ -1057,7 +1063,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         chatView.OlderMessagesRequested += OnOlderMessagesRequested;
         chatView.ExternalLinkRequested += OnChatExternalLinkRequested;
         chatView.ToolDetailRequested += OnToolDetailRequested;
-        chatView.PlanClarifyAnswerReceived += OnPlanClarifyAnswerReceived;
         chatView.PlanBuildRequested += OnPlanBuildRequested;
         chatView.PlanOpenEditorRequested += OnPlanOpenEditorRequested;
         _uiCache.AttachChatViewToAll(chatView);
@@ -1678,6 +1683,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
         _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
         DebugBar.RefreshFromActiveRun();
+        QuestionBar.RefreshFromActiveSession();
         RequestRefreshSessionHistory();
     }
 
@@ -1800,6 +1806,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 OnPlanTimeline(run);
             }
         }
+
+        QuestionBar.RefreshFromActiveSession();
     }
 
     private void OnPlanTimeline(PlanRun run)
@@ -1809,36 +1817,26 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
-        if (run.Phase == PlanPhase.AwaitClarify && run.PendingClarification is not null)
-        {
-            _ = _savedChatView.ShowPlanClarifyAsync(run.PendingClarification);
-            return;
-        }
-
         if (run.Phase == PlanPhase.AwaitConfirm)
         {
             _ = _savedChatView.ShowPlanReadyAsync(run);
         }
     }
 
-    private void OnPlanClarifyAnswerReceived(object? sender, Controls.PlanClarifyAnswerEventArgs e)
+    /// <summary>
+    /// The user submitted an <c>ask_user</c> answer in the QuestionBar. The formatted
+    /// answer is sent as the next turn's user input: Plan resumes the AwaitClarify run,
+    /// any other mode just continues the conversation.
+    /// </summary>
+    private void OnUserQuestionAnswered(string text)
     {
-        var run = PlanBar.GetActiveRun();
-        if (run?.PendingClarification is null
-            || !string.Equals(run.PendingClarification.RequestId, e.RequestId, StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(text))
         {
             return;
         }
 
-        var text = PlanClarification.FormatUserAnswer(run.PendingClarification, e.Selections, e.FreeText);
-        if (string.IsNullOrWhiteSpace(text)
-            || (e.Selections.Count == 0 && string.IsNullOrWhiteSpace(e.FreeText)))
-        {
-            ShowShellToast(_loc["Plan_ClarifyEmptyAnswer"], ShellToastKind.Error);
-            return;
-        }
-
-        _ = _savedChatView?.ResolvePlanClarifyAsync(e.RequestId, text);
+        // If starting the turn fails (e.g. busy), SessionTurnCoordinator leaves the
+        // pending question intact so the bar stays visible for a retry.
         ChatPage.TrySubmitPlanInput(text);
     }
 
@@ -1913,6 +1911,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 _ = ComposerHarness.RefreshTasksAsync();
                 DebugBar.RefreshFromActiveRun();
                 PlanBar.RefreshFromActiveRun();
+                QuestionBar.RefreshFromActiveSession();
             }
 
             _sessionNavigation.Invalidate(e.SessionId);

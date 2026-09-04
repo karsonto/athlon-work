@@ -269,6 +269,7 @@
                         <StackPanel Grid.Row="2">
                             <controls:DebugActionBar DataContext="{Binding DebugBar}" />
                             <controls:PlanActionBar DataContext="{Binding PlanBar}" />
+                            <controls:QuestionBar DataContext="{Binding QuestionBar}" />
                         </StackPanel>
                         <Grid Grid.Row="3">
                         <Border Style="{StaticResource ComposerInputShadowStyle}" />

@@ -49,14 +49,32 @@ public sealed class PlanToolAvailabilityPolicyTests
     }
 
     [Theory]
-    [InlineData(PlanPhase.Explore, true)]
-    [InlineData(PlanPhase.Draft, false)]
-    [InlineData(PlanPhase.AwaitConfirm, false)]
-    [InlineData(PlanPhase.AwaitClarify, false)]
-    public void PlanMode_AskClarification_ExploreOnly(PlanPhase phase, bool expected)
+    [InlineData(PlanPhase.Explore)]
+    [InlineData(PlanPhase.Draft)]
+    [InlineData(PlanPhase.AwaitConfirm)]
+    [InlineData(PlanPhase.AwaitClarify)]
+    public void PlanMode_AskUser_AlwaysEnabled(PlanPhase phase)
     {
         var ctx = PlanCtx(phase);
-        Assert.Equal(expected, ToolAvailabilityPolicy.IsEnabled(new StubPlanClarify("ask_plan_clarification"), ctx));
+        Assert.True(ToolAvailabilityPolicy.IsEnabled(new StubAskUser("ask_user"), ctx));
+    }
+
+    [Fact]
+    public void AskUser_AvailableInEveryMode()
+    {
+        foreach (var mode in Enum.GetValues<SessionAgentMode>())
+        {
+            var ctx = new ToolAvailabilityContext(
+                ComputerUseActive: false,
+                HasWorkspace: true,
+                WorkspaceKind: WorkspaceKind.Local,
+                Mode: mode,
+                BrowserTabOpen: false,
+                TerminalTabOpen: false,
+                KnowledgeEnabled: false,
+                ActivePlanPhase: null);
+            Assert.True(ToolAvailabilityPolicy.IsEnabled(new StubAskUser("ask_user"), ctx));
+        }
     }
 
     [Fact]
@@ -64,13 +82,6 @@ public sealed class PlanToolAvailabilityPolicyTests
     {
         Assert.True(ToolFacetClassifier.Classify(new StubPlanDocument("publish_plan")).HasFlag(ToolFacet.PlanDocument));
         Assert.False(ToolFacetClassifier.Classify(new StubNamed("file_read")).HasFlag(ToolFacet.PlanDocument));
-    }
-
-    [Fact]
-    public void Classifier_TagsPlanClarifyFacet()
-    {
-        Assert.True(ToolFacetClassifier.Classify(new StubPlanClarify("ask_plan_clarification")).HasFlag(ToolFacet.PlanClarify));
-        Assert.False(ToolFacetClassifier.Classify(new StubPlanDocument("publish_plan")).HasFlag(ToolFacet.PlanClarify));
     }
 
     private sealed class StubNamed(string name) : IAgentTool
@@ -89,7 +100,7 @@ public sealed class PlanToolAvailabilityPolicyTests
             Task.FromResult(ToolResult.Success("ok"));
     }
 
-    private sealed class StubPlanClarify(string name) : IAgentTool, IPlanClarifyTool
+    private sealed class StubAskUser(string name) : IAgentTool
     {
         public ToolDefinition Definition => new(name, name, ToolSchema.Object().Build());
 

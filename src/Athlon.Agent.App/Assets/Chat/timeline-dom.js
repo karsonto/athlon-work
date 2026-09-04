@@ -1470,8 +1470,10 @@ function upsertCompactionCheckpoint(event) {
   scrollToBottom();
 }
 
-function isPlanSpecialTool(name) {
-  return name === 'ask_plan_clarification' || name === 'publish_plan';
+function isQuietTool(name) {
+  // ask_user and publish_plan render outside the normal tool bubble flow
+  // (QuestionBar / plan card respectively).
+  return name === 'ask_user' || name === 'publish_plan';
 }
 
 /**
@@ -1482,13 +1484,6 @@ function scopedRoot() {
   if (state.patchRow) return state.patchRow;
   if (state.virtualRender) return getMessageRoot();
   return document;
-}
-
-function getPlanClarifyCard(requestId) {
-  if (!requestId) return null;
-  const root = scopedRoot();
-  if (!root || !root.querySelector) return null;
-  return root.querySelector('.plan-clarify-card[data-request-id="' + cssEscape(requestId) + '"]');
 }
 
 function getPlanReadyCard(runId) {
@@ -1502,7 +1497,7 @@ function resolvePlanCard(event, createSkeleton) {
   // Incremental patch: the card already lives in the patched row (create if missing).
   var hostRow = targetHostRow();
   if (hostRow) {
-    var existing = hostRow.querySelector(':scope > .plan-clarify-card, :scope > .plan-ready-card');
+    var existing = hostRow.querySelector(':scope > .plan-ready-card');
     if (existing) return existing;
     return createSkeleton(hostRow);
   }
@@ -1515,136 +1510,6 @@ function resolvePlanCard(event, createSkeleton) {
     return created;
   }
   return null;
-}
-
-function showPlanClarify(event) {
-  if (!event || !event.requestId || !event.questions || !event.questions.length) return;
-  state.currentAssistantEl = null;
-  state.currentReasoningEl = null;
-
-  var card = resolvePlanCard(event, function (host) {
-    var c = document.createElement('div');
-    c.className = 'plan-clarify-card';
-    host.appendChild(c);
-    return c;
-  });
-  if (!card) return;
-  card.dataset.requestId = event.requestId;
-  card.innerHTML = '';
-
-  var title = document.createElement('div');
-  title.className = 'plan-card-title';
-  title.dataset.i18n = 'planClarifyTitle';
-  title.textContent = t('planClarifyTitle');
-  card.appendChild(title);
-
-  (event.questions || []).forEach(function (question) {
-    var block = document.createElement('div');
-    block.className = 'plan-clarify-question';
-    block.dataset.questionId = question.id || '';
-    block.dataset.allowMultiple = question.allowMultiple ? '1' : '0';
-    var prompt = document.createElement('div');
-    prompt.className = 'plan-clarify-prompt';
-    prompt.textContent = question.prompt || '';
-    block.appendChild(prompt);
-    var options = document.createElement('div');
-    options.className = 'plan-clarify-options';
-    (question.options || []).forEach(function (option) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'plan-clarify-option';
-      btn.dataset.optionId = option.id || '';
-      btn.textContent = option.label || option.id || '';
-      btn.addEventListener('click', function () {
-        if (card.dataset.resolved === '1') return;
-        if (block.dataset.allowMultiple === '1') {
-          btn.classList.toggle('selected');
-        } else {
-          options.querySelectorAll('.plan-clarify-option').forEach(function (other) {
-            other.classList.toggle('selected', other === btn);
-          });
-        }
-      });
-      options.appendChild(btn);
-    });
-    block.appendChild(options);
-    card.appendChild(block);
-  });
-
-  if (event.allowFreeText !== false) {
-    var note = document.createElement('textarea');
-    note.className = 'plan-clarify-notes';
-    note.rows = 2;
-    note.placeholder = t('planClarifyNotes');
-    note.dataset.i18nPlaceholder = 'planClarifyNotes';
-    card.appendChild(note);
-  }
-
-  var actions = document.createElement('div');
-  actions.className = 'plan-card-actions';
-  var submit = document.createElement('button');
-  submit.type = 'button';
-  submit.className = 'plan-card-button primary';
-  submit.dataset.i18n = 'planClarifySubmit';
-  submit.textContent = t('planClarifySubmit');
-  submit.addEventListener('click', function () {
-    submitPlanClarify(card);
-  });
-  actions.appendChild(submit);
-  card.appendChild(actions);
-
-  if (event.resolved) {
-    applyPlanClarifyResolved(card, event.summary);
-  }
-  scrollToBottom(true);
-}
-
-function submitPlanClarify(card) {
-  if (!card || card.dataset.resolved === '1') return;
-  var selections = {};
-  var hasSelection = false;
-  card.querySelectorAll('.plan-clarify-question').forEach(function (block) {
-    var qid = block.dataset.questionId || '';
-    var ids = [];
-    block.querySelectorAll('.plan-clarify-option.selected').forEach(function (btn) {
-      if (btn.dataset.optionId) ids.push(btn.dataset.optionId);
-    });
-    if (qid && ids.length) {
-      selections[qid] = ids;
-      hasSelection = true;
-    }
-  });
-  var notes = card.querySelector('.plan-clarify-notes');
-  var freeText = notes && notes.value ? String(notes.value).trim() : '';
-  if (!hasSelection && !freeText) return;
-  post({
-    type: 'planClarifyAnswer',
-    requestId: card.dataset.requestId,
-    selections: selections,
-    freeText: freeText
-  });
-}
-
-function applyPlanClarifyResolved(card, summary) {
-  if (!card) return;
-  card.dataset.resolved = '1';
-  card.querySelectorAll('button, textarea').forEach(function (el) {
-    el.disabled = true;
-  });
-  var result = card.querySelector('.plan-clarify-result');
-  if (!result) {
-    result = document.createElement('div');
-    result.className = 'plan-clarify-result';
-    card.appendChild(result);
-  }
-  result.textContent = summary || t('planClarifyAnswered');
-  result.dataset.i18n = summary ? '' : 'planClarifyAnswered';
-}
-
-function resolvePlanClarify(event) {
-  var card = getPlanClarifyCard(event && event.requestId);
-  if (!card) return;
-  applyPlanClarifyResolved(card, event && event.summary);
 }
 
 function resolvePlanMarkdown(event) {
@@ -1791,7 +1656,7 @@ function handleEvent(event) {
       break;
     }
     case 'TOOL_CALL_START':
-      if (isPlanSpecialTool(event.toolCallName)) {
+      if (isQuietTool(event.toolCallName)) {
         state.currentAssistantEl = null;
         break;
       }
@@ -1828,12 +1693,6 @@ function handleEvent(event) {
       break;
     case 'TOOL_APPROVAL_RESOLVED':
       resolveToolApproval(event);
-      break;
-    case 'PLAN_CLARIFY_REQUEST':
-      showPlanClarify(event);
-      break;
-    case 'PLAN_CLARIFY_RESOLVED':
-      resolvePlanClarify(event);
       break;
     case 'PLAN_READY':
       showPlanReady(event);
@@ -1958,13 +1817,6 @@ function renderItemRow(item) {
       ['TOOL_CALL_ARGS', 'TOOL_CALL_END', 'TOOL_CALL_OUTPUT', 'TOOL_CALL_RESULT',
         'TOOL_APPROVAL_REQUEST', 'TOOL_APPROVAL_RESOLVED'].forEach(function (type) {
         if (toolState[type]) handleEvent(toolState[type]);
-      });
-    } else if (item.type === 'PLAN_CLARIFY' && item.event.resolved) {
-      handleEvent(Object.assign({ type: 'PLAN_CLARIFY_REQUEST' }, item.event));
-      handleEvent({
-        type: 'PLAN_CLARIFY_RESOLVED',
-        requestId: item.event.requestId,
-        summary: item.event.summary
       });
     } else {
       handleEvent(item.event);

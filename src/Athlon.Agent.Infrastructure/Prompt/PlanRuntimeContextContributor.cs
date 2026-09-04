@@ -51,7 +51,7 @@ public sealed class PlanRuntimeContextContributor(
         {
             builder.AppendLine(
                 "The user just submitted clarification answers in this turn. Do not idle or say you are waiting. "
-                + "If answers are still insufficient, call ask_plan_clarification again; otherwise explore the workspace or call publish_plan.");
+                + "If answers are still insufficient, call ask_user again; otherwise explore the workspace or call publish_plan.");
         }
 
         builder.AppendLine();
@@ -67,7 +67,7 @@ public sealed class PlanRuntimeContextContributor(
                 continue;
             }
 
-            return message.Content.StartsWith("Plan clarification answers:", StringComparison.Ordinal);
+            return message.Content.StartsWith("Clarification answers:", StringComparison.Ordinal);
         }
 
         return false;
@@ -80,12 +80,12 @@ internal static class PlanPhaseInstructions
     {
         PlanPhase.Explore =>
             "Phase Explore (consulting): You control the loop. Read/search the workspace as needed. "
-            + "When the goal, stack, scope, or approach is still ambiguous, call ask_plan_clarification (1–3 questions with concrete options) and stop. "
+            + "When the goal, stack, scope, or approach is still ambiguous, call ask_user (1–3 questions with concrete options) and stop. "
             + "You may ask across multiple user turns. When you have enough information, call publish_plan yourself — nothing auto-drafts for you. "
-            + "Do not edit files or run shell. Do not pretend to wait without calling ask_plan_clarification.",
+            + "Do not edit files or run shell. Do not pretend to wait without calling ask_user.",
         PlanPhase.AwaitClarify =>
-            "Phase AwaitClarify: a clarification card was already shown and this turn should have ended. "
-            + "Do not call publish_plan or ask_plan_clarification again, and do not generate waiting copy.",
+            "Phase AwaitClarify: questions were already asked in the QuestionBar and this turn should have ended. "
+            + "Do not call publish_plan or ask_user again, and do not generate waiting copy.",
         PlanPhase.Draft =>
             "Phase Draft: call publish_plan with title, overview, and a markdown body that includes "
             + "`## Steps` (numbered) and `## Acceptance` (checklist). Optional todos array seeds Coding tasks after Build. "

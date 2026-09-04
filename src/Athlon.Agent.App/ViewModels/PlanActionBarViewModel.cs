@@ -24,7 +24,6 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
     private Action<string?, ShellToastKind>? _showToast;
     private Func<Task>? _onBuildApprovedAsync;
     private Action<PlanRun>? _onPlanTimeline;
-    private Action<string>? _onPlanClarifyResolved;
     private Action<string?>? _setComposerHint;
     private string? _lastTimelineKey;
 
@@ -52,7 +51,6 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         Action<string?, ShellToastKind> showToast,
         Func<Task> onBuildApprovedAsync,
         Action<PlanRun>? onPlanTimeline = null,
-        Action<string>? onPlanClarifyResolved = null,
         Action<string?>? setComposerHint = null)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
@@ -61,7 +59,6 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         _showToast = showToast;
         _onBuildApprovedAsync = onBuildApprovedAsync;
         _onPlanTimeline = onPlanTimeline;
-        _onPlanClarifyResolved = onPlanClarifyResolved;
         _setComposerHint = setComposerHint;
         RequestRefreshFromActiveRun();
     }
@@ -233,38 +230,16 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
 
     private void DispatchPlanTimeline(PlanRun? run)
     {
-        if (run is null)
+        // Only the AwaitConfirm "plan ready" state is shown in the timeline now;
+        // ask_user / AwaitClarify renders exclusively in the composer QuestionBar.
+        if (run is null || run.Phase != PlanPhase.AwaitConfirm)
         {
             return;
         }
 
         var dispatcher = Application.Current?.Dispatcher;
-        if (_lastTimelineKey is not null
-            && _lastTimelineKey.StartsWith("clarify:", StringComparison.Ordinal)
-            && run.Phase != PlanPhase.AwaitClarify)
-        {
-            var requestId = _lastTimelineKey["clarify:".Length..];
-            _lastTimelineKey = null;
-            var resolve = _onPlanClarifyResolved;
-            if (resolve is not null)
-            {
-                if (dispatcher is not null && !dispatcher.CheckAccess())
-                {
-                    dispatcher.InvokeAsync(() => resolve(requestId));
-                }
-                else
-                {
-                    resolve(requestId);
-                }
-            }
-        }
-
-        var key = run.Phase == PlanPhase.AwaitClarify
-            ? "clarify:" + (run.PendingClarification?.RequestId ?? run.Id)
-            : run.Phase == PlanPhase.AwaitConfirm
-                ? "ready:" + run.Id + ":" + run.UpdatedAt.ToUnixTimeMilliseconds()
-                : null;
-        if (key is null || string.Equals(key, _lastTimelineKey, StringComparison.Ordinal))
+        var key = "ready:" + run.Id + ":" + run.UpdatedAt.ToUnixTimeMilliseconds();
+        if (string.Equals(key, _lastTimelineKey, StringComparison.Ordinal))
         {
             return;
         }

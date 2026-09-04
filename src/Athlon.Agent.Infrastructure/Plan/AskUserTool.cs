@@ -5,21 +5,29 @@ using Athlon.Agent.Core.SubAgents;
 
 namespace Athlon.Agent.Infrastructure.Plan;
 
-public sealed class AskPlanClarificationTool(
-    IPlanRunStore planRunStore,
+/// <summary>
+/// Pauses the agent and asks the user one to three multiple-choice questions,
+/// shown in the composer QuestionBar. Works in every agent mode; when an active
+/// Plan run is in Explore/Draft the run is parked in AwaitClarify so the next
+/// user turn resumes it.
+/// </summary>
+public sealed class AskUserTool(
+    IUserQuestionState userQuestions,
     IPlanPhaseAccessor phaseAccessor,
+    IPlanRunStore planRunStore,
     IPlanSessionState planSessionState,
     IActiveAgentSessionContext activeSessionContext,
-    IAppLogger logger) : IAgentTool, IPlanClarifyTool, IExcludedFromChildAgentToolkit
+    IAppLogger logger) : IAgentTool, IExcludedFromChildAgentToolkit
 {
-    private readonly IAppLogger _logger = logger.ForContext("AskPlanClarificationTool");
+    private readonly IAppLogger _logger = logger.ForContext("AskUserTool");
 
     public ToolDefinition Definition => new(
-        Name: "ask_plan_clarification",
+        Name: "ask_user",
         Description:
-            "Pause Plan Explore and ask the user one to three multiple-choice questions before drafting. "
-            + "Use when the goal, stack, scope, or approach is ambiguous. Provide concrete options; "
-            + "do not guess silently. The user can pick options and optionally type extra notes.",
+            "Pause and ask the user one to three multiple-choice questions before continuing. "
+            + "Use when the goal, stack, scope, or approach is ambiguous and a wrong guess would "
+            + "be costly. Provide concrete options; do not guess silently. The user can pick "
+            + "options and optionally type extra notes. Available in every mode.",
         ParametersSchema: ToolSchema.Object()
             .Array(
                 "questions",
@@ -53,53 +61,47 @@ public sealed class AskPlanClarificationTool(
         var sessionId = activeSessionContext.SessionId;
         if (string.IsNullOrWhiteSpace(sessionId))
         {
-            return ToolResult.Failure("No session", "ask_plan_clarification requires an active agent session.");
+            return ToolResult.Failure("No session", "ask_user requires an active agent session.");
         }
 
-        var phase = phaseAccessor.GetPhase(sessionId);
-        if (phase is not PlanPhase.Explore)
-        {
-            return ToolResult.Failure(
-                "Wrong phase",
-                $"ask_plan_clarification is only available in Explore (current: {phase?.ToString() ?? "none"}).");
-        }
-
-        if (!TryParseClarification(invocation, out var clarification, out var error))
+        if (!TryParseQuestion(invocation, out var question, out var error))
         {
             return ToolResult.Failure("Invalid questions", error);
         }
 
+        userQuestions.SetPending(sessionId, question);
+
+        // A Plan run in Explore/Draft parks in AwaitClarify until the user answers;
+        // outside Plan (or with no run) the question is shown and the next turn is a
+        // normal user turn that already carries the answer text.
         var run = phaseAccessor.GetActiveRun(sessionId)
             ?? await planRunStore.LoadActiveAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        if (run is null)
+        if (run is { Phase: PlanPhase.Explore or PlanPhase.Draft })
         {
-            return ToolResult.Failure("No plan run", "ask_plan_clarification requires an active plan run.");
+            run.Phase = PlanPhase.AwaitClarify;
+            run.Status = PlanRunStatuses.AwaitingClarification;
+            run.UpdatedAt = DateTimeOffset.UtcNow;
+            phaseAccessor.SetActiveRun(run);
+            planSessionState.NotifyChanged(run);
+            await planRunStore.SaveActiveAsync(run, cancellationToken).ConfigureAwait(false);
         }
 
-        run.PendingClarification = clarification;
-        run.Phase = PlanPhase.AwaitClarify;
-        run.Status = PlanRunStatuses.AwaitingClarification;
-        run.UpdatedAt = DateTimeOffset.UtcNow;
-        phaseAccessor.SetActiveRun(run);
-        planSessionState.NotifyChanged(run);
-        await planRunStore.SaveActiveAsync(run, cancellationToken).ConfigureAwait(false);
-
         _logger.Information(
-            "Asked {Count} plan clarification question(s) for session {SessionId}",
-            clarification.Questions.Count,
+            "Asked {Count} question(s) for session {SessionId}",
+            question.Questions.Count,
             sessionId);
         return ToolResult.Success(
-            "Clarification card shown",
-            $"Showed {clarification.Questions.Count} clarification question(s). End this turn.",
+            "Question asked",
+            $"Showed {question.Questions.Count} question(s). End this turn.",
             endsTurn: true);
     }
 
-    private static bool TryParseClarification(
+    private static bool TryParseQuestion(
         ToolInvocation invocation,
-        out PlanClarification clarification,
+        out UserQuestion question,
         out string error)
     {
-        clarification = new PlanClarification
+        question = new UserQuestion
         {
             RequestId = Guid.NewGuid().ToString("N"),
             AllowFreeText = !invocation.Arguments.TryGetBoolean("allow_free_text", out var allowFree)
@@ -131,17 +133,17 @@ public sealed class AskPlanClarificationTool(
                 return false;
             }
 
-            var questions = new List<PlanClarificationQuestion>();
+            var questions = new List<UserQuestionItem>();
             var index = 0;
             foreach (var item in doc.RootElement.EnumerateArray())
             {
                 index++;
-                if (!TryParseQuestion(item, index, out var question, out error))
+                if (!TryParseItem(item, index, out var parsed, out error))
                 {
                     return false;
                 }
 
-                questions.Add(question);
+                questions.Add(parsed);
             }
 
             if (questions.Count is < 1 or > 3)
@@ -150,7 +152,7 @@ public sealed class AskPlanClarificationTool(
                 return false;
             }
 
-            clarification.Questions = questions;
+            question.Questions = questions;
             error = string.Empty;
             return true;
         }
@@ -161,13 +163,13 @@ public sealed class AskPlanClarificationTool(
         }
     }
 
-    private static bool TryParseQuestion(
+    private static bool TryParseItem(
         JsonElement item,
         int index,
-        out PlanClarificationQuestion question,
+        out UserQuestionItem parsed,
         out string error)
     {
-        question = new PlanClarificationQuestion();
+        parsed = new UserQuestionItem();
         if (item.ValueKind != JsonValueKind.Object)
         {
             error = $"Question {index} must be an object.";
@@ -182,9 +184,9 @@ public sealed class AskPlanClarificationTool(
             return false;
         }
 
-        question.Id = id;
-        question.Prompt = prompt;
-        question.AllowMultiple = item.TryGetProperty("allow_multiple", out var multiEl)
+        parsed.Id = id;
+        parsed.Prompt = prompt;
+        parsed.AllowMultiple = item.TryGetProperty("allow_multiple", out var multiEl)
             && multiEl.ValueKind is JsonValueKind.True;
 
         if (!item.TryGetProperty("options", out var optionsEl) || optionsEl.ValueKind != JsonValueKind.Array)
@@ -207,10 +209,10 @@ public sealed class AskPlanClarificationTool(
                 continue;
             }
 
-            question.Options.Add(new PlanClarificationOption { Id = optionId, Label = label });
+            parsed.Options.Add(new UserQuestionOption { Id = optionId, Label = label });
         }
 
-        if (question.Options.Count < 2)
+        if (parsed.Options.Count < 2)
         {
             error = $"Question {index} requires at least two options.";
             return false;

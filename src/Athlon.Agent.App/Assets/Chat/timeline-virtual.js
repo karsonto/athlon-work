@@ -426,7 +426,7 @@ export class VirtualTimeline {
 
     const patchTypes = new Set([
       'TOOL_CALL_ARGS', 'TOOL_CALL_END', 'TOOL_CALL_OUTPUT', 'TOOL_CALL_RESULT',
-      'TOOL_APPROVAL_REQUEST', 'TOOL_APPROVAL_RESOLVED', 'PLAN_CLARIFY_RESOLVED'
+      'TOOL_APPROVAL_REQUEST', 'TOOL_APPROVAL_RESOLVED'
     ]);
 
     if (event.type === 'TEXT_MESSAGE_START') {

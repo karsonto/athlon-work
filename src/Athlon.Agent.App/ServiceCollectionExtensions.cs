@@ -166,6 +166,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<DebugActionBarViewModel>();
         services.AddSingleton<PlanActionBarViewModel>();
+        services.AddSingleton<QuestionBarViewModel>();
 
         services.AddSingleton<ChatPageViewModel>();
 

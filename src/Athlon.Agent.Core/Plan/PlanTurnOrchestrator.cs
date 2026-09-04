@@ -4,7 +4,8 @@ public sealed class PlanTurnOrchestrator(
     IAgentOrchestrator orchestrator,
     IPlanRunStore runStore,
     IPlanPhaseAccessor phaseAccessor,
-    IPlanSessionState sessionState) : IPlanTurnOrchestrator
+    IPlanSessionState sessionState,
+    IUserQuestionState userQuestions) : IPlanTurnOrchestrator
 {
     public bool IsAwaitingUser(string sessionId)
     {
@@ -150,7 +151,7 @@ public sealed class PlanTurnOrchestrator(
         AgentTurnCallbacks? callbacks,
         CancellationToken cancellationToken)
     {
-        run.PendingClarification = null;
+        userQuestions.Clear(session.Id);
         run.Phase = PlanPhase.Explore;
         run.Status = PlanRunStatuses.Draft;
         run.UpdatedAt = DateTimeOffset.UtcNow;
@@ -181,7 +182,7 @@ public sealed class PlanTurnOrchestrator(
             return session;
         }
 
-        if (run.PendingClarification is not null || run.Phase == PlanPhase.AwaitClarify)
+        if (run.Phase == PlanPhase.AwaitClarify)
         {
             run.Phase = PlanPhase.AwaitClarify;
             run.Status = PlanRunStatuses.AwaitingClarification;
@@ -227,7 +228,7 @@ public sealed class PlanTurnOrchestrator(
             run.Todos = PlanDocumentParser.ParseTodos(markdown).ToList();
         }
 
-        run.PendingClarification = null;
+        userQuestions.Clear(session.Id);
         run.Status = PlanRunStatuses.AwaitingConfirmation;
         run.Phase = PlanPhase.AwaitConfirm;
         run.UpdatedAt = DateTimeOffset.UtcNow;

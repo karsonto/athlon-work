@@ -56,7 +56,6 @@ public partial class WebChatView : UserControl
     public event EventHandler<string>? ExternalLinkRequested;
     public event EventHandler<ToolApprovalDecisionEventArgs>? ToolApprovalDecisionReceived;
     public event EventHandler<ToolDetailRequestEventArgs>? ToolDetailRequested;
-    public event EventHandler<PlanClarifyAnswerEventArgs>? PlanClarifyAnswerReceived;
     public event EventHandler? PlanBuildRequested;
     public event EventHandler<string>? PlanOpenEditorRequested;
 
@@ -318,14 +317,6 @@ public partial class WebChatView : UserControl
     public Task ResolveToolApprovalAsync(string toolCallId, ToolApprovalDecision decision) =>
         ExecuteScriptWhenReadyAsync(
             $"handleEvent({ChatEventSerializer.SerializeToolApprovalResolved(toolCallId, decision)});");
-
-    public Task ShowPlanClarifyAsync(Athlon.Agent.Core.Plan.PlanClarification clarification, bool resolved = false) =>
-        ExecuteScriptWhenReadyAsync(
-            $"handleEvent({ChatEventSerializer.SerializePlanClarifyRequest(clarification, resolved)});");
-
-    public Task ResolvePlanClarifyAsync(string requestId, string? summary = null) =>
-        ExecuteScriptWhenReadyAsync(
-            $"handleEvent({ChatEventSerializer.SerializePlanClarifyResolved(requestId, summary)});");
 
     public Task ShowPlanReadyAsync(Athlon.Agent.Core.Plan.PlanRun run) =>
         ExecuteScriptWhenReadyAsync(
@@ -658,46 +649,6 @@ public partial class WebChatView : UserControl
                         }
 
                         break;
-                    case "planClarifyAnswer":
-                    {
-                        var requestId = root.TryGetProperty("requestId", out var requestIdEl)
-                            ? requestIdEl.GetString()
-                            : null;
-                        var freeText = root.TryGetProperty("freeText", out var freeTextEl)
-                            ? freeTextEl.GetString()
-                            : null;
-                        var selections = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
-                        if (root.TryGetProperty("selections", out var selectionsEl)
-                            && selectionsEl.ValueKind == JsonValueKind.Object)
-                        {
-                            foreach (var prop in selectionsEl.EnumerateObject())
-                            {
-                                if (prop.Value.ValueKind != JsonValueKind.Array)
-                                {
-                                    continue;
-                                }
-
-                                var ids = prop.Value.EnumerateArray()
-                                    .Select(item => item.GetString())
-                                    .Where(id => !string.IsNullOrWhiteSpace(id))
-                                    .Select(id => id!)
-                                    .ToList();
-                                if (ids.Count > 0)
-                                {
-                                    selections[prop.Name] = ids;
-                                }
-                            }
-                        }
-
-                        if (!string.IsNullOrWhiteSpace(requestId))
-                        {
-                            PlanClarifyAnswerReceived?.Invoke(
-                                this,
-                                new PlanClarifyAnswerEventArgs(requestId, selections, freeText));
-                        }
-
-                        break;
-                    }
                     case "planBuild":
                         PlanBuildRequested?.Invoke(this, EventArgs.Empty);
                         break;
@@ -1090,8 +1041,3 @@ public sealed record ToolDetailRequestEventArgs(
     string? MessageId,
     string? ToolCallId,
     string? RequestId);
-
-public sealed record PlanClarifyAnswerEventArgs(
-    string RequestId,
-    IReadOnlyDictionary<string, IReadOnlyList<string>> Selections,
-    string? FreeText);

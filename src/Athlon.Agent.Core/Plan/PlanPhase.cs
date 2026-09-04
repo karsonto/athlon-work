@@ -22,7 +22,4 @@ public static class PlanPhaseRules
 
     public static bool AllowsPublishPlan(this PlanPhase phase) =>
         phase is PlanPhase.Explore or PlanPhase.Draft;
-
-    public static bool AllowsAskClarification(this PlanPhase phase) =>
-        phase == PlanPhase.Explore;
 }
