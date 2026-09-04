@@ -379,8 +379,18 @@
     scrollForcePending: false,
     autoScrollEnabled: true,
     batchTarget: null,
-    virtualRender: false
+    virtualRender: false,
+    // When the virtualizer applies an incremental event to a row that is already
+    // mounted, this points at that row. Card builders update it in place instead of
+    // scanning the document or creating new rows (order is owned by the store).
+    patchRow: null
   };
+  function targetHostRow() {
+    return state.patchRow || null;
+  }
+  function isFragmentBuild() {
+    return state.virtualRender === true;
+  }
   function t(key) {
     return window.__chatI18n && window.__chatI18n[key] || key;
   }
@@ -640,11 +650,6 @@
     applyMarkdownHtml(row.querySelector(".bubble > .message-content"), html, streaming !== true);
     if (streaming !== true) {
       setMessageMeta(row, formatResponseDuration(responseDurationMs));
-      var filesCard = findLatestFilesChangedCardInCurrentTurn();
-      if (filesCard && !filesCard.hasAttribute("data-sealed")) {
-        var filesRow = filesCard.closest(".message-row") || filesCard.parentNode;
-        placeFilesChangedRow(filesRow);
-      }
     }
     updateEmptyStateVisibility();
     scrollToBottom();
@@ -1254,74 +1259,39 @@
     }
     return t("thinking") || "Working\u2026";
   }
-  function findLatestFilesChangedCardInCurrentTurn() {
-    var root = getMessageRoot();
-    if (!root) return null;
-    var rows = root.querySelectorAll(".message-row");
-    var lastUser = -1;
-    for (var i = 0; i < rows.length; i++) {
-      if (rows[i].classList.contains("user")) lastUser = i;
-    }
-    var latest = null;
-    for (var j = lastUser + 1; j < rows.length; j++) {
-      var card = rows[j].querySelector(".files-changed-card");
-      if (card) latest = card;
-    }
-    return latest;
-  }
-  function findLiveFilesChangedCardInCurrentTurn() {
-    var latest = findLatestFilesChangedCardInCurrentTurn();
-    if (latest && latest.getAttribute("data-live") === "1") return latest;
-    return null;
-  }
-  function findFilesChangedTargetCard(upsert) {
-    var live = findLiveFilesChangedCardInCurrentTurn();
-    if (live) return live;
-    if (upsert) {
-      return findLatestFilesChangedCardInCurrentTurn();
-    }
-    return null;
-  }
-  function placeFilesChangedRow(row) {
-    var root = getMessageRoot();
-    if (!root || !row) return;
-    if (row.closest && row.closest("#virtual-window")) return;
-    if (state.virtualRender) {
-      root.appendChild(row);
-      return;
-    }
-    var rows = Array.prototype.slice.call(root.querySelectorAll(".message-row"));
-    var lastUserIdx = -1;
-    for (var i = 0; i < rows.length; i++) {
-      if (rows[i].classList.contains("user")) lastUserIdx = i;
-    }
-    var insertAfter = lastUserIdx >= 0 ? rows[lastUserIdx] : null;
-    for (var j = lastUserIdx + 1; j < rows.length; j++) {
-      var candidate = rows[j];
-      if (candidate === row) continue;
-      if (candidate.querySelector(".turn-activity")) {
-        insertAfter = candidate;
-        continue;
+  function resolveFilesChangedCard(event) {
+    var files = event.files || [];
+    var hostRow = targetHostRow();
+    var row = null;
+    var card = null;
+    var wasLive = false;
+    var isNew = false;
+    if (hostRow) {
+      row = hostRow;
+      card = hostRow.querySelector(":scope > .files-changed-card");
+      if (card) {
+        wasLive = card.getAttribute("data-live") === "1";
+      } else if (files.length) {
+        card = document.createElement("div");
+        card.className = "files-changed-card";
+        hostRow.appendChild(card);
+        isNew = true;
       }
-      if (candidate.querySelector(".files-changed-card")) continue;
-      if (candidate.classList.contains("tool-row")) continue;
-      if (candidate.classList.contains("assistant-row") && candidate.querySelector(".bubble > .message-content")) {
-        insertAfter = candidate;
-        continue;
-      }
+    } else if (isFragmentBuild() && files.length) {
+      row = document.createElement("div");
+      row.className = "message-row assistant files-changed-host";
+      card = document.createElement("div");
+      card.className = "files-changed-card";
+      row.appendChild(card);
+      getMessageRoot().appendChild(row);
+      isNew = true;
     }
-    if (insertAfter && insertAfter.parentNode === root) {
-      root.insertBefore(row, insertAfter.nextSibling);
-      return;
-    }
-    root.appendChild(row);
+    return row && card ? { row, card, wasLive, isNew } : null;
   }
   function sealFilesChangedCard(card) {
     if (!card) return;
     card.removeAttribute("data-live");
     card.setAttribute("data-sealed", "1");
-    var row = card.closest(".message-row") || card.parentNode;
-    placeFilesChangedRow(row);
     updateEmptyStateVisibility();
     scrollToBottom();
   }
@@ -1331,31 +1301,23 @@
     var files = event.files || [];
     var upsert = event.upsert === true;
     if (!files.length) {
-      if (upsert) return;
-      var liveToSeal = findFilesChangedTargetCard(false);
-      if (liveToSeal) sealFilesChangedCard(liveToSeal);
+      if (!upsert) {
+        var resolved = resolveFilesChangedCard(event);
+        if (resolved && resolved.wasLive) sealFilesChangedCard(resolved.card);
+      }
       return;
     }
-    var existing = findFilesChangedTargetCard(upsert);
-    var card = existing;
-    var sealingLiveCard = !!(existing && existing.getAttribute("data-live") === "1");
+    var target = resolveFilesChangedCard(event);
+    if (!target) return;
+    var card = target.card;
     var openPaths = {};
-    var row = null;
-    if (existing) {
-      existing.querySelectorAll(".files-changed-item.open").forEach(function(item) {
+    if (!target.isNew) {
+      card.querySelectorAll(".files-changed-item.open").forEach(function(item) {
         var path = item.getAttribute("data-path") || "";
         if (path) openPaths[path] = true;
       });
-      card.innerHTML = "";
-      row = existing.closest(".message-row") || existing.parentNode;
-    } else {
-      row = document.createElement("div");
-      row.className = "message-row assistant files-changed-host";
-      card = document.createElement("div");
-      card.className = "files-changed-card";
-      if (upsert) card.setAttribute("data-live", "1");
-      row.appendChild(card);
     }
+    card.innerHTML = "";
     var title = document.createElement("div");
     title.className = "files-changed-title";
     title.textContent = filesChangedTitle(files.length);
@@ -1409,11 +1371,8 @@
       card.removeAttribute("data-sealed");
     } else {
       card.removeAttribute("data-live");
-      if (sealingLiveCard) {
-        card.setAttribute("data-sealed", "1");
-      }
+      if (target.wasLive) card.setAttribute("data-sealed", "1");
     }
-    placeFilesChangedRow(row);
     updateEmptyStateVisibility();
     scrollToBottom();
   }
@@ -1428,25 +1387,20 @@
     if (!chevron) return;
     chevron.textContent = details.open ? "\u2228" : "\u203A";
   }
-  function insertAfterLastUserRow(row) {
-    var root = getMessageRoot();
-    if (!root || !row) return;
-    if (row.closest && row.closest("#virtual-window")) return;
-    if (state.virtualRender) {
-      root.appendChild(row);
-      return;
-    }
-    var users = root.querySelectorAll(".message-row.user");
-    var lastUser = users.length ? users[users.length - 1] : null;
-    if (lastUser && lastUser.parentNode === root) {
-      var anchor = lastUser.nextSibling;
-      while (anchor && anchor.nodeType === 1 && anchor.classList.contains("turn-activity-host")) {
-        anchor = anchor.nextSibling;
+  function createTurnActivityDetails() {
+    const details = document.createElement("details");
+    details.className = "turn-activity";
+    details.addEventListener("toggle", function() {
+      syncTurnActivityChevron(details);
+      if (details.open) {
+        details.classList.add("is-expanded");
+        scrollTurnActivityThoughts(details);
+        scrollToBottom();
+      } else {
+        details.classList.remove("is-expanded");
       }
-      root.insertBefore(row, anchor);
-      return;
-    }
-    root.appendChild(row);
+    });
+    return details;
   }
   function scrollTurnActivityThoughts(details) {
     if (!details || !details.open) return;
@@ -1454,56 +1408,34 @@
       el.scrollTop = el.scrollHeight;
     });
   }
-  function findLatestTurnActivityInCurrentTurn() {
-    var root = getMessageRoot();
-    if (!root) return null;
-    var rows = root.querySelectorAll(".message-row");
-    var lastUser = -1;
-    for (var i = 0; i < rows.length; i++) {
-      if (rows[i].classList.contains("user")) lastUser = i;
-    }
-    var latest = null;
-    for (var j = lastUser + 1; j < rows.length; j++) {
-      var card = rows[j].querySelector(".turn-activity");
-      if (card) latest = card;
-    }
-    return latest;
-  }
-  function findTurnActivityTargetCard(upsert) {
-    var live = document.querySelector('.turn-activity[data-live="1"]');
-    if (live) return live;
-    if (!upsert) return null;
-    return findLatestTurnActivityInCurrentTurn();
-  }
   function appendTurnActivityCard(event) {
     state.currentAssistantEl = null;
     state.currentReasoningEl = null;
     var items = event.items || [];
     if (!items.length && !(event.exploredFileCount || event.searchCount || event.commandCount || event.thoughtCount)) return;
-    var existing = findTurnActivityTargetCard(event.upsert === true);
-    var details = existing;
-    var keepOpen = !!(existing && existing.open);
-    if (!details) {
-      var row = document.createElement("div");
+    var upsert = event.upsert === true;
+    var hostRow = targetHostRow();
+    var details = null;
+    var isNew = false;
+    if (hostRow) {
+      details = hostRow.querySelector(":scope > .turn-activity");
+      if (!details) {
+        details = createTurnActivityDetails();
+        hostRow.appendChild(details);
+        isNew = true;
+      }
+    } else if (isFragmentBuild()) {
+      const row = document.createElement("div");
       row.className = "message-row assistant turn-activity-host";
-      details = document.createElement("details");
-      details.className = "turn-activity";
-      if (event.upsert) details.setAttribute("data-live", "1");
-      details.addEventListener("toggle", function() {
-        syncTurnActivityChevron(details);
-        if (details.open) {
-          details.classList.add("is-expanded");
-          scrollTurnActivityThoughts(details);
-          scrollToBottom();
-        } else {
-          details.classList.remove("is-expanded");
-        }
-      });
+      details = createTurnActivityDetails();
       row.appendChild(details);
-      insertAfterLastUserRow(row);
+      getMessageRoot().appendChild(row);
+      isNew = true;
     } else {
-      details.innerHTML = "";
+      return;
     }
+    var keepOpen = upsert && !isNew && details.open === true;
+    details.innerHTML = "";
     var summary = document.createElement("summary");
     var summaryText = document.createElement("span");
     summaryText.className = "turn-activity-summary-text";
@@ -1614,21 +1546,33 @@
     scrollTurnActivityThoughts(details);
     scrollToBottom();
   }
+  function createCompactionSkeleton(id) {
+    const details = document.createElement("details");
+    details.className = "compaction-checkpoint";
+    details.dataset.compactionId = id;
+    details.innerHTML = '<summary><span class="compaction-title"></span><span class="tool-status"></span></summary><div class="compaction-body"><div class="compaction-summary"></div><details class="compaction-tech"><summary class="compaction-tech-label"></summary><pre class="compaction-detail"></pre></details></div>';
+    return details;
+  }
   function upsertCompactionCheckpoint(event) {
     const id = event.id || "compaction";
-    let details = document.querySelector('[data-compaction-id="' + id + '"]');
-    if (!details) {
+    var hostRow = targetHostRow();
+    var details = null;
+    if (hostRow) {
+      details = hostRow.querySelector(":scope > .compaction-checkpoint");
+      if (!details) {
+        details = createCompactionSkeleton(id);
+        hostRow.appendChild(details);
+      }
+    } else if (isFragmentBuild()) {
       state.currentAssistantEl = null;
       state.currentReasoningEl = null;
       const row = document.createElement("div");
       row.className = "message-row assistant compaction-row";
-      details = document.createElement("details");
-      details.className = "compaction-checkpoint";
-      details.dataset.compactionId = id;
-      details.innerHTML = '<summary><span class="compaction-title"></span><span class="tool-status"></span></summary><div class="compaction-body"><div class="compaction-summary"></div><details class="compaction-tech"><summary class="compaction-tech-label"></summary><pre class="compaction-detail"></pre></details></div>';
+      details = createCompactionSkeleton(id);
       row.appendChild(details);
       getMessageRoot().appendChild(row);
-      updateEmptyStateVisibility();
+    } else {
+      return;
     }
     const title = details.querySelector(".compaction-title");
     if (title) title.textContent = event.title || "";
@@ -1653,31 +1597,44 @@
   function isPlanSpecialTool(name) {
     return name === "ask_plan_clarification" || name === "publish_plan";
   }
+  function scopedRoot() {
+    if (state.patchRow) return state.patchRow;
+    if (state.virtualRender) return getMessageRoot();
+    return document;
+  }
   function getPlanClarifyCard(requestId) {
     if (!requestId) return null;
-    return document.querySelector('.plan-clarify-card[data-request-id="' + cssEscape(requestId) + '"]');
+    const root = scopedRoot();
+    if (!root || !root.querySelector) return null;
+    return root.querySelector('.plan-clarify-card[data-request-id="' + cssEscape(requestId) + '"]');
   }
-  function getPlanReadyCard(runId) {
-    if (!runId) return null;
-    return document.querySelector('.plan-ready-card[data-run-id="' + cssEscape(runId) + '"]');
+  function resolvePlanCard(event, createSkeleton) {
+    var hostRow = targetHostRow();
+    if (hostRow) {
+      var existing = hostRow.querySelector(":scope > .plan-clarify-card, :scope > .plan-ready-card");
+      if (existing) return existing;
+      return createSkeleton(hostRow);
+    }
+    if (isFragmentBuild()) {
+      var row = document.createElement("div");
+      row.className = "message-row assistant plan-row";
+      var created = createSkeleton(row);
+      getMessageRoot().appendChild(row);
+      return created;
+    }
+    return null;
   }
   function showPlanClarify(event) {
     if (!event || !event.requestId || !event.questions || !event.questions.length) return;
-    var existing = getPlanClarifyCard(event.requestId);
-    var card;
-    if (existing) {
-      card = existing;
-    } else {
-      state.currentAssistantEl = null;
-      state.currentReasoningEl = null;
-      var row = document.createElement("div");
-      row.className = "message-row assistant plan-row";
-      card = document.createElement("div");
-      card.className = "plan-clarify-card";
-      row.appendChild(card);
-      getMessageRoot().appendChild(row);
-      updateEmptyStateVisibility();
-    }
+    state.currentAssistantEl = null;
+    state.currentReasoningEl = null;
+    var card = resolvePlanCard(event, function(host) {
+      var c = document.createElement("div");
+      c.className = "plan-clarify-card";
+      host.appendChild(c);
+      return c;
+    });
+    if (!card) return;
     card.dataset.requestId = event.requestId;
     card.innerHTML = "";
     var title = document.createElement("div");
@@ -1787,39 +1744,6 @@
     if (!card) return;
     applyPlanClarifyResolved(card, event && event.summary);
   }
-  function placePlanReadyRow(row) {
-    var root = getMessageRoot();
-    if (!root || !row) return;
-    if (state.virtualRender) {
-      root.appendChild(row);
-      return;
-    }
-    var rows = Array.prototype.slice.call(root.querySelectorAll(".message-row"));
-    var lastUserIdx = -1;
-    for (var i = 0; i < rows.length; i++) {
-      if (rows[i].classList.contains("user")) lastUserIdx = i;
-    }
-    var insertAfter = lastUserIdx >= 0 ? rows[lastUserIdx] : null;
-    for (var j = lastUserIdx + 1; j < rows.length; j++) {
-      var candidate = rows[j];
-      if (candidate === row) continue;
-      if (candidate.querySelector(".turn-activity")) {
-        insertAfter = candidate;
-        continue;
-      }
-      if (candidate.classList.contains("plan-row")) continue;
-      if (candidate.classList.contains("tool-row")) continue;
-      if (candidate.classList.contains("assistant-row") && candidate.querySelector(".bubble > .message-content")) {
-        insertAfter = candidate;
-        continue;
-      }
-    }
-    if (insertAfter && insertAfter.parentNode === root) {
-      root.insertBefore(row, insertAfter.nextSibling);
-      return;
-    }
-    root.appendChild(row);
-  }
   function resolvePlanMarkdown(event) {
     if (event && event.markdownB64) return decodeBase64Utf8(event.markdownB64);
     if (event && event.markdown) return event.markdown;
@@ -1829,26 +1753,18 @@
   function showPlanReady(event) {
     if (!event) return;
     var runId = event.runId || "plan";
-    var existing = getPlanReadyCard(runId);
-    var row;
-    var card;
-    if (existing) {
-      card = existing;
-      row = card.closest(".message-row");
-      card.innerHTML = "";
-    } else {
-      state.currentAssistantEl = null;
-      state.currentReasoningEl = null;
-      row = document.createElement("div");
-      row.className = "message-row assistant plan-row";
-      card = document.createElement("div");
-      card.className = "plan-ready-card";
-      row.appendChild(card);
-      placePlanReadyRow(row);
-      updateEmptyStateVisibility();
-    }
+    state.currentAssistantEl = null;
+    state.currentReasoningEl = null;
+    var card = resolvePlanCard(event, function(host) {
+      var c = document.createElement("div");
+      c.className = "plan-ready-card";
+      host.appendChild(c);
+      return c;
+    });
+    if (!card) return;
     card.dataset.runId = runId;
     if (event.planPath) card.dataset.planPath = event.planPath;
+    card.innerHTML = "";
     var title = document.createElement("div");
     title.className = "plan-card-title";
     title.textContent = event.title || t("planReadyTitle");
@@ -1880,7 +1796,8 @@
     });
     actions.appendChild(buildBtn);
     card.appendChild(actions);
-    if (row) placePlanReadyRow(row);
+    updateEmptyStateVisibility();
+    scrollToBottom(true);
   }
   function appendOverflowSkipped(event) {
     state.currentAssistantEl = null;
@@ -1903,15 +1820,6 @@
         updateEmptyStateVisibility();
         break;
       case "USER_MESSAGE":
-        (function() {
-          var liveActivity = document.querySelector('.turn-activity[data-live="1"]');
-          if (liveActivity) liveActivity.removeAttribute("data-live");
-          var liveFiles = document.querySelector('.files-changed-card[data-live="1"]');
-          if (liveFiles) {
-            liveFiles.removeAttribute("data-live");
-            liveFiles.setAttribute("data-sealed", "1");
-          }
-        })();
         appendMessage("user", event.content || "", false, event.images || [], event.startedAt || "", event.mentions || []);
         break;
       case "FILES_CHANGED":
@@ -3975,28 +3883,14 @@
         return;
       }
       const result = this.store.applyEvent(event);
-      if (event.type === "TURN_ACTIVITY" && event.upsert === true) {
+      const isTurnActivity = event.type === "TURN_ACTIVITY";
+      const isFilesChanged = event.type === "FILES_CHANGED";
+      if (isTurnActivity || isFilesChanged) {
         const turnId = this.store.currentTurnId || "orphan";
-        const itemId = this.store.activityId(turnId);
+        const itemId = isTurnActivity ? this.store.activityId(turnId) : this.store.filesId(turnId);
         const mounted = this.mountedById.get(itemId);
         if (mounted) {
-          this.dom.state.batchTarget = null;
-          this.dom.handleEvent(event);
-          this._syncMountedVersion(mounted, itemId);
-          this._remeasureRow(mounted);
-          if (result.scrollBottom) this.scrollToBottom(false);
-          return;
-        }
-      }
-      if (event.type === "FILES_CHANGED") {
-        const turnId = this.store.currentTurnId || "orphan";
-        const itemId = this.store.filesId(turnId);
-        const mounted = this.mountedById.get(itemId);
-        if (mounted) {
-          this.dom.state.batchTarget = null;
-          this.dom.handleEvent(event);
-          this._syncMountedVersion(mounted, itemId);
-          this._remeasureRow(mounted);
+          this._patchMounted(mounted, itemId, event);
           if (result.scrollBottom) this.scrollToBottom(false);
           return;
         }
@@ -4005,10 +3899,7 @@
         const itemId = this.store.assistantId(event.messageId || "");
         const mounted = this.mountedById.get(itemId);
         if (mounted) {
-          this.dom.state.batchTarget = null;
-          this.dom.handleEvent(event);
-          this._syncMountedVersion(mounted, itemId);
-          this._remeasureRow(mounted);
+          this._patchMounted(mounted, itemId, event);
           if (result.scrollBottom) this.scrollToBottom(false);
           return;
         }
@@ -4023,15 +3914,32 @@
         const itemId = this.store.toolId(toolCallId);
         const mounted = this.mountedById.get(itemId);
         if (mounted) {
-          this.dom.state.batchTarget = null;
-          this.dom.handleEvent(event);
-          this._syncMountedVersion(mounted, itemId);
-          this._remeasureRow(mounted);
+          this._patchMounted(mounted, itemId, event);
           return;
         }
       }
       this.refresh();
       if (result.scrollBottom) this.scrollToBottom(false);
+    }
+    /**
+     * Apply an incremental event to a row that is already mounted. DOM builders
+     * update this exact row in place (state.patchRow) — they never create new rows
+     * or scan the document — then the row's store version is synced so the next
+     * paint repositions instead of rebuilding the whole row.
+     * @param {HTMLElement} mounted
+     * @param {string} itemId
+     * @param {object} event
+     */
+    _patchMounted(mounted, itemId, event) {
+      this.dom.state.patchRow = mounted;
+      this.dom.state.batchTarget = null;
+      try {
+        this.dom.handleEvent(event);
+      } finally {
+        this.dom.state.patchRow = null;
+      }
+      this._syncMountedVersion(mounted, itemId);
+      this._remeasureRow(mounted);
     }
     /** @param {string} itemId */
     getMountedRow(itemId) {

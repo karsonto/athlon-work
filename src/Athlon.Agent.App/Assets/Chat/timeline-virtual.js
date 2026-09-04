@@ -458,29 +458,14 @@ export class VirtualTimeline {
 
     const result = this.store.applyEvent(event);
 
-    if (event.type === 'TURN_ACTIVITY' && event.upsert === true) {
+    const isTurnActivity = event.type === 'TURN_ACTIVITY';
+    const isFilesChanged = event.type === 'FILES_CHANGED';
+    if (isTurnActivity || isFilesChanged) {
       const turnId = this.store.currentTurnId || 'orphan';
-      const itemId = this.store.activityId(turnId);
+      const itemId = isTurnActivity ? this.store.activityId(turnId) : this.store.filesId(turnId);
       const mounted = this.mountedById.get(itemId);
       if (mounted) {
-        this.dom.state.batchTarget = null;
-        this.dom.handleEvent(event);
-        this._syncMountedVersion(mounted, itemId);
-        this._remeasureRow(mounted);
-        if (result.scrollBottom) this.scrollToBottom(false);
-        return;
-      }
-    }
-
-    if (event.type === 'FILES_CHANGED') {
-      const turnId = this.store.currentTurnId || 'orphan';
-      const itemId = this.store.filesId(turnId);
-      const mounted = this.mountedById.get(itemId);
-      if (mounted) {
-        this.dom.state.batchTarget = null;
-        this.dom.handleEvent(event);
-        this._syncMountedVersion(mounted, itemId);
-        this._remeasureRow(mounted);
+        this._patchMounted(mounted, itemId, event);
         if (result.scrollBottom) this.scrollToBottom(false);
         return;
       }
@@ -490,10 +475,7 @@ export class VirtualTimeline {
       const itemId = this.store.assistantId(event.messageId || '');
       const mounted = this.mountedById.get(itemId);
       if (mounted) {
-        this.dom.state.batchTarget = null;
-        this.dom.handleEvent(event);
-        this._syncMountedVersion(mounted, itemId);
-        this._remeasureRow(mounted);
+        this._patchMounted(mounted, itemId, event);
         if (result.scrollBottom) this.scrollToBottom(false);
         return;
       }
@@ -510,16 +492,34 @@ export class VirtualTimeline {
       const itemId = this.store.toolId(toolCallId);
       const mounted = this.mountedById.get(itemId);
       if (mounted) {
-        this.dom.state.batchTarget = null;
-        this.dom.handleEvent(event);
-        this._syncMountedVersion(mounted, itemId);
-        this._remeasureRow(mounted);
+        this._patchMounted(mounted, itemId, event);
         return;
       }
     }
 
     this.refresh();
     if (result.scrollBottom) this.scrollToBottom(false);
+  }
+
+  /**
+   * Apply an incremental event to a row that is already mounted. DOM builders
+   * update this exact row in place (state.patchRow) — they never create new rows
+   * or scan the document — then the row's store version is synced so the next
+   * paint repositions instead of rebuilding the whole row.
+   * @param {HTMLElement} mounted
+   * @param {string} itemId
+   * @param {object} event
+   */
+  _patchMounted(mounted, itemId, event) {
+    this.dom.state.patchRow = mounted;
+    this.dom.state.batchTarget = null;
+    try {
+      this.dom.handleEvent(event);
+    } finally {
+      this.dom.state.patchRow = null;
+    }
+    this._syncMountedVersion(mounted, itemId);
+    this._remeasureRow(mounted);
   }
 
   /** @param {string} itemId */

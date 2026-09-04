@@ -13,8 +13,29 @@ const state = {
   scrollForcePending: false,
   autoScrollEnabled: true,
   batchTarget: null,
-  virtualRender: false
+  virtualRender: false,
+  // When the virtualizer applies an incremental event to a row that is already
+  // mounted, this points at that row. Card builders update it in place instead of
+  // scanning the document or creating new rows (order is owned by the store).
+  patchRow: null
 };
+
+/**
+ * Row the virtualizer is patching in place (incremental events on mounted rows).
+ * @returns {HTMLElement | null}
+ */
+function targetHostRow() {
+  return state.patchRow || null;
+}
+
+/**
+ * True while a row is being (re)built from its store item inside a fragment.
+ * This is the only context in which card builders may create a new row.
+ * @returns {boolean}
+ */
+function isFragmentBuild() {
+  return state.virtualRender === true;
+}
 
 function t(key) {
   return (window.__chatI18n && window.__chatI18n[key]) || key;
@@ -325,12 +346,9 @@ function applyAssistantHtml(messageId, html, createIfMissing, streaming, respons
   applyMarkdownHtml(row.querySelector('.bubble > .message-content'), html, streaming !== true);
   if (streaming !== true) {
     setMessageMeta(row, formatResponseDuration(responseDurationMs));
-    // Final assistant landed after a live files card — move the card below this reply.
-    var filesCard = findLatestFilesChangedCardInCurrentTurn();
-    if (filesCard && !filesCard.hasAttribute('data-sealed')) {
-      var filesRow = filesCard.closest('.message-row') || filesCard.parentNode;
-      placeFilesChangedRow(filesRow);
-    }
+    // No DOM repositioning needed here: in the virtual timeline the store moves the
+    // FILES_CHANGED item after this assistant message (see store.applyEvent), and the
+    // next paint repositions every row from item order.
   }
   updateEmptyStateVisibility();
   scrollToBottom();
@@ -1048,93 +1066,52 @@ function turnActivitySummaryText(event) {
   return t('thinking') || 'Working…';
 }
 
-function findLatestFilesChangedCardInCurrentTurn() {
-  var root = getMessageRoot();
-  if (!root) return null;
-  var rows = root.querySelectorAll('.message-row');
-  var lastUser = -1;
-  for (var i = 0; i < rows.length; i++) {
-    if (rows[i].classList.contains('user')) lastUser = i;
-  }
-  var latest = null;
-  for (var j = lastUser + 1; j < rows.length; j++) {
-    var card = rows[j].querySelector('.files-changed-card');
-    if (card) latest = card;
-  }
-  return latest;
-}
-
-function findLiveFilesChangedCardInCurrentTurn() {
-  var latest = findLatestFilesChangedCardInCurrentTurn();
-  if (latest && latest.getAttribute('data-live') === '1') return latest;
-  return null;
-}
-
-function findFilesChangedTargetCard(upsert) {
-  // Scope to the current turn only — never steal a prior turn's live card.
-  var live = findLiveFilesChangedCardInCurrentTurn();
-  if (live) return live;
-  if (upsert) {
-    // Reuse the current turn's latest card (live or just-sealed) so a later
-    // upsert updates it in place instead of stacking a second card.
-    return findLatestFilesChangedCardInCurrentTurn();
-  }
-  // Seal with no live card: nothing to finalize (do not rewrite sealed history cards).
-  return null;
-}
-
 /**
- * Place the files-changed row after the current turn's final assistant bubble
- * (or after activity/user when no assistant yet) so it scrolls with history.
+ * Resolve the files-changed card that this event should update.
+ *
+ * Ownership rules (virtual timeline):
+ * - Incremental patch on a mounted row: the card lives in that row.
+ * - Fragment rebuild of a store item: the card is brand new (no DOM scan).
+ * - Anything else: the virtualizer owns ordering; skip DOM work entirely.
+ *
+ * @returns {{ row: HTMLElement, card: HTMLElement, wasLive: boolean, isNew: boolean } | null}
  */
-function placeFilesChangedRow(row) {
-  var root = getMessageRoot();
-  if (!root || !row) return;
-  // In the virtual timeline the store + virtualizer own item order and offsets.
-  // A row already inside #virtual-window must never be physically re-parented
-  // (moving it under #messages would duplicate/break its absolute position).
-  if (row.closest && row.closest('#virtual-window')) return;
-  if (state.virtualRender) {
-    root.appendChild(row);
-    return;
-  }
-  var rows = Array.prototype.slice.call(root.querySelectorAll('.message-row'));
-  var lastUserIdx = -1;
-  for (var i = 0; i < rows.length; i++) {
-    if (rows[i].classList.contains('user')) lastUserIdx = i;
+function resolveFilesChangedCard(event) {
+  var files = event.files || [];
+  var hostRow = targetHostRow();
+  var row = null;
+  var card = null;
+  var wasLive = false;
+  var isNew = false;
+
+  if (hostRow) {
+    row = hostRow;
+    card = hostRow.querySelector(':scope > .files-changed-card');
+    if (card) {
+      wasLive = card.getAttribute('data-live') === '1';
+    } else if (files.length) {
+      card = document.createElement('div');
+      card.className = 'files-changed-card';
+      hostRow.appendChild(card);
+      isNew = true;
+    }
+  } else if (isFragmentBuild() && files.length) {
+    row = document.createElement('div');
+    row.className = 'message-row assistant files-changed-host';
+    card = document.createElement('div');
+    card.className = 'files-changed-card';
+    row.appendChild(card);
+    getMessageRoot().appendChild(row);
+    isNew = true;
   }
 
-  var insertAfter = lastUserIdx >= 0 ? rows[lastUserIdx] : null;
-  for (var j = lastUserIdx + 1; j < rows.length; j++) {
-    var candidate = rows[j];
-    if (candidate === row) continue;
-    if (candidate.querySelector('.turn-activity')) {
-      insertAfter = candidate;
-      continue;
-    }
-    if (candidate.querySelector('.files-changed-card')) continue;
-    if (candidate.classList.contains('tool-row')) continue;
-    // Prefer real assistant reply bubbles (assistant-row), not host wrappers.
-    if (candidate.classList.contains('assistant-row')
-        && candidate.querySelector('.bubble > .message-content')) {
-      insertAfter = candidate;
-      continue;
-    }
-  }
-
-  if (insertAfter && insertAfter.parentNode === root) {
-    root.insertBefore(row, insertAfter.nextSibling);
-    return;
-  }
-  root.appendChild(row);
+  return row && card ? { row: row, card: card, wasLive: wasLive, isNew: isNew } : null;
 }
 
 function sealFilesChangedCard(card) {
   if (!card) return;
   card.removeAttribute('data-live');
   card.setAttribute('data-sealed', '1');
-  var row = card.closest('.message-row') || card.parentNode;
-  placeFilesChangedRow(row);
   updateEmptyStateVisibility();
   scrollToBottom();
 }
@@ -1145,34 +1122,27 @@ function appendFilesChangedCard(event) {
   var files = event.files || [];
   var upsert = event.upsert === true;
 
-  // Empty upsert: nothing to show. Empty seal: finalize existing live card in place.
+  // Empty upsert: nothing to show. Empty seal: finalize an existing live card in place.
   if (!files.length) {
-    if (upsert) return;
-    var liveToSeal = findFilesChangedTargetCard(false);
-    if (liveToSeal) sealFilesChangedCard(liveToSeal);
+    if (!upsert) {
+      var resolved = resolveFilesChangedCard(event);
+      if (resolved && resolved.wasLive) sealFilesChangedCard(resolved.card);
+    }
     return;
   }
 
-  var existing = findFilesChangedTargetCard(upsert);
-  var card = existing;
-  var sealingLiveCard = !!(existing && existing.getAttribute('data-live') === '1');
+  var target = resolveFilesChangedCard(event);
+  if (!target) return; // No host row and not building a fragment — nothing to do.
+
+  var card = target.card;
   var openPaths = {};
-  var row = null;
-  if (existing) {
-    existing.querySelectorAll('.files-changed-item.open').forEach(function (item) {
+  if (!target.isNew) {
+    card.querySelectorAll('.files-changed-item.open').forEach(function (item) {
       var path = item.getAttribute('data-path') || '';
       if (path) openPaths[path] = true;
     });
-    card.innerHTML = '';
-    row = existing.closest('.message-row') || existing.parentNode;
-  } else {
-    row = document.createElement('div');
-    row.className = 'message-row assistant files-changed-host';
-    card = document.createElement('div');
-    card.className = 'files-changed-card';
-    if (upsert) card.setAttribute('data-live', '1');
-    row.appendChild(card);
   }
+  card.innerHTML = '';
 
   var title = document.createElement('div');
   title.className = 'files-changed-title';
@@ -1234,14 +1204,11 @@ function appendFilesChangedCard(event) {
     card.removeAttribute('data-sealed');
   } else {
     card.removeAttribute('data-live');
-    // Seal live cards and completed replay cards. Leave the card unsealed only when
-    // this is a non-live replay placeholder that RestoreLive may still adopt (no
-    // data-live was ever set — sealingLiveCard is false and we are not mid-seal).
-    if (sealingLiveCard) {
-      card.setAttribute('data-sealed', '1');
-    }
+    // Only a previously-live card becomes "sealed" (finalized). Fresh fragment
+    // rebuilds of non-live history cards stay plain — no global adoption logic
+    // depends on data-sealed anymore.
+    if (target.wasLive) card.setAttribute('data-sealed', '1');
   }
-  placeFilesChangedRow(row);
   updateEmptyStateVisibility();
   scrollToBottom();
 }
@@ -1259,26 +1226,21 @@ function syncTurnActivityChevron(details) {
   chevron.textContent = details.open ? '∨' : '›';
 }
 
-function insertAfterLastUserRow(row) {
-  var root = getMessageRoot();
-  if (!root || !row) return;
-  // Virtual rows are positioned by the virtualizer; never re-parent them.
-  if (row.closest && row.closest('#virtual-window')) return;
-  if (state.virtualRender) {
-    root.appendChild(row);
-    return;
-  }
-  var users = root.querySelectorAll('.message-row.user');
-  var lastUser = users.length ? users[users.length - 1] : null;
-  if (lastUser && lastUser.parentNode === root) {
-    var anchor = lastUser.nextSibling;
-    while (anchor && anchor.nodeType === 1 && anchor.classList.contains('turn-activity-host')) {
-      anchor = anchor.nextSibling;
+/** Create a collapsed turn-activity <details> with its toggle behavior wired once. */
+function createTurnActivityDetails() {
+  const details = document.createElement('details');
+  details.className = 'turn-activity';
+  details.addEventListener('toggle', function () {
+    syncTurnActivityChevron(details);
+    if (details.open) {
+      details.classList.add('is-expanded');
+      scrollTurnActivityThoughts(details);
+      scrollToBottom();
+    } else {
+      details.classList.remove('is-expanded');
     }
-    root.insertBefore(row, anchor);
-    return;
-  }
-  root.appendChild(row);
+  });
+  return details;
 }
 
 function scrollTurnActivityThoughts(details) {
@@ -1288,63 +1250,40 @@ function scrollTurnActivityThoughts(details) {
   });
 }
 
-function findLatestTurnActivityInCurrentTurn() {
-  var root = getMessageRoot();
-  if (!root) return null;
-  var rows = root.querySelectorAll('.message-row');
-  var lastUser = -1;
-  for (var i = 0; i < rows.length; i++) {
-    if (rows[i].classList.contains('user')) lastUser = i;
-  }
-  var latest = null;
-  for (var j = lastUser + 1; j < rows.length; j++) {
-    var card = rows[j].querySelector('.turn-activity');
-    if (card) latest = card;
-  }
-  return latest;
-}
-
-function findTurnActivityTargetCard(upsert) {
-  var live = document.querySelector('.turn-activity[data-live="1"]');
-  if (live) return live;
-  if (!upsert) return null;
-  // After a conversation switch the replayed card has no data-live. Reuse it so
-  // the next thought upsert does not stack a second fold.
-  return findLatestTurnActivityInCurrentTurn();
-}
-
 function appendTurnActivityCard(event) {
   state.currentAssistantEl = null;
   state.currentReasoningEl = null;
   var items = event.items || [];
   if (!items.length && !(event.exploredFileCount || event.searchCount || event.commandCount || event.thoughtCount)) return;
 
-  // One live card for the whole turn; sealing (upsert=false) finalizes it.
-  var existing = findTurnActivityTargetCard(event.upsert === true);
-  var details = existing;
-  // Stay collapsed by default; keep expanded only if the user already opened it.
-  var keepOpen = !!(existing && existing.open);
-  if (!details) {
-    var row = document.createElement('div');
+  var upsert = event.upsert === true;
+  var hostRow = targetHostRow();
+  var details = null;
+  var isNew = false;
+  if (hostRow) {
+    // Incremental patch on a mounted row: update its card in place.
+    details = hostRow.querySelector(':scope > .turn-activity');
+    if (!details) {
+      details = createTurnActivityDetails();
+      hostRow.appendChild(details);
+      isNew = true;
+    }
+  } else if (isFragmentBuild()) {
+    // Fragment rebuild of a store item: always a fresh row, never a DOM scan.
+    const row = document.createElement('div');
     row.className = 'message-row assistant turn-activity-host';
-    details = document.createElement('details');
-    details.className = 'turn-activity';
-    if (event.upsert) details.setAttribute('data-live', '1');
-    details.addEventListener('toggle', function () {
-      syncTurnActivityChevron(details);
-      if (details.open) {
-        details.classList.add('is-expanded');
-        scrollTurnActivityThoughts(details);
-        scrollToBottom();
-      } else {
-        details.classList.remove('is-expanded');
-      }
-    });
+    details = createTurnActivityDetails();
     row.appendChild(details);
-    insertAfterLastUserRow(row);
+    getMessageRoot().appendChild(row);
+    isNew = true;
   } else {
-    details.innerHTML = '';
+    // No host and not building a fragment — ordering is owned by the virtualizer.
+    return;
   }
+
+  // Live upserts keep a user-opened fold expanded; seals always collapse.
+  var keepOpen = upsert && !isNew && details.open === true;
+  details.innerHTML = '';
 
   var summary = document.createElement('summary');
   var summaryText = document.createElement('span');
@@ -1476,27 +1415,40 @@ function appendTurnActivityCard(event) {
   scrollToBottom();
 }
 
+function createCompactionSkeleton(id) {
+  const details = document.createElement('details');
+  details.className = 'compaction-checkpoint';
+  details.dataset.compactionId = id;
+  details.innerHTML =
+    '<summary><span class="compaction-title"></span><span class="tool-status"></span></summary>' +
+    '<div class="compaction-body">' +
+    '<div class="compaction-summary"></div>' +
+    '<details class="compaction-tech"><summary class="compaction-tech-label"></summary>' +
+    '<pre class="compaction-detail"></pre></details>' +
+    '</div>';
+  return details;
+}
+
 function upsertCompactionCheckpoint(event) {
   const id = event.id || 'compaction';
-  let details = document.querySelector('[data-compaction-id="' + id + '"]');
-  if (!details) {
+  var hostRow = targetHostRow();
+  var details = null;
+  if (hostRow) {
+    details = hostRow.querySelector(':scope > .compaction-checkpoint');
+    if (!details) {
+      details = createCompactionSkeleton(id);
+      hostRow.appendChild(details);
+    }
+  } else if (isFragmentBuild()) {
     state.currentAssistantEl = null;
     state.currentReasoningEl = null;
     const row = document.createElement('div');
     row.className = 'message-row assistant compaction-row';
-    details = document.createElement('details');
-    details.className = 'compaction-checkpoint';
-    details.dataset.compactionId = id;
-    details.innerHTML =
-      '<summary><span class="compaction-title"></span><span class="tool-status"></span></summary>' +
-      '<div class="compaction-body">' +
-      '<div class="compaction-summary"></div>' +
-      '<details class="compaction-tech"><summary class="compaction-tech-label"></summary>' +
-      '<pre class="compaction-detail"></pre></details>' +
-      '</div>';
+    details = createCompactionSkeleton(id);
     row.appendChild(details);
     getMessageRoot().appendChild(row);
-    updateEmptyStateVisibility();
+  } else {
+    return;
   }
   const title = details.querySelector('.compaction-title');
   if (title) title.textContent = event.title || '';
@@ -1522,33 +1474,61 @@ function isPlanSpecialTool(name) {
   return name === 'ask_plan_clarification' || name === 'publish_plan';
 }
 
+/**
+ * Best root for plan-card lookups in the current context: the patched row, the
+ * in-progress fragment, or the document for legacy calls.
+ */
+function scopedRoot() {
+  if (state.patchRow) return state.patchRow;
+  if (state.virtualRender) return getMessageRoot();
+  return document;
+}
+
 function getPlanClarifyCard(requestId) {
   if (!requestId) return null;
-  return document.querySelector('.plan-clarify-card[data-request-id="' + cssEscape(requestId) + '"]');
+  const root = scopedRoot();
+  if (!root || !root.querySelector) return null;
+  return root.querySelector('.plan-clarify-card[data-request-id="' + cssEscape(requestId) + '"]');
 }
 
 function getPlanReadyCard(runId) {
   if (!runId) return null;
-  return document.querySelector('.plan-ready-card[data-run-id="' + cssEscape(runId) + '"]');
+  const root = scopedRoot();
+  if (!root || !root.querySelector) return null;
+  return root.querySelector('.plan-ready-card[data-run-id="' + cssEscape(runId) + '"]');
+}
+
+function resolvePlanCard(event, createSkeleton) {
+  // Incremental patch: the card already lives in the patched row (create if missing).
+  var hostRow = targetHostRow();
+  if (hostRow) {
+    var existing = hostRow.querySelector(':scope > .plan-clarify-card, :scope > .plan-ready-card');
+    if (existing) return existing;
+    return createSkeleton(hostRow);
+  }
+  // Fragment rebuild: always build a fresh row from the store item.
+  if (isFragmentBuild()) {
+    var row = document.createElement('div');
+    row.className = 'message-row assistant plan-row';
+    var created = createSkeleton(row);
+    getMessageRoot().appendChild(row);
+    return created;
+  }
+  return null;
 }
 
 function showPlanClarify(event) {
   if (!event || !event.requestId || !event.questions || !event.questions.length) return;
-  var existing = getPlanClarifyCard(event.requestId);
-  var card;
-  if (existing) {
-    card = existing;
-  } else {
-    state.currentAssistantEl = null;
-    state.currentReasoningEl = null;
-    var row = document.createElement('div');
-    row.className = 'message-row assistant plan-row';
-    card = document.createElement('div');
-    card.className = 'plan-clarify-card';
-    row.appendChild(card);
-    getMessageRoot().appendChild(row);
-    updateEmptyStateVisibility();
-  }
+  state.currentAssistantEl = null;
+  state.currentReasoningEl = null;
+
+  var card = resolvePlanCard(event, function (host) {
+    var c = document.createElement('div');
+    c.className = 'plan-clarify-card';
+    host.appendChild(c);
+    return c;
+  });
+  if (!card) return;
   card.dataset.requestId = event.requestId;
   card.innerHTML = '';
 
@@ -1667,43 +1647,6 @@ function resolvePlanClarify(event) {
   applyPlanClarifyResolved(card, event && event.summary);
 }
 
-function placePlanReadyRow(row) {
-  var root = getMessageRoot();
-  if (!root || !row) return;
-  if (state.virtualRender) {
-    root.appendChild(row);
-    return;
-  }
-  var rows = Array.prototype.slice.call(root.querySelectorAll('.message-row'));
-  var lastUserIdx = -1;
-  for (var i = 0; i < rows.length; i++) {
-    if (rows[i].classList.contains('user')) lastUserIdx = i;
-  }
-
-  var insertAfter = lastUserIdx >= 0 ? rows[lastUserIdx] : null;
-  for (var j = lastUserIdx + 1; j < rows.length; j++) {
-    var candidate = rows[j];
-    if (candidate === row) continue;
-    if (candidate.querySelector('.turn-activity')) {
-      insertAfter = candidate;
-      continue;
-    }
-    if (candidate.classList.contains('plan-row')) continue;
-    if (candidate.classList.contains('tool-row')) continue;
-    if (candidate.classList.contains('assistant-row')
-        && candidate.querySelector('.bubble > .message-content')) {
-      insertAfter = candidate;
-      continue;
-    }
-  }
-
-  if (insertAfter && insertAfter.parentNode === root) {
-    root.insertBefore(row, insertAfter.nextSibling);
-    return;
-  }
-  root.appendChild(row);
-}
-
 function resolvePlanMarkdown(event) {
   if (event && event.markdownB64) return decodeBase64Utf8(event.markdownB64);
   if (event && event.markdown) return event.markdown;
@@ -1714,26 +1657,19 @@ function resolvePlanMarkdown(event) {
 function showPlanReady(event) {
   if (!event) return;
   var runId = event.runId || 'plan';
-  var existing = getPlanReadyCard(runId);
-  var row;
-  var card;
-  if (existing) {
-    card = existing;
-    row = card.closest('.message-row');
-    card.innerHTML = '';
-  } else {
-    state.currentAssistantEl = null;
-    state.currentReasoningEl = null;
-    row = document.createElement('div');
-    row.className = 'message-row assistant plan-row';
-    card = document.createElement('div');
-    card.className = 'plan-ready-card';
-    row.appendChild(card);
-    placePlanReadyRow(row);
-    updateEmptyStateVisibility();
-  }
+  state.currentAssistantEl = null;
+  state.currentReasoningEl = null;
+
+  var card = resolvePlanCard(event, function (host) {
+    var c = document.createElement('div');
+    c.className = 'plan-ready-card';
+    host.appendChild(c);
+    return c;
+  });
+  if (!card) return;
   card.dataset.runId = runId;
   if (event.planPath) card.dataset.planPath = event.planPath;
+  card.innerHTML = '';
 
   var title = document.createElement('div');
   title.className = 'plan-card-title';
@@ -1768,7 +1704,8 @@ function showPlanReady(event) {
   });
   actions.appendChild(buildBtn);
   card.appendChild(actions);
-  if (row) placePlanReadyRow(row);
+  updateEmptyStateVisibility();
+  scrollToBottom(true);
 }
 
 function appendOverflowSkipped(event) {
@@ -1793,15 +1730,9 @@ function handleEvent(event) {
       updateEmptyStateVisibility();
       break;
     case 'USER_MESSAGE':
-      (function () {
-        var liveActivity = document.querySelector('.turn-activity[data-live="1"]');
-        if (liveActivity) liveActivity.removeAttribute('data-live');
-        var liveFiles = document.querySelector('.files-changed-card[data-live="1"]');
-        if (liveFiles) {
-          liveFiles.removeAttribute('data-live');
-          liveFiles.setAttribute('data-sealed', '1');
-        }
-      })();
+      // Turn lifecycle (sealing the previous turn's live cards) is owned by the
+      // store. A row here is built purely from its item snapshot, so there is no
+      // DOM-wide data-live scan to run.
       appendMessage('user', event.content || '', false, event.images || [], event.startedAt || '', event.mentions || []);
       break;
     case 'FILES_CHANGED':

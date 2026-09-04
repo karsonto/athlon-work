@@ -120,3 +120,66 @@ test('prepend scroll compensation uses stable estimated height delta', () => {
   assert.equal(anchoredTop, previousTop + delta);
   assert.ok(anchoredTop > previousTop);
 });
+
+test('multi-turn activity: seal belongs to its own turn, next turn gets a fresh card', () => {
+  const store = new TimelineItemStore();
+
+  // Turn 1: user message, live activity, then seal.
+  store.applyEvent({ type: 'USER_MESSAGE', messageId: 'u1', content: 'q1' });
+  const act1 = { type: 'TURN_ACTIVITY', upsert: true, items: [{ kind: 'thought', body: 'work', verb: 'Thought' }], thoughtCount: 1 };
+  store.applyEvent(act1);
+  const a1 = store.items.find((item) => item.type === 'TURN_ACTIVITY');
+  assert.equal(a1?.live, true);
+  assert.equal(a1?.turnId, 'u1');
+
+  store.applyEvent({ type: 'TURN_ACTIVITY', upsert: false, items: [{ kind: 'thought', body: 'work', verb: 'Thought' }], thoughtCount: 1, durationMs: 1000 });
+  assert.equal(a1?.live, false);
+  assert.equal(a1?.event.upsert, false);
+  assert.equal(store.currentTurnId, 'u1', 'seal must not move currentTurnId');
+
+  // Turn 2 starts; seal of turn 1 must not be replayed into turn 2.
+  store.applyEvent({ type: 'USER_MESSAGE', messageId: 'u2', content: 'q2' });
+  assert.equal(store.currentTurnId, 'u2');
+  assert.equal(a1?.live, false, 'turn-1 card stays sealed after turn-2 starts');
+
+  const act2 = { type: 'TURN_ACTIVITY', upsert: true, items: [{ kind: 'thought', body: 'work2', verb: 'Thought' }], thoughtCount: 1 };
+  store.applyEvent(act2);
+
+  const activities = store.items.filter((item) => item.type === 'TURN_ACTIVITY');
+  assert.equal(activities.length, 2, 'each turn owns exactly one activity card');
+  assert.equal(activities[0].turnId, 'u1');
+  assert.equal(activities[1].turnId, 'u2');
+  assert.equal(activities[1].live, true);
+  assert.equal(activities[0].live, false);
+  // Item order follows event arrival: u1, a1, u2, a2.
+  const typeOrder = store.items.map((item) => item.type);
+  assert.deepEqual(typeOrder, ['USER', 'TURN_ACTIVITY', 'USER', 'TURN_ACTIVITY']);
+});
+
+test('files card per turn is keyed by turn id and survives cross-turn upserts', () => {
+  const store = new TimelineItemStore();
+  store.applyEvent({ type: 'USER_MESSAGE', messageId: 'u1', content: 'q1' });
+  store.applyEvent({
+    type: 'FILES_CHANGED', upsert: true,
+    files: [{ path: 'a.txt', added: 1, removed: 0, lines: [] }]
+  });
+  const files1 = store.items.find((item) => item.type === 'FILES_CHANGED');
+  assert.equal(files1?.turnId, 'u1');
+  assert.equal(files1?.live, true);
+
+  store.applyEvent({ type: 'FILES_CHANGED', upsert: false, files: [] });
+  assert.equal(files1?.live, false);
+
+  store.applyEvent({ type: 'USER_MESSAGE', messageId: 'u2', content: 'q2' });
+  store.applyEvent({
+    type: 'FILES_CHANGED', upsert: true,
+    files: [{ path: 'b.txt', added: 2, removed: 0, lines: [] }]
+  });
+
+  const filesCards = store.items.filter((item) => item.type === 'FILES_CHANGED');
+  assert.equal(filesCards.length, 2);
+  assert.equal(filesCards[0].turnId, 'u1');
+  assert.equal(filesCards[0].live, false);
+  assert.equal(filesCards[1].turnId, 'u2');
+  assert.equal(filesCards[1].live, true);
+});
