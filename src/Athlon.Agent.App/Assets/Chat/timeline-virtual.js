@@ -17,6 +17,8 @@ export class VirtualTimeline {
     this.onLoadOlder = options.onLoadOlder || null;
     /** @type {Virtualizer<HTMLElement, HTMLElement> | null} */
     this.virtualizer = null;
+    /** @type {(() => void) | null} */
+    this._unmount = null;
     /** @type {Map<string, HTMLElement>} */
     this.mountedById = new Map();
     /** @type {number} */
@@ -25,6 +27,8 @@ export class VirtualTimeline {
     this.hasOlderMessages = false;
     /** @type {boolean} */
     this.loadOlderPending = false;
+    /** @type {number} */
+    this._lastCount = -1;
     this._scrollListener = this._onScroll.bind(this);
     this._sentinelObserver = null;
   }
@@ -53,6 +57,12 @@ export class VirtualTimeline {
     });
 
     this.virtualizer = new Virtualizer(this._buildVirtualizerOptions(this.store.count));
+    this._lastCount = this.store.count;
+    // Vanilla virtual-core requires these lifecycle hooks to attach scroll/rect observers.
+    if (typeof this.virtualizer._didMount === 'function') {
+      this._unmount = this.virtualizer._didMount();
+    }
+    this._willUpdate();
 
     scroller.addEventListener('scroll', this._scrollListener, { passive: true });
     scroller.addEventListener('wheel', (e) => {
@@ -66,10 +76,22 @@ export class VirtualTimeline {
     this._paint();
   }
 
+  _willUpdate() {
+    if (this.virtualizer && typeof this.virtualizer._willUpdate === 'function') {
+      this.virtualizer._willUpdate();
+    }
+  }
+
   /** @param {number} count */
   _setCount(count) {
     if (!this.virtualizer || !this._buildVirtualizerOptions) return;
+    if (count === this._lastCount) {
+      this._willUpdate();
+      return;
+    }
+    this._lastCount = count;
     this.virtualizer.setOptions(this._buildVirtualizerOptions(count));
+    this._willUpdate();
   }
 
   _bindSentinel() {
@@ -114,11 +136,15 @@ export class VirtualTimeline {
     const scroller = this.dom.getChatScroller();
     if (!scroller) return;
     if (!force && (!this.dom.state.autoScrollEnabled || this.dom.hasActiveSelection())) return;
+    this._willUpdate();
     scroller.scrollTop = scroller.scrollHeight;
+    this._schedulePaint();
   }
 
   _onScroll() {
     this.dom.state.autoScrollEnabled = this.dom.isNearBottom();
+    // Backup paint path if virtualizer observers are momentarily stale.
+    this._schedulePaint();
   }
 
   _schedulePaint() {
@@ -138,29 +164,60 @@ export class VirtualTimeline {
     this._schedulePaint();
   }
 
+  /**
+   * When getVirtualItems is empty (e.g. viewport not measured yet), estimate a
+   * window around the current scroll offset — not always the list tail.
+   * @returns {Array<{ index: number, start: number, size: number, end: number, key: number, lane: number }>}
+   */
+  _fallbackVirtualItems() {
+    const count = this.store.count;
+    if (count <= 0) return [];
+    const scroller = this.dom.getChatScroller();
+    const scrollTop = scroller ? scroller.scrollTop : 0;
+    const viewport = scroller && scroller.clientHeight > 0 ? scroller.clientHeight : 600;
+    const windowSize = 40;
+
+    let startIndex = 0;
+    let offset = 0;
+    for (let i = 0; i < count; i++) {
+      const size = (this.store.items[i]?.estimatedHeight || 80) + 20;
+      if (offset + size > scrollTop) {
+        startIndex = i;
+        break;
+      }
+      offset += size;
+      startIndex = i;
+    }
+
+    startIndex = Math.max(0, startIndex - 4);
+    const endIndex = Math.min(count - 1, startIndex + windowSize - 1);
+    /** @type {Array<{ index: number, start: number, size: number, end: number, key: number, lane: number }>} */
+    const items = [];
+    for (let index = startIndex; index <= endIndex; index++) {
+      const start = this._estimateOffset(index);
+      const size = (this.store.items[index]?.estimatedHeight || 80) + 20;
+      items.push({ index, start, size, end: start + size, key: index, lane: 0 });
+    }
+    // Keep viewport in the dependency list for lint-free intentional use.
+    void viewport;
+    return items;
+  }
+
   _paint() {
     if (!this.virtualizer) return;
     const windowEl = document.getElementById('virtual-window');
     if (!windowEl) return;
 
-    this._setCount(this.store.count);
-    let virtualItems = this.virtualizer.getVirtualItems();
-    // Fallback when the scroll element has not been measured yet (height 0):
-    // still render a trailing window so history / new turns are not blank.
-    if (virtualItems.length === 0 && this.store.count > 0) {
-      const start = Math.max(0, this.store.count - 40);
-      virtualItems = [];
-      for (let index = start; index < this.store.count; index++) {
-        virtualItems.push({
-          index,
-          start: this._estimateOffset(index),
-          size: (this.store.items[index]?.estimatedHeight || 80) + 20,
-          end: 0,
-          key: index,
-          lane: 0
-        });
-      }
+    this._willUpdate();
+    if (this._lastCount !== this.store.count) {
+      this._setCount(this.store.count);
     }
+
+    let virtualItems = this.virtualizer.getVirtualItems();
+    if (virtualItems.length === 0 && this.store.count > 0) {
+      virtualItems = this._fallbackVirtualItems();
+    }
+
     const liveIndices = new Set();
     this.store.items.forEach((item, index) => {
       if (item.live) liveIndices.add(index);
@@ -217,7 +274,8 @@ export class VirtualTimeline {
     });
     this.mountedById = nextMounted;
 
-    windowEl.style.height = this.virtualizer.getTotalSize() + 'px';
+    const totalSize = this.virtualizer.getTotalSize() || this.store.estimateTotalSize();
+    windowEl.style.height = totalSize + 'px';
     this.dom.updateEmptyStateVisibility();
   }
 
@@ -284,11 +342,9 @@ export class VirtualTimeline {
     }
 
     if (prepend && scroller && this.virtualizer) {
-      // Sync paint so estimated→measured delta can be compensated in the same turn.
       this._paint();
       const delta = this.virtualizer.getTotalSize() - previousSize;
       scroller.scrollTop = previousTop + Math.max(0, delta);
-      // One more paint after scroll so the window matches the anchored offset.
       this._paint();
       const afterSize = this.virtualizer.getTotalSize();
       const measureDelta = afterSize - (previousSize + Math.max(0, delta));

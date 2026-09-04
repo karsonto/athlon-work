@@ -3586,10 +3586,12 @@
       this.dom = options.dom;
       this.onLoadOlder = options.onLoadOlder || null;
       this.virtualizer = null;
+      this._unmount = null;
       this.mountedById = /* @__PURE__ */ new Map();
       this.renderFrame = 0;
       this.hasOlderMessages = false;
       this.loadOlderPending = false;
+      this._lastCount = -1;
       this._scrollListener = this._onScroll.bind(this);
       this._sentinelObserver = null;
     }
@@ -3613,6 +3615,11 @@
         }
       });
       this.virtualizer = new Virtualizer(this._buildVirtualizerOptions(this.store.count));
+      this._lastCount = this.store.count;
+      if (typeof this.virtualizer._didMount === "function") {
+        this._unmount = this.virtualizer._didMount();
+      }
+      this._willUpdate();
       scroller.addEventListener("scroll", this._scrollListener, { passive: true });
       scroller.addEventListener("wheel", (e) => {
         if (e.deltaY < 0) this.dom.state.autoScrollEnabled = false;
@@ -3623,10 +3630,21 @@
       this._bindSentinel();
       this._paint();
     }
+    _willUpdate() {
+      if (this.virtualizer && typeof this.virtualizer._willUpdate === "function") {
+        this.virtualizer._willUpdate();
+      }
+    }
     /** @param {number} count */
     _setCount(count) {
       if (!this.virtualizer || !this._buildVirtualizerOptions) return;
+      if (count === this._lastCount) {
+        this._willUpdate();
+        return;
+      }
+      this._lastCount = count;
       this.virtualizer.setOptions(this._buildVirtualizerOptions(count));
+      this._willUpdate();
     }
     _bindSentinel() {
       const sentinel = document.getElementById("load-older-sentinel");
@@ -3667,10 +3685,13 @@
       const scroller = this.dom.getChatScroller();
       if (!scroller) return;
       if (!force && (!this.dom.state.autoScrollEnabled || this.dom.hasActiveSelection())) return;
+      this._willUpdate();
       scroller.scrollTop = scroller.scrollHeight;
+      this._schedulePaint();
     }
     _onScroll() {
       this.dom.state.autoScrollEnabled = this.dom.isNearBottom();
+      this._schedulePaint();
     }
     _schedulePaint() {
       if (this.renderFrame) return;
@@ -3687,25 +3708,51 @@
       this._setCount(this.store.count);
       this._schedulePaint();
     }
+    /**
+     * When getVirtualItems is empty (e.g. viewport not measured yet), estimate a
+     * window around the current scroll offset — not always the list tail.
+     * @returns {Array<{ index: number, start: number, size: number, end: number, key: number, lane: number }>}
+     */
+    _fallbackVirtualItems() {
+      const count = this.store.count;
+      if (count <= 0) return [];
+      const scroller = this.dom.getChatScroller();
+      const scrollTop = scroller ? scroller.scrollTop : 0;
+      const viewport = scroller && scroller.clientHeight > 0 ? scroller.clientHeight : 600;
+      const windowSize = 40;
+      let startIndex = 0;
+      let offset = 0;
+      for (let i = 0; i < count; i++) {
+        const size = (this.store.items[i]?.estimatedHeight || 80) + 20;
+        if (offset + size > scrollTop) {
+          startIndex = i;
+          break;
+        }
+        offset += size;
+        startIndex = i;
+      }
+      startIndex = Math.max(0, startIndex - 4);
+      const endIndex = Math.min(count - 1, startIndex + windowSize - 1);
+      const items = [];
+      for (let index = startIndex; index <= endIndex; index++) {
+        const start = this._estimateOffset(index);
+        const size = (this.store.items[index]?.estimatedHeight || 80) + 20;
+        items.push({ index, start, size, end: start + size, key: index, lane: 0 });
+      }
+      void viewport;
+      return items;
+    }
     _paint() {
       if (!this.virtualizer) return;
       const windowEl = document.getElementById("virtual-window");
       if (!windowEl) return;
-      this._setCount(this.store.count);
+      this._willUpdate();
+      if (this._lastCount !== this.store.count) {
+        this._setCount(this.store.count);
+      }
       let virtualItems = this.virtualizer.getVirtualItems();
       if (virtualItems.length === 0 && this.store.count > 0) {
-        const start = Math.max(0, this.store.count - 40);
-        virtualItems = [];
-        for (let index = start; index < this.store.count; index++) {
-          virtualItems.push({
-            index,
-            start: this._estimateOffset(index),
-            size: (this.store.items[index]?.estimatedHeight || 80) + 20,
-            end: 0,
-            key: index,
-            lane: 0
-          });
-        }
+        virtualItems = this._fallbackVirtualItems();
       }
       const liveIndices = /* @__PURE__ */ new Set();
       this.store.items.forEach((item, index) => {
@@ -3755,7 +3802,8 @@
         if (!usedIds.has(id) && row.parentNode) row.parentNode.removeChild(row);
       });
       this.mountedById = nextMounted;
-      windowEl.style.height = this.virtualizer.getTotalSize() + "px";
+      const totalSize = this.virtualizer.getTotalSize() || this.store.estimateTotalSize();
+      windowEl.style.height = totalSize + "px";
       this.dom.updateEmptyStateVisibility();
     }
     /** @param {number} index */
