@@ -1278,15 +1278,14 @@
     var live = findLiveFilesChangedCardInCurrentTurn();
     if (live) return live;
     if (upsert) {
-      var latest = findLatestFilesChangedCardInCurrentTurn();
-      if (latest && !latest.hasAttribute("data-sealed")) return latest;
-      return null;
+      return findLatestFilesChangedCardInCurrentTurn();
     }
     return null;
   }
   function placeFilesChangedRow(row) {
     var root = getMessageRoot();
     if (!root || !row) return;
+    if (row.closest && row.closest("#virtual-window")) return;
     if (state.virtualRender) {
       root.appendChild(row);
       return;
@@ -1431,6 +1430,8 @@
   }
   function insertAfterLastUserRow(row) {
     var root = getMessageRoot();
+    if (!root || !row) return;
+    if (row.closest && row.closest("#virtual-window")) return;
     if (state.virtualRender) {
       root.appendChild(row);
       return;
@@ -3776,7 +3777,10 @@
           usedIds.add(item.id);
           return;
         }
-        if (row && row.parentNode) row.parentNode.removeChild(row);
+        if (row && row.parentNode) {
+          this._unbindRemeasure(row);
+          row.parentNode.removeChild(row);
+        }
         row = this.dom.renderItemRow(item);
         if (!row) return;
         row.classList.add("virtual-row");
@@ -3788,18 +3792,17 @@
         row.style.transform = "translateY(" + start + "px)";
         row.style.width = "100%";
         windowEl.appendChild(row);
+        this.dom.enhanceCodeBlocks(row);
+        this._remeasureRow(row);
         this._bindRemeasure(row);
-        this.virtualizer.measureElement(row);
-        const measured = row.getBoundingClientRect().height;
-        if (measured > 0) {
-          item.estimatedHeight = Math.max(1, Math.round(measured) - 20);
-        }
         nextMounted.set(item.id, row);
         usedIds.add(item.id);
-        this.dom.enhanceCodeBlocks(row);
       });
       this.mountedById.forEach((row, id) => {
-        if (!usedIds.has(id) && row.parentNode) row.parentNode.removeChild(row);
+        if (!usedIds.has(id) && row.parentNode) {
+          this._unbindRemeasure(row);
+          row.parentNode.removeChild(row);
+        }
       });
       this.mountedById = nextMounted;
       const totalSize = this.virtualizer.getTotalSize() || this.store.estimateTotalSize();
@@ -3816,23 +3819,67 @@
     }
     /** @param {HTMLElement} row */
     _bindRemeasure(row) {
-      if (row.dataset.remeasureBound) return;
-      row.dataset.remeasureBound = "1";
-      const details = row.querySelector("details");
-      if (!details) return;
-      details.addEventListener("toggle", () => {
-        if (!this.virtualizer) return;
-        this.virtualizer.measureElement(row);
+      if (!row || row.__remeasureBound) return;
+      row.__remeasureBound = true;
+      let lastHeight = -1;
+      const onChange = (height) => {
+        if (height === lastHeight) return;
+        lastHeight = height;
+        this._remeasureRow(row);
+      };
+      if (typeof ResizeObserver === "function") {
+        const ro = new ResizeObserver((entries) => {
+          const entry = entries && entries[entries.length - 1];
+          const box = entry && (entry.contentRect || entry.borderBoxSize);
+          onChange(box ? box.height : row.getBoundingClientRect().height);
+        });
+        ro.observe(row);
+        row.__remeasureRO = ro;
+      } else {
+        const details = row.querySelector("details");
+        if (details) details.addEventListener("toggle", () => onChange(row.getBoundingClientRect().height));
+      }
+    }
+    /** @param {HTMLElement} row */
+    _unbindRemeasure(row) {
+      if (row && row.__remeasureRO) {
+        try {
+          row.__remeasureRO.disconnect();
+        } catch (_e) {
+        }
+        row.__remeasureRO = null;
+      }
+    }
+    /**
+     * Re-measure one mounted row and sync both the virtualizer cache and the
+     * store's estimatedHeight, then repaint so following rows shift correctly.
+     * @param {HTMLElement} row
+     */
+    _remeasureRow(row) {
+      if (!row || !row.isConnected || !this.virtualizer) return;
+      this.virtualizer.measureElement(row);
+      const measured = row.getBoundingClientRect().height;
+      if (measured > 0) {
         const itemId = row.dataset.timelineItemId;
         if (itemId) {
-          const item = this.store.items.find((candidate) => candidate.id === itemId);
-          const measured = row.getBoundingClientRect().height;
-          if (item && measured > 0) {
-            item.estimatedHeight = Math.max(1, Math.round(measured) - 20);
-          }
+          const index = this.store.indexById.get(itemId);
+          const item = index != null ? this.store.items[index] : null;
+          if (item) item.estimatedHeight = Math.max(1, Math.round(measured) - 20);
         }
-        this._schedulePaint();
-      });
+      }
+      this._schedulePaint();
+    }
+    /**
+     * After an in-place DOM patch, sync the row's version stamp with the store so
+     * the next paint updates position instead of rebuilding the whole row.
+     * @param {HTMLElement} row
+     * @param {string} itemId
+     */
+    _syncMountedVersion(row, itemId) {
+      if (!row || !itemId) return;
+      const index = this.store.indexById.get(itemId);
+      if (index == null) return;
+      row.dataset.timelineVersion = String(this.store.items[index].version);
     }
     /**
      * @param {Array<string | object>} events
@@ -3930,32 +3977,38 @@
       const result = this.store.applyEvent(event);
       if (event.type === "TURN_ACTIVITY" && event.upsert === true) {
         const turnId = this.store.currentTurnId || "orphan";
-        const mounted = this.mountedById.get(this.store.activityId(turnId));
+        const itemId = this.store.activityId(turnId);
+        const mounted = this.mountedById.get(itemId);
         if (mounted) {
           this.dom.state.batchTarget = null;
           this.dom.handleEvent(event);
-          if (this.virtualizer) this.virtualizer.measureElement(mounted);
+          this._syncMountedVersion(mounted, itemId);
+          this._remeasureRow(mounted);
           if (result.scrollBottom) this.scrollToBottom(false);
           return;
         }
       }
       if (event.type === "FILES_CHANGED") {
         const turnId = this.store.currentTurnId || "orphan";
-        const mounted = this.mountedById.get(this.store.filesId(turnId));
+        const itemId = this.store.filesId(turnId);
+        const mounted = this.mountedById.get(itemId);
         if (mounted) {
           this.dom.state.batchTarget = null;
           this.dom.handleEvent(event);
-          if (this.virtualizer) this.virtualizer.measureElement(mounted);
+          this._syncMountedVersion(mounted, itemId);
+          this._remeasureRow(mounted);
           if (result.scrollBottom) this.scrollToBottom(false);
           return;
         }
       }
       if (event.type === "STATIC_ASSISTANT_HTML") {
-        const mounted = this.mountedById.get(this.store.assistantId(event.messageId || ""));
+        const itemId = this.store.assistantId(event.messageId || "");
+        const mounted = this.mountedById.get(itemId);
         if (mounted) {
           this.dom.state.batchTarget = null;
           this.dom.handleEvent(event);
-          if (this.virtualizer) this.virtualizer.measureElement(mounted);
+          this._syncMountedVersion(mounted, itemId);
+          this._remeasureRow(mounted);
           if (result.scrollBottom) this.scrollToBottom(false);
           return;
         }
@@ -3967,10 +4020,13 @@
       }
       if (patchTypes.has(event.type)) {
         const toolCallId = event.toolCallId || "";
-        const mounted = this.mountedById.get(this.store.toolId(toolCallId));
+        const itemId = this.store.toolId(toolCallId);
+        const mounted = this.mountedById.get(itemId);
         if (mounted) {
           this.dom.state.batchTarget = null;
           this.dom.handleEvent(event);
+          this._syncMountedVersion(mounted, itemId);
+          this._remeasureRow(mounted);
           return;
         }
       }

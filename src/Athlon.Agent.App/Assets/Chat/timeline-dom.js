@@ -1075,11 +1075,9 @@ function findFilesChangedTargetCard(upsert) {
   var live = findLiveFilesChangedCardInCurrentTurn();
   if (live) return live;
   if (upsert) {
-    // After a full timeline reload, replay emits an unsealed card for the current turn.
-    // Adopt it as the live card instead of stacking a duplicate with the same paths.
-    var latest = findLatestFilesChangedCardInCurrentTurn();
-    if (latest && !latest.hasAttribute('data-sealed')) return latest;
-    return null;
+    // Reuse the current turn's latest card (live or just-sealed) so a later
+    // upsert updates it in place instead of stacking a second card.
+    return findLatestFilesChangedCardInCurrentTurn();
   }
   // Seal with no live card: nothing to finalize (do not rewrite sealed history cards).
   return null;
@@ -1092,6 +1090,10 @@ function findFilesChangedTargetCard(upsert) {
 function placeFilesChangedRow(row) {
   var root = getMessageRoot();
   if (!root || !row) return;
+  // In the virtual timeline the store + virtualizer own item order and offsets.
+  // A row already inside #virtual-window must never be physically re-parented
+  // (moving it under #messages would duplicate/break its absolute position).
+  if (row.closest && row.closest('#virtual-window')) return;
   if (state.virtualRender) {
     root.appendChild(row);
     return;
@@ -1259,6 +1261,9 @@ function syncTurnActivityChevron(details) {
 
 function insertAfterLastUserRow(row) {
   var root = getMessageRoot();
+  if (!root || !row) return;
+  // Virtual rows are positioned by the virtualizer; never re-parent them.
+  if (row.closest && row.closest('#virtual-window')) return;
   if (state.virtualRender) {
     root.appendChild(row);
     return;

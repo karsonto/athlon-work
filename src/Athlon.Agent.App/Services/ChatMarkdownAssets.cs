@@ -22,6 +22,7 @@ internal static class ChatMarkdownAssets
             {
                 var css = Path.Combine(AssetsDirectory, "chat-shell.css");
                 var js = Path.Combine(AssetsDirectory, "chat-timeline.js");
+                var bundle = Path.Combine(AssetsDirectory, "chat-timeline.bundle.js");
                 var stamp = 0L;
                 if (File.Exists(css))
                 {
@@ -31,6 +32,12 @@ internal static class ChatMarkdownAssets
                 if (File.Exists(js))
                 {
                     stamp = Math.Max(stamp, File.GetLastWriteTimeUtc(js).Ticks);
+                }
+
+                // The shell actually loads the bundled virtual-list build.
+                if (File.Exists(bundle))
+                {
+                    stamp = Math.Max(stamp, File.GetLastWriteTimeUtc(bundle).Ticks);
                 }
 
                 return stamp > 0 ? $"?v={stamp:x}" : string.Empty;
