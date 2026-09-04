@@ -10,7 +10,7 @@ namespace Athlon.Agent.Tests;
 public sealed class ChatHtmlBuilderTests
 {
     private readonly ChatHtmlBuilder _builder = new();
-    private static readonly Lazy<string> TimelineJs = new(() => ReadChatAsset("chat-timeline.js"));
+    private static readonly Lazy<string> TimelineJs = new(() => ReadChatAsset("chat-timeline.bundle.js"));
     private static readonly Lazy<string> ShellCss = new(() => ReadChatAsset("chat-shell.css"));
 
     public ChatHtmlBuilderTests()
@@ -45,7 +45,7 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("id=\"chat-scroll\"", surface, StringComparison.Ordinal);
         Assert.Contains("id=\"empty-state\"", surface, StringComparison.Ordinal);
         Assert.Contains("chat-shell.css", surface, StringComparison.Ordinal);
-        Assert.Contains("chat-timeline.js", surface, StringComparison.Ordinal);
+        Assert.Contains("chat-timeline.bundle.js", surface, StringComparison.Ordinal);
         Assert.Contains("updateEmptyStateVisibility", surface, StringComparison.Ordinal);
         Assert.Contains("scroller.scrollTop", surface, StringComparison.Ordinal);
         Assert.DoesNotContain("avatar-user", surface, StringComparison.Ordinal);
@@ -172,11 +172,11 @@ public sealed class ChatHtmlBuilderTests
     {
         var surface = Surface();
 
-        Assert.Contains("window.chrome.webview.addEventListener('message'", surface, StringComparison.Ordinal);
-        Assert.Contains("command.command === 'replay'", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "window.chrome.webview.addEventListener('message'");
+        AssertContainsJs(surface, "command.command === 'replay'");
         Assert.Contains("function beginBatch()", surface, StringComparison.Ordinal);
         Assert.Contains("function endBatch(forceScroll)", surface, StringComparison.Ordinal);
-        Assert.Contains("html.replaying .message-row", surface, StringComparison.Ordinal);
+        Assert.Contains("html.replaying .virtual-row", surface, StringComparison.Ordinal);
         Assert.Contains("endBatch(true)", surface, StringComparison.Ordinal);
     }
 
@@ -192,7 +192,7 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("hasActiveSelection()", surface, StringComparison.Ordinal);
         Assert.Contains("e.deltaY < 0", surface, StringComparison.Ordinal);
         Assert.Contains("requestToolDetail", surface, StringComparison.Ordinal);
-        Assert.Contains("command.command === 'toolDetail'", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "command.command === 'toolDetail'");
         Assert.Contains("turn-activity-tool-detail", surface, StringComparison.Ordinal);
         Assert.Contains("endBatch(false)", surface, StringComparison.Ordinal);
     }
@@ -204,7 +204,7 @@ public sealed class ChatHtmlBuilderTests
 
         Assert.Contains("new IntersectionObserver", surface, StringComparison.Ordinal);
         Assert.Contains("codeObserver.observe(code)", surface, StringComparison.Ordinal);
-        Assert.Contains("if (pre.closest('.code-block')) return", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "if (pre.closest('.code-block')) return");
     }
 
     [Fact]
@@ -213,9 +213,9 @@ public sealed class ChatHtmlBuilderTests
         var surface = Surface();
 
         Assert.Contains("\"preview\":", surface, StringComparison.Ordinal);
-        Assert.Contains("t('preview')", surface, StringComparison.Ordinal);
-        Assert.Contains("langKey === 'html' || langKey === 'htm'", surface, StringComparison.Ordinal);
-        Assert.Contains("post({ type: 'preview', html: raw })", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "t('preview')");
+        AssertContainsJs(surface, "langKey === 'html' || langKey === 'htm'");
+        AssertContainsJs(surface, "post({ type: 'preview', html: raw })");
     }
 
     [Fact]
@@ -223,12 +223,12 @@ public sealed class ChatHtmlBuilderTests
     {
         var surface = Surface();
 
-        Assert.Contains("id=\"load-older\"", surface, StringComparison.Ordinal);
-        Assert.Contains("post({ type: 'loadOlder' })", surface, StringComparison.Ordinal);
-        Assert.Contains("command.command === 'prepend'", surface, StringComparison.Ordinal);
+        Assert.Contains("id=\"load-older-sentinel\"", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "post({ type: 'loadOlder' })");
+        AssertContainsJs(surface, "command.command === 'prepend'");
         Assert.Contains("function prependEvents(events, hasOlderMessages)", surface, StringComparison.Ordinal);
-        Assert.Contains("scroller.scrollHeight - previousHeight", surface, StringComparison.Ordinal);
-        Assert.Contains("content-visibility: auto", surface, StringComparison.Ordinal);
+        Assert.Contains("virtual-window", surface, StringComparison.Ordinal);
+        Assert.Contains("TimelineItemStore", surface, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -236,9 +236,9 @@ public sealed class ChatHtmlBuilderTests
     {
         var surface = Surface();
 
-        Assert.Contains("case 'TOOL_APPROVAL_REQUEST':", surface, StringComparison.Ordinal);
-        Assert.Contains("case 'TOOL_APPROVAL_RESOLVED':", surface, StringComparison.Ordinal);
-        Assert.Contains("post({ type: 'toolApproval'", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "case 'TOOL_APPROVAL_REQUEST':");
+        AssertContainsJs(surface, "case 'TOOL_APPROVAL_RESOLVED':");
+        AssertContainsJs(surface, "post({ type: 'toolApproval'");
         Assert.Contains("tool-approval-button approve", surface, StringComparison.Ordinal);
         Assert.Contains("ensureToolApprovalPanel", surface, StringComparison.Ordinal);
         Assert.Contains("awaiting_approval", surface, StringComparison.Ordinal);
@@ -247,7 +247,7 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("background: var(--panel);", surface, StringComparison.Ordinal);
         Assert.Contains("turn-activity", surface, StringComparison.Ordinal);
         Assert.Contains("scrollTurnActivityThoughts", surface, StringComparison.Ordinal);
-        Assert.Contains("case 'TURN_ACTIVITY':", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "case 'TURN_ACTIVITY':");
         Assert.Contains("formatWorkedFor", surface, StringComparison.Ordinal);
         Assert.Contains("syncTurnActivityChevron", surface, StringComparison.Ordinal);
         Assert.Contains("var keepOpen = !!(existing && existing.open);", surface, StringComparison.Ordinal);
@@ -260,14 +260,14 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("files-changed-card", surface, StringComparison.Ordinal);
         Assert.Contains("findFilesChangedTargetCard", surface, StringComparison.Ordinal);
         Assert.Contains("findTurnActivityTargetCard", surface, StringComparison.Ordinal);
-        Assert.Contains("case 'FILES_CHANGED':", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "case 'FILES_CHANGED':");
         Assert.Contains("user-image-thumb", surface, StringComparison.Ordinal);
         Assert.Contains("image-lightbox", surface, StringComparison.Ordinal);
         Assert.Contains("openImagePreview", surface, StringComparison.Ordinal);
-        Assert.Contains(
-            "Reasoning is folded into TURN_ACTIVITY; ignore standalone thought bubbles.",
-            surface,
-            StringComparison.Ordinal);
+        // Standalone reasoning bubbles are ignored; content folds into TURN_ACTIVITY.
+        AssertContainsJs(surface, "case 'REASONING_MESSAGE_START':");
+        AssertContainsJs(surface, "case 'REASONING_MESSAGE_CONTENT':");
+        AssertContainsJs(surface, "case 'REASONING_MESSAGE_END':");
         Assert.Contains("\"approve\":", surface, StringComparison.Ordinal);
         Assert.Contains("\"deny\":", surface, StringComparison.Ordinal);
         AssertContainsLocalized(surface, Strings.Get("Chat_ToolApprovalApprove"));
@@ -283,6 +283,23 @@ public sealed class ChatHtmlBuilderTests
             $"Expected localized text '{text}' (or JSON-encoded form) in HTML.");
     }
 
+    /// <summary>
+    /// Bundle is esbuild IIFE output which normalizes string literals to double quotes.
+    /// Accept either quote style so source and bundle both pass.
+    /// </summary>
+    private static void AssertContainsJs(string surface, string needle)
+    {
+        if (surface.Contains(needle, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var alt = needle.Replace('\'', '"');
+        Assert.True(
+            surface.Contains(alt, StringComparison.Ordinal),
+            $"Expected '{needle}' (or double-quoted form) in chat surface.");
+    }
+
     [Fact]
     public void BuildShellHtml_does_not_parse_final_markdown_in_javascript()
     {
@@ -291,7 +308,7 @@ public sealed class ChatHtmlBuilderTests
         Assert.DoesNotContain("marked.min.js", surface, StringComparison.Ordinal);
         Assert.DoesNotContain("marked.parse", surface, StringComparison.Ordinal);
         Assert.DoesNotContain("finalizeAssistantMarkdown", surface, StringComparison.Ordinal);
-        Assert.Contains("case 'TEXT_MESSAGE_END':", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "case 'TEXT_MESSAGE_END':");
         Assert.Contains("resolveEventHtml(event)", surface, StringComparison.Ordinal);
     }
 
@@ -300,13 +317,17 @@ public sealed class ChatHtmlBuilderTests
     {
         var surface = Surface();
 
-        Assert.Contains("case 'STATIC_ASSISTANT_HTML':", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "case 'STATIC_ASSISTANT_HTML':");
         Assert.Contains("event.streaming === true", surface, StringComparison.Ordinal);
         Assert.Contains("streaming !== true", surface, StringComparison.Ordinal);
-        Assert.Contains("case 'TEXT_MESSAGE_CONTENT':", surface, StringComparison.Ordinal);
+        AssertContainsJs(surface, "case 'TEXT_MESSAGE_CONTENT':");
         // Live text display comes from STATIC_ASSISTANT_HTML, not plain textContent deltas.
         Assert.DoesNotContain(
-            "case 'TEXT_MESSAGE_CONTENT':\n              finalizeReasoningLabel(event.messageId);\n              if (!state.assistantStarted[event.messageId]) ensureAssistantBubble(event.messageId);\n              appendMessage('assistant'",
+            "appendMessage('assistant'",
+            surface,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "appendMessage(\"assistant\"",
             surface,
             StringComparison.Ordinal);
     }

@@ -62,6 +62,7 @@
     <Content Include="Assets\Chat\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Remove="Assets\Chat\node_modules\**\*" />
     <Content Include="Assets\SkillHub\**\*">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

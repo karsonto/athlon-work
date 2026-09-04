@@ -5,7 +5,7 @@ namespace Athlon.Agent.Tests;
 
 public sealed class ChatHtmlBuilderCopyActionTests
 {
-    private static string TimelineJs => ReadChatAsset("chat-timeline.js");
+    private static string TimelineJs => ReadChatAsset("chat-timeline.bundle.js");
 
     private static string ReadChatAsset(string fileName)
     {

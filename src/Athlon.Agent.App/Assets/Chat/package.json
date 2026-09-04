@@ -1,0 +1,15 @@
+{
+  "name": "athlon-chat-timeline",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node --test timeline-store.test.mjs"
+  },
+  "dependencies": {
+    "@tanstack/virtual-core": "^3.11.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

@@ -21,6 +21,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/Athlon.Agent.App/Assets/Chat/package-lock.json
+
+      - name: Build chat timeline assets
+        working-directory: src/Athlon.Agent.App/Assets/Chat
+        run: |
+          npm ci
+          npm run build
+          npm test
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:

@@ -23,8 +23,8 @@ public sealed class ChatHtmlBuilder
             "<style id=\"chat-code-syntax\">" + GetCodeSyntaxOverrideStyles() + "</style>" +
             $"<link rel=\"stylesheet\" href=\"{assets}chat-shell.css{cache}\"/>" +
             "</head><body><div id=\"chat-scroll\">" + BuildEmptyStateHtml(ssoDisplayName) +
-            "<button id=\"load-older\" type=\"button\" hidden></button>" +
-            "<div id=\"messages\"></div></div>" +
+            "<div id=\"load-older-sentinel\" hidden aria-hidden=\"true\"></div>" +
+            "<div id=\"messages\"><div id=\"virtual-window\"></div></div></div>" +
             "<div id=\"image-lightbox\" class=\"image-lightbox\" hidden>" +
             "<button type=\"button\" class=\"image-lightbox-backdrop\" aria-label=\"Close\"></button>" +
             "<img class=\"image-lightbox-img\" alt=\"\"/>" +
@@ -32,7 +32,7 @@ public sealed class ChatHtmlBuilder
             "</div>" +
             $"<script src=\"{assets}highlight.min.js{cache}\"></script>" +
             "<script>" + BuildI18nBootstrapScript() + "</script>" +
-            $"<script src=\"{assets}chat-timeline.js{cache}\"></script>" +
+            $"<script src=\"{assets}chat-timeline.bundle.js{cache}\"></script>" +
             "</body></html>";
     }
 

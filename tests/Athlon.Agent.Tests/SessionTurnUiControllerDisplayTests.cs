@@ -194,6 +194,40 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
+    public async Task PrependDisplayMessagesAsync_keeps_messages_beyond_legacy_trim_threshold()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () => Task.CompletedTask;
+        ui.SetDisplayed(false);
+
+        var tail = Enumerable.Range(200, 50)
+            .Select(i => ChatMessage.Create(MessageRole.User, $"msg-{i}"))
+            .ToArray();
+        var older = Enumerable.Range(0, 200)
+            .Select(i => ChatMessage.Create(MessageRole.User, $"msg-{i}"))
+            .ToArray();
+
+        await ui.HydrateDisplayAsync(
+            AgentSession.Create("long").WithMessages(older.Concat(tail).ToArray()),
+            tail,
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: older.Concat(tail).ToArray());
+
+        await ui.PrependDisplayMessagesAsync(
+            older,
+            olderDisplayCursor: null,
+            showToolCalls: false,
+            hasOlderMessages: false);
+
+        var visible = await dispatcher.InvokeAsync(() => ui.Messages.ToList());
+        Assert.Equal(250, visible.Count);
+        Assert.DoesNotContain(visible, message => message.IsHiddenPlaceholder);
+        Assert.Equal(older[0].Id, visible[0].MessageId);
+        Assert.Equal(tail[^1].Id, visible[^1].MessageId);
+    }
+
+    [Fact]
     public async Task HiddenSession_buffers_text_delta_without_adding_messages()
     {
         var dispatcher = await StartStaDispatcherAsync();

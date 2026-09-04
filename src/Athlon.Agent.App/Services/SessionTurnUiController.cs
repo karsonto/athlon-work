@@ -32,8 +32,7 @@ public sealed class LiveAgentSession
 public sealed partial class SessionTurnUiController
 {
     private static readonly Action NoOpScroll = () => { };
-    private const int MaxMessagesInMemory = 200;
-    private const int TrimThreshold = 250;
+    private const int MaxViewModelCacheSize = 1000;
 
     private readonly Dispatcher _dispatcher;
     private readonly SessionStreamingUiContext _streaming = new();
@@ -1321,31 +1320,23 @@ public sealed partial class SessionTurnUiController
 
     private void TrimMessagesIfNeeded()
     {
-        if (Messages.Count <= TrimThreshold)
+        TrimViewModelCacheIfNeeded();
+    }
+
+    private void TrimViewModelCacheIfNeeded()
+    {
+        if (_viewModelCache.Count <= MaxViewModelCacheSize)
+        {
             return;
-
-        // 保留最新的 MaxMessagesInMemory 条
-        var excess = Messages.Count - MaxMessagesInMemory;
-        for (var i = 0; i < excess; i++)
-        {
-            var removed = Messages[0];
-            Messages.RemoveAt(0);
-            // 从 ViewModelCache 也移除，但保留 Compact 消息
-            if (!removed.IsCompaction)
-            {
-                _viewModelCache.Remove(removed.MessageId);
-            }
         }
 
-        // 在顶部插入一条占位消息，点击可加载更早消息
-        if (excess > 0)
+        var liveIds = new HashSet<string>(
+            Messages.Select(message => message.MessageId),
+            StringComparer.Ordinal);
+        foreach (var key in _viewModelCache.Keys.Where(key => !liveIds.Contains(key)).Take(_viewModelCache.Count - MaxViewModelCacheSize))
         {
-            Messages.Insert(0, new ChatMessageViewModel(
-                ChatMessage.Create(MessageRole.System, $"<!-- 查看更多历史消息 ({excess} 条已折叠) -->"),
-                isFoldedHistoryPlaceholder: true));
+            _viewModelCache.Remove(key);
         }
-
-        TrimActivitySourceToDisplayedMessages();
     }
 
     private void TrimActivitySourceToDisplayedMessages()

@@ -18,6 +18,29 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/Athlon.Agent.App/Assets/Chat/package-lock.json
+
+      - name: Build chat timeline assets
+        working-directory: src/Athlon.Agent.App/Assets/Chat
+        run: |
+          npm ci
+          npm run build
+          npm test
+
+      - name: Verify chat-timeline.bundle.js is up to date
+        shell: pwsh
+        run: |
+          git diff --exit-code -- src/Athlon.Agent.App/Assets/Chat/chat-timeline.bundle.js
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "chat-timeline.bundle.js is stale. Run 'npm run build' under src/Athlon.Agent.App/Assets/Chat and commit the bundle."
+            exit 1
+          }
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
