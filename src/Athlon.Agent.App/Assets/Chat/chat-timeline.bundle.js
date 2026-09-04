@@ -3597,9 +3597,9 @@
       const scroller = this.dom.getChatScroller();
       const windowEl = document.getElementById("virtual-window");
       if (!scroller || !windowEl) return;
-      this.virtualizer = new Virtualizer({
-        count: this.store.count,
-        getScrollElement: () => scroller,
+      this._buildVirtualizerOptions = (count) => ({
+        count,
+        getScrollElement: () => this.dom.getChatScroller(),
         estimateSize: (index) => {
           const item = this.store.items[index];
           return (item ? item.estimatedHeight : 80) + 20;
@@ -3612,6 +3612,7 @@
           this._schedulePaint();
         }
       });
+      this.virtualizer = new Virtualizer(this._buildVirtualizerOptions(this.store.count));
       scroller.addEventListener("scroll", this._scrollListener, { passive: true });
       scroller.addEventListener("wheel", (e) => {
         if (e.deltaY < 0) this.dom.state.autoScrollEnabled = false;
@@ -3621,6 +3622,11 @@
       }, { passive: true });
       this._bindSentinel();
       this._paint();
+    }
+    /** @param {number} count */
+    _setCount(count) {
+      if (!this.virtualizer || !this._buildVirtualizerOptions) return;
+      this.virtualizer.setOptions(this._buildVirtualizerOptions(count));
     }
     _bindSentinel() {
       const sentinel = document.getElementById("load-older-sentinel");
@@ -3651,7 +3657,7 @@
       const windowEl = document.getElementById("virtual-window");
       if (windowEl) windowEl.innerHTML = "";
       if (this.virtualizer) {
-        this.virtualizer.setOptions({ count: 0 });
+        this._setCount(0);
         this.virtualizer.measure();
       }
       this.dom.updateEmptyStateVisibility();
@@ -3678,15 +3684,29 @@
         this.init();
         return;
       }
-      this.virtualizer.setOptions({ count: this.store.count });
+      this._setCount(this.store.count);
       this._schedulePaint();
     }
     _paint() {
       if (!this.virtualizer) return;
       const windowEl = document.getElementById("virtual-window");
       if (!windowEl) return;
-      this.virtualizer.setOptions({ count: this.store.count });
-      const virtualItems = this.virtualizer.getVirtualItems();
+      this._setCount(this.store.count);
+      let virtualItems = this.virtualizer.getVirtualItems();
+      if (virtualItems.length === 0 && this.store.count > 0) {
+        const start = Math.max(0, this.store.count - 40);
+        virtualItems = [];
+        for (let index = start; index < this.store.count; index++) {
+          virtualItems.push({
+            index,
+            start: this._estimateOffset(index),
+            size: (this.store.items[index]?.estimatedHeight || 80) + 20,
+            end: 0,
+            key: index,
+            lane: 0
+          });
+        }
+      }
       const liveIndices = /* @__PURE__ */ new Set();
       this.store.items.forEach((item, index) => {
         if (item.live) liveIndices.add(index);
@@ -3791,7 +3811,7 @@
       if (!this.virtualizer) {
         this.init();
       } else {
-        this.virtualizer.setOptions({ count: this.store.count });
+        this._setCount(this.store.count);
       }
       if (prepend && scroller && this.virtualizer) {
         this._paint();
