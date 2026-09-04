@@ -51,6 +51,15 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
                 break;
         }
 
+        // Generic ask_user guidance for every non-Plan mode. Plan mode carries its
+        // own richer clarifying-loop contract above (and in the runtime contributor).
+        if (context.AgentMode != SessionAgentMode.Plan
+            && PromptModeHelper.HasTool(context, "ask_user"))
+        {
+            builder.AppendLine("- When the request is ambiguous and a wrong guess would be costly, stop and ask the user with ask_user (1–3 multiple-choice questions with concrete options) instead of guessing silently.");
+            builder.AppendLine("- Do not overuse it: ask only when genuinely blocked on a decision, then continue once the user answers.");
+        }
+
         builder.AppendLine();
     }
 }
