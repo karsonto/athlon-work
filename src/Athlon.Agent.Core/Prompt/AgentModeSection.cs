@@ -36,6 +36,7 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
             case SessionAgentMode.Plan:
                 builder.AppendLine("- The user selected Plan mode — produce an implementation plan for review before coding.");
                 builder.AppendLine("- Consult across turns: explore with read/search; ask with ask_user when ambiguous; call publish_plan when ready.");
+                builder.AppendLine("- When calling ask_user: finish any brief user-facing note first, keep reasoning short, and make ask_user the last action of the turn — then stop.");
                 builder.AppendLine("- Nothing auto-drafts the plan for you; never implement.");
                 builder.AppendLine("- After the plan is published, wait for the user to Build (switch to Coding) or send a revision.");
                 break;
@@ -57,6 +58,7 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
             && PromptModeHelper.HasTool(context, "ask_user"))
         {
             builder.AppendLine("- When the request is ambiguous and a wrong guess would be costly, stop and ask the user with ask_user (1–3 multiple-choice questions with concrete options) instead of guessing silently.");
+            builder.AppendLine("- When calling ask_user: keep any preamble brief, avoid long monologues, and make ask_user the last action of the turn — then stop and wait for the answer.");
             builder.AppendLine("- Do not overuse it: ask only when genuinely blocked on a decision, then continue once the user answers.");
         }
 

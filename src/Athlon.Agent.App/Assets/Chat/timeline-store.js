@@ -26,23 +26,69 @@ const HEIGHT = {
   STATUS: 40
 };
 
+const LINE_PX = 22;
+
+/**
+ * Rough block height from plain text (newlines + wrapped lines).
+ * Used so absolute virtual rows do not stack on the default 120px slot.
+ * @param {string} text
+ * @param {number} min
+ * @param {number} max
+ * @param {number} [charsPerLine]
+ */
+function estimateTextBlockHeight(text, min, max, charsPerLine = 48) {
+  const raw = String(text || '');
+  if (!raw) return min;
+  const explicitLines = raw.split(/\n/).length;
+  const wrapped = Math.ceil(raw.length / Math.max(12, charsPerLine));
+  const lines = Math.max(explicitLines, wrapped);
+  return Math.min(max, Math.max(min, lines * LINE_PX + 28));
+}
+
+function stripHtmlToText(html) {
+  return String(html || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** @param {string} type @param {AgUiEvent | null | undefined} event */
 function estimateHeight(type, event) {
   switch (type) {
-    case 'USER':
-      return HEIGHT.USER + ((event.images && event.images.length) ? 80 : 0);
+    case 'USER': {
+      const images = (event && event.images && event.images.length) ? 80 : 0;
+      return estimateTextBlockHeight(event && event.content, HEIGHT.USER, 2400, 40) + images;
+    }
     case 'STATIC_ASSISTANT_HTML':
-    case 'ASSISTANT':
-      return HEIGHT.ASSISTANT;
+    case 'ASSISTANT': {
+      const markdown = (event && (event.markdown || event.content)) || '';
+      const fromMd = estimateTextBlockHeight(markdown, HEIGHT.ASSISTANT, 6000, 52);
+      if (markdown) return fromMd;
+      const fromHtml = estimateTextBlockHeight(
+        stripHtmlToText(event && event.html),
+        HEIGHT.ASSISTANT,
+        6000,
+        52);
+      return fromHtml;
+    }
     case 'TURN_ACTIVITY':
       return event && event.upsert ? 52 : HEIGHT.TURN_ACTIVITY;
     case 'TOOL':
       return HEIGHT.TOOL;
     case 'FILES_CHANGED':
-      return HEIGHT.FILES_CHANGED + ((event.files && event.files.length) || 0) * 28;
+      return HEIGHT.FILES_CHANGED + ((event && event.files && event.files.length) || 0) * 28;
     case 'COMPACTION_CHECKPOINT':
       return HEIGHT.COMPACTION;
-    case 'PLAN_READY':
-      return HEIGHT.PLAN;
+    case 'PLAN_READY': {
+      const body = (event && (event.markdown || event.overview)) || '';
+      return estimateTextBlockHeight(body, HEIGHT.PLAN, 6000, 52);
+    }
     case 'OVERFLOW_RETRY_SKIPPED':
       return HEIGHT.OVERFLOW;
     default:
@@ -111,9 +157,14 @@ export class TimelineItemStore {
     const index = this.indexById.get(id);
     if (index != null) {
       const existing = this.items[index];
+      const previousHeight = existing.estimatedHeight || 0;
       Object.assign(existing, patch, { version: existing.version + 1 });
       if (patch.event) {
-        existing.estimatedHeight = estimateHeight(existing.type, existing.event);
+        const next = estimateHeight(existing.type, existing.event);
+        // Never shrink below a previously measured/estimated height on event
+        // patches — resetting to the flat ASSISTANT default (120) makes the next
+        // absolute row translateY into the still-tall previous bubble (overlap).
+        existing.estimatedHeight = Math.max(next, previousHeight);
       }
       return existing;
     }
@@ -394,4 +445,4 @@ export class TimelineItemStore {
   }
 }
 
-export { estimateHeight, HEIGHT };
+export { estimateHeight };

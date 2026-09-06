@@ -671,6 +671,9 @@
   <data name="AskUser_EmptyAnswer" xml:space="preserve">
     <value>请选择选项或输入补充说明</value>
   </data>
+  <data name="AskUser_BusyCannotSubmit" xml:space="preserve">
+    <value>请等待当前回复结束后再提交回答</value>
+  </data>
   <data name="Plan_ReadyCardTitle" xml:space="preserve">
     <value>计划</value>
   </data>

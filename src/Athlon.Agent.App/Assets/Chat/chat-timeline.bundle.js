@@ -11,23 +11,49 @@
     OVERFLOW: 40,
     STATUS: 40
   };
+  var LINE_PX = 22;
+  function estimateTextBlockHeight(text, min, max, charsPerLine = 48) {
+    const raw = String(text || "");
+    if (!raw) return min;
+    const explicitLines = raw.split(/\n/).length;
+    const wrapped = Math.ceil(raw.length / Math.max(12, charsPerLine));
+    const lines = Math.max(explicitLines, wrapped);
+    return Math.min(max, Math.max(min, lines * LINE_PX + 28));
+  }
+  function stripHtmlToText(html) {
+    return String(html || "").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/&amp;/gi, "&").replace(/\s+/g, " ").trim();
+  }
   function estimateHeight(type, event) {
     switch (type) {
-      case "USER":
-        return HEIGHT.USER + (event.images && event.images.length ? 80 : 0);
+      case "USER": {
+        const images = event && event.images && event.images.length ? 80 : 0;
+        return estimateTextBlockHeight(event && event.content, HEIGHT.USER, 2400, 40) + images;
+      }
       case "STATIC_ASSISTANT_HTML":
-      case "ASSISTANT":
-        return HEIGHT.ASSISTANT;
+      case "ASSISTANT": {
+        const markdown = event && (event.markdown || event.content) || "";
+        const fromMd = estimateTextBlockHeight(markdown, HEIGHT.ASSISTANT, 6e3, 52);
+        if (markdown) return fromMd;
+        const fromHtml = estimateTextBlockHeight(
+          stripHtmlToText(event && event.html),
+          HEIGHT.ASSISTANT,
+          6e3,
+          52
+        );
+        return fromHtml;
+      }
       case "TURN_ACTIVITY":
         return event && event.upsert ? 52 : HEIGHT.TURN_ACTIVITY;
       case "TOOL":
         return HEIGHT.TOOL;
       case "FILES_CHANGED":
-        return HEIGHT.FILES_CHANGED + (event.files && event.files.length || 0) * 28;
+        return HEIGHT.FILES_CHANGED + (event && event.files && event.files.length || 0) * 28;
       case "COMPACTION_CHECKPOINT":
         return HEIGHT.COMPACTION;
-      case "PLAN_READY":
-        return HEIGHT.PLAN;
+      case "PLAN_READY": {
+        const body = event && (event.markdown || event.overview) || "";
+        return estimateTextBlockHeight(body, HEIGHT.PLAN, 6e3, 52);
+      }
       case "OVERFLOW_RETRY_SKIPPED":
         return HEIGHT.OVERFLOW;
       default:
@@ -80,9 +106,11 @@
       const index = this.indexById.get(id);
       if (index != null) {
         const existing = this.items[index];
+        const previousHeight = existing.estimatedHeight || 0;
         Object.assign(existing, patch, { version: existing.version + 1 });
         if (patch.event) {
-          existing.estimatedHeight = estimateHeight(existing.type, existing.event);
+          const next = estimateHeight(existing.type, existing.event);
+          existing.estimatedHeight = Math.max(next, previousHeight);
         }
         return existing;
       }
@@ -3336,6 +3364,7 @@
       this._lastCount = -1;
       this._scrollListener = this._onScroll.bind(this);
       this._sentinelObserver = null;
+      this._postPaintRemeasureFrame = 0;
     }
     init() {
       const scroller = this.dom.getChatScroller();
@@ -3504,6 +3533,7 @@
       liveIndices.forEach((i) => renderIndices.add(i));
       const nextMounted = /* @__PURE__ */ new Map();
       const usedIds = /* @__PURE__ */ new Set();
+      let didMountOrRebuild = false;
       renderIndices.forEach((index) => {
         const item = this.store.items[index];
         if (!item) return;
@@ -3524,6 +3554,7 @@
         }
         row = this.dom.renderItemRow(item);
         if (!row) return;
+        didMountOrRebuild = true;
         row.classList.add("virtual-row");
         row.setAttribute("data-index", String(index));
         row.style.position = "absolute";
@@ -3534,7 +3565,7 @@
         row.style.width = "100%";
         windowEl.appendChild(row);
         this.dom.enhanceCodeBlocks(row);
-        this._remeasureRow(row);
+        this._remeasureRow(row, { schedulePaint: false });
         this._bindRemeasure(row);
         nextMounted.set(item.id, row);
         usedIds.add(item.id);
@@ -3549,6 +3580,24 @@
       const totalSize = this.virtualizer.getTotalSize() || this.store.estimateTotalSize();
       windowEl.style.height = totalSize + "px";
       this.dom.updateEmptyStateVisibility();
+      if (didMountOrRebuild) this._schedulePostPaintRemeasure();
+    }
+    /**
+     * Remeasure every mounted row on the next two animation frames, then repaint
+     * so translateY offsets catch up to real content height.
+     */
+    _schedulePostPaintRemeasure() {
+      if (this._postPaintRemeasureFrame) return;
+      this._postPaintRemeasureFrame = requestAnimationFrame(() => {
+        this._postPaintRemeasureFrame = requestAnimationFrame(() => {
+          this._postPaintRemeasureFrame = 0;
+          let changed = false;
+          this.mountedById.forEach((row) => {
+            if (this._remeasureRow(row, { schedulePaint: false })) changed = true;
+          });
+          if (changed) this._schedulePaint();
+        });
+      });
     }
     /** @param {number} index */
     _estimateOffset(index) {
@@ -3564,15 +3613,14 @@
       row.__remeasureBound = true;
       let lastHeight = -1;
       const onChange = (height) => {
-        if (height === lastHeight) return;
-        lastHeight = height;
+        const rounded = Math.round(height);
+        if (rounded === lastHeight) return;
+        lastHeight = rounded;
         this._remeasureRow(row);
       };
       if (typeof ResizeObserver === "function") {
-        const ro = new ResizeObserver((entries) => {
-          const entry = entries && entries[entries.length - 1];
-          const box = entry && (entry.contentRect || entry.borderBoxSize);
-          onChange(box ? box.height : row.getBoundingClientRect().height);
+        const ro = new ResizeObserver(() => {
+          onChange(row.getBoundingClientRect().height);
         });
         ro.observe(row);
         row.__remeasureRO = ro;
@@ -3583,32 +3631,47 @@
     }
     /** @param {HTMLElement} row */
     _unbindRemeasure(row) {
-      if (row && row.__remeasureRO) {
+      if (!row) return;
+      if (row.__remeasureRO) {
         try {
           row.__remeasureRO.disconnect();
         } catch (_e) {
         }
         row.__remeasureRO = null;
       }
+      row.__remeasureBound = false;
     }
     /**
      * Re-measure one mounted row and sync both the virtualizer cache and the
-     * store's estimatedHeight, then repaint so following rows shift correctly.
+     * store's estimatedHeight, then optionally repaint so following rows shift.
      * @param {HTMLElement} row
+     * @param {{ schedulePaint?: boolean }} [opts]
+     * @returns {boolean} whether the stored height changed
      */
-    _remeasureRow(row) {
-      if (!row || !row.isConnected || !this.virtualizer) return;
+    _remeasureRow(row, opts) {
+      if (!row || !row.isConnected || !this.virtualizer) return false;
       this.virtualizer.measureElement(row);
       const measured = row.getBoundingClientRect().height;
+      let changed = false;
       if (measured > 0) {
         const itemId = row.dataset.timelineItemId;
         if (itemId) {
           const index = this.store.indexById.get(itemId);
           const item = index != null ? this.store.items[index] : null;
-          if (item) item.estimatedHeight = Math.max(1, Math.round(measured) - 20);
+          if (item) {
+            const next = Math.max(1, Math.round(measured) - 20);
+            if (item.estimatedHeight !== next) {
+              item.estimatedHeight = next;
+              changed = true;
+            }
+          }
         }
       }
-      this._schedulePaint();
+      if (opts && opts.schedulePaint === false) {
+        return changed;
+      }
+      if (changed) this._schedulePaint();
+      return changed;
     }
     /**
      * After an in-place DOM patch, sync the row's version stamp with the store so
@@ -3771,7 +3834,9 @@
         this.dom.state.patchRow = null;
       }
       this._syncMountedVersion(mounted, itemId);
+      this.dom.enhanceCodeBlocks(mounted);
       this._remeasureRow(mounted);
+      this._schedulePostPaintRemeasure();
     }
     /** @param {string} itemId */
     getMountedRow(itemId) {

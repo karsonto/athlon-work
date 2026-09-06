@@ -19,9 +19,11 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="Padding" Value="12,8" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
@@ -31,7 +33,9 @@
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="8"
                                 Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="Center"
+                                              RecognizesAccessKey="True" />
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -55,19 +59,28 @@
             BorderThickness="1"
             CornerRadius="12"
             Padding="12,10"
-            Margin="0,0,0,8">
-        <StackPanel>
-            <Grid>
+            Margin="0,0,0,8"
+            MaxHeight="360">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
                            Text="{loc:Localize Key=AskUser_Title}"
                            FontWeight="SemiBold"
                            FontSize="12.5"
                            Foreground="{DynamicResource Brush.Text}"
-                           VerticalAlignment="Center" />
+                           VerticalAlignment="Center"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis" />
                 <Button Grid.Column="1"
                         HorizontalAlignment="Right"
                         Content="{loc:Localize Key=AskUser_Cancel}"
@@ -82,49 +95,62 @@
                 </Button>
             </Grid>
 
-            <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Items}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Margin="0,0,0,10">
-                            <TextBlock Text="{Binding Prompt}"
-                                       TextWrapping="Wrap"
-                                       FontSize="12.5"
-                                       Foreground="{DynamicResource Brush.Text}"
-                                       Margin="0,0,0,6" />
-                            <ItemsControl ItemsSource="{Binding Options}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <ToggleButton Content="{Binding Label}"
-                                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                                      Margin="0,0,6,4"
-                                                      Style="{StaticResource QuestionOptionToggleStyle}" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+            <ScrollViewer Grid.Row="1"
+                          Margin="0,8,0,0"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <ItemsControl ItemsSource="{Binding Items}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Margin="0,0,0,12">
+                                    <TextBlock Text="{Binding Prompt}"
+                                               TextWrapping="Wrap"
+                                               FontSize="12.5"
+                                               Foreground="{DynamicResource Brush.Text}"
+                                               Margin="0,0,0,8" />
+                                    <ItemsControl ItemsSource="{Binding Options}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Vertical" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <ToggleButton IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                              Margin="0,0,0,6"
+                                                              Style="{StaticResource QuestionOptionToggleStyle}">
+                                                    <TextBlock Text="{Binding Label}"
+                                                               TextWrapping="Wrap"
+                                                               FontSize="12" />
+                                                </ToggleButton>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
-            <StackPanel Orientation="Vertical" Visibility="{Binding ShowFreeText, Converter={StaticResource BoolToVisConverter}}">
-                <TextBlock Text="{loc:Localize Key=AskUser_NotesPlaceholder}"
-                           FontSize="11"
-                           Foreground="{DynamicResource Brush.SubtleText}"
-                           Margin="0,0,0,4" />
-                <TextBox Text="{Binding FreeText, UpdateSourceTrigger=PropertyChanged}"
-                         AcceptsReturn="True"
-                         TextWrapping="Wrap"
-                         MaxHeight="72"
-                         VerticalScrollBarVisibility="Auto"
-                         FontSize="12" />
-            </StackPanel>
+                    <StackPanel Orientation="Vertical"
+                                Visibility="{Binding DataContext.ShowFreeText, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisConverter}}">
+                        <TextBlock Text="{loc:Localize Key=AskUser_NotesPlaceholder}"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource Brush.SubtleText}"
+                                   Margin="0,0,0,4" />
+                        <TextBox Text="{Binding DataContext.FreeText, RelativeSource={RelativeSource AncestorType=UserControl}, UpdateSourceTrigger=PropertyChanged}"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 MinHeight="40"
+                                 MaxHeight="72"
+                                 VerticalScrollBarVisibility="Auto"
+                                 FontSize="12" />
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
 
-            <StackPanel Orientation="Horizontal"
+            <StackPanel Grid.Row="2"
+                        Orientation="Horizontal"
                         HorizontalAlignment="Right"
                         Margin="0,10,0,0">
                 <Button Content="{loc:Localize Key=AskUser_Submit}"
@@ -140,6 +166,6 @@
                     </Button.Style>
                 </Button>
             </StackPanel>
-        </StackPanel>
+        </Grid>
     </Border>
 </UserControl>

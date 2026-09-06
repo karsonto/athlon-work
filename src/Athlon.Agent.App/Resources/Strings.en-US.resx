@@ -677,6 +677,9 @@ Hold to talk</value>
   <data name="AskUser_EmptyAnswer" xml:space="preserve">
     <value>Pick an option or add a note</value>
   </data>
+  <data name="AskUser_BusyCannotSubmit" xml:space="preserve">
+    <value>Wait for the current reply to finish before submitting</value>
+  </data>
   <data name="Plan_ReadyCardTitle" xml:space="preserve">
     <value>Plan</value>
   </data>

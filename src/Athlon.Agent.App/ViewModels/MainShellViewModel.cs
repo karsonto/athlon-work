@@ -196,7 +196,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         QuestionBar.Configure(
             () => _displayedSessionId,
             ShowShellToast,
-            OnUserQuestionAnswered);
+            OnUserQuestionAnswered,
+            sessionId => _sessionTurns.TurnHost.IsRunning(sessionId));
         ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
         ComposerHarness.OnModeChangedAsync = OnComposerModeChangedAsync;
         ChatPage = chatPage;

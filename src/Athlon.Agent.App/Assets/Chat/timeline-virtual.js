@@ -31,6 +31,8 @@ export class VirtualTimeline {
     this._lastCount = -1;
     this._scrollListener = this._onScroll.bind(this);
     this._sentinelObserver = null;
+    /** @type {number} */
+    this._postPaintRemeasureFrame = 0;
   }
 
   init() {
@@ -229,6 +231,7 @@ export class VirtualTimeline {
 
     const nextMounted = new Map();
     const usedIds = new Set();
+    let didMountOrRebuild = false;
 
     renderIndices.forEach((index) => {
       const item = this.store.items[index];
@@ -252,6 +255,7 @@ export class VirtualTimeline {
       }
       row = this.dom.renderItemRow(item);
       if (!row) return;
+      didMountOrRebuild = true;
       row.classList.add('virtual-row');
       row.setAttribute('data-index', String(index));
       row.style.position = 'absolute';
@@ -263,7 +267,7 @@ export class VirtualTimeline {
       windowEl.appendChild(row);
       // Enhance first, then measure — code-block chrome participates in the slot height.
       this.dom.enhanceCodeBlocks(row);
-      this._remeasureRow(row);
+      this._remeasureRow(row, { schedulePaint: false });
       this._bindRemeasure(row);
       nextMounted.set(item.id, row);
       usedIds.add(item.id);
@@ -280,6 +284,27 @@ export class VirtualTimeline {
     const totalSize = this.virtualizer.getTotalSize() || this.store.estimateTotalSize();
     windowEl.style.height = totalSize + 'px';
     this.dom.updateEmptyStateVisibility();
+    // Second-pass measure after layout/fonts/code chrome settle — first paint often
+    // under-reads tall assistant HTML and parks the next row on top of it.
+    if (didMountOrRebuild) this._schedulePostPaintRemeasure();
+  }
+
+  /**
+   * Remeasure every mounted row on the next two animation frames, then repaint
+   * so translateY offsets catch up to real content height.
+   */
+  _schedulePostPaintRemeasure() {
+    if (this._postPaintRemeasureFrame) return;
+    this._postPaintRemeasureFrame = requestAnimationFrame(() => {
+      this._postPaintRemeasureFrame = requestAnimationFrame(() => {
+        this._postPaintRemeasureFrame = 0;
+        let changed = false;
+        this.mountedById.forEach((row) => {
+          if (this._remeasureRow(row, { schedulePaint: false })) changed = true;
+        });
+        if (changed) this._schedulePaint();
+      });
+    });
   }
 
   /** @param {number} index */
@@ -297,15 +322,16 @@ export class VirtualTimeline {
     row.__remeasureBound = true;
     let lastHeight = -1;
     const onChange = (height) => {
-      if (height === lastHeight) return;
-      lastHeight = height;
+      const rounded = Math.round(height);
+      if (rounded === lastHeight) return;
+      lastHeight = rounded;
       this._remeasureRow(row);
     };
     if (typeof ResizeObserver === 'function') {
-      const ro = new ResizeObserver((entries) => {
-        const entry = entries && entries[entries.length - 1];
-        const box = entry && (entry.contentRect || entry.borderBoxSize);
-        onChange(box ? box.height : row.getBoundingClientRect().height);
+      const ro = new ResizeObserver(() => {
+        // Always use the border box of the row itself. contentRect can lag and
+        // borderBoxSize is an array in some engines (no .height).
+        onChange(row.getBoundingClientRect().height);
       });
       ro.observe(row);
       row.__remeasureRO = ro;
@@ -317,30 +343,46 @@ export class VirtualTimeline {
 
   /** @param {HTMLElement} row */
   _unbindRemeasure(row) {
-    if (row && row.__remeasureRO) {
+    if (!row) return;
+    if (row.__remeasureRO) {
       try { row.__remeasureRO.disconnect(); } catch (_e) { /* noop */ }
       row.__remeasureRO = null;
     }
+    row.__remeasureBound = false;
   }
 
   /**
    * Re-measure one mounted row and sync both the virtualizer cache and the
-   * store's estimatedHeight, then repaint so following rows shift correctly.
+   * store's estimatedHeight, then optionally repaint so following rows shift.
    * @param {HTMLElement} row
+   * @param {{ schedulePaint?: boolean }} [opts]
+   * @returns {boolean} whether the stored height changed
    */
-  _remeasureRow(row) {
-    if (!row || !row.isConnected || !this.virtualizer) return;
+  _remeasureRow(row, opts) {
+    if (!row || !row.isConnected || !this.virtualizer) return false;
     this.virtualizer.measureElement(row);
     const measured = row.getBoundingClientRect().height;
+    let changed = false;
     if (measured > 0) {
       const itemId = row.dataset.timelineItemId;
       if (itemId) {
         const index = this.store.indexById.get(itemId);
         const item = index != null ? this.store.items[index] : null;
-        if (item) item.estimatedHeight = Math.max(1, Math.round(measured) - 20);
+        if (item) {
+          // measured is content box; estimateSize adds the 20px row gap back.
+          const next = Math.max(1, Math.round(measured) - 20);
+          if (item.estimatedHeight !== next) {
+            item.estimatedHeight = next;
+            changed = true;
+          }
+        }
       }
     }
-    this._schedulePaint();
+    if (opts && opts.schedulePaint === false) {
+      return changed;
+    }
+    if (changed) this._schedulePaint();
+    return changed;
   }
 
   /**
@@ -519,7 +561,9 @@ export class VirtualTimeline {
       this.dom.state.patchRow = null;
     }
     this._syncMountedVersion(mounted, itemId);
+    this.dom.enhanceCodeBlocks(mounted);
     this._remeasureRow(mounted);
+    this._schedulePostPaintRemeasure();
   }
 
   /** @param {string} itemId */

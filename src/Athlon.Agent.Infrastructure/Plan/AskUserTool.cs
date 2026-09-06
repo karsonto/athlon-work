@@ -26,8 +26,10 @@ public sealed class AskUserTool(
         Description:
             "Pause and ask the user one to three multiple-choice questions before continuing. "
             + "Use when the goal, stack, scope, or approach is ambiguous and a wrong guess would "
-            + "be costly. Provide concrete options; do not guess silently. The user can pick "
-            + "options and optionally type extra notes. Available in every mode.",
+            + "be costly. Provide concrete options; do not guess silently. "
+            + "Call this as the last action of the turn after any brief note; keep reasoning short "
+            + "and stop after the call. The user can pick options and optionally type extra notes. "
+            + "Available in every mode.",
         ParametersSchema: ToolSchema.Object()
             .Array(
                 "questions",

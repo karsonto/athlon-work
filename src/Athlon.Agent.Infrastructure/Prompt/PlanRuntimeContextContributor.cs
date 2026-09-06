@@ -80,7 +80,8 @@ internal static class PlanPhaseInstructions
     {
         PlanPhase.Explore =>
             "Phase Explore (consulting): You control the loop. Read/search the workspace as needed. "
-            + "When the goal, stack, scope, or approach is still ambiguous, call ask_user (1–3 questions with concrete options) and stop. "
+            + "When the goal, stack, scope, or approach is still ambiguous, call ask_user (1–3 questions with concrete options) as the last action of this turn and stop. "
+            + "Keep reasoning brief before ask_user; do not continue narrating after the tool call. "
             + "You may ask across multiple user turns. When you have enough information, call publish_plan yourself — nothing auto-drafts for you. "
             + "Do not edit files or run shell. Do not pretend to wait without calling ask_user.",
         PlanPhase.AwaitClarify =>

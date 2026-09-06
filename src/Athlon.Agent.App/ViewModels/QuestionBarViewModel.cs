@@ -79,6 +79,8 @@ public sealed partial class QuestionItemViewModel : ObservableObject
 /// question lives only in process memory (<see cref="IUserQuestionState"/>); once the
 /// user submits (or dismisses) the bar, the formatted answer is handed to the shell
 /// which starts the next turn with it.
+/// Visibility is deferred until the current turn finishes so streaming thought does
+/// not race the question card.
 /// </summary>
 public sealed partial class QuestionBarViewModel : ObservableObject
 {
@@ -86,6 +88,7 @@ public sealed partial class QuestionBarViewModel : ObservableObject
     private readonly ILocalizationService _loc;
 
     private Func<string>? _getDisplayedSessionId;
+    private Func<string, bool>? _isSessionRunning;
     private Action<string?, ShellToastKind>? _showToast;
     private Action<string>? _onSubmitText;
 
@@ -99,11 +102,13 @@ public sealed partial class QuestionBarViewModel : ObservableObject
     public void Configure(
         Func<string> getDisplayedSessionId,
         Action<string?, ShellToastKind> showToast,
-        Action<string> onSubmitText)
+        Action<string> onSubmitText,
+        Func<string, bool>? isSessionRunning = null)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _showToast = showToast;
         _onSubmitText = onSubmitText;
+        _isSessionRunning = isSessionRunning;
         RefreshFromActiveSession();
     }
 
@@ -125,7 +130,7 @@ public sealed partial class QuestionBarViewModel : ObservableObject
         var question = string.IsNullOrWhiteSpace(sessionId)
             ? null
             : _userQuestions.GetPending(sessionId);
-        Apply(question);
+        Apply(sessionId, question);
     }
 
     [RelayCommand]
@@ -133,6 +138,12 @@ public sealed partial class QuestionBarViewModel : ObservableObject
     {
         if (_getDisplayedSessionId?.Invoke() is not { } sessionId)
         {
+            return;
+        }
+
+        if (_isSessionRunning?.Invoke(sessionId) == true)
+        {
+            _showToast?.Invoke(_loc["AskUser_BusyCannotSubmit"], ShellToastKind.Error);
             return;
         }
 
@@ -176,7 +187,7 @@ public sealed partial class QuestionBarViewModel : ObservableObject
         _userQuestions.Clear(sessionId);
     }
 
-    private void Apply(UserQuestion? question)
+    private void Apply(string? sessionId, UserQuestion? question)
     {
         Items.Clear();
         if (question is null || question.Questions.Count == 0)
@@ -194,7 +205,10 @@ public sealed partial class QuestionBarViewModel : ObservableObject
             Items.Add(new QuestionItemViewModel(item.Id, item.Prompt, item.AllowMultiple, item.Options));
         }
 
-        IsVisible = true;
+        // Defer until the turn that called ask_user has fully finished streaming.
+        var turnStillRunning = !string.IsNullOrWhiteSpace(sessionId)
+            && _isSessionRunning?.Invoke(sessionId) == true;
+        IsVisible = !turnStillRunning;
     }
 
     private void OnQuestionChanged(object? sender, UserQuestionChangedEventArgs e)

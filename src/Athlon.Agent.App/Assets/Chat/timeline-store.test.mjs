@@ -183,3 +183,40 @@ test('files card per turn is keyed by turn id and survives cross-turn upserts', 
   assert.equal(filesCards[1].turnId, 'u2');
   assert.equal(filesCards[1].live, true);
 });
+
+test('estimateHeight scales with long assistant and user content', async () => {
+  const { estimateHeight } = await import('./timeline-store.js');
+  const short = estimateHeight('ASSISTANT', { html: '<p>hi</p>' });
+  const long = estimateHeight('ASSISTANT', {
+    markdown: Array.from({ length: 40 }, (_, i) => `${i}. detail line about the plan`).join('\n')
+  });
+  assert.ok(long > short);
+  assert.ok(long > 200);
+
+  const clarify = estimateHeight('USER', {
+    content: 'Plan clarification answers:\n- q1: a\n- q2: b\n- q3: c\n'
+  });
+  assert.ok(clarify > 72);
+});
+
+test('upsertItem does not shrink previously measured assistant height', () => {
+  const store = new TimelineItemStore();
+  store.applyEvent({ type: 'USER_MESSAGE', messageId: 'u1', content: 'q' });
+  store.applyEvent({
+    type: 'STATIC_ASSISTANT_HTML',
+    messageId: 'a1',
+    html: '<p>short</p>',
+    streaming: true
+  });
+  const item = store.items.find((entry) => entry.type === 'ASSISTANT');
+  assert.ok(item);
+  item.estimatedHeight = 1800;
+
+  store.applyEvent({
+    type: 'STATIC_ASSISTANT_HTML',
+    messageId: 'a1',
+    html: '<p>short</p>',
+    streaming: false
+  });
+  assert.equal(item.estimatedHeight, 1800);
+});

@@ -441,7 +441,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
         var displayedSessionId = _getDisplayedSessionId();
         if (_sessionTurns.IsRunning(displayedSessionId))
         {
-            _showShellToast?.Invoke(_loc["Plan_BusyCannotRevise"], ShellToastKind.Error);
+            _showShellToast?.Invoke(_loc["AskUser_BusyCannotSubmit"], ShellToastKind.Error);
             return false;
         }
 
