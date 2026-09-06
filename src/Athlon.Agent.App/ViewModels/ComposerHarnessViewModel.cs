@@ -113,7 +113,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
 
         if (wasCoding && mode != SessionAgentMode.Coding)
         {
-            ClearTasks();
+            await ClearTaskPlanAsync().ConfigureAwait(true);
         }
         else if (mode == SessionAgentMode.Coding)
         {

@@ -291,6 +291,8 @@ public sealed class ComposerHarnessViewModelTests
         Assert.Equal(SessionAgentMode.Ask, vm.SelectedMode);
         Assert.Empty(vm.Tasks);
         Assert.False(vm.IsModePickerOpen);
+        var list = await store.GetAsync("session-1");
+        Assert.Empty(list.Items);
     }
 
     private sealed class StubHarnessState(SessionAgentMode mode) : ISessionHarnessState
