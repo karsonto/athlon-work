@@ -345,7 +345,9 @@ internal static class ChatEventSerializer
             planPath = run.PlanPath,
             markdown = run.PlanMarkdown,
             html = MarkdownHtmlRenderer.ToHtmlFragment(run.PlanMarkdown),
-            todos = run.Todos.Select(t => new { id = t.Id, content = t.Content }).ToList()
+            todos = run.Todos.Select(t => new { id = t.Id, content = t.Content }).ToList(),
+            built = run.Phase == PlanPhase.Done
+                || string.Equals(run.Status, PlanRunStatuses.Approved, StringComparison.OrdinalIgnoreCase)
         });
 
     private static string RenderToolResultHtml(ChatMessageViewModel message, string detail) =>

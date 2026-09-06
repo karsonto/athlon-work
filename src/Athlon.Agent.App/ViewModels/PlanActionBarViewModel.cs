@@ -105,18 +105,16 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
             _ = HydrateActiveRunAsync(sessionId);
         }
         ApplyComposerHint(run);
-        IsVisible = run is not null && run.Phase == PlanPhase.AwaitConfirm;
-        if (run is null || run.Phase != PlanPhase.AwaitConfirm)
+        // Composer no longer hosts Build — only the timeline plan card does.
+        IsVisible = false;
+        ShowBuild = run is not null && run.Phase == PlanPhase.AwaitConfirm;
+        if (!ShowBuild)
         {
             PhaseLabel = string.Empty;
             Summary = string.Empty;
             TodosSummary = string.Empty;
-            ShowBuild = false;
-            NotifyActionCommands();
-            return;
         }
 
-        ShowBuild = true;
         NotifyActionCommands();
     }
 
@@ -230,15 +228,17 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
 
     private void DispatchPlanTimeline(PlanRun? run)
     {
-        // Only the AwaitConfirm "plan ready" state is shown in the timeline now;
-        // ask_user / AwaitClarify renders exclusively in the composer QuestionBar.
-        if (run is null || run.Phase != PlanPhase.AwaitConfirm)
+        // AwaitConfirm: show/update the plan-ready card (Build enabled).
+        // Done: refresh the same card with Build disabled after the user builds.
+        if (run is null
+            || run.Phase is not (PlanPhase.AwaitConfirm or PlanPhase.Done))
         {
             return;
         }
 
         var dispatcher = Application.Current?.Dispatcher;
-        var key = "ready:" + run.Id + ":" + run.UpdatedAt.ToUnixTimeMilliseconds();
+        var built = run.Phase == PlanPhase.Done;
+        var key = (built ? "built:" : "ready:") + run.Id + ":" + run.UpdatedAt.ToUnixTimeMilliseconds();
         if (string.Equals(key, _lastTimelineKey, StringComparison.Ordinal))
         {
             return;

@@ -1818,7 +1818,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
-        if (run.Phase == PlanPhase.AwaitConfirm)
+        if (run.Phase is PlanPhase.AwaitConfirm or PlanPhase.Done)
         {
             _ = _savedChatView.ShowPlanReadyAsync(run);
         }
