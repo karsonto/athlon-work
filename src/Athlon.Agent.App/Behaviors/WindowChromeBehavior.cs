@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Shell;
 using Athlon.Agent.App.Resources;
 using Microsoft.Xaml.Behaviors;
 
@@ -16,10 +17,27 @@ public sealed class WindowChromeBehavior : Behavior<FrameworkElement>
             typeof(WindowChromeBehavior),
             new PropertyMetadata(null));
 
+    public static readonly DependencyProperty FrameBorderProperty =
+        DependencyProperty.Register(
+            nameof(FrameBorder),
+            typeof(Border),
+            typeof(WindowChromeBehavior),
+            new PropertyMetadata(null));
+
     public Button? MaximizeRestoreButton
     {
         get => (Button?)GetValue(MaximizeRestoreButtonProperty);
         set => SetValue(MaximizeRestoreButtonProperty, value);
+    }
+
+    /// <summary>
+    /// Optional outer frame border. Corner radius / border thickness track window state
+    /// (rounded when restored, square when maximized).
+    /// </summary>
+    public Border? FrameBorder
+    {
+        get => (Border?)GetValue(FrameBorderProperty);
+        set => SetValue(FrameBorderProperty, value);
     }
 
     private Window? _window;
@@ -53,6 +71,7 @@ public sealed class WindowChromeBehavior : Behavior<FrameworkElement>
 
         _window.StateChanged += OnWindowStateChanged;
         UpdateMaximizeRestoreButton();
+        SyncFrameForWindowState();
     }
 
     private void OnTitleBarMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -74,8 +93,44 @@ public sealed class WindowChromeBehavior : Behavior<FrameworkElement>
         }
     }
 
-    private void OnWindowStateChanged(object? sender, EventArgs e) =>
+    private void OnWindowStateChanged(object? sender, EventArgs e)
+    {
         UpdateMaximizeRestoreButton();
+        SyncFrameForWindowState();
+    }
+
+    private void SyncFrameForWindowState()
+    {
+        if (_window is null)
+        {
+            return;
+        }
+
+        var maximized = _window.WindowState == WindowState.Maximized;
+        var radius = maximized ? default : AppLayoutMetrics.MainWindowCornerRadius;
+
+        var chrome = WindowChrome.GetWindowChrome(_window);
+        if (chrome is not null)
+        {
+            chrome.CornerRadius = radius;
+        }
+
+        if (FrameBorder is null)
+        {
+            return;
+        }
+
+        FrameBorder.CornerRadius = radius;
+        FrameBorder.BorderThickness = maximized ? new Thickness(0) : new Thickness(1);
+        foreach (var behavior in Interaction.GetBehaviors(FrameBorder))
+        {
+            if (behavior is RoundedClipBehavior clip)
+            {
+                clip.CornerRadius = radius;
+                break;
+            }
+        }
+    }
 
     private static bool IsWithinTitleBarMenu(DependencyObject? source)
     {

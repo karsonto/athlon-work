@@ -20,6 +20,16 @@ public static class AppLayoutMetrics
     /// <summary>Hover pill corner radius for caption controls.</summary>
     public static readonly CornerRadius WindowCaptionButtonCornerRadius = new(5);
 
+    /// <summary>
+    /// Outer main-window corner radius (restored/normal state). Cleared when maximized
+    /// so the frame sits flush in the monitor work area.
+    /// </summary>
+    public const double MainWindowCornerRadiusValue = 12;
+
+    /// <summary><see cref="MainWindowCornerRadiusValue"/> as <see cref="CornerRadius"/>.</summary>
+    public static readonly CornerRadius MainWindowCornerRadius =
+        new(MainWindowCornerRadiusValue);
+
     /// <summary>Caption glyph size when using text-based window icons.</summary>
     public const double WindowCaptionIconFontSize = 10;
 

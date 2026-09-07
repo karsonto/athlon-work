@@ -35,12 +35,21 @@
     </Window.InputBindings>
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome CaptionHeight="0"
-                            CornerRadius="0"
+                            CornerRadius="{x:Static app:AppLayoutMetrics.MainWindowCornerRadius}"
                             GlassFrameThickness="0"
                             ResizeBorderThickness="8"
                             UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
-    <Grid>
+    <Border x:Name="WindowFrameBorder"
+            Background="{DynamicResource Brush.AppBackground}"
+            BorderBrush="{DynamicResource Brush.Border}"
+            BorderThickness="1"
+            CornerRadius="{x:Static app:AppLayoutMetrics.MainWindowCornerRadius}"
+            SnapsToDevicePixels="True">
+        <i:Interaction.Behaviors>
+            <behaviors:RoundedClipBehavior CornerRadius="{x:Static app:AppLayoutMetrics.MainWindowCornerRadius}" />
+        </i:Interaction.Behaviors>
+        <Grid>
         <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="{x:Static app:AppLayoutMetrics.WindowChromeRowHeight}" />
@@ -67,7 +76,8 @@
                 BorderBrush="{DynamicResource Brush.Border}"
                 BorderThickness="0,0,0,1">
             <i:Interaction.Behaviors>
-                <behaviors:WindowChromeBehavior MaximizeRestoreButton="{Binding ElementName=MaximizeRestoreButton}" />
+                <behaviors:WindowChromeBehavior MaximizeRestoreButton="{Binding ElementName=MaximizeRestoreButton}"
+                                                FrameBorder="{Binding ElementName=WindowFrameBorder}" />
             </i:Interaction.Behaviors>
             <Grid>
                 <StackPanel Orientation="Horizontal"
@@ -473,4 +483,5 @@
             </StackPanel>
         </Border>
     </Grid>
+    </Border>
 </Window>
