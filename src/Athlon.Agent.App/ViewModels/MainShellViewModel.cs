@@ -2673,6 +2673,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         RefreshAtCompletionSources(reloadSkills: true);
         await RefreshWorkspaceTreeAsync().ConfigureAwait(true);
         ConfigureWorkspaceWatcher();
+        // MCP stdio servers start with the workspace root as their cwd; refresh so a
+        // workspace/session change re-evaluates (and reconnects when the root actually moved).
+        await RefreshMcpRuntimeAsync().ConfigureAwait(true);
         OnPropertyChanged(nameof(Sidebar));
         OnPropertyChanged(nameof(HasSessionWorkspace));
         OnPropertyChanged(nameof(WorkspacePanelActionLabel));

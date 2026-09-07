@@ -188,7 +188,7 @@ public sealed class McpRegistry(
 
             foreach (var (name, server) in enabled)
             {
-                var fingerprint = CreateConfigFingerprint(server);
+                var fingerprint = CreateEffectiveFingerprint(server, workspaceContext.RootPath);
                 _toolCallTimeoutSeconds[name] = Math.Clamp(server.ToolCallTimeoutSeconds, 1, 3600);
                 if (_clients.ContainsKey(name)
                     && _configFingerprints.TryGetValue(name, out var existingFingerprint)
@@ -305,7 +305,7 @@ public sealed class McpRegistry(
 
             _configFingerprints.TryRemove(name, out _);
             _tools[name] = Array.Empty<McpTool>();
-            fingerprint = CreateConfigFingerprint(server);
+            fingerprint = CreateEffectiveFingerprint(server, workspaceContext.RootPath);
             _toolCallTimeoutSeconds[name] = Math.Clamp(server.ToolCallTimeoutSeconds, 1, 3600);
             var transportLabel = ResolveTransportLabel(server);
             _statuses[name] = new McpServerStatus(
@@ -631,6 +631,14 @@ public sealed class McpRegistry(
 
     private static string CreateConfigFingerprint(McpServerSettings server) =>
         JsonSerializer.Serialize(server, JsonFileStore.Options);
+
+    /// <summary>
+    /// Config fingerprint combined with the workspace root the server connects with. stdio
+    /// servers are started with the workspace root as cwd, so a workspace/session switch with
+    /// an otherwise identical config must still reconnect; this composite drives that decision.
+    /// </summary>
+    private static string CreateEffectiveFingerprint(McpServerSettings server, string? workspaceRoot) =>
+        CreateConfigFingerprint(server) + "\n" + (workspaceRoot ?? "<no-workspace>");
 
     /// <summary>
     /// Inject SSO <c>MCP_REFRESH_TOKEN</c> into stdio MCP process env (same as <see cref="WindowsCmdEncoding"/>).
