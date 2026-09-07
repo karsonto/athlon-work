@@ -71,6 +71,13 @@ internal sealed class ToolInvocationPipeline(
 
         sw.Stop();
 
+        // Count skill usage outcomes (success/failure) for the current turn. The skill loader
+        // itself is excluded here because its result is already reported via the skill_load event.
+        if (!string.Equals(toolCall.Name, "load_skill_through_path", StringComparison.OrdinalIgnoreCase))
+        {
+            SessionSkillActivationScope.CurrentState?.RecordToolOutcome(result.Succeeded);
+        }
+
         await storage.AppendToolCallLogAsync(
             sessionId,
             new SessionToolCallLogEntry(

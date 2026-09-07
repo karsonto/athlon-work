@@ -33,6 +33,7 @@ public sealed class SessionSkillActivationScope : IDisposable
             if (!string.IsNullOrWhiteSpace(skillId))
             {
                 _activeSkillIds.Add(skillId);
+                LastActivatedSkillId = skillId;
             }
         }
 
@@ -40,5 +41,31 @@ public sealed class SessionSkillActivationScope : IDisposable
             !string.IsNullOrWhiteSpace(skillId) && _activeSkillIds.Contains(skillId);
 
         public IReadOnlyCollection<string> ActiveSkillIds => _activeSkillIds;
+
+        /// <summary>Most recently activated skill id in this turn (usage attribution target).</summary>
+        public string? LastActivatedSkillId { get; private set; }
+
+        public int TotalToolCalls { get; private set; }
+
+        public int SucceededToolCalls { get; private set; }
+
+        public int FailedToolCalls { get; private set; }
+
+        /// <summary>
+        /// Counts one executed tool outcome for the current turn. Used to report skill
+        /// usage success/failure at turn end (see <c>skill_usage</c> behavior event).
+        /// </summary>
+        public void RecordToolOutcome(bool succeeded)
+        {
+            TotalToolCalls++;
+            if (succeeded)
+            {
+                SucceededToolCalls++;
+            }
+            else
+            {
+                FailedToolCalls++;
+            }
+        }
     }
 }

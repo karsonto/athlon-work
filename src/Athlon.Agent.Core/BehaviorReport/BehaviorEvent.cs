@@ -32,6 +32,7 @@ public static class BehaviorEventIds
     public const string McpServer = "mcp_server";
     public const string SkillLoad = "skill_load";
     public const string SkillToggle = "skill_toggle";
+    public const string SkillUsage = "skill_usage";
     public const string ToolInvoke = "tool_invoke";
     public const string ToolApproval = "tool_approval";
     public const string UserMessageSent = "user_message_sent";

@@ -115,7 +115,37 @@ public sealed class AgentRuntime(
             runContext.WorkspaceKind);
         using var skillActivationScope = SessionSkillActivationScope.EnterNewTurn();
         using var sessionScope = activeSessionContext.Enter(session.Id);
-        return await SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, runContext, cancellationToken, appendUserMessage).ConfigureAwait(false);
+        var turnResult = await SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, runContext, cancellationToken, appendUserMessage).ConfigureAwait(false);
+        EmitSkillUsageIfApplicable(turnResult, runContext);
+        return turnResult;
+    }
+
+    /// <summary>
+    /// Emits a <c>skill_usage</c> summary when the just-finished turn activated at least one
+    /// skill and executed tool calls. Whole-turn tool outcomes are attributed to the most
+    /// recently activated skill. Must run before the turn's skill activation scope is disposed.
+    /// </summary>
+    private void EmitSkillUsageIfApplicable(AgentSession session, AgentRunContext runContext)
+    {
+        var state = SessionSkillActivationScope.CurrentState;
+        if (state is null || state.TotalToolCalls == 0 || string.IsNullOrWhiteSpace(state.LastActivatedSkillId))
+        {
+            return;
+        }
+
+        _eventManager.Record(
+            BehaviorEventIds.SkillUsage,
+            BehaviorEventTypes.Event,
+            BehaviorEventIds.SkillUsage,
+            new Dictionary<string, object?>
+            {
+                ["skill_id"] = state.LastActivatedSkillId,
+                ["session_id"] = session.Id,
+                ["run_id"] = runContext.RunId,
+                ["total_calls"] = state.TotalToolCalls,
+                ["success_calls"] = state.SucceededToolCalls,
+                ["failed_calls"] = state.FailedToolCalls
+            });
     }
 
     private IReadOnlyList<string> ResolveIgnorePatterns(AgentSession session) =>
