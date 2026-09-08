@@ -15,14 +15,13 @@ namespace Athlon.Agent.App.Windows;
 public partial class SshConnectWizardWindow : Window
 {
     private readonly SshWorkspaceConnectionService _connectionService;
-    private readonly ISshWorkspaceClient _sshClient;
+    private readonly SshWorkspaceClient? _probe;
     private readonly ICredentialStore _credentialStore;
     private readonly IUserNotifier _notifier;
     private readonly ILocalizationService _loc;
     private readonly WorkspaceSettings _workspace;
     private readonly ObservableCollection<BrowseNode> _treeRoots = new();
     private int _step = 1;
-    private bool _browseConnected;
     private string? _selectedRemotePath;
     private string? _preferredBrowseRoot;
     private bool _nameTouchedByUser;
@@ -30,7 +29,6 @@ public partial class SshConnectWizardWindow : Window
 
     public SshConnectWizardWindow(
         SshWorkspaceConnectionService connectionService,
-        ISshWorkspaceClient sshClient,
         ICredentialStore credentialStore,
         IUserNotifier notifier,
         ILocalizationService localization,
@@ -38,7 +36,9 @@ public partial class SshConnectWizardWindow : Window
     {
         InitializeComponent();
         _connectionService = connectionService;
-        _sshClient = sshClient;
+        // The wizard browses through its own scratch connection so the configured workspace is
+        // never bound to (or torn down against) the pool slot of any real session.
+        _probe = connectionService.CreateProbeClient();
         _credentialStore = credentialStore;
         _notifier = notifier;
         _loc = localization;
@@ -87,6 +87,9 @@ public partial class SshConnectWizardWindow : Window
 
     public WorkspaceSettings? ResultWorkspace { get; private set; }
 
+    private SshWorkspaceClient Probe =>
+        _probe ?? throw new InvalidOperationException("SSH probe connection is not available.");
+
     private static string BuildHostHint(WorkspaceSettings workspace)
     {
         if (workspace.Ssh is null || string.IsNullOrWhiteSpace(workspace.Ssh.Host))
@@ -125,16 +128,11 @@ public partial class SshConnectWizardWindow : Window
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => DialogResult = false;
 
-    private async void Window_OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    private void Window_OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (DialogResult == true || !_browseConnected)
-        {
-            return;
-        }
-
         try
         {
-            await _connectionService.DisconnectAsync().ConfigureAwait(true);
+            _probe?.Dispose();
         }
         catch
         {
@@ -200,8 +198,7 @@ public partial class SshConnectWizardWindow : Window
                 : _workspace.RootPath;
             // Browse from filesystem root; final workspace root is chosen in step 3.
             _workspace.RootPath = "/";
-            await _connectionService.TestConnectionAsync(_workspace).ConfigureAwait(true);
-            _browseConnected = true;
+            await _connectionService.ConnectProbeAsync(Probe, _workspace).ConfigureAwait(true);
             StatusText.Text = _loc["Shell_SshWizardLoadingTree"];
             await LoadRemoteTreeAsync().ConfigureAwait(true);
             ShowStep(3);
@@ -209,7 +206,6 @@ public partial class SshConnectWizardWindow : Window
         }
         catch (Exception ex)
         {
-            _browseConnected = false;
             StatusText.Text = _loc.Format("Shell_SshTestFailed", ex.Message);
         }
         finally
@@ -270,7 +266,7 @@ public partial class SshConnectWizardWindow : Window
         StatusText.Text = _loc["Shell_SshWizardLoadingTree"];
         try
         {
-            var info = await _sshClient.TryGetFileInfoAsync(path).ConfigureAwait(true);
+            var info = await Probe.TryGetFileInfoAsync(path).ConfigureAwait(true);
             if (info is null || !info.IsDirectory)
             {
                 StatusText.Text = _loc["Shell_SshWizardPathInvalid"];
@@ -314,7 +310,7 @@ public partial class SshConnectWizardWindow : Window
             : RemotePathNormalizer.NormalizeRoot(_preferredBrowseRoot);
         if (!string.IsNullOrWhiteSpace(preferred)
             && preferred != "/"
-            && await _sshClient.FileExistsAsync(preferred).ConfigureAwait(true))
+            && await Probe.FileExistsAsync(preferred).ConfigureAwait(true))
         {
             return preferred;
         }
@@ -323,7 +319,7 @@ public partial class SshConnectWizardWindow : Window
         if (!string.IsNullOrWhiteSpace(username))
         {
             var home = RemotePathNormalizer.Combine("/", "home/" + username);
-            if (await _sshClient.FileExistsAsync(home).ConfigureAwait(true))
+            if (await Probe.FileExistsAsync(home).ConfigureAwait(true))
             {
                 return home;
             }
@@ -357,7 +353,7 @@ public partial class SshConnectWizardWindow : Window
         try
         {
             var directories = new List<SshEntry>();
-            await foreach (var entry in _sshClient.ListAsync(node.FullPath).ConfigureAwait(true))
+            await foreach (var entry in Probe.ListAsync(node.FullPath).ConfigureAwait(true))
             {
                 if (entry.IsDirectory)
                 {

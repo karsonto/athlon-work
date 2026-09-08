@@ -158,6 +158,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _contextSidebarEdgeGutterWidth = 0;
         _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
         _displayedSessionId = _session.Id;
+        _sshConnection.SetDefaultSession(_displayedSessionId);
         _runtime.Attach(_session, hydrated: true);
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         WireSessionUsageUi(_activeUi);
@@ -1444,6 +1445,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _sessionTurns.QueuedTurnPresenter.RemoveSession(item.Id);
 
         _runtime.Remove(item.Id);
+        await _sshConnection.DisconnectSessionAsync(item.Id).ConfigureAwait(true);
 
         string? workspaceKey = null;
         try
@@ -1657,6 +1659,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         _displayedSessionId = session.Id;
+        // Non-turn (UI) SSH callers resolve the slot of the session that is currently visible.
+        _sshConnection.SetDefaultSession(_displayedSessionId);
         _session = session;
         _runtime.Attach(session);
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
@@ -2082,7 +2086,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 return;
             }
 
-            await _sshConnection.DisconnectAsync().ConfigureAwait(true);
+            await _sshConnection.DisconnectSessionAsync(_session.Id).ConfigureAwait(true);
             _session = _session.WithWorkspace(null, workspaceId: null);
             await ApplySessionWorkspaceAsync().ConfigureAwait(true);
             await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
@@ -2325,7 +2329,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         var dialog = new SshConnectWizardWindow(
             _sshConnection,
-            _sshClient,
             _credentialStore,
             _notifier,
             _loc)
@@ -2396,7 +2399,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
-        await _sshConnection.DisconnectAsync().ConfigureAwait(true);
+        await _sshConnection.DisconnectSessionAsync(_session.Id).ConfigureAwait(true);
 
         var folderName = new DirectoryInfo(dialog.FolderName).Name;
         _session = _session.WithWorkspace(dialog.FolderName, workspaceId: null);
@@ -2417,7 +2420,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
-        await _sshConnection.DisconnectAsync().ConfigureAwait(true);
+        await _sshConnection.DisconnectSessionAsync(_session.Id).ConfigureAwait(true);
         _session = _session.WithWorkspace(null, workspaceId: null);
         await ApplySessionWorkspaceAsync().ConfigureAwait(true);
         await SaveCurrentSessionIfNeededAsync().ConfigureAwait(true);
@@ -2664,10 +2667,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 // Connection errors surface when tools run or when configuring workspace.
             }
         }
-        else if (_workspaceContext.Kind != WorkspaceKind.Ssh && _sshClient.IsConnected)
-        {
-            await _sshConnection.DisconnectAsync().ConfigureAwait(true);
-        }
 
         ActiveWorkspaceName = ResolveActiveWorkspaceName();
         RefreshAtCompletionSources(reloadSkills: true);
@@ -2882,7 +2881,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _workspaceBridge.Dispose();
         try
         {
-            await _sshConnection.DisconnectAsync(cancellationToken).ConfigureAwait(false);
+            await _sshConnection.DisconnectAllAsync(cancellationToken).ConfigureAwait(false);
         }
         catch
         {

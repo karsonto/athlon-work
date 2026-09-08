@@ -17,17 +17,21 @@ public sealed record SshEntry(string Name, string FullPath, bool IsDirectory, lo
 
 public sealed record SshCommandResult(int ExitCode, string StdOut, string StdErr, TimeSpan Duration);
 
+/// <summary>
+/// SSH/SFTP file operations routed to the connection slot of the current context:
+/// an in-flight agent turn resolves its root session (see <c>SshRootSessionScope</c>),
+/// and non-turn UI callers resolve the currently displayed session
+/// (<see cref="ISshConnectionRegistry.DefaultSessionId"/>).
+/// Connection lifecycle (connect/disconnect/idle reclamation) lives on
+/// <see cref="ISshConnectionRegistry"/> and is keyed per root session.
+/// </summary>
 public interface ISshWorkspaceClient
 {
+    /// <summary>
+    /// True when the connection slot for the current context (turn root session, falling
+    /// back to the displayed session) is connected.
+    /// </summary>
     bool IsConnected { get; }
-
-    string? RemoteRoot { get; }
-
-    string? ConnectedWorkspaceId { get; }
-
-    Task ConnectAsync(SshConnectRequest request, CancellationToken cancellationToken = default);
-
-    Task DisconnectAsync(CancellationToken cancellationToken = default);
 
     Task<bool> FileExistsAsync(string remotePath, CancellationToken cancellationToken = default);
 

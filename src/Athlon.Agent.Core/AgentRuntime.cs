@@ -115,6 +115,9 @@ public sealed class AgentRuntime(
             runContext.WorkspaceKind);
         using var skillActivationScope = SessionSkillActivationScope.EnterNewTurn();
         using var sessionScope = activeSessionContext.Enter(session.Id);
+        // SSH connections are keyed by the conversation-tree root. Sub-agent turns run nested
+        // inside this flow and therefore inherit the root scope instead of replacing it.
+        using var sshRootScope = SshRootSessionScope.EnterIfAbsent(session.Id);
         var turnResult = await SendAsyncTurnAsync(session, userInput, imageAttachments, callbacks, runContext, cancellationToken, appendUserMessage).ConfigureAwait(false);
         EmitSkillUsageIfApplicable(turnResult, runContext);
         return turnResult;

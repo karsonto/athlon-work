@@ -120,7 +120,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<Athlon.Agent.Core.ComputerUse.IComputerUseAutomationHost>(
             Athlon.Agent.Core.ComputerUse.NullComputerUseAutomationHost.Instance);
         services.AddSingleton<WorkspaceGuard>();
-        services.AddSingleton<ISshWorkspaceClient, SshWorkspaceClient>();
+        services.AddSingleton<SshWorkspaceClient>();
+        services.AddSingleton<ISshWorkspaceClient>(sp => sp.GetRequiredService<SshWorkspaceClient>());
+        services.AddSingleton<ISshConnectionRegistry>(sp => sp.GetRequiredService<SshWorkspaceClient>());
         services.AddSingleton<SshWorkspaceConnectionService>();
         services.AddSingleton<WorkspaceFileEditorService>();
         services.AddSingleton<IKnowledgePageOcr, VisionChatKnowledgeOcr>();
