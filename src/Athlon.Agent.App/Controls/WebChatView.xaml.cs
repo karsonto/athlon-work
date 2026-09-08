@@ -251,6 +251,20 @@ public partial class WebChatView : UserControl
         _pendingActivitySourceMessages = activitySourceMessages;
         _needsRender = true;
         var generation = StartRenderGeneration();
+        // #region chat-switch probe
+        ChatSwitchProbe.Log(
+            "WebChatView.LoadMessagesAsync",
+            "load-begin",
+            new
+            {
+                generation,
+                pending = ChatSwitchProbe.SummarizeMessages(messages),
+                activityCount = activitySourceMessages?.Count ?? 0,
+                showToolCalls,
+                needsRender = _needsRender,
+                canRender = CanRender()
+            });
+        // #endregion
         await RunRenderPipelineSafeAsync(generation).ConfigureAwait(true);
 
         if (_needsRender && generation == _renderGeneration)
@@ -409,15 +423,44 @@ public partial class WebChatView : UserControl
                 var messages = _pendingMessages.ToArray();
                 var showToolCalls = _pendingShowToolCalls;
                 var activitySource = _pendingActivitySourceMessages;
+                // #region chat-switch probe
+                ChatSwitchProbe.Log(
+                    "WebChatView.RunRenderPipeline",
+                    "snapshot-toarray",
+                    new
+                    {
+                        expectedGeneration,
+                        liveGeneration = _renderGeneration,
+                        snapshot = ChatSwitchProbe.SummarizeMessages(messages),
+                        pendingLiveCount = _pendingMessages.Count,
+                        activityCount = activitySource?.Count ?? 0
+                    });
+                // #endregion
                 await PostReplayInBatchesAsync(messages, showToolCalls, activitySource, expectedGeneration)
                     .ConfigureAwait(true);
                 if (expectedGeneration != _renderGeneration)
                 {
+                    // #region chat-switch probe
+                    ChatSwitchProbe.Log(
+                        "WebChatView.RunRenderPipeline",
+                        "stale-after-post",
+                        new { expectedGeneration, liveGeneration = _renderGeneration });
+                    // #endregion
                     return;
                 }
 
                 _needsRender = false;
                 App.StartupTrace($"WebChatView replayed {_pendingMessages.Count} messages");
+                // #region chat-switch probe
+                ChatSwitchProbe.Log(
+                    "WebChatView.RunRenderPipeline",
+                    "replay-complete",
+                    new
+                    {
+                        expectedGeneration,
+                        pendingLiveCount = _pendingMessages.Count
+                    });
+                // #endregion
             }
             finally
             {
@@ -456,13 +499,40 @@ public partial class WebChatView : UserControl
                     activitySourceMessages: activitySource,
                     mode: TimelineProjectionMode.HighFidelity))
             .ConfigureAwait(true);
+        // #region chat-switch probe
+        ChatSwitchProbe.Log(
+            "WebChatView.PostReplayInBatchesAsync",
+            "events-built",
+            new
+            {
+                expectedGeneration,
+                liveGeneration = _renderGeneration,
+                messageCount = messages.Count,
+                activityCount = activitySource?.Count ?? 0,
+                eventCount = allEvents.Count,
+                batchSize,
+                staleBeforePost = expectedGeneration != _renderGeneration
+            });
+        // #endregion
         if (expectedGeneration != _renderGeneration)
         {
+            // #region chat-switch probe
+            ChatSwitchProbe.Log(
+                "WebChatView.PostReplayInBatchesAsync",
+                "abort-before-first-batch",
+                new { expectedGeneration, liveGeneration = _renderGeneration, eventCount = allEvents.Count });
+            // #endregion
             return;
         }
 
         if (allEvents.Count == 0)
         {
+            // #region chat-switch probe
+            ChatSwitchProbe.Log(
+                "WebChatView.PostReplayInBatchesAsync",
+                "empty-replay",
+                new { expectedGeneration });
+            // #endregion
             ChatWebView.CoreWebView2.PostWebMessageAsJson(
                 ChatEventSerializer.SerializeEventsCommand(
                     "replay",
@@ -476,6 +546,19 @@ public partial class WebChatView : UserControl
         {
             if (expectedGeneration != _renderGeneration)
             {
+                // #region chat-switch probe
+                ChatSwitchProbe.Log(
+                    "WebChatView.PostReplayInBatchesAsync",
+                    "abort-mid-batch",
+                    new
+                    {
+                        expectedGeneration,
+                        liveGeneration = _renderGeneration,
+                        offset,
+                        eventCount = allEvents.Count,
+                        postedFirstReplay = offset > 0
+                    });
+                // #endregion
                 return;
             }
 
@@ -491,9 +574,35 @@ public partial class WebChatView : UserControl
                 .ConfigureAwait(true);
             if (expectedGeneration != _renderGeneration)
             {
+                // #region chat-switch probe
+                ChatSwitchProbe.Log(
+                    "WebChatView.PostReplayInBatchesAsync",
+                    "abort-after-serialize",
+                    new
+                    {
+                        expectedGeneration,
+                        liveGeneration = _renderGeneration,
+                        offset,
+                        isFirst,
+                        eventCount = allEvents.Count
+                    });
+                // #endregion
                 return;
             }
 
+            // #region chat-switch probe
+            ChatSwitchProbe.Log(
+                "WebChatView.PostReplayInBatchesAsync",
+                isFirst ? "post-replay" : "post-append",
+                new
+                {
+                    expectedGeneration,
+                    offset,
+                    take,
+                    isLast,
+                    eventCount = allEvents.Count
+                });
+            // #endregion
             ChatWebView.CoreWebView2.PostWebMessageAsJson(json);
             if (offset + take < allEvents.Count)
             {
@@ -597,10 +706,35 @@ public partial class WebChatView : UserControl
                         if (root.TryGetProperty("renderGeneration", out var generationElement)
                             && generationElement.TryGetInt32(out var completedGeneration))
                         {
+                            // #region chat-switch probe
+                            ChatSwitchProbe.Log(
+                                "WebChatView.OnWebMessageReceived",
+                                "replayComplete",
+                                new
+                                {
+                                    completedGeneration,
+                                    liveGeneration = _renderGeneration
+                                });
+                            // #endregion
                             CompleteRenderGeneration(completedGeneration, rendered: true);
                         }
 
                         break;
+                    case "chatSwitchProbe":
+                    {
+                        // #region chat-switch probe
+                        var loc = root.TryGetProperty("location", out var locEl) ? locEl.GetString() : "js";
+                        var msg = root.TryGetProperty("message", out var msgEl) ? msgEl.GetString() : "probe";
+                        object? data = null;
+                        if (root.TryGetProperty("data", out var dataEl))
+                        {
+                            data = JsonSerializer.Deserialize<Dictionary<string, object?>>(dataEl.GetRawText());
+                        }
+
+                        ChatSwitchProbe.Log(loc ?? "js", msg ?? "probe", data);
+                        // #endregion
+                        break;
+                    }
                     case "copy":
                         var text = root.TryGetProperty("text", out var textElement)
                             ? textElement.GetString()
@@ -783,6 +917,19 @@ public partial class WebChatView : UserControl
             var documentReady = await WaitForDocumentReadyAsync().ConfigureAwait(true);
             if (!documentReady || expectedGeneration != Volatile.Read(ref _renderGeneration))
             {
+                // #region chat-switch probe
+                ChatSwitchProbe.Log(
+                    "WebChatView.ExecuteScriptWhenReadyAsync",
+                    "skipped-stale-or-not-ready",
+                    new
+                    {
+                        expectedGeneration,
+                        liveGeneration = Volatile.Read(ref _renderGeneration),
+                        documentReady,
+                        scriptChars = script.Length,
+                        isUserDispatch = script.Contains("USER_MESSAGE", StringComparison.Ordinal)
+                    });
+                // #endregion
                 App.StartupTrace(
                     $"WebChatView ExecuteScript skipped: stale generation or document not ready ({script.Length} chars)");
                 return;
@@ -791,6 +938,18 @@ public partial class WebChatView : UserControl
             if (!await WaitForRenderGenerationAsync(expectedGeneration).ConfigureAwait(true)
                 || expectedGeneration != Volatile.Read(ref _renderGeneration))
             {
+                // #region chat-switch probe
+                ChatSwitchProbe.Log(
+                    "WebChatView.ExecuteScriptWhenReadyAsync",
+                    "skipped-wait-generation",
+                    new
+                    {
+                        expectedGeneration,
+                        liveGeneration = Volatile.Read(ref _renderGeneration),
+                        scriptChars = script.Length,
+                        isUserDispatch = script.Contains("USER_MESSAGE", StringComparison.Ordinal)
+                    });
+                // #endregion
                 return;
             }
 

@@ -457,6 +457,17 @@ public sealed partial class SessionTurnUiController
 
         var chatView = ChatView;
         var activitySource = BuildReplayActivitySource();
+        // #region chat-switch probe
+        ChatSwitchProbe.Log(
+            "SessionTurnUiController.ReloadChatViewAsync",
+            "reload-begin",
+            new
+            {
+                messages = ChatSwitchProbe.SummarizeMessages(Messages),
+                activityCount = activitySource.Count,
+                showToolCalls = _showToolCalls()
+            });
+        // #endregion
         if (!IsDisplayed || !ReferenceEquals(ChatView, chatView))
         {
             return;
@@ -1025,6 +1036,20 @@ public sealed partial class SessionTurnUiController
         {
             FlushBufferedStreamingToUi();
         }
+
+        // #region chat-switch probe
+        ChatSwitchProbe.Log(
+            "SessionTurnUiController.FinishRebuildDisplay",
+            "finish-rebuild",
+            new
+            {
+                viewModels = ChatSwitchProbe.SummarizeMessages(viewModels),
+                messages = ChatSwitchProbe.SummarizeMessages(Messages),
+                activityCount = _activitySourceMessages.Count,
+                preserveActiveTurn,
+                isDisplayed = IsDisplayed
+            });
+        // #endregion
 
         SyncChatView(immediate: true);
         RequestScrollImmediate();
@@ -1688,6 +1713,18 @@ public sealed partial class SessionTurnUiController
         {
             return;
         }
+
+        // #region chat-switch probe
+        ChatSwitchProbe.Log(
+            "SessionTurnUiController.DispatchUserMessageToChatView",
+            "incremental-user",
+            new
+            {
+                messageId = ChatSwitchProbe.ShortId(message.MessageId),
+                messagesCount = Messages.Count,
+                isDisplayed = IsDisplayed
+            });
+        // #endregion
 
         _ = ChatView.DispatchUserMessageAsync(message);
     }
