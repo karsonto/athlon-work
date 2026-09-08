@@ -23,7 +23,6 @@ public sealed class ChatHtmlBuilder
             "<style id=\"chat-code-syntax\">" + GetCodeSyntaxOverrideStyles() + "</style>" +
             $"<link rel=\"stylesheet\" href=\"{assets}chat-shell.css{cache}\"/>" +
             "</head><body><div id=\"chat-scroll\">" + BuildEmptyStateHtml(ssoDisplayName) +
-            "<button id=\"load-older\" type=\"button\" hidden></button>" +
             "<div id=\"messages\"></div></div>" +
             "<div id=\"image-lightbox\" class=\"image-lightbox\" hidden>" +
             "<button type=\"button\" class=\"image-lightbox-backdrop\" aria-label=\"Close\"></button>" +
@@ -110,7 +109,6 @@ public sealed class ChatHtmlBuilder
             ["welcomeTitle"] = Strings.Get("Chat_WelcomeTitle"),
             ["welcomeTitleWithName"] = Strings.Get("Chat_WelcomeTitleWithName"),
             ["welcomeDescription"] = Strings.Get("Chat_WelcomeDescription"),
-            ["loadOlder"] = Strings.Get("RecordGroup_Earlier") + "…",
             ["approvalTitle"] = Strings.Get("Chat_ToolApprovalTitle"),
             ["approvalDescription"] = Strings.Get("Chat_ToolApprovalDescription"),
             ["approvalPending"] = Strings.Get("Chat_ToolApprovalPending"),

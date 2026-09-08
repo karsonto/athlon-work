@@ -12,7 +12,9 @@ const state = {
   scrollFrame: 0,
   scrollForcePending: false,
   autoScrollEnabled: true,
-  batchTarget: null
+  batchTarget: null,
+  hasOlderMessages: false,
+  loadingOlder: false
 };
 
 function t(key) {
@@ -20,8 +22,6 @@ function t(key) {
 }
 
 function applyChatI18n() {
-  const loadOlder = document.getElementById('load-older');
-  if (loadOlder) loadOlder.textContent = t('loadOlder');
   document.querySelectorAll('.code-btn').forEach(function (btn) {
     if (btn.classList.contains('copied')) return;
     if (btn.dataset.i18n === 'preview') {
@@ -430,6 +430,8 @@ function resetTimeline() {
   state.reasoningStartAt = {};
   state.reasoningFinalizedMs = {};
   state.toolCalls.clear();
+  state.hasOlderMessages = false;
+  state.loadingOlder = false;
 }
 
 function beginBatch() {
@@ -2036,11 +2038,16 @@ function appendEvents(events) {
 }
 
 function setOlderMessagesAvailable(available) {
-  const button = document.getElementById('load-older');
-  if (!button) return;
-  button.hidden = !available;
-  button.disabled = false;
-  button.textContent = t('loadOlder');
+  state.hasOlderMessages = !!available;
+  state.loadingOlder = false;
+}
+
+function maybeLoadOlderOnScroll() {
+  if (state.loadingOlder || !state.hasOlderMessages) return;
+  const scroller = getChatScroller();
+  if (!scroller || scroller.scrollTop > 160) return;
+  state.loadingOlder = true;
+  post({ type: 'loadOlder' });
 }
 
 function prependEvents(events, hasOlderMessages) {
@@ -2103,6 +2110,7 @@ const chatScroller = getChatScroller();
 if (chatScroller) {
   chatScroller.addEventListener('scroll', function () {
     state.autoScrollEnabled = isNearBottom();
+    maybeLoadOlderOnScroll();
   }, { passive: true });
   chatScroller.addEventListener('wheel', function (e) {
     if (e.deltaY < 0) state.autoScrollEnabled = false;
@@ -2110,14 +2118,6 @@ if (chatScroller) {
   chatScroller.addEventListener('touchmove', function () {
     if (!isNearBottom()) state.autoScrollEnabled = false;
   }, { passive: true });
-}
-const loadOlderButton = document.getElementById('load-older');
-if (loadOlderButton) {
-  loadOlderButton.textContent = t('loadOlder');
-  loadOlderButton.addEventListener('click', function () {
-    loadOlderButton.disabled = true;
-    post({ type: 'loadOlder' });
-  });
 }
 document.addEventListener('selectionchange', function () {
   if (hasActiveSelection()) state.autoScrollEnabled = false;

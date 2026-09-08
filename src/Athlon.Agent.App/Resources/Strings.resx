@@ -1092,9 +1092,6 @@
   <data name="Nav_AccountGuest" xml:space="preserve">
     <value>未登录</value>
   </data>
-  <data name="RecordGroup_Earlier" xml:space="preserve">
-    <value>更早</value>
-  </data>
   <data name="RecordGroup_Last7Days" xml:space="preserve">
     <value>过去 7 天</value>
   </data>

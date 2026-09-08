@@ -35,17 +35,6 @@ html, body {
   gap: 20px;
   max-width: 100%;
 }
-#load-older {
-  display: block;
-  margin: 0 auto 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 6px 12px;
-  background: var(--panel);
-  color: var(--subtle-text);
-  cursor: pointer;
-}
-#load-older[hidden] { display: none; }
 .message-row {
   content-visibility: auto;
   contain-intrinsic-size: auto 96px;
