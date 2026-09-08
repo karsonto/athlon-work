@@ -22,4 +22,5 @@ public sealed record SessionHttpInteractionLog(
     object? Request,
     string? ResponseBody,
     string? Error,
-    long DurationMs);
+    long DurationMs,
+    string? RequestId = null);

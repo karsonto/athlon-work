@@ -88,7 +88,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<CliSessionMap>();
         services.AddSingleton<CliIpcServer>();
         services.AddHttpClient<IAgentModelClient, OpenAiCompatibleChatModelClient>(
-            static client => client.Timeout = Timeout.InfiniteTimeSpan);
+                static client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(static () => ModelHttpClientHandler.Create());
         services.AddSingleton<IAgentOrchestrator, AgentOrchestrator>();
         services.AddSingleton<IDebugPhaseAccessor, DebugPhaseAccessor>();
         services.AddSingleton<IDebugSessionState, DebugSessionState>();
@@ -136,7 +137,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISessionTaskListStore, FileSessionTaskListStore>();
         services.AddSingleton<ITaskListChangedNotifier, TaskListChangedNotifier>();
         services.AddHttpClient<IEmbeddingClient, OpenAiCompatibleEmbeddingClient>(
-            static client => client.Timeout = TimeSpan.FromMinutes(5));
+                static client => client.Timeout = TimeSpan.FromMinutes(5))
+            .ConfigurePrimaryHttpMessageHandler(static () => ModelHttpClientHandler.Create());
         services.AddSingleton<AuditLogService>();
         services.AddSingleton<RuntimeDiagnosticEventSink>();
         services.AddSingleton<IRuntimeDiagnosticEventSink>(sp => sp.GetRequiredService<RuntimeDiagnosticEventSink>());

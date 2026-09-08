@@ -64,6 +64,8 @@ public sealed class OpenAiCompatibleChatModelClient(
         Func<StreamingToolCallDelta, Task>? onToolCallDelta,
         CancellationToken cancellationToken)
     {
+        // Per-request id shared with the gateway (X-Request-Id) for end-to-end correlation.
+        var requestId = Guid.NewGuid().ToString("N");
         var endpoint = settings.Model.Endpoint.TrimEnd('/') + "/chat/completions";
         var purpose = OpenAiChatRequestFactory.BuildPurpose(request);
         var payload = OpenAiChatRequestFactory.BuildPayload(request, settings, stream);
@@ -81,6 +83,7 @@ public sealed class OpenAiCompatibleChatModelClient(
                 Content = JsonContent.Create(payload)
             };
             httpRequest.Headers.TryAddWithoutValidation("User-Agent", "Athlon-Agent");
+            httpRequest.Headers.TryAddWithoutValidation("X-Request-Id", requestId);
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
                 httpRequest.Headers.Authorization =
@@ -98,9 +101,10 @@ public sealed class OpenAiCompatibleChatModelClient(
                 responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
                 error = $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
                 _logger.Warning(
-                    "Model HTTP failed {StatusCode} for session {SessionId}: {Body}",
+                    "Model HTTP failed {StatusCode} for session {SessionId}, requestId={RequestId}: {Body}",
                     statusCode,
                     sessionId ?? "(none)",
+                    requestId,
                     HttpLogSanitizer.Truncate(responseBody) ?? string.Empty);
                 throw new HttpRequestException($"{error}. Body: {HttpLogSanitizer.Truncate(responseBody)}");
             }
@@ -131,7 +135,7 @@ public sealed class OpenAiCompatibleChatModelClient(
                 eventType: "model.request_failed",
                 severity: RuntimeDiagnosticSeverity.Error,
                 errorCode: RuntimeDiagnosticErrorCodes.ModelRequestFailed,
-                message: ex.Message).ConfigureAwait(false);
+                message: $"requestId={requestId} {ex.Message}").ConfigureAwait(false);
             throw;
         }
         finally
@@ -149,7 +153,8 @@ public sealed class OpenAiCompatibleChatModelClient(
                         payload,
                         responseBody,
                         error,
-                        sw.ElapsedMilliseconds),
+                        sw.ElapsedMilliseconds,
+                        RequestId: requestId),
                     CancellationToken.None);
             }
             catch (Exception logEx) when (logEx is not OperationCanceledException)
