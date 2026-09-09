@@ -164,6 +164,68 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
             return session.ReadConsoleEntries(limit);
         }, cancellationToken);
 
+    public Task<IReadOnlyList<BrowserCookieEntry>> GetCookiesAsync(
+        string? url,
+        CancellationToken cancellationToken = default) =>
+        InvokeOnUiAsync(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var tab = EnsureBrowserTabCore();
+            var webView = await WaitForWebViewAsync(tab.Id, cancellationToken).ConfigureAwait(true);
+            var target = ResolveCookieUrl(url, tab, webView);
+            var cookies = await webView.CookieManager.GetCookiesAsync(target).ConfigureAwait(true);
+            var entries = new List<BrowserCookieEntry>(cookies.Count);
+            foreach (var cookie in cookies)
+            {
+                entries.Add(new BrowserCookieEntry(
+                    cookie.Name ?? string.Empty,
+                    cookie.Value ?? string.Empty,
+                    cookie.Domain,
+                    cookie.Path,
+                    cookie.Expires <= 0,
+                    cookie.Expires > 0
+                        ? DateTime.FromFileTimeUtc((long)(cookie.Expires * TimeSpan.TicksPerSecond))
+                            .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+                        : null,
+                    cookie.IsHttpOnly,
+                    cookie.IsSecure,
+                    cookie.SameSite.ToString()));
+            }
+
+            return (IReadOnlyList<BrowserCookieEntry>)entries;
+        }, cancellationToken);
+
+    private static string ResolveCookieUrl(string? url, BrowserWorkspaceTabViewModel tab, CoreWebView2 webView)
+    {
+        var candidate = url;
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            candidate = webView.Source?.AbsoluteUri ?? tab.CurrentUrl;
+        }
+
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            throw new InvalidOperationException(
+                "No URL available to read cookies for. Pass url or navigate to a page first.");
+        }
+
+        candidate = candidate.Trim();
+        if (!candidate.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            && !candidate.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = "https://" + candidate;
+        }
+
+        if (!Uri.TryCreate(candidate, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException(
+                $"A valid http(s) URL is required to read cookies (got: {url}).");
+        }
+
+        return uri.AbsoluteUri;
+    }
+
     private BrowserWorkspaceTabViewModel EnsureBrowserTabCore()
     {
         var existing = ResolveTargetTab();

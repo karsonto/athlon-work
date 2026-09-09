@@ -23,6 +23,7 @@ public sealed class BrowserToolsPromptContributor(IBrowserWorkspaceState browser
             builder.AppendLine("6. One action tool at a time; verify after each action before the next step.");
             builder.AppendLine("7. For API or page errors: browser_network_list → browser_network_get (one requestId at a time); use browser_console_read for JS errors.");
             builder.AppendLine("8. UI interaction uses browser_aria_*; network and console analysis uses browser_network_* and browser_console_read.");
+            builder.AppendLine("9. browser_get_cookies reads the stored cookies for the current site (approval required); omit url to use the open page, or pass an http(s) URL.");
             return;
         }
 

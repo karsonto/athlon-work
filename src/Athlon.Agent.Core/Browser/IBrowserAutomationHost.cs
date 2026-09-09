@@ -37,4 +37,12 @@ public interface IBrowserAutomationHost
     Task<BrowserConsoleReadResult> ReadConsoleAsync(
         int limit,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reads the cookies the browser stores for the given URL (or the active tab's
+    /// URL when null). The URL may be an absolute http(s) URL or a bare host name.
+    /// </summary>
+    Task<IReadOnlyList<BrowserCookieEntry>> GetCookiesAsync(
+        string? url,
+        CancellationToken cancellationToken = default);
 }

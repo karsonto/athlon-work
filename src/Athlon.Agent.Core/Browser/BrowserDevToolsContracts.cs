@@ -37,3 +37,14 @@ public sealed record BrowserNetworkListResult(
 public sealed record BrowserConsoleReadResult(
     IReadOnlyList<BrowserConsoleEntry> Entries,
     int TotalBuffered);
+
+public sealed record BrowserCookieEntry(
+    string Name,
+    string Value,
+    string? Domain,
+    string? Path,
+    bool IsSession,
+    string? ExpiresUtc,
+    bool HttpOnly,
+    bool Secure,
+    string SameSite);

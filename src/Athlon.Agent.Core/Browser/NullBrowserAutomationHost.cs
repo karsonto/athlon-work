@@ -38,4 +38,9 @@ public sealed class NullBrowserAutomationHost : IBrowserAutomationHost
         int limit,
         CancellationToken cancellationToken = default) =>
         Task.FromException<BrowserConsoleReadResult>(new InvalidOperationException("Browser automation host is not available."));
+
+    public Task<IReadOnlyList<BrowserCookieEntry>> GetCookiesAsync(
+        string? url,
+        CancellationToken cancellationToken = default) =>
+        Task.FromException<IReadOnlyList<BrowserCookieEntry>>(new InvalidOperationException("Browser automation host is not available."));
 }
