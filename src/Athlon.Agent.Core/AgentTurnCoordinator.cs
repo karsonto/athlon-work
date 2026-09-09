@@ -43,7 +43,7 @@ internal sealed class AgentTurnCoordinator(
         string? runtimeContext,
         CancellationToken cancellationToken)
     {
-        var initialAttemptId = Guid.NewGuid().ToString("N");
+        var initialAttemptId = IdGen.NewId();
         try
         {
             var allowToolCalls = ScheduleTurnScope.Current?.AllowToolCalls ?? true;
@@ -219,7 +219,7 @@ internal sealed class AgentTurnCoordinator(
                     environmentPrompt,
                     runtimeContext,
                     middleCutResult.EstimatedSavingsTokens,
-                    Guid.NewGuid().ToString("N"),
+                    IdGen.NewId(),
                     ParentAttemptId: initialAttemptId,
                     cancellationToken).ConfigureAwait(false);
                 return (middleCutSession, middleCutResponse);
@@ -228,7 +228,7 @@ internal sealed class AgentTurnCoordinator(
             var request = new AgentModelRequest(retryResult.Messages, tools, AllowToolCalls: allowToolCalls);
             var response = await CompleteRecordedAsync(
                 session, callbacks, streamAdapter, assistantMessageId, request, environmentPrompt,
-                runtimeContext, retryResult.EstimatedSavingsTokens, Guid.NewGuid().ToString("N"),
+                runtimeContext, retryResult.EstimatedSavingsTokens, IdGen.NewId(),
                 ParentAttemptId: initialAttemptId, cancellationToken).ConfigureAwait(false);
             return (session, response);
         }

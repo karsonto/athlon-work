@@ -34,7 +34,7 @@ public sealed class KnowledgeIndexerService(
         }
 
         await store.InitializeAsync(cancellationToken).ConfigureAwait(false);
-        var documentId = Guid.NewGuid().ToString("N");
+        var documentId = IdGen.NewId();
         var fileName = Path.GetFileName(sourcePath);
         Report(progress, "准备", $"准备导入 {fileName}", 0, 1, 0);
         var safeFileName = $"{documentId}-{FileNameSanitizer.Sanitize(fileName)}";

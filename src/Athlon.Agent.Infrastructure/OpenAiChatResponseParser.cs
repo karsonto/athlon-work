@@ -240,7 +240,7 @@ internal static class OpenAiChatResponseParser
                 var state = item.Value;
                 var args = state.Arguments.Length == 0 ? "{}" : state.Arguments.ToString();
                 var call = CreateToolCall(
-                    string.IsNullOrWhiteSpace(state.Id) ? Guid.NewGuid().ToString("N") : state.Id,
+                    IdGen.EnsureId(state.Id),
                     state.Name ?? string.Empty,
                     args,
                     idleTimedOut);
@@ -345,7 +345,7 @@ internal static class OpenAiChatResponseParser
             foreach (var call in callsElement.EnumerateArray())
             {
                 var function = call.GetProperty("function");
-                var id = call.GetProperty("id").GetString() ?? Guid.NewGuid().ToString("N");
+                var id = call.GetProperty("id").GetString() ?? IdGen.NewId();
                 var name = function.GetProperty("name").GetString() ?? string.Empty;
                 var argumentsJson = function.TryGetProperty("arguments", out var argumentsElement)
                     ? argumentsElement.ValueKind == JsonValueKind.String

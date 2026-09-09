@@ -13,11 +13,6 @@ namespace Athlon.Agent.App.Services;
 /// <summary>将 <see cref="AgentStreamEvent"/> 与历史消息序列化为 AG-UI 兼容 JSON，供 WebChatView 的 handleEvent 消费。</summary>
 internal static class ChatEventSerializer
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    };
     private static readonly object ReplayCacheLock = new();
     private static readonly Dictionary<string, IReadOnlyList<string>> ReplayEventsCache = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, IReadOnlyList<ReplayTurnSegment>> ReplaySegmentsCache = new(StringComparer.Ordinal);
@@ -436,7 +431,7 @@ internal static class ChatEventSerializer
         {
             command = "historyAvailability",
             hasOlderMessages
-        }, JsonOptions);
+        }, AppJson.Options);
 
     public static IReadOnlyList<string> BuildReplayEvents(
         IReadOnlyList<ChatMessageViewModel> messages,
@@ -931,7 +926,7 @@ internal static class ChatEventSerializer
 
     private static string SerializeAgui(string type, object payload)
     {
-        var json = JsonSerializer.SerializeToElement(payload, JsonOptions);
+        var json = JsonSerializer.SerializeToElement(payload, AppJson.Options);
         var buffer = new MemoryStream();
         using (var writer = new Utf8JsonWriter(buffer))
         {

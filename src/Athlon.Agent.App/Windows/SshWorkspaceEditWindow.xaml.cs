@@ -183,7 +183,7 @@ public partial class SshWorkspaceEditWindow : Window
 
         if (string.IsNullOrWhiteSpace(workspace.Id))
         {
-            workspace.Id = Guid.NewGuid().ToString("N");
+            workspace.Id = IdGen.NewId();
         }
 
         workspace.Name = name;

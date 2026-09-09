@@ -39,7 +39,7 @@ public sealed class SessionCompactionService(
         var environmentPrompt = frozen.Text;
         var runContext = AgentRunContext.CreateRoot(
             session,
-            Guid.NewGuid().ToString("N"),
+            IdGen.NewId(),
             toolRouter,
             promptOrchestrator,
             ResolveIgnorePatterns(session),

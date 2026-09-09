@@ -29,7 +29,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
     }
 
     public Task EnsureBrowserTabAsync(CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(() =>
+        UiDispatcherHelper.RunAsync(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             _ = EnsureBrowserTabCore();
@@ -40,7 +40,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         BrowserNavigateAction action,
         string? url = null,
         CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(async () =>
+        UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             var tab = EnsureBrowserTabCore();
@@ -79,7 +79,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         }, cancellationToken);
 
     public Task<BrowserPageInfo> GetPageInfoAsync(CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(async () =>
+        UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             var tab = EnsureBrowserTabCore();
@@ -93,7 +93,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         string operation,
         string? argsJson = null,
         CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(async () =>
+        UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(operation))
@@ -132,7 +132,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         int limit,
         string? urlContains,
         CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(async () =>
+        UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             var session = await ResolveDevToolsSessionAsync(cancellationToken).ConfigureAwait(true);
@@ -142,7 +142,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
     public Task<BrowserNetworkEntryDetail> GetNetworkEntryAsync(
         string requestId,
         CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(async () =>
+        UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(requestId))
@@ -157,7 +157,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
     public Task<BrowserConsoleReadResult> ReadConsoleAsync(
         int limit,
         CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(async () =>
+        UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             var session = await ResolveDevToolsSessionAsync(cancellationToken).ConfigureAwait(true);
@@ -167,7 +167,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
     public Task<IReadOnlyList<BrowserCookieEntry>> GetCookiesAsync(
         string? url,
         CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(async () =>
+        UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             var tab = EnsureBrowserTabCore();
@@ -405,37 +405,6 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
                 """{"ok":false,"error":"Empty script result"}""",
             _ => JsonElementFormatter.FormatForDisplay(value, indented: true)
         };
-    }
-
-    private static async Task InvokeOnUiAsync(Func<Task> action, CancellationToken cancellationToken)
-    {
-        var dispatcher = Application.Current?.Dispatcher
-            ?? throw new InvalidOperationException("WPF dispatcher is not available.");
-
-        if (dispatcher.CheckAccess())
-        {
-            await action().ConfigureAwait(true);
-            return;
-        }
-
-        var op = dispatcher.InvokeAsync(action, DispatcherPriority.Normal, cancellationToken);
-        await op.Task.ConfigureAwait(false);
-        await op.Result.ConfigureAwait(false);
-    }
-
-    private static async Task<T> InvokeOnUiAsync<T>(Func<Task<T>> action, CancellationToken cancellationToken)
-    {
-        var dispatcher = Application.Current?.Dispatcher
-            ?? throw new InvalidOperationException("WPF dispatcher is not available.");
-
-        if (dispatcher.CheckAccess())
-        {
-            return await action().ConfigureAwait(true);
-        }
-
-        var op = dispatcher.InvokeAsync(action, DispatcherPriority.Normal, cancellationToken);
-        await op.Task.ConfigureAwait(false);
-        return await op.Result.ConfigureAwait(false);
     }
 
     internal static string? TryLoadAriaHostScript()

@@ -2466,7 +2466,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 return null;
             }
 
-            var remote = relativeOrFullPath.Replace('\\', '/').Trim();
+            var remote = PathUtil.ToForwardSlashes(relativeOrFullPath);
             return remote.StartsWith('/')
                 ? RemotePathNormalizer.Collapse(remote)
                 : RemotePathNormalizer.Combine(_session.ActiveWorkspace, remote);

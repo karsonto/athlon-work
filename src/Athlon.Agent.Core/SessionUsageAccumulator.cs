@@ -78,7 +78,7 @@ public sealed class SessionUsageAccumulator : ISessionUsageAccumulator
         _snapshots.GetValueOrDefault(sessionId) ?? SessionUsageSnapshot.Empty;
 
     public SessionUsageSnapshot Record(string sessionId, ModelUsage usage, int contextSavingsTokens = 0)
-        => RecordCall(sessionId, Guid.NewGuid().ToString("N"), ModelCallPurpose.Chat, usage, contextSavingsTokens);
+        => RecordCall(sessionId, IdGen.NewId(), ModelCallPurpose.Chat, usage, contextSavingsTokens);
 
     public SessionUsageSnapshot RecordCall(
         string sessionId,
@@ -112,7 +112,7 @@ public sealed class SessionUsageAccumulator : ISessionUsageAccumulator
 
         return RecordCall(
             parentSessionId,
-            Guid.NewGuid().ToString("N"),
+            IdGen.NewId(),
             ModelCallPurpose.SubAgent,
             usage,
             hygieneSavingsTokens,

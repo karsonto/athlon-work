@@ -126,7 +126,7 @@ public sealed class ConversationCompactor(
             out var summaryInputCharsAfter,
             out var hygieneSavingsEstimate);
         string summary;
-        var summaryAttemptId = Guid.NewGuid().ToString("N");
+        var summaryAttemptId = IdGen.NewId();
         var summaryStopwatch = Stopwatch.StartNew();
         try
         {
@@ -271,7 +271,7 @@ public sealed class ConversationCompactor(
 
         await storage.SaveContextSummaryAsync(
             new ContextSummary(
-                Guid.NewGuid().ToString("N"),
+                IdGen.NewId(),
                 session.Id,
                 summary,
                 originalCount,
@@ -351,7 +351,7 @@ public sealed class ConversationCompactor(
             out _);
 
         string summary;
-        var summaryAttemptId = Guid.NewGuid().ToString("N");
+        var summaryAttemptId = IdGen.NewId();
         var summaryStopwatch = Stopwatch.StartNew();
         try
         {

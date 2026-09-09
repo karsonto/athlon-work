@@ -13,12 +13,6 @@ namespace Athlon.Agent.App.ViewModels;
 
 public sealed partial class SkillHubViewModel : ObservableObject
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
     private readonly ISkillHubClient _client;
     private readonly SkillPackageInstaller _installer;
     private readonly IAgentSkillCatalog _catalog;
@@ -196,7 +190,7 @@ public sealed partial class SkillHubViewModel : ObservableObject
             installed = installedKeys.ToList(),
             emptyMessage = _localization["SkillHub_Empty"]
         };
-        CatalogJsonReady?.Invoke(this, JsonSerializer.Serialize(payload, JsonOptions));
+        CatalogJsonReady?.Invoke(this, JsonSerializer.Serialize(payload, AppJson.Options));
     }
 
     private void EmitCatalogError(string error)
@@ -208,7 +202,7 @@ public sealed partial class SkillHubViewModel : ObservableObject
             installed = Array.Empty<string>(),
             error
         };
-        CatalogJsonReady?.Invoke(this, JsonSerializer.Serialize(payload, JsonOptions));
+        CatalogJsonReady?.Invoke(this, JsonSerializer.Serialize(payload, AppJson.Options));
     }
 
     private void EmitInstallResult(
@@ -227,7 +221,7 @@ public sealed partial class SkillHubViewModel : ObservableObject
             englishName,
             name
         };
-        CatalogJsonReady?.Invoke(this, JsonSerializer.Serialize(payload, JsonOptions));
+        CatalogJsonReady?.Invoke(this, JsonSerializer.Serialize(payload, AppJson.Options));
     }
 
     /// <summary>

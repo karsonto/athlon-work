@@ -96,7 +96,7 @@ public sealed class SystemPromptOrchestrator(
                 Name = match?.Name
                     ?? (kind == WorkspaceKind.Ssh
                         ? RemotePathNormalizer.GetFileName(rootPath)
-                        : Path.GetFileName(rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))),
+                        : PathUtil.DirectoryName(rootPath)),
                 Kind = WorkspaceKinds.ToSettingsValue(kind),
                 RootPath = rootPath,
                 IgnorePatterns = WorkspaceIgnoreResolver.Resolve(

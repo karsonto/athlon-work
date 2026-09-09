@@ -93,7 +93,7 @@ public sealed class AgentRuntime(
         {
             var ignorePatterns = ResolveIgnorePatterns(session);
             var workspaceKind = WorkspaceSessionResolver.ResolveKind(session, settings);
-            var runId = Guid.NewGuid().ToString("N");
+            var runId = IdGen.NewId();
             runContext = AgentRunContext.CreateRoot(
                 session,
                 runId,
@@ -239,7 +239,7 @@ public sealed class AgentRuntime(
                     runtimeContextState);
                 var runtimeContextForRequest = runtimeContextState.LastSelectedContext;
 
-                var assistantMessageId = Guid.NewGuid().ToString("N");
+                var assistantMessageId = IdGen.NewId();
                 var (updatedSession, response) = await TurnCoordinator.CompleteWithOverflowRetryAsync(
                     session,
                     callbacks,
@@ -423,10 +423,10 @@ public sealed class AgentRuntime(
         var invocation = new AgentTurnInvocation
         {
             RunContext = runContextAccessor.Current
-                ?? AgentRunContext.CreateRoot(session, Guid.NewGuid().ToString("N"), toolRouter, systemPromptOrchestrator, ResolveIgnorePatterns(session)),
+                ?? AgentRunContext.CreateRoot(session, IdGen.NewId(), toolRouter, systemPromptOrchestrator, ResolveIgnorePatterns(session)),
             Session = session,
             Callbacks = callbacks,
-            StreamAdapter = new AgentStreamAdapter(session.Id, Guid.NewGuid().ToString("N")),
+            StreamAdapter = new AgentStreamAdapter(session.Id, IdGen.NewId()),
             EnvironmentPrompt = environmentPrompt,
             RuntimeContext = runtimeContext,
             Tools = tools

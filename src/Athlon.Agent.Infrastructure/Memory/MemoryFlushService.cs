@@ -61,7 +61,7 @@ IMPORTANT:
 
         AgentModelResponse response;
         var sessionId = activeSessionContext.SessionId ?? "memory-flush";
-        var attemptId = Guid.NewGuid().ToString("N");
+        var attemptId = IdGen.NewId();
         var stopwatch = Stopwatch.StartNew();
         try
         {

@@ -286,8 +286,7 @@ public static class WorkspacePromptLoader
 
     private static bool IsUnderRoot(string fullPath, string rootPath)
     {
-        var normalizedRoot = Path.GetFullPath(rootPath)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+        var normalizedRoot = PathUtil.TrimTrailingSeparators(Path.GetFullPath(rootPath))
             + Path.DirectorySeparatorChar;
         var normalizedPath = Path.GetFullPath(fullPath);
         return normalizedPath.Equals(normalizedRoot.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase)

@@ -67,7 +67,7 @@ public sealed class KnowledgeDocumentExtractor(
         var batchSize = Math.Clamp(ocr.BatchSize <= 0 ? 3 : ocr.BatchSize, 1, 8);
         var pdfBytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
         var baseName = Path.GetFileNameWithoutExtension(path);
-        var tempDirectory = Path.Combine(Path.GetTempPath(), "athlon-knowledge-ocr", Guid.NewGuid().ToString("N"));
+        var tempDirectory = Path.Combine(Path.GetTempPath(), "athlon-knowledge-ocr", IdGen.NewId());
         Directory.CreateDirectory(tempDirectory);
 
         var pageWorks = new List<PageWork>();

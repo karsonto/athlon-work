@@ -77,7 +77,7 @@ public sealed record AgentRunContext
         new()
         {
             SessionId = subSessionId,
-            RunId = Guid.NewGuid().ToString("N"),
+            RunId = IdGen.NewId(),
             ParentSessionId = Kind == AgentRunKind.SubAgent && ParentSessionId is not null
                 ? ParentSessionId
                 : SessionId,

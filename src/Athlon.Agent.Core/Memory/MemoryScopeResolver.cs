@@ -74,7 +74,7 @@ public static class MemoryScopeResolver
 
     public static string HashPath(string rootPath)
     {
-        var normalized = rootPath.Replace('\\', '/').Trim().TrimEnd('/').ToLowerInvariant();
+        var normalized = PathUtil.ToForwardSlashes(rootPath).TrimEnd('/').ToLowerInvariant();
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(normalized));
         return Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();
     }

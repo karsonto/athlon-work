@@ -63,7 +63,7 @@ public sealed class RuntimeDiagnosticEventSink : IRuntimeDiagnosticEventSink, ID
 
         if (string.IsNullOrWhiteSpace(evt.eventId))
         {
-            evt = evt with { eventId = Guid.NewGuid().ToString("N") };
+            evt = evt with { eventId = IdGen.NewId() };
         }
 
         if (evt.ts == default)

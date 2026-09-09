@@ -39,7 +39,7 @@ public sealed record ChatMessage(
         string? reasoningContent = null,
         IReadOnlyList<ImageAttachment>? imageAttachments = null) =>
         CreateWithId(
-            Guid.NewGuid().ToString("N"),
+            IdGen.NewId(),
             role,
             content,
             parentId,
@@ -86,7 +86,7 @@ public sealed record AgentSession(
 
     public static AgentSession Create(string title = "New chat") =>
         new(
-            Guid.NewGuid().ToString("N"),
+            IdGen.NewId(),
             title,
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow,

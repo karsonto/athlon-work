@@ -108,7 +108,7 @@ public static class AgentRecordGrouping
 
         var name = isRemote
             ? RemotePathNormalizer.GetFileName(normalized)
-            : Path.GetFileName(normalized.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            : PathUtil.DirectoryName(normalized);
         return string.IsNullOrWhiteSpace(name) ? normalized : name;
     }
 
@@ -126,8 +126,7 @@ public static class AgentRecordGrouping
 
         try
         {
-            return Path.GetFullPath(activeWorkspace)
-                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return PathUtil.TrimTrailingSeparators(Path.GetFullPath(activeWorkspace));
         }
         catch (Exception)
         {

@@ -123,7 +123,7 @@ public sealed class WorkspaceSessionBridge : IDisposable
     }
 
     private static string NormalizeDirectoryPath(string path) =>
-        Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        PathUtil.TrimTrailingSeparators(Path.GetFullPath(path));
 
     private void ScheduleWatcherDebounce(Action<string> onExternalFileChange)
     {

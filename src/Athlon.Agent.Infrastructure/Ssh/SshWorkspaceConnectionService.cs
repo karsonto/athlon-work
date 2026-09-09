@@ -59,7 +59,7 @@ public sealed class SshWorkspaceConnectionService(
     {
         var probe = new SshWorkspaceClient(logger)
         {
-            DefaultSessionId = "ssh-probe:" + Guid.NewGuid().ToString("N")
+            DefaultSessionId = "ssh-probe:" + IdGen.NewId()
         };
         return probe;
     }

@@ -48,7 +48,7 @@ public sealed class SubAgentRunExecutor(
         var parentRunContext = runContextAccessor.Current
             ?? AgentRunContext.CreateRoot(
                 new AgentSession(parentSessionId, string.Empty, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, workspaceRoot, null, settings.Model.ModelName, []),
-                Guid.NewGuid().ToString("N"),
+                IdGen.NewId(),
                 childToolRouter.Value,
                 subAgentPromptOrchestrator,
                 ignorePatterns,

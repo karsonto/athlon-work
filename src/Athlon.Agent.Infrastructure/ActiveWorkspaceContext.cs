@@ -49,7 +49,7 @@ public sealed class ActiveWorkspaceContext : IActiveWorkspaceContext
         DisplayName = displayName
             ?? (kind == WorkspaceKind.Ssh
                 ? RemotePathNormalizer.GetFileName(RootPath)
-                : Path.GetFileName(RootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)));
+                : PathUtil.DirectoryName(RootPath));
         IgnorePatterns = ignorePatterns is { Count: > 0 }
             ? ignorePatterns
             : WorkspaceIgnoreDefaults.BuiltIn;

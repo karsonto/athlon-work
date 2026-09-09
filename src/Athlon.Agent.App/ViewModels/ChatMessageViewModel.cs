@@ -324,7 +324,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public static ChatMessageViewModel CreateStreamingTool(int streamIndex) => new(streamIndex);
 
     public static ChatMessageViewModel CreateStreamingAssistant(string? messageId = null) =>
-        new(ChatMessage.CreateWithId(messageId ?? Guid.NewGuid().ToString("N"), MessageRole.Assistant, string.Empty))
+        new(ChatMessage.CreateWithId(messageId ?? IdGen.NewId(), MessageRole.Assistant, string.Empty))
         {
             IsStreaming = true
         };

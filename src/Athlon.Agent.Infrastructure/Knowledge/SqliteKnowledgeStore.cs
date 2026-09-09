@@ -111,7 +111,7 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
     public async Task<KnowledgeModule> SaveModuleAsync(KnowledgeModule module, CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
-        module.Id = string.IsNullOrWhiteSpace(module.Id) ? Guid.NewGuid().ToString("N") : module.Id;
+        module.Id = IdGen.EnsureId(module.Id);
         module.CreatedAt = module.CreatedAt == default ? DateTimeOffset.UtcNow : module.CreatedAt;
         module.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -181,7 +181,7 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
     public async Task<KnowledgeDocument> SaveDocumentAsync(KnowledgeDocument document, CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
-        document.Id = string.IsNullOrWhiteSpace(document.Id) ? Guid.NewGuid().ToString("N") : document.Id;
+        document.Id = IdGen.EnsureId(document.Id);
         document.CreatedAt = document.CreatedAt == default ? DateTimeOffset.UtcNow : document.CreatedAt;
         document.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -247,7 +247,7 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
                     ($id, $documentId, $moduleId, $chunkIndex, $titlePath, $pageNumber, $content,
                      $tokenCount, $embeddingModel, $embeddingDimension, $embeddingBlob, $createdAt);
                 """;
-            Add(insert, "$id", string.IsNullOrWhiteSpace(chunk.Id) ? Guid.NewGuid().ToString("N") : chunk.Id);
+            Add(insert, "$id", IdGen.EnsureId(chunk.Id));
             Add(insert, "$documentId", documentId);
             Add(insert, "$moduleId", chunk.ModuleId);
             Add(insert, "$chunkIndex", chunk.ChunkIndex);
@@ -271,7 +271,7 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
         CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
-        document.Id = string.IsNullOrWhiteSpace(document.Id) ? Guid.NewGuid().ToString("N") : document.Id;
+        document.Id = IdGen.EnsureId(document.Id);
         document.CreatedAt = document.CreatedAt == default ? DateTimeOffset.UtcNow : document.CreatedAt;
         document.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -324,7 +324,7 @@ public sealed class SqliteKnowledgeStore(IAppPathProvider paths, AppSettings set
                     ($id, $documentId, $moduleId, $chunkIndex, $titlePath, $pageNumber, $content,
                      $tokenCount, $embeddingModel, $embeddingDimension, $embeddingBlob, $createdAt);
                 """;
-            Add(insert, "$id", string.IsNullOrWhiteSpace(chunk.Id) ? Guid.NewGuid().ToString("N") : chunk.Id);
+            Add(insert, "$id", IdGen.EnsureId(chunk.Id));
             Add(insert, "$documentId", document.Id);
             Add(insert, "$moduleId", chunk.ModuleId);
             Add(insert, "$chunkIndex", chunk.ChunkIndex);

@@ -230,7 +230,7 @@ public sealed class SkillSettings
 }
 public sealed class WorkspaceSettings
 {
-    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Id { get; set; } = IdGen.NewId();
 
     public string Name { get; set; } = string.Empty;
 

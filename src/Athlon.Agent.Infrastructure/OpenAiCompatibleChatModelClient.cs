@@ -65,7 +65,7 @@ public sealed class OpenAiCompatibleChatModelClient(
         CancellationToken cancellationToken)
     {
         // Per-request id shared with the gateway (X-Request-Id) for end-to-end correlation.
-        var requestId = Guid.NewGuid().ToString("N");
+        var requestId = IdGen.NewId();
         var endpoint = settings.Model.Endpoint.TrimEnd('/') + "/chat/completions";
         var purpose = OpenAiChatRequestFactory.BuildPurpose(request);
         var payload = OpenAiChatRequestFactory.BuildPayload(request, settings, stream);

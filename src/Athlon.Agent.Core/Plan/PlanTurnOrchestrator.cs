@@ -55,7 +55,7 @@ public sealed class PlanTurnOrchestrator(
             return await FinalizeConsultingAsync(session, callbacks, cancellationToken).ConfigureAwait(false);
         }
 
-        var runId = Guid.NewGuid().ToString("N");
+        var runId = IdGen.NewId();
         var planPath = runStore.GetPlanMarkdownPath(session.Id);
         var run = new PlanRun
         {

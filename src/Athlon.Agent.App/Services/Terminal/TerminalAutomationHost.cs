@@ -20,7 +20,7 @@ public sealed class TerminalAutomationHost : ITerminalAutomationHost
     }
 
     public Task EnsureTerminalTabAsync(CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(async () =>
+        UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             var tab = EnsureTerminalTabCore();
@@ -28,7 +28,7 @@ public sealed class TerminalAutomationHost : ITerminalAutomationHost
         }, cancellationToken);
 
     public Task<TerminalSessionInfo> GetSessionInfoAsync(CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(() =>
+        UiDispatcherHelper.RunAsync(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             var tab = ResolveTargetTab() ?? EnsureTerminalTabCore();
@@ -36,7 +36,7 @@ public sealed class TerminalAutomationHost : ITerminalAutomationHost
         }, cancellationToken);
 
     public Task SendInputAsync(string text, bool appendNewline = true, CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(async () =>
+        UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrEmpty(text) && !appendNewline)
@@ -50,7 +50,7 @@ public sealed class TerminalAutomationHost : ITerminalAutomationHost
         }, cancellationToken);
 
     public Task<TerminalOutputSnapshot> ReadOutputAsync(int maxChars = 8000, CancellationToken cancellationToken = default) =>
-        InvokeOnUiAsync(async () =>
+        UiDispatcherHelper.RunAsync(async () =>
         {
             cancellationToken.ThrowIfCancellationRequested();
             var tab = ResolveTargetTab() ?? EnsureTerminalTabCore();
@@ -111,36 +111,5 @@ public sealed class TerminalAutomationHost : ITerminalAutomationHost
             tab.WorkingDirectory,
             IsAttached: attached,
             ProcessAlive: alive);
-    }
-
-    private static async Task InvokeOnUiAsync(Func<Task> action, CancellationToken cancellationToken)
-    {
-        var dispatcher = Application.Current?.Dispatcher
-            ?? throw new InvalidOperationException("WPF dispatcher is not available.");
-
-        if (dispatcher.CheckAccess())
-        {
-            await action().ConfigureAwait(true);
-            return;
-        }
-
-        var op = dispatcher.InvokeAsync(action, DispatcherPriority.Normal, cancellationToken);
-        await op.Task.ConfigureAwait(false);
-        await op.Result.ConfigureAwait(false);
-    }
-
-    private static async Task<T> InvokeOnUiAsync<T>(Func<Task<T>> action, CancellationToken cancellationToken)
-    {
-        var dispatcher = Application.Current?.Dispatcher
-            ?? throw new InvalidOperationException("WPF dispatcher is not available.");
-
-        if (dispatcher.CheckAccess())
-        {
-            return await action().ConfigureAwait(true);
-        }
-
-        var op = dispatcher.InvokeAsync(action, DispatcherPriority.Normal, cancellationToken);
-        await op.Task.ConfigureAwait(false);
-        return await op.Result.ConfigureAwait(false);
     }
 }

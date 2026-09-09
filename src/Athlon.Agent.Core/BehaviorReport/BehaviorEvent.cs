@@ -2,7 +2,7 @@ namespace Athlon.Agent.Core.BehaviorReport;
 
 public sealed class BehaviorEvent
 {
-    public string Id { get; init; } = Guid.NewGuid().ToString("N");
+    public string Id { get; init; } = IdGen.NewId();
 
     public DateTimeOffset Timestamp { get; init; } = AppTimeZone.Now;
 

@@ -26,7 +26,7 @@ public sealed class DebugTurnOrchestrator(
                 .ConfigureAwait(false);
         }
 
-        var runId = Guid.NewGuid().ToString("N");
+        var runId = IdGen.NewId();
         var run = new DebugRun
         {
             Id = runId,

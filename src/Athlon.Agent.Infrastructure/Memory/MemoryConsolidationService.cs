@@ -82,7 +82,7 @@ Output the COMPLETE new MEMORY.md content (not just a diff). Use markdown.
 
         AgentModelResponse response;
         var sessionId = activeSessionContext.SessionId ?? "memory-consolidation";
-        var attemptId = Guid.NewGuid().ToString("N");
+        var attemptId = IdGen.NewId();
         var stopwatch = Stopwatch.StartNew();
         try
         {

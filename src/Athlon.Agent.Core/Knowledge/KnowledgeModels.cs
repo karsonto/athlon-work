@@ -12,7 +12,7 @@ public enum KnowledgeDocumentStatus
 
 public sealed class KnowledgeModule
 {
-    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Id { get; set; } = IdGen.NewId();
     public string Name { get; set; } = "";
     public string Description { get; set; } = "";
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -21,7 +21,7 @@ public sealed class KnowledgeModule
 
 public sealed class KnowledgeDocument
 {
-    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Id { get; set; } = IdGen.NewId();
     public string ModuleId { get; set; } = "";
     public string FileName { get; set; } = "";
     public string FileType { get; set; } = "";
@@ -37,7 +37,7 @@ public sealed class KnowledgeDocument
 
 public sealed class KnowledgeChunk
 {
-    public string Id { get; set; } = Guid.NewGuid().ToString("N");
+    public string Id { get; set; } = IdGen.NewId();
     public string DocumentId { get; set; } = "";
     public string ModuleId { get; set; } = "";
     public int ChunkIndex { get; set; }

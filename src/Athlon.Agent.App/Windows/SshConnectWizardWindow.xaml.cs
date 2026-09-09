@@ -44,7 +44,7 @@ public partial class SshConnectWizardWindow : Window
         _loc = localization;
         _workspace = existing ?? new WorkspaceSettings
         {
-            Id = Guid.NewGuid().ToString("N"),
+            Id = IdGen.NewId(),
             Kind = WorkspaceKinds.Ssh,
             Ssh = new SshWorkspaceSettings()
         };
@@ -184,7 +184,7 @@ public partial class SshConnectWizardWindow : Window
 
         if (string.IsNullOrWhiteSpace(_workspace.Id))
         {
-            _workspace.Id = Guid.NewGuid().ToString("N");
+            _workspace.Id = IdGen.NewId();
         }
 
         NextButton.IsEnabled = false;
@@ -540,7 +540,7 @@ public partial class SshConnectWizardWindow : Window
 
         if (string.IsNullOrWhiteSpace(_workspace.Id))
         {
-            _workspace.Id = Guid.NewGuid().ToString("N");
+            _workspace.Id = IdGen.NewId();
         }
 
         _workspace.Name = name;

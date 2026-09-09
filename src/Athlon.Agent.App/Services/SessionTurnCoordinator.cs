@@ -130,7 +130,7 @@ public sealed class SessionTurnCoordinator
         ImageAttachment[] imageAttachments,
         SessionTurnUiController ui)
     {
-        var queueId = Guid.NewGuid().ToString("N");
+        var queueId = IdGen.NewId();
         _queuedTurnPresenter.Enqueue(sessionId, queueId, input, imageAttachments, ui);
     }
 

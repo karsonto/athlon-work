@@ -16,7 +16,7 @@ public static class ToolPathNormalizer
             return path;
         }
 
-        return path.Replace('\\', '/').Trim();
+        return PathUtil.ToForwardSlashes(path);
     }
 
     public static bool TryNormalizeForFileOperation(string? path, out string normalized, out string errorMessage)
@@ -68,8 +68,7 @@ public static class ToolPathNormalizer
             return path;
         }
 
-        var normalizedRoot = Path.GetFullPath(workspaceRoot)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var normalizedRoot = PathUtil.TrimTrailingSeparators(Path.GetFullPath(workspaceRoot));
         var rootForward = normalizedRoot.Replace('\\', '/');
         var pathForFullPath = path.Replace('/', Path.DirectorySeparatorChar);
 

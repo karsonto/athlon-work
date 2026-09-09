@@ -105,7 +105,7 @@ public sealed class AskUserTool(
     {
         question = new UserQuestion
         {
-            RequestId = Guid.NewGuid().ToString("N"),
+            RequestId = IdGen.NewId(),
             AllowFreeText = !invocation.Arguments.TryGetBoolean("allow_free_text", out var allowFree)
                 || allowFree
         };

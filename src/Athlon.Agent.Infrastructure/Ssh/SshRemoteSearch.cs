@@ -275,7 +275,7 @@ internal static class SshRemoteSearch
 
     private static string NormalizeRelative(string raw)
     {
-        var value = raw.Replace('\\', '/').Trim();
+        var value = PathUtil.ToForwardSlashes(raw);
         if (value.StartsWith("./", StringComparison.Ordinal))
         {
             value = value[2..];

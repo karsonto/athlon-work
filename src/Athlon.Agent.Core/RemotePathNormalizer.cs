@@ -10,7 +10,7 @@ public static class RemotePathNormalizer
             return "/";
         }
 
-        var normalized = root.Replace('\\', '/').Trim();
+        var normalized = PathUtil.ToForwardSlashes(root);
         if (!normalized.StartsWith('/'))
         {
             normalized = "/" + normalized;
@@ -37,7 +37,7 @@ public static class RemotePathNormalizer
     }
 
     public static string ForModel(string path) =>
-        (path ?? string.Empty).Replace('\\', '/').Trim();
+        PathUtil.ToForwardSlashes(path ?? string.Empty);
 
     public static bool IsUnderRoot(string fullPath, string root)
     {

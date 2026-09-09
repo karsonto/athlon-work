@@ -75,7 +75,7 @@ public sealed class SshWorkspaceTransferService(ISshWorkspaceClient sshClient, I
         string remoteParentDirectory,
         CancellationToken cancellationToken = default)
     {
-        var folderName = Path.GetFileName(localDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var folderName = PathUtil.DirectoryName(localDirectory);
         var remoteDirectory = RemotePathNormalizer.Combine(remoteParentDirectory, folderName);
         await sshClient.CreateDirectoryAsync(remoteDirectory, cancellationToken).ConfigureAwait(true);
 

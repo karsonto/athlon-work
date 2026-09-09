@@ -26,6 +26,6 @@ public static class CliPaths
             return full;
         }
 
-        return full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return PathUtil.TrimTrailingSeparators(full);
     }
 }

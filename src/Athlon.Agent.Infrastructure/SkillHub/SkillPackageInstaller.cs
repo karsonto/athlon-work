@@ -37,7 +37,7 @@ public sealed class SkillPackageInstaller(
         }
 
         paths.EnsureCreated();
-        var stagingRoot = Path.Combine(Path.GetTempPath(), "athlon-skill-hub", Guid.NewGuid().ToString("N"));
+        var stagingRoot = Path.Combine(Path.GetTempPath(), "athlon-skill-hub", IdGen.NewId());
         var extractDir = Path.Combine(stagingRoot, "extract");
         var zipPath = Path.Combine(stagingRoot, "package.zip");
         Directory.CreateDirectory(extractDir);
@@ -170,8 +170,8 @@ public sealed class SkillPackageInstaller(
         }
 
         if (!candidate.StartsWith(rootFull, StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(candidate.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            && !string.Equals(PathUtil.TrimTrailingSeparators(candidate),
+                PathUtil.TrimTrailingSeparators(root),
                 StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException($"Zip entry escapes destination: {candidate}");

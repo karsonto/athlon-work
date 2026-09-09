@@ -127,7 +127,7 @@ public sealed partial class KnowledgeChunker(AppSettings settings)
 
             chunks.Add(new KnowledgeChunk
             {
-                Id = Guid.NewGuid().ToString("N"),
+                Id = IdGen.NewId(),
                 DocumentId = documentId,
                 ModuleId = moduleId,
                 ChunkIndex = chunkIndex++,

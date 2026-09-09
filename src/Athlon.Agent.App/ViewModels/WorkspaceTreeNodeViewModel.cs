@@ -234,7 +234,7 @@ public sealed class WorkspaceTreeNodeViewModel
 
     private static WorkspaceTreeNodeViewModel CreateDirectoryNode(string directoryPath)
     {
-        var name = Path.GetFileName(directoryPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        var name = PathUtil.DirectoryName(directoryPath);
         if (string.IsNullOrWhiteSpace(name))
         {
             name = directoryPath;

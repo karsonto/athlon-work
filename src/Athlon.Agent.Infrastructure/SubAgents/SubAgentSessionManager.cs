@@ -70,7 +70,7 @@ public sealed class SubAgentSessionManager(
         }
         else
         {
-            subSessionId = Guid.NewGuid().ToString("N");
+            subSessionId = IdGen.NewId();
             sessionKey = SubAgentSessionKey.Build(parentSessionId, subSessionId);
             sessionFilePath = registry.GetSessionFilePath(parentSessionId, subSessionId);
             spawnRunId = $"run_{Guid.NewGuid():N}";

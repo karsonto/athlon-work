@@ -61,7 +61,7 @@ public sealed class ChatDocumentAttachmentExtractor : IChatDocumentAttachmentExt
         DocumentTextExtraction.EnsureFileSizeWithinLimit(path);
         var fileName = Path.GetFileName(path);
         var extension = Path.GetExtension(path).ToLowerInvariant();
-        var tempDirectory = Path.Combine(Path.GetTempPath(), "athlon-chat-attachments", Guid.NewGuid().ToString("N"));
+        var tempDirectory = Path.Combine(Path.GetTempPath(), "athlon-chat-attachments", IdGen.NewId());
         Directory.CreateDirectory(tempDirectory);
 
         try
