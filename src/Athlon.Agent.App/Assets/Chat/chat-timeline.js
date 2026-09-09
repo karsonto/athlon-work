@@ -257,15 +257,22 @@ function hasActiveSelection() {
 }
 
 function scrollToBottom(force) {
-  if (state.batching || (!force && (!state.autoScrollEnabled || hasActiveSelection()))) return;
+  // Keep the force intention across batches: a later non-force call must not drop it,
+  // and a force call must win past autoScrollEnabled / active selection.
+  if (!force && !state.scrollForcePending && (!state.autoScrollEnabled || hasActiveSelection())) return;
   if (force) state.scrollForcePending = true;
-  if (state.scrollFrame) return;
+  if (state.batching || state.scrollFrame) return;
   state.scrollFrame = requestAnimationFrame(function () {
     state.scrollFrame = 0;
     const shouldForce = state.scrollForcePending;
     state.scrollForcePending = false;
     const scroller = getChatScroller();
-    if (state.batching || !scroller
+    if (state.batching) {
+      // Batch in progress: preserve the force intention for the next endBatch.
+      if (shouldForce) state.scrollForcePending = true;
+      return;
+    }
+    if (!scroller
         || (!shouldForce && (!state.autoScrollEnabled || hasActiveSelection()))) return;
     scroller.scrollTop = scroller.scrollHeight;
   });
@@ -438,7 +445,8 @@ function beginBatch() {
   state.batching = true;
   if (state.scrollFrame) cancelAnimationFrame(state.scrollFrame);
   state.scrollFrame = 0;
-  state.scrollForcePending = false;
+  // Keep state.scrollForcePending so a force-scroll requested before a batch (e.g. user
+  // message submit or session switch) survives into the batch's first endBatch below.
   state.pendingEnhancementRoots = [];
   document.documentElement.classList.add('replaying');
 }
@@ -2004,47 +2012,19 @@ function applyThemeUpdate(highlightHref, tokensB64, syntaxB64) {
   syncThemeSurfaces();
 }
 
-function chatSwitchProbe(location, message, data) {
-  try {
-    post({ type: 'chatSwitchProbe', location: location, message: message, data: data || {} });
-  } catch (_e) { /* ignore */ }
-}
-
-function countTimelineKinds() {
-  var root = document.getElementById('messages');
-  if (!root) return { rows: 0, user: 0, assistant: 0, activity: 0, plan: 0 };
-  return {
-    rows: root.querySelectorAll('.message-row').length,
-    user: root.querySelectorAll('.message-row.user').length,
-    assistant: root.querySelectorAll('.message-row.assistant-row, .message-row.assistant').length,
-    activity: root.querySelectorAll('.turn-activity').length,
-    plan: root.querySelectorAll('.plan-ready-card').length
-  };
-}
-
 function replayEvents(events) {
   beginBatch();
   state.trackReasoningDuration = false;
   resetTimeline();
   var list = Array.isArray(events) ? events : [];
-  var userN = 0;
-  var assistantN = 0;
   for (const raw of list) {
     try {
       const event = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      if (event && event.type === 'USER_MESSAGE') userN++;
-      if (event && (event.type === 'STATIC_ASSISTANT_HTML' || event.type === 'TEXT_MESSAGE_CONTENT')) assistantN++;
       handleEvent(event);
     } catch (e) { console.warn('replayEvents parse failed', e); }
   }
   state.trackReasoningDuration = true;
   endBatch(true);
-  chatSwitchProbe('chat-timeline.js:replayEvents', 'replay-done', {
-    eventCount: list.length,
-    userEvents: userN,
-    assistantEvents: assistantN,
-    dom: countTimelineKinds()
-  });
 }
 
 function appendEvents(events) {
@@ -2065,10 +2045,6 @@ function appendEvents(events) {
   state.trackReasoningDuration = true;
   root.appendChild(fragment);
   endBatch(false);
-  chatSwitchProbe('chat-timeline.js:appendEvents', 'append-done', {
-    eventCount: list.length,
-    dom: countTimelineKinds()
-  });
 }
 
 function setOlderMessagesAvailable(available) {
@@ -2111,13 +2087,6 @@ function prependEvents(events, hasOlderMessages) {
 function handleWebMessage(message) {
   const command = typeof message === 'string' ? JSON.parse(message) : message;
   if (!command || !command.command) return;
-  chatSwitchProbe('chat-timeline.js:handleWebMessage', 'command', {
-    command: command.command,
-    eventCount: Array.isArray(command.events) ? command.events.length : 0,
-    renderGeneration: command.renderGeneration,
-    replayComplete: !!command.replayComplete,
-    domBefore: countTimelineKinds()
-  });
   if (command.command === 'replay' || command.command === 'replaceSurface') {
     replayEvents(Array.isArray(command.events) ? command.events : []);
   } else if (command.command === 'append' || command.command === 'appendEvents') {

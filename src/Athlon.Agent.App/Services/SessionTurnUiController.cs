@@ -457,17 +457,6 @@ public sealed partial class SessionTurnUiController
 
         var chatView = ChatView;
         var activitySource = BuildReplayActivitySource();
-        // #region chat-switch probe
-        ChatSwitchProbe.Log(
-            "SessionTurnUiController.ReloadChatViewAsync",
-            "reload-begin",
-            new
-            {
-                messages = ChatSwitchProbe.SummarizeMessages(Messages),
-                activityCount = activitySource.Count,
-                showToolCalls = _showToolCalls()
-            });
-        // #endregion
         if (!IsDisplayed || !ReferenceEquals(ChatView, chatView))
         {
             return;
@@ -1037,20 +1026,6 @@ public sealed partial class SessionTurnUiController
             FlushBufferedStreamingToUi();
         }
 
-        // #region chat-switch probe
-        ChatSwitchProbe.Log(
-            "SessionTurnUiController.FinishRebuildDisplay",
-            "finish-rebuild",
-            new
-            {
-                viewModels = ChatSwitchProbe.SummarizeMessages(viewModels),
-                messages = ChatSwitchProbe.SummarizeMessages(Messages),
-                activityCount = _activitySourceMessages.Count,
-                preserveActiveTurn,
-                isDisplayed = IsDisplayed
-            });
-        // #endregion
-
         SyncChatView(immediate: true);
         RequestScrollImmediate();
     }
@@ -1510,15 +1485,38 @@ public sealed partial class SessionTurnUiController
             return _activitySourceMessages;
         }
 
-        var firstUserId = Messages.FirstOrDefault(message => message.IsUser)?.MessageId;
-        if (string.IsNullOrWhiteSpace(firstUserId))
+        // Slice from the turn-start (User/Compaction) that owns the FIRST displayed message.
+        //
+        // The display window can begin mid-turn (e.g. it is the tail page and starts with an
+        // assistant/tool message, especially with preserveActiveTurn). Anchoring on the first
+        // *User* in the window would then slice from the window's end and discard the activity
+        // above it, so TURN_ACTIVITY / FILES_CHANGED replay goes missing. Anchoring on the first
+        // displayed message and walking back to its owning turn keeps the replay complete.
+        var firstDisplayedId = Messages
+            .FirstOrDefault(message => !message.IsHiddenPlaceholder)
+            ?.MessageId;
+        if (string.IsNullOrWhiteSpace(firstDisplayedId))
         {
             return _activitySourceMessages;
         }
 
-        var startIndex = _activitySourceMessages.FindIndex(message =>
-            string.Equals(message.Id, firstUserId, StringComparison.Ordinal));
-        if (startIndex <= 0)
+        var firstIndex = _activitySourceMessages.FindIndex(message =>
+            string.Equals(message.Id, firstDisplayedId, StringComparison.Ordinal));
+        if (firstIndex < 0)
+        {
+            // The first displayed message has no activity-source entry; keep the whole source
+            // so its owning turn is not dropped.
+            return _activitySourceMessages;
+        }
+
+        var startIndex = firstIndex;
+        while (startIndex > 0
+            && !ConversationActivitySource.StartsAtTurnBoundary(_activitySourceMessages[startIndex]))
+        {
+            startIndex--;
+        }
+
+        if (startIndex == 0)
         {
             return _activitySourceMessages;
         }
@@ -1713,18 +1711,6 @@ public sealed partial class SessionTurnUiController
         {
             return;
         }
-
-        // #region chat-switch probe
-        ChatSwitchProbe.Log(
-            "SessionTurnUiController.DispatchUserMessageToChatView",
-            "incremental-user",
-            new
-            {
-                messageId = ChatSwitchProbe.ShortId(message.MessageId),
-                messagesCount = Messages.Count,
-                isDisplayed = IsDisplayed
-            });
-        // #endregion
 
         _ = ChatView.DispatchUserMessageAsync(message);
     }

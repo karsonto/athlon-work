@@ -2785,21 +2785,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
 
             var displayMessages = snapshot.DisplayMessages;
-            // #region chat-switch probe
-            ChatSwitchProbe.Log(
-                "MainShellViewModel.LoadSessionInternalAsync",
-                "snapshot-loaded",
-                new
-                {
-                    sessionId = ChatSwitchProbe.ShortId(sessionId),
-                    loadGeneration,
-                    preserveActiveTurn,
-                    display = ChatSwitchProbe.SummarizeChatMessages(displayMessages),
-                    activity = ChatSwitchProbe.SummarizeChatMessages(snapshot.ActivitySource),
-                    sessionMsgCount = snapshot.Session.Messages.Count,
-                    usedTakeLastFallback = false
-                });
-            // #endregion
             if (displayMessages.Count == 0 && snapshot.Session.Messages.Count > 0)
             {
                 await _runtime.ReplaceDisplayAsync(snapshot.Session, snapshot.Session.Messages)
@@ -2808,17 +2793,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 displayMessages = snapshot.Session.Messages
                     .TakeLast(ConversationDisplayLimits.PageSize)
                     .ToArray();
-                // #region chat-switch probe
-                ChatSwitchProbe.Log(
-                    "MainShellViewModel.LoadSessionInternalAsync",
-                    "take-last-fallback",
-                    new
-                    {
-                        sessionId = ChatSwitchProbe.ShortId(sessionId),
-                        loadGeneration,
-                        display = ChatSwitchProbe.SummarizeChatMessages(displayMessages)
-                    });
-                // #endregion
             }
 
             if (displayMessages.Count > 0)
