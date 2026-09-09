@@ -177,16 +177,18 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
             var entries = new List<BrowserCookieEntry>(cookies.Count);
             foreach (var cookie in cookies)
             {
+                // .NET wrapper: Expires is a DateTime; DateTime.MinValue marks a session cookie.
+                var isSession = cookie.Expires == DateTime.MinValue;
                 entries.Add(new BrowserCookieEntry(
                     cookie.Name ?? string.Empty,
                     cookie.Value ?? string.Empty,
                     cookie.Domain,
                     cookie.Path,
-                    cookie.Expires <= 0,
-                    cookie.Expires > 0
-                        ? DateTime.FromFileTimeUtc((long)(cookie.Expires * TimeSpan.TicksPerSecond))
-                            .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
-                        : null,
+                    isSession,
+                    isSession
+                        ? null
+                        : DateTime.SpecifyKind(cookie.Expires, DateTimeKind.Utc)
+                            .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'"),
                     cookie.IsHttpOnly,
                     cookie.IsSecure,
                     cookie.SameSite.ToString()));
@@ -200,7 +202,8 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         var candidate = url;
         if (string.IsNullOrWhiteSpace(candidate))
         {
-            candidate = webView.Source?.AbsoluteUri ?? tab.CurrentUrl;
+            // CoreWebView2.Source is a plain string (unlike a Uri).
+            candidate = string.IsNullOrEmpty(webView.Source) ? tab.CurrentUrl : webView.Source;
         }
 
         if (string.IsNullOrWhiteSpace(candidate))
