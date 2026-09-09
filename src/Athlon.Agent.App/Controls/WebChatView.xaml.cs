@@ -24,6 +24,7 @@ public partial class WebChatView : UserControl
     private Task? _initTask;
     private bool _initialized;
     private bool _documentReady;
+    private TaskCompletionSource<bool> _documentReadyTcs = CreateCompletedDocumentReadyTcs();
     private bool _loggedCanRenderBlock;
     private int _navigationGeneration;
     private int _renderGeneration;
@@ -238,17 +239,25 @@ public partial class WebChatView : UserControl
         return barrier;
     }
 
+    private static TaskCompletionSource<bool> CreateCompletedDocumentReadyTcs()
+    {
+        var tcs = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        tcs.SetResult(true);
+        return tcs;
+    }
+
     public async Task LoadMessagesAsync(
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls = false,
         IReadOnlyList<ChatMessage>? activitySourceMessages = null)
     {
-        // Keep the live per-session collection so a deferred replay (for example after
-        // the control becomes visible) snapshots the newest bubbles, not the state from
-        // when rendering was first requested.
-        _pendingMessages = messages;
+        // Snapshot immediately rather than holding the live per-session collection.
+        // Concurrent hydration can otherwise mutate the collection mid-render (e.g. a
+        // session switch) and produce a half-populated array (only the last user message).
+        _pendingMessages = messages.ToArray();
         _pendingShowToolCalls = showToolCalls;
-        _pendingActivitySourceMessages = activitySourceMessages;
+        _pendingActivitySourceMessages = activitySourceMessages?.ToArray();
         _needsRender = true;
         var generation = StartRenderGeneration();
         await RunRenderPipelineSafeAsync(generation).ConfigureAwait(true);
@@ -826,13 +835,10 @@ public partial class WebChatView : UserControl
         }
 
         var generation = _navigationGeneration;
-        var deadline = Environment.TickCount64 + 5000;
-        while (!_documentReady && generation == _navigationGeneration && Environment.TickCount64 < deadline)
-        {
-            await Task.Delay(16).ConfigureAwait(true);
-        }
-
-        if (!_documentReady && generation == _navigationGeneration)
+        var deadline = Task.Delay(TimeSpan.FromSeconds(5));
+        var readyTask = _documentReadyTcs.Task;
+        var completed = await Task.WhenAny(readyTask, deadline).ConfigureAwait(true);
+        if (!ReferenceEquals(completed, readyTask))
         {
             const string timeoutMessage = "WebChatView WaitForDocumentReady timed out after 5s";
             ScriptExecutionFailed?.Invoke(this, timeoutMessage);
@@ -840,14 +846,22 @@ public partial class WebChatView : UserControl
             return false;
         }
 
-        return _documentReady;
+        // Only trust the result if the navigation generation hasn't advanced (a newer
+        // navigation may have reset the TCS and this completion belongs to a stale one).
+        if (generation != _navigationGeneration)
+        {
+            return false;
+        }
+
+        return _documentReady && _documentReadyTcs.Task.IsCompletedSuccessfully;
     }
 
     private async Task NavigateShellAsync()
     {
         var generation = ++_navigationGeneration;
         _documentReady = false;
-        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // Reset the completion source so WaitForDocumentReadyAsync awaits this navigation.
+        _documentReadyTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
         {
@@ -861,14 +875,14 @@ public partial class WebChatView : UserControl
                 }
             }
 
-            tcs.TrySetResult(e.IsSuccess);
+            _documentReadyTcs.TrySetResult(e.IsSuccess);
         }
 
         try
         {
             ChatWebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
             ChatWebView.NavigateToString(_htmlBuilder.BuildShellHtml(ResolveSsoDisplayName()));
-            var success = await tcs.Task.ConfigureAwait(true);
+            var success = await _documentReadyTcs.Task.ConfigureAwait(true);
             if (!success || generation != _navigationGeneration)
             {
                 throw new InvalidOperationException("WebChatView shell navigation failed.");

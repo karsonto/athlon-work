@@ -14,7 +14,8 @@ const state = {
   autoScrollEnabled: true,
   batchTarget: null,
   hasOlderMessages: false,
-  loadingOlder: false
+  loadingOlder: false,
+  lastScrollHeight: undefined
 };
 
 function t(key) {
@@ -90,6 +91,19 @@ function post(payload) {
 
 var pendingToolDetailRequests = Object.create(null);
 var toolDetailRequestSeq = 0;
+
+// Streaming scroll coalescing: only write scrollTop during a pinned auto-scroll when the
+// content grew by at least SCROLL_MERGE_THRESHOLD px. Sub-threshold growth (per-token
+// height changes) is skipped to avoid forcing layout on every token.
+var SCROLL_MERGE_THRESHOLD = 24;
+
+// Code-highlight chunking: processing every `<pre>` at once during an endBatch can block
+// the main thread on long conversations. We enqueue pre nodes and flush them in small
+// slices via requestIdleCallback (falling back to setTimeout(0)), keeping the final
+// highlighting result identical while spreading the work across idle frames.
+var CODE_ENHANCE_BATCH_SIZE = 24;
+var pendingEnhanceQueue = [];
+var enhanceScheduled = false;
 
 function requestToolDetailForEntry(entry, detailPanel) {
   if (!entry || entry.dataset.hydrated === '1' || entry.dataset.loading === '1') return;
@@ -273,8 +287,25 @@ function scrollToBottom(force) {
       return;
     }
     if (!scroller
-        || (!shouldForce && (!state.autoScrollEnabled || hasActiveSelection()))) return;
-    scroller.scrollTop = scroller.scrollHeight;
+        || (!shouldForce && (!state.autoScrollEnabled || hasActiveSelection()))) {
+      state.lastScrollHeight = undefined;
+      return;
+    }
+    const newHeight = scroller.scrollHeight;
+    // During streaming the height grows by a little each token. Reading scrollHeight
+    // forces a layout; guard that we only write scrollTop when the content actually
+    // grew by more than a small threshold while already pinned to the bottom. This
+    // avoids re-laying-out the whole timeline on every streamed token. On failure the
+    // original semantics (always snap to bottom) are preserved.
+    if (!shouldForce && state.lastScrollHeight !== undefined) {
+      const grew = newHeight - state.lastScrollHeight;
+      if (grew > 0 && grew < SCROLL_MERGE_THRESHOLD && isNearBottom()) {
+        state.lastScrollHeight = newHeight;
+        return;
+      }
+    }
+    scroller.scrollTop = newHeight;
+    state.lastScrollHeight = newHeight;
   });
 }
 
@@ -357,78 +388,111 @@ const codeObserver = typeof IntersectionObserver === 'function'
     }, { root: document.getElementById('chat-scroll'), rootMargin: '200px 0px' })
   : null;
 
+function enhanceOneCodeBlock(pre, index) {
+  // Guard against stale nodes: a resetTimeline() between enqueue and flush detaches the
+  // pre from the DOM, and a pre already wrapped in a .code-block must never be re-wrapped.
+  if (!pre.isConnected || pre.closest('.code-block')) return;
+  const code = pre.querySelector('code');
+  if (!code) return;
+
+  const raw = code.textContent || '';
+  const className = code.className || '';
+  const match = className.match(/language-([\w#+-]+)/i);
+  const language = match ? match[1] : t('code');
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'code-block';
+
+  const header = document.createElement('div');
+  header.className = 'code-block-header';
+
+  const label = document.createElement('span');
+  label.textContent = language;
+
+  const actions = document.createElement('div');
+  actions.className = 'code-block-actions';
+
+  const langKey = (match ? match[1] : '').toLowerCase();
+  if (langKey === 'html' || langKey === 'htm') {
+    const previewBtn = document.createElement('button');
+    previewBtn.type = 'button';
+    previewBtn.className = 'code-btn';
+    previewBtn.dataset.i18n = 'preview';
+    previewBtn.textContent = t('preview');
+    previewBtn.addEventListener('click', function () {
+      post({ type: 'preview', html: raw });
+    });
+    actions.appendChild(previewBtn);
+  }
+
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.className = 'code-btn';
+  copyBtn.textContent = t('copy');
+  copyBtn.addEventListener('click', function () {
+    post({ type: 'copy', text: raw, blockId: String(index) });
+    copyBtn.textContent = t('copied');
+    copyBtn.classList.add('copied');
+    setTimeout(function () {
+      copyBtn.textContent = t('copy');
+      copyBtn.classList.remove('copied');
+    }, 1600);
+  });
+  actions.appendChild(copyBtn);
+
+  header.appendChild(label);
+  header.appendChild(actions);
+
+  pre.parentNode.insertBefore(wrapper, pre);
+  wrapper.appendChild(header);
+  wrapper.appendChild(pre);
+  if (codeObserver) {
+    codeObserver.observe(code);
+  } else if (typeof hljs !== 'undefined' && !code.dataset.hljsDone) {
+    try {
+      hljs.highlightElement(code);
+      code.dataset.hljsDone = '1';
+    } catch (e) {}
+  }
+}
+
+function flushEnhanceQueue() {
+  enhanceScheduled = false;
+  const slice = pendingEnhanceQueue.splice(0, CODE_ENHANCE_BATCH_SIZE);
+  for (let i = 0; i < slice.length; i++) {
+    enhanceOneCodeBlock(slice[i].pre, slice[i].index);
+  }
+  if (pendingEnhanceQueue.length > 0) {
+    scheduleEnhanceFlush();
+  }
+}
+
+function scheduleEnhanceFlush() {
+  if (enhanceScheduled) return;
+  enhanceScheduled = true;
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(function () { flushEnhanceQueue(); }, { timeout: 400 });
+  } else {
+    setTimeout(function () { flushEnhanceQueue(); }, 0);
+  }
+}
+
 function enhanceCodeBlocks(root) {
   const scope = root || document;
   scope.querySelectorAll('.md-root pre').forEach(function (pre, index) {
     if (pre.closest('.code-block')) return;
-    const code = pre.querySelector('code');
-    if (!code) return;
-
-    const raw = code.textContent || '';
-    const className = code.className || '';
-    const match = className.match(/language-([\w#+-]+)/i);
-    const language = match ? match[1] : t('code');
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'code-block';
-
-    const header = document.createElement('div');
-    header.className = 'code-block-header';
-
-    const label = document.createElement('span');
-    label.textContent = language;
-
-    const actions = document.createElement('div');
-    actions.className = 'code-block-actions';
-
-    const langKey = (match ? match[1] : '').toLowerCase();
-    if (langKey === 'html' || langKey === 'htm') {
-      const previewBtn = document.createElement('button');
-      previewBtn.type = 'button';
-      previewBtn.className = 'code-btn';
-      previewBtn.dataset.i18n = 'preview';
-      previewBtn.textContent = t('preview');
-      previewBtn.addEventListener('click', function () {
-        post({ type: 'preview', html: raw });
-      });
-      actions.appendChild(previewBtn);
-    }
-
-    const copyBtn = document.createElement('button');
-    copyBtn.type = 'button';
-    copyBtn.className = 'code-btn';
-    copyBtn.textContent = t('copy');
-    copyBtn.addEventListener('click', function () {
-      post({ type: 'copy', text: raw, blockId: String(index) });
-      copyBtn.textContent = t('copied');
-      copyBtn.classList.add('copied');
-      setTimeout(function () {
-        copyBtn.textContent = t('copy');
-        copyBtn.classList.remove('copied');
-      }, 1600);
-    });
-    actions.appendChild(copyBtn);
-
-    header.appendChild(label);
-    header.appendChild(actions);
-
-    pre.parentNode.insertBefore(wrapper, pre);
-    wrapper.appendChild(header);
-    wrapper.appendChild(pre);
-    if (codeObserver) {
-      codeObserver.observe(code);
-    } else if (typeof hljs !== 'undefined' && !code.dataset.hljsDone) {
-      try {
-        hljs.highlightElement(code);
-        code.dataset.hljsDone = '1';
-      } catch (e) {}
-    }
+    pendingEnhanceQueue.push({ pre: pre, index: index });
   });
+  scheduleEnhanceFlush();
 }
 
 function resetTimeline() {
   const root = document.getElementById('messages');
   if (codeObserver) codeObserver.disconnect();
+  // Drop any queued code blocks from a previous timeline; their nodes are about to be
+  // removed, so flushing them later would be wasted work (guarded in enhanceOneCodeBlock).
+  pendingEnhanceQueue.length = 0;
+  enhanceScheduled = false;
   root.innerHTML = '';
   state.currentAssistantEl = null;
   state.currentReasoningEl = null;
@@ -439,6 +503,7 @@ function resetTimeline() {
   state.toolCalls.clear();
   state.hasOlderMessages = false;
   state.loadingOlder = false;
+  state.lastScrollHeight = undefined;
 }
 
 function beginBatch() {
