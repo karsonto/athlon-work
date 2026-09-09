@@ -69,6 +69,7 @@ public sealed class OpenAiCompatibleChatModelClient(
         var endpoint = settings.Model.Endpoint.TrimEnd('/') + "/chat/completions";
         var purpose = OpenAiChatRequestFactory.BuildPurpose(request);
         var payload = OpenAiChatRequestFactory.BuildPayload(request, settings, stream);
+        var httpLogEnabled = sessionHttpLog.IsEnabled;
 
         var sessionId = activeSessionContext.SessionId;
         var sw = Stopwatch.StartNew();
@@ -141,36 +142,39 @@ public sealed class OpenAiCompatibleChatModelClient(
         finally
         {
             sw.Stop();
-            try
+            if (httpLogEnabled)
             {
-                await sessionHttpLog.LogInteractionAsync(
-                    sessionId,
-                    new SessionHttpInteractionLog(
-                        DateTimeOffset.UtcNow,
-                        endpoint,
-                        purpose,
-                        statusCode,
-                        payload,
-                        responseBody,
-                        error,
-                        sw.ElapsedMilliseconds,
-                        RequestId: requestId),
-                    CancellationToken.None);
-            }
-            catch (Exception logEx) when (logEx is not OperationCanceledException)
-            {
-                _logger.Warning(
-                    "Failed to write HTTP interaction log for session {SessionId}: {Message}",
-                    sessionId ?? "(none)",
-                    logEx.Message);
-                await EnqueueDiagnosticAsync(
-                    sessionId: sessionId,
-                    component: RuntimeDiagnosticComponent.Storage,
-                    phase: RuntimeDiagnosticPhase.Persist,
-                    eventType: "storage.persist_failed",
-                    severity: RuntimeDiagnosticSeverity.Warning,
-                    errorCode: RuntimeDiagnosticErrorCodes.StoragePersistFailed,
-                    message: $"session_http_log failed: {logEx.Message}").ConfigureAwait(false);
+                try
+                {
+                    await sessionHttpLog.LogInteractionAsync(
+                        sessionId,
+                        new SessionHttpInteractionLog(
+                            DateTimeOffset.UtcNow,
+                            endpoint,
+                            purpose,
+                            statusCode,
+                            payload,
+                            responseBody,
+                            error,
+                            sw.ElapsedMilliseconds,
+                            RequestId: requestId),
+                        CancellationToken.None);
+                }
+                catch (Exception logEx) when (logEx is not OperationCanceledException)
+                {
+                    _logger.Warning(
+                        "Failed to write HTTP interaction log for session {SessionId}: {Message}",
+                        sessionId ?? "(none)",
+                        logEx.Message);
+                    await EnqueueDiagnosticAsync(
+                        sessionId: sessionId,
+                        component: RuntimeDiagnosticComponent.Storage,
+                        phase: RuntimeDiagnosticPhase.Persist,
+                        eventType: "storage.persist_failed",
+                        severity: RuntimeDiagnosticSeverity.Warning,
+                        errorCode: RuntimeDiagnosticErrorCodes.StoragePersistFailed,
+                        message: $"session_http_log failed: {logEx.Message}").ConfigureAwait(false);
+                }
             }
         }
     }

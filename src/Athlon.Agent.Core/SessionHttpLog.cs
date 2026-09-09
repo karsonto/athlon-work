@@ -11,6 +11,9 @@ public interface IActiveAgentSessionContext
 
 public interface ISessionHttpLogService
 {
+    /// <summary>Whether HTTP interaction logging is active. Callers may short-circuit to avoid building/serializing logs.</summary>
+    bool IsEnabled { get; }
+
     Task LogInteractionAsync(string? sessionId, SessionHttpInteractionLog entry, CancellationToken cancellationToken = default);
 }
 

@@ -36,6 +36,8 @@ public sealed class SessionHttpLogService(
     private readonly IJsonFileStore __ = jsonFileStore;
     private readonly IAgentRunContextAccessor ___ = runContextAccessor;
 
+    public bool IsEnabled => false;
+
     public async Task LogInteractionAsync(string? sessionId, SessionHttpInteractionLog entry, CancellationToken cancellationToken = default)
     {
         _logger.Debug(

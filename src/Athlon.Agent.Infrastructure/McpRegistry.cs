@@ -56,13 +56,26 @@ public sealed class McpRegistry(
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private readonly ConcurrentDictionary<string, long> _connectGenerations = new(StringComparer.OrdinalIgnoreCase);
     private IReadOnlyList<McpCatalogEntry>? _catalogCache;
+    private int _catalogSchemaChars;
     private int _catalogVersion;
     private int _disposed;
 
     public int CatalogVersion => _catalogVersion;
     public int CatalogCount => ListCatalogEntries().Count;
-    public int CatalogSchemaCharCount => ListCatalogEntries().Sum(entry =>
-        entry.Description.Length + entry.InputSchemaJson.Length + entry.EncodedName.Length);
+    public int CatalogSchemaCharCount
+    {
+        get
+        {
+            // Fast path: unscoped access returns the cached full-catalog count.
+            if (ScheduleTurnScope.Current?.McpServerNames is null && _catalogCache is not null)
+            {
+                return _catalogSchemaChars;
+            }
+
+            return ListCatalogEntries().Sum(entry =>
+                entry.Description.Length + entry.InputSchemaJson.Length + entry.EncodedName.Length);
+        }
+    }
 
     public IReadOnlyList<McpServerStatus> GetStatuses() =>
         _statuses.Values.OrderBy(status => status.Name, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -139,7 +152,20 @@ public sealed class McpRegistry(
             }
         }
 
-        return entries.OrderBy(entry => entry.EncodedName, StringComparer.OrdinalIgnoreCase).ToArray();
+        var sorted = entries.OrderBy(entry => entry.EncodedName, StringComparer.OrdinalIgnoreCase).ToArray();
+        _catalogSchemaChars = ComputeCatalogSchemaChars(sorted);
+        return sorted;
+    }
+
+    private static int ComputeCatalogSchemaChars(IReadOnlyList<McpCatalogEntry> entries)
+    {
+        var total = 0;
+        foreach (var entry in entries)
+        {
+            total += entry.Description.Length + entry.InputSchemaJson.Length + entry.EncodedName.Length;
+        }
+
+        return total;
     }
 
     private void InvalidateCatalogCache()

@@ -584,6 +584,8 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
 
     private sealed class CaptureHttpLogService : ISessionHttpLogService
     {
+        public bool IsEnabled => true;
+
         public Task LogInteractionAsync(string? sessionId, SessionHttpInteractionLog entry, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
