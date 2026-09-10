@@ -25,7 +25,7 @@ public sealed class ChatDisplayPolicyTests
     }
 
     [Fact]
-    public void ShouldIncludeToolViewModel_keeps_manual_compaction_when_tools_hidden()
+    public void ShouldIncludeToolViewModel_keeps_compaction_checkpoints_when_tools_hidden()
     {
         var autoCompactionVm = new ChatMessageViewModel(
             CompactionMessageContent.CreateCompactionMessage(
@@ -40,7 +40,8 @@ public sealed class ChatDisplayPolicyTests
             new AgentToolCall("call-approval", "file_write", new Dictionary<string, string>()));
         pendingApprovalVm.MarkAwaitingApproval("""{"path":"a.txt"}""");
 
-        Assert.False(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, autoCompactionVm));
+        // Both auto and manual compaction surface a checkpoint card; only manual also collapses.
+        Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, autoCompactionVm));
         Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, manualCompactionVm));
         Assert.False(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, toolVm));
         Assert.True(ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls: false, pendingApprovalVm));
@@ -76,7 +77,7 @@ public sealed class ChatDisplayPolicyTests
     }
 
     [Fact]
-    public void BuildDisplayMessages_hides_tools_by_default()
+    public void BuildDisplayMessages_hides_tools_but_keeps_compaction_checkpoint()
     {
         var toolCall = new AgentToolCall("call-1", "read_file", new Dictionary<string, string>());
         var toolContent = AgentRuntime.FormatToolResult(toolCall, ToolResult.Success("ok", "detail"));
@@ -92,14 +93,14 @@ public sealed class ChatDisplayPolicyTests
 
         var hidden = ChatTimelineHydrator.BuildDisplayMessages(displayMessages, showToolCalls: false);
         Assert.DoesNotContain(hidden, vm => vm.IsTool && !vm.IsCompaction);
-        Assert.DoesNotContain(hidden, vm => vm.IsCompaction);
-        Assert.Equal(2, hidden.Count);
+        Assert.Contains(hidden, vm => vm.IsCompaction && vm.MessageId == compaction.Id);
+        Assert.Equal(3, hidden.Count);
 
         // Activity tools are folded into TURN_ACTIVITY, not kept as tool view-models.
         var shown = ChatTimelineHydrator.BuildDisplayMessages(displayMessages, showToolCalls: true);
         Assert.DoesNotContain(shown, vm => vm.IsTool && !vm.IsCompaction);
-        Assert.DoesNotContain(shown, vm => vm.IsCompaction);
-        Assert.Equal(2, shown.Count);
+        Assert.Contains(shown, vm => vm.IsCompaction && vm.MessageId == compaction.Id);
+        Assert.Equal(3, shown.Count);
     }
 
     [Fact]
@@ -117,7 +118,8 @@ public sealed class ChatDisplayPolicyTests
 
         var hidden = ChatEventSerializer.BuildReplayEvents(messages, showToolCalls: false);
         Assert.Equal(0, hidden.Count(json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal)));
-        Assert.DoesNotContain(hidden, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
+        // Compaction checkpoint stays visible so the user can see context was condensed.
+        Assert.Contains(hidden, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
         // Folded into the single turn-activity summary instead of a tool card.
         Assert.Contains(hidden, json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal));
 
@@ -125,7 +127,7 @@ public sealed class ChatDisplayPolicyTests
         Assert.Equal(0, shown.Count(json => json.Contains("TOOL_CALL_START", StringComparison.Ordinal)));
         Assert.Contains(shown, json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal));
         Assert.Contains(shown, json => json.Contains("read_file", StringComparison.Ordinal));
-        Assert.DoesNotContain(shown, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
+        Assert.Contains(shown, json => json.Contains("COMPACTION_CHECKPOINT", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -163,7 +165,7 @@ public sealed class ChatDisplayPolicyTests
     }
 
     [Fact]
-    public void BuildDisplayMessages_keeps_manual_compaction_hides_auto()
+    public void BuildDisplayMessages_keeps_manual_and_auto_compaction_checkpoints()
     {
         var auto = CompactionMessageContent.CreateCompactionMessage(
             CompactionMessageContent.CreateConversationCompact(1000, 500, 3, null, "auto"));
@@ -179,7 +181,9 @@ public sealed class ChatDisplayPolicyTests
         };
 
         var shown = ChatTimelineHydrator.BuildDisplayMessages(displayMessages, showToolCalls: false);
-        Assert.DoesNotContain(shown, vm => vm.MessageId == auto.Id);
+        // Full history is preserved; both compaction strategies insert a checkpoint card.
+        Assert.Contains(shown, vm => vm.MessageId == auto.Id);
+        Assert.Contains(shown, vm => vm.IsCompaction && vm.MessageId == auto.Id);
         Assert.Contains(shown, vm => vm.IsCompaction && vm.MessageId == manual.Id);
     }
 

@@ -2,6 +2,7 @@ using System.Windows.Threading;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.Tests;
@@ -317,13 +318,13 @@ public sealed class SessionTurnUiControllerDisplayTests
     }
 
     [Fact]
-    public async Task HiddenSession_rebuilds_cached_surface_after_compaction_replaces_history()
+    public async Task HiddenSession_auto_compaction_keeps_history_and_appends_checkpoint()
     {
         var dispatcher = await StartStaDispatcherAsync();
         var ui = new SessionTurnUiController(dispatcher);
         var oldUser = ChatMessage.Create(MessageRole.User, "old");
         var oldAssistant = ChatMessage.Create(MessageRole.Assistant, "old answer");
-        var original = AgentSession.Create("compact-hidden")
+        var original = AgentSession.Create("compact-auto")
             .WithMessages([oldUser, oldAssistant]);
         await ui.HydrateDisplayAsync(
             original,
@@ -332,15 +333,58 @@ public sealed class SessionTurnUiControllerDisplayTests
             activitySourceMessages: original.Messages);
         ui.SetDisplayed(false);
 
-        var compaction = ChatMessage.Create(MessageRole.Compaction, "compacted");
+        // Model-driven compaction: the audit is appended incrementally and the timeline must keep
+        // the already-displayed history instead of collapsing to the compacted session.
+        var audit = CompactionMessageContent.CreateCompactionMessage(
+            CompactionMessageContent.CreateConversationCompact(1000, 500, 3, null, "summary"));
         var currentAssistant = ChatMessage.Create(MessageRole.Assistant, "current");
-        var compacted = AgentSession.Create("compact-hidden")
-            .WithMessages([compaction, currentAssistant]);
+        var compacted = AgentSession.Create("compact-auto")
+            .WithMessages([audit, currentAssistant]);
+
+        var callbacks = ui.BuildCallbacks();
+        await callbacks.OnSessionUpdated!(compacted);
+        await callbacks.OnStreamEvent!(new AgentStreamEvent.ChatMessageAppended(audit));
+        ui.SetDisplayed(true);
+
+        var display = await dispatcher.InvokeAsync(() => ui.DisplayMessagesSnapshot.ToList());
+        Assert.Contains(display, message => message.Id == oldUser.Id);
+        Assert.Contains(display, message => message.Id == oldAssistant.Id);
+        Assert.Contains(display, message => message.Id == audit.Id);
+
+        var visible = await dispatcher.InvokeAsync(() => ui.Messages.ToList());
+        Assert.Contains(visible, message => message.MessageId == oldUser.Id);
+        Assert.Contains(visible, message => message.IsCompaction && message.MessageId == audit.Id);
+    }
+
+    [Fact]
+    public async Task HiddenSession_manual_compaction_collapses_cached_surface()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        var oldUser = ChatMessage.Create(MessageRole.User, "old");
+        var oldAssistant = ChatMessage.Create(MessageRole.Assistant, "old answer");
+        var original = AgentSession.Create("compact-manual")
+            .WithMessages([oldUser, oldAssistant]);
+        await ui.HydrateDisplayAsync(
+            original,
+            original.Messages,
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: original.Messages);
+        ui.SetDisplayed(false);
+
+        // Manual compaction is user-requested and still replaces the displayed history.
+        var audit = CompactionMessageContent.CreateCompactionMessage(
+            CompactionMessageContent.CreateConversationCompact(
+                1000, 500, 3, null, "summary", CompactionStrategy.ManualCompact));
+        var currentAssistant = ChatMessage.Create(MessageRole.Assistant, "current");
+        var compacted = AgentSession.Create("compact-manual")
+            .WithMessages([audit, currentAssistant]);
+
         await ui.BuildCallbacks().OnSessionUpdated!(compacted);
 
         var display = await dispatcher.InvokeAsync(() => ui.DisplayMessagesSnapshot.ToList());
         Assert.DoesNotContain(display, message => message.Id == oldUser.Id);
-        Assert.Contains(display, message => message.Id == compaction.Id);
+        Assert.Contains(display, message => message.Id == audit.Id);
         Assert.Contains(display, message => message.Id == currentAssistant.Id);
     }
 

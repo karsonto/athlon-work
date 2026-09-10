@@ -1,6 +1,5 @@
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
-using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.App.Services;
@@ -22,27 +21,16 @@ internal static class ChatDisplayPolicy
         return showToolCalls;
     }
 
+    /// <summary>
+    /// Every compaction audit is surfaced as a checkpoint card: the timeline keeps the full
+    /// history and the card marks where model context was condensed. Manual compaction is the
+    /// only strategy that also collapses the display (see SessionTurnUiController).
+    /// </summary>
     public static bool ShouldDisplayCompactionCheckpoint(ChatMessage message) =>
-        message.Role == MessageRole.Compaction
-        && CompactionAuditDisplay.Parse(message.Content).Strategy == CompactionStrategy.ManualCompact;
+        message.Role == MessageRole.Compaction;
 
-    public static bool ShouldDisplayCompactionCheckpoint(ChatMessageViewModel vm)
-    {
-        if (!vm.IsCompaction)
-        {
-            return false;
-        }
-
-        if (string.Equals(
-                vm.MessageId,
-                ChatMessageViewModel.PendingManualCompactionMessageId,
-                StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        return CompactionAuditDisplay.Parse(vm.Content).Strategy == CompactionStrategy.ManualCompact;
-    }
+    public static bool ShouldDisplayCompactionCheckpoint(ChatMessageViewModel vm) =>
+        vm.IsCompaction;
 
     public static bool ShouldIncludeToolViewModel(bool showToolCalls, ChatMessageViewModel vm)
     {

@@ -45,6 +45,12 @@ public sealed partial class SessionTurnUiController
     private List<ChatMessage> _activitySourceMessages = new();
     private List<ChatMessage> _displayMessages = new();
     private ConversationDisplayCursor? _olderDisplayCursor;
+    /// <summary>
+    /// Manual-compaction audits whose display collapse has already been applied. Model-driven
+    /// compaction never collapses the timeline, so it must not be listed here.
+    /// </summary>
+    private readonly HashSet<string> _appliedManualCompactionAuditIds = new(StringComparer.Ordinal);
+    private readonly object _manualCompactionRefreshGate = new();
     private readonly ToolCallArgsDisplayCoordinator _displayCoordinator = new();
     private readonly StreamingTokenBuffer _tokenBuffer;
     private readonly ConcurrentDictionary<string, PendingUiApproval> _pendingApprovals =
@@ -417,24 +423,31 @@ public sealed partial class SessionTurnUiController
 
     private bool ShouldRefreshDisplayAfterSessionReplace(AgentSession session)
     {
-        if (!session.Messages.Any(message =>
-                message.Role == MessageRole.Compaction || SummaryMessageBuilder.IsSummaryMessage(message)))
+        // Model-driven compaction (ConversationCompact / ForceCompact / MiddleCutOnRetrySkipped)
+        // must not collapse the timeline. Its checkpoint audit arrives incrementally through
+        // ChatMessageAppended, so the already-displayed history stays untouched and scrolling
+        // back through it keeps working. Only manual compaction, which the user explicitly asked
+        // for, replaces the display with the compacted session.
+        foreach (var message in session.Messages)
         {
-            return false;
-        }
+            if (message.Role != MessageRole.Compaction
+                || CompactionAuditDisplay.Parse(message.Content).Strategy != CompactionStrategy.ManualCompact)
+            {
+                continue;
+            }
 
-        if (_activitySourceMessages.Count == 0)
-        {
+            lock (_manualCompactionRefreshGate)
+            {
+                if (!_appliedManualCompactionAuditIds.Add(message.Id))
+                {
+                    continue;
+                }
+            }
+
             return true;
         }
 
-        if (session.Messages.Count < _activitySourceMessages.Count)
-        {
-            return true;
-        }
-
-        var sessionIds = session.Messages.Select(message => message.Id).ToHashSet(StringComparer.Ordinal);
-        return _activitySourceMessages.Any(message => !sessionIds.Contains(message.Id));
+        return false;
     }
 
     public async Task ReloadChatViewAsync()
@@ -469,6 +482,10 @@ public sealed partial class SessionTurnUiController
             .ConfigureAwait(true);
         if (ReferenceEquals(ChatView, chatView) && IsDisplayed)
         {
+            // A full replay resets the JS timeline, which clears hasOlderMessages. Re-arm it so
+            // scrolling to the top still loads older history without a session switch.
+            await chatView.SetOlderMessagesAvailableAsync(_olderDisplayCursor is not null)
+                .ConfigureAwait(true);
             await RestorePendingToolApprovalsAsync().ConfigureAwait(true);
             RestoreLiveTurnCardsAfterReload();
         }
@@ -526,6 +543,7 @@ public sealed partial class SessionTurnUiController
                 _displayMessages = new List<ChatMessage>();
                 _activitySourceMessages = new List<ChatMessage>();
                 _olderDisplayCursor = null;
+                _appliedManualCompactionAuditIds.Clear();
             }
             finally
             {
@@ -1392,6 +1410,10 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
+        // The display page mirrors every durable append (including hidden summary placeholders,
+        // which the display log also contains); the activity source below stays role-restricted.
+        SyncDisplayModelWithAppend(message);
+
         if (message.Role is not (MessageRole.User or MessageRole.Tool or MessageRole.Assistant or MessageRole.Compaction))
         {
             return;
@@ -1404,6 +1426,22 @@ public sealed partial class SessionTurnUiController
         }
 
         _activitySourceMessages.Add(message);
+    }
+
+    /// <summary>
+    /// Keeps the display-page model aligned with durable appends so loading an older page merges
+    /// against the real window. Only tracks once a page has been hydrated; a brand-new session has
+    /// no page model yet and reloads it from disk on the next switch.
+    /// </summary>
+    private void SyncDisplayModelWithAppend(ChatMessage message)
+    {
+        if (_displayMessages.Count == 0
+            || _displayMessages.Any(existing => string.Equals(existing.Id, message.Id, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        _displayMessages.Add(message);
     }
 
     private void TryAppendActivitySourceFromStreamEvent(AgentStreamEvent streamEvent)
