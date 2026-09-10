@@ -1,8 +1,11 @@
 (function () {
+  'use strict';
+
   var state = {
     items: [],
     installed: {},
     installing: {},
+    lastResult: null, // { id, ok, error } short-lived install feedback
     query: '',
     category: '',
     featuredExpanded: false,
@@ -16,7 +19,7 @@
   }
 
   function escapeHtml(text) {
-    return String(text || '')
+    return String(text == null ? '' : text)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -85,6 +88,11 @@
     el.textContent = message;
   }
 
+  function setMeta(id, text) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = text || '';
+  }
+
   function renderDiscover(items) {
     var section = document.getElementById('discover');
     var grid = document.getElementById('discoverGrid');
@@ -96,6 +104,7 @@
       return;
     }
     section.hidden = false;
+    setMeta('discoverMeta', discover.length + ' featured this week');
     grid.innerHTML = discover.map(function (item) {
       return '<article class="discover-card">' +
         '<div class="discover-icon">' + escapeHtml(initial(item)) + '</div>' +
@@ -106,26 +115,35 @@
     }).join('');
   }
 
-  function renderRow(item) {
+  function actionHtml(item) {
     var installed = isInstalled(item);
     var installing = !!state.installing[item.id];
-    var actionHtml;
+    var last = state.lastResult && state.lastResult.id === item.id ? state.lastResult : null;
     if (installed) {
       // Local skill already present — never show Add.
-      actionHtml = '<span class="installed-label">Installed</span>';
-    } else if (installing) {
-      actionHtml = '<button type="button" class="add-btn" disabled>Adding…</button>';
-    } else {
-      actionHtml = '<button type="button" class="add-btn" data-action="add" data-id="' +
-        escapeHtml(item.id) + '">Add</button>';
+      return '<span class="installed-label">Installed</span>';
     }
+    if (installing) {
+      return '<button type="button" class="add-btn" disabled>Adding\u2026</button>';
+    }
+    if (last && last.ok) {
+      return '<button type="button" class="add-btn added" data-action="add" data-id="' + escapeHtml(item.id) + '">\u2713 Added</button>';
+    }
+    if (last && !last.ok) {
+      return '<span class="result-flash">Retry</span>' +
+        '<button type="button" class="add-btn" data-action="add" data-id="' + escapeHtml(item.id) + '">Add</button>';
+    }
+    return '<button type="button" class="add-btn" data-action="add" data-id="' + escapeHtml(item.id) + '">Add</button>';
+  }
+
+  function renderRow(item) {
     return '<div class="skill-row" data-id="' + escapeHtml(item.id) + '">' +
       '<div class="skill-row-icon">' + escapeHtml(initial(item)) + '</div>' +
       '<div class="skill-row-body">' +
       nameHtml(item, 'skill-row-name', 'skill-row-en') +
       '<div class="skill-row-desc">' + escapeHtml(item.description || '') + '</div>' +
       '</div>' +
-      actionHtml +
+      actionHtml(item) +
       '</div>';
   }
 
@@ -151,12 +169,13 @@
     }
 
     section.hidden = false;
+    setMeta('featuredMeta', state.featuredExpanded ? featured.length + ' skills' : state.featuredLimit + ' of ' + featured.length + ' shown');
     var visible = state.featuredExpanded ? featured : featured.slice(0, state.featuredLimit);
     list.innerHTML = visible.map(renderRow).join('');
     var hiddenCount = featured.length - state.featuredLimit;
     if (!state.featuredExpanded && hiddenCount > 0) {
       more.hidden = false;
-      more.textContent = 'Show ' + hiddenCount + ' more';
+      more.textContent = 'Show ' + hiddenCount + ' more skills';
     } else {
       more.hidden = true;
     }
@@ -177,13 +196,13 @@
       return a.localeCompare(b, 'zh');
     });
 
-    // When browsing All with no search, still show category sections for everything
-    // after Discover+Featured would confuse; show all items under categories always
-    // when filtered, otherwise show every category with its skills.
     host.innerHTML = keys.map(function (key) {
       var rows = byCategory[key].map(renderRow).join('');
       return '<section class="section">' +
+        '<div class="section-head">' +
         '<h2 class="section-title">' + escapeHtml(key) + '</h2>' +
+        '<span class="section-meta">' + byCategory[key].length + ' skills</span>' +
+        '</div>' +
         '<div class="skill-list">' + rows + '</div>' +
         '</section>';
     }).join('');
@@ -199,7 +218,7 @@
       if (c && cats.indexOf(c) < 0) cats.push(c);
     });
     cats.sort(function (a, b) { return a.localeCompare(b, 'zh'); });
-    select.innerHTML = '<option value="">All</option>' +
+    select.innerHTML = '<option value="">All Categories</option>' +
       cats.map(function (c) {
         return '<option value="' + escapeHtml(c) + '"' +
           (c === current ? ' selected' : '') + '>' + escapeHtml(c) + '</option>';
@@ -272,6 +291,7 @@
       state.items = data.items || [];
       state.installed = {};
       state.installing = {};
+      state.lastResult = null;
       (data.installed || []).forEach(function (name) {
         var key = String(name || '').trim().toLowerCase();
         if (key) state.installed[key] = true;
@@ -315,8 +335,9 @@
         state.items.forEach(function (item) {
           if (item && String(item.id) === resultId) item.installed = true;
         });
-      } else if (data.error) {
-        setStatus(data.error, true);
+      } else {
+        state.lastResult = { id: resultId, ok: false, error: data.error };
+        if (data.error) setStatus(data.error, true);
       }
       render();
     }
@@ -343,6 +364,7 @@
     var id = btn.getAttribute('data-id');
     if (!id) return;
     state.installing[id] = true;
+    state.lastResult = null;
     render();
     post({ type: 'add', id: id });
   });
@@ -352,6 +374,9 @@
       onHostMessage(event.data);
     });
   }
+
+  // Host executes this script after load to push theme tokens (SkillHubThemeStyles.BuildThemeUpdateScript).
+  window.applyThemeUpdate = applyThemeUpdate;
 
   post({ type: 'ready' });
 })();

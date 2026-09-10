@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Skill Hub · 重新设计稿</title>
+  <style>
+    :root {
+      --bg:      #fafaf7;
+      --surface: #ffffff;
+      --fg:      #1a1916;
+      --muted:   #6b6964;
+      --border:  #e8e5df;
+      --accent:  #c96442;
+
+      --accent-soft: color-mix(in oklch, var(--accent) 14%, transparent);
+      --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+
+      --font-display: 'Iowan Old Style', 'Charter', Georgia, 'Times New Roman', serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --font-mono:    ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
+      --fs-h1: clamp(44px, 6vw, 76px);
+      --fs-h2: clamp(32px, 4vw, 48px);
+      --fs-h3: 22px;
+      --fs-lead: 19px;
+      --fs-body: 16px;
+      --fs-meta: 13px;
+
+      --gap-xs: 8px;
+      --gap-sm: 12px;
+      --gap-md: 20px;
+      --gap-lg: 32px;
+      --gap-xl: 56px;
+      --gap-2xl: 96px;
+      --container: 1120px;
+      --gutter: 32px;
+
+      --radius: 10px;
+      --radius-lg: 16px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-body);
+      font-size: var(--fs-body);
+      line-height: 1.55;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+    img, svg { display: block; max-width: 100%; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    p { text-wrap: pretty; }
+    h1, h2, h3, h4 { text-wrap: balance; }
+
+    .container { max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }
+    .section { padding-block: clamp(48px, 8vw, var(--gap-2xl)); }
+    .section + .section { border-top: 1px solid var(--border); }
+    .stack { display: flex; flex-direction: column; }
+    .stack > * + * { margin-top: var(--gap-md); }
+    .row { display: flex; align-items: center; gap: var(--gap-md); }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--gap-md); }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--gap-lg); }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap-lg); }
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap-md); }
+    .grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: var(--gap-xl); align-items: start; }
+    .grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: var(--gap-xl); align-items: start; }
+    @media (max-width: 920px) {
+      .grid-2, .grid-3, .grid-4, .grid-2-1, .grid-1-2 { grid-template-columns: 1fr; }
+    }
+
+    .h1, h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height: 1.04; letter-spacing: -0.02em; margin: 0; }
+    .h2, h2 { font-family: var(--font-display); font-size: var(--fs-h2); line-height: 1.1; letter-spacing: -0.015em; margin: 0; }
+    .h3, h3 { font-size: var(--fs-h3); font-weight: 600; line-height: 1.3; letter-spacing: -0.005em; margin: 0; }
+    .lead   { font-size: var(--fs-lead); line-height: 1.55; color: var(--muted); max-width: 60ch; margin: 0; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin: 0 0 var(--gap-md);
+    }
+    .meta { font-family: var(--font-mono); font-size: var(--fs-meta); color: var(--muted); }
+    .num  { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+    .topnav {
+      position: sticky; top: 0; z-index: 10;
+      background: color-mix(in oklch, var(--bg) 92%, transparent);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .topnav-inner { display: flex; align-items: center; justify-content: space-between; padding-block: 14px; }
+    .topnav .logo { font-family: var(--font-display); font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+    .topnav nav { display: flex; gap: var(--gap-lg); }
+    .topnav nav a { font-size: 14px; color: var(--muted); }
+    .topnav nav a:hover { color: var(--fg); }
+    .pagefoot { padding-block: var(--gap-xl); color: var(--muted); font-size: 13px; border-top: 1px solid var(--border); }
+    .pagefoot .row-between { flex-wrap: wrap; gap: var(--gap-md); }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 20px;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: -0.005em;
+      transition: transform 0.05s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn-primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+    .btn-primary:hover { background: color-mix(in oklch, var(--accent) 88%, black); }
+    .btn-secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+    .btn-secondary:hover { border-color: var(--fg); }
+    .btn-ghost { background: transparent; color: var(--fg); border-color: transparent; padding-inline: 8px; }
+    .btn-ghost:hover { color: var(--accent); }
+    .btn-arrow::after { content: '→'; transition: transform 0.15s ease; }
+    .btn-arrow:hover::after { transform: translateX(2px); }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 28px;
+    }
+    .card-flat { background: transparent; border: 0; padding: 0; }
+    .card-rule { background: transparent; border: 0; border-top: 1px solid var(--fg); padding: 24px 0 0; border-radius: 0; }
+
+    .feature .feature-mark {
+      width: 36px; height: 36px;
+      display: grid; place-items: center;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--accent);
+      margin-bottom: var(--gap-md);
+    }
+    .feature .feature-mark svg { width: 18px; height: 18px; }
+    .feature h3 { margin-bottom: 6px; }
+    .feature p  { margin: 0; color: var(--muted); font-size: 15px; }
+
+    .stat .stat-num {
+      font-family: var(--font-display);
+      font-size: clamp(56px, 8vw, 96px);
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .stat .stat-label { color: var(--muted); font-size: 14px; margin-top: 8px; max-width: 24ch; }
+    .stat .stat-unit  { font-size: 0.5em; opacity: 0.7; margin-left: 2px; }
+
+    .quote {
+      font-family: var(--font-display);
+      font-size: clamp(24px, 2.6vw, 32px);
+      line-height: 1.32;
+      letter-spacing: -0.01em;
+      max-width: 28ch;
+    }
+    .quote-author { color: var(--muted); font-size: 14px; margin-top: var(--gap-md); }
+    .quote-mark   {
+      font-family: var(--font-display);
+      font-size: 140px; line-height: 0.7;
+      color: var(--accent); opacity: 0.18;
+      margin-bottom: -28px;
+    }
+
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .tag {
+      display: inline-flex; align-items: center;
+      padding: 4px 10px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 12px;
+    }
+
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 13px; color: var(--muted); }
+    .input, .textarea {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--fg);
+      font: inherit;
+      font-size: 15px;
+    }
+    .input:focus, .textarea:focus {
+      outline: 2px solid var(--accent-soft);
+      border-color: var(--accent);
+    }
+    .textarea { min-height: 96px; resize: vertical; line-height: 1.55; }
+
+    .ds-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .ds-table th, .ds-table td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+    .ds-table th { color: var(--muted); font-weight: 500; font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+    .ds-table tbody tr:hover { background: var(--fg-soft); }
+    .ds-table .num-col { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+
+    .ph-img {
+      background: linear-gradient(135deg, var(--accent-soft), var(--fg-soft)), var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      aspect-ratio: 16 / 10;
+      display: grid; place-items: center;
+      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.04em;
+    }
+    .ph-img.square    { aspect-ratio: 1 / 1; }
+    .ph-img.portrait  { aspect-ratio: 3 / 4; }
+    .ph-img.wide      { aspect-ratio: 16 / 9; }
+    .content-img {
+      display: block;
+      max-width: 100%;
+      max-height: min(70vh, 720px);
+      width: auto;
+      height: auto;
+      object-fit: contain;
+      justify-self: center;
+      border-radius: var(--radius-lg);
+    }
+
+    .rule  { border: 0; border-top: 1px solid var(--border); margin: 0; }
+    .rule-strong { border: 0; border-top: 1px solid var(--fg); margin: 0; }
+
+    .hero          { padding-block: clamp(80px, 12vw, 160px); }
+    .hero-center   { text-align: center; max-width: 32ch; margin-inline: auto; }
+    .hero h1       { margin-bottom: var(--gap-md); }
+    .hero .lead    { margin-bottom: var(--gap-lg); }
+    .hero-cta      { display: inline-flex; gap: var(--gap-sm); flex-wrap: wrap; }
+    .hero-center .hero-cta { justify-content: center; }
+    .hero-split    { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-2xl); align-items: center; }
+    @media (max-width: 920px) { .hero-split { grid-template-columns: 1fr; } }
+
+    .log-row { display: grid; grid-template-columns: 120px 1fr 100px; gap: var(--gap-lg); padding: 22px 0; border-top: 1px solid var(--border); align-items: baseline; }
+    .log-row .meta { color: var(--muted); }
+    .log-row h3 { font-size: 19px; }
+    .log-row .pull { text-align: right; }
+
+    /* ─── Skill Hub page-specific ─────────────────────────────────── */
+    .appframe { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; box-shadow: 0 12px 40px var(--fg-soft); }
+    .appbar { display: flex; align-items: center; gap: var(--gap-md); padding: 14px 20px; border-bottom: 1px solid var(--border); background: color-mix(in oklch, var(--bg) 70%, var(--surface)); }
+    .appbar .logo { font-family: var(--font-display); font-weight: 600; font-size: 17px; }
+    .appbar .search {
+      flex: 1; max-width: 420px;
+      display: flex; align-items: center; gap: 10px;
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 8px 16px; background: var(--surface); color: var(--muted);
+    }
+    .appbar .search input { border: 0; outline: 0; flex: 1; font: inherit; font-size: 14px; background: transparent; color: var(--fg); }
+    .appbar .cat {
+      border: 1px solid var(--border); border-radius: 999px;
+      padding: 8px 16px; font-size: 13px; color: var(--fg);
+      background: var(--surface); cursor: pointer;
+    }
+    .appbody { padding: clamp(24px, 4vw, 48px); }
+    .hub-eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+    .hub-title { font-family: var(--font-display); font-size: clamp(34px, 5vw, 56px); line-height: 1.05; letter-spacing: -0.02em; margin: 12px 0 16px; }
+    .hub-sub { color: var(--muted); font-size: 16px; max-width: 52ch; margin: 0 0 28px; }
+    .discover-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap-md); }
+    @media (max-width: 920px) { .discover-grid { grid-template-columns: 1fr; } }
+    .discover-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; }
+    .discover-icon { width: 40px; height: 40px; border-radius: 12px; background: var(--accent-soft); color: var(--accent); font-family: var(--font-display); font-size: 20px; font-weight: 600; display: grid; place-items: center; margin-bottom: 16px; }
+    .discover-card h3 { font-size: 18px; margin-bottom: 4px; }
+    .discover-card .en { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+    .discover-card p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+    .discover-badge { display: inline-flex; padding: 3px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--muted); }
+    .featured-row { display: grid; grid-template-columns: 44px 1fr auto; gap: var(--gap-md); align-items: center; padding: 18px 0; border-top: 1px solid var(--border); }
+    .featured-row:first-child { border-top: 0; padding-top: 0; }
+    .row-icon { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border); display: grid; place-items: center; font-family: var(--font-display); font-size: 17px; font-weight: 600; color: var(--fg); }
+    .row-body h3 { font-size: 17px; margin-bottom: 3px; }
+    .row-body .en { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+    .row-body p { margin: 6px 0 0; color: var(--muted); font-size: 14px; max-width: 56ch; }
+    .row-action { text-align: right; }
+    .btn-add { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); font-size: 14px; font-weight: 500; color: var(--fg); cursor: pointer; transition: border-color .15s, color .15s; }
+    .btn-add:hover { border-color: var(--fg); }
+    .installed-label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+    .installed-label::before { content: '✓'; font-family: var(--font-mono); }
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px; }
+    .section-head h2 { font-size: 28px; }
+    .section-head .meta { font-size: 13px; }
+    .hub-foot { display: flex; justify-content: center; padding: 28px 0 8px; }
+
+    .design-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap-md); }
+    @media (max-width: 920px) { .design-list { grid-template-columns: 1fr; } }
+    .design-cell { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 28px; }
+    .design-cell .kicker { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+    .design-cell h3 { font-size: 19px; margin-bottom: 8px; }
+    .design-cell p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    .state-table .state-tag { display: inline-block; min-width: 96px; text-align: center; padding: 4px 10px; border-radius: 999px; font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--border); color: var(--muted); }
+    .state-table .state-tag.accent { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  </style>
+</head>
+<body>
+  <header class="topnav" data-od-id="topnav">
+    <div class="container topnav-inner">
+      <span class="logo">Athlon Agent</span>
+      <nav>
+        <a href="#">Chat</a>
+        <a href="#">Skills</a>
+        <a href="#">Settings</a>
+      </nav>
+      <button class="btn btn-secondary">Manage Skills</button>
+    </div>
+  </header>
+
+  <main id="content">
+    <section class="section" data-od-id="hero">
+      <div class="container" style="max-width: 720px;">
+        <p class="eyebrow">Design Concept · v2.0</p>
+        <h1>Skill Hub，重新设计。</h1>
+        <p class="lead" style="margin-top: 20px;">
+          更清晰的浏览动线、更克制的内容密度、更一致的视觉语言。
+          下面是完整的设计稿：从页面结构、信息层级到组件规范。
+        </p>
+      </div>
+    </section>
+
+    <section class="section" data-od-id="mockup">
+      <div class="container">
+        <div class="section-head">
+          <h2>页面设计稿</h2>
+          <span class="meta">1440 × 900 · Light</span>
+        </div>
+
+        <div class="appframe">
+          <div class="appbar">
+            <span class="logo">Athlon Agent</span>
+            <div class="search">
+              <span aria-hidden="true" style="font-size: 15px;">⌕</span>
+              <input type="text" placeholder="Search skills by name, category, or description…" />
+            </div>
+            <select class="cat" aria-label="Category">
+              <option>All Categories</option>
+              <option>Development</option>
+              <option>Design</option>
+              <option>Productivity</option>
+              <option>Research</option>
+            </select>
+            <button class="btn btn-primary" style="padding: 8px 16px; font-size: 14px;">Manage</button>
+          </div>
+
+          <div class="appbody">
+            <p class="hub-eyebrow">Skill Library</p>
+            <h1 class="hub-title">Discover skills that extend your agent.</h1>
+            <p class="hub-sub">
+              Browse the catalog, install with one click, and manage from Settings.
+              Skills are local packages — download, verify, enable.
+            </p>
+
+            <div class="section-head">
+              <h2>Discover</h2>
+              <span class="meta">3 featured this week</span>
+            </div>
+            <div class="discover-grid">
+              <div class="discover-card">
+                <div class="discover-icon">F</div>
+                <h3>Frontend Design</h3>
+                <div class="en">frontend-design</div>
+                <p>Generate polished single-page HTML with a token-driven design system.</p>
+                <span class="discover-badge">Design</span>
+              </div>
+              <div class="discover-card">
+                <div class="discover-icon">D</div>
+                <h3>Data Visualization</h3>
+                <div class="en">data-viz</div>
+                <p>Turn messy datasets into clean, responsive chart pages and dashboards.</p>
+                <span class="discover-badge">Development</span>
+              </div>
+              <div class="discover-card">
+                <div class="discover-icon">R</div>
+                <h3>Research Assistant</h3>
+                <div class="en">research-assistant</div>
+                <p>Structure research questions, synthesize sources, and draft literature reviews.</p>
+                <span class="discover-badge">Productivity</span>
+              </div>
+            </div>
+
+            <div class="section-head" style="margin-top: 56px;">
+              <h2>Featured</h2>
+              <span class="meta">6 of 12 shown</span>
+            </div>
+            <div>
+              <div class="featured-row">
+                <div class="row-icon">S</div>
+                <div class="row-body">
+                  <h3>SQL Query Builder</h3>
+                  <div class="en">sql-builder</div>
+                  <p>Write, optimize, and explain SQL across PostgreSQL, MySQL, and SQL Server.</p>
+                </div>
+                <div class="row-action"><button class="btn-add">Add</button></div>
+              </div>
+              <div class="featured-row">
+                <div class="row-icon">T</div>
+                <div class="row-body">
+                  <h3>Translation & Localization</h3>
+                  <div class="en">translate</div>
+                  <p>Translate and localize UI copy with tone, context, and glossary awareness.</p>
+                </div>
+                <div class="row-action"><span class="installed-label">Installed</span></div>
+              </div>
+              <div class="featured-row">
+                <div class="row-icon">A</div>
+                <div class="row-body">
+                  <h3>API Mock Server</h3>
+                  <div class="en">api-mock</div>
+                  <p>Generate OpenAPI specs and run a local mock server from natural-language descriptions.</p>
+                </div>
+                <div class="row-action"><button class="btn-add">Add</button></div>
+              </div>
+              <div class="featured-row">
+                <div class="row-icon">C</div>
+                <div class="row-body">
+                  <h3>Code Review Copilot</h3>
+                  <div class="en">code-review</div>
+                  <p>Analyze diffs for risk, readability, and test coverage before you merge.</p>
+                </div>
+                <div class="row-action"><button class="btn-add">Add</button></div>
+              </div>
+            </div>
+
+            <div class="section-head" style="margin-top: 56px;">
+              <h2>Development</h2>
+              <span class="meta">4 skills</span>
+            </div>
+            <div>
+              <div class="featured-row">
+                <div class="row-icon">R</div>
+                <div class="row-body">
+                  <h3>Refactoring Guide</h3>
+                  <div class="en">refactor</div>
+                  <p>Apply safe, incremental refactors with clear before/after examples.</p>
+                </div>
+                <div class="row-action"><button class="btn-add">Add</button></div>
+              </div>
+              <div class="featured-row">
+                <div class="row-icon">T</div>
+                <div class="row-body">
+                  <h3>Test Case Generator</h3>
+                  <div class="en">test-gen</div>
+                  <p>Produce unit, integration, and edge-case tests from function signatures.</p>
+                </div>
+                <div class="row-action"><button class="btn-add">Add</button></div>
+              </div>
+            </div>
+
+            <div class="hub-foot">
+              <button class="btn btn-secondary">Show 8 more skills</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" data-od-id="principles">
+      <div class="container stack" style="gap: 56px;">
+        <div style="max-width: 36ch;">
+          <p class="eyebrow">Design Principles</p>
+          <h2>What changed and why.</h2>
+        </div>
+        <div class="design-list">
+          <div class="design-cell">
+            <div class="kicker">01 · Clarity</div>
+            <h3>One job per section</h3>
+            <p>Discover shows the 3 strongest picks; Featured scrolls a longer list; categories group the rest. No mixed concerns.</p>
+          </div>
+          <div class="design-cell">
+            <div class="kicker">02 · Density</div>
+            <h3>Reduce visual noise</h3>
+            <p>Replace icon-heavy cards with hairline-divided rows. Let the skill name and description lead; actions stay small and quiet.</p>
+          </div>
+          <div class="design-cell">
+            <div class="kicker">03 · Consistency</div>
+            <h3>Inherit the app theme</h3>
+            <p>All color flows from six CSS tokens. The hub can switch to the host's dark theme without custom paint code.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" data-od-id="states">
+      <div class="container">
+        <div style="text-align: center; max-width: 36ch; margin: 0 auto 48px;">
+          <p class="eyebrow">States</p>
+          <h2>Every interaction has a visible answer.</h2>
+        </div>
+        <table class="ds-table state-table">
+          <thead>
+            <tr>
+              <th>State</th>
+              <th>Trigger</th>
+              <th>Visual treatment</th>
+              <th class="num-col">Accent uses</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="state-tag">Default</span></td>
+              <td>Page loaded, no query</td>
+              <td>Full catalog: Discover + Featured + category sections</td>
+              <td class="num-col">1 · primary CTA</td>
+            </tr>
+            <tr>
+              <td><span class="state-tag">Search</span></td>
+              <td>User types in search</td>
+              <td>Hide Discover, filter rows by name / description / category</td>
+              <td class="num-col">0</td>
+            </tr>
+            <tr>
+              <td><span class="state-tag accent">Add</span></td>
+              <td>User clicks Add</td>
+              <td>Button becomes "Adding…" and disabled until installResult</td>
+              <td class="num-col">1 · active button</td>
+            </tr>
+            <tr>
+              <td><span class="state-tag">Installed</span></td>
+              <td>Skill already on disk</td>
+              <td>Replaces Add with a muted "✓ Installed" label</td>
+              <td class="num-col">0</td>
+            </tr>
+            <tr>
+              <td><span class="state-tag">Empty</span></td>
+              <td>No skills / no match</td>
+              <td>Centered meta message: "No skills match your search."</td>
+              <td class="num-col">0</td>
+            </tr>
+            <tr>
+              <td><span class="state-tag">Error</span></td>
+              <td>Hub server unreachable</td>
+              <td>Inline status banner above the list, with retry ghost button</td>
+              <td class="num-col">0</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" data-od-id="footer-note" style="text-align: center;">
+      <div class="container" style="max-width: 640px;">
+        <h2>A quieter, faster skill catalog.</h2>
+        <p class="lead" style="margin: 16px auto 32px;">
+          This design keeps the existing WebView2 contract intact — it is a
+          visual re-skin, not an architecture change.
+        </p>
+        <button class="btn btn-primary">Open in Settings</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="pagefoot" data-od-id="footer">
+    <div class="container row-between">
+      <span>© Athlon Agent · 2026</span>
+      <span class="meta">Skill Hub design concept · Light</span>
+    </div>
+  </footer>
+</body>
+</html>

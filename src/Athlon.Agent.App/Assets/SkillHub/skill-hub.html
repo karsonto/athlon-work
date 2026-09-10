@@ -10,26 +10,48 @@
 <body>
   <div id="app">
     <header class="toolbar">
+      <span class="toolbar-brand">Skill Hub</span>
       <div class="search-wrap">
-        <span class="search-icon" aria-hidden="true">⌕</span>
-        <input id="search" type="search" placeholder="Search Skills..." autocomplete="off" />
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="M20 20l-3.5-3.5"></path>
+        </svg>
+        <input id="search" type="search" placeholder="Search skills by name, category, or description…" autocomplete="off" />
         <select id="categoryFilter" aria-label="Category">
-          <option value="">All</option>
+          <option value="">All Categories</option>
         </select>
       </div>
       <button id="manageBtn" type="button" class="manage-btn">Manage</button>
     </header>
+
     <main id="content" class="content">
       <div id="status" class="status" hidden></div>
+
+      <section class="hub-hero">
+        <p class="hub-eyebrow">Skill Library</p>
+        <h1 class="hub-title">Discover skills that extend your agent.</h1>
+        <p class="hub-sub">Browse the catalog, install with one click, and manage from Settings. Skills are local packages — download, verify, enable.</p>
+      </section>
+
       <section id="discover" class="section" hidden>
-        <h2 class="section-title">Discover</h2>
+        <div class="section-head">
+          <h2 class="section-title">Discover</h2>
+          <span class="section-meta" id="discoverMeta"></span>
+        </div>
         <div id="discoverGrid" class="discover-grid"></div>
       </section>
+
       <section id="featured" class="section" hidden>
-        <h2 class="section-title">Featured</h2>
+        <div class="section-head">
+          <h2 class="section-title">Featured</h2>
+          <span class="section-meta" id="featuredMeta"></span>
+        </div>
         <div id="featuredList" class="skill-list"></div>
-        <button id="featuredMore" type="button" class="show-more" hidden></button>
+        <div class="show-more-wrap">
+          <button id="featuredMore" type="button" class="show-more" hidden></button>
+        </div>
       </section>
+
       <div id="categorySections"></div>
     </main>
   </div>
