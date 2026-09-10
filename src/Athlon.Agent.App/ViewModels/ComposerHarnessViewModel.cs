@@ -38,7 +38,7 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
     [ObservableProperty]
     private bool _isModePickerOpen;
 
-    public bool IsHarnessActive => SelectedMode == SessionAgentMode.Coding;
+    public bool IsHarnessActive => SelectedMode == SessionAgentMode.Agent;
 
     public bool IsPlanMode => SelectedMode == SessionAgentMode.Plan;
 
@@ -48,7 +48,6 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
 
     public string HarnessButtonToolTip => SelectedMode switch
     {
-        SessionAgentMode.Coding => _loc["Harness_Mode_Coding_Tooltip"],
         SessionAgentMode.Ask => _loc["Harness_Mode_Ask_Tooltip"],
         SessionAgentMode.Plan => _loc["Harness_Mode_Plan_Tooltip"],
         SessionAgentMode.Debug => _loc["Harness_Mode_Debug_Tooltip"],
@@ -57,7 +56,6 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
 
     public string HarnessPickerLabel => SelectedMode switch
     {
-        SessionAgentMode.Coding => _loc["Harness_Mode_Coding"],
         SessionAgentMode.Ask => _loc["Harness_Mode_Ask"],
         SessionAgentMode.Plan => _loc["Harness_Mode_Plan"],
         SessionAgentMode.Debug => _loc["Harness_Mode_Debug"],
@@ -106,16 +104,15 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
         }
 
         var previous = SelectedMode;
-        var wasCoding = previous == SessionAgentMode.Coding;
         await _harnessState.SaveAsync(_sessionId, new SessionHarnessSnapshot(mode)).ConfigureAwait(true);
         SelectedMode = mode;
         IsModePickerOpen = false;
 
-        if (wasCoding && mode != SessionAgentMode.Coding)
+        if (previous == SessionAgentMode.Agent && mode != SessionAgentMode.Agent)
         {
             await ClearTaskPlanAsync().ConfigureAwait(true);
         }
-        else if (mode == SessionAgentMode.Coding)
+        else if (mode == SessionAgentMode.Agent)
         {
             await RefreshTasksAsync().ConfigureAwait(true);
         }

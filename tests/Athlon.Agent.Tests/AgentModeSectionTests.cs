@@ -9,7 +9,7 @@ public sealed class AgentModeSectionTests
 {
     [Theory]
     [InlineData(SessionAgentMode.Agent, "Agent mode")]
-    [InlineData(SessionAgentMode.Coding, "Coding mode")]
+    [InlineData(SessionAgentMode.Coding, "Agent mode")]
     [InlineData(SessionAgentMode.Ask, "Ask mode")]
     [InlineData(SessionAgentMode.Debug, "Debug mode")]
     public void Append_WithWorkspace_IncludesModeDeclaration(SessionAgentMode mode, string expectedPhrase)
@@ -20,9 +20,9 @@ public sealed class AgentModeSectionTests
         var text = builder.ToString();
         Assert.Contains("Session mode:", text, StringComparison.Ordinal);
         Assert.Contains(expectedPhrase, text, StringComparison.Ordinal);
-        if (mode == SessionAgentMode.Coding)
+        if (mode == SessionAgentMode.Agent || mode == SessionAgentMode.Coding)
         {
-            Assert.Contains("maintain todos with todo_write", text, StringComparison.Ordinal);
+            Assert.Contains("todo_write", text, StringComparison.Ordinal);
         }
     }
 
@@ -55,7 +55,7 @@ public sealed class AgentModeSectionTests
             new("file_read", "r", ToolSchema.Object().Build()),
             new("grep_files", "g", ToolSchema.Object().Build()),
         };
-        if (mode == SessionAgentMode.Coding)
+        if (mode == SessionAgentMode.Agent || mode == SessionAgentMode.Coding)
         {
             tools.Add(new ToolDefinition("todo_write", "t", ToolSchema.Object().Build()));
         }

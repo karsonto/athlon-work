@@ -20,13 +20,9 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
         switch (context.AgentMode)
         {
             case SessionAgentMode.Coding:
-                builder.AppendLine("- The user selected Coding mode for this session.");
-                builder.AppendLine("- You have full workspace tools (read, write, shell) as advertised, plus long-term memory and task planning when those tools are present.");
-                if (PromptModeHelper.HasTool(context, "todo_write"))
-                {
-                    builder.AppendLine("- For multi-step or multi-file work: maintain todos with todo_write.");
-                }
-
+            default:
+                builder.AppendLine("- The user selected Agent mode for this session — the unified entry point with full workspace tools (read, write, shell) as advertised, plus long-term memory and task planning when those tools are present.");
+                builder.AppendLine("- You have complete workspace autonomy: inspect, implement, and verify. Use todo_write for multi-step or multi-file work when available.");
                 builder.AppendLine("- Explore, write todos when useful, implement, and verify.");
                 break;
             case SessionAgentMode.Ask:
@@ -38,17 +34,13 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
                 builder.AppendLine("- Consult across turns: explore with read/search; ask with ask_user when ambiguous; call publish_plan when ready.");
                 builder.AppendLine("- When calling ask_user: finish any brief user-facing note first, keep reasoning short, and make ask_user the last action of the turn — then stop.");
                 builder.AppendLine("- Nothing auto-drafts the plan for you; never implement.");
-                builder.AppendLine("- After the plan is published, wait for the user to Build (switch to Coding) or send a revision.");
+                builder.AppendLine("- After the plan is published, wait for the user to Build (which enters implementation) or send a revision.");
                 break;
             case SessionAgentMode.Debug:
                 builder.AppendLine("- The user selected Debug mode — investigate a reproducible bug with runtime logs.");
                 builder.AppendLine("- Evidence gate: do not state a root cause and do not apply a fix until you have called diagnose_logs and cited matching evidence.");
                 builder.AppendLine("- Empty logs or no matching entries means evidence is insufficient: adjust probes and wait for another repro. Do not guess.");
                 builder.AppendLine("- Instrument, Fix, and Cleanup may edit files; Hypothesize, Analyze, and Await phases are read-only.");
-                break;
-            default:
-                builder.AppendLine("- The user selected Agent mode for this session.");
-                builder.AppendLine("- You have full workspace tools (read, write, shell) as advertised. Long-term memory and todo_write are disabled unless advertised.");
                 break;
         }
 

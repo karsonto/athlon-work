@@ -307,7 +307,79 @@ public sealed class GrepFilesToolTests
         }
     }
 
-    private static GrepFilesTool CreateTool(string workspaceRoot, string appDataRoot, bool sequential = false)
+    [Fact]
+    public async Task InvokeAsync_FoldsOverlongMatchedLine()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(workspaceRoot);
+
+        // One minified-style line far longer than the fold limit, match point at the head.
+        var longLine = "needle" + new string('x', 50_000) + "tail-marker";
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "bundle.min.js"), longLine);
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot, maxLineChars: 512);
+            var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
+            {
+                ["pattern"] = "needle"
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("Found 1 matches", result.Summary);
+            var matchLine = Assert.Single(
+                result.Content!.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+            Assert.True(matchLine.Length <= 512, $"line was {matchLine.Length} chars");
+            Assert.Contains("bundle.min.js", matchLine, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("needle", matchLine, StringComparison.Ordinal);
+            Assert.Contains("[line truncated", matchLine, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_ShortLines_AreNotFolded()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-grep-{Guid.NewGuid():N}");
+        var workspaceRoot = Path.Combine(root, "workspace");
+        var appDataRoot = Path.Combine(root, ".athlon-agent");
+        Directory.CreateDirectory(workspaceRoot);
+
+        await File.WriteAllTextAsync(Path.Combine(workspaceRoot, "short.txt"), "needle here");
+
+        try
+        {
+            var tool = CreateTool(workspaceRoot, appDataRoot, maxLineChars: 512);
+            var result = await tool.InvokeAsync(new ToolInvocation("grep_files", new Dictionary<string, string>
+            {
+                ["pattern"] = "needle"
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.DoesNotContain("[line truncated", result.Content!, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    private static GrepFilesTool CreateTool(
+        string workspaceRoot,
+        string appDataRoot,
+        bool sequential = false,
+        int? maxLineChars = null)
     {
         var context = new ActiveWorkspaceContext();
         context.SetWorkspace(workspaceRoot);
@@ -317,6 +389,11 @@ public sealed class GrepFilesToolTests
         if (sequential)
         {
             settings.ParallelToolExecution.MaxDegreeOfParallelism = 1;
+        }
+
+        if (maxLineChars is not null)
+        {
+            settings.Grep.MaxLineChars = maxLineChars.Value;
         }
 
         return new GrepFilesTool(guard, audit, settings);

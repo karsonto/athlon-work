@@ -134,7 +134,8 @@ public static class ContextPressureEvaluator
             var estimated = ContextTokenEstimator.Estimate(
                 conversation,
                 settings.IncludeReasoningInModelContext,
-                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext);
+                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext,
+                hygiene: settings.RequestHistoryHygiene);
             return ConversationCutoffPlanner.ShouldCompact(conversation, estimated, settings, force: false);
         }
 
@@ -150,7 +151,8 @@ public static class ContextPressureEvaluator
             ?? ContextTokenEstimator.Estimate(
                 conversation,
                 settings.IncludeReasoningInModelContext,
-                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext);
+                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext,
+                hygiene: settings.RequestHistoryHygiene);
         return ConversationCutoffPlanner.ShouldTruncateArgs(
             conversation,
             estimated,
@@ -166,7 +168,8 @@ public static class ContextPressureEvaluator
             ?? ContextTokenEstimator.Estimate(
                 conversation,
                 settings.IncludeReasoningInModelContext,
-                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext);
+                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext,
+                hygiene: settings.RequestHistoryHygiene);
         return ConversationCutoffPlanner.ShouldCompact(conversation, estimated, settings, force: false);
     }
 
@@ -189,6 +192,7 @@ public static class ContextPressureEvaluator
             conversation,
             tailStart,
             settings.IncludeReasoningInModelContext,
-            settings.MaxToolScreenshotsInModelContext);
+            settings.MaxToolScreenshotsInModelContext,
+            settings.RequestHistoryHygiene);
     }
 }

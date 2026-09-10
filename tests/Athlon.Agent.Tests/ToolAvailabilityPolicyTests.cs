@@ -72,11 +72,12 @@ public sealed class ToolAvailabilityPolicyTests
     }
 
     [Theory]
-    [InlineData(SessionAgentMode.Agent, false)]
+    [InlineData(SessionAgentMode.Agent, true)]
     [InlineData(SessionAgentMode.Coding, true)]
     [InlineData(SessionAgentMode.Ask, false)]
-    [InlineData(SessionAgentMode.Debug, false)]
-    public void TodoWrite_OnlyInCoding(SessionAgentMode mode, bool expected)
+    [InlineData(SessionAgentMode.Plan, false)]
+    [InlineData(SessionAgentMode.Debug, true)]
+    public void TodoWrite_EnabledExceptAskAndPlan(SessionAgentMode mode, bool expected)
     {
         var ctx = AgentLocal with { Mode = mode };
         Assert.Equal(expected, ToolAvailabilityPolicy.IsEnabled(new StubHarness("todo_write"), ctx));

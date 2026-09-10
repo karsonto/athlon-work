@@ -8,7 +8,6 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, A
     private const int MaxFilesToScan = 2000;
     private const int MaxMatches = 200;
     private const long MaxFileSizeBytes = 2 * 1024 * 1024;
-
     public ToolDefinition Definition { get; } = new(
         "grep_files",
         "Search file contents. Literal matching by default (case-insensitive); set regex true for .NET regular expressions. "
@@ -96,7 +95,9 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, A
                     if (!matcher!.IsMatch(line))
                         continue;
 
-                    var matchLine = $"{Path.GetRelativePath(baseRoot, file)}:{lineNumber}:{line.Trim()}";
+                    var matchLine = FormatMatchLine(
+                        $"{Path.GetRelativePath(baseRoot, file)}:{lineNumber}:{line.Trim()}",
+                        settings.Grep.MaxLineChars);
                     lock (matchLock)
                     {
                         if (matchCount < MaxMatches)
@@ -121,5 +122,21 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, A
         return matches.Count == 0
             ? ToolResult.Success("No matches found", "No matches found")
             : ToolResult.Success($"Found {matches.Count} matches", string.Join(Environment.NewLine, matches));
+    }
+
+    /// <summary>
+    /// Folds an over-long match line so a single minified/bundled file cannot blow up the payload.
+    /// Keeps the path:line prefix and the head most likely to contain the match point.
+    /// </summary>
+    internal static string FormatMatchLine(string matchLine, int maxLineChars)
+    {
+        if (maxLineChars <= 0 || matchLine.Length <= maxLineChars)
+        {
+            return matchLine;
+        }
+
+        var suffix = $"... [line truncated, {matchLine.Length} chars]";
+        var keep = Math.Max(0, maxLineChars - suffix.Length);
+        return matchLine[..keep] + suffix;
     }
 }

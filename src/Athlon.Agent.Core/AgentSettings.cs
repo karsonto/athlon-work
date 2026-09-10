@@ -74,6 +74,7 @@ public sealed class AppSettings
     public AgentTurnSettings AgentTurn { get; set; } = new();
     public WorkspaceIgnoreSettings WorkspaceIgnore { get; set; } = new();
     public FileReadSettings FileRead { get; set; } = new();
+    public GrepSettings Grep { get; set; } = new();
     public SubAgentSettings SubAgent { get; set; } = new();
     public ParallelToolExecutionSettings ParallelToolExecution { get; set; } = new();
     public MemorySettings Memory { get; set; } = new();
@@ -100,6 +101,18 @@ public sealed class FileReadSettings
     public int MaxResponseChars { get; set; } = 32_768;
     public int MaxLineChars { get; set; } = 1_0240;
     public bool CountTotalLines { get; set; } = true;
+}
+
+public sealed class GrepSettings
+{
+    /// <summary>Max chars per matched line before head/tail folding (keeps the match point visible).</summary>
+    public int MaxLineChars { get; set; } = 1_024;
+
+    /// <summary>
+    /// Max total chars of inline match lines. Beyond this the full result spills to the session's
+    /// <c>evicted/</c> folder and the model receives a pointer plus an explicit truncation notice.
+    /// </summary>
+    public int MaxResponseChars { get; set; } = 32_768;
 }
 
 public sealed class WorkspaceIgnoreSettings

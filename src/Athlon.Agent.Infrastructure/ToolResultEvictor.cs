@@ -24,16 +24,23 @@ public sealed class ToolResultEvictor(
             return formattedToolContent;
         }
 
-        if (cfg.ExcludedToolNames.Any(name =>
-                string.Equals(name, toolCall.Name, StringComparison.OrdinalIgnoreCase)))
-        {
-            return formattedToolContent;
-        }
-
         var rawContent = result.Content ?? string.Empty;
-        if (rawContent.Length <= cfg.MaxResultChars)
+        var grepOverflow = IsGrepTool(toolCall.Name)
+            && settings.Grep.MaxResponseChars > 0
+            && rawContent.Length > settings.Grep.MaxResponseChars;
+
+        if (!grepOverflow)
         {
-            return formattedToolContent;
+            if (cfg.ExcludedToolNames.Any(name =>
+                    string.Equals(name, toolCall.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return formattedToolContent;
+            }
+
+            if (rawContent.Length <= cfg.MaxResultChars)
+            {
+                return formattedToolContent;
+            }
         }
 
         string path;
@@ -61,6 +68,13 @@ public sealed class ToolResultEvictor(
             .AppendLine("Preview:")
             .Append(preview)
             .ToString();
+        if (grepOverflow)
+        {
+            var totalMatches = CountNonEmptyLines(rawContent);
+            placeholder += Environment.NewLine
+                + $"[grep output truncated: {totalMatches} match(es), {rawContent.Length} chars total, exceeds the inline limit of "
+                + $"{settings.Grep.MaxResponseChars} chars; read the archived file for the full match list.]";
+        }
 
         await EnqueueDiagnosticAsync(
             sessionId,
@@ -74,6 +88,28 @@ public sealed class ToolResultEvictor(
         return AgentRuntime.FormatToolResult(
             toolCall,
             ToolResult.Success(result.Summary, placeholder));
+    }
+
+    private static bool IsGrepTool(string toolName) =>
+        string.Equals(toolName, "grep_files", StringComparison.OrdinalIgnoreCase);
+
+    private static int CountNonEmptyLines(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return 0;
+        }
+
+        var count = 0;
+        foreach (var line in content.Split('\n'))
+        {
+            if (line.Trim().Length > 0)
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private async Task EnqueueDiagnosticAsync(

@@ -109,6 +109,75 @@ public sealed class ToolResultEvictorTests
         }
     }
 
+    [Fact]
+    public async Task EvictIfNeeded_EvictsGrepOutputOverInlineLimitDespiteExclusion()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-evict-grep", Guid.NewGuid().ToString("N"));
+        var paths = new CompactionTests.TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var settings = new AppSettings
+            {
+                Grep = new GrepSettings { MaxResponseChars = 200 },
+                ContextCompaction = new ContextCompactionSettings
+                {
+                    ToolResultEviction = new ToolResultEvictionSettings
+                    {
+                        MaxResultChars = 10_000_000,
+                        PreviewChars = 20
+                    }
+                }
+            };
+            Assert.Contains("grep_files", settings.ContextCompaction.ToolResultEviction.ExcludedToolNames);
+
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+            var evictor = new ToolResultEvictor(settings, storage);
+            var toolCall = new AgentToolCall("call-grep", "grep_files", new Dictionary<string, string>());
+            var full = string.Join('\n', Enumerable.Range(0, 40).Select(i => $"src/file{i:D2}.cs:{i}:needle"));
+            var result = ToolResult.Success("Found 40 matches", full);
+
+            var output = await evictor.EvictIfNeededAsync(
+                "session-grep",
+                toolCall,
+                result,
+                AgentRuntime.FormatToolResult(toolCall, result));
+
+            Assert.Contains("[Tool result evicted", output, StringComparison.Ordinal);
+            Assert.Contains("Archived at:", output, StringComparison.Ordinal);
+            Assert.Contains("grep output truncated", output, StringComparison.Ordinal);
+            Assert.Contains("40 match(es)", output, StringComparison.Ordinal);
+
+            var archived = await storage.TryReadEvictedToolResultAsync("session-grep", "call-grep");
+            Assert.Equal(full, archived);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task EvictIfNeeded_KeepsGrepOutputUnderInlineLimit()
+    {
+        var settings = new AppSettings
+        {
+            Grep = new GrepSettings { MaxResponseChars = 32_768 }
+        };
+        var evictor = new ToolResultEvictor(settings, new NoOpStorage());
+        var toolCall = new AgentToolCall("call-small", "grep_files", new Dictionary<string, string>());
+        var result = ToolResult.Success("Found 2 matches", "a.cs:1:needle\nb.cs:2:needle");
+        var formatted = AgentRuntime.FormatToolResult(toolCall, result);
+
+        var output = await evictor.EvictIfNeededAsync("session-small", toolCall, result, formatted);
+
+        Assert.Equal(formatted, output);
+    }
+
     private sealed class NoOpStorage : IFileStorageService
     {
         public string RootPath => "/tmp";

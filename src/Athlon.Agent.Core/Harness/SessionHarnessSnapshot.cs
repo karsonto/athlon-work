@@ -33,9 +33,7 @@ public sealed record SessionHarnessSnapshot(SessionAgentMode Mode)
             return new SessionHarnessSnapshot(parsed);
         }
 
-        return file.Enabled
-            ? new SessionHarnessSnapshot(SessionAgentMode.Coding)
-            : new SessionHarnessSnapshot(SessionAgentMode.Agent);
+        return new SessionHarnessSnapshot(SessionAgentMode.Agent);
     }
 
     public static bool TryParseMode(string? value, out SessionAgentMode mode)
@@ -48,7 +46,7 @@ public sealed record SessionHarnessSnapshot(SessionAgentMode Mode)
 
         if (string.Equals(value, "coding", StringComparison.OrdinalIgnoreCase))
         {
-            mode = SessionAgentMode.Coding;
+            mode = SessionAgentMode.Agent;
             return true;
         }
 
@@ -76,7 +74,6 @@ public sealed record SessionHarnessSnapshot(SessionAgentMode Mode)
 
     public string ToPersistedMode() => Mode switch
     {
-        SessionAgentMode.Coding => "coding",
         SessionAgentMode.Ask => "ask",
         SessionAgentMode.Plan => "plan",
         SessionAgentMode.Debug => "debug",

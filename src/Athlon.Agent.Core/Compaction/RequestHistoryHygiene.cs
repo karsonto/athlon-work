@@ -26,6 +26,12 @@ public static partial class RequestHistoryHygiene
     private static readonly Regex Base64KeyRe = Base64KeyPattern();
     private static readonly Regex DataUrlRe = DataUrlPattern();
 
+    /// <summary>
+    /// True for argument names hygiene always preserves verbatim (paths, ranges, continuity fields).
+    /// Shared with <see cref="ContextTokenEstimator"/> so estimation clamps exactly what hygiene rewrites.
+    /// </summary>
+    public static bool IsContinuityArgument(string name) => ContinuityArgumentNames.Contains(name);
+
     public sealed record ApplyResult(IReadOnlyList<AgentModelMessage> Messages, int EstimatedSavingsTokens);
 
     public sealed record SummaryCompactResult(string Text, int CharsBefore, int CharsAfter, int EstimatedSavingsTokens);

@@ -79,12 +79,12 @@ public sealed class ToolsPolicySectionTests
     }
 
     [Fact]
-    public void Append_CodingMode_RequiresTodoMaintenanceForWrites()
+    public void Append_TodoTool_RequiresTodoMaintenanceForWrites()
     {
         var builder = new StringBuilder();
         new ToolsPolicySection().Append(
             builder,
-            CreateContext(hasWorkspace: true, tools: FullWorkspaceTools, mode: SessionAgentMode.Coding));
+            CreateContext(hasWorkspace: true, tools: FullWorkspaceTools, mode: SessionAgentMode.Agent));
 
         var text = builder.ToString();
         Assert.Contains("todo_write", text, StringComparison.Ordinal);

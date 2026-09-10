@@ -14,7 +14,7 @@ namespace Athlon.Agent.Tests;
 public sealed class HarnessTests
 {
     [Fact]
-    public async Task SessionHarnessState_PersistsEnabledFlag()
+    public async Task SessionHarnessState_PersistsMode()
     {
         var root = CreateTempRoot();
         var state = CreateHarnessState(root);
@@ -24,7 +24,8 @@ public sealed class HarnessTests
         var reloaded = CreateHarnessState(root);
         await reloaded.LoadAsync("session-1");
 
-        Assert.True(reloaded.IsCodingMode("session-1"));
+        Assert.True(reloaded.IsEnabled("session-1"));
+        Assert.Equal(SessionAgentMode.Agent, reloaded.GetMode("session-1"));
     }
 
     [Fact]
@@ -40,7 +41,7 @@ public sealed class HarnessTests
         var state = CreateHarnessState(root);
         await state.LoadAsync("session-legacy");
 
-        Assert.Equal(SessionAgentMode.Coding, state.GetMode("session-legacy"));
+        Assert.Equal(SessionAgentMode.Agent, state.GetMode("session-legacy"));
     }
 
     [Fact]
@@ -76,13 +77,12 @@ public sealed class HarnessTests
     [Fact]
     public void TaskListPromptContributor_InjectsTasks_WhenHarnessEnabled()
     {
-        var harness = RouterTestDependencies.CreateSessionHarnessState(enabled: true);
         var store = new InMemoryTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "Do work", Status = AgentTaskStatuses.Pending }
         ]);
         var accessor = RouterTestDependencies.CreateRunContextAccessor(harnessEnabled: true);
-        var contributor = new TaskListPromptContributor(harness, store, accessor);
+        var contributor = new TaskListPromptContributor(store, accessor);
         var builder = new StringBuilder();
         var context = CreatePromptContext();
 

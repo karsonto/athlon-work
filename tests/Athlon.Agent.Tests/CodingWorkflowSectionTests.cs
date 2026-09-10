@@ -26,10 +26,10 @@ public sealed class CodingWorkflowSectionTests
     }
 
     [Fact]
-    public void Append_IncludesVerificationAndDotnet_InCodingMode()
+    public void Append_IncludesVerificationAndDotnet_InAgentMode()
     {
         var builder = new StringBuilder();
-        new CodingWorkflowSection().Append(builder, CreateContext(hasWorkspace: true, SessionAgentMode.Coding));
+        new CodingWorkflowSection().Append(builder, CreateContext(hasWorkspace: true, SessionAgentMode.Agent));
 
         var text = builder.ToString();
         Assert.Contains("Coding workflow:", text, StringComparison.Ordinal);

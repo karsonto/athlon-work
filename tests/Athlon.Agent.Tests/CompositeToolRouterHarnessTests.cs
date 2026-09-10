@@ -10,7 +10,7 @@ namespace Athlon.Agent.Tests;
 public sealed class CompositeToolRouterHarnessTests
 {
     [Fact]
-    public void ListTools_WhenNotCoding_ExcludesHarnessTools_ButKeepsMemoryWithWorkspace()
+    public void ListTools_WhenAgent_IncludesHarnessAndMemoryTools()
     {
         var router = CreateRouter(SessionAgentMode.Agent);
 
@@ -18,7 +18,7 @@ public sealed class CompositeToolRouterHarnessTests
 
         Assert.Contains("memory_search", names);
         Assert.Contains("memory_get", names);
-        Assert.DoesNotContain("todo_write", names);
+        Assert.Contains("todo_write", names);
         Assert.Contains("file_list", names);
     }
 
@@ -49,9 +49,9 @@ public sealed class CompositeToolRouterHarnessTests
     }
 
     [Fact]
-    public async Task InvokeAsync_WhenNotCoding_ReturnsNotFoundForHarnessTools_ButResolvesMemory()
+    public async Task InvokeAsync_WhenAsk_BlocksHarnessTools_ButResolvesMemory()
     {
-        var router = CreateRouter(SessionAgentMode.Agent);
+        var router = CreateRouter(SessionAgentMode.Ask, includeWriteTools: true, includeSubAgentTools: true);
 
         var searchResult = await router.InvokeAsync(new ToolInvocation("memory_search", new Dictionary<string, string> { ["query"] = "test" }));
         var todoResult = await router.InvokeAsync(new ToolInvocation("todo_write", new Dictionary<string, string>

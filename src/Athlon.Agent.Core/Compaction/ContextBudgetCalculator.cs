@@ -33,7 +33,8 @@ public static class ContextBudgetCalculator
             conversation,
             compactionSettings.IncludeReasoningInModelContext,
             calibrationMultiplier,
-            compactionSettings.MaxToolScreenshotsInModelContext);
+            compactionSettings.MaxToolScreenshotsInModelContext,
+            compactionSettings.RequestHistoryHygiene);
         var historyUtilization = historyBudget > 0 ? (double)estimatedHistory / historyBudget : 1.0;
         var occupancy = BuildOccupancy(
             systemTokens,
@@ -68,7 +69,8 @@ public static class ContextBudgetCalculator
             conversation,
             compactionSettings.IncludeReasoningInModelContext,
             calibrationMultiplier,
-            compactionSettings.MaxToolScreenshotsInModelContext);
+            compactionSettings.MaxToolScreenshotsInModelContext,
+            compactionSettings.RequestHistoryHygiene);
 
         return snapshot.WithHistoryEstimate(estimatedHistory, snapshot.HistoryBudget);
     }
@@ -80,7 +82,8 @@ public static class ContextBudgetCalculator
         ContextTokenEstimator.Estimate(
             ConversationMessageFilters.WithoutCompactionAudits(messages),
             compactionSettings.IncludeReasoningInModelContext,
-            maxToolScreenshots: compactionSettings.MaxToolScreenshotsInModelContext);
+            maxToolScreenshots: compactionSettings.MaxToolScreenshotsInModelContext,
+            hygiene: compactionSettings.RequestHistoryHygiene);
 
     private static ContextOccupancyBreakdown BuildOccupancy(
         int systemTokens,

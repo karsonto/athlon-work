@@ -85,7 +85,8 @@ public static class ContextTokenEstimator
             ?? Estimate(
                 messages,
                 settings.IncludeReasoningInModelContext,
-                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext);
+                maxToolScreenshots: settings.MaxToolScreenshotsInModelContext,
+                hygiene: settings.RequestHistoryHygiene);
         if (budget is null)
         {
             return estimated;
@@ -98,13 +99,15 @@ public static class ContextTokenEstimator
         IReadOnlyList<ChatMessage> messages,
         bool includeReasoningInModelContext = false,
         double calibrationMultiplier = 1.0,
-        int maxToolScreenshots = int.MaxValue)
+        int maxToolScreenshots = int.MaxValue,
+        RequestHistoryHygieneSettings? hygiene = null)
     {
         if (messages.Count == 0)
         {
             return 0;
         }
 
+        var pairedToolCallIds = ResolvePairedToolCallIds(messages, hygiene);
         var remainingToolScreenshots = Math.Max(0, maxToolScreenshots);
         var total = 0;
         // Newest-first allocation for Tool screenshots (matches RetainLatestToolScreenshots).
@@ -116,7 +119,12 @@ public static class ContextTokenEstimator
                 continue;
             }
 
-            total += EstimateMessage(message, includeReasoningInModelContext, ref remainingToolScreenshots);
+            total += EstimateMessageCore(
+                message,
+                includeReasoningInModelContext,
+                ref remainingToolScreenshots,
+                hygiene,
+                pairedToolCallIds);
         }
 
         return calibrationMultiplier <= 0 || Math.Abs(calibrationMultiplier - 1.0) < 0.001
@@ -124,16 +132,37 @@ public static class ContextTokenEstimator
             : (int)Math.Ceiling(total * calibrationMultiplier);
     }
 
-    public static int EstimateMessage(ChatMessage message, bool includeReasoningInModelContext = false)
+    public static int EstimateMessage(
+        ChatMessage message,
+        bool includeReasoningInModelContext = false,
+        RequestHistoryHygieneSettings? hygiene = null)
     {
         var unlimited = int.MaxValue;
-        return EstimateMessage(message, includeReasoningInModelContext, ref unlimited);
+        return EstimateMessageCore(
+            message,
+            includeReasoningInModelContext,
+            ref unlimited,
+            hygiene,
+            pairedToolCallIds: null);
     }
 
     public static int EstimateMessage(
         ChatMessage message,
         bool includeReasoningInModelContext,
-        ref int remainingToolScreenshots)
+        ref int remainingToolScreenshots) =>
+        EstimateMessageCore(
+            message,
+            includeReasoningInModelContext,
+            ref remainingToolScreenshots,
+            hygiene: null,
+            pairedToolCallIds: null);
+
+    private static int EstimateMessageCore(
+        ChatMessage message,
+        bool includeReasoningInModelContext,
+        ref int remainingToolScreenshots,
+        RequestHistoryHygieneSettings? hygiene,
+        HashSet<string>? pairedToolCallIds)
     {
         if (message.Role == MessageRole.Compaction)
         {
@@ -149,17 +178,19 @@ public static class ContextTokenEstimator
             case MessageRole.Assistant:
             case MessageRole.System:
             case MessageRole.Summary:
-                tokens += EstimateRawTextTokens(message.Content);
+                tokens += IsToolPayloadMessage(message, hygiene)
+                    ? EstimateClampedToolResultTokens(message.Content, hygiene)
+                    : EstimateRawTextTokens(message.Content);
                 if (ReasoningInModelContext.CountsTowardEstimate(message, includeReasoningInModelContext))
                 {
                     tokens += EstimateRawTextTokens(message.ReasoningContent);
                 }
 
-                tokens += EstimateToolCallsTokens(message.ToolCallsJson);
+                tokens += EstimateToolCallsTokens(message.ToolCallsJson, hygiene, pairedToolCallIds);
                 break;
             case MessageRole.Tool:
                 tokens += ToolResultOverhead;
-                tokens += EstimateRawTextTokens(message.Content);
+                tokens += EstimateClampedToolResultTokens(message.Content, hygiene);
                 break;
             default:
                 tokens += EstimateRawTextTokens(message.Content);
@@ -186,13 +217,15 @@ public static class ContextTokenEstimator
         IReadOnlyList<ChatMessage> messages,
         int startIndex,
         bool includeReasoningInModelContext = false,
-        int maxToolScreenshots = int.MaxValue)
+        int maxToolScreenshots = int.MaxValue,
+        RequestHistoryHygieneSettings? hygiene = null)
     {
         if (startIndex < 0 || startIndex >= messages.Count)
         {
             return 0;
         }
 
+        var pairedToolCallIds = ResolvePairedToolCallIds(messages, hygiene);
         var remainingToolScreenshots = Math.Max(0, maxToolScreenshots);
         var total = 0;
         for (var i = messages.Count - 1; i >= startIndex; i--)
@@ -203,13 +236,89 @@ public static class ContextTokenEstimator
                 continue;
             }
 
-            total += EstimateMessage(message, includeReasoningInModelContext, ref remainingToolScreenshots);
+            total += EstimateMessageCore(
+                message,
+                includeReasoningInModelContext,
+                ref remainingToolScreenshots,
+                hygiene,
+                pairedToolCallIds);
         }
 
         return total;
     }
 
-    private static int EstimateToolCallsTokens(string? toolCallsJson)
+    /// <summary>
+    /// Tool-call ids that have a matching Tool message in <paramref name="messages"/>.
+    /// Mirrors <see cref="RequestHistoryHygiene.ApplyToModelMessages"/>'s pairing so argument
+    /// clamping never touches calls that hygiene would leave untouched.
+    /// </summary>
+    private static HashSet<string>? ResolvePairedToolCallIds(
+        IReadOnlyList<ChatMessage> messages,
+        RequestHistoryHygieneSettings? hygiene)
+    {
+        if (hygiene is not { Enabled: true })
+        {
+            return null;
+        }
+
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var message in messages)
+        {
+            if (message.Role != MessageRole.Tool || ModelMessageBuilder.IsRunningToolResult(message.Content))
+            {
+                continue;
+            }
+
+            var id = ModelMessageBuilder.ExtractToolCallId(message.Content);
+            if (!string.IsNullOrWhiteSpace(id))
+            {
+                ids.Add(id!);
+            }
+        }
+
+        return ids;
+    }
+
+    /// <summary>
+    /// True when hygiene treats this message as a tool payload (role Tool, or a user message
+    /// carrying a formatted tool output). Clamping is a conservative upper bound on hygiene's output.
+    /// </summary>
+    private static bool IsToolPayloadMessage(ChatMessage message, RequestHistoryHygieneSettings? hygiene)
+    {
+        if (hygiene is not { Enabled: true })
+        {
+            return false;
+        }
+
+        if (message.Role == MessageRole.Tool)
+        {
+            return true;
+        }
+
+        if (message.Role != MessageRole.User || string.IsNullOrEmpty(message.Content))
+        {
+            return false;
+        }
+
+        return message.Content.StartsWith("[Tool output]", StringComparison.Ordinal)
+            || message.Content.Contains("ToolCallId:", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static int EstimateClampedToolResultTokens(string? content, RequestHistoryHygieneSettings? hygiene)
+    {
+        var tokens = EstimateRawTextTokens(content);
+        if (hygiene is not { Enabled: true })
+        {
+            return tokens;
+        }
+
+        return Math.Min(tokens, Math.Max(0, hygiene.MaxToolResultTokens));
+    }
+
+    private static int EstimateToolCallsTokens(
+        string? toolCallsJson,
+        RequestHistoryHygieneSettings? hygiene,
+        HashSet<string>? pairedToolCallIds)
     {
         var calls = AssistantToolCallsCodec.Deserialize(toolCallsJson);
         if (calls is not { Count: > 0 })
@@ -223,13 +332,44 @@ public static class ContextTokenEstimator
             tokens += ToolCallOverhead;
             tokens += EstimateRawTextTokens(call.Name);
             tokens += EstimateRawTextTokens(call.Id);
+            var clampArguments = hygiene is { Enabled: true }
+                && pairedToolCallIds is not null
+                && pairedToolCallIds.Contains(call.Id);
             foreach (var argument in call.Arguments)
             {
                 tokens += EstimateRawTextTokens(argument.Key);
-                tokens += EstimateRawTextTokens(argument.Value.GetRawText());
+                tokens += clampArguments
+                    ? EstimateClampedArgumentTokens(argument.Key, argument.Value, hygiene!)
+                    : EstimateRawTextTokens(argument.Value.GetRawText());
             }
         }
 
         return tokens;
+    }
+
+    private static int EstimateClampedArgumentTokens(
+        string key,
+        System.Text.Json.JsonElement value,
+        RequestHistoryHygieneSettings hygiene)
+    {
+        var rawTokens = EstimateRawTextTokens(value.GetRawText());
+        // Hygiene only rewrites plain string arguments that are not continuity-critical.
+        if (value.ValueKind != System.Text.Json.JsonValueKind.String
+            || RequestHistoryHygiene.IsContinuityArgument(key))
+        {
+            return rawTokens;
+        }
+
+        var text = value.GetString() ?? string.Empty;
+        var textTokens = EstimateRawTextTokens(text);
+        var bytes = System.Text.Encoding.UTF8.GetByteCount(text);
+        if (bytes <= hygiene.MaxToolArgumentStringBytes && textTokens <= hygiene.MaxToolArgumentStringTokens)
+        {
+            // Left untouched: the payload carries the original raw JSON.
+            return rawTokens;
+        }
+
+        // Rewritten to a short omission notice; MaxToolArgumentStringTokens is a safe upper bound.
+        return Math.Min(rawTokens, Math.Max(0, hygiene.MaxToolArgumentStringTokens));
     }
 }

@@ -15,7 +15,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task ClearTaskPlanAsync_ClearsStoreAndSidebarTasks()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "task", Status = AgentTaskStatuses.InProgress }
@@ -37,9 +37,9 @@ public sealed class ComposerHarnessViewModelTests
     }
 
     [Fact]
-    public async Task ShowTaskPanel_IsFalse_WhenHarnessDisabled()
+    public async Task ShowTaskPanel_IsFalse_WhenReadOnlyMode()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var harness = new StubHarnessState(SessionAgentMode.Ask);
         var store = new MutableTaskListStore();
         var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
 
@@ -54,7 +54,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task ShowTaskPanel_IsFalse_WhenTaskListEmpty()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore();
         var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
 
@@ -67,7 +67,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task ShowTaskPanel_IsTrue_WhenHarnessEnabledAndTasksExist()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Pending }
@@ -84,7 +84,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_MergesById_UpdatesStatusAndAddsRemovesItems()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Pending },
@@ -110,7 +110,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_TriggersCompletionAnimation_WhenStatusBecomesCompleted()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress }
@@ -130,7 +130,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_DoesNotTriggerCompletionAnimation_ForInitiallyCompletedTask()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed }
@@ -145,7 +145,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_NotifiesTaskCompleted_WhenLastTaskCompletesPlan()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed },
@@ -169,7 +169,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_NotifiesTaskCompleted_WhenOnlyPartiallyComplete()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress },
@@ -193,7 +193,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task LoadForSessionAsync_DoesNotNotifyTaskCompleted_WhenPlanAlreadyComplete()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed },
@@ -210,7 +210,7 @@ public sealed class ComposerHarnessViewModelTests
     [Fact]
     public async Task RefreshTasksAsync_DoesNotNotifyTaskCompleted_WhenAllCancelled()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress },
@@ -273,9 +273,9 @@ public sealed class ComposerHarnessViewModelTests
     }
 
     [Fact]
-    public async Task SelectModeAsync_PersistsModeAndClearsTasksWhenLeavingCoding()
+    public async Task SelectModeAsync_PersistsModeAndClearsTasksWhenLeavingAgent()
     {
-        var harness = new StubHarnessState(SessionAgentMode.Coding);
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
         var store = new MutableTaskListStore(
         [
             new AgentTaskItem { Id = "1", Content = "task", Status = AgentTaskStatuses.Pending }
@@ -283,7 +283,7 @@ public sealed class ComposerHarnessViewModelTests
         var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
         await vm.LoadForSessionAsync("session-1");
 
-        Assert.Equal(SessionAgentMode.Coding, vm.SelectedMode);
+        Assert.Equal(SessionAgentMode.Agent, vm.SelectedMode);
         Assert.Single(vm.Tasks);
 
         await vm.SelectModeCommand.ExecuteAsync(SessionAgentMode.Ask);

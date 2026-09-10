@@ -124,11 +124,11 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
         var step = 3;
 
-        if (PromptModeHelper.IsCodingMode(context) && PromptModeHelper.HasTool(context, "todo_write"))
+        if (PromptModeHelper.HasTool(context, "todo_write"))
 
         {
 
-            builder.AppendLine($"  {step}. Coding multi-step / multi-file work: maintain an accurate todo list via todo_write (create or merge) before and during writes.");
+            builder.AppendLine($"  {step}. Multi-step / multi-file work: maintain an accurate todo list via todo_write (create or merge) before and during writes.");
 
             step++;
 

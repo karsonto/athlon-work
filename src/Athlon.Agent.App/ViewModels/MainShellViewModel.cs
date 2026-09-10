@@ -191,7 +191,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             () => _session,
             session => _session = session,
             ShowShellToast,
-            StartCodingFromApprovedPlanAsync,
+            StartFromApprovedPlanAsync,
             onPlanTimeline: OnPlanTimeline,
             setComposerHint: SetComposerStatus);
         QuestionBar.Configure(
@@ -1858,7 +1858,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _ = FileEditor.OpenFileAsync(path, _session.ActiveWorkspace, readOnly: false);
     }
 
-    private async Task StartCodingFromApprovedPlanAsync()
+    private async Task StartFromApprovedPlanAsync()
     {
         var sessionId = _displayedSessionId;
         var approved = await _planRunStore.LoadApprovedAsync(sessionId).ConfigureAwait(true);
@@ -1880,9 +1880,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _taskListChangedNotifier.Notify(sessionId);
         }
 
-        if (ComposerHarness.SelectModeCommand.CanExecute(SessionAgentMode.Coding))
+        if (ComposerHarness.SelectModeCommand.CanExecute(SessionAgentMode.Agent))
         {
-            await ComposerHarness.SelectModeCommand.ExecuteAsync(SessionAgentMode.Coding).ConfigureAwait(true);
+            await ComposerHarness.SelectModeCommand.ExecuteAsync(SessionAgentMode.Agent).ConfigureAwait(true);
         }
 
         var prompt = _loc["Harness_ConfirmPlanPrompt"];

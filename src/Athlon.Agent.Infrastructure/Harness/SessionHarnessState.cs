@@ -61,7 +61,7 @@ public sealed class SessionHarnessState(
 
     public bool IsDebugMode(string? sessionId) => GetMode(sessionId) == SessionAgentMode.Debug;
 
-    public bool IsEnabled(string? sessionId) => IsCodingMode(sessionId);
+    public bool IsEnabled(string? sessionId) => true;
 
     public bool IsCodingModeForActiveRun(IAgentRunContextAccessor accessor) =>
         IsActiveRunMode(accessor, IsCodingMode);
@@ -76,7 +76,7 @@ public sealed class SessionHarnessState(
         IsActiveRunMode(accessor, IsDebugMode);
 
     public bool IsEnabledForActiveRun(IAgentRunContextAccessor accessor) =>
-        IsCodingModeForActiveRun(accessor);
+        accessor.Current is { Kind: not AgentRunKind.SubAgent };
 
     private bool IsActiveRunMode(IAgentRunContextAccessor accessor, Func<string?, bool> predicate)
     {

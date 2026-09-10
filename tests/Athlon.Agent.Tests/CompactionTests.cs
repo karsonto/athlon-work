@@ -1612,6 +1612,132 @@ public sealed class CompactionTests
     }
 
     [Fact]
+    public void Estimate_ClampsHugeToolResultToHygieneLimit()
+    {
+        var settings = new ContextCompactionSettings
+        {
+            DynamicCompaction = new DynamicCompactionSettings { Enabled = true }
+        };
+        var hugeToolResult = "ToolCallId: c1\n" + new string('x', 400_000);
+        var messages = new[]
+        {
+            ChatMessage.Create(MessageRole.User, "search something"),
+            ChatMessage.Create(
+                MessageRole.Assistant,
+                "ok",
+                toolCalls: [new AgentToolCall("c1", "grep_files", new Dictionary<string, string>())]),
+            ChatMessage.Create(MessageRole.Tool, hugeToolResult)
+        };
+
+        var raw = ContextTokenEstimator.Estimate(messages);
+        var clamped = ContextTokenEstimator.Estimate(
+            messages,
+            hygiene: settings.RequestHistoryHygiene);
+
+        var rawToolTokens = ContextTokenEstimator.EstimateTextTokens(hugeToolResult);
+        Assert.True(raw > rawToolTokens * 0.9);
+        Assert.True(
+            clamped < rawToolTokens,
+            $"clamped={clamped} should be below raw tool tokens {rawToolTokens}");
+        // Upper bound: clamped <= everything except the tool payload + hygiene tool cap.
+        var nonToolTokens = raw - rawToolTokens;
+        Assert.True(clamped <= nonToolTokens + settings.RequestHistoryHygiene.MaxToolResultTokens + 64);
+    }
+
+    [Fact]
+    public void Estimate_ClampsHugeToolArgumentOnlyWhenPaired()
+    {
+        var settings = new ContextCompactionSettings
+        {
+            DynamicCompaction = new DynamicCompactionSettings { Enabled = true }
+        };
+        var hugeArgument = new Dictionary<string, string> { ["content"] = new string('y', 200_000) };
+        var pairedCall = new AgentToolCall("paired", "file_write", hugeArgument);
+        var unpairedCall = new AgentToolCall("unpaired", "file_write", hugeArgument);
+        var pairedMessages = new[]
+        {
+            ChatMessage.Create(MessageRole.Assistant, "writing", toolCalls: [pairedCall]),
+            ChatMessage.Create(MessageRole.Tool, "ToolCallId: paired\nok")
+        };
+        var unpairedMessages = new[]
+        {
+            ChatMessage.Create(MessageRole.Assistant, "writing", toolCalls: [unpairedCall])
+        };
+
+        var pairedRaw = ContextTokenEstimator.Estimate(pairedMessages);
+        var pairedClamped = ContextTokenEstimator.Estimate(
+            pairedMessages,
+            hygiene: settings.RequestHistoryHygiene);
+        var unpairedRaw = ContextTokenEstimator.Estimate(unpairedMessages);
+        var unpairedClamped = ContextTokenEstimator.Estimate(
+            unpairedMessages,
+            hygiene: settings.RequestHistoryHygiene);
+
+        Assert.True(pairedClamped < pairedRaw);
+        Assert.True(
+            pairedClamped < settings.RequestHistoryHygiene.MaxToolArgumentStringTokens + 64);
+        // Unpaired calls are left untouched by hygiene, so clamping must be a no-op.
+        Assert.Equal(unpairedRaw, unpairedClamped);
+    }
+
+    [Fact]
+    public void Budget_HugeToolResult_NoLongerReportsCriticalPressure()
+    {
+        var compaction = CreateDynamicCompactionSettings(s =>
+        {
+            s.Enabled = true;
+            s.ContextWindowTokens = 120_000;
+            s.KeepMessages = 20;
+            s.TriggerMessages = 10_000;
+            s.TriggerTokens = 10_000_000;
+        });
+        var toolResult = "ToolCallId: c1\n" + string.Join(
+            '\n',
+            Enumerable.Range(0, 40).Select(i => $"src/bundle.min.js:{i}:{new string('x', 50_000)}"));
+        var messages = new List<ChatMessage>
+        {
+            ChatMessage.Create(MessageRole.User, "search minified assets"),
+            ChatMessage.Create(
+                MessageRole.Assistant,
+                "searching",
+                toolCalls: [new AgentToolCall("c1", "grep_files", new Dictionary<string, string>())]),
+            ChatMessage.Create(MessageRole.Tool, toolResult)
+        };
+        var model = new ModelSettings { MaxTokens = 4_096 };
+
+        var rawEstimate = ContextTokenEstimator.Estimate(
+            messages,
+            compaction.IncludeReasoningInModelContext,
+            maxToolScreenshots: compaction.MaxToolScreenshotsInModelContext);
+        Assert.True(
+            (double)rawEstimate / 120_000 > 0.9,
+            $"raw estimate {rawEstimate} should look critical before the fix");
+
+        var budget = ContextBudgetCalculator.Compute(
+            "system",
+            [],
+            messages,
+            compaction,
+            model);
+
+        Assert.True(
+            budget.TotalUtilization < 0.80,
+            $"hygiene-aware utilization was {budget.TotalUtilization:F3}");
+        Assert.False(ContextPressureEvaluator.ShouldCompact(
+            budget,
+            messages,
+            compaction,
+            ContextPressureLevel.Normal,
+            force: false));
+        Assert.False(ContextPressureEvaluator.ShouldApplyTruncateArgs(
+            budget,
+            messages,
+            compaction,
+            ContextPressureLevel.Normal,
+            force: false));
+    }
+
+    [Fact]
     public async Task ConversationCompactor_PrefixReplay_ReusesEnvironmentPromptAndTools()
     {
         var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
@@ -2001,24 +2127,29 @@ public sealed class CompactionTests
             ContextCompaction = compaction,
             Model = new ModelSettings { MaxTokens = 1_000 }
         };
-        var toolCall = new AgentToolCall(
-            "c1",
-            "file_write",
-            new Dictionary<string, string> { ["content"] = new string('x', 50_000) });
+        // Pressure comes from oversized (paired) tool-call arguments. Hygiene clamps each to
+        // MaxToolArgumentStringTokens while assessing utilization, yet truncate-args shrinks them
+        // to MaxArgLength, so the prune step still measurably lowers utilization.
+        var messages = new List<ChatMessage> { ChatMessage.Create(MessageRole.User, "write files") };
+        for (var i = 0; i < 5; i++)
+        {
+            var call = new AgentToolCall(
+                $"c{i}",
+                "file_write",
+                new Dictionary<string, string> { ["content"] = new string((char)('a' + i), 50_000) });
+            messages.Add(ChatMessage.Create(MessageRole.Assistant, "ok", toolCalls: [call]));
+            messages.Add(ChatMessage.Create(MessageRole.Tool, $"ToolCallId: c{i}\nok"));
+        }
+
         var recentCall = new AgentToolCall(
-            "c2",
+            "c-recent",
             "file_write",
             new Dictionary<string, string> { ["content"] = "ok" });
-        var session = AgentSession.Create("prune-skip").WithMessages(
-        [
-            ChatMessage.Create(MessageRole.User, "write a file"),
-            ChatMessage.Create(MessageRole.Assistant, "ok", toolCalls: [toolCall]),
-            ChatMessage.Create(MessageRole.Tool, "ToolCallId: c1\nok"),
-            ChatMessage.Create(MessageRole.User, "write a small file " + new string('y', 12_000)),
-            ChatMessage.Create(MessageRole.Assistant, "ok", toolCalls: [recentCall]),
-            ChatMessage.Create(MessageRole.Tool, "ToolCallId: c2\nok"),
-            ChatMessage.Create(MessageRole.User, "thanks")
-        ]);
+        messages.Add(ChatMessage.Create(MessageRole.User, "write a small file " + new string('y', 12_000)));
+        messages.Add(ChatMessage.Create(MessageRole.Assistant, "ok", toolCalls: [recentCall]));
+        messages.Add(ChatMessage.Create(MessageRole.Tool, "ToolCallId: c-recent\nok"));
+        messages.Add(ChatMessage.Create(MessageRole.User, "thanks"));
+        var session = AgentSession.Create("prune-skip").WithMessages(messages);
         var budget = ContextBudgetCalculator.Compute(
             "system",
             [],

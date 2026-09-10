@@ -73,8 +73,8 @@ public static class ToolAvailabilityPolicy
             static ctx => ctx.WorkspaceKind != WorkspaceKind.Ssh,
             static (_, facets) => facets.HasFlag(ToolFacet.RemoteWorkspace) ? false : null),
         new(
-            "harness-todo-coding-only",
-            static ctx => ctx.Mode != SessionAgentMode.Coding,
+            "harness-todo-ask-plan-only",
+            static ctx => ctx.Mode == SessionAgentMode.Ask || ctx.Mode == SessionAgentMode.Plan,
             static (_, facets) => facets.HasFlag(ToolFacet.HarnessTodo) ? false : null),
         new(
             "plan-document-explore-or-draft",

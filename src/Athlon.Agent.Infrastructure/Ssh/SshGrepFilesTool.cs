@@ -8,7 +8,8 @@ namespace Athlon.Agent.Infrastructure.Ssh;
 public sealed class SshGrepFilesTool(
     WorkspaceGuard guard,
     ISshWorkspaceClient client,
-    AuditLogService audit) : IAgentTool, IRemoteWorkspaceTool, IParallelizableAgentTool
+    AuditLogService audit,
+    AppSettings settings) : IAgentTool, IRemoteWorkspaceTool, IParallelizableAgentTool
 {
     private const int MaxFilesToScan = 500;
     private const int MaxMatches = 200;
@@ -88,7 +89,9 @@ public sealed class SshGrepFilesTool(
                         ? ToolResult.Success("No matches found", "No matches found")
                         : ToolResult.Success(
                             $"Found {remoteMatches.Count} match(es)",
-                            string.Join(Environment.NewLine, remoteMatches));
+                            string.Join(
+                                Environment.NewLine,
+                                remoteMatches.Select(match => GrepFilesTool.FormatMatchLine(match, settings.Grep.MaxLineChars))));
                 }
             }
 
@@ -143,7 +146,11 @@ public sealed class SshGrepFilesTool(
 
             return matches.Count == 0
                 ? ToolResult.Success("No matches found", "No matches found")
-                : ToolResult.Success($"Found {matches.Count} match(es)", string.Join(Environment.NewLine, matches));
+                : ToolResult.Success(
+                    $"Found {matches.Count} match(es)",
+                    string.Join(
+                        Environment.NewLine,
+                        matches.Select(match => GrepFilesTool.FormatMatchLine(match, settings.Grep.MaxLineChars))));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

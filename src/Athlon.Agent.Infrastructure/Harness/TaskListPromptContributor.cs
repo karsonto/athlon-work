@@ -7,7 +7,6 @@ using Athlon.Agent.Core.Threading;
 namespace Athlon.Agent.Infrastructure.Harness;
 
 public sealed class TaskListPromptContributor(
-    ISessionHarnessState harnessState,
     ISessionTaskListStore taskListStore,
     IAgentRunContextAccessor runContextAccessor) : IRuntimeContextContributor
 {
@@ -15,7 +14,7 @@ public sealed class TaskListPromptContributor(
 
     public void Append(StringBuilder builder, EnvironmentPromptContext context)
     {
-        if (!harnessState.IsCodingModeForActiveRun(runContextAccessor) || PromptModeHelper.IsChatOnly(context))
+        if (PromptModeHelper.IsChatOnly(context))
         {
             return;
         }

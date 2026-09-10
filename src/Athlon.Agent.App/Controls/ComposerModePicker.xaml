@@ -24,12 +24,6 @@
                 <Style TargetType="Button" BasedOn="{StaticResource ComposerModePillButtonStyle}">
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
-                                     Value="{x:Static harness:SessionAgentMode.Coding}">
-                            <Setter Property="Background" Value="{DynamicResource Brush.ModeCodingBg}" />
-                            <Setter Property="BorderBrush" Value="{DynamicResource Brush.ModeCodingBorder}" />
-                            <Setter Property="Foreground" Value="{DynamicResource Brush.ModeCodingForeground}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
                                      Value="{x:Static harness:SessionAgentMode.Ask}">
                             <Setter Property="Background" Value="{DynamicResource Brush.ModeAskBg}" />
                             <Setter Property="BorderBrush" Value="{DynamicResource Brush.ModeAskBorder}" />
@@ -66,10 +60,6 @@
                                 <Setter Property="Visibility" Value="Visible" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
-                                                 Value="{x:Static harness:SessionAgentMode.Coding}">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                    </DataTrigger>
-                                    <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
                                                  Value="{x:Static harness:SessionAgentMode.Ask}">
                                         <Setter Property="Visibility" Value="Collapsed" />
                                     </DataTrigger>
@@ -85,36 +75,6 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                    <!-- Coding sliders -->
-                    <Viewbox Width="14" Height="14" Stretch="Uniform">
-                        <Viewbox.Style>
-                            <Style TargetType="Viewbox">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
-                                                 Value="{x:Static harness:SessionAgentMode.Coding}">
-                                        <Setter Property="Visibility" Value="Visible" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Viewbox.Style>
-                        <Canvas Width="16" Height="16">
-                            <Line X1="1.5" Y1="5" X2="14.5" Y2="5"
-                                  Style="{StaticResource ModeIconStroke}"
-                                  Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
-                            <Ellipse Canvas.Left="9.5" Canvas.Top="2.75" Width="4.5" Height="4.5"
-                                     Style="{StaticResource ModeIconStroke}"
-                                     Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
-                                     Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Background}" />
-                            <Line X1="1.5" Y1="11" X2="14.5" Y2="11"
-                                  Style="{StaticResource ModeIconStroke}"
-                                  Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" />
-                            <Ellipse Canvas.Left="2" Canvas.Top="8.75" Width="4.5" Height="4.5"
-                                     Style="{StaticResource ModeIconStroke}"
-                                     Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
-                                     Fill="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Background}" />
-                        </Canvas>
-                    </Viewbox>
                     <!-- Ask bubble -->
                     <Viewbox Width="13" Height="13" Stretch="Uniform">
                         <Viewbox.Style>
@@ -282,74 +242,6 @@
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
                                                          Value="{x:Static harness:SessionAgentMode.Agent}">
-                                                <Setter Property="Visibility" Value="Visible" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </Grid>
-                    </Button>
-
-                    <!-- Coding -->
-                    <Button Command="{Binding ComposerHarness.SelectModeCommand}"
-                            CommandParameter="{x:Static harness:SessionAgentMode.Coding}">
-                        <Button.Style>
-                            <Style TargetType="Button" BasedOn="{StaticResource ComposerModeMenuItemStyle}">
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
-                                                 Value="{x:Static harness:SessionAgentMode.Coding}">
-                                        <Setter Property="Background" Value="{DynamicResource Brush.MenuHover}" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Button.Style>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="28" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <Viewbox Grid.Column="0"
-                                     Width="15"
-                                     Height="15"
-                                     HorizontalAlignment="Left"
-                                     Margin="1,0,0,0"
-                                     VerticalAlignment="Center">
-                                <Canvas Width="16" Height="16">
-                                    <Line X1="1.5" Y1="5" X2="14.5" Y2="5"
-                                          Style="{StaticResource ModeIconStroke}"
-                                          Stroke="{DynamicResource Brush.Text}" />
-                                    <Ellipse Canvas.Left="9.5" Canvas.Top="2.75" Width="4.5" Height="4.5"
-                                             Style="{StaticResource ModeIconStroke}"
-                                             Stroke="{DynamicResource Brush.Text}"
-                                             Fill="{DynamicResource Brush.MenuBackground}" />
-                                    <Line X1="1.5" Y1="11" X2="14.5" Y2="11"
-                                          Style="{StaticResource ModeIconStroke}"
-                                          Stroke="{DynamicResource Brush.Text}" />
-                                    <Ellipse Canvas.Left="2" Canvas.Top="8.75" Width="4.5" Height="4.5"
-                                             Style="{StaticResource ModeIconStroke}"
-                                             Stroke="{DynamicResource Brush.Text}"
-                                             Fill="{DynamicResource Brush.MenuBackground}" />
-                                </Canvas>
-                            </Viewbox>
-                            <TextBlock Grid.Column="1"
-                                       Text="{loc:Localize Key=Harness_Mode_Coding}"
-                                       FontSize="13"
-                                       VerticalAlignment="Center" />
-                            <TextBlock Grid.Column="2"
-                                       Text="✓"
-                                       FontSize="12"
-                                       FontWeight="SemiBold"
-                                       Margin="16,0,2,0"
-                                       VerticalAlignment="Center"
-                                       Foreground="{DynamicResource Brush.TextSecondary}">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Visibility" Value="Collapsed" />
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding ComposerHarness.SelectedMode}"
-                                                         Value="{x:Static harness:SessionAgentMode.Coding}">
                                                 <Setter Property="Visibility" Value="Visible" />
                                             </DataTrigger>
                                         </Style.Triggers>

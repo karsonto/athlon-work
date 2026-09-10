@@ -9,23 +9,23 @@ namespace Athlon.Agent.Tests;
 public sealed class HarnessPlanningSectionTests
 {
     [Fact]
-    public void Append_IncludesCodingPlanning_WhenCodingMode()
+    public void Append_IncludesPlanning_WhenTodoToolAvailable()
     {
         var builder = new StringBuilder();
-        new HarnessPlanningSection().Append(builder, CreateContext(SessionAgentMode.Coding));
+        new HarnessPlanningSection().Append(builder, CreateContext(SessionAgentMode.Agent));
 
         var text = builder.ToString();
-        Assert.Contains("Coding long-task discipline:", text, StringComparison.Ordinal);
+        Assert.Contains("Long-task discipline:", text, StringComparison.Ordinal);
         Assert.Contains("todo_write", text, StringComparison.Ordinal);
         Assert.Contains("in_progress", text, StringComparison.Ordinal);
         Assert.Contains("merge=false", text, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Append_Skips_WhenAgentMode()
+    public void Append_Skips_WhenNoTodoTool()
     {
         var builder = new StringBuilder();
-        new HarnessPlanningSection().Append(builder, CreateContext(SessionAgentMode.Agent));
+        new HarnessPlanningSection().Append(builder, CreateContext(SessionAgentMode.Agent, includeTodo: false));
 
         Assert.Equal(string.Empty, builder.ToString());
     }
@@ -34,22 +34,26 @@ public sealed class HarnessPlanningSectionTests
     public void Append_Skips_WhenAskMode()
     {
         var builder = new StringBuilder();
-        new HarnessPlanningSection().Append(builder, CreateContext(SessionAgentMode.Ask));
+        new HarnessPlanningSection().Append(builder, CreateContext(SessionAgentMode.Ask, includeTodo: false));
 
         Assert.Equal(string.Empty, builder.ToString());
     }
 
-    private static EnvironmentPromptContext CreateContext(SessionAgentMode mode) =>
-        new()
+    private static EnvironmentPromptContext CreateContext(SessionAgentMode mode, bool includeTodo = true)
+    {
+        var tools = new List<ToolDefinition>();
+        if (includeTodo)
+        {
+            tools.Add(new ToolDefinition("todo_write", "Todos", ToolSchema.Object().Build()));
+        }
+
+        return new EnvironmentPromptContext
         {
             Session = AgentSession.Create("harness-planning-test"),
             WorkspaceRoot = @"C:\work\demo",
             WorkspaceName = "demo",
             IgnorePatterns = [".git"],
-            Tools =
-            [
-                new ToolDefinition("todo_write", "Todos", ToolSchema.Object().Build()),
-            ],
+            Tools = tools,
             SkillsDirectory = @"C:\Users\test\.athlon-agent\skills",
             Host = new PromptTestHelpers.FakeHostEnvironment(
                 @"C:\Users\test\.athlon-agent\skills",
@@ -57,4 +61,5 @@ public sealed class HarnessPlanningSectionTests
             PromptSettings = new PromptSettings(),
             AgentMode = mode,
         };
+    }
 }

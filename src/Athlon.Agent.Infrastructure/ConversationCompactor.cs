@@ -122,6 +122,7 @@ public sealed class ConversationCompactor(
             cfg,
             request,
             mustPreserve,
+            request.EmitAudit,
             out var summaryInputCharsBefore,
             out var summaryInputCharsAfter,
             out var hygieneSavingsEstimate);
@@ -246,7 +247,8 @@ public sealed class ConversationCompactor(
         var utilization = request.RuntimeContext?.Budget.TotalUtilization;
         var tokensAfterPreview = ContextTokenEstimator.Estimate(
             new[] { summaryMessage }.Concat(tail).ToArray(),
-            cfg.IncludeReasoningInModelContext);
+            cfg.IncludeReasoningInModelContext,
+            hygiene: cfg.RequestHistoryHygiene);
 
         if (request.EmitAudit)
         {
@@ -346,6 +348,7 @@ public sealed class ConversationCompactor(
             cfg,
             request,
             request.Plan?.MustPreserveAppendix,
+            computeAuditMetrics: false,
             out _,
             out _,
             out _);
@@ -408,8 +411,14 @@ public sealed class ConversationCompactor(
         if (request.EmitAudit)
         {
             var auditContent = CompactionMessageContent.CreateConversationCompact(
-                tokensBefore: ContextTokenEstimator.Estimate(conversation, cfg.IncludeReasoningInModelContext),
-                tokensAfter: ContextTokenEstimator.Estimate(compactMessages, cfg.IncludeReasoningInModelContext),
+                tokensBefore: ContextTokenEstimator.Estimate(
+                    conversation,
+                    cfg.IncludeReasoningInModelContext,
+                    hygiene: cfg.RequestHistoryHygiene),
+                tokensAfter: ContextTokenEstimator.Estimate(
+                    compactMessages,
+                    cfg.IncludeReasoningInModelContext,
+                    hygiene: cfg.RequestHistoryHygiene),
                 originalMessageCount: conversation.Count,
                 transcriptPath: null,
                 summaryPreview: "Middle-cut compaction applied due to overflow retry skip.",
@@ -474,6 +483,7 @@ public sealed class ConversationCompactor(
         ContextCompactionSettings cfg,
         CompactionExecutionRequest request,
         string? mustPreserve,
+        bool computeAuditMetrics,
         out int? summaryInputCharsBefore,
         out int? summaryInputCharsAfter,
         out int? hygieneSavingsEstimate)
@@ -486,25 +496,34 @@ public sealed class ConversationCompactor(
         var environmentPrompt = runtime?.EnvironmentPrompt ?? string.Empty;
         var calibrationMultiplier = runtime?.CalibrationMultiplier ?? 1.0;
 
-        var formatted = ConversationSummaryFormatter.FormatMessages(prefix);
-        summaryInputCharsBefore = formatted.Length;
-        summaryInputCharsAfter = formatted.Length;
+        summaryInputCharsBefore = null;
+        summaryInputCharsAfter = null;
         hygieneSavingsEstimate = null;
 
-        if (formatted.Length > effectiveMaxChars
-            || ContextTokenEstimator.EstimateTextTokens(formatted, calibrationMultiplier) > hygieneSettings.MaxToolResultTokens)
+        // The formatted text only feeds the compaction audit display; the model payload is
+        // built from the structured messages below. Skip the whole formatting/hygiene pass
+        // unless an audit is actually emitted (the middle-cut path always skips it).
+        if (computeAuditMetrics)
         {
-            var compacted = RequestHistoryHygiene.CompactTextForSummary(formatted, hygieneSettings);
-            formatted = compacted.Text;
-            summaryInputCharsBefore = compacted.CharsBefore;
-            summaryInputCharsAfter = compacted.CharsAfter;
-            hygieneSavingsEstimate = compacted.EstimatedSavingsTokens;
-        }
-
-        if (formatted.Length > effectiveMaxChars)
-        {
-            formatted = ConversationSummaryFormatter.FitToMaxChars(formatted, effectiveMaxChars);
+            var formatted = ConversationSummaryFormatter.FormatMessages(prefix);
+            summaryInputCharsBefore = formatted.Length;
             summaryInputCharsAfter = formatted.Length;
+
+            if (formatted.Length > effectiveMaxChars
+                || ContextTokenEstimator.EstimateTextTokens(formatted, calibrationMultiplier) > hygieneSettings.MaxToolResultTokens)
+            {
+                var compacted = RequestHistoryHygiene.CompactTextForSummary(formatted, hygieneSettings);
+                formatted = compacted.Text;
+                summaryInputCharsBefore = compacted.CharsBefore;
+                summaryInputCharsAfter = compacted.CharsAfter;
+                hygieneSavingsEstimate = compacted.EstimatedSavingsTokens;
+            }
+
+            if (formatted.Length > effectiveMaxChars)
+            {
+                formatted = ConversationSummaryFormatter.FitToMaxChars(formatted, effectiveMaxChars);
+                summaryInputCharsAfter = formatted.Length;
+            }
         }
 
         var built = ModelMessagesForApiBuilder.Build(

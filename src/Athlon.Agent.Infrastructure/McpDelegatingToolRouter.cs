@@ -78,7 +78,7 @@ internal sealed class McpDelegatingToolRouter(
     {
         if (sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor))
         {
-            return SessionAgentMode.Coding;
+            return SessionAgentMode.Agent;
         }
 
         if (sessionHarnessState.IsAskModeForActiveRun(runContextAccessor))
@@ -121,7 +121,6 @@ internal sealed class McpDelegatingToolRouter(
     {
         var sessionId = activeSessionContext.SessionId ?? string.Empty;
         var knowledge = sessionKnowledgeState.ShouldExposeKnowledgeTool(sessionId);
-        var coding = sessionHarnessState.IsCodingModeForActiveRun(runContextAccessor);
         var ask = sessionHarnessState.IsAskModeForActiveRun(runContextAccessor);
         var plan = sessionHarnessState.IsPlanModeForActiveRun(runContextAccessor);
         var debug = sessionHarnessState.IsDebugModeForActiveRun(runContextAccessor);
@@ -136,7 +135,6 @@ internal sealed class McpDelegatingToolRouter(
             workspaceGuard.HasConfiguredWorkspace,
             sessionId,
             knowledge,
-            coding,
             ask,
             plan,
             planPhase,
