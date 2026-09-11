@@ -223,14 +223,17 @@ internal static class ChatEventSerializer
         IReadOnlyList<ModifiedFileViewModel> files,
         bool upsert = false,
         long? seq = null,
-        string? turnAnchorId = null)
+        string? turnAnchorId = null,
+        string? entryId = null)
     {
+        var resolvedEntryId = entryId
+            ?? (turnAnchorId is null ? null : "files:" + turnAnchorId);
         if (files.Count == 0)
         {
             return SerializeAgui("FILES_CHANGED", new
             {
                 seq,
-                entryId = turnAnchorId is null ? null : "files:" + turnAnchorId,
+                entryId = resolvedEntryId,
                 upsert,
                 files = Array.Empty<object>()
             });
@@ -263,7 +266,7 @@ internal static class ChatEventSerializer
         return SerializeAgui("FILES_CHANGED", new
         {
             seq,
-            entryId = turnAnchorId is null ? null : "files:" + turnAnchorId,
+            entryId = resolvedEntryId,
             upsert,
             files = payload
         });
@@ -496,7 +499,6 @@ internal static class ChatEventSerializer
                             SerializeUserMessage(user, TimelineOrderPolicy.User(turnIndex))
                         ],
                         ActivityEvent: null,
-                        FilesChangedEvent: null,
                         ContentEvents: Array.Empty<string>(),
                         CompactionEvent: null,
                         TurnIndex: turnIndex));
@@ -511,7 +513,6 @@ internal static class ChatEventSerializer
                 segments.Add(new ReplayTurnSegment(
                     UserEvents: Array.Empty<string>(),
                     ActivityEvent: null,
-                    FilesChangedEvent: null,
                     ContentEvents: Array.Empty<string>(),
                     CompactionEvent: SerializeCompactionCheckpoint(compaction) is { } compactionEvent
                         ? WithSeq(compactionEvent, TimelineOrderPolicy.Compaction(turnIndex))
@@ -524,7 +525,6 @@ internal static class ChatEventSerializer
             turnIndex++;
             var currentTurn = turnIndex;
             string? activityEvent = null;
-            string? filesEvent = null;
             if (segment.ActivitySegment.Count > 0)
             {
                 var activity = TurnActivitySummaryBuilder.Build(segment.ActivitySegment);
@@ -535,19 +535,12 @@ internal static class ChatEventSerializer
                         seq: TimelineOrderPolicy.Activity(currentTurn),
                         turnAnchorId: segment.TurnAnchorId);
                 }
-
-                var files = SessionModifiedFilesTracker.BuildTurnFileGroups(segment.ActivitySegment);
-                if (files is { Count: > 0 } && files[0].Count > 0)
-                {
-                    filesEvent = SerializeFilesChanged(
-                        files[0],
-                        seq: TimelineOrderPolicy.Files(currentTurn),
-                        turnAnchorId: segment.TurnAnchorId);
-                }
             }
 
             // Number tool cards and assistant replies consecutively in transcript order so the
-            // timeline keeps the exact interleaving the turn streamed with.
+            // timeline keeps the exact interleaving the turn streamed with. A succeeded file edit
+            // renders as its own single-file card at its slot instead of a tool card, so file
+            // modifications appear along the timeline where they happened.
             var contentEvents = new List<string>(segment.ContentMessages.Count);
             var contentOrdinal = 0;
             foreach (var content in segment.ContentMessages)
@@ -555,6 +548,17 @@ internal static class ChatEventSerializer
                 var seq = TimelineOrderPolicy.Content(currentTurn, contentOrdinal++);
                 if (content.IsTool)
                 {
+                    if (ChatTimelineProjector.IsSucceededFileEdit(content))
+                    {
+                        var editEvent = SerializeEditCard(content, seq);
+                        if (editEvent is not null)
+                        {
+                            contentEvents.Add(editEvent);
+                        }
+
+                        continue;
+                    }
+
                     contentEvents.AddRange(BuildReplayEventsForMessage(content, seq: seq));
                     continue;
                 }
@@ -566,7 +570,6 @@ internal static class ChatEventSerializer
             }
 
             if (activityEvent is not null
-                || filesEvent is not null
                 || contentEvents.Count > 0
                 // A turn whose only tool was publish_plan has no other events, but still owns the
                 // plan card's slot. Dropping the segment here would drop the card on replay.
@@ -575,7 +578,6 @@ internal static class ChatEventSerializer
                 segments.Add(new ReplayTurnSegment(
                     UserEvents: Array.Empty<string>(),
                     ActivityEvent: activityEvent,
-                    FilesChangedEvent: filesEvent,
                     ContentEvents: contentEvents.ToArray(),
                     CompactionEvent: null,
                     TurnIndex: currentTurn,
@@ -584,6 +586,28 @@ internal static class ChatEventSerializer
         }
 
         return segments;
+    }
+
+    /// <summary>
+    /// One succeeded file edit as its own timeline card, keyed by the tool call id so the live
+    /// publish and this replayed card are the same entry. Returns <c>null</c> when the edit has no
+    /// resolvable path.
+    /// </summary>
+    private static string? SerializeEditCard(ChatMessageViewModel message, long seq)
+    {
+        var files = SessionModifiedFilesTracker.BuildEditCardFiles(message);
+        if (files.Count == 0)
+        {
+            return null;
+        }
+
+        return SerializeFilesChanged(files, seq: seq, entryId: EditCardEntryId(message));
+    }
+
+    internal static string EditCardEntryId(ChatMessageViewModel message)
+    {
+        var id = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;
+        return "files:edit:" + id;
     }
 
     /// <summary>
@@ -642,11 +666,6 @@ internal static class ChatEventSerializer
 
             events.AddRange(segment.ContentEvents);
 
-            if (segment.FilesChangedEvent is not null)
-            {
-                events.Add(segment.FilesChangedEvent);
-            }
-
             if (segment.CompactionEvent is not null)
             {
                 events.Add(segment.CompactionEvent);
@@ -667,7 +686,6 @@ internal static class ChatEventSerializer
     private sealed record ReplayTurnSegment(
         IReadOnlyList<string> UserEvents,
         string? ActivityEvent,
-        string? FilesChangedEvent,
         IReadOnlyList<string> ContentEvents,
         string? CompactionEvent,
         /// <summary>Index of this segment in the replay, paired with <see cref="TimelineOrderPolicy"/>.</summary>

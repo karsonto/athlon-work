@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Windows.Threading;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
@@ -142,6 +143,163 @@ public sealed class SessionTurnUiControllerFilesChangedReloadTests
         await ui.RefreshDisplayForSettingsAsync();
 
         Assert.Equal(1, Volatile.Read(ref reloadCount));
+    }
+
+    /// <summary>
+    /// Regression: switching away mid-turn and back rebuilds the display from disk, whose activity
+    /// source carries the *transcript's* user message id. The live cards were anchored to the
+    /// provisional id AddUserMessage minted, so without re-anchoring the switch-back replayed fold
+    /// and the live upsert registered under two different entry ids and rendered side by side.
+    /// </summary>
+    [Fact]
+    public async Task Switch_back_mid_turn_reanchors_live_cards_to_the_transcript_user_message()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () => Task.CompletedTask;
+        ui.SetDisplayed(true);
+
+        var session = AgentSession.Create("switch-anchor");
+        var callbacks = ui.BuildCallbacks(new LiveAgentSession(session));
+        await dispatcher.InvokeAsync(() => ui.ResetForTurn());
+
+        // The UI mints its own provisional user row; the runtime would persist a different id.
+        await dispatcher.InvokeAsync(() => ui.AddUserMessage("edit it", Array.Empty<ImageAttachment>()));
+
+        await EmitFileWrite(callbacks, "call-write-anchor", "src/App.tsx");
+        await EmitPendingActivityTool(callbacks, "call-read-anchor", "file_read", "src/Other.cs");
+        Assert.True(await dispatcher.InvokeAsync(() => ui.ModifiedFiles.Count) > 0);
+
+        var provisionalAnchor = ui.CurrentTurnAnchorId;
+        Assert.False(string.IsNullOrWhiteSpace(provisionalAnchor));
+
+        // The turn is still in flight while the user switches away and back.
+        ui.SetDisplayed(false);
+
+        var transcriptUser = ChatMessage.Create(MessageRole.User, "edit it");
+        var transcriptRead = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-read-anchor",
+                "Tool `file_read` succeeded.",
+                "",
+                "Arguments: path = src/Other.cs",
+                "Summary: Read src/Other.cs",
+                ""));
+        var persistedSession = session.WithMessages(
+            [transcriptUser, transcriptRead]);
+
+        await ui.HydrateDisplayAsync(
+            persistedSession,
+            [transcriptUser],
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: persistedSession.Messages,
+            preserveActiveTurn: true);
+        ui.SetDisplayed(true);
+
+        // The replay keys the fold off the transcript user message; the live upsert must adopt
+        // that same id or the two cards cannot collapse.
+        Assert.Equal(transcriptUser.Id, ui.CurrentTurnAnchorId);
+        Assert.NotEqual(provisionalAnchor, ui.CurrentTurnAnchorId);
+    }
+
+    /// <summary>
+    /// A rebuild from disk restores each succeeded edit as its own card, keyed by tool call id, so
+    /// the live re-publish after a switch-back rewrites the replayed cards in place.
+    /// </summary>
+    [Fact]
+    public void RebuildFromMessages_restores_one_edit_card_per_succeeded_file_tool()
+    {
+        var tracker = new SessionModifiedFilesTracker();
+        tracker.RebuildFromMessages(
+        [
+            new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "edit two files")),
+            new ChatMessageViewModel(ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    "ToolCallId: call-a",
+                    "Tool `file_edit` succeeded.",
+                    "",
+                    "Arguments: path = a.ts",
+                    "Summary: Edited a.ts",
+                    "",
+                    "--- a/a.ts",
+                    "+++ b/a.ts",
+                    "@@ -1,1 +1,1 @@",
+                    "-old",
+                    "+new"))),
+            new ChatMessageViewModel(ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    "ToolCallId: call-b",
+                    "Tool `file_write` succeeded.",
+                    "",
+                    "Arguments: path = b.ts; content = hello",
+                    "Summary: Wrote 5 chars")))
+        ]);
+
+        var cards = tracker.PeekSegmentEditCards();
+        Assert.Equal(2, cards.Count);
+        Assert.Equal(["call-a", "call-b"], cards.Select(card => card.ToolCallId));
+
+        // Rebuilding drops the previous cards instead of accumulating them.
+        tracker.RebuildFromMessages(
+        [
+            new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "edit two files")),
+            new ChatMessageViewModel(ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    "ToolCallId: call-a",
+                    "Tool `file_edit` succeeded.",
+                    "",
+                    "Arguments: path = a.ts",
+                    "Summary: Edited a.ts",
+                    "",
+                    "--- a/a.ts",
+                    "+++ b/a.ts",
+                    "@@ -1,1 +1,1 @@",
+                    "-old",
+                    "+new")))
+        ]);
+
+        Assert.Equal(["call-a"], tracker.PeekSegmentEditCards().Select(card => card.ToolCallId));
+    }
+
+    /// <summary>
+    /// Emits a succeeded file write through the live stream and returns the per-edit card the
+    /// tracker staged for it.
+    /// </summary>
+    [Fact]
+    public void Live_file_write_result_stages_a_card_keyed_by_tool_call_id()
+    {
+        var tracker = new SessionModifiedFilesTracker();
+        tracker.BeginTurn();
+        tracker.Process(new AgentStreamEvent.ToolCallStart("call-live", "file_write", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("call-live", """{"path":"c.ts","content":"hi"}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd("call-live"));
+        tracker.Process(new AgentStreamEvent.ToolCallResult(
+            "call-live",
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-live",
+                "Tool `file_write` succeeded.",
+                "",
+                "Arguments: path = c.ts; content = hi",
+                "Summary: Wrote 2 chars"),
+            "msg-live"));
+
+        var card = Assert.Single(tracker.PeekSegmentEditCards());
+        Assert.Equal("call-live", card.ToolCallId);
+        var file = Assert.Single(card.Files);
+        Assert.Equal("c.ts", file.RelativePath);
+
+        // Sealing the segment drops the staged card so the next turn republishes its own.
+        tracker.ClearSegmentEditCards();
+        Assert.Empty(tracker.PeekSegmentEditCards());
     }
 
     private static async Task EmitFileWrite(AgentTurnCallbacks callbacks, string toolCallId, string path)

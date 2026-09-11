@@ -1389,6 +1389,18 @@ function filesChangedTitle(count) {
   return (t('filesChangedMany') || '{0} Files Changed').replace('{0}', String(count));
 }
 
+/**
+ * Title for a single-edit card: the edited file's name is the headline, so each edit reads as one
+ * line on the timeline instead of a count.
+ */
+function filesChangedTitleFor(files) {
+  if (files && files.length === 1) {
+    var first = files[0];
+    return first.displayName || first.path || filesChangedTitle(1);
+  }
+  return filesChangedTitle(files ? files.length : 0);
+}
+
 function joinSummaryParts(parts) {
   if (!parts.length) return '';
   if (parts.length === 1) return parts[0];
@@ -1444,12 +1456,12 @@ function filesChangedEntryKey(event) {
 }
 
 /**
- * Renders (or refreshes) the turn's files-changed card at its seq slot.
+ * Renders (or refreshes) one file-edit card in the timeline.
  *
- * The card is keyed by the turn it summarizes: a live upsert and a replayed card carrying the
- * same key are the same card, so they overwrite in place instead of stacking twins. The seq is
- * fixed by TimelineOrderPolicy at the turn's files slot, which places it after the turn's
- * replies in both paths without any "move it below the last assistant bubble" heuristics.
+ * Every file edit is its own card, keyed by the tool call id C# derives from the transcript, so a
+ * live publish and its replayed twin are the same entry and overwrite in place instead of stacking.
+ * Replay carries the edit's own content seq; a live card claims the next content slot so it lands
+ * where the edit happened rather than being deferred to the end of the turn.
  */
 function appendFilesChangedCard(event) {
   state.currentAssistantEl = null;
@@ -1461,7 +1473,7 @@ function appendFilesChangedCard(event) {
   // Empty payload with no card yet: nothing to show.
   if (!files.length && !existingRow) return;
 
-  var seq = resolveEventSeq(event, SEQ_FILES);
+  var hasExplicitSeq = event && typeof event.seq === 'number' && isFinite(event.seq);
   var openPaths = {};
   var row = existingRow;
   var card;
@@ -1484,9 +1496,11 @@ function appendFilesChangedCard(event) {
     card = document.createElement('div');
     card.className = 'files-changed-card';
     row.appendChild(card);
-    registerEntry(key, row, seq);
-  } else {
-    insertBySeq(row, seq);
+    // A live card claims the next content slot; a replayed card carries its edit's own seq so it
+    // lands exactly where the edit happened in the turn.
+    registerEntry(key, row, hasExplicitSeq ? event.seq : nextLiveContentSeq());
+  } else if (hasExplicitSeq) {
+    insertBySeq(row, event.seq);
   }
 
   if (!files.length) {
@@ -1499,7 +1513,7 @@ function appendFilesChangedCard(event) {
 
   var title = document.createElement('div');
   title.className = 'files-changed-title';
-  title.textContent = filesChangedTitle(files.length);
+  title.textContent = filesChangedTitleFor(files);
   card.appendChild(title);
 
   var list = document.createElement('div');

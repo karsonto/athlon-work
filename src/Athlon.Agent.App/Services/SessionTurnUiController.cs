@@ -209,6 +209,13 @@ public sealed partial class SessionTurnUiController
     internal int SyncChatViewGeneration => Volatile.Read(ref _syncChatViewGeneration);
 
     /// <summary>
+    /// Test seam: anchor the live activity/files cards are published under. It must always be the
+    /// transcript's own user message id, never the provisional id the UI minted in
+    /// <see cref="AddUserMessage"/>, or a replay and a live upsert render two cards.
+    /// </summary>
+    internal string? CurrentTurnAnchorId => _currentTurnAnchorId;
+
+    /// <summary>
     /// Materializes buffered tokens and returns the in-flight assistant row that is not yet
     /// durable on disk so a session switch can checkpoint it before flush.
     /// Tool messages are sync-flushed at message boundaries and do not need checkpointing.
@@ -834,10 +841,10 @@ public sealed partial class SessionTurnUiController
             _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: false, turnAnchorId: _currentTurnAnchorId);
         }
 
-        var files = _modifiedFilesTracker.TakeAndClearSegmentSucceededFiles();
-        // Always dispatch the seal (even with no files) so the live card is finalized and the
-        // turn's own files entry is closed; the next turn publishes under its own anchor id.
-        _ = ChatView!.DispatchFilesChangedAsync(files, upsert: false, turnAnchorId: _currentTurnAnchorId);
+        // File edits render as their own cards keyed by tool call id, so there is no per-turn
+        // aggregate card to seal here. Drop the segment's cards so the next segment republishes
+        // under its own tool call ids rather than replaying this segment's.
+        _modifiedFilesTracker.ClearSegmentEditCards();
 
         _turnActivityTracker.BeginSegment();
     }
@@ -858,22 +865,22 @@ public sealed partial class SessionTurnUiController
         _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: upsert, turnAnchorId: _currentTurnAnchorId);
     }
 
-    private void PublishFilesChanged(bool upsert = true)
+    /// <summary>
+    /// Publishes each completed file edit as its own timeline card. The card is keyed by the tool
+    /// call id (matching replay's entry id), so re-publishing after a rebuild rewrites the same
+    /// entry instead of stacking a twin.
+    /// </summary>
+    private void PublishEditCards()
     {
         if (!CanTouchChatView)
         {
             return;
         }
 
-        var files = upsert
-            ? _modifiedFilesTracker.TakeCurrentTurnSucceededFiles()
-            : _modifiedFilesTracker.TakeAndClearSegmentSucceededFiles();
-        if (files.Count == 0)
+        foreach (var card in _modifiedFilesTracker.PeekSegmentEditCards())
         {
-            return;
+            _ = ChatView!.DispatchEditFileCardAsync(card.ToolCallId, card.Files);
         }
-
-        _ = ChatView!.DispatchFilesChangedAsync(files, upsert: upsert, turnAnchorId: _currentTurnAnchorId);
     }
 
     private void ProcessUiStreamEvents(AgentStreamEvent streamEvent, bool notifyTracker)
@@ -912,7 +919,7 @@ public sealed partial class SessionTurnUiController
             PublishTurnActivity(upsert: true);
             if (streamEvent is AgentStreamEvent.ToolCallResult)
             {
-                PublishFilesChanged(upsert: true);
+                PublishEditCards();
             }
         }
     }
@@ -1182,6 +1189,13 @@ public sealed partial class SessionTurnUiController
         if (!liveTurnActive)
         {
             _modifiedFilesTracker.Clear();
+        }
+        else
+        {
+            // A switch-back rebuilds the activity source from disk, whose turn anchor differs from
+            // the provisional id AddUserMessage minted. Adopt the transcript's id before the
+            // authoritative replay below emits its cards, otherwise the live fold lands beside them.
+            ReanchorLiveTurnToTranscript();
         }
 
         _bulkChatViewSyncDepth--;
@@ -1605,6 +1619,31 @@ public sealed partial class SessionTurnUiController
         }
     }
 
+    /// <summary>
+    /// Re-points the live activity/files anchor at the transcript's own user message for the
+    /// current turn.
+    ///
+    /// <see cref="AddUserMessage"/> anchors the live cards to the id of the user message the UI
+    /// created, but the runtime persists a *different* user message id, and replay derives its
+    /// anchor from that transcript id. A live upsert and its replayed twin therefore carry two
+    /// different entry ids, and the web view draws them side by side at the same seq slot instead
+    /// of collapsing them. Re-deriving the anchor from the authoritative source whenever the
+    /// display is rebuilt from disk keeps both paths on one id.
+    /// </summary>
+    private void ReanchorLiveTurnToTranscript()
+    {
+        // Mid-turn the transcript's trailing user message is this turn's; a resting transcript
+        // still names the turn that owns its tail, which FinalizeTurn's re-publish needs.
+        var anchorId = _activitySourceMessages.LastOrDefault(
+                static message => message.Role is MessageRole.User or MessageRole.Compaction)
+            ?.Id
+            ?? Messages.LastOrDefault(static message => message.IsUser)?.MessageId;
+        if (!string.IsNullOrWhiteSpace(anchorId))
+        {
+            _currentTurnAnchorId = anchorId;
+        }
+    }
+
     private void RestoreLiveTurnCardsAfterReload()
     {
         if (_streaming.ActiveAssistantBubble is null
@@ -1614,13 +1653,14 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
-        // The tracker is current-turn-only after RebuildFromMessages. Re-publish so a mid-turn
-        // reload rewrites the replayed entry in place — the entry id (turn anchor) matches, so the
-        // card's seq and position are unchanged and no twin is stacked.
-        if (_modifiedFilesTracker.HasCurrentTurnPaths)
-        {
-            PublishFilesChanged(upsert: true);
-        }
+        // The replayed cards were keyed by the transcript's turn boundary; re-point the live
+        // anchor at that same message before re-publishing so the upsert rewrites those cards in
+        // place instead of stacking a twin beside them.
+        ReanchorLiveTurnToTranscript();
+
+        // Per-edit cards are keyed by tool call id in both paths, so re-publishing the segment's
+        // edits after a reload rewrites the replayed cards in place rather than stacking twins.
+        PublishEditCards();
 
         var live = _turnActivityTracker.Snapshot();
         if (live is not { HasContent: true } || !CanTouchChatView)

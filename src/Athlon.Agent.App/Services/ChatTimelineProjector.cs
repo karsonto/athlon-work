@@ -126,6 +126,16 @@ internal static class ChatTimelineProjector
                     continue;
                 }
 
+                // A successful edit renders as its own single-file card at the edit's slot in the
+                // turn's content stream — not folded into the activity summary and not aggregated
+                // into one per-turn "N files changed" card. Placing it here is what makes file
+                // modifications appear along the timeline in the order they happened.
+                if (IsSucceededFileEdit(message))
+                {
+                    contentMessages.Add(message);
+                    continue;
+                }
+
                 if (ShouldEmitToolCard(showToolCalls, message))
                 {
                     contentMessages.Add(message);
@@ -179,6 +189,16 @@ internal static class ChatTimelineProjector
 
         return ChatDisplayPolicy.ShouldIncludeToolViewModel(showToolCalls, message);
     }
+
+    /// <summary>
+    /// A file tool that finished successfully. These are rendered one card per edit (see
+    /// <see cref="IsSucceededFileEdit"/>) instead of folding into the turn's file-change summary.
+    /// </summary>
+    internal static bool IsSucceededFileEdit(ChatMessageViewModel message) =>
+        message.IsTool
+        && ModifiedFilePathExtractor.IsFileTool(message.ToolName)
+        && message.ToolApprovalState is not (ToolApprovalState.Pending or ToolApprovalState.Denied)
+        && ModifiedFilePathExtractor.ToModifiedFileStatus(message.ToolCallStatus) == ModifiedFileStatus.Succeeded;
 
     internal static HashSet<string> FindFinalAssistantMessageIds(
         IReadOnlyList<ChatMessageViewModel> timeline)

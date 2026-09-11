@@ -308,6 +308,21 @@ public partial class WebChatView : UserControl
         return Task.CompletedTask;
     }
 
+    public Task DispatchEditFileCardAsync(string toolCallId, IReadOnlyList<ModifiedFileViewModel> files)
+    {
+        if (files.Count == 0 || string.IsNullOrWhiteSpace(toolCallId))
+        {
+            return Task.CompletedTask;
+        }
+
+        // Keyed by the tool call id so a live publish and its replayed twin share one entry.
+        PostTimelineEvent(ChatEventSerializer.SerializeFilesChanged(
+            files,
+            upsert: true,
+            entryId: "files:edit:" + toolCallId));
+        return Task.CompletedTask;
+    }
+
     public Task DispatchTurnActivityAsync(
         TurnActivitySummary summary,
         bool upsert = true,

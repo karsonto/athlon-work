@@ -12,6 +12,14 @@ public sealed class SessionModifiedFilesTracker
     private readonly Dictionary<string, string> _toolCallIdToName = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _toolCallIdToArgs = new(StringComparer.Ordinal);
     private readonly HashSet<string> _currentTurnPaths = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<EditFileCard> _segmentEditCards = new();
+
+    /// <summary>
+    /// One completed file edit, shaped for its own single-file timeline card. Edits render as
+    /// independent entries along the timeline (keyed by the tool call id), not as an aggregate
+    /// per-turn "N files changed" card.
+    /// </summary>
+    public sealed record EditFileCard(string ToolCallId, IReadOnlyList<ModifiedFileViewModel> Files);
 
     public ObservableCollection<ModifiedFileViewModel> ModifiedFiles { get; } = new();
 
@@ -26,6 +34,7 @@ public sealed class SessionModifiedFilesTracker
         _toolCallIdToName.Clear();
         _toolCallIdToArgs.Clear();
         _currentTurnPaths.Clear();
+        _segmentEditCards.Clear();
         ModifiedFiles.Clear();
     }
 
@@ -34,6 +43,7 @@ public sealed class SessionModifiedFilesTracker
     {
         _currentTurnPaths.Clear();
         _byPath.Clear();
+        _segmentEditCards.Clear();
         ModifiedFiles.Clear();
     }
 
@@ -65,6 +75,82 @@ public sealed class SessionModifiedFilesTracker
             _currentTurnPaths.Remove(file.RelativePath);
             _byPath.Remove(file.RelativePath);
             ModifiedFiles.Remove(file);
+        }
+
+        return files;
+    }
+
+    /// <summary>
+    /// Completed edits for the current segment, in the order they finished. Each entry is one card
+    /// on the timeline, keyed by its tool call id, so a live publish and its replay resolve to the
+    /// same entry id. Not destructive: a rebuild re-publishes the same list and the stable key makes
+    /// the upsert idempotent.
+    /// </summary>
+    public IReadOnlyList<EditFileCard> PeekSegmentEditCards() => _segmentEditCards;
+
+    /// <summary>Drops the segment's completed-edit cards once the segment is sealed.</summary>
+    public void ClearSegmentEditCards() => _segmentEditCards.Clear();
+
+    /// <summary>
+    /// Single-edit card payload for a succeeded file tool: one file for <c>file_edit</c> /
+    /// <c>file_write</c>, one per touched path for <c>apply_patch</c>. Replay and the live tracker
+    /// share this so both paths render the identical card.
+    /// </summary>
+    public static IReadOnlyList<ModifiedFileViewModel> BuildEditCardFiles(ChatMessageViewModel message)
+    {
+        if (!message.IsTool
+            || !ModifiedFilePathExtractor.IsFileTool(message.ToolName)
+            || ModifiedFilePathExtractor.ToModifiedFileStatus(message.ToolCallStatus) != ModifiedFileStatus.Succeeded)
+        {
+            return Array.Empty<ModifiedFileViewModel>();
+        }
+
+        return BuildEditCardFiles(message.ToolName, message.ToolArgumentsText, message.Content);
+    }
+
+    public static IReadOnlyList<ModifiedFileViewModel> BuildEditCardFiles(
+        string? toolName,
+        string? argumentsText,
+        string? toolContent)
+    {
+        if (string.IsNullOrWhiteSpace(toolName))
+        {
+            return Array.Empty<ModifiedFileViewModel>();
+        }
+
+        var files = new List<ModifiedFileViewModel>();
+        if (string.Equals(toolName, "apply_patch", StringComparison.Ordinal))
+        {
+            foreach (var path in ModifiedFilePathExtractor.ExtractApplyPatchPaths(toolContent ?? string.Empty))
+            {
+                var patchItem = new ModifiedFileViewModel(path, toolName, ModifiedFileStatus.Succeeded);
+                TryAttachDiff(patchItem, toolName, argumentsText, toolContent);
+                files.Add(patchItem);
+            }
+
+            return files;
+        }
+
+        var relativePath = ModifiedFilePathExtractor.ExtractPathFromArguments(argumentsText);
+        if (relativePath is null && !string.IsNullOrWhiteSpace(toolContent))
+        {
+            ToolMessageDisplayParser.ParseToolContent(
+                toolContent,
+                out _,
+                out _,
+                out _,
+                out _,
+                out _,
+                out var embeddedArguments,
+                out _);
+            relativePath = ModifiedFilePathExtractor.ExtractPathFromArguments(embeddedArguments);
+        }
+
+        if (relativePath is not null)
+        {
+            var item = new ModifiedFileViewModel(relativePath, toolName, ModifiedFileStatus.Succeeded);
+            TryAttachDiff(item, toolName, argumentsText, toolContent);
+            files.Add(item);
         }
 
         return files;
@@ -131,6 +217,20 @@ public sealed class SessionModifiedFilesTracker
 
             var status = ModifiedFilePathExtractor.ToModifiedFileStatus(message.ToolCallStatus);
             var argsText = message.ToolArgumentsText;
+
+            // Succeeded edits re-publish as their own timeline cards after a reload; restoring them
+            // here is what lets RestoreLiveTurnCardsAfterReload rewrite the replayed cards in place.
+            if (ChatTimelineProjector.IsSucceededFileEdit(message))
+            {
+                var cardFiles = BuildEditCardFiles(message.ToolName, argsText, message.Content);
+                if (cardFiles.Count > 0 && !string.IsNullOrWhiteSpace(message.ToolCallId))
+                {
+                    _segmentEditCards.RemoveAll(
+                        card => string.Equals(card.ToolCallId, message.ToolCallId, StringComparison.Ordinal));
+                    _segmentEditCards.Add(new EditFileCard(message.ToolCallId, cardFiles));
+                }
+            }
+
             if (string.Equals(message.ToolName, "apply_patch", StringComparison.Ordinal)
                 && status == ModifiedFileStatus.Succeeded)
             {
@@ -273,6 +373,18 @@ public sealed class SessionModifiedFilesTracker
         }
 
         var status = ModifiedFilePathExtractor.ParseResultStatus(content);
+        if (status == ModifiedFileStatus.Succeeded)
+        {
+            var cardFiles = BuildEditCardFiles(toolName, args, content);
+            if (cardFiles.Count > 0 && !string.IsNullOrWhiteSpace(toolCallId))
+            {
+                // Replace a re-emitted card for the same call (retry / duplicate result) instead of
+                // stacking a second card for one edit.
+                _segmentEditCards.RemoveAll(card => string.Equals(card.ToolCallId, toolCallId, StringComparison.Ordinal));
+                _segmentEditCards.Add(new EditFileCard(toolCallId, cardFiles));
+            }
+        }
+
         if (string.Equals(toolName, "apply_patch", StringComparison.Ordinal))
         {
             var paths = ModifiedFilePathExtractor.ExtractApplyPatchPaths(content);

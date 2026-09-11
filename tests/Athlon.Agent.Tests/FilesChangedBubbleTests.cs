@@ -47,6 +47,69 @@ public sealed class FilesChangedBubbleTests
     }
 
     [Fact]
+    public void BuildReplayEvents_renders_each_edit_as_its_own_timeline_card()
+    {
+        // Two edits to different files in one turn: each is its own card (keyed by tool call id),
+        // not one aggregate "2 files changed" card at the end of the turn.
+        var user = ChatMessage.Create(MessageRole.User, "edit two files");
+        var edit1 = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-a",
+                "Tool `file_edit` succeeded.",
+                "",
+                "Arguments: path = a.ts",
+                "Summary: Edited a.ts",
+                "",
+                "--- a/a.ts",
+                "+++ b/a.ts",
+                "@@ -1,1 +1,1 @@",
+                "-old",
+                "+new"));
+        var edit2 = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: call-b",
+                "Tool `file_edit` succeeded.",
+                "",
+                "Arguments: path = b.ts",
+                "Summary: Edited b.ts",
+                "",
+                "--- a/b.ts",
+                "+++ b/b.ts",
+                "@@ -1,1 +1,1 @@",
+                "-one",
+                "+two"));
+        var assistant = ChatMessage.Create(MessageRole.Assistant, "done");
+
+        var source = new List<ChatMessage> { user, edit1, edit2, assistant };
+        var display = source.Select(message => new ChatMessageViewModel(message)).ToList();
+        var events = ChatEventSerializer.BuildReplayEvents(display, showToolCalls: false, activitySourceMessages: source)
+            .ToList();
+
+        var fileEvents = events.Where(json => json.Contains("FILES_CHANGED", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, fileEvents.Count);
+
+        using var first = JsonDocument.Parse(fileEvents[0]);
+        using var second = JsonDocument.Parse(fileEvents[1]);
+        Assert.Equal("a.ts", first.RootElement.GetProperty("files")[0].GetProperty("path").GetString());
+        Assert.Equal("b.ts", second.RootElement.GetProperty("files")[0].GetProperty("path").GetString());
+        Assert.Equal(1, first.RootElement.GetProperty("files").GetArrayLength());
+        Assert.Equal(1, second.RootElement.GetProperty("files").GetArrayLength());
+
+        // The entry ids are per-edit, so they cannot collide with a turn-anchored aggregate card.
+        Assert.Equal("files:edit:call-a", first.RootElement.GetProperty("entryId").GetString());
+        Assert.Equal("files:edit:call-b", second.RootElement.GetProperty("entryId").GetString());
+
+        // Each card carries its edit's own seq, which lands it at the edit's slot in the turn.
+        Assert.True(
+            first.RootElement.GetProperty("seq").GetInt64() < second.RootElement.GetProperty("seq").GetInt64(),
+            "Edits should be ordered by when they happened.");
+    }
+
+    [Fact]
     public void SerializeFilesChanged_empty_list_emits_seal_payload()
     {
         var json = ChatEventSerializer.SerializeFilesChanged([], upsert: false);
@@ -156,9 +219,11 @@ public sealed class FilesChangedBubbleTests
         Assert.True(
             events.IndexOf(activity) < events.IndexOf(assistantHtml),
             "Activity bubble should appear above the model text output.");
+        // The edit renders as its own card at its own slot, which precedes the final reply in the
+        // transcript (the edit happened before the model wrote its summary).
         Assert.True(
-            events.IndexOf(assistantHtml) < events.IndexOf(files),
-            "Files-changed bubble should appear after the model text output.");
+            events.IndexOf(files) < events.IndexOf(assistantHtml),
+            "Edit card should appear at the edit's own slot, before the final reply.");
 
         using var activityDoc = JsonDocument.Parse(activity);
         Assert.Equal(0, activityDoc.RootElement.GetProperty("editedFileCount").GetInt32());
@@ -613,10 +678,10 @@ public sealed class FilesChangedBubbleTests
         var assistants = events.Where(json => json.Contains("STATIC_ASSISTANT_HTML", StringComparison.Ordinal)).ToList();
         Assert.Equal(2, assistants.Count);
 
-        // Successful edits fold into FILES_CHANGED only (no TURN_ACTIVITY rows).
-        Assert.True(events.IndexOf(assistants[0]) < events.IndexOf(fileEvents[0]));
-        Assert.True(events.IndexOf(assistants[1]) < events.IndexOf(fileEvents[1]));
-        Assert.True(events.IndexOf(fileEvents[0]) < events.IndexOf(assistants[1]));
+        // Each edit renders at its own slot in its turn: edit → reply → next turn's edit → reply.
+        Assert.True(events.IndexOf(fileEvents[0]) < events.IndexOf(assistants[0]));
+        Assert.True(events.IndexOf(assistants[0]) < events.IndexOf(fileEvents[1]));
+        Assert.True(events.IndexOf(fileEvents[1]) < events.IndexOf(assistants[1]));
     }
 
     [Fact]
@@ -657,7 +722,8 @@ public sealed class FilesChangedBubbleTests
         var files = Assert.Single(events, json => json.Contains("FILES_CHANGED", StringComparison.Ordinal));
         var assistantHtml = Assert.Single(events, json => json.Contains("STATIC_ASSISTANT_HTML", StringComparison.Ordinal));
         Assert.True(events.IndexOf(activity) < events.IndexOf(assistantHtml));
-        Assert.True(events.IndexOf(assistantHtml) < events.IndexOf(files));
+        // The edit card sits at the edit's own slot, which precedes the final reply.
+        Assert.True(events.IndexOf(files) < events.IndexOf(assistantHtml));
         using var activityDoc = JsonDocument.Parse(activity);
         Assert.Equal(1, activityDoc.RootElement.GetProperty("thoughtCount").GetInt32());
         Assert.Equal(0, activityDoc.RootElement.GetProperty("editedFileCount").GetInt32());
