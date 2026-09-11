@@ -174,7 +174,10 @@ public sealed class SessionModifiedFilesTrackerTests
 
         tracker.BeginTurn();
         Assert.Empty(tracker.TakeCurrentTurnSucceededFiles());
-        Assert.Single(tracker.ModifiedFiles);
+        // BeginTurn starts a fresh turn: the live list is per-turn only (prior turns are replayed
+        // from the transcript), so it is cleared rather than carrying the previous turn's files.
+        // See BeginTurn_clears_prior_turn_file_entries for the full contract.
+        Assert.Empty(tracker.ModifiedFiles);
     }
 
     [Fact]
