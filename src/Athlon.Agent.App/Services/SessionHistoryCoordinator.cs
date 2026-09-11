@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -47,23 +48,39 @@ public sealed class SessionHistoryCoordinator : IDisposable
         _stopSession = stopSession;
 
         var entries = await _storage.ListSessionsAsync();
-        var previouslyExpanded = AgentRecordGroups
-            .Where(group => group.IsExpanded)
-            .Select(group => group.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        AgentRecordGroups.Clear();
-        foreach (var group in AgentRecordGrouping.Build(
-                     entries,
-                     currentSessionId,
-                     isSessionRunning,
-                     stopSession,
-                     previouslyExpanded.Count > 0 ? previouslyExpanded : null))
+        void Apply()
         {
-            if (group.Items.Count > 0)
+            var previouslyExpanded = AgentRecordGroups
+                .Where(group => group.IsExpanded)
+                .Select(group => group.Key)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            AgentRecordGroups.Clear();
+            foreach (var group in AgentRecordGrouping.Build(
+                         entries,
+                         currentSessionId,
+                         isSessionRunning,
+                         stopSession,
+                         previouslyExpanded.Count > 0 ? previouslyExpanded : null))
             {
-                AgentRecordGroups.Add(group);
+                if (group.Items.Count > 0)
+                {
+                    AgentRecordGroups.Add(group);
+                }
             }
+        }
+
+        // AgentRecordGroups is bound to the sidebar UI, so mutation must run on the UI
+        // thread. When there is no WPF Application (e.g. unit tests), apply inline.
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is null || dispatcher.CheckAccess())
+        {
+            Apply();
+        }
+        else
+        {
+            dispatcher.Invoke(Apply);
         }
     }
 

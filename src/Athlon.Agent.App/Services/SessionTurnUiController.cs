@@ -9,6 +9,7 @@ using Athlon.Agent.App.Services.Streaming;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.App.Services;
@@ -60,6 +61,19 @@ public sealed partial class SessionTurnUiController
     private readonly Dictionary<string, ChatMessageViewModel> _viewModelCache = new(StringComparer.Ordinal);
     private int _bulkChatViewSyncDepth;
     private int _syncChatViewGeneration;
+    /// <summary>
+    /// Message id of the user message that opened the turn currently being streamed. Used as the
+    /// activity/files entry key so a live card and the replayed card for the same turn collide
+    /// (and merge) instead of appearing twice.
+    /// </summary>
+    private string? _currentTurnAnchorId;
+    /// <summary>
+    /// The plan run the timeline is currently showing a plan-ready card for. Kept here because the
+    /// card is the one timeline entry the transcript cannot rebuild: <c>publish_plan</c> renders as
+    /// a plan card, not a tool card, so a full replay would otherwise drop it. The controller
+    /// re-emits it onto its <see cref="TimelineOrderPolicy.Plan"/> slot after every reload.
+    /// </summary>
+    private PlanRun? _visiblePlanRun;
     private Func<bool> _showToolCalls = () => true;
     private readonly HashSet<string> _foldedAssistantMessageIds = new(StringComparer.Ordinal);
     /// <summary>
@@ -185,6 +199,12 @@ public sealed partial class SessionTurnUiController
     /// <summary>Test seam: activity source sliced to the displayed window for WebView replay.</summary>
     internal IReadOnlyList<ChatMessage> ReplayActivitySource => BuildReplayActivitySource();
 
+    /// <summary>Test seam: the plan run whose card is currently kept across replays.</summary>
+    internal PlanRun? VisiblePlanRun => _visiblePlanRun;
+
+    /// <summary>Test seam: observes the plan-card events this controller decides to publish.</summary>
+    internal Action<string>? PlanTimelineEventObserver { get; set; }
+
     /// <summary>Test seam: generation bumped when a chat-view sync is scheduled.</summary>
     internal int SyncChatViewGeneration => Volatile.Read(ref _syncChatViewGeneration);
 
@@ -258,6 +278,9 @@ public sealed partial class SessionTurnUiController
                 // session's UI cache.
                 FlushBufferedStreamingToUi();
                 _tokenBuffer.StopFlushTimer();
+                // The shared WebChatView is about to show another session. A stale plan run would
+                // otherwise be replayed into that session's timeline on its first render.
+                _visiblePlanRun = null;
             }
         });
     }
@@ -421,6 +444,89 @@ public sealed partial class SessionTurnUiController
             }
         });
 
+    /// <summary>
+    /// Publishes (or refreshes) the plan-ready card for <paramref name="run"/>. Called by the plan
+    /// bar when a run reaches AwaitConfirm/Done. The controller remembers the run so the next full
+    /// replay, which rebuilds the timeline from the transcript alone, re-emits the card at the
+    /// turn that called <c>publish_plan</c>.
+    /// </summary>
+    public void ShowPlanReady(PlanRun run)
+    {
+        _visiblePlanRun = run;
+        RunOnUiSync(() =>
+        {
+            var seq = PlanSeqFor(run);
+            PlanTimelineEventObserver?.Invoke(ChatEventSerializer.SerializePlanReady(run, seq));
+            if (IsDisplayed && ChatView is not null)
+            {
+                _ = ChatView.ShowPlanReadyAsync(run, seq);
+            }
+        });
+    }
+
+    /// <summary>Drops the plan-ready card (plan abandoned). The card is not transcript-backed.</summary>
+    public void ClearPlanReady()
+    {
+        var previous = _visiblePlanRun;
+        _visiblePlanRun = null;
+        if (previous is null)
+        {
+            return;
+        }
+
+        RunOnUiSync(() =>
+        {
+            PlanTimelineEventObserver?.Invoke(ChatEventSerializer.SerializePlanCleared(previous.Id));
+            if (IsDisplayed && ChatView is not null)
+            {
+                _ = ChatView.ClearPlanReadyAsync(previous.Id);
+            }
+        });
+    }
+
+    /// <summary>
+    /// The seq the plan card belongs at: the <see cref="TimelineOrderPolicy.Plan"/> slot of the
+    /// turn whose <c>publish_plan</c> call produced the run. Returns <c>null</c> when that turn is
+    /// not in the displayed window, in which case the card keeps the seq it already has.
+    /// </summary>
+    private long? PlanSeqFor(PlanRun run)
+    {
+        _ = run;
+        var turnIndex = FindPlanPublishTurnIndex();
+        return turnIndex is { } index ? TimelineOrderPolicy.Plan(index) : null;
+    }
+
+    /// <summary>
+    /// Index of the turn that called <c>publish_plan</c>, by counting turn boundaries in the
+    /// replay source the same way <see cref="ChatEventSerializer"/> does. Uses the newest such
+    /// call, which is the run the plan bar just published.
+    /// </summary>
+    private long? FindPlanPublishTurnIndex()
+    {
+        var projected = ProjectActivitySourceViewModels(BuildReplayActivitySource());
+        if (projected.Count == 0)
+        {
+            return null;
+        }
+
+        var segments = ChatTimelineProjector.BuildSegments(projected, _showToolCalls());
+        long turnIndex = -1;
+        long? result = null;
+        foreach (var segment in segments)
+        {
+            // Mirrors ReplayTurnSegment numbering: the projector emits one leading segment per turn
+            // (user message, compaction checkpoint, or a mid-turn tail page), so each projection
+            // step here advances the turn index exactly once.
+            turnIndex++;
+            if (segment.HasPlanPublish)
+            {
+                result = turnIndex;
+            }
+        }
+
+        return result;
+    }
+
     private bool ShouldRefreshDisplayAfterSessionReplace(AgentSession session)
     {
         // Model-driven compaction (ConversationCompact / ForceCompact / MiddleCutOnRetrySkipped)
@@ -450,9 +556,26 @@ public sealed partial class SessionTurnUiController
         return false;
     }
 
-    public async Task ReloadChatViewAsync()
+    /// <summary>
+    /// Reloads the whole chat timeline. <paramref name="authoritative"/> marks renders whose
+    /// content cannot be produced incrementally (session switch, first paint, page prepend):
+    /// those are always allowed. Refresh-style reloads are suppressed while a live turn still owns
+    /// live FILES_CHANGED / TURN_ACTIVITY cards, so a mid-turn replay cannot stack a twin card
+    /// next to the live one. The turn-end authoritative replay renders the canonical surface, so a
+    /// suppressed refresh does not need to be queued.
+    /// </summary>
+    public async Task ReloadChatViewAsync(bool authoritative = false)
     {
         if (!IsDisplayed)
+        {
+            return;
+        }
+
+        // Evaluated before the renderer (including the host/test override): a refresh must not
+        // re-render the timeline while a live turn still owns the FILES_CHANGED card.
+        // The refresh is dropped rather than deferred: the turn-end authoritative replay below
+        // renders the canonical surface anyway, so a deferred render would only duplicate it.
+        if (!authoritative && HasLiveTurnSurface)
         {
             return;
         }
@@ -478,7 +601,8 @@ public sealed partial class SessionTurnUiController
         await chatView.LoadMessagesAsync(
                 Messages,
                 _showToolCalls(),
-                activitySource.Count > 0 ? activitySource : null)
+                activitySource.Count > 0 ? activitySource : null,
+                _visiblePlanRun)
             .ConfigureAwait(true);
         if (ReferenceEquals(ChatView, chatView) && IsDisplayed)
         {
@@ -487,6 +611,9 @@ public sealed partial class SessionTurnUiController
             await chatView.SetOlderMessagesAvailableAsync(_olderDisplayCursor is not null)
                 .ConfigureAwait(true);
             await RestorePendingToolApprovalsAsync().ConfigureAwait(true);
+            // Replay re-emits the current turn's activity/files entries under the same entry ids
+            // the live upsert uses, so this re-publish overwrites them in place instead of stacking
+            // a second card.
             RestoreLiveTurnCardsAfterReload();
         }
     }
@@ -502,6 +629,10 @@ public sealed partial class SessionTurnUiController
             var message = ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments);
             AppendActivitySourceMessage(message);
             Messages.Add(new ChatMessageViewModel(message));
+            // Anchor this turn's live activity/files cards to the user message that opened it.
+            // Replay derives the same anchor from the transcript, so a live card and its replayed
+            // twin share one key and overwrite each other instead of stacking.
+            _currentTurnAnchorId = message.Id;
             TrimMessagesIfNeeded();
             RequestScrollImmediate();
         });
@@ -661,7 +792,19 @@ public sealed partial class SessionTurnUiController
             {
                 _bulkChatViewSyncDepth--;
                 FinalizeStreamingDisplay();
-                DispatchCurrentTurnActivity();
+                // Seal the now-finished segment: this drops the provisional live "running" text and
+                // reduces the fold to the transcript's own record.
+                SealCurrentSegment();
+                // Re-render from the transcript so the resting timeline is byte-for-byte what a
+                // session switch or restart would produce. The incremental live events only need to
+                // look right while the turn is in flight; this replay is what settles the timeline
+                // into the canonical projection.
+                SyncChatView(immediate: true, authoritative: true);
+                // Overlay the still-open agent narration (tool activity between the last segment
+                // seal and turn end) onto the replayed fold, keyed by the same turn anchor. Without
+                // this, speaking before calling a tool would drop that narration from the fold.
+                RestoreLiveTurnCardsAfterReload();
+
                 if (IsDisplayed)
                 {
                     RequestScrollImmediate();
@@ -669,8 +812,6 @@ public sealed partial class SessionTurnUiController
             }
         });
     }
-
-    private void DispatchCurrentTurnActivity() => SealCurrentSegment();
 
     /// <summary>
     /// Finalizes the live activity / files bubbles for the whole turn (once),
@@ -690,13 +831,13 @@ public sealed partial class SessionTurnUiController
         var summary = _turnActivityTracker.Snapshot();
         if (summary is { HasContent: true })
         {
-            _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: false);
+            _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: false, turnAnchorId: _currentTurnAnchorId);
         }
 
         var files = _modifiedFilesTracker.TakeAndClearSegmentSucceededFiles();
-        // Always dispatch seal (even with empty files) so a live card is finalized and
-        // cannot be stolen by the next turn's upsert via data-live.
-        _ = ChatView!.DispatchFilesChangedAsync(files, upsert: false);
+        // Always dispatch the seal (even with no files) so the live card is finalized and the
+        // turn's own files entry is closed; the next turn publishes under its own anchor id.
+        _ = ChatView!.DispatchFilesChangedAsync(files, upsert: false, turnAnchorId: _currentTurnAnchorId);
 
         _turnActivityTracker.BeginSegment();
     }
@@ -714,7 +855,7 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
-        _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: upsert);
+        _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: upsert, turnAnchorId: _currentTurnAnchorId);
     }
 
     private void PublishFilesChanged(bool upsert = true)
@@ -732,7 +873,7 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
-        _ = ChatView!.DispatchFilesChangedAsync(files, upsert: upsert);
+        _ = ChatView!.DispatchFilesChangedAsync(files, upsert: upsert, turnAnchorId: _currentTurnAnchorId);
     }
 
     private void ProcessUiStreamEvents(AgentStreamEvent streamEvent, bool notifyTracker)
@@ -877,7 +1018,10 @@ public sealed partial class SessionTurnUiController
             await RebuildDisplayFromMessagesCoreAsync(
                     display,
                     synthesizeInterruptedToolResults: true,
-                    activity)
+                    activity,
+                    // Settings/theme changes are a refresh, not an authoritative render: while a
+                    // turn is in flight the reload is deferred so replay cannot stack a twin card.
+                    authoritativeRender: false)
                 .ConfigureAwait(true);
         });
 
@@ -934,7 +1078,8 @@ public sealed partial class SessionTurnUiController
         IReadOnlyList<ChatMessage> displayMessages,
         bool synthesizeInterruptedToolResults,
         IReadOnlyList<ChatMessage>? activitySourceMessages = null,
-        bool preserveActiveTurn = false)
+        bool preserveActiveTurn = false,
+        bool authoritativeRender = true)
     {
         var viewModels = BeginRebuildDisplay(
             displayMessages,
@@ -951,7 +1096,7 @@ public sealed partial class SessionTurnUiController
             }
         }
 
-        FinishRebuildDisplay(viewModels, preserveActiveTurn);
+        FinishRebuildDisplay(viewModels, preserveActiveTurn, authoritativeRender);
     }
 
     private IReadOnlyList<ChatMessageViewModel> BeginRebuildDisplay(
@@ -1013,7 +1158,8 @@ public sealed partial class SessionTurnUiController
 
     private void FinishRebuildDisplay(
         IReadOnlyList<ChatMessageViewModel> viewModels,
-        bool preserveActiveTurn = false)
+        bool preserveActiveTurn = false,
+        bool authoritativeRender = true)
     {
         // Cache ViewModels for future session switches
         foreach (var viewModel in viewModels)
@@ -1027,8 +1173,8 @@ public sealed partial class SessionTurnUiController
             : viewModels;
         _modifiedFilesTracker.RebuildFromMessages(fileSource);
 
-        // Idle / history hydrate: replay owns sealed-per-turn cards. Keep live paths only
-        // while a turn is still in flight so RestoreLive can adopt the current-turn card.
+        // Idle / history hydrate: replay owns the per-turn cards. Keep live paths only while a turn
+        // is still in flight so the mid-turn re-publish can rewrite the replayed entry in place.
         var liveTurnActive = preserveActiveTurn
             || _streaming.ActiveAssistantBubble is not null
             || _streaming.ToolBubblesByIndex.Count > 0
@@ -1044,7 +1190,7 @@ public sealed partial class SessionTurnUiController
             FlushBufferedStreamingToUi();
         }
 
-        SyncChatView(immediate: true);
+        SyncChatView(immediate: true, authoritative: authoritativeRender);
         RequestScrollImmediate();
     }
 
@@ -1163,7 +1309,7 @@ public sealed partial class SessionTurnUiController
                     }
                     else if (!IsStreamingChatItem(single))
                     {
-                        if (ShouldAvoidFullChatReload)
+                        if (HasLiveTurnSurface)
                         {
                             DispatchIncrementalChatItem(single);
                         }
@@ -1173,7 +1319,7 @@ public sealed partial class SessionTurnUiController
                         }
                     }
                 }
-                else if (!ShouldAvoidFullChatReload)
+                else if (!HasLiveTurnSurface)
                 {
                     SyncChatView();
                 }
@@ -1182,7 +1328,7 @@ public sealed partial class SessionTurnUiController
             case NotifyCollectionChangedAction.Remove:
             case NotifyCollectionChangedAction.Replace:
             case NotifyCollectionChangedAction.Move:
-                if (!ShouldAvoidFullChatReload)
+                if (!HasLiveTurnSurface)
                 {
                     SyncChatView();
                 }
@@ -1192,10 +1338,12 @@ public sealed partial class SessionTurnUiController
     }
 
     /// <summary>
-    /// Full WebView reload while a turn still has live FILES_CHANGED paths re-emits a sealed
-    /// card from replay, then live upsert creates a second card that repeats those files.
+    /// The turn still owns UI that a full replay would duplicate (live FILES_CHANGED paths, a live
+    /// activity fold, streaming bubbles). Callers must not re-implement a narrower version — a full
+    /// reload while a turn still has live paths re-emits a card from replay, and the live upsert
+    /// then creates a second card that repeats those files.
     /// </summary>
-    private bool ShouldAvoidFullChatReload =>
+    private bool HasLiveTurnSurface =>
         _modifiedFilesTracker.HasCurrentTurnPaths
         || _turnActivityTracker.HasSegmentContent
         || _streaming.ActiveAssistantBubble is not null
@@ -1310,7 +1458,7 @@ public sealed partial class SessionTurnUiController
             : ChatEventSerializer.ComputeResponseDurationMs(turnUser.CreatedAtUtc, assistant.CreatedAtUtc);
     }
 
-    private void SyncChatView(bool immediate = false)
+    private void SyncChatView(bool immediate = false, bool authoritative = false)
     {
         if (!CanSyncChatView)
         {
@@ -1320,7 +1468,7 @@ public sealed partial class SessionTurnUiController
         if (immediate)
         {
             Interlocked.Increment(ref _syncChatViewGeneration);
-            _ = ReloadChatViewAsync();
+            _ = ReloadChatViewAsync(authoritative);
             return;
         }
 
@@ -1332,7 +1480,7 @@ public sealed partial class SessionTurnUiController
                 return;
             }
 
-            _ = ReloadChatViewAsync();
+            _ = ReloadChatViewAsync(authoritative);
         });
     }
 
@@ -1466,8 +1614,9 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
-        // Tracker is current-turn-only after RebuildFromMessages. Re-publish so a mid-turn
-        // reload can adopt the replayed card as data-live without pulling prior-turn paths.
+        // The tracker is current-turn-only after RebuildFromMessages. Re-publish so a mid-turn
+        // reload rewrites the replayed entry in place — the entry id (turn anchor) matches, so the
+        // card's seq and position are unchanged and no twin is stacked.
         if (_modifiedFilesTracker.HasCurrentTurnPaths)
         {
             PublishFilesChanged(upsert: true);
@@ -1483,7 +1632,7 @@ public sealed partial class SessionTurnUiController
         var summary = TurnActivitySummaryBuilder.OverlayLiveThought(replayed, live);
         if (summary.HasContent)
         {
-            _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: true);
+            _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: true, turnAnchorId: _currentTurnAnchorId);
         }
     }
 
@@ -1515,6 +1664,21 @@ public sealed partial class SessionTurnUiController
 
         return result;
     }
+
+    /// <summary>
+    /// Materializes the activity-fold view models for <paramref name="messages"/> with the same
+    /// projection <see cref="ChatEventSerializer.BuildReplayEvents"/> uses, so turn boundaries
+    /// counted here match the replay's turn indices exactly.
+    /// </summary>
+    internal static List<ChatMessageViewModel> ProjectActivitySourceViewModels(
+        IReadOnlyList<ChatMessage> messages) =>
+        messages
+            .Where(message => message.Role is MessageRole.User
+                or MessageRole.Tool
+                or MessageRole.Assistant
+                or MessageRole.Compaction)
+            .Select(message => new ChatMessageViewModel(message))
+            .ToList();
 
     private List<ChatMessage> BuildReplayActivitySource()
     {

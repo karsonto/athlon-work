@@ -79,6 +79,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private Controls.WebChatView? _savedChatView;
     private ConversationDisplayCursor? _olderDisplayCursor;
     private bool _olderHistoryLoadInProgress;
+    private EventHandler? _onMcpConfigurationChanged;
+    private EventHandler? _onSkillConfigurationChanged;
+    private EventHandler? _onSettingsSaved;
 
     public MainShellViewModel(
         IFileStorageService storage,
@@ -192,8 +195,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             session => _session = session,
             ShowShellToast,
             StartFromApprovedPlanAsync,
-            onPlanTimeline: OnPlanTimeline,
-            setComposerHint: SetComposerStatus);
+            setComposerHint: SetComposerStatus,
+            onPlanTimeline: _ => RefreshPlanCard(),
+            onPlanTimelineCleared: () => _activeUi.ClearPlanReady());
         QuestionBar.Configure(
             () => _displayedSessionId,
             ShowShellToast,
@@ -214,9 +218,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             () => _workspaceContext.IgnorePatterns,
             TryCancelCompaction,
             CreateSlashCommandContext);
-        Settings.McpConfigurationChanged += async (_, _) => await RefreshMcpRuntimeAsync();
-        Settings.SkillConfigurationChanged += (_, _) => OnSkillConfigurationChanged();
-        Settings.SettingsSaved += async (_, _) => await OnSettingsSavedAsync();
+        _onMcpConfigurationChanged = (_, _) => _ = RunGuardedAsync(RefreshMcpRuntimeAsync, "MCP runtime refresh");
+        _onSkillConfigurationChanged = (_, _) => OnSkillConfigurationChanged();
+        _onSettingsSaved = (_, _) => _ = RunGuardedAsync(OnSettingsSavedAsync, "settings saved handler");
+        Settings.McpConfigurationChanged += _onMcpConfigurationChanged;
+        Settings.SkillConfigurationChanged += _onSkillConfigurationChanged;
+        Settings.SettingsSaved += _onSettingsSaved;
         Sidebar = sidebar;
         Sidebar.SetActivateHandlers(ToggleSkillFromSidebarAsync, ActivateMcpFromSidebarAsync);
         Sidebar.Refresh(_appSettings);
@@ -1088,14 +1095,15 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private async void OnToolDetailRequested(object? sender, Controls.ToolDetailRequestEventArgs e)
     {
-        if (_savedChatView is not { } chatView)
+        var chatView = _savedChatView;
+        if (chatView is null)
         {
             return;
         }
 
-        var sessionId = _displayedSessionId;
         try
         {
+            var sessionId = _displayedSessionId;
             var detail = await ToolDetailReadback.LoadDisplayDetailAsync(
                 _storage,
                 sessionId,
@@ -1526,10 +1534,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         _olderHistoryLoadInProgress = true;
-        var sessionId = _displayedSessionId;
-        var loadGeneration = Volatile.Read(ref _sessionLoadGeneration);
         try
         {
+            var sessionId = _displayedSessionId;
+            var loadGeneration = Volatile.Read(ref _sessionLoadGeneration);
             var page = await _sessionNavigation.LoadOlderDisplayPageAsync(
                 sessionId,
                 cursor,
@@ -1688,6 +1696,10 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _ = ComposerKnowledge.LoadForSessionAsync(_displayedSessionId);
         _ = ComposerHarness.LoadForSessionAsync(_displayedSessionId);
         DebugBar.RefreshFromActiveRun();
+        // The plan card belongs to the session being displayed: refresh re-publishes the new
+        // session's active plan, or clears the card for one that has no active plan.
+        PlanBar.RefreshFromActiveRun();
+        RefreshPlanCard();
         QuestionBar.RefreshFromActiveSession();
         RequestRefreshSessionHistory();
     }
@@ -1805,26 +1817,27 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         if (to == SessionAgentMode.Plan)
         {
             PlanBar.RefreshFromActiveRun();
-            var run = PlanBar.GetActiveRun();
-            if (run is not null)
-            {
-                OnPlanTimeline(run);
-            }
+            RefreshPlanCard();
         }
 
         QuestionBar.RefreshFromActiveSession();
     }
 
-    private void OnPlanTimeline(PlanRun run)
+    /// <summary>
+    /// Re-emits the plan card for the displayed session. A plan card is not backed by the
+    /// transcript, so the timeline cannot restore it on its own; this is the single refresh path
+    /// that keeps it pinned to the run's <see cref="TimelineOrderPolicy.Plan"/> slot.
+    /// </summary>
+    private void RefreshPlanCard()
     {
-        if (_savedChatView is null)
+        var run = PlanBar.GetActiveRun();
+        if (run is { Phase: PlanPhase.AwaitConfirm or PlanPhase.Done })
         {
-            return;
+            _activeUi.ShowPlanReady(run);
         }
-
-        if (run.Phase is PlanPhase.AwaitConfirm or PlanPhase.Done)
+        else
         {
-            _ = _savedChatView.ShowPlanReadyAsync(run);
+            _activeUi.ClearPlanReady();
         }
     }
 
@@ -2912,11 +2925,29 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         KnowledgePageVm.KnowledgeDataChanged -= OnKnowledgeDataChanged;
         _taskListChangedNotifier.TaskListChanged -= OnTaskListChanged;
         _composer.AtCompletionSourcesUpdated -= OnAtCompletionSourcesUpdated;
+        if (_onMcpConfigurationChanged is not null)
+        {
+            Settings.McpConfigurationChanged -= _onMcpConfigurationChanged;
+        }
+
+        if (_onSkillConfigurationChanged is not null)
+        {
+            Settings.SkillConfigurationChanged -= _onSkillConfigurationChanged;
+        }
+
+        if (_onSettingsSaved is not null)
+        {
+            Settings.SettingsSaved -= _onSettingsSaved;
+        }
+
+        _sessionTurns.QueuedTurnPresenter.QueueChanged -= OnQueuedTurnsChanged;
         if (_savedChatView is not null)
         {
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
+            _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
+            _savedChatView.PlanOpenEditorRequested -= OnPlanOpenEditorRequested;
         }
 
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
@@ -2940,6 +2971,18 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             SchedulePageVm,
             KnowledgePageVm,
             SkillHubVm);
+    }
+
+    private async Task RunGuardedAsync(Func<Task> action, string operation)
+    {
+        try
+        {
+            await action().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"{operation} failed: {ex.Message}");
+        }
     }
 
     private void OnSkillConfigurationChanged()

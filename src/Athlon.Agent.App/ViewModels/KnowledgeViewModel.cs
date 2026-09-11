@@ -11,7 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Athlon.Agent.App.ViewModels;
 
-public sealed partial class KnowledgeViewModel : ObservableObject
+public sealed partial class KnowledgeViewModel : ObservableObject, IDisposable
 {
     /// <summary>当知识空间/文档发生变更时触发，供 ComposerKnowledgeViewModel 等外部消费者刷新。</summary>
     public event Action? KnowledgeDataChanged;
@@ -27,6 +27,7 @@ public sealed partial class KnowledgeViewModel : ObservableObject
     private string? _activeSearchModuleId;
     private string? _activeSearchDocumentId;
     private bool _isStale = true;
+    private bool _disposed;
     private IReadOnlyDictionary<string, List<KnowledgeDocument>> _documentsByModuleId =
         new Dictionary<string, List<KnowledgeDocument>>(StringComparer.OrdinalIgnoreCase);
 
@@ -609,6 +610,17 @@ public sealed partial class KnowledgeViewModel : ObservableObject
 
         OnPropertyChanged(nameof(Modules));
         OnPropertyChanged(nameof(DocumentTree));
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        AppCultureManager.CultureChanged -= OnCultureChanged;
     }
 }
 

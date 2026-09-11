@@ -15,7 +15,16 @@ const state = {
   batchTarget: null,
   hasOlderMessages: false,
   loadingOlder: false,
-  lastScrollHeight: undefined
+  lastScrollHeight: undefined,
+  // Timeline entries keyed by their stable id (messageId / toolCallId / turn anchor). Each record
+  // remembers the seq it was placed at so an update rewrites content in place instead of moving
+  // the bubble. This map — not the DOM — is the source of truth for what the timeline contains.
+  entries: new Map(),
+  // Live ordering cursor, mirroring C# TimelineOrderPolicy for events that arrive without an
+  // explicit seq. Replay always sends seq, so this only drives the live stream.
+  liveTurn: 0,
+  liveTurnStarted: false,
+  liveContentOrdinal: 0
 };
 
 function t(key) {
@@ -245,19 +254,163 @@ function createMessageActions(row) {
   return actions;
 }
 
-function ensureMessageActions(row) {
-  if (!row || row.querySelector('.message-actions')) return;
-  const stack = row.querySelector('.message-stack');
-  if (!stack) return;
-  stack.appendChild(createMessageActions(row));
-}
-
 function getChatScroller() {
   return document.getElementById('chat-scroll');
 }
 
 function getMessageRoot() {
   return state.batchTarget || document.getElementById('messages');
+}
+
+/**
+ * Mirror of C# TimelineOrderPolicy. Both sides compute the same number for the same entry, so a
+ * live bubble and its replayed twin land in the identical slot. Keep these constants in sync with
+ * src/Athlon.Agent.App/Services/TimelineOrderPolicy.cs.
+ */
+var SEQ_TURN_BAND = 1000000;
+var SEQ_USER = 0;
+var SEQ_ACTIVITY = 1000;
+var SEQ_CONTENT = 2000;
+var SEQ_FILES = 800000;
+var SEQ_COMPACTION = 900000;
+/**
+ * Gap left for an older page when it is prepended. Older pages are shifted below the current
+ * minimum by this much (plus their own span), which is far wider than any real turn band.
+ */
+var SEQ_PAGE_GAP = 1000000;
+
+function seqForTurn(turnIndex, offset) {
+  return Math.max(0, turnIndex) * SEQ_TURN_BAND + offset;
+}
+
+/**
+ * Advances the live cursor to a new turn. Called when a user message opens a turn; replay never
+ * calls this because its events already carry explicit seqs.
+ */
+function beginLiveTurn() {
+  if (state.liveTurnStarted) state.liveTurn += 1;
+  state.liveTurnStarted = true;
+  state.liveContentOrdinal = 0;
+  return state.liveTurn;
+}
+
+/**
+ * Re-anchors the live cursor after a replay so live events that follow continue the numbering the
+ * replay used. Without this, a mid-turn reload would place the next live card in the wrong turn
+ * band and stack a duplicate beside the replayed one.
+ */
+function syncLiveCursorFromSeq(maxSeq) {
+  if (typeof maxSeq !== 'number' || !isFinite(maxSeq) || maxSeq < 0) return;
+  state.liveTurn = Math.floor(maxSeq / SEQ_TURN_BAND);
+  state.liveTurnStarted = true;
+  var withinContent = maxSeq - seqForTurn(state.liveTurn, SEQ_CONTENT);
+  state.liveContentOrdinal = withinContent >= 0 ? withinContent + 1 : 0;
+}
+
+/** Next content slot (tool card / assistant reply) inside the current live turn. */
+function nextLiveContentSeq() {
+  return seqForTurn(state.liveTurn, SEQ_CONTENT + (state.liveContentOrdinal++));
+}
+
+/**
+ * Places (or moves) a row so that #messages is always ascending by data-seq. This is the only
+ * positioning decision in the timeline: no "insert after the last user row", no scanning for a
+ * previous card to adopt. A missing seq keeps the node appended, which is what the tests and the
+ * shell's inline replay rely on when they feed events without ordering metadata.
+ */
+function insertBySeq(row, seq) {
+  var root = getMessageRoot();
+  if (!root || !row) return;
+  if (seq === undefined || seq === null || isNaN(seq)) {
+    if (row.parentNode !== root) root.appendChild(row);
+    return;
+  }
+
+  row.setAttribute('data-seq', String(seq));
+  var inRoot = row.parentNode === root;
+
+  // Fast path: a new node whose seq is at or past the last child appends in O(1). Replay and the
+  // live stream both emit ascending seqs, so this is the hot path and keeps a full replay linear.
+  var last = root.lastElementChild;
+  if (!inRoot && (!last || Number(last.getAttribute('data-seq')) <= seq)) {
+    root.appendChild(row);
+    return;
+  }
+
+  // Fast path: already in place relative to its immediate neighbours.
+  var previous = row.previousElementSibling;
+  var next = row.nextElementSibling;
+  if (inRoot
+      && (!previous || Number(previous.getAttribute('data-seq')) <= seq)
+      && (!next || Number(next.getAttribute('data-seq')) >= seq)) {
+    return;
+  }
+
+  var children = root.children;
+  var anchor = null;
+  var found = false;
+  for (var i = children.length - 1; i >= 0; i--) {
+    var candidate = children[i];
+    if (candidate === row) continue;
+    var candidateSeq = Number(candidate.getAttribute('data-seq'));
+    if (isNaN(candidateSeq) || candidateSeq <= seq) {
+      anchor = candidate.nextElementSibling;
+      found = true;
+      break;
+    }
+  }
+
+  // Every existing child sorts after this one: it belongs at the front.
+  if (!found) anchor = children.length > 0 ? children[0] : null;
+
+  if (anchor === row) return;
+  root.insertBefore(row, anchor);
+}
+
+/**
+ * Registers a timeline entry and inserts it at its seq. Returns the existing element when the key
+ * is already present so callers can update content in place without reordering the timeline.
+ */
+function registerEntry(key, row, seq) {
+  var normalized = key || '';
+  var existing = normalized ? state.entries.get(normalized) : null;
+  if (existing && existing.el && existing.el !== row) {
+    return existing;
+  }
+
+  if (normalized) {
+    state.entries.set(normalized, { el: row, seq: seq });
+  }
+
+  insertBySeq(row, seq);
+  return null;
+}
+
+/** The row currently registered for a key, if any. */
+function getEntryRow(key) {
+  if (!key) return null;
+  var record = state.entries.get(key);
+  return record ? record.el : null;
+}
+
+/** Removes a keyed entry and its row from the timeline. */
+function removeEntry(key) {
+  if (!key) return false;
+  var record = state.entries.get(key);
+  if (!record) return false;
+  state.entries.delete(key);
+  if (record.el && record.el.parentNode) record.el.parentNode.removeChild(record.el);
+  return true;
+}
+
+/**
+ * Resolves the seq an event should be placed at. Replay and the C# live dispatcher always send an
+ * explicit seq; a missing seq falls back to the JSON key order the shell test fixtures use.
+ */
+function resolveEventSeq(event, fallbackOffset) {
+  if (event && typeof event.seq === 'number' && isFinite(event.seq)) return event.seq;
+  if (fallbackOffset === undefined) return undefined;
+  return seqForTurn(state.liveTurn, fallbackOffset);
 }
 
 function isNearBottom() {
@@ -317,12 +470,6 @@ function updateEmptyStateVisibility() {
   emptyState.style.display = root.children.length === 0 ? 'flex' : 'none';
 }
 
-function findAssistantContentNode(messageId) {
-  if (!messageId) return null;
-  const row = findAssistantBubbleRow(messageId);
-  return row ? row.querySelector('.bubble > .message-content') : null;
-}
-
 function findAssistantBubbleRow(messageId) {
   if (!messageId) return null;
   const selector = '.message-row.assistant-row[data-message-id="' + cssEscape(messageId) + '"]';
@@ -345,28 +492,28 @@ function applyMarkdownHtml(node, html, enhance) {
     state.pendingEnhancementRoots.push(node);
   } else {
     enhanceCodeBlocks(node);
+    scheduleMermaidRender(node);
   }
 }
 
-function applyAssistantHtml(messageId, html, createIfMissing, streaming, responseDurationMs) {
+function applyAssistantHtml(messageId, html, createIfMissing, streaming, responseDurationMs, seq) {
   let row = findAssistantBubbleRow(messageId);
   if (!row && createIfMissing) {
     row = createAssistantRow(messageId);
-    getMessageRoot().appendChild(row);
+    // A live assistant bubble claims the next content slot; a replayed one carries its seq so it
+    // lands in the same place the streamed bubble occupied.
+    registerEntry('msg:' + messageId, row, seq === undefined ? nextLiveContentSeq() : seq);
     state.assistantStarted[messageId] = true;
     state.currentAssistantEl = row;
+  } else if (row && seq !== undefined) {
+    insertBySeq(row, seq);
   }
   if (!row) return;
   // Query content on the row itself — do not re-query document (breaks DocumentFragment batches).
   applyMarkdownHtml(row.querySelector('.bubble > .message-content'), html, streaming !== true);
   if (streaming !== true) {
+    // The files-changed card take its own seq slot, so no reordering is needed here.
     setMessageMeta(row, formatResponseDuration(responseDurationMs));
-    // Final assistant landed after a live files card — move the card below this reply.
-    var filesCard = findLatestFilesChangedCardInCurrentTurn();
-    if (filesCard && !filesCard.hasAttribute('data-sealed')) {
-      var filesRow = filesCard.closest('.message-row') || filesCard.parentNode;
-      placeFilesChangedRow(filesRow);
-    }
   }
   updateEmptyStateVisibility();
   scrollToBottom();
@@ -399,6 +546,11 @@ function enhanceOneCodeBlock(pre, index) {
   const className = code.className || '';
   const match = className.match(/language-([\w#+-]+)/i);
   const language = match ? match[1] : t('code');
+
+  if (String(language).toLowerCase() === 'mermaid') {
+    // Diagrams render through renderMermaidBlocks(); a code-block header would fight the SVG.
+    return;
+  }
 
   const wrapper = document.createElement('div');
   wrapper.className = 'code-block';
@@ -477,6 +629,135 @@ function scheduleEnhanceFlush() {
   }
 }
 
+// --- Mermaid diagrams -------------------------------------------------------
+// The bundled runtime (~2.5 MB) is lazy-loaded the first time a ```mermaid block appears.
+var MERMAID_RENDER_DEBOUNCE_MS = 250;
+var mermaidState = { promise: null, ready: false };
+var mermaidSources = new WeakMap();
+var mermaidSeq = 0;
+var mermaidRenderTimer = null;
+var mermaidRenderRoots = [];
+
+function mermaidThemeName() {
+  return (window.__chatAssets && window.__chatAssets.theme) || 'dark';
+}
+
+function initMermaidRuntime() {
+  try {
+    if (typeof window.mermaid === 'undefined') return;
+    window.mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: mermaidThemeName()
+    });
+  } catch (e) { }
+}
+
+function ensureMermaidLoaded() {
+  if (mermaidState.promise) return mermaidState.promise;
+  mermaidState.promise = new Promise(function (resolve) {
+    if (typeof window.mermaid !== 'undefined') {
+      initMermaidRuntime();
+      mermaidState.ready = true;
+      resolve(true);
+      return;
+    }
+    var cfg = window.__chatAssets || {};
+    if (!cfg.mermaidBase) {
+      resolve(false);
+      return;
+    }
+    var script = document.createElement('script');
+    script.src = cfg.mermaidBase + (cfg.mermaid || 'mermaid.min.js') + (cfg.cache || '');
+    script.onload = function () {
+      initMermaidRuntime();
+      mermaidState.ready = true;
+      resolve(true);
+    };
+    script.onerror = function () { resolve(false); };
+    document.head.appendChild(script);
+  });
+  return mermaidState.promise;
+}
+
+function scheduleMermaidRender(root) {
+  if (!root) return;
+  mermaidRenderRoots.push(root);
+  if (mermaidRenderTimer) clearTimeout(mermaidRenderTimer);
+  mermaidRenderTimer = setTimeout(function () {
+    mermaidRenderTimer = null;
+    var roots = mermaidRenderRoots;
+    mermaidRenderRoots = [];
+    renderMermaidBlocks(roots);
+  }, MERMAID_RENDER_DEBOUNCE_MS);
+}
+
+function renderMermaidBlocks(roots) {
+  var blocks = [];
+  (roots && roots.length ? roots : [document]).forEach(function (root) {
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+    root.querySelectorAll('pre > code.language-mermaid').forEach(function (code) {
+      var pre = code.parentElement;
+      if (pre && pre.dataset.mermaidDone !== '1') blocks.push(pre);
+    });
+  });
+  if (!blocks.length) return;
+  ensureMermaidLoaded().then(function (loaded) {
+    if (!loaded) return;
+    blocks.forEach(function (pre) {
+      if (pre.isConnected && pre.dataset.mermaidDone !== '1') renderOneMermaidBlock(pre);
+    });
+  });
+}
+
+function renderOneMermaidBlock(pre) {
+  var code = pre.querySelector('code');
+  var source = code ? code.textContent || '' : '';
+  if (!source.trim()) return;
+  pre.dataset.mermaidDone = '1';
+  mermaidRenderFigure(pre, source, null);
+}
+
+function mermaidRenderFigure(pre, source, targetFigure) {
+  var figure = targetFigure || document.createElement('div');
+  figure.className = 'mermaid-figure';
+  figure.dataset.mermaidDone = '1';
+  mermaidSources.set(figure, source);
+  var id = 'mermaid-' + (++mermaidSeq);
+  var settle = function (svg) {
+    figure.innerHTML = svg;
+    if (!targetFigure && pre && pre.parentNode) pre.parentNode.replaceChild(figure, pre);
+    scrollToBottom();
+  };
+  var fail = function () {
+    // Degrade to the raw code block; a malformed diagram must never break the timeline.
+    if (pre) pre.dataset.mermaidFailed = '1';
+  };
+  try {
+    var result = window.mermaid.render(id, source);
+    if (result && typeof result.then === 'function') {
+      result.then(function (r) { settle(r && r.svg ? r.svg : ''); }).catch(fail);
+    } else if (result && result.svg) {
+      settle(result.svg);
+    } else {
+      fail();
+    }
+  } catch (e) {
+    fail();
+  }
+}
+
+/** Re-render every mounted diagram after a theme switch. */
+function refreshMermaidTheme() {
+  if (!mermaidState.ready) return;
+  initMermaidRuntime();
+  document.querySelectorAll('.mermaid-figure').forEach(function (figure) {
+    var source = mermaidSources.get(figure);
+    if (!source) return;
+    mermaidRenderFigure(null, source, figure);
+  });
+}
+
 function enhanceCodeBlocks(root) {
   const scope = root || document;
   scope.querySelectorAll('.md-root pre').forEach(function (pre, index) {
@@ -494,6 +775,9 @@ function resetTimeline() {
   pendingEnhanceQueue.length = 0;
   enhanceScheduled = false;
   root.innerHTML = '';
+  state.entries.clear();
+  state.liveTurn = 0;
+  state.liveContentOrdinal = 0;
   state.currentAssistantEl = null;
   state.currentReasoningEl = null;
   state.assistantStarted = {};
@@ -504,6 +788,12 @@ function resetTimeline() {
   state.hasOlderMessages = false;
   state.loadingOlder = false;
   state.lastScrollHeight = undefined;
+  if (mermaidRenderTimer) {
+    clearTimeout(mermaidRenderTimer);
+    mermaidRenderTimer = null;
+  }
+  mermaidRenderRoots = [];
+  mermaidSources = new WeakMap();
 }
 
 function beginBatch() {
@@ -521,7 +811,10 @@ function endBatch(forceScroll) {
   document.documentElement.classList.remove('replaying');
   const roots = state.pendingEnhancementRoots;
   state.pendingEnhancementRoots = [];
-  roots.forEach(function (root) { enhanceCodeBlocks(root); });
+  roots.forEach(function (root) {
+    enhanceCodeBlocks(root);
+    scheduleMermaidRender(root);
+  });
   updateEmptyStateVisibility();
   scrollToBottom(!!forceScroll);
 }
@@ -639,9 +932,10 @@ function formatResponseDuration(durationMs) {
   return (t('responseDuration') || 'Took {0}').replace('{0}', secondsLabel);
 }
 
-function createUserRow(content, images, startedAt, mentions) {
+function createUserRow(content, images, startedAt, mentions, messageId) {
   const row = document.createElement('div');
   row.className = 'message-row user';
+  if (messageId) row.dataset.messageId = messageId;
   const stack = document.createElement('div');
   stack.className = 'message-stack';
   const bubble = document.createElement('div');
@@ -838,7 +1132,7 @@ function createReasoningRow(messageId) {
   return row;
 }
 
-function appendMessage(role, content, append, images, startedAt, mentions) {
+function appendMessage(role, content, append, images, startedAt, mentions, seq, messageId) {
   if (append && role === 'assistant' && state.currentAssistantEl) {
     const el = state.currentAssistantEl.querySelector('.message-content');
     el.textContent += content;
@@ -853,7 +1147,13 @@ function appendMessage(role, content, append, images, startedAt, mentions) {
   }
 
   if (role === 'user') {
-    getMessageRoot().appendChild(createUserRow(content, images, startedAt, mentions));
+    if (seq === undefined) {
+      beginLiveTurn();
+      seq = seqForTurn(state.liveTurn, SEQ_USER);
+    }
+
+    var userRow = createUserRow(content, images, startedAt, mentions, messageId);
+    registerEntry('msg:' + (messageId || ''), userRow, seq);
   } else if (role === 'assistant') {
     const row = createAssistantRow('');
     row.querySelector('.message-content').textContent = content;
@@ -870,24 +1170,21 @@ function appendMessage(role, content, append, images, startedAt, mentions) {
 }
 
 function ensureAssistantBubble(messageId) {
+  const existing = getEntryRow('msg:' + messageId);
+  if (existing) {
+    state.currentAssistantEl = existing;
+    state.assistantStarted[messageId] = true;
+    return;
+  }
   if (state.currentAssistantEl && state.assistantStarted[messageId]) return;
   const row = createAssistantRow(messageId);
-  getMessageRoot().appendChild(row);
+  registerEntry('msg:' + messageId, row, nextLiveContentSeq());
   state.currentAssistantEl = row;
   state.assistantStarted[messageId] = true;
   updateEmptyStateVisibility();
 }
 
-function ensureReasoningBubble(messageId) {
-  if (state.currentReasoningEl && state.reasoningStarted[messageId]) return;
-  const row = createReasoningRow(messageId);
-  getMessageRoot().appendChild(row);
-  state.currentReasoningEl = row;
-  state.reasoningStarted[messageId] = true;
-  updateEmptyStateVisibility();
-}
-
-function createToolCard(toolCallId, toolName) {
+function createToolCard(toolCallId, toolName, seq) {
   state.currentAssistantEl = null;
   state.currentReasoningEl = null;
   const row = document.createElement('div');
@@ -906,13 +1203,20 @@ function createToolCard(toolCallId, toolName) {
     '<div class="tool-result-html md-root"></div>' +
     '</div></div>';
   row.appendChild(details);
-  getMessageRoot().appendChild(row);
+  registerEntry('tool:' + toolCallId, row, seq === undefined ? nextLiveContentSeq() : seq);
   state.toolCalls.set(toolCallId, details);
   updateEmptyStateVisibility();
   scrollToBottom();
+  return details;
 }
 
+/** Existing tool card element for a call id, in the live map or already in the DOM. */
 function getToolCard(toolCallId) {
+  var registered = getEntryRow('tool:' + toolCallId);
+  if (registered) {
+    var details = registered.querySelector('.message.tool');
+    if (details) return details;
+  }
   return state.toolCalls.get(toolCallId) || document.querySelector('[data-tool-call-id="' + toolCallId + '"]');
 }
 
@@ -1121,125 +1425,77 @@ function turnActivitySummaryText(event) {
   return t('thinking') || 'Working…';
 }
 
-function findLatestFilesChangedCardInCurrentTurn() {
-  var root = getMessageRoot();
-  if (!root) return null;
-  var rows = root.querySelectorAll('.message-row');
-  var lastUser = -1;
-  for (var i = 0; i < rows.length; i++) {
-    if (rows[i].classList.contains('user')) lastUser = i;
-  }
-  var latest = null;
-  for (var j = lastUser + 1; j < rows.length; j++) {
-    var card = rows[j].querySelector('.files-changed-card');
-    if (card) latest = card;
-  }
-  return latest;
-}
-
-function findLiveFilesChangedCardInCurrentTurn() {
-  var latest = findLatestFilesChangedCardInCurrentTurn();
-  if (latest && latest.getAttribute('data-live') === '1') return latest;
-  return null;
-}
-
-function findFilesChangedTargetCard(upsert) {
-  // Scope to the current turn only — never steal a prior turn's live card.
-  var live = findLiveFilesChangedCardInCurrentTurn();
-  if (live) return live;
-  if (upsert) {
-    // After a full timeline reload, replay emits an unsealed card for the current turn.
-    // Adopt it as the live card instead of stacking a duplicate with the same paths.
-    var latest = findLatestFilesChangedCardInCurrentTurn();
-    if (latest && !latest.hasAttribute('data-sealed')) return latest;
-    return null;
-  }
-  // Seal with no live card: nothing to finalize (do not rewrite sealed history cards).
-  return null;
+/**
+ * Stable key for the turn-activity fold. Prefers the C#-supplied entryId (which is anchored to the
+ * turn's user message) so a live fold and its replayed twin share one key. Falls back to the live
+ * turn index for events that predate the entryId field.
+ */
+function turnActivityEntryKey(event) {
+  if (event && event.entryId) return event.entryId;
+  return 'activity:' + state.liveTurn;
 }
 
 /**
- * Place the files-changed row after the current turn's final assistant bubble
- * (or after activity/user when no assistant yet) so it scrolls with history.
+ * Stable key for the files-changed card. Same anchoring rule as the activity fold.
  */
-function placeFilesChangedRow(row) {
-  var root = getMessageRoot();
-  if (!root || !row) return;
-  var rows = Array.prototype.slice.call(root.querySelectorAll('.message-row'));
-  var lastUserIdx = -1;
-  for (var i = 0; i < rows.length; i++) {
-    if (rows[i].classList.contains('user')) lastUserIdx = i;
-  }
-
-  var insertAfter = lastUserIdx >= 0 ? rows[lastUserIdx] : null;
-  for (var j = lastUserIdx + 1; j < rows.length; j++) {
-    var candidate = rows[j];
-    if (candidate === row) continue;
-    if (candidate.querySelector('.turn-activity')) {
-      insertAfter = candidate;
-      continue;
-    }
-    if (candidate.querySelector('.files-changed-card')) continue;
-    if (candidate.classList.contains('tool-row')) continue;
-    // Prefer real assistant reply bubbles (assistant-row), not host wrappers.
-    if (candidate.classList.contains('assistant-row')
-        && candidate.querySelector('.bubble > .message-content')) {
-      insertAfter = candidate;
-      continue;
-    }
-  }
-
-  if (insertAfter && insertAfter.parentNode === root) {
-    root.insertBefore(row, insertAfter.nextSibling);
-    return;
-  }
-  root.appendChild(row);
+function filesChangedEntryKey(event) {
+  if (event && event.entryId) return event.entryId;
+  return 'files:' + state.liveTurn;
 }
 
-function sealFilesChangedCard(card) {
-  if (!card) return;
-  card.removeAttribute('data-live');
-  card.setAttribute('data-sealed', '1');
-  var row = card.closest('.message-row') || card.parentNode;
-  placeFilesChangedRow(row);
-  updateEmptyStateVisibility();
-  scrollToBottom();
-}
-
+/**
+ * Renders (or refreshes) the turn's files-changed card at its seq slot.
+ *
+ * The card is keyed by the turn it summarizes: a live upsert and a replayed card carrying the
+ * same key are the same card, so they overwrite in place instead of stacking twins. The seq is
+ * fixed by TimelineOrderPolicy at the turn's files slot, which places it after the turn's
+ * replies in both paths without any "move it below the last assistant bubble" heuristics.
+ */
 function appendFilesChangedCard(event) {
   state.currentAssistantEl = null;
   state.currentReasoningEl = null;
   var files = event.files || [];
-  var upsert = event.upsert === true;
+  var key = filesChangedEntryKey(event);
+  var existingRow = getEntryRow(key);
 
-  // Empty upsert: nothing to show. Empty seal: finalize existing live card in place.
-  if (!files.length) {
-    if (upsert) return;
-    var liveToSeal = findFilesChangedTargetCard(false);
-    if (liveToSeal) sealFilesChangedCard(liveToSeal);
-    return;
+  // Empty payload with no card yet: nothing to show.
+  if (!files.length && !existingRow) return;
+
+  var seq = resolveEventSeq(event, SEQ_FILES);
+  var openPaths = {};
+  var row = existingRow;
+  var card;
+  if (row) {
+    card = row.querySelector('.files-changed-card');
+    if (!card) {
+      row = null;
+    } else {
+      card.querySelectorAll('.files-changed-item.open').forEach(function (item) {
+        var path = item.getAttribute('data-path') || '';
+        if (path) openPaths[path] = true;
+      });
+      card.innerHTML = '';
+    }
   }
 
-  var existing = findFilesChangedTargetCard(upsert);
-  var card = existing;
-  var sealingLiveCard = !!(existing && existing.getAttribute('data-live') === '1');
-  var openPaths = {};
-  var row = null;
-  if (existing) {
-    existing.querySelectorAll('.files-changed-item.open').forEach(function (item) {
-      var path = item.getAttribute('data-path') || '';
-      if (path) openPaths[path] = true;
-    });
-    card.innerHTML = '';
-    row = existing.closest('.message-row') || existing.parentNode;
-  } else {
+  if (!row) {
     row = document.createElement('div');
     row.className = 'message-row assistant files-changed-host';
     card = document.createElement('div');
     card.className = 'files-changed-card';
-    if (upsert) card.setAttribute('data-live', '1');
     row.appendChild(card);
+    registerEntry(key, row, seq);
+  } else {
+    insertBySeq(row, seq);
   }
+
+  if (!files.length) {
+    // Sealed-and-empty: the card stays as the turn's marker.
+    updateEmptyStateVisibility();
+    return;
+  }
+
+  card.setAttribute('data-turn-key', key);
 
   var title = document.createElement('div');
   title.className = 'files-changed-title';
@@ -1296,19 +1552,6 @@ function appendFilesChangedCard(event) {
   });
 
   card.appendChild(list);
-  if (upsert) {
-    card.setAttribute('data-live', '1');
-    card.removeAttribute('data-sealed');
-  } else {
-    card.removeAttribute('data-live');
-    // Seal live cards and completed replay cards. Leave the card unsealed only when
-    // this is a non-live replay placeholder that RestoreLive may still adopt (no
-    // data-live was ever set — sealingLiveCard is false and we are not mid-seal).
-    if (sealingLiveCard) {
-      card.setAttribute('data-sealed', '1');
-    }
-  }
-  placeFilesChangedRow(row);
   updateEmptyStateVisibility();
   scrollToBottom();
 }
@@ -1326,21 +1569,6 @@ function syncTurnActivityChevron(details) {
   chevron.textContent = details.open ? '∨' : '›';
 }
 
-function insertAfterLastUserRow(row) {
-  var root = getMessageRoot();
-  var users = root.querySelectorAll('.message-row.user');
-  var lastUser = users.length ? users[users.length - 1] : null;
-  if (lastUser && lastUser.parentNode === root) {
-    var anchor = lastUser.nextSibling;
-    while (anchor && anchor.nodeType === 1 && anchor.classList.contains('turn-activity-host')) {
-      anchor = anchor.nextSibling;
-    }
-    root.insertBefore(row, anchor);
-    return;
-  }
-  root.appendChild(row);
-}
-
 function scrollTurnActivityThoughts(details) {
   if (!details || !details.open) return;
   details.querySelectorAll('.turn-activity-thought').forEach(function (el) {
@@ -1348,48 +1576,36 @@ function scrollTurnActivityThoughts(details) {
   });
 }
 
-function findLatestTurnActivityInCurrentTurn() {
-  var root = getMessageRoot();
-  if (!root) return null;
-  var rows = root.querySelectorAll('.message-row');
-  var lastUser = -1;
-  for (var i = 0; i < rows.length; i++) {
-    if (rows[i].classList.contains('user')) lastUser = i;
-  }
-  var latest = null;
-  for (var j = lastUser + 1; j < rows.length; j++) {
-    var card = rows[j].querySelector('.turn-activity');
-    if (card) latest = card;
-  }
-  return latest;
-}
-
-function findTurnActivityTargetCard(upsert) {
-  var live = document.querySelector('.turn-activity[data-live="1"]');
-  if (live) return live;
-  if (!upsert) return null;
-  // After a conversation switch the replayed card has no data-live. Reuse it so
-  // the next thought upsert does not stack a second fold.
-  return findLatestTurnActivityInCurrentTurn();
-}
-
+/**
+ * Renders (or refreshes) the turn-activity fold at its seq slot.
+ *
+ * The fold is keyed by the turn it belongs to, so a live fold that keeps growing and the fold
+ * rebuilt from the transcript are the same entry: the second render overwrites the first's
+ * contents and leaves the row where it is. No "insert after the last user row" step is needed —
+ * the seq (TimelineOrderPolicy's activity slot, just after the turn's user message) already
+ * places it, which is what makes the fold anchored to the turn's first activity instead of
+ * jumping to the end of the turn when it is finalized.
+ */
 function appendTurnActivityCard(event) {
   state.currentAssistantEl = null;
   state.currentReasoningEl = null;
   var items = event.items || [];
-  if (!items.length && !(event.exploredFileCount || event.searchCount || event.commandCount || event.thoughtCount)) return;
+  if (!items.length && !(event.exploredFileCount || event.searchCount || event.commandCount || event.thoughtCount)) {
+    return;
+  }
 
-  // One live card for the whole turn; sealing (upsert=false) finalizes it.
-  var existing = findTurnActivityTargetCard(event.upsert === true);
-  var details = existing;
-  // Stay collapsed by default; keep expanded only if the user already opened it.
-  var keepOpen = !!(existing && existing.open);
+  var key = turnActivityEntryKey(event);
+  var seq = resolveEventSeq(event, SEQ_ACTIVITY);
+  var row = getEntryRow(key);
+  var details = row ? row.querySelector('.turn-activity') : null;
+  // Preserve a fold the user already opened; a fresh/replayed fold starts collapsed.
+  var keepOpen = !!(details && details.open && event.upsert === true);
+
   if (!details) {
-    var row = document.createElement('div');
+    row = document.createElement('div');
     row.className = 'message-row assistant turn-activity-host';
     details = document.createElement('details');
     details.className = 'turn-activity';
-    if (event.upsert) details.setAttribute('data-live', '1');
     details.addEventListener('toggle', function () {
       syncTurnActivityChevron(details);
       if (details.open) {
@@ -1401,9 +1617,10 @@ function appendTurnActivityCard(event) {
       }
     });
     row.appendChild(details);
-    insertAfterLastUserRow(row);
+    registerEntry(key, row, seq);
   } else {
     details.innerHTML = '';
+    insertBySeq(row, seq);
   }
 
   var summary = document.createElement('summary');
@@ -1517,14 +1734,8 @@ function appendTurnActivityCard(event) {
   });
 
   details.appendChild(body);
-  // Default collapsed; live upserts preserve a user-opened fold; seal always collapses.
-  if (event.upsert) {
-    details.setAttribute('data-live', '1');
-    details.open = keepOpen;
-  } else {
-    details.removeAttribute('data-live');
-    details.open = false;
-  }
+  // A live fold preserves an already-opened state; a final/replayed fold starts collapsed.
+  details.open = keepOpen;
   if (details.open) {
     details.classList.add('is-expanded');
   } else {
@@ -1538,11 +1749,14 @@ function appendTurnActivityCard(event) {
 
 function upsertCompactionCheckpoint(event) {
   const id = event.id || 'compaction';
-  let details = document.querySelector('[data-compaction-id="' + id + '"]');
+  const key = 'compaction:' + id;
+  const seq = resolveEventSeq(event, SEQ_COMPACTION);
+  let row = getEntryRow(key);
+  let details = row ? row.querySelector('.compaction-checkpoint') : null;
   if (!details) {
     state.currentAssistantEl = null;
     state.currentReasoningEl = null;
-    const row = document.createElement('div');
+    row = document.createElement('div');
     row.className = 'message-row assistant compaction-row';
     details = document.createElement('details');
     details.className = 'compaction-checkpoint';
@@ -1555,8 +1769,9 @@ function upsertCompactionCheckpoint(event) {
       '<pre class="compaction-detail"></pre></details>' +
       '</div>';
     row.appendChild(details);
-    getMessageRoot().appendChild(row);
-    updateEmptyStateVisibility();
+    registerEntry(key, row, seq);
+  } else {
+    insertBySeq(row, seq);
   }
   const title = details.querySelector('.compaction-title');
   if (title) title.textContent = event.title || '';
@@ -1585,11 +1800,6 @@ function isPlanSpecialTool(name) {
 function getPlanClarifyCard(requestId) {
   if (!requestId) return null;
   return document.querySelector('.plan-clarify-card[data-request-id="' + cssEscape(requestId) + '"]');
-}
-
-function getPlanReadyCard(runId) {
-  if (!runId) return null;
-  return document.querySelector('.plan-ready-card[data-run-id="' + cssEscape(runId) + '"]');
 }
 
 function showPlanClarify(event) {
@@ -1727,37 +1937,6 @@ function resolvePlanClarify(event) {
   applyPlanClarifyResolved(card, event && event.summary);
 }
 
-function placePlanReadyRow(row) {
-  var root = getMessageRoot();
-  if (!root || !row) return;
-  var rows = Array.prototype.slice.call(root.querySelectorAll('.message-row'));
-  var lastUserIdx = -1;
-  for (var i = 0; i < rows.length; i++) {
-    if (rows[i].classList.contains('user')) lastUserIdx = i;
-  }
-
-  // Anchor after the current turn's user + activity only. Do not walk past
-  // assistant bubbles — otherwise plan sits under model output, and refreshing
-  // the card after Build moves it below the new turn's streaming messages.
-  var insertAfter = lastUserIdx >= 0 ? rows[lastUserIdx] : null;
-  for (var j = lastUserIdx + 1; j < rows.length; j++) {
-    var candidate = rows[j];
-    if (candidate === row) continue;
-    if (candidate.querySelector('.turn-activity')
-        || candidate.querySelector('.files-changed-card')) {
-      insertAfter = candidate;
-      continue;
-    }
-    break;
-  }
-
-  if (insertAfter && insertAfter.parentNode === root) {
-    root.insertBefore(row, insertAfter.nextSibling);
-    return;
-  }
-  root.appendChild(row);
-}
-
 function resolvePlanMarkdown(event) {
   if (event && event.markdownB64) return decodeBase64Utf8(event.markdownB64);
   if (event && event.markdown) return event.markdown;
@@ -1765,20 +1944,51 @@ function resolvePlanMarkdown(event) {
   return '';
 }
 
+/** Stable entry key for a plan-ready card. Replay and the live dispatcher use the same run id. */
+function planReadyEntryKey(event) {
+  return 'plan:' + ((event && event.runId) || 'plan');
+}
+
+/** Removes a plan-ready card that is no longer the active plan. */
+function clearPlanReady(event) {
+  var runId = event && event.runId;
+  if (runId) {
+    if (!removeEntry('plan:' + runId)) removePlanReadyCardRows(runId);
+  } else {
+    document.querySelectorAll('.plan-ready-card').forEach(function (card) {
+      var id = card.dataset.runId || 'plan';
+      if (!removeEntry('plan:' + id)) removePlanReadyCardRows(id);
+    });
+  }
+  updateEmptyStateVisibility();
+}
+
+/** DOM fallback for a card that was never registered as a keyed entry. */
+function removePlanReadyCardRows(runId) {
+  document.querySelectorAll('.plan-ready-card[data-run-id="' + cssEscape(runId) + '"]')
+    .forEach(function (card) {
+      var row = card.closest('.message-row') || card;
+      if (row.parentNode) row.parentNode.removeChild(row);
+    });
+}
+
 function showPlanReady(event) {
   if (!event) return;
   var runId = event.runId || 'plan';
+  var key = planReadyEntryKey(event);
   var built = event.built === true;
-  var existing = getPlanReadyCard(runId);
-  var row;
-  var card;
-  var isNew = false;
-  if (existing) {
-    card = existing;
-    row = card.closest('.message-row');
+  var row = getEntryRow(key);
+  var card = row ? row.querySelector('.plan-ready-card') : null;
+  var seq = resolveEventSeq(event);
+  if (card) {
     card.innerHTML = '';
+    // A missing seq means "keep the current position"; insertBySeq would treat that as append.
+    if (typeof seq === 'number') insertBySeq(row, seq);
   } else {
-    isNew = true;
+    // The timeline shows one plan card: a revision mints a new run id, so drop the superseded one.
+    document.querySelectorAll('.plan-ready-card').forEach(function (other) {
+      removeEntry('plan:' + (other.dataset.runId || 'plan'));
+    });
     state.currentAssistantEl = null;
     state.currentReasoningEl = null;
     row = document.createElement('div');
@@ -1786,7 +1996,10 @@ function showPlanReady(event) {
     card = document.createElement('div');
     card.className = 'plan-ready-card';
     row.appendChild(card);
-    placePlanReadyRow(row);
+    // Placed by seq: the plan card belongs to the turn whose publish_plan call produced it, so a
+    // later turn's smaller seq can no longer overtake it, and a full replay re-emits it at the
+    // same slot instead of dropping it.
+    registerEntry(key, row, seq);
     updateEmptyStateVisibility();
   }
   card.dataset.runId = runId;
@@ -1834,8 +2047,6 @@ function showPlanReady(event) {
   }
   actions.appendChild(buildBtn);
   card.appendChild(actions);
-  // Keep an already-mounted card in place so Build-turn streaming stays below it.
-  if (isNew && row) placePlanReadyRow(row);
 }
 
 function appendOverflowSkipped(event) {
@@ -1860,16 +2071,17 @@ function handleEvent(event) {
       updateEmptyStateVisibility();
       break;
     case 'USER_MESSAGE':
-      (function () {
-        var liveActivity = document.querySelector('.turn-activity[data-live="1"]');
-        if (liveActivity) liveActivity.removeAttribute('data-live');
-        var liveFiles = document.querySelector('.files-changed-card[data-live="1"]');
-        if (liveFiles) {
-          liveFiles.removeAttribute('data-live');
-          liveFiles.setAttribute('data-sealed', '1');
-        }
-      })();
-      appendMessage('user', event.content || '', false, event.images || [], event.startedAt || '', event.mentions || []);
+      // A new user message opens a new turn band in the live cursor; the previous turn's cards
+      // stay exactly where their seq put them, so nothing needs to be "sealed" or re-parented.
+      appendMessage(
+        'user',
+        event.content || '',
+        false,
+        event.images || [],
+        event.startedAt || '',
+        event.mentions || [],
+        event.seq,
+        event.messageId);
       break;
     case 'FILES_CHANGED':
       appendFilesChangedCard(event);
@@ -1910,7 +2122,8 @@ function handleEvent(event) {
         resolveRenderedHtml(event),
         event.createIfMissing !== false,
         event.streaming === true,
-        event.responseDurationMs);
+        event.responseDurationMs,
+        event.seq);
       updateCopyText(
         findAssistantBubbleRow(event.messageId),
         resolveEventMarkdown(event));
@@ -1919,8 +2132,10 @@ function handleEvent(event) {
     case 'REMOVE_ASSISTANT_BUBBLES': {
       var ids = event.messageIds || [];
       ids.forEach(function (id) {
-        var row = findAssistantBubbleRow(id);
-        if (row && row.parentNode) row.parentNode.removeChild(row);
+        if (!removeEntry('msg:' + id)) {
+          var row = findAssistantBubbleRow(id);
+          if (row && row.parentNode) row.parentNode.removeChild(row);
+        }
         delete state.assistantStarted[id];
       });
       state.currentAssistantEl = null;
@@ -1931,7 +2146,7 @@ function handleEvent(event) {
         state.currentAssistantEl = null;
         break;
       }
-      createToolCard(event.toolCallId, event.toolCallName);
+      createToolCard(event.toolCallId, event.toolCallName, event.seq);
       break;
     case 'TOOL_CALL_ARGS': {
       const card = getToolCard(event.toolCallId);
@@ -1973,6 +2188,9 @@ function handleEvent(event) {
       break;
     case 'PLAN_READY':
       showPlanReady(event);
+      break;
+    case 'PLAN_CLEARED':
+      clearPlanReady(event);
       break;
     case 'TOOL_CALL_OUTPUT': {
       const card = getToolCard(event.toolCallId);
@@ -2077,17 +2295,29 @@ function applyThemeUpdate(highlightHref, tokensB64, syntaxB64) {
   syncThemeSurfaces();
 }
 
+/**
+ * Renders a full authoritative timeline. Every entry the events carry lands at its own seq, and
+ * the live cursor is re-anchored afterwards so a mid-turn reload's next live event continues the
+ * replay's numbering instead of landing in a stale turn band.
+ */
 function replayEvents(events) {
   beginBatch();
   state.trackReasoningDuration = false;
   resetTimeline();
   var list = Array.isArray(events) ? events : [];
+  var maxSeq = -1;
   for (const raw of list) {
     try {
       const event = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (event && typeof event.seq === 'number' && isFinite(event.seq) && event.seq > maxSeq) {
+        maxSeq = event.seq;
+      }
       handleEvent(event);
     } catch (e) { console.warn('replayEvents parse failed', e); }
   }
+  // Continue the live cursor from where the replay ended so a mid-turn reload's next live card
+  // does not land in a stale turn band.
+  syncLiveCursorFromSeq(maxSeq);
   state.trackReasoningDuration = true;
   endBatch(true);
 }
@@ -2100,16 +2330,50 @@ function appendEvents(events) {
   state.batchTarget = fragment;
   state.trackReasoningDuration = false;
   var list = Array.isArray(events) ? events : [];
+  var maxSeq = -1;
   for (const raw of list) {
     try {
       const event = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (event && typeof event.seq === 'number' && isFinite(event.seq) && event.seq > maxSeq) {
+        maxSeq = event.seq;
+      }
       handleEvent(event);
     } catch (e) { console.warn('appendEvents parse failed', e); }
   }
   state.batchTarget = null;
   state.trackReasoningDuration = true;
   root.appendChild(fragment);
+  // Merge the freshly appended rows into the global seq order (older pages can interleave).
+  sortMessageRoot();
+  syncLiveCursorFromSeq(maxSeq);
   endBatch(false);
+}
+
+/**
+ * Re-establishes ascending order for rows that were appended without absolute positioning (e.g.
+ * a paged append whose seqs predate the current tail). Stable by construction: rows keep the
+ * relative order they were inserted in when their seqs tie.
+ */
+function sortMessageRoot() {
+  var root = document.getElementById('messages');
+  if (!root || root.children.length < 2) return;
+  var rows = Array.prototype.slice.call(root.children);
+  var needsSort = false;
+  for (var i = 1; i < rows.length; i++) {
+    if (Number(rows[i].getAttribute('data-seq')) < Number(rows[i - 1].getAttribute('data-seq'))) {
+      needsSort = true;
+      break;
+    }
+  }
+  if (!needsSort) return;
+  rows.sort(function (a, b) {
+    var left = Number(a.getAttribute('data-seq'));
+    var right = Number(b.getAttribute('data-seq'));
+    if (isNaN(left)) left = Number.MAX_SAFE_INTEGER;
+    if (isNaN(right)) right = Number.MAX_SAFE_INTEGER;
+    return left - right;
+  });
+  for (var j = 0; j < rows.length; j++) root.appendChild(rows[j]);
 }
 
 function setOlderMessagesAvailable(available) {
@@ -2132,11 +2396,19 @@ function prependEvents(events, hasOlderMessages) {
   const previousHeight = scroller.scrollHeight;
   const previousTop = scroller.scrollTop;
   const fragment = document.createDocumentFragment();
+  // An older page is projected with the same 0-based turn bands as the current window, so its
+  // seqs would interleave with (and be overtaken by) the newer rows. Shift the whole page below
+  // the current minimum: relative order inside the page is preserved and the page stays "older".
+  const minSeq = findMinSeq(root);
+  const offset = minSeq - SEQ_PAGE_GAP;
   beginBatch();
   state.batchTarget = fragment;
   for (const raw of events) {
     try {
       const event = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (event && typeof event.seq === 'number' && isFinite(event.seq)) {
+        event.seq += offset;
+      }
       handleEvent(event);
     } catch (e) { console.warn('prependEvents parse failed', e); }
   }
@@ -2149,17 +2421,39 @@ function prependEvents(events, hasOlderMessages) {
   state.currentReasoningEl = null;
 }
 
+/** Smallest data-seq currently rendered, or 0 when the timeline is empty. */
+function findMinSeq(root) {
+  var scope = root || document.getElementById('messages');
+  if (!scope) return 0;
+  var min = Infinity;
+  for (var i = 0; i < scope.children.length; i++) {
+    var value = Number(scope.children[i].getAttribute('data-seq'));
+    if (!isNaN(value) && value < min) min = value;
+  }
+  return isFinite(min) ? min : 0;
+}
+
 function handleWebMessage(message) {
   const command = typeof message === 'string' ? JSON.parse(message) : message;
   if (!command || !command.command) return;
-  if (command.command === 'replay' || command.command === 'replaceSurface') {
+  if (command.command === 'replay') {
     replayEvents(Array.isArray(command.events) ? command.events : []);
-  } else if (command.command === 'append' || command.command === 'appendEvents') {
+  } else if (command.command === 'append') {
     appendEvents(Array.isArray(command.events) ? command.events : []);
   } else if (command.command === 'prepend') {
     prependEvents(
       Array.isArray(command.events) ? command.events : [],
       !!command.hasOlderMessages);
+  } else if (command.command === 'event') {
+    // Single real-time event on the same channel as replay. Shares handleEvent, so live and
+    // replayed entries go through one renderer and one seq-based placement rule.
+    var immediate = Array.isArray(command.events) ? command.events : [];
+    for (var i = 0; i < immediate.length; i++) {
+      try {
+        var parsed = typeof immediate[i] === 'string' ? immediate[i] : JSON.stringify(immediate[i]);
+        handleEvent(typeof parsed === 'string' ? JSON.parse(parsed) : parsed);
+      } catch (e) { console.warn('event parse failed', e); }
+    }
   } else if (command.command === 'historyAvailability') {
     setOlderMessagesAvailable(!!command.hasOlderMessages);
   } else if (command.command === 'toolDetail') {

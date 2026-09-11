@@ -80,6 +80,24 @@ public sealed class FilesChangedBubbleTests
     }
 
     [Fact]
+    public void SerializeFilesChanged_marks_upsert_when_requested()
+    {
+        // The live files card upserts the current turn's cumulative list. Replay cards are not
+        // upserts; both carry the same entryId, so the JS layer rewrites the entry in place rather
+        // than stacking a second card.
+        var file = new ModifiedFileViewModel("src/App.tsx", "file_edit", ModifiedFileStatus.Succeeded);
+
+        var live = ChatEventSerializer.SerializeFilesChanged([file], upsert: true);
+        using var liveDoc = JsonDocument.Parse(live);
+        Assert.Equal("FILES_CHANGED", liveDoc.RootElement.GetProperty("type").GetString());
+        Assert.True(liveDoc.RootElement.GetProperty("upsert").GetBoolean());
+
+        var replay = ChatEventSerializer.SerializeFilesChanged([file]);
+        using var replayDoc = JsonDocument.Parse(replay);
+        Assert.False(replayDoc.RootElement.GetProperty("upsert").GetBoolean());
+    }
+
+    [Fact]
     public void BuildReplayEvents_emits_activity_and_independent_files_changed()
     {
         var user = ChatMessage.Create(MessageRole.User, "edit it");

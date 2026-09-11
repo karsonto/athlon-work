@@ -10,6 +10,19 @@ internal static class ChatMarkdownAssets
 
     public static string VirtualBaseUrl => $"https://{VirtualHost}/";
 
+    /// <summary>
+    /// Separate host for the bundled Mermaid runtime. The script is ~2.5 MB, so the timeline
+    /// lazy-loads it from here only when a ```mermaid block actually shows up.
+    /// </summary>
+    public const string MermaidVirtualHost = "athlon.chat.mermaid";
+
+    public const string MermaidScriptFileName = "mermaid.min.js";
+
+    public static string MermaidVirtualBaseUrl => $"https://{MermaidVirtualHost}/";
+
+    public static string MermaidAssetsDirectory =>
+        Path.Combine(AppContext.BaseDirectory, "Assets", MermaidPreviewHtmlBuilder.MermaidFolderName);
+
     public static string AssetsDirectory =>
         Path.Combine(AppContext.BaseDirectory, "Assets", "Chat");
 
@@ -31,6 +44,12 @@ internal static class ChatMarkdownAssets
                 if (File.Exists(js))
                 {
                     stamp = Math.Max(stamp, File.GetLastWriteTimeUtc(js).Ticks);
+                }
+
+                var mermaid = Path.Combine(MermaidAssetsDirectory, MermaidScriptFileName);
+                if (File.Exists(mermaid))
+                {
+                    stamp = Math.Max(stamp, File.GetLastWriteTimeUtc(mermaid).Ticks);
                 }
 
                 return stamp > 0 ? $"?v={stamp:x}" : string.Empty;

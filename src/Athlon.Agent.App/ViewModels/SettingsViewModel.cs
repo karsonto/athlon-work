@@ -13,7 +13,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Athlon.Agent.App.ViewModels;
 
-public sealed partial class SettingsViewModel : ObservableObject
+public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 {
     private readonly IMcpRegistry _mcpRegistry;
     private readonly IAgentSkillCatalog _skillCatalog;
@@ -22,6 +22,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly IFileStorageService _storage;
     private readonly ApiKeySecretMigrationService _apiKeySecretMigration;
     private readonly ILocalizationService _loc;
+    private bool _disposed;
 
     public SettingsViewModel(
         AppSettings settings,
@@ -286,6 +287,17 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(LanguageOptions));
         OnPropertyChanged(nameof(TerminalShellOptions));
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        AppCultureManager.CultureChanged -= OnCultureChanged;
     }
 
     public sealed record TerminalShellOption(string Value, string DisplayName);

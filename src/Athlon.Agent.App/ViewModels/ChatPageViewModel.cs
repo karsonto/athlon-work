@@ -14,7 +14,7 @@ using Microsoft.Win32;
 
 namespace Athlon.Agent.App.ViewModels;
 
-public sealed partial class ChatPageViewModel : ObservableObject
+public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
 {
     private readonly ComposerCoordinator _composer;
     private readonly SessionTurnCoordinator _sessionTurns;
@@ -25,6 +25,7 @@ public sealed partial class ChatPageViewModel : ObservableObject
     private readonly ILocalizationService _loc;
     private readonly IPlanPhaseAccessor _planPhaseAccessor;
     private string? _speechDraftBase;
+    private bool _disposed;
 
     private Func<string>? _getDisplayedSessionId;
     private Func<AgentSession>? _getSession;
@@ -799,6 +800,21 @@ public sealed partial class ChatPageViewModel : ObservableObject
 
     partial void OnIsSpeechListeningChanged(bool value) =>
         OnPropertyChanged(nameof(SendButtonToolTip));
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        _speechToText.AvailabilityChanged -= OnSpeechAvailabilityChanged;
+        _speechToText.PartialText -= OnSpeechPartialText;
+        _speechToText.FinalText -= OnSpeechFinalText;
+        _speechToText.Failed -= OnSpeechFailed;
+        AppCultureManager.CultureChanged -= OnCultureChanged;
+    }
 }
 
 public sealed class PendingDocumentAttachmentViewModel(string filePath)

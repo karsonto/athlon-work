@@ -13,12 +13,6 @@ namespace Athlon.Agent.App.Services;
 /// <summary>将 <see cref="AgentStreamEvent"/> 与历史消息序列化为 AG-UI 兼容 JSON，供 WebChatView 的 handleEvent 消费。</summary>
 internal static class ChatEventSerializer
 {
-    private static readonly object ReplayCacheLock = new();
-    private static readonly Dictionary<string, IReadOnlyList<string>> ReplayEventsCache = new(StringComparer.Ordinal);
-    private static readonly Dictionary<string, IReadOnlyList<ReplayTurnSegment>> ReplaySegmentsCache = new(StringComparer.Ordinal);
-    private static readonly Queue<string> ReplayCacheOrder = new();
-    private const int ReplayCacheCapacity = 32;
-
     public static string Serialize(AgentStreamEvent streamEvent) =>
         streamEvent switch
         {
@@ -54,7 +48,7 @@ internal static class ChatEventSerializer
     public static string SerializeResetTimeline() =>
         SerializeAgui("RESET_TIMELINE", new { });
 
-    public static string SerializeUserMessage(ChatMessageViewModel message)
+    public static string SerializeUserMessage(ChatMessageViewModel message, long? seq = null)
     {
         var images = message.ImageAttachments
             .Select(image =>
@@ -86,6 +80,7 @@ internal static class ChatEventSerializer
 
         return SerializeAgui("USER_MESSAGE", new
         {
+            seq,
             messageId = message.MessageId,
             content,
             mentions = BuildUserMentions(content) is { Length: > 0 } fileMentions ? fileMentions : null,
@@ -151,7 +146,11 @@ internal static class ChatEventSerializer
         return ms > 0 ? ms : null;
     }
 
-    public static string SerializeTurnActivity(TurnActivitySummary summary, bool upsert = false)
+    public static string SerializeTurnActivity(
+        TurnActivitySummary summary,
+        bool upsert = false,
+        long? seq = null,
+        string? turnAnchorId = null)
     {
         var items = summary.Items.Select(item => new
         {
@@ -178,6 +177,8 @@ internal static class ChatEventSerializer
 
         return SerializeAgui("TURN_ACTIVITY", new
         {
+            seq,
+            entryId = turnAnchorId is null ? null : "activity:" + turnAnchorId,
             upsert,
             editedFileCount = summary.EditedFileCount,
             exploredFileCount = summary.ExploredFileCount,
@@ -218,11 +219,21 @@ internal static class ChatEventSerializer
         _ => status
     };
 
-    public static string SerializeFilesChanged(IReadOnlyList<ModifiedFileViewModel> files, bool upsert = false)
+    public static string SerializeFilesChanged(
+        IReadOnlyList<ModifiedFileViewModel> files,
+        bool upsert = false,
+        long? seq = null,
+        string? turnAnchorId = null)
     {
         if (files.Count == 0)
         {
-            return SerializeAgui("FILES_CHANGED", new { upsert, files = Array.Empty<object>() });
+            return SerializeAgui("FILES_CHANGED", new
+            {
+                seq,
+                entryId = turnAnchorId is null ? null : "files:" + turnAnchorId,
+                upsert,
+                files = Array.Empty<object>()
+            });
         }
 
         var payload = files.Select(file => new
@@ -249,15 +260,23 @@ internal static class ChatEventSerializer
                 })
         }).ToList();
 
-        return SerializeAgui("FILES_CHANGED", new { upsert, files = payload });
+        return SerializeAgui("FILES_CHANGED", new
+        {
+            seq,
+            entryId = turnAnchorId is null ? null : "files:" + turnAnchorId,
+            upsert,
+            files = payload
+        });
     }
 
     public static string SerializeStaticAssistantHtml(
         ChatMessageViewModel message,
         bool streaming = false,
-        int? responseDurationMs = null) =>
+        int? responseDurationMs = null,
+        long? seq = null) =>
         SerializeAgui("STATIC_ASSISTANT_HTML", new
         {
+            seq,
             messageId = message.MessageId,
             markdown = message.Content,
             html = MarkdownHtmlRenderer.ToHtmlFragment(message.Content),
@@ -331,9 +350,10 @@ internal static class ChatEventSerializer
             approved = decision == ToolApprovalDecision.Approved
         });
 
-    public static string SerializePlanReady(PlanRun run) =>
+    public static string SerializePlanReady(PlanRun run, long? seq = null) =>
         SerializeAgui("PLAN_READY", new
         {
+            seq,
             runId = run.Id,
             title = run.Title,
             overview = run.Overview,
@@ -344,6 +364,13 @@ internal static class ChatEventSerializer
             built = run.Phase == PlanPhase.Done
                 || string.Equals(run.Status, PlanRunStatuses.Approved, StringComparison.OrdinalIgnoreCase)
         });
+
+    /// <summary>
+    /// Removes a plan-ready card from the timeline (plan abandoned). Replay never emits it; it
+    /// only clears a card the live dispatcher had published from the plan store.
+    /// </summary>
+    public static string SerializePlanCleared(string runId) =>
+        SerializeAgui("PLAN_CLEARED", new { runId });
 
     private static string RenderToolResultHtml(ChatMessageViewModel message, string detail) =>
         message.IsCompaction && message.IsToolRunning
@@ -376,25 +403,22 @@ internal static class ChatEventSerializer
     public static string SerializeReplayCommand(
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls = false,
-        IReadOnlyList<ChatMessage>? activitySourceMessages = null,
-        TimelineProjectionMode mode = TimelineProjectionMode.HighFidelity) =>
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null) =>
         SerializeWebMessageCommand(
-            "replaceSurface",
-            BuildReplayEvents(messages, showToolCalls, activitySourceMessages: activitySourceMessages, mode: mode));
+            "replay",
+            BuildReplayEvents(messages, showToolCalls, activitySourceMessages: activitySourceMessages));
 
     public static string SerializeAppendCommand(
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls = false,
-        IReadOnlyList<ChatMessage>? activitySourceMessages = null,
-        TimelineProjectionMode mode = TimelineProjectionMode.HighFidelity) =>
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null) =>
         SerializeWebMessageCommand(
-            "appendEvents",
+            "append",
             BuildReplayEvents(
                 messages,
                 showToolCalls,
                 includeReset: false,
-                activitySourceMessages: activitySourceMessages,
-                mode: mode));
+                activitySourceMessages: activitySourceMessages));
 
     public static string SerializeEventsCommand(
         string command,
@@ -414,16 +438,14 @@ internal static class ChatEventSerializer
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls,
         bool hasOlderMessages,
-        IReadOnlyList<ChatMessage>? activitySourceMessages = null,
-        TimelineProjectionMode mode = TimelineProjectionMode.HighFidelity) =>
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null) =>
         SerializeWebMessageCommand(
             "prepend",
             BuildReplayEvents(
                 messages,
                 showToolCalls,
                 includeReset: false,
-                activitySourceMessages: activitySourceMessages,
-                mode: mode),
+                activitySourceMessages: activitySourceMessages),
             hasOlderMessages);
 
     public static string SerializeHistoryAvailabilityCommand(bool hasOlderMessages) =>
@@ -438,17 +460,8 @@ internal static class ChatEventSerializer
         bool showToolCalls = false,
         bool includeReset = true,
         IReadOnlyList<ChatMessage>? activitySourceMessages = null,
-        TimelineProjectionMode mode = TimelineProjectionMode.HighFidelity)
+        PlanRun? planRun = null)
     {
-        var cacheKey = BuildReplayCacheKey(messages, showToolCalls, includeReset, activitySourceMessages, mode);
-        lock (ReplayCacheLock)
-        {
-            if (ReplayEventsCache.TryGetValue(cacheKey, out var cached))
-            {
-                return cached;
-            }
-        }
-
         var timeline = activitySourceMessages is { Count: > 0 }
             ? activitySourceMessages
                 .Where(message => message.Role is MessageRole.User
@@ -458,47 +471,35 @@ internal static class ChatEventSerializer
                 .Select(message => new ChatMessageViewModel(message))
                 .ToList()
             : messages.ToList();
-        var timelineKey = BuildReplayTimelineKey(timeline, showToolCalls, mode);
-        IReadOnlyList<ReplayTurnSegment> segments;
-        lock (ReplayCacheLock)
-        {
-            if (!ReplaySegmentsCache.TryGetValue(timelineKey, out segments!))
-            {
-                segments = BuildReplaySegments(timeline, showToolCalls, mode);
-                AddReplaySegmentsToCache(timelineKey, segments);
-            }
-        }
-
-        var events = BuildEventsFromSegments(segments, includeReset);
-        lock (ReplayCacheLock)
-        {
-            AddReplayEventsToCache(cacheKey, events);
-        }
-
-        return events;
+        var segments = BuildReplaySegments(timeline, showToolCalls);
+        return BuildEventsFromSegments(segments, includeReset, planRun);
     }
 
     private static IReadOnlyList<ReplayTurnSegment> BuildReplaySegments(
         IReadOnlyList<ChatMessageViewModel> timeline,
-        bool showToolCalls,
-        TimelineProjectionMode mode)
+        bool showToolCalls)
     {
-        var projected = ChatTimelineProjector.BuildSegments(timeline, showToolCalls, mode);
+        var projected = ChatTimelineProjector.BuildSegments(timeline, showToolCalls);
         var segments = new List<ReplayTurnSegment>(projected.Count);
+        var turnIndex = -1L;
 
         foreach (var segment in projected)
         {
             if (segment.UserMessages.Count > 0)
             {
+                turnIndex++;
                 foreach (var user in segment.UserMessages)
                 {
                     segments.Add(new ReplayTurnSegment(
-                        UserEvents: BuildReplayEventsForMessage(user).ToArray(),
+                        UserEvents:
+                        [
+                            SerializeUserMessage(user, TimelineOrderPolicy.User(turnIndex))
+                        ],
                         ActivityEvent: null,
                         FilesChangedEvent: null,
-                        ToolEvents: Array.Empty<string>(),
-                        AssistantEvents: Array.Empty<string>(),
-                        CompactionEvent: null));
+                        ContentEvents: Array.Empty<string>(),
+                        CompactionEvent: null,
+                        TurnIndex: turnIndex));
                 }
 
                 continue;
@@ -506,16 +507,22 @@ internal static class ChatEventSerializer
 
             if (segment.CompactionMessage is { } compaction)
             {
+                turnIndex++;
                 segments.Add(new ReplayTurnSegment(
                     UserEvents: Array.Empty<string>(),
                     ActivityEvent: null,
                     FilesChangedEvent: null,
-                    ToolEvents: Array.Empty<string>(),
-                    AssistantEvents: Array.Empty<string>(),
-                    CompactionEvent: SerializeCompactionCheckpoint(compaction)));
+                    ContentEvents: Array.Empty<string>(),
+                    CompactionEvent: SerializeCompactionCheckpoint(compaction) is { } compactionEvent
+                        ? WithSeq(compactionEvent, TimelineOrderPolicy.Compaction(turnIndex))
+                        : null,
+                    TurnIndex: turnIndex));
                 continue;
             }
 
+            // A turn without a leading user message (mid-turn tail page) still needs its own band.
+            turnIndex++;
+            var currentTurn = turnIndex;
             string? activityEvent = null;
             string? filesEvent = null;
             if (segment.ActivitySegment.Count > 0)
@@ -523,52 +530,101 @@ internal static class ChatEventSerializer
                 var activity = TurnActivitySummaryBuilder.Build(segment.ActivitySegment);
                 if (activity is { HasContent: true })
                 {
-                    activityEvent = SerializeTurnActivity(activity);
+                    activityEvent = SerializeTurnActivity(
+                        activity,
+                        seq: TimelineOrderPolicy.Activity(currentTurn),
+                        turnAnchorId: segment.TurnAnchorId);
                 }
 
                 var files = SessionModifiedFilesTracker.BuildTurnFileGroups(segment.ActivitySegment);
                 if (files is { Count: > 0 } && files[0].Count > 0)
                 {
-                    filesEvent = SerializeFilesChanged(files[0]);
+                    filesEvent = SerializeFilesChanged(
+                        files[0],
+                        seq: TimelineOrderPolicy.Files(currentTurn),
+                        turnAnchorId: segment.TurnAnchorId);
                 }
             }
 
-            var toolEvents = new List<string>();
-            foreach (var tool in segment.ToolMessages)
+            // Number tool cards and assistant replies consecutively in transcript order so the
+            // timeline keeps the exact interleaving the turn streamed with.
+            var contentEvents = new List<string>(segment.ContentMessages.Count);
+            var contentOrdinal = 0;
+            foreach (var content in segment.ContentMessages)
             {
-                toolEvents.AddRange(BuildReplayEventsForMessage(tool));
-            }
+                var seq = TimelineOrderPolicy.Content(currentTurn, contentOrdinal++);
+                if (content.IsTool)
+                {
+                    contentEvents.AddRange(BuildReplayEventsForMessage(content, seq: seq));
+                    continue;
+                }
 
-            var assistantEvents = new List<string>();
-            foreach (var assistant in segment.AssistantMessages)
-            {
                 var durationMs = segment.TurnUserCreatedAt is { } startedAt
-                    ? ComputeResponseDurationMs(startedAt, assistant.CreatedAtUtc)
+                    ? ComputeResponseDurationMs(startedAt, content.CreatedAtUtc)
                     : null;
-                assistantEvents.AddRange(BuildReplayEventsForMessage(assistant, durationMs));
+                contentEvents.AddRange(BuildReplayEventsForMessage(content, durationMs, seq));
             }
 
             if (activityEvent is not null
                 || filesEvent is not null
-                || toolEvents.Count > 0
-                || assistantEvents.Count > 0)
+                || contentEvents.Count > 0
+                // A turn whose only tool was publish_plan has no other events, but still owns the
+                // plan card's slot. Dropping the segment here would drop the card on replay.
+                || segment.HasPlanPublish)
             {
                 segments.Add(new ReplayTurnSegment(
                     UserEvents: Array.Empty<string>(),
                     ActivityEvent: activityEvent,
                     FilesChangedEvent: filesEvent,
-                    ToolEvents: toolEvents.ToArray(),
-                    AssistantEvents: assistantEvents.ToArray(),
-                    CompactionEvent: null));
+                    ContentEvents: contentEvents.ToArray(),
+                    CompactionEvent: null,
+                    TurnIndex: currentTurn,
+                    PlanSeq: segment.HasPlanPublish ? TimelineOrderPolicy.Plan(currentTurn) : null));
             }
         }
 
         return segments;
     }
 
+    /// <summary>
+    /// Re-emits an already-serialized event with a <c>seq</c> injected. Used for the compaction
+    /// checkpoint, whose serializer is shared with the live path.
+    /// </summary>
+    private static string WithSeq(string eventJson, long seq)
+    {
+        using var document = JsonDocument.Parse(eventJson);
+        var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            var wroteSeq = false;
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (property.NameEquals("seq"))
+                {
+                    writer.WriteNumber("seq", seq);
+                    wroteSeq = true;
+                    continue;
+                }
+
+                property.WriteTo(writer);
+            }
+
+            if (!wroteSeq)
+            {
+                writer.WriteNumber("seq", seq);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
     private static IReadOnlyList<string> BuildEventsFromSegments(
         IReadOnlyList<ReplayTurnSegment> segments,
-        bool includeReset)
+        bool includeReset,
+        PlanRun? planRun = null)
     {
         var events = new List<string>();
         if (includeReset)
@@ -584,8 +640,7 @@ internal static class ChatEventSerializer
                 events.Add(segment.ActivityEvent);
             }
 
-            events.AddRange(segment.ToolEvents);
-            events.AddRange(segment.AssistantEvents);
+            events.AddRange(segment.ContentEvents);
 
             if (segment.FilesChangedEvent is not null)
             {
@@ -596,98 +651,38 @@ internal static class ChatEventSerializer
             {
                 events.Add(segment.CompactionEvent);
             }
+
+            // The plan card is not part of the transcript projection: publish_plan is not rendered
+            // as a tool card. A turn that called publish_plan exposes its slot here and the caller
+            // hands in the active run, so a live card and a replayed card agree on a position.
+            if (planRun is not null && segment.PlanSeq is { } planSeq)
+            {
+                events.Add(SerializePlanReady(planRun, planSeq));
+            }
         }
 
         return events;
-    }
-
-    private static string BuildReplayCacheKey(
-        IReadOnlyList<ChatMessageViewModel> messages,
-        bool showToolCalls,
-        bool includeReset,
-        IReadOnlyList<ChatMessage>? activitySourceMessages,
-        TimelineProjectionMode mode) =>
-        string.Join(
-            "|",
-            BuildReplayTimelineKey(
-                activitySourceMessages is { Count: > 0 }
-                    ? activitySourceMessages.Select(message => new ChatMessageViewModel(message)).ToList()
-                    : messages.ToList(),
-                showToolCalls,
-                mode),
-            includeReset ? "reset" : "noreset",
-            System.Globalization.CultureInfo.CurrentUICulture.Name);
-
-    private static string BuildReplayTimelineKey(
-        IReadOnlyList<ChatMessageViewModel> timeline,
-        bool showToolCalls,
-        TimelineProjectionMode mode)
-    {
-        var builder = new StringBuilder();
-        builder.Append(showToolCalls ? '1' : '0');
-        builder.Append(mode == TimelineProjectionMode.HighFidelity ? 'H' : 'L');
-        foreach (var message in timeline)
-        {
-            builder.Append('|');
-            builder.Append(message.MessageId);
-            builder.Append(':');
-            builder.Append(message.Role);
-            builder.Append(':');
-            builder.Append(message.Content?.Length ?? 0);
-            builder.Append(':');
-            builder.Append(message.ReasoningContent?.Length ?? 0);
-            builder.Append(':');
-            builder.Append(message.ToolCallId);
-        }
-
-        return builder.ToString();
-    }
-
-    private static void AddReplayEventsToCache(string key, IReadOnlyList<string> events)
-    {
-        ReplayEventsCache[key] = events;
-        ReplayCacheOrder.Enqueue("events:" + key);
-        TrimReplayCaches();
-    }
-
-    private static void AddReplaySegmentsToCache(string key, IReadOnlyList<ReplayTurnSegment> segments)
-    {
-        ReplaySegmentsCache[key] = segments;
-        ReplayCacheOrder.Enqueue("segments:" + key);
-        TrimReplayCaches();
-    }
-
-    private static void TrimReplayCaches()
-    {
-        while (ReplayCacheOrder.Count > ReplayCacheCapacity)
-        {
-            var key = ReplayCacheOrder.Dequeue();
-            if (key.StartsWith("events:", StringComparison.Ordinal))
-            {
-                ReplayEventsCache.Remove(key["events:".Length..]);
-            }
-            else if (key.StartsWith("segments:", StringComparison.Ordinal))
-            {
-                ReplaySegmentsCache.Remove(key["segments:".Length..]);
-            }
-        }
     }
 
     private sealed record ReplayTurnSegment(
         IReadOnlyList<string> UserEvents,
         string? ActivityEvent,
         string? FilesChangedEvent,
-        IReadOnlyList<string> ToolEvents,
-        IReadOnlyList<string> AssistantEvents,
-        string? CompactionEvent);
+        IReadOnlyList<string> ContentEvents,
+        string? CompactionEvent,
+        /// <summary>Index of this segment in the replay, paired with <see cref="TimelineOrderPolicy"/>.</summary>
+        long TurnIndex = -1,
+        /// <summary>The slot for a plan card when this turn called <c>publish_plan</c>.</summary>
+        long? PlanSeq = null);
 
     private static IEnumerable<string> BuildReplayEventsForMessage(
         ChatMessageViewModel message,
-        int? responseDurationMs = null)
+        int? responseDurationMs = null,
+        long? seq = null)
     {
         if (message.IsUser)
         {
-            yield return SerializeUserMessage(message);
+            yield return SerializeUserMessage(message, seq);
             yield break;
         }
 
@@ -703,7 +698,7 @@ internal static class ChatEventSerializer
 
         if (message.IsTool)
         {
-            foreach (var evt in BuildToolReplayEvents(message))
+            foreach (var evt in BuildToolReplayEvents(message, seq))
             {
                 yield return evt;
             }
@@ -715,55 +710,51 @@ internal static class ChatEventSerializer
 
         if (!string.IsNullOrWhiteSpace(message.Content))
         {
-            yield return SerializeStaticAssistantHtml(message, streaming: false, responseDurationMs);
+            yield return SerializeStaticAssistantHtml(message, streaming: false, responseDurationMs, seq);
         }
     }
 
-    private static IEnumerable<string> BuildToolReplayEvents(ChatMessageViewModel message)
+    private static IEnumerable<string> BuildToolReplayEvents(ChatMessageViewModel message, long? seq = null)
     {
         var toolCallId = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;
         var toolName = string.IsNullOrWhiteSpace(message.ToolName) ? "tool" : message.ToolName;
 
-        if (string.Equals(toolName, "publish_plan", StringComparison.OrdinalIgnoreCase)
-            && TryReplayPlanReady(message, out var planReadyEvent))
-        {
-            yield return planReadyEvent;
-            yield break;
-        }
-
-        yield return SerializeAgui("TOOL_CALL_START", new { toolCallId, toolCallName = toolName });
+        // publish_plan never reaches here: the projector filters it out of every segment and the
+        // plan card is emitted from the run handed to BuildEventsFromSegments instead.
+        yield return SerializeAgui("TOOL_CALL_START", new { seq, toolCallId, toolCallName = toolName });
 
         if (!string.IsNullOrWhiteSpace(message.ToolArgumentsText) && message.ToolArgumentsText != "…")
         {
-            yield return SerializeAgui("TOOL_CALL_ARGS", new { toolCallId, delta = message.ToolArgumentsText });
+            yield return SerializeAgui("TOOL_CALL_ARGS", new { seq, toolCallId, delta = message.ToolArgumentsText });
         }
 
         yield return SerializeAgui("TOOL_CALL_END", new
         {
+            seq,
             toolCallId,
             status = SerializeToolStatus(message.ToolCallStatus, message.ToolApprovalState)
         });
 
         if (message.ToolApprovalState == ToolApprovalState.Pending)
         {
-            yield return SerializeToolApprovalRequest(
-                new PendingToolApproval(
-                    toolCallId,
-                    toolName,
-                    ToolCallArguments.Empty,
-                    ToolInvocationPolicy.Ask,
-                    DateTimeOffset.UtcNow),
-                message.ToolApprovalArgumentsPreview);
+            yield return SerializeAgui("TOOL_APPROVAL_REQUEST", new
+            {
+                seq,
+                toolCallId,
+                toolName,
+                arguments = message.ToolApprovalArgumentsPreview
+            });
             yield break;
         }
 
         if (message.ToolApprovalState is ToolApprovalState.Approved or ToolApprovalState.Denied)
         {
-            yield return SerializeToolApprovalResolved(
+            yield return SerializeAgui("TOOL_APPROVAL_RESOLVED", new
+            {
+                seq,
                 toolCallId,
-                message.ToolApprovalState == ToolApprovalState.Approved
-                    ? ToolApprovalDecision.Approved
-                    : ToolApprovalDecision.Denied);
+                approved = message.ToolApprovalState == ToolApprovalState.Approved
+            });
         }
 
         if (message.IsCompaction && message.IsToolRunning)
@@ -781,6 +772,7 @@ internal static class ChatEventSerializer
         {
             yield return SerializeAgui("TOOL_CALL_RESULT", new
             {
+                seq,
                 toolCallId,
                 content = detail,
                 messageId = message.MessageId,
@@ -790,85 +782,6 @@ internal static class ChatEventSerializer
                 markdown = detail,
                 html = RenderToolResultHtml(message, detail)
             });
-        }
-    }
-
-    private static bool TryReplayPlanReady(ChatMessageViewModel message, out string eventJson)
-    {
-        eventJson = string.Empty;
-        if (!TryParseToolArguments(message.ToolArgumentsText, out var root))
-        {
-            return false;
-        }
-
-        var title = root.TryGetProperty("title", out var titleEl) ? titleEl.GetString() : null;
-        var overview = root.TryGetProperty("overview", out var overviewEl) ? overviewEl.GetString() : null;
-        var body = root.TryGetProperty("body", out var bodyEl) ? bodyEl.GetString() : null;
-        if (string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(body))
-        {
-            return false;
-        }
-
-        var markdown = PlanDocumentParser.ComposeMarkdown(title, overview, body);
-        var todos = new List<PlanTodoItem>();
-        if (root.TryGetProperty("todos", out var todosEl) && todosEl.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in todosEl.EnumerateArray())
-            {
-                if (item.ValueKind != JsonValueKind.Object)
-                {
-                    continue;
-                }
-
-                var id = item.TryGetProperty("id", out var idEl) ? idEl.GetString()?.Trim() : null;
-                var content = item.TryGetProperty("content", out var contentEl) ? contentEl.GetString()?.Trim() : null;
-                if (!string.IsNullOrWhiteSpace(id) && !string.IsNullOrWhiteSpace(content))
-                {
-                    todos.Add(new PlanTodoItem { Id = id, Content = content });
-                }
-            }
-        }
-
-        if (todos.Count == 0)
-        {
-            todos.AddRange(PlanDocumentParser.ParseTodos(markdown));
-        }
-
-        var run = new PlanRun
-        {
-            Id = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId,
-            SessionId = "",
-            Title = title,
-            Overview = overview,
-            PlanMarkdown = markdown,
-            Todos = todos
-        };
-        eventJson = SerializePlanReady(run);
-        return true;
-    }
-
-    private static bool TryParseToolArguments(string? text, out JsonElement root)
-    {
-        root = default;
-        if (string.IsNullOrWhiteSpace(text) || text == "…")
-        {
-            return false;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(text);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                return false;
-            }
-
-            root = doc.RootElement.Clone();
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
         }
     }
 

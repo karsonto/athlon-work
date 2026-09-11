@@ -25,13 +25,21 @@ public static class AppThemeManager
             if (app.Dispatcher.CheckAccess())
             {
                 ApplyToApplication(app);
+                ThemeChanged?.Invoke(null, EventArgs.Empty);
             }
             else
             {
-                app.Dispatcher.Invoke(() => ApplyToApplication(app));
+                app.Dispatcher.Invoke(() =>
+                {
+                    ApplyToApplication(app);
+                    ThemeChanged?.Invoke(null, EventArgs.Empty);
+                });
             }
+
+            return;
         }
 
+        // No WPF Application (e.g. unit tests): apply and notify on the calling thread.
         ThemeChanged?.Invoke(null, EventArgs.Empty);
     }
 

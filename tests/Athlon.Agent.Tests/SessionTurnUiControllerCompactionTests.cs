@@ -12,7 +12,7 @@ namespace Athlon.Agent.Tests;
 public sealed class SessionTurnUiControllerCompactionTests
 {
     [Fact]
-    public async Task Compaction_OnSessionUpdated_ReplacesDisplayedSurface()
+    public async Task Compaction_OnSessionUpdated_keeps_displayed_history_for_model_compaction()
     {
         var dispatcher = await StartStaDispatcherAsync();
         var ui = new SessionTurnUiController(dispatcher);
@@ -37,12 +37,16 @@ public sealed class SessionTurnUiControllerCompactionTests
         var callbacks = ui.BuildCallbacks(new LiveAgentSession(compactedSession));
         await callbacks.OnSessionUpdated!(compactedSession);
 
+        // Model-driven compaction must not collapse the timeline: its checkpoint arrives
+        // incrementally through ChatMessageAppended, so the already-displayed history stays put.
+        // Only manual compaction (user-requested) replaces the display with the compacted session.
         await dispatcher.InvokeAsync(() =>
         {
-            Assert.Single(ui.Messages);
-            Assert.Equal("four", ui.Messages[0].Content);
-            Assert.DoesNotContain(ui.Messages, message => message.Content == "one");
-            Assert.DoesNotContain(ui.Messages, message => message.Content == "two");
+            Assert.Equal(3, ui.Messages.Count);
+            Assert.Contains(ui.Messages, message => message.Content == "one");
+            Assert.Contains(ui.Messages, message => message.Content == "two");
+            Assert.Contains(ui.Messages, message => message.Content == "three");
+            Assert.DoesNotContain(ui.Messages, message => message.Content == "four");
         });
     }
 

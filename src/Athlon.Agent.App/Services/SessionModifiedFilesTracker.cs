@@ -37,6 +37,11 @@ public sealed class SessionModifiedFilesTracker
         ModifiedFiles.Clear();
     }
 
+    /// <summary>
+    /// Cumulative view of the current turn: every succeeded file so far. The live card upserts this
+    /// list under the turn's entry id, which is exactly the id replay uses, so a live update and a
+    /// replayed card resolve to one entry instead of duplicating.
+    /// </summary>
     public IReadOnlyList<ModifiedFileViewModel> TakeCurrentTurnSucceededFiles()
     {
         if (_currentTurnPaths.Count == 0)

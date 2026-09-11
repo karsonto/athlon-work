@@ -10,7 +10,7 @@ namespace Athlon.Agent.Tests;
 public sealed class ChatHtmlBuilderTests
 {
     private readonly ChatHtmlBuilder _builder = new();
-    private static readonly Lazy<string> TimelineJs = new(() => ReadChatAsset("chat-timeline.bundle.js"));
+    private static readonly Lazy<string> TimelineJs = new(() => ReadChatAsset("chat-timeline.js"));
     private static readonly Lazy<string> ShellCss = new(() => ReadChatAsset("chat-shell.css"));
 
     public ChatHtmlBuilderTests()
@@ -45,7 +45,7 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("id=\"chat-scroll\"", surface, StringComparison.Ordinal);
         Assert.Contains("id=\"empty-state\"", surface, StringComparison.Ordinal);
         Assert.Contains("chat-shell.css", surface, StringComparison.Ordinal);
-        Assert.Contains("chat-timeline.bundle.js", surface, StringComparison.Ordinal);
+        Assert.Contains("chat-timeline.js", surface, StringComparison.Ordinal);
         Assert.Contains("updateEmptyStateVisibility", surface, StringComparison.Ordinal);
         Assert.Contains("scroller.scrollTop", surface, StringComparison.Ordinal);
         Assert.DoesNotContain("avatar-user", surface, StringComparison.Ordinal);
@@ -176,7 +176,7 @@ public sealed class ChatHtmlBuilderTests
         AssertContainsJs(surface, "command.command === 'replay'");
         Assert.Contains("function beginBatch()", surface, StringComparison.Ordinal);
         Assert.Contains("function endBatch(forceScroll)", surface, StringComparison.Ordinal);
-        Assert.Contains("html.replaying .virtual-row", surface, StringComparison.Ordinal);
+        Assert.Contains("html.replaying .message-row", surface, StringComparison.Ordinal);
         Assert.Contains("endBatch(true)", surface, StringComparison.Ordinal);
     }
 
@@ -223,12 +223,14 @@ public sealed class ChatHtmlBuilderTests
     {
         var surface = Surface();
 
-        Assert.Contains("id=\"load-older-sentinel\"", surface, StringComparison.Ordinal);
+        // Older history is loaded by scroll position, not by a sentinel element.
+        Assert.Contains("function maybeLoadOlderOnScroll()", surface, StringComparison.Ordinal);
+        Assert.Contains("state.hasOlderMessages", surface, StringComparison.Ordinal);
         AssertContainsJs(surface, "post({ type: 'loadOlder' })");
         AssertContainsJs(surface, "command.command === 'prepend'");
         Assert.Contains("function prependEvents(events, hasOlderMessages)", surface, StringComparison.Ordinal);
-        Assert.Contains("virtual-window", surface, StringComparison.Ordinal);
-        Assert.Contains("TimelineItemStore", surface, StringComparison.Ordinal);
+        // Older pages are shifted below the current minimum seq so they stay chronologically first.
+        Assert.Contains("SEQ_PAGE_GAP", surface, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -250,16 +252,18 @@ public sealed class ChatHtmlBuilderTests
         AssertContainsJs(surface, "case 'TURN_ACTIVITY':");
         Assert.Contains("formatWorkedFor", surface, StringComparison.Ordinal);
         Assert.Contains("syncTurnActivityChevron", surface, StringComparison.Ordinal);
-        Assert.Contains("var keepOpen = !!(existing && existing.open);", surface, StringComparison.Ordinal);
-        Assert.Contains("details.open = keepOpen;", surface, StringComparison.Ordinal);
+        Assert.Contains("var keepOpen = !!(details && details.open && event.upsert === true);", surface, StringComparison.Ordinal);
+        Assert.Contains("if (details.open) {", surface, StringComparison.Ordinal);
         Assert.DoesNotContain("Live: open so the action list is visible while working.", surface, StringComparison.Ordinal);
         Assert.Contains("turn-activity-duration", surface, StringComparison.Ordinal);
         Assert.Contains("turn-activity-line", surface, StringComparison.Ordinal);
         Assert.Contains("\"workedFor\":", surface, StringComparison.Ordinal);
         AssertContainsLocalized(surface, Strings.Get("Chat_WorkedFor"));
         Assert.Contains("files-changed-card", surface, StringComparison.Ordinal);
-        Assert.Contains("findFilesChangedTargetCard", surface, StringComparison.Ordinal);
-        Assert.Contains("findTurnActivityTargetCard", surface, StringComparison.Ordinal);
+        Assert.Contains("function filesChangedEntryKey", surface, StringComparison.Ordinal);
+        Assert.Contains("function appendFilesChangedCard", surface, StringComparison.Ordinal);
+        Assert.Contains("function appendTurnActivityCard", surface, StringComparison.Ordinal);
+        Assert.Contains("filesChangedEntryKey(event)", surface, StringComparison.Ordinal);
         AssertContainsJs(surface, "case 'FILES_CHANGED':");
         Assert.Contains("user-image-thumb", surface, StringComparison.Ordinal);
         Assert.Contains("image-lightbox", surface, StringComparison.Ordinal);
@@ -272,6 +276,44 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("\"deny\":", surface, StringComparison.Ordinal);
         AssertContainsLocalized(surface, Strings.Get("Chat_ToolApprovalApprove"));
         AssertContainsLocalized(surface, Strings.Get("Chat_ToolApprovalDeny"));
+    }
+
+    /// <summary>
+    /// Timeline placement contract: every entry is keyed by a stable id and positioned strictly by
+    /// <c>seq</c>, so a live card and its replayed twin resolve to the same slot instead of the old
+    /// path-set/adoptable heuristics. The same seq policy exists in C# (TimelineOrderPolicy).
+    /// </summary>
+    [Fact]
+    public void BuildShellHtml_places_timeline_entries_by_seq()
+    {
+        var timelineJs = ReadChatAsset("chat-timeline.js");
+
+        Assert.Contains("function insertBySeq", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("function registerEntry", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("seqForTurn(state.liveTurn", timelineJs, StringComparison.Ordinal);
+        // The seq bands must mirror TimelineOrderPolicy.cs so live and replay agree.
+        Assert.Contains("SEQ_TURN_BAND = 1000000", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("SEQ_ACTIVITY = 1000", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("SEQ_CONTENT = 2000", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("SEQ_FILES = 800000", timelineJs, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Mermaid diagrams render inline: the timeline lazy-loads the bundled runtime, swaps the raw
+    /// fenced block for an SVG figure, and degrades to the code block when rendering fails.
+    /// </summary>
+    [Fact]
+    public void BuildShellHtml_renders_mermaid_diagrams_inline()
+    {
+        var timelineJs = ReadChatAsset("chat-timeline.js");
+        var shellCss = ReadChatAsset("chat-shell.css");
+
+        Assert.Contains("function ensureMermaidLoaded", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("function renderMermaidBlocks", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("function refreshMermaidTheme", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("window.__chatAssets", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("'pre > code.language-mermaid'", timelineJs, StringComparison.Ordinal);
+        Assert.Contains(".mermaid-figure", shellCss, StringComparison.Ordinal);
     }
 
     private static void AssertContainsLocalized(string html, string text)

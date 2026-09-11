@@ -25,6 +25,7 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
     private Func<Task>? _onBuildApprovedAsync;
     private Action<PlanRun>? _onPlanTimeline;
     private Action<string?>? _setComposerHint;
+    private Action? _onPlanTimelineCleared;
     private string? _lastTimelineKey;
 
     public PlanActionBarViewModel(
@@ -51,7 +52,8 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         Action<string?, ShellToastKind> showToast,
         Func<Task> onBuildApprovedAsync,
         Action<PlanRun>? onPlanTimeline = null,
-        Action<string?>? setComposerHint = null)
+        Action<string?>? setComposerHint = null,
+        Action? onPlanTimelineCleared = null)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
@@ -60,6 +62,7 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         _onBuildApprovedAsync = onBuildApprovedAsync;
         _onPlanTimeline = onPlanTimeline;
         _setComposerHint = setComposerHint;
+        _onPlanTimelineCleared = onPlanTimelineCleared;
         RequestRefreshFromActiveRun();
     }
 
@@ -142,6 +145,8 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         _planSessionState.NotifyChanged(null);
         _lastTimelineKey = null;
         _setComposerHint?.Invoke(null);
+        // The plan card is not transcript-backed, so a fresh replay cannot drop it for us.
+        _onPlanTimelineCleared?.Invoke();
         RequestRefreshFromActiveRun();
     }
 

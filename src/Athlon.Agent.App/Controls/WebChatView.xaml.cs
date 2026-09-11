@@ -35,6 +35,7 @@ public partial class WebChatView : UserControl
     private IReadOnlyList<ChatMessageViewModel> _pendingMessages = Array.Empty<ChatMessageViewModel>();
     private bool _pendingShowToolCalls;
     private IReadOnlyList<ChatMessage>? _pendingActivitySourceMessages;
+    private Athlon.Agent.Core.Plan.PlanRun? _pendingPlanRun;
     private bool _needsRender;
     private bool _renderRetryScheduled;
     private bool _renderInProgress;
@@ -250,7 +251,8 @@ public partial class WebChatView : UserControl
     public async Task LoadMessagesAsync(
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls = false,
-        IReadOnlyList<ChatMessage>? activitySourceMessages = null)
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null,
+        Athlon.Agent.Core.Plan.PlanRun? planRun = null)
     {
         // Snapshot immediately rather than holding the live per-session collection.
         // Concurrent hydration can otherwise mutate the collection mid-render (e.g. a
@@ -258,6 +260,7 @@ public partial class WebChatView : UserControl
         _pendingMessages = messages.ToArray();
         _pendingShowToolCalls = showToolCalls;
         _pendingActivitySourceMessages = activitySourceMessages?.ToArray();
+        _pendingPlanRun = planRun;
         _needsRender = true;
         var generation = StartRenderGeneration();
         await RunRenderPipelineSafeAsync(generation).ConfigureAwait(true);
@@ -271,17 +274,28 @@ public partial class WebChatView : UserControl
     public Task ApplyAssistantMarkdownAsync(
         ChatMessageViewModel message,
         bool streaming = false,
-        int? responseDurationMs = null) =>
-        ExecuteScriptWhenReadyAsync(
-            $"handleEvent({ChatEventSerializer.SerializeStaticAssistantHtml(message, streaming, responseDurationMs)});");
+        int? responseDurationMs = null)
+    {
+        PostTimelineEvent(ChatEventSerializer.SerializeStaticAssistantHtml(message, streaming, responseDurationMs));
+        return Task.CompletedTask;
+    }
 
-    public Task ApplyToolResultMarkdownAsync(ChatMessageViewModel message) =>
-        ExecuteScriptWhenReadyAsync($"handleEvent({ChatEventSerializer.SerializeToolResultMarkdown(message)});");
+    public Task ApplyToolResultMarkdownAsync(ChatMessageViewModel message)
+    {
+        PostTimelineEvent(ChatEventSerializer.SerializeToolResultMarkdown(message));
+        return Task.CompletedTask;
+    }
 
-    public Task DispatchUserMessageAsync(ChatMessageViewModel message) =>
-        ExecuteScriptWhenReadyAsync($"handleEvent({ChatEventSerializer.SerializeUserMessage(message)});");
+    public Task DispatchUserMessageAsync(ChatMessageViewModel message)
+    {
+        PostTimelineEvent(ChatEventSerializer.SerializeUserMessage(message));
+        return Task.CompletedTask;
+    }
 
-    public Task DispatchFilesChangedAsync(IReadOnlyList<ModifiedFileViewModel> files, bool upsert = true)
+    public Task DispatchFilesChangedAsync(
+        IReadOnlyList<ModifiedFileViewModel> files,
+        bool upsert = true,
+        string? turnAnchorId = null)
     {
         // Empty upsert: nothing to show. Empty seal must still reach JS so a live card
         // is finalized and cannot be stolen by the next turn.
@@ -290,19 +304,22 @@ public partial class WebChatView : UserControl
             return Task.CompletedTask;
         }
 
-        return ExecuteScriptWhenReadyAsync(
-            $"handleEvent({ChatEventSerializer.SerializeFilesChanged(files, upsert)});");
+        PostTimelineEvent(ChatEventSerializer.SerializeFilesChanged(files, upsert, turnAnchorId: turnAnchorId));
+        return Task.CompletedTask;
     }
 
-    public Task DispatchTurnActivityAsync(TurnActivitySummary summary, bool upsert = true)
+    public Task DispatchTurnActivityAsync(
+        TurnActivitySummary summary,
+        bool upsert = true,
+        string? turnAnchorId = null)
     {
         if (!summary.HasContent)
         {
             return Task.CompletedTask;
         }
 
-        return ExecuteScriptWhenReadyAsync(
-            $"handleEvent({ChatEventSerializer.SerializeTurnActivity(summary, upsert)});");
+        PostTimelineEvent(ChatEventSerializer.SerializeTurnActivity(summary, upsert, turnAnchorId: turnAnchorId));
+        return Task.CompletedTask;
     }
 
     public Task RemoveAssistantBubblesAsync(IReadOnlyList<string> messageIds)
@@ -312,24 +329,96 @@ public partial class WebChatView : UserControl
             return Task.CompletedTask;
         }
 
-        return ExecuteScriptWhenReadyAsync(
-            $"handleEvent({ChatEventSerializer.SerializeRemoveAssistantBubbles(messageIds)});");
+        PostTimelineEvent(ChatEventSerializer.SerializeRemoveAssistantBubbles(messageIds));
+        return Task.CompletedTask;
     }
 
-    public Task DispatchEventAsync(AgentStreamEvent streamEvent) =>
-        ExecuteScriptWhenReadyAsync(_htmlBuilder.BuildDispatchScript(streamEvent));
+    public Task DispatchEventAsync(AgentStreamEvent streamEvent)
+    {
+        PostTimelineEvent(ChatEventSerializer.Serialize(streamEvent));
+        return Task.CompletedTask;
+    }
 
-    public Task ShowToolApprovalAsync(PendingToolApproval approval, string arguments) =>
-        ExecuteScriptWhenReadyAsync(
-            $"handleEvent({ChatEventSerializer.SerializeToolApprovalRequest(approval, arguments)});");
+    public Task ShowToolApprovalAsync(PendingToolApproval approval, string arguments)
+    {
+        PostTimelineEvent(ChatEventSerializer.SerializeToolApprovalRequest(approval, arguments));
+        return Task.CompletedTask;
+    }
 
-    public Task ResolveToolApprovalAsync(string toolCallId, ToolApprovalDecision decision) =>
-        ExecuteScriptWhenReadyAsync(
-            $"handleEvent({ChatEventSerializer.SerializeToolApprovalResolved(toolCallId, decision)});");
+    public Task ResolveToolApprovalAsync(string toolCallId, ToolApprovalDecision decision)
+    {
+        PostTimelineEvent(ChatEventSerializer.SerializeToolApprovalResolved(toolCallId, decision));
+        return Task.CompletedTask;
+    }
 
-    public Task ShowPlanReadyAsync(Athlon.Agent.Core.Plan.PlanRun run) =>
-        ExecuteScriptWhenReadyAsync(
-            $"handleEvent({ChatEventSerializer.SerializePlanReady(run)});");
+    public Task ShowPlanReadyAsync(Athlon.Agent.Core.Plan.PlanRun run, long? seq = null)
+    {
+        PostTimelineEvent(ChatEventSerializer.SerializePlanReady(run, seq));
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Removes a plan-ready card the plan bar had published (plan abandoned or superseded).</summary>
+    public Task ClearPlanReadyAsync(string runId)
+    {
+        PostTimelineEvent(ChatEventSerializer.SerializePlanCleared(runId));
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Posts one AG-UI event into the timeline over the WebView message channel.
+    ///
+    /// This is the single real-time transport. It used to be an <c>ExecuteScriptAsync</c> call
+    /// with the event JSON pasted into a <c>handleEvent(...)</c> literal, which meant a live event
+    /// and the same replayed event travelled two different contracts. Posting JSON over the same
+    /// channel replay uses keeps one contract, and preserves ordering because the WebView message
+    /// queue is FIFO.
+    /// </summary>
+    private void PostTimelineEvent(string eventJson)
+    {
+        if (string.IsNullOrEmpty(eventJson))
+        {
+            return;
+        }
+
+        _ = PostTimelineEventAsync(eventJson);
+    }
+
+    private async Task PostTimelineEventAsync(string eventJson)
+    {
+        var expectedGeneration = Volatile.Read(ref _renderGeneration);
+        try
+        {
+            await EnsureReadyAsync().ConfigureAwait(true);
+            if (!await WaitForDocumentReadyAsync().ConfigureAwait(true)
+                || expectedGeneration != Volatile.Read(ref _renderGeneration)
+                || !await WaitForRenderGenerationAsync(expectedGeneration).ConfigureAwait(true))
+            {
+                return;
+            }
+
+            var json = ChatEventSerializer.SerializeEventsCommand("event", [eventJson]);
+            await _renderOperationGate.WaitAsync().ConfigureAwait(true);
+            try
+            {
+                if (expectedGeneration != Volatile.Read(ref _renderGeneration))
+                {
+                    return;
+                }
+
+                ChatWebView.CoreWebView2.PostWebMessageAsJson(json);
+            }
+            finally
+            {
+                _renderOperationGate.Release();
+            }
+        }
+        catch (Exception ex)
+        {
+            var message = $"WebChatView post timeline event failed: {ex.Message}";
+            ScriptExecutionFailed?.Invoke(this, message);
+            App.StartupTrace(message);
+        }
+    }
 
     private void ScheduleRenderRetry()
     {
@@ -418,7 +507,8 @@ public partial class WebChatView : UserControl
                 var messages = _pendingMessages.ToArray();
                 var showToolCalls = _pendingShowToolCalls;
                 var activitySource = _pendingActivitySourceMessages;
-                await PostReplayInBatchesAsync(messages, showToolCalls, activitySource, expectedGeneration)
+                var planRun = _pendingPlanRun;
+                await PostReplayInBatchesAsync(messages, showToolCalls, activitySource, planRun, expectedGeneration)
                     .ConfigureAwait(true);
                 if (expectedGeneration != _renderGeneration)
                 {
@@ -453,6 +543,7 @@ public partial class WebChatView : UserControl
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls,
         IReadOnlyList<ChatMessage>? activitySource,
+        Athlon.Agent.Core.Plan.PlanRun? planRun,
         int expectedGeneration)
     {
         const int batchSize = ConversationDisplayLimits.WebViewReplayBatchSize;
@@ -464,7 +555,7 @@ public partial class WebChatView : UserControl
                     showToolCalls,
                     includeReset: true,
                     activitySourceMessages: activitySource,
-                    mode: TimelineProjectionMode.HighFidelity))
+                    planRun: planRun))
             .ConfigureAwait(true);
         if (expectedGeneration != _renderGeneration)
         {
@@ -551,6 +642,17 @@ public partial class WebChatView : UserControl
                 ChatWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                     ChatMarkdownAssets.VirtualHost,
                     assetsDir,
+                    CoreWebView2HostResourceAccessKind.Allow);
+            }
+
+            // The bundled Mermaid runtime lives in its own folder (shared with the preview
+            // window) and gets its own host so the timeline can lazy-load it on demand.
+            var mermaidDir = ChatMarkdownAssets.MermaidAssetsDirectory;
+            if (Directory.Exists(mermaidDir))
+            {
+                ChatWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                    ChatMarkdownAssets.MermaidVirtualHost,
+                    mermaidDir,
                     CoreWebView2HostResourceAccessKind.Allow);
             }
 

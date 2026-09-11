@@ -4,7 +4,6 @@ using System.Text.Json;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
-using Athlon.Agent.Core.Streaming;
 
 namespace Athlon.Agent.App.Services;
 
@@ -31,12 +30,10 @@ public sealed class ChatHtmlBuilder
             "</div>" +
             $"<script src=\"{assets}highlight.min.js{cache}\"></script>" +
             "<script>" + BuildI18nBootstrapScript() + "</script>" +
+            "<script>" + BuildAssetConfigScript() + "</script>" +
             $"<script src=\"{assets}chat-timeline.js{cache}\"></script>" +
             "</body></html>";
     }
-
-    public string BuildDispatchScript(AgentStreamEvent streamEvent) =>
-        $"handleEvent({ChatEventSerializer.Serialize(streamEvent)});";
 
     /// <summary>Updates chat theme tokens in-place so theme switches do not reload the timeline.</summary>
     public string BuildThemeUpdateScript()
@@ -51,7 +48,11 @@ public sealed class ChatHtmlBuilder
             JsonSerializer.Serialize(tokensB64) +
             ", " +
             JsonSerializer.Serialize(syntaxB64) +
-            ");";
+            ");" +
+            "if(window.__chatAssets){window.__chatAssets.theme=" +
+            JsonSerializer.Serialize(ThemeHtmlStyles.GetMermaidPalette().MermaidTheme) +
+            ";}" +
+            "if(typeof refreshMermaidTheme==='function'){refreshMermaidTheme();}";
     }
 
     public string BuildDocumentHtml(
@@ -95,6 +96,19 @@ public sealed class ChatHtmlBuilder
 
     private static string BuildI18nBootstrapScript() =>
         "window.__chatI18n=" + JsonSerializer.Serialize(BuildChatI18n()) + ";";
+
+    /// <summary>
+    /// Hands the timeline the lazy-load coordinates for the bundled Mermaid runtime plus the
+    /// Mermaid theme name, so diagrams can render offline without touching the shell startup path.
+    /// </summary>
+    private static string BuildAssetConfigScript() =>
+        "window.__chatAssets=" + JsonSerializer.Serialize(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["mermaidBase"] = ChatMarkdownAssets.MermaidVirtualBaseUrl,
+            ["mermaid"] = ChatMarkdownAssets.MermaidScriptFileName,
+            ["cache"] = ChatMarkdownAssets.AssetCacheQuery,
+            ["theme"] = ThemeHtmlStyles.GetMermaidPalette().MermaidTheme,
+        }) + ";";
 
     private static IReadOnlyDictionary<string, string> BuildChatI18n() =>
         new Dictionary<string, string>(StringComparer.Ordinal)

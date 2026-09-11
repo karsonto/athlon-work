@@ -10,7 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Athlon.Agent.App.ViewModels;
 
-public sealed partial class ComposerKnowledgeViewModel : ObservableObject
+public sealed partial class ComposerKnowledgeViewModel : ObservableObject, IDisposable
 {
     private readonly ISessionKnowledgeState _sessionKnowledgeState;
     private readonly IKnowledgeStore _store;
@@ -18,6 +18,7 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
     private readonly ILocalizationService _loc;
     private string _sessionId = "";
     private bool _suppressSave;
+    private bool _disposed;
 
     public ComposerKnowledgeViewModel(
         ISessionKnowledgeState sessionKnowledgeState,
@@ -174,6 +175,17 @@ public sealed partial class ComposerKnowledgeViewModel : ObservableObject
     private bool IsEmbeddingConfigured() =>
         !string.IsNullOrWhiteSpace(_settings.Knowledge.Embedding.Endpoint)
         && !string.IsNullOrWhiteSpace(_settings.Knowledge.Embedding.Model);
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        AppCultureManager.CultureChanged -= OnCultureChanged;
+    }
 }
 
 public sealed partial class ComposerKnowledgeModuleItemViewModel : ObservableObject

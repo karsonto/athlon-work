@@ -405,6 +405,20 @@ html.replaying .message-row { animation: none; }
   background: transparent;
   padding: 0;
 }
+/* Rendered ```mermaid diagrams. Replaces the raw code block in place. */
+.mermaid-figure {
+  margin: 16px 0;
+  padding: 12px 16px;
+  border: 1px solid var(--md-code-block-border);
+  border-radius: 16px;
+  background: var(--md-code-block-bg);
+  overflow-x: auto;
+  text-align: center;
+}
+.mermaid-figure svg {
+  max-width: 100%;
+  height: auto;
+}
 .message-content.md-root table,
 .tool-result-html.md-root table {
   width: 100%;

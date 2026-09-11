@@ -4,59 +4,71 @@ using Athlon.Agent.Core;
 namespace Athlon.Agent.App.Services;
 
 /// <summary>
-/// Controls how tool calls are projected into the chat timeline during replay.
-/// Activity tools fold into <c>TURN_ACTIVITY</c> in both modes; <see cref="HighFidelity"/>
-/// is used for session hydrate/switch replay.
-/// </summary>
-internal enum TimelineProjectionMode
-{
-    LiveFold,
-    HighFidelity
-}
-
-/// <summary>
-/// Builds turn segments from transcript messages for AG-UI replay projection.
+/// Projects a transcript into per-turn segments for AG-UI replay.
+///
+/// A turn's content bubbles (tool cards and assistant replies) are kept in one
+/// <see cref="TurnSegment.ContentMessages"/> list in transcript order so the timeline can number
+/// them consecutively. Splitting them into separate tool/assistant lists and re-emitting tools
+/// first — as this projector used to — made a turn where the model interleaves text and tools
+/// render in a different order on replay than it did while streaming.
+///
+/// The <c>publish_plan</c> call is deliberately absent from every list: it renders as a plan card
+/// that the plan store owns (see <see cref="PlanTimelinePolicy"/>), so its turn only exposes
+/// <see cref="TurnSegment.HasPlanPublish"/> for the caller to place that card.
 /// </summary>
 internal static class ChatTimelineProjector
 {
     internal sealed record TurnSegment(
         IReadOnlyList<ChatMessageViewModel> UserMessages,
         IReadOnlyList<ChatMessageViewModel> ActivitySegment,
-        IReadOnlyList<ChatMessageViewModel> ToolMessages,
-        IReadOnlyList<ChatMessageViewModel> AssistantMessages,
+        /// <summary>Tool cards and assistant replies, in transcript order.</summary>
+        IReadOnlyList<ChatMessageViewModel> ContentMessages,
         ChatMessageViewModel? CompactionMessage,
-        DateTimeOffset? TurnUserCreatedAt);
+        DateTimeOffset? TurnUserCreatedAt,
+        /// <summary>
+        /// Message id of the user/compaction turn boundary this segment belongs to. Stable across
+        /// restarts, so it is the anchor used for the turn's activity/files entry ids.
+        /// </summary>
+        string? TurnAnchorId,
+        /// <summary>
+        /// Index this segment occupies in the replayed timeline, exposed so the caller can compute
+        /// seq values with <see cref="TimelineOrderPolicy"/> for entries it appends after the
+        /// projection (currently the plan-ready card).
+        /// </summary>
+        long TurnIndex,
+        /// <summary>True when the turn called <c>publish_plan</c>; see <see cref="PlanTimelinePolicy"/>.</summary>
+        bool HasPlanPublish);
 
     public static IReadOnlyList<TurnSegment> BuildSegments(
         IReadOnlyList<ChatMessageViewModel> timeline,
-        bool showToolCalls,
-        TimelineProjectionMode mode = TimelineProjectionMode.HighFidelity)
+        bool showToolCalls)
     {
         var segments = new List<TurnSegment>();
         var activitySegment = new List<ChatMessageViewModel>();
-        var pendingToolMessages = new List<ChatMessageViewModel>();
-        var pendingAssistants = new List<ChatMessageViewModel>();
-        var finalAssistantMessageIds = FindFinalAssistantMessageIds(timeline, mode);
+        var contentMessages = new List<ChatMessageViewModel>();
+        var finalAssistantMessageIds = FindFinalAssistantMessageIds(timeline);
         DateTimeOffset? turnUserCreatedAt = null;
+        string? turnAnchorId = null;
+        var hasPlanPublish = false;
 
         void FlushTurnIntermediate()
         {
-            if (activitySegment.Count > 0
-                || pendingToolMessages.Count > 0
-                || pendingAssistants.Count > 0)
+            if (activitySegment.Count > 0 || contentMessages.Count > 0 || hasPlanPublish)
             {
                 segments.Add(new TurnSegment(
                     UserMessages: Array.Empty<ChatMessageViewModel>(),
                     ActivitySegment: activitySegment.ToArray(),
-                    ToolMessages: pendingToolMessages.ToArray(),
-                    AssistantMessages: pendingAssistants.ToArray(),
+                    ContentMessages: contentMessages.ToArray(),
                     CompactionMessage: null,
-                    TurnUserCreatedAt: turnUserCreatedAt));
+                    TurnUserCreatedAt: turnUserCreatedAt,
+                    TurnAnchorId: turnAnchorId,
+                    TurnIndex: segments.Count,
+                    HasPlanPublish: hasPlanPublish));
             }
 
             activitySegment.Clear();
-            pendingToolMessages.Clear();
-            pendingAssistants.Clear();
+            contentMessages.Clear();
+            hasPlanPublish = false;
         }
 
         foreach (var message in timeline)
@@ -70,13 +82,16 @@ internal static class ChatTimelineProjector
             {
                 FlushTurnIntermediate();
                 turnUserCreatedAt = message.CreatedAtUtc;
+                turnAnchorId = message.MessageId;
                 segments.Add(new TurnSegment(
                     UserMessages: [message],
                     ActivitySegment: Array.Empty<ChatMessageViewModel>(),
-                    ToolMessages: Array.Empty<ChatMessageViewModel>(),
-                    AssistantMessages: Array.Empty<ChatMessageViewModel>(),
+                    ContentMessages: Array.Empty<ChatMessageViewModel>(),
                     CompactionMessage: null,
-                    TurnUserCreatedAt: turnUserCreatedAt));
+                    TurnUserCreatedAt: turnUserCreatedAt,
+                    TurnAnchorId: turnAnchorId,
+                    TurnIndex: segments.Count,
+                    HasPlanPublish: false));
                 continue;
             }
 
@@ -86,13 +101,16 @@ internal static class ChatTimelineProjector
                 {
                     FlushTurnIntermediate();
                     turnUserCreatedAt = null;
+                    turnAnchorId = message.MessageId;
                     segments.Add(new TurnSegment(
                         UserMessages: Array.Empty<ChatMessageViewModel>(),
                         ActivitySegment: Array.Empty<ChatMessageViewModel>(),
-                        ToolMessages: Array.Empty<ChatMessageViewModel>(),
-                        AssistantMessages: Array.Empty<ChatMessageViewModel>(),
+                        ContentMessages: Array.Empty<ChatMessageViewModel>(),
                         CompactionMessage: message,
-                        TurnUserCreatedAt: null));
+                        TurnUserCreatedAt: null,
+                        TurnAnchorId: turnAnchorId,
+                        TurnIndex: segments.Count,
+                        HasPlanPublish: false));
                 }
 
                 continue;
@@ -100,9 +118,17 @@ internal static class ChatTimelineProjector
 
             if (message.IsTool)
             {
-                if (ShouldEmitToolCard(showToolCalls, mode, message))
+                if (PlanTimelinePolicy.IsPublishPlanTool(message.ToolName))
                 {
-                    pendingToolMessages.Add(message);
+                    // A dedicated plan-ready card renders this call; it is never a tool card and
+                    // never activity (folding it would hide the turn's final assistant reply).
+                    hasPlanPublish = true;
+                    continue;
+                }
+
+                if (ShouldEmitToolCard(showToolCalls, message))
+                {
+                    contentMessages.Add(message);
                     continue;
                 }
 
@@ -127,7 +153,7 @@ internal static class ChatTimelineProjector
             {
                 if (finalAssistantMessageIds.Contains(message.MessageId))
                 {
-                    pendingAssistants.Add(message);
+                    contentMessages.Add(message);
                 }
                 else
                 {
@@ -142,11 +168,11 @@ internal static class ChatTimelineProjector
 
     internal static bool ShouldEmitToolCard(
         bool showToolCalls,
-        TimelineProjectionMode mode,
         ChatMessageViewModel message)
     {
-        _ = mode;
-        if (!showToolCalls)
+        // A pending approval must always surface a card, otherwise hiding tool cards would swallow
+        // the approve/deny buttons and strand the turn. ChatDisplayPolicy encodes that exception.
+        if (!showToolCalls && message.ToolApprovalState != ToolApprovalState.Pending)
         {
             return false;
         }
@@ -155,10 +181,8 @@ internal static class ChatTimelineProjector
     }
 
     internal static HashSet<string> FindFinalAssistantMessageIds(
-        IReadOnlyList<ChatMessageViewModel> timeline,
-        TimelineProjectionMode mode)
+        IReadOnlyList<ChatMessageViewModel> timeline)
     {
-        _ = mode;
         var finals = new HashSet<string>(StringComparer.Ordinal);
         var turnHasActivity = false;
         var turnAssistantIds = new List<string>();
@@ -199,7 +223,8 @@ internal static class ChatTimelineProjector
 
             if (message.IsTool)
             {
-                if (TurnActivityClassifier.IsActivityTool(message.ToolName))
+                if (!PlanTimelinePolicy.IsPublishPlanTool(message.ToolName)
+                    && TurnActivityClassifier.IsActivityTool(message.ToolName))
                 {
                     turnHasActivity = true;
                 }

@@ -9,13 +9,14 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace Athlon.Agent.App.ViewModels;
 
-public sealed partial class ComposerHarnessViewModel : ObservableObject
+public sealed partial class ComposerHarnessViewModel : ObservableObject, IDisposable
 {
     private readonly ISessionHarnessState _harnessState;
     private readonly ISessionTaskListStore _taskListStore;
     private readonly ITaskPlanCompletionNotifier _taskPlanCompletionNotifier;
     private readonly ILocalizationService _loc;
     private string _sessionId = "";
+    private bool _disposed;
 
     public ComposerHarnessViewModel(
         ISessionHarnessState harnessState,
@@ -228,9 +229,24 @@ public sealed partial class ComposerHarnessViewModel : ObservableObject
             task.NotifyStatusFlagsChanged();
         }
     }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        AppCultureManager.CultureChanged -= OnCultureChanged;
+        foreach (var task in Tasks)
+        {
+            task.Dispose();
+        }
+    }
 }
 
-public sealed partial class SessionTaskItemViewModel : ObservableObject
+public sealed partial class SessionTaskItemViewModel : ObservableObject, IDisposable
 {
     private DispatcherTimer? _completionAnimationTimer;
 
@@ -311,5 +327,15 @@ public sealed partial class SessionTaskItemViewModel : ObservableObject
         OnPropertyChanged(nameof(IsCompleted));
         OnPropertyChanged(nameof(IsCancelled));
         OnPropertyChanged(nameof(StatusLabel));
+    }
+
+    public void Dispose()
+    {
+        if (_completionAnimationTimer is not null)
+        {
+            _completionAnimationTimer.Tick -= OnCompletionAnimationTimerTick;
+            _completionAnimationTimer.Stop();
+            _completionAnimationTimer = null;
+        }
     }
 }
