@@ -1104,6 +1104,15 @@
   <data name="Schedule_AtTime" xml:space="preserve">
     <value>执行时间点</value>
   </data>
+  <data name="Schedule_AtDate" xml:space="preserve">
+    <value>执行日期</value>
+  </data>
+  <data name="Schedule_AtTimeOfDay" xml:space="preserve">
+    <value>执行时刻</value>
+  </data>
+  <data name="Schedule_AtTimeHint" xml:space="preserve">
+    <value>到设定时间后任务执行一次，之后不再重复。</value>
+  </data>
   <data name="Schedule_DeleteMessage" xml:space="preserve">
     <value>确定要删除定时任务「{0}」吗？</value>
   </data>

@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Athlon.Agent.App.Localization;
@@ -19,6 +20,7 @@ public partial class ScheduleTaskEditWindow : Window
     private readonly List<SelectableRow> _skillRows = [];
     private readonly List<SelectableRow> _mcpRows = [];
     private readonly List<SelectableRow> _knowledgeRows = [];
+    private bool _atTimeInitialized;
 
     public ScheduleTaskEditWindow(
         ScheduledTask task,
@@ -51,7 +53,7 @@ public partial class ScheduleTaskEditWindow : Window
 
         TimeOfDayBox.Text = task.TimeOfDay;
         IntervalBox.Text = task.EveryMinutes.ToString();
-        AtTimeBox.Text = task.AtTime;
+        InitializeAtTimeInputs(task.AtTime);
 
         KindCombo.SelectionChanged += (_, _) => UpdatePanels();
         UpdatePanels();
@@ -144,6 +146,79 @@ public partial class ScheduleTaskEditWindow : Window
         AtPanel.Visibility = kind == "at" ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    /// <summary>
+    /// Fills the one-time hour/minute pickers and parses the stored value into the date picker.
+    /// A missing or unparseable value falls back to "one hour from now", so a fresh task always has
+    /// a concrete, already-valid selection.
+    /// </summary>
+    private void InitializeAtTimeInputs(string? atTime)
+    {
+        AtHourCombo.ItemsSource = Enumerable.Range(0, 24).Select(h => h.ToString("00")).ToList();
+        AtMinuteCombo.ItemsSource = Enumerable.Range(0, 60).Select(m => m.ToString("00")).ToList();
+
+        if (!DateTime.TryParse(atTime, out var parsed))
+        {
+            parsed = DateTime.Now.AddHours(1);
+        }
+
+        AtDatePicker.SelectedDate = parsed.Date;
+        SelectComboItem(AtHourCombo, parsed.Hour.ToString("00"));
+        SelectComboItem(AtMinuteCombo, parsed.Minute.ToString("00"));
+    }
+
+    private static void SelectComboItem(ComboBox combo, string tag)
+    {
+        foreach (var item in combo.Items)
+        {
+            if (string.Equals(item?.ToString(), tag, StringComparison.Ordinal))
+            {
+                combo.SelectedItem = item;
+                return;
+            }
+        }
+
+        if (combo.Items.Count > 0)
+        {
+            combo.SelectedIndex = 0;
+        }
+    }
+
+    /// <summary>
+    /// Picking a day only needs to fill the time-of-day pickers the first time; after that the user
+    /// owns them. Existing tasks keep their stored time instead of snapping to now.
+    /// </summary>
+    private void AtDatePicker_OnSelectedDateChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (AtDatePicker.SelectedDate is not { } date || _atTimeInitialized)
+        {
+            return;
+        }
+
+        _atTimeInitialized = true;
+        if (AtHourCombo.SelectedItem is null)
+        {
+            SelectComboItem(AtHourCombo, date.TimeOfDay.Hours.ToString("00"));
+            SelectComboItem(AtMinuteCombo, date.TimeOfDay.Minutes.ToString("00"));
+        }
+    }
+
+    /// <summary>Reads the one-time pickers as a local <see cref="DateTime"/>.</summary>
+    private DateTime? ReadAtTime()
+    {
+        if (AtDatePicker.SelectedDate is not { } date)
+        {
+            return null;
+        }
+
+        if (!int.TryParse(AtHourCombo.SelectedItem?.ToString(), out var hour)
+            || !int.TryParse(AtMinuteCombo.SelectedItem?.ToString(), out var minute))
+        {
+            return null;
+        }
+
+        return date.Date.AddHours(hour).AddMinutes(minute);
+    }
+
     private void SaveButton_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(TitleBox.Text))
@@ -186,10 +261,10 @@ public partial class ScheduleTaskEditWindow : Window
             return;
         }
 
-        if (kind == "at" && !DateTime.TryParse(AtTimeBox.Text, out _))
+        if (kind == "at" && ReadAtTime() is not { } atTime)
         {
             _notifier.Warning("Common_Prompt", "Schedule_InvalidDateTime");
-            AtTimeBox.Focus();
+            AtDatePicker.Focus();
             return;
         }
 
@@ -198,7 +273,11 @@ public partial class ScheduleTaskEditWindow : Window
         _task.Kind = kind;
         _task.TimeOfDay = TimeOfDayBox.Text.Trim();
         _task.EveryMinutes = int.TryParse(IntervalBox.Text, out var m) ? m : 60;
-        _task.AtTime = AtTimeBox.Text.Trim();
+        // Store the pickers as a local, round-trippable timestamp; ScheduleTiming converts it to
+        // UTC itself when it decides whether the task is due.
+        _task.AtTime = kind == "at" && ReadAtTime() is { } atValue
+            ? atValue.ToString("yyyy-MM-dd HH:mm")
+            : _task.AtTime;
         _task.WorkspaceRoot = workspace;
         _task.Mode = (ModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "agent";
         _task.ComputerUse = ComputerUseCheck.IsChecked == true;

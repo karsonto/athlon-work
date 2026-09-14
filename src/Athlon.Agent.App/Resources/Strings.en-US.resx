@@ -1095,6 +1095,15 @@ Error: {1}</value>
   <data name="Schedule_AtTime" xml:space="preserve">
     <value>Run at</value>
   </data>
+  <data name="Schedule_AtDate" xml:space="preserve">
+    <value>Date</value>
+  </data>
+  <data name="Schedule_AtTimeOfDay" xml:space="preserve">
+    <value>Time</value>
+  </data>
+  <data name="Schedule_AtTimeHint" xml:space="preserve">
+    <value>Runs once at the selected time, then never again.</value>
+  </data>
   <data name="Schedule_DeleteMessage" xml:space="preserve">
     <value>Delete scheduled task "{0}"?</value>
   </data>

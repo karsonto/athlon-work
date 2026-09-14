@@ -944,10 +944,18 @@
                             <ToggleButton Grid.Column="0"
                                           Grid.ColumnSpan="2"
                                           Focusable="False"
-                                          Background="Transparent"
-                                          BorderThickness="0"
                                           IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                                          ClickMode="Press" />
+                                          ClickMode="Press">
+                                <!-- The overlay only needs to toggle IsDropDownOpen. An explicit
+                                     template keeps MaterialDesign's implicit ToggleButton style
+                                     (merged before this dictionary) from supplying its own
+                                     content/padding over the selected item and the chevron. -->
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border Background="Transparent" BorderThickness="0" />
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
                             <Path Grid.Column="1"
                                   Data="M 0 0 L 4 4 L 8 0"
                                   Stroke="{DynamicResource Brush.SubtleText}"
