@@ -7,10 +7,11 @@ using Athlon.Agent.Core.Plan;
 namespace Athlon.Agent.Tests;
 
 /// <summary>
-/// The plan-ready card is not derived from the transcript, so the controller owns its lifetime:
-/// it re-emits a visible card after a mid-session replay (the turn-end authoritative replay resets
-/// the timeline), and it drops the run when the card is cleared so switching sessions does not
-/// bring a consumed plan back — which is the regression these tests pin.
+/// The plan-ready card is published by the plan bar, not derived from the transcript, so the
+/// controller has to remember the active run and re-emit its card on the publishing turn's slot
+/// after every full replay. Otherwise the turn-end authoritative replay resets the timeline (and
+/// publish_plan always ends its turn) and the card silently disappears — which is the regression
+/// these tests pin.
 /// </summary>
 [Collection(TestCollections.Sta)]
 [Trait("Category", TestCategories.UsesSta)]
@@ -40,7 +41,7 @@ public sealed class SessionTurnUiControllerPlanCardTests
     }
 
     [Fact]
-    public async Task The_controller_keeps_the_run_across_a_replay()
+    public async Task The_controller_remembers_the_run_across_replays()
     {
         var dispatcher = await StartStaDispatcherAsync();
         var ui = new SessionTurnUiController(dispatcher);
@@ -54,9 +55,8 @@ public sealed class SessionTurnUiControllerPlanCardTests
         ui.ShowPlanReady(run);
         Assert.Same(run, ui.VisiblePlanRun);
 
-        // A full replay resets the JS timeline. Because a plan run is not derived from the
-        // transcript, the controller has to keep handing the run to the renderer or a mid-session
-        // replay would silently drop the user's not-yet-built plan.
+        // A full replay is rebuilt from the transcript, which has no publish_plan record. The
+        // controller must still hand the remembered run to the renderer.
         await dispatcher.InvokeAsync(() => ui.HydrateDisplay(
             AgentSession.Create("plan-card-replay"),
             TranscriptWithPlanPublish()));
@@ -90,7 +90,7 @@ public sealed class SessionTurnUiControllerPlanCardTests
     }
 
     [Fact]
-    public async Task A_consumed_plan_never_returns_after_switching_sessions()
+    public async Task Hiding_the_session_drops_the_plan_run_so_it_cannot_leak_into_the_next_one()
     {
         var dispatcher = await StartStaDispatcherAsync();
         var ui = new SessionTurnUiController(dispatcher);
@@ -103,9 +103,9 @@ public sealed class SessionTurnUiControllerPlanCardTests
         ui.ShowPlanReady(BuildRun());
         Assert.NotNull(ui.VisiblePlanRun);
 
-        // Build consumes the plan: clearing it is what keeps a finished plan from coming back when
-        // the user switches away and returns to this session.
-        ui.ClearPlanReady();
+        // The shared WebChatView is reused for the next session, so the hidden controller must stop
+        // handing its run to a replay that now belongs to a different session.
+        ui.SetDisplayed(false);
         Assert.Null(ui.VisiblePlanRun);
     }
 

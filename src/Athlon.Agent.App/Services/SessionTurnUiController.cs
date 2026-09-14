@@ -285,6 +285,9 @@ public sealed partial class SessionTurnUiController
                 // session's UI cache.
                 FlushBufferedStreamingToUi();
                 _tokenBuffer.StopFlushTimer();
+                // The shared WebChatView is about to show another session. A stale plan run would
+                // otherwise be replayed into that session's timeline on its first render.
+                _visiblePlanRun = null;
             }
         });
     }
@@ -605,7 +608,8 @@ public sealed partial class SessionTurnUiController
         await chatView.LoadMessagesAsync(
                 Messages,
                 _showToolCalls(),
-                activitySource.Count > 0 ? activitySource : null)
+                activitySource.Count > 0 ? activitySource : null,
+                _visiblePlanRun)
             .ConfigureAwait(true);
         if (ReferenceEquals(ChatView, chatView) && IsDisplayed)
         {

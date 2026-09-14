@@ -483,7 +483,8 @@ internal static class ChatEventSerializer
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls = false,
         bool includeReset = true,
-        IReadOnlyList<ChatMessage>? activitySourceMessages = null)
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null,
+        PlanRun? planRun = null)
     {
         var timeline = activitySourceMessages is { Count: > 0 }
             ? activitySourceMessages
@@ -495,7 +496,7 @@ internal static class ChatEventSerializer
                 .ToList()
             : messages.ToList();
         var segments = BuildReplaySegments(timeline, showToolCalls);
-        return BuildEventsFromSegments(segments, includeReset);
+        return BuildEventsFromSegments(segments, includeReset, planRun);
     }
 
     private static IReadOnlyList<ReplayTurnSegment> BuildReplaySegments(
@@ -608,13 +609,17 @@ internal static class ChatEventSerializer
                 }
             }
 
-            if (blockEvents.Count > 0)
+            if (blockEvents.Count > 0
+                // A turn whose only tool was publish_plan has no other events, but still owns the
+                // plan card's slot. Dropping the segment here would drop the card on replay.
+                || segment.HasPlanPublish)
             {
                 segments.Add(new ReplayTurnSegment(
                     UserEvents: Array.Empty<string>(),
                     BlockEvents: blockEvents.ToArray(),
                     CompactionEvent: null,
-                    TurnIndex: currentTurn));
+                    TurnIndex: currentTurn,
+                    PlanSeq: segment.HasPlanPublish ? TimelineOrderPolicy.Plan(currentTurn) : null));
             }
         }
 
@@ -680,7 +685,8 @@ internal static class ChatEventSerializer
 
     private static IReadOnlyList<string> BuildEventsFromSegments(
         IReadOnlyList<ReplayTurnSegment> segments,
-        bool includeReset)
+        bool includeReset,
+        PlanRun? planRun = null)
     {
         var events = new List<string>();
         if (includeReset)
@@ -697,6 +703,14 @@ internal static class ChatEventSerializer
             {
                 events.Add(segment.CompactionEvent);
             }
+
+            // The plan card is not part of the transcript projection: publish_plan is not rendered
+            // as a tool card. A turn that called publish_plan exposes its slot here and the caller
+            // hands in the active run, so a live card and a replayed card agree on a position.
+            if (planRun is not null && segment.PlanSeq is { } planSeq)
+            {
+                events.Add(SerializePlanReady(planRun, planSeq));
+            }
         }
 
         return events;
@@ -707,7 +721,9 @@ internal static class ChatEventSerializer
         IReadOnlyList<string> BlockEvents,
         string? CompactionEvent,
         /// <summary>Index of this segment in the replay, paired with <see cref="TimelineOrderPolicy"/>.</summary>
-        long TurnIndex = -1);
+        long TurnIndex = -1,
+        /// <summary>The slot for a plan card when this turn called <c>publish_plan</c>.</summary>
+        long? PlanSeq = null);
 
     private static IEnumerable<string> BuildReplayEventsForMessage(
         ChatMessageViewModel message,

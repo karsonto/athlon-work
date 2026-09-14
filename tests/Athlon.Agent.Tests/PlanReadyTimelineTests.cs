@@ -52,7 +52,37 @@ public sealed class PlanReadyTimelineTests
     }
 
     [Fact]
-    public void Replay_never_emits_the_plan_card()
+    public void Replay_emits_the_plan_card_on_the_publishing_turn_slot()
+    {
+        var messages = TranscriptWithPlanPublish();
+        var run = BuildRun();
+
+        var events = ChatEventSerializer.BuildReplayEvents(
+            messages,
+            showToolCalls: true,
+            planRun: run);
+
+        var planReady = Assert.Single(events, json => json.Contains("PLAN_READY", StringComparison.Ordinal));
+        using var document = JsonDocument.Parse(planReady);
+        var root = document.RootElement;
+
+        Assert.Equal(run.Id, root.GetProperty("runId").GetString());
+        // The projector numbers a user message and its response as consecutive bands, so the first
+        // turn's publish response is band 1. The card lands on that band's plan slot, which is after
+        // the reply (Block(1, 0)) and before the next user message (User(2)).
+        Assert.Equal(TimelineOrderPolicy.Plan(1), root.GetProperty("seq").GetInt64());
+        Assert.True(TimelineOrderPolicy.Plan(1) > TimelineOrderPolicy.Block(1, 0));
+        Assert.True(TimelineOrderPolicy.Plan(1) < TimelineOrderPolicy.User(2));
+    }
+
+    /// <summary>
+    /// publish_plan ends its turn, and the turn-end authoritative replay resets the JS timeline
+    /// (clearing state.entries with it). The card is not transcript-derived, so the replay is the
+    /// only thing that can put it back — dropping this path makes the card vanish the instant the
+    /// publishing turn ends.
+    /// </summary>
+    [Fact]
+    public void Replay_without_a_plan_run_emits_no_plan_card()
     {
         var messages = TranscriptWithPlanPublish();
 

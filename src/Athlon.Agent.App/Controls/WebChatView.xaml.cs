@@ -35,6 +35,7 @@ public partial class WebChatView : UserControl
     private IReadOnlyList<ChatMessageViewModel> _pendingMessages = Array.Empty<ChatMessageViewModel>();
     private bool _pendingShowToolCalls;
     private IReadOnlyList<ChatMessage>? _pendingActivitySourceMessages;
+    private Athlon.Agent.Core.Plan.PlanRun? _pendingPlanRun;
     private bool _needsRender;
     private bool _renderRetryScheduled;
     private bool _renderInProgress;
@@ -249,7 +250,8 @@ public partial class WebChatView : UserControl
     public async Task LoadMessagesAsync(
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls = false,
-        IReadOnlyList<ChatMessage>? activitySourceMessages = null)
+        IReadOnlyList<ChatMessage>? activitySourceMessages = null,
+        Athlon.Agent.Core.Plan.PlanRun? planRun = null)
     {
         // Snapshot immediately rather than holding the live per-session collection.
         // Concurrent hydration can otherwise mutate the collection mid-render (e.g. a
@@ -257,6 +259,7 @@ public partial class WebChatView : UserControl
         _pendingMessages = messages.ToArray();
         _pendingShowToolCalls = showToolCalls;
         _pendingActivitySourceMessages = activitySourceMessages?.ToArray();
+        _pendingPlanRun = planRun;
         _needsRender = true;
         var generation = StartRenderGeneration();
         await RunRenderPipelineSafeAsync(generation).ConfigureAwait(true);
@@ -512,7 +515,8 @@ public partial class WebChatView : UserControl
                 var messages = _pendingMessages.ToArray();
                 var showToolCalls = _pendingShowToolCalls;
                 var activitySource = _pendingActivitySourceMessages;
-                await PostReplayInBatchesAsync(messages, showToolCalls, activitySource, expectedGeneration)
+                var planRun = _pendingPlanRun;
+                await PostReplayInBatchesAsync(messages, showToolCalls, activitySource, planRun, expectedGeneration)
                     .ConfigureAwait(true);
                 if (expectedGeneration != _renderGeneration)
                 {
@@ -547,6 +551,7 @@ public partial class WebChatView : UserControl
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls,
         IReadOnlyList<ChatMessage>? activitySource,
+        Athlon.Agent.Core.Plan.PlanRun? planRun,
         int expectedGeneration)
     {
         const int batchSize = ConversationDisplayLimits.WebViewReplayBatchSize;
@@ -557,7 +562,8 @@ public partial class WebChatView : UserControl
                     messages,
                     showToolCalls,
                     includeReset: true,
-                    activitySourceMessages: activitySource))
+                    activitySourceMessages: activitySource,
+                    planRun: planRun))
             .ConfigureAwait(true);
         if (expectedGeneration != _renderGeneration)
         {
