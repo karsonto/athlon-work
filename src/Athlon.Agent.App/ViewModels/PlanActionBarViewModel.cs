@@ -127,6 +127,28 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         return string.IsNullOrWhiteSpace(sessionId) ? null : _planPhaseAccessor.GetActiveRun(sessionId);
     }
 
+    /// <summary>
+    /// Drops the session's in-memory plan run and its timeline card. Called after Build consumes
+    /// the plan, and when the user abandons a draft. Does not touch a running turn.
+    /// </summary>
+    public async Task ClearActiveRunAsync()
+    {
+        var sessionId = _getDisplayedSessionId?.Invoke();
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        _planPhaseAccessor.Clear(sessionId);
+        await _planRunStore.ClearActiveAsync(sessionId).ConfigureAwait(true);
+        _planSessionState.NotifyChanged(null);
+        _lastTimelineKey = null;
+        _setComposerHint?.Invoke(null);
+        // The plan card is not transcript-backed, so a fresh replay cannot drop it for us.
+        _onPlanTimelineCleared?.Invoke();
+        RequestRefreshFromActiveRun();
+    }
+
     public async Task AbandonActiveRunAsync()
     {
         var sessionId = _getDisplayedSessionId?.Invoke();
@@ -140,14 +162,7 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
             _sessionTurns.Cancel(sessionId);
         }
 
-        _planPhaseAccessor.Clear(sessionId);
-        await _planRunStore.ClearActiveAsync(sessionId).ConfigureAwait(true);
-        _planSessionState.NotifyChanged(null);
-        _lastTimelineKey = null;
-        _setComposerHint?.Invoke(null);
-        // The plan card is not transcript-backed, so a fresh replay cannot drop it for us.
-        _onPlanTimelineCleared?.Invoke();
-        RequestRefreshFromActiveRun();
+        await ClearActiveRunAsync().ConfigureAwait(true);
     }
 
     [RelayCommand(CanExecute = nameof(CanBuild))]

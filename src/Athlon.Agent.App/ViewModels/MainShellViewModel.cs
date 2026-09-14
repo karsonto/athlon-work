@@ -1071,7 +1071,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
             _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
-            _savedChatView.PlanOpenEditorRequested -= OnPlanOpenEditorRequested;
         }
 
         _savedChatView = chatView;
@@ -1079,7 +1078,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         chatView.ExternalLinkRequested += OnChatExternalLinkRequested;
         chatView.ToolDetailRequested += OnToolDetailRequested;
         chatView.PlanBuildRequested += OnPlanBuildRequested;
-        chatView.PlanOpenEditorRequested += OnPlanOpenEditorRequested;
         _uiCache.AttachChatViewToAll(chatView);
         _activeUi.ChatView = chatView;
         _ = _activeUi.ReloadChatViewAsync();
@@ -1493,6 +1491,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         await _storage.DeleteSessionAsync(item.Id);
         _sessionNavigation.Invalidate(item.Id);
+        // Plan runs live only in memory; drop the deleted session's entry so it cannot leak.
+        await _planRunStore.ClearActiveAsync(item.Id).ConfigureAwait(true);
 
         if (string.Equals(_session.Id, item.Id, StringComparison.Ordinal))
         {
@@ -1897,17 +1897,19 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
     }
 
-    private void OnPlanOpenEditorRequested(object? sender, string path)
-    {
-        _ = FileEditor.OpenFileAsync(path, _session.ActiveWorkspace, readOnly: false);
-    }
-
     private async Task StartFromApprovedPlanAsync()
     {
         await EnsureDisplayedSessionReadyAsync().ConfigureAwait(true);
         var sessionId = _displayedSessionId;
-        var approved = await _planRunStore.LoadApprovedAsync(sessionId).ConfigureAwait(true);
-        if (approved?.Todos.Count > 0)
+        // The plan run lives in memory only and is the single source for this build.
+        var approved = await _planRunStore.LoadActiveAsync(sessionId).ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(approved?.PlanMarkdown))
+        {
+            ShowShellToast(_loc["Plan_BuildMissingPlan"], ShellToastKind.Error);
+            return;
+        }
+
+        if (approved.Todos.Count > 0)
         {
             var list = new SessionTaskList
             {
@@ -1925,28 +1927,36 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _taskListChangedNotifier.Notify(sessionId);
         }
 
+        // Switching modes before starting the turn matters: SessionTurnHost picks the Plan
+        // orchestrator while the harness state still says Plan.
         if (ComposerHarness.SelectModeCommand.CanExecute(SessionAgentMode.Agent))
         {
             await ComposerHarness.SelectModeCommand.ExecuteAsync(SessionAgentMode.Agent).ConfigureAwait(true);
         }
 
-        var prompt = _loc["Harness_ConfirmPlanPrompt"];
         var ui = _sessionTurns.GetOrCreateUi(
             sessionId,
             _chatScroll.ScrollToBottom,
             _chatScroll.ScrollToBottomImmediate);
         ui.ResetForTurn();
+        // The plan travels as a regular user message so it is persisted and replayed like any
+        // other turn; ui.AddUserMessage is intentionally skipped because the UI hides this
+        // control message instead of showing a user bubble.
         var error = _sessionTurns.TryStartTurn(
             sessionId,
             _session,
-            prompt,
+            ApprovedPlanPrompt.BuildUserMessage(approved.PlanMarkdown),
             Array.Empty<ImageAttachment>(),
             ui,
-            appendUserMessage: false);
+            appendUserMessage: true);
         if (error is not null)
         {
             ShowShellToast(error, ShellToastKind.Error);
+            return;
         }
+
+        // Consume the plan: it must not come back on reload or session switch.
+        await PlanBar.ClearActiveRunAsync().ConfigureAwait(true);
     }
 
     private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)
@@ -3125,7 +3135,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
             _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
-            _savedChatView.PlanOpenEditorRequested -= OnPlanOpenEditorRequested;
         }
 
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;

@@ -56,15 +56,13 @@ public sealed class PlanTurnOrchestrator(
         }
 
         var runId = IdGen.NewId();
-        var planPath = runStore.GetPlanMarkdownPath(session.Id);
         var run = new PlanRun
         {
             Id = runId,
             SessionId = session.Id,
             Goal = userInput.Trim(),
             Phase = PlanPhase.Explore,
-            Status = PlanRunStatuses.Draft,
-            PlanPath = planPath
+            Status = PlanRunStatuses.Draft
         };
 
         await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
@@ -88,21 +86,19 @@ public sealed class PlanTurnOrchestrator(
         switch (continuation)
         {
             case PlanContinuationKind.Build when run.Phase == PlanPhase.AwaitConfirm:
-                var disk = await runStore.ReadPlanMarkdownAsync(session.Id, cancellationToken)
+                // The plan lives in memory only; re-read it so any markdown written by the last
+                // publish_plan call wins over a stale copy on the run object.
+                var published = await runStore.ReadPlanMarkdownAsync(session.Id, cancellationToken)
                     .ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(disk))
+                if (!string.IsNullOrWhiteSpace(published))
                 {
-                    run.PlanMarkdown = disk;
-                    run.Title = PlanDocumentParser.ParseTitle(disk) ?? run.Title ?? "Plan";
-                    var parsedTodos = PlanDocumentParser.ParseTodos(disk).ToList();
+                    run.PlanMarkdown = published;
+                    run.Title = PlanDocumentParser.ParseTitle(published) ?? run.Title ?? "Plan";
+                    var parsedTodos = PlanDocumentParser.ParseTodos(published).ToList();
                     if (parsedTodos.Count > 0)
                     {
                         run.Todos = parsedTodos;
                     }
-                }
-                else if (string.IsNullOrWhiteSpace(run.PlanMarkdown))
-                {
-                    run.PlanMarkdown = disk;
                 }
 
                 if (run.Todos.Count == 0 && !string.IsNullOrWhiteSpace(run.PlanMarkdown))
@@ -221,7 +217,6 @@ public sealed class PlanTurnOrchestrator(
         CancellationToken cancellationToken)
     {
         run.PlanMarkdown = markdown;
-        run.PlanPath = runStore.GetPlanMarkdownPath(session.Id);
         run.Title = PlanDocumentParser.ParseTitle(markdown) ?? run.Title ?? "Plan";
         if (run.Todos.Count == 0)
         {

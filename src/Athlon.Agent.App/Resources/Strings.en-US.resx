@@ -641,6 +641,9 @@ Hold to talk</value>
   <data name="Plan_BusyCannotBuild" xml:space="preserve">
     <value>Wait for the current turn to finish before Build</value>
   </data>
+  <data name="Plan_BuildMissingPlan" xml:space="preserve">
+    <value>The plan content is no longer available. Regenerate the plan in Plan mode.</value>
+  </data>
   <data name="Plan_BusyCannotRevise" xml:space="preserve">
     <value>Wait for the current turn to finish before sending revision notes</value>
   </data>

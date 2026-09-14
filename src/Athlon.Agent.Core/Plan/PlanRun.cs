@@ -25,8 +25,6 @@ public sealed class PlanRun
 
     public string? PlanMarkdown { get; set; }
 
-    public string? PlanPath { get; set; }
-
     public List<PlanTodoItem> Todos { get; set; } = [];
 
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
@@ -49,7 +47,6 @@ public sealed class PlanRun
         Title = Title,
         Overview = Overview,
         PlanMarkdown = PlanMarkdown,
-        PlanPath = PlanPath,
         Todos = Todos.Select(t => new PlanTodoItem { Id = t.Id, Content = t.Content }).ToList(),
         CreatedAt = CreatedAt,
         UpdatedAt = UpdatedAt

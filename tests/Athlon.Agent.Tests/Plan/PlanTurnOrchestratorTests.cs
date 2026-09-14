@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Plan;
+using Athlon.Agent.Infrastructure.Plan;
 
 namespace Athlon.Agent.Tests.Plan;
 
@@ -81,8 +82,7 @@ public sealed class PlanTurnOrchestratorTests
             SessionId = session.Id,
             Phase = PlanPhase.Explore,
             Status = PlanRunStatuses.Draft,
-            Goal = "Add token refresh",
-            PlanPath = store.GetPlanMarkdownPath(session.Id)
+            Goal = "Add token refresh"
         };
         await store.SaveActiveAsync(run);
         phaseAccessor.SetActiveRun(run);
@@ -141,8 +141,7 @@ public sealed class PlanTurnOrchestratorTests
             Phase = PlanPhase.AwaitConfirm,
             Status = PlanRunStatuses.AwaitingConfirmation,
             Goal = "Feature X",
-            PlanMarkdown = completePlan,
-            PlanPath = store.GetPlanMarkdownPath(session.Id)
+            PlanMarkdown = completePlan
         };
         await store.SaveActiveAsync(run);
         phaseAccessor.SetActiveRun(run);
@@ -263,8 +262,7 @@ public sealed class PlanTurnOrchestratorTests
             SessionId = session.Id,
             Phase = PlanPhase.AwaitClarify,
             Status = PlanRunStatuses.AwaitingClarification,
-            Goal = "Add notifications",
-            PlanPath = store.GetPlanMarkdownPath(session.Id)
+            Goal = "Add notifications"
         };
         await store.SaveActiveAsync(run);
         phaseAccessor.SetActiveRun(run);
@@ -326,8 +324,7 @@ public sealed class PlanTurnOrchestratorTests
             SessionId = session.Id,
             Phase = PlanPhase.AwaitClarify,
             Status = PlanRunStatuses.AwaitingClarification,
-            Goal = "Add notifications",
-            PlanPath = store.GetPlanMarkdownPath(session.Id)
+            Goal = "Add notifications"
         };
         await store.SaveActiveAsync(run);
         phaseAccessor.SetActiveRun(run);
@@ -352,7 +349,7 @@ public sealed class PlanTurnOrchestratorTests
     }
 
     [Fact]
-    public async Task ContinueAsync_Build_RereadsPlanMarkdownFromDisk()
+    public async Task ContinueAsync_Build_MarksApprovedFromInMemoryMarkdown()
     {
         var session = AgentSession.Create("plan-session");
         var store = new InMemoryPlanRunStore();
@@ -370,10 +367,10 @@ public sealed class PlanTurnOrchestratorTests
             ## Acceptance
             - [ ] Works
             """;
-        var edited = """
+        var published = """
             # Ship feature
 
-            Edited on disk.
+            Published latest.
 
             ## Steps
             1. Implement edited step
@@ -381,7 +378,7 @@ public sealed class PlanTurnOrchestratorTests
             ## Acceptance
             - [ ] Edited works
             """;
-        await store.WritePlanMarkdownAsync(session.Id, edited);
+        await store.WritePlanMarkdownAsync(session.Id, published);
         var run = new PlanRun
         {
             Id = "run1",
@@ -389,7 +386,6 @@ public sealed class PlanTurnOrchestratorTests
             Phase = PlanPhase.AwaitConfirm,
             Status = PlanRunStatuses.AwaitingConfirmation,
             PlanMarkdown = stale,
-            PlanPath = store.GetPlanMarkdownPath(session.Id),
             Todos = [new PlanTodoItem { Id = "impl", Content = "Implement feature" }]
         };
         await store.SaveActiveAsync(run);
@@ -403,7 +399,7 @@ public sealed class PlanTurnOrchestratorTests
         Assert.NotNull(done);
         Assert.Equal(PlanPhase.Done, done.Phase);
         Assert.Equal(PlanRunStatuses.Approved, PlanRunStatuses.Normalize(done.Status));
-        Assert.Contains("Edited on disk", done.PlanMarkdown, StringComparison.Ordinal);
+        Assert.Contains("Published latest", done.PlanMarkdown, StringComparison.Ordinal);
         Assert.Contains("Edited works", done.Todos.Select(t => t.Content));
     }
 
@@ -432,8 +428,7 @@ public sealed class PlanTurnOrchestratorTests
             SessionId = session.Id,
             Phase = PlanPhase.AwaitConfirm,
             Status = PlanRunStatuses.AwaitingConfirmation,
-            Goal = "goal",
-            PlanPath = store.GetPlanMarkdownPath(session.Id)
+            Goal = "goal"
         };
         await store.SaveActiveAsync(run);
         phaseAccessor.SetActiveRun(run);
@@ -490,88 +485,6 @@ public sealed class PlanTurnOrchestratorTests
             }
 
             return Task.FromResult(session);
-        }
-    }
-
-    private sealed class InMemoryPlanRunStore : IPlanRunStore
-    {
-        private readonly Dictionary<string, PlanRun> _runs = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, string> _active = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, string> _markdown = new(StringComparer.OrdinalIgnoreCase);
-        private readonly string _root = Path.Combine(Path.GetTempPath(), "athlon-plan-tests-" + Guid.NewGuid().ToString("N"));
-
-        public string GetPlanMarkdownPath(string sessionId) =>
-            Path.Combine(_root, sessionId, "plan.md");
-
-        public Task WritePlanMarkdownAsync(string sessionId, string markdown, CancellationToken cancellationToken = default)
-        {
-            _markdown[sessionId] = markdown ?? string.Empty;
-            Directory.CreateDirectory(Path.GetDirectoryName(GetPlanMarkdownPath(sessionId))!);
-            File.WriteAllText(GetPlanMarkdownPath(sessionId), markdown ?? string.Empty);
-            return Task.CompletedTask;
-        }
-
-        public Task<string?> ReadPlanMarkdownAsync(string sessionId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(_markdown.TryGetValue(sessionId, out var md) ? md : null);
-
-        public Task<PlanRun?> LoadActiveAsync(string sessionId, CancellationToken cancellationToken = default)
-        {
-            if (!_active.TryGetValue(sessionId, out var runId))
-            {
-                return Task.FromResult<PlanRun?>(null);
-            }
-
-            _runs.TryGetValue(runId, out var run);
-            return Task.FromResult(run?.Clone());
-        }
-
-        public Task SaveActiveAsync(PlanRun run, CancellationToken cancellationToken = default)
-        {
-            _runs[run.Id] = run.Clone();
-            _active[run.SessionId] = run.Id;
-            return Task.CompletedTask;
-        }
-
-        public Task SaveRunAsync(PlanRun run, CancellationToken cancellationToken = default)
-        {
-            _runs[run.Id] = run.Clone();
-            return Task.CompletedTask;
-        }
-
-        public Task<PlanRun?> LoadRunAsync(string sessionId, string runId, CancellationToken cancellationToken = default)
-        {
-            _runs.TryGetValue(runId, out var run);
-            return Task.FromResult(run?.Clone());
-        }
-
-        public Task ClearActiveAsync(string sessionId, CancellationToken cancellationToken = default)
-        {
-            _active.Remove(sessionId);
-            return Task.CompletedTask;
-        }
-
-        public Task<PlanRun?> LoadApprovedAsync(string sessionId, CancellationToken cancellationToken = default)
-        {
-            PlanRun? best = null;
-            foreach (var run in _runs.Values)
-            {
-                if (!string.Equals(run.SessionId, sessionId, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (!string.Equals(PlanRunStatuses.Normalize(run.Status), PlanRunStatuses.Approved, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (best is null || run.UpdatedAt > best.UpdatedAt)
-                {
-                    best = run;
-                }
-            }
-
-            return Task.FromResult(best?.Clone());
         }
     }
 }

@@ -3,6 +3,7 @@ using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Streaming;
 using Athlon.Agent.Core.SubAgents;
 
@@ -220,7 +221,8 @@ public sealed class SessionStreamingUiContext
 
         if (SummaryMessageBuilder.IsSummaryMessage(message)
             || message.Role == MessageRole.User
-                && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message))
+                && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
+            || ApprovedPlanPrompt.IsApprovedPlanMessage(message))
         {
             RemoveEmptyActiveAssistantBubble(messages);
             return;

@@ -30,11 +30,6 @@ public sealed class PlanRuntimeContextContributor(
         builder.AppendLine($"- run_id: {run.Id}");
         builder.AppendLine($"- phase: {run.Phase}");
         builder.AppendLine($"- status: {run.Status}");
-        if (!string.IsNullOrWhiteSpace(run.PlanPath))
-        {
-            builder.AppendLine($"- plan_path: {run.PlanPath}");
-        }
-
         if (!string.IsNullOrWhiteSpace(run.Goal))
         {
             builder.AppendLine($"- goal: {run.Goal}");

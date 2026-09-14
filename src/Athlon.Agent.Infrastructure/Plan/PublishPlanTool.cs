@@ -80,7 +80,6 @@ public sealed class PublishPlanTool(
             run.Title = title;
             run.Overview = overview;
             run.PlanMarkdown = markdown;
-            run.PlanPath = planRunStore.GetPlanMarkdownPath(sessionId);
             run.Todos = todos;
             run.UpdatedAt = DateTimeOffset.UtcNow;
             phaseAccessor.SetActiveRun(run);

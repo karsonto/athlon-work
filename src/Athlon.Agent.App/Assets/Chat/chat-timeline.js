@@ -2018,7 +2018,6 @@ function showPlanReady(event) {
     updateEmptyStateVisibility();
   }
   card.dataset.runId = runId;
-  if (event.planPath) card.dataset.planPath = event.planPath;
   if (built) card.dataset.built = '1';
   else card.removeAttribute('data-built');
 
@@ -2034,17 +2033,6 @@ function showPlanReady(event) {
 
   var actions = document.createElement('div');
   actions.className = 'plan-card-actions';
-  if (event.planPath) {
-    var openBtn = document.createElement('button');
-    openBtn.type = 'button';
-    openBtn.className = 'plan-card-button';
-    openBtn.dataset.i18n = 'planOpenEditor';
-    openBtn.textContent = t('planOpenEditor');
-    openBtn.addEventListener('click', function () {
-      post({ type: 'planOpenEditor', path: card.dataset.planPath });
-    });
-    actions.appendChild(openBtn);
-  }
   var buildBtn = document.createElement('button');
   buildBtn.type = 'button';
   buildBtn.className = 'plan-card-button primary';

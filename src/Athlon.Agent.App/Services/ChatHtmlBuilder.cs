@@ -153,8 +153,6 @@ public sealed class ChatHtmlBuilder
             ["planClarifySubmit"] = Strings.Get("Plan_ClarifySubmit"),
             ["planClarifyAnswered"] = Strings.Get("Plan_ClarifyAnswered"),
             ["planReadyTitle"] = Strings.Get("Plan_ReadyCardTitle"),
-            ["planTodos"] = Strings.Get("Plan_TodosHeading"),
-            ["planOpenEditor"] = Strings.Get("Plan_OpenInEditor"),
             ["planBuild"] = Strings.Get("Harness_PlanBuild"),
         };
 

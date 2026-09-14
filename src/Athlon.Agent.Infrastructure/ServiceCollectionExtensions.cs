@@ -97,7 +97,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IDebugTurnOrchestrator, DebugTurnOrchestrator>();
         services.AddSingleton<IPlanPhaseAccessor, PlanPhaseAccessor>();
         services.AddSingleton<IPlanSessionState, PlanSessionState>();
-        services.AddSingleton<IPlanRunStore, Athlon.Agent.Infrastructure.Plan.FilePlanRunStore>();
+        services.AddSingleton<IPlanRunStore, Athlon.Agent.Infrastructure.Plan.InMemoryPlanRunStore>();
         services.AddSingleton<IPlanTurnOrchestrator, PlanTurnOrchestrator>();
         services.AddSingleton<IUserQuestionState, UserQuestionState>();
         services.AddSingleton<IAgentRuntime, AgentRuntime>();
@@ -240,7 +240,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IRuntimeContextContributor, HostWorkspaceRuntimeContributor>();
         services.AddSingleton<IRuntimeContextContributor, DebugRuntimeContextContributor>();
         services.AddSingleton<IRuntimeContextContributor, PlanRuntimeContextContributor>();
-        services.AddSingleton<IRuntimeContextContributor, ApprovedPlanPromptContributor>();
         services.AddSingleton<IRuntimeContextContributor, MemoryPromptContributor>();
         services.AddSingleton<IRuntimeContextContributor, TaskListPromptContributor>();
         services.AddSingleton<CompactionTurnMiddleware>();

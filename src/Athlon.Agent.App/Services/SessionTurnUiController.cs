@@ -285,9 +285,6 @@ public sealed partial class SessionTurnUiController
                 // session's UI cache.
                 FlushBufferedStreamingToUi();
                 _tokenBuffer.StopFlushTimer();
-                // The shared WebChatView is about to show another session. A stale plan run would
-                // otherwise be replayed into that session's timeline on its first render.
-                _visiblePlanRun = null;
             }
         });
     }
@@ -453,9 +450,9 @@ public sealed partial class SessionTurnUiController
 
     /// <summary>
     /// Publishes (or refreshes) the plan-ready card for <paramref name="run"/>. Called by the plan
-    /// bar when a run reaches AwaitConfirm/Done. The controller remembers the run so the next full
-    /// replay, which rebuilds the timeline from the transcript alone, re-emits the card at the
-    /// turn that called <c>publish_plan</c>.
+    /// bar when a run reaches AwaitConfirm/Done. The controller keeps the run so it survives a
+    /// mid-session replay: the timeline is rebuilt from the transcript, and a plan run is not
+    /// derived from the transcript, so nothing else would re-emit the card.
     /// </summary>
     public void ShowPlanReady(PlanRun run)
     {
@@ -471,7 +468,7 @@ public sealed partial class SessionTurnUiController
         });
     }
 
-    /// <summary>Drops the plan-ready card (plan abandoned). The card is not transcript-backed.</summary>
+    /// <summary>Drops the plan-ready card (plan consumed by Build, or draft abandoned).</summary>
     public void ClearPlanReady()
     {
         var previous = _visiblePlanRun;
@@ -608,8 +605,7 @@ public sealed partial class SessionTurnUiController
         await chatView.LoadMessagesAsync(
                 Messages,
                 _showToolCalls(),
-                activitySource.Count > 0 ? activitySource : null,
-                _visiblePlanRun)
+                activitySource.Count > 0 ? activitySource : null)
             .ConfigureAwait(true);
         if (ReferenceEquals(ChatView, chatView) && IsDisplayed)
         {

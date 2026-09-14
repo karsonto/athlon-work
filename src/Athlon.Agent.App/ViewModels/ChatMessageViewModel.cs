@@ -3,6 +3,7 @@ using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.SubAgents;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -47,6 +48,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             ? false
             : SummaryMessageBuilder.IsSummaryMessage(message)
             || IsUser && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
+            || ApprovedPlanPrompt.IsApprovedPlanMessage(message)
             || IsAssistantToolCallsOnly(message);
         DisplayRole = IsUser
             ? Strings.Get("Chat_RoleUser")
