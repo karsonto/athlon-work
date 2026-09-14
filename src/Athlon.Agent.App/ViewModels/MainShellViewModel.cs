@@ -72,6 +72,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private AgentSession _session = AgentSession.Create("New Chat");
     private string _displayedSessionId;
     private SessionTurnUiController _activeUi;
+    /// <summary>
+    /// Completion of the displayed session's full payload. Turn-start paths await this so a
+    /// metadata-only shell is never used as the model context. Null when nothing is pending.
+    /// </summary>
+    private Task? _displayedSessionReady;
     private bool _shutdownCompleted;
     private bool _disposed;
     private int _sessionLoadGeneration;
@@ -217,7 +222,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             busy => IsBusy = busy,
             () => _workspaceContext.IgnorePatterns,
             TryCancelCompaction,
-            CreateSlashCommandContext);
+            CreateSlashCommandContext,
+            EnsureDisplayedSessionReadyAsync);
         _onMcpConfigurationChanged = (_, _) => _ = RunGuardedAsync(RefreshMcpRuntimeAsync, "MCP runtime refresh");
         _onSkillConfigurationChanged = (_, _) => OnSkillConfigurationChanged();
         _onSettingsSaved = (_, _) => _ = RunGuardedAsync(OnSettingsSavedAsync, "settings saved handler");
@@ -1622,10 +1628,14 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     }
 
     private void RefreshContextOccupancy() =>
-        _ = RefreshContextOccupancyAsync();
+        _ = RunGuardedAsync(RefreshContextOccupancyAsync, "context occupancy refresh");
 
     private async Task RefreshContextOccupancyAsync()
     {
+        // Token accounting needs the real message list; wait out a partial session load instead of
+        // measuring an empty history.
+        await EnsureDisplayedSessionReadyAsync().ConfigureAwait(true);
+
         var session = _session;
         var sessionId = session.Id;
 
@@ -1654,23 +1664,24 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private void SwitchDisplayedSession(AgentSession session)
     {
-        var previousSessionId = _displayedSessionId;
+        // Any pending full-session load belonged to the previous session; the load path sets a new
+        // ready-task for the session it adopts. Non-load switches (new chat, clear) are ready
+        // immediately because there is no payload to wait for.
+        _displayedSessionReady = null;
         UnwireSessionUsageUi(_activeUi);
         _activeUi.SetDisplayed(false);
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
 
-        if (!string.IsNullOrWhiteSpace(previousSessionId)
-            && !string.Equals(previousSessionId, session.Id, StringComparison.Ordinal)
-            && !_sessionTurns.TurnHost.IsRunning(previousSessionId))
-        {
-            _uiCache.Remove(previousSessionId);
-        }
-
+        // The previous controller is intentionally kept in the LRU cache so switching back reuses
+        // its rendered view models. Eviction is capacity-based (see SessionUiCache) and pinned
+        // sessions stay put; explicit removal only happens on session delete.
         _displayedSessionId = session.Id;
         // Non-turn (UI) SSH callers resolve the slot of the session that is currently visible.
         _sshConnection.SetDefaultSession(_displayedSessionId);
         _session = session;
-        _runtime.Attach(session);
+        // Note: _runtime.Attach is intentionally NOT called here. Every caller (startup, new
+        // session, switch, load) attaches first with the right SessionComplete flag; attaching
+        // again with the default would clobber a metadata-only entry back to "complete".
         _activeUi = _uiCache.GetOrCreate(_displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);
         WireSessionUsageUi(_activeUi);
         _activeUi.SetDisplayed(true);
@@ -1775,11 +1786,29 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             App.StartupTrace($"Flush before session switch failed for {sessionId}: {ex.Message}");
         }
 
-        _sessionNavigation.Invalidate(sessionId);
+        // Keep the session payload so switching back does not deserialize session.json again, but
+        // only when it is actually complete: a metadata-only shell must never be cached as a full
+        // session (it would make the next switch skip the real load).
+        if (_runtime.TryGetHydrated(sessionId, out var live)
+            && live.SessionComplete
+            && live.Session is not null)
+        {
+            _sessionNavigation.UpdateCachedSession(live.Session);
+        }
+        else
+        {
+            _sessionNavigation.Invalidate(sessionId);
+        }
+
+        // The conversation log may have grown during the turn, so the tail page is always stale.
+        _sessionNavigation.InvalidateDisplayPage(sessionId);
     }
 
     private void OnTurnStateChanged(object? sender, string sessionId)
     {
+        // Pin the controller for the duration of the turn so LRU eviction cannot drop its buffered
+        // streaming state when the user switches away and back.
+        _uiCache.SetPinned(sessionId, _sessionTurns.TurnHost.IsRunning(sessionId));
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             if (string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
@@ -1855,7 +1884,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         // If starting the turn fails (e.g. busy), SessionTurnCoordinator leaves the
         // pending question intact so the bar stays visible for a retry.
-        ChatPage.TrySubmitPlanInput(text);
+        _ = RunGuardedAsync(
+            () => ChatPage.TrySubmitPlanInputAsync(text),
+            "answer user question");
     }
 
     private void OnPlanBuildRequested(object? sender, EventArgs e)
@@ -1873,6 +1904,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private async Task StartFromApprovedPlanAsync()
     {
+        await EnsureDisplayedSessionReadyAsync().ConfigureAwait(true);
         var sessionId = _displayedSessionId;
         var approved = await _planRunStore.LoadApprovedAsync(sessionId).ConfigureAwait(true);
         if (approved?.Todos.Count > 0)
@@ -1932,7 +1964,19 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 QuestionBar.RefreshFromActiveSession();
             }
 
-            _sessionNavigation.Invalidate(e.SessionId);
+            // Cache the finished session so switching back re-reads only the display tail, but
+            // never cache an empty result (a session with no messages must reload from disk).
+            if (e.Session.Messages.Count > 0)
+            {
+                _sessionNavigation.UpdateCachedSession(e.Session);
+            }
+            else
+            {
+                _sessionNavigation.Invalidate(e.SessionId);
+            }
+
+            _sessionNavigation.InvalidateDisplayPage(e.SessionId);
+            _uiCache.SetPinned(e.SessionId, _sessionTurns.TurnHost.IsRunning(e.SessionId));
             RequestRefreshSessionHistory();
             if (_sessionTurns.QueuedTurnPresenter.TryProcessNext(e, out var queueError))
             {
@@ -2786,8 +2830,22 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
 
             var preserveActiveTurn = _sessionTurns.TurnHost.IsRunning(sessionId);
-            _runtime.Attach(snapshot.Session);
-            SwitchDisplayedSession(snapshot.Session);
+            // A session with a running turn already holds live in-memory state. Keep it instead of
+            // downgrading the entry to the metadata shell (which would also clear SessionComplete
+            // and suppress the turn's session.json writes while the background load is in flight).
+            var attachedSession = snapshot.Session;
+            if (preserveActiveTurn
+                && _runtime.TryGetEntry(sessionId, out var runningEntry)
+                && runningEntry.Session is not null)
+            {
+                attachedSession = runningEntry.Session;
+            }
+            else
+            {
+                _runtime.Attach(snapshot.Session, sessionComplete: !snapshot.SessionIsPartial);
+            }
+
+            SwitchDisplayedSession(attachedSession);
             _olderDisplayCursor = snapshot.OlderDisplayCursor;
             _activeUi.UpdateSurfaceCursor(_olderDisplayCursor);
             ApplyLoadedSessionChrome();
@@ -2798,40 +2856,49 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             }
 
             var displayMessages = snapshot.DisplayMessages;
-            if (displayMessages.Count == 0 && snapshot.Session.Messages.Count > 0)
+            var firstPaintDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _displayedSessionReady = LoadFullSessionAndAdoptAsync(
+                sessionId,
+                loadGeneration,
+                displayMessages,
+                preserveActiveTurn,
+                firstPaintDone.Task);
+            try
             {
-                await _runtime.ReplaceDisplayAsync(snapshot.Session, snapshot.Session.Messages)
-                    .ConfigureAwait(true);
-                _sessionNavigation.Invalidate(sessionId);
-                displayMessages = snapshot.Session.Messages
-                    .TakeLast(ConversationDisplayLimits.PageSize)
-                    .ToArray();
-            }
-
-            if (displayMessages.Count > 0)
-            {
+                // First paint: the display page is enough to render the timeline. When the session
+                // is still a metadata-only shell this shows history immediately instead of blocking
+                // on the full session.json deserialization.
                 await _activeUi.HydrateDisplayAsync(
                     _session,
                     displayMessages,
                     synthesizeInterruptedToolResults: false,
                     activitySourceMessages: snapshot.ActivitySource,
                     preserveActiveTurn: preserveActiveTurn).ConfigureAwait(true);
-            }
-            else
-            {
-                await _activeUi.HydrateDisplayAsync(
-                    _session,
-                    Array.Empty<ChatMessage>(),
-                    synthesizeInterruptedToolResults: false,
-                    preserveActiveTurn: preserveActiveTurn).ConfigureAwait(true);
-            }
 
-            _runtime.MarkHydrated(sessionId, _olderDisplayCursor);
+                _runtime.MarkHydrated(sessionId, _olderDisplayCursor);
 
-            if (_savedChatView is not null)
+                if (_savedChatView is not null)
+                {
+                    await _savedChatView.SetOlderMessagesAvailableAsync(
+                        _olderDisplayCursor is not null).ConfigureAwait(true);
+                }
+
+                SetComposerStatus(null);
+                ShowShellToast(_loc.Format("Shell_LoadConversationDone", snapshot.Session.Title), ShellToastKind.Success);
+
+                // First paint is on screen: hide the loading overlay now instead of waiting for the
+                // full payload. This is the point of the two-phase load — the timeline is visible
+                // while session.json finishes loading in the background.
+                IsLoadingSession = false;
+                NotifyCommandStatesChanged();
+
+                firstPaintDone.TrySetResult();
+                await _displayedSessionReady.ConfigureAwait(true);
+            }
+            finally
             {
-                await _savedChatView.SetOlderMessagesAvailableAsync(
-                    _olderDisplayCursor is not null).ConfigureAwait(true);
+                // Never leave the adopt task (and any send awaiting it) hanging.
+                firstPaintDone.TrySetResult();
             }
 
             if (!IsSessionLoadCurrent(loadGeneration))
@@ -2841,8 +2908,6 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
             ApplySessionWorkspace();
             UpdateDisplayedBusyState();
-            SetComposerStatus(null);
-            ShowShellToast(_loc.Format("Shell_LoadConversationDone", _session.Title), ShellToastKind.Success);
         }
         finally
         {
@@ -2857,6 +2922,119 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
                 NotifyCommandStatesChanged();
             }
+        }
+    }
+
+    /// <summary>
+    /// Completes a two-phase session load: awaits the full session payload and adopts it once the
+    /// user can actually interact with the conversation. Awaiters (<see cref="EnsureDisplayedSessionReadyAsync"/>)
+    /// are gated on this task, so a turn can never start from the metadata-only shell.
+    /// </summary>
+    private async Task LoadFullSessionAndAdoptAsync(
+        string sessionId,
+        int loadGeneration,
+        IReadOnlyList<ChatMessage> displayMessages,
+        bool preserveActiveTurn,
+        Task firstPaintDone)
+    {
+        AgentSession? full;
+        try
+        {
+            full = await _sessionNavigation.LoadFullSessionAsync(sessionId).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Full session load failed for {sessionId}: {ex.Message}");
+            if (IsSessionLoadCurrent(loadGeneration))
+            {
+                ShowShellToast(_loc["Shell_LoadConversationFailed"], ShellToastKind.Error);
+            }
+
+            return;
+        }
+
+        // The full payload is ready, but do not adopt it until the display page has been painted:
+        // adopting earlier would make the ready-task complete while the timeline is still empty.
+        await firstPaintDone.ConfigureAwait(true);
+        if (full is null)
+        {
+            if (IsSessionLoadCurrent(loadGeneration))
+            {
+                ShowShellToast(_loc["Shell_LoadConversationFailed"], ShellToastKind.Error);
+            }
+
+            return;
+        }
+
+        if (!IsSessionLoadCurrent(loadGeneration))
+        {
+            return;
+        }
+
+        // While the session loaded, a running turn may have produced newer in-memory messages.
+        // Prefer that live session over the (possibly older) on-disk snapshot so the delayed load
+        // never rolls the conversation back.
+        var adopted = full;
+        if (preserveActiveTurn
+            && _runtime.TryGetEntry(sessionId, out var live)
+            && live.Session is not null
+            && live.Session.UpdatedAt > full.UpdatedAt)
+        {
+            adopted = live.Session;
+        }
+
+        // We hold the full payload now: flip the entry back to SessionComplete so the flush path
+        // may persist again (the guard in ReplaceDisplayAsync/FlushSessionCore depends on it), and
+        // refresh the navigation cache so switching back skips the reload.
+        _runtime.Attach(adopted, sessionComplete: true);
+        _session = adopted;
+        _sessionNavigation.UpdateCachedSession(adopted);
+
+        // A session that had no display rows yet (fresh or migrated) can only be rebuilt now, once
+        // the messages are actually in memory.
+        if (displayMessages.Count == 0 && adopted.Messages.Count > 0)
+        {
+            await _runtime.ReplaceDisplayAsync(adopted, adopted.Messages).ConfigureAwait(true);
+            _sessionNavigation.InvalidateDisplayPage(sessionId);
+            var rebuiltMessages = adopted.Messages
+                .TakeLast(ConversationDisplayLimits.PageSize)
+                .ToArray();
+
+            if (!IsSessionLoadCurrent(loadGeneration))
+            {
+                return;
+            }
+
+            await _activeUi.HydrateDisplayAsync(
+                adopted,
+                rebuiltMessages,
+                synthesizeInterruptedToolResults: false,
+                activitySourceMessages: rebuiltMessages,
+                preserveActiveTurn: preserveActiveTurn).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Resolves once the displayed session's full payload has been adopted (or immediately when
+    /// there is nothing to wait for). Turn-start paths await this so a metadata-only shell can
+    /// never be used as the model context. Never throws: a failed background load already raised a
+    /// toast from the load path, and letting it escape an async-void command would crash the shell.
+    /// </summary>
+    internal async Task EnsureDisplayedSessionReadyAsync()
+    {
+        var ready = _displayedSessionReady;
+        if (ready is null || ready.IsCompleted)
+        {
+            return;
+        }
+
+        try
+        {
+            await ready.ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Waiting for the displayed session to finish loading failed: {ex.Message}");
         }
     }
 

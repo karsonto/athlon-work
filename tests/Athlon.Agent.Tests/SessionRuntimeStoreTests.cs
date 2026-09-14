@@ -205,6 +205,52 @@ public sealed class SessionRuntimeStoreTests
         Assert.Equal(withMessage.Id, Assert.Single(storage.Saved).Id);
     }
 
+    [Fact]
+    public async Task FlushSessionAsync_skips_session_json_for_incomplete_session()
+    {
+        var storage = new RecordingStorage();
+        using var store = new SessionRuntimeStore(storage);
+        var partial = AgentSession.Create("loading");
+        var message = ChatMessage.Create(MessageRole.User, "queued");
+        store.Attach(partial, hydrated: true, sessionComplete: false);
+
+        await store.AppendAsync(partial.Id, message);
+
+        // Conversation rows still flush; the metadata-only session must not overwrite session.json.
+        Assert.Equal(message.Id, Assert.Single(storage.Appended).Message.Id);
+        Assert.Empty(storage.Saved);
+    }
+
+    [Fact]
+    public async Task FlushSessionAsync_resumes_session_json_after_full_attach()
+    {
+        var storage = new RecordingStorage();
+        using var store = new SessionRuntimeStore(storage);
+        var partial = AgentSession.Create("loading");
+        store.Attach(partial, hydrated: true, sessionComplete: false);
+        await store.AppendAsync(partial.Id, ChatMessage.Create(MessageRole.User, "queued"));
+
+        var full = partial.WithMessage(ChatMessage.Create(MessageRole.User, "queued"));
+        store.Attach(full, sessionComplete: true);
+        await store.MarkSessionDirtyAsync(full);
+
+        Assert.Equal(full.Id, Assert.Single(storage.Saved).Id);
+    }
+
+    [Fact]
+    public async Task ReplaceDisplayAsync_is_ignored_for_incomplete_session()
+    {
+        var storage = new RecordingStorage();
+        using var store = new SessionRuntimeStore(storage);
+        var partial = AgentSession.Create("loading");
+        store.Attach(partial, hydrated: true, sessionComplete: false);
+
+        await store.ReplaceDisplayAsync(partial, partial.Messages);
+
+        Assert.Empty(storage.Saved);
+        Assert.Empty(storage.ReplacedMessages);
+    }
+
     private sealed class RecordingStorage : IFileStorageService
     {
         public object Sync { get; } = new();

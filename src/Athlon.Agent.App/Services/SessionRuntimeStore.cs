@@ -7,6 +7,13 @@ public sealed class RuntimeSessionEntry
 {
     public AgentSession? Session { get; set; }
 
+    /// <summary>
+    /// False while <see cref="Session"/> is a metadata-only shell whose messages are still
+    /// loading. Persisting such a session would overwrite the on-disk history with an empty
+    /// message list, so the flush path skips it until the full session is attached.
+    /// </summary>
+    public bool SessionComplete { get; set; } = true;
+
     public bool Hydrated { get; set; }
 
     public ConversationDisplayCursor? OlderDisplayCursor { get; set; }
@@ -76,13 +83,15 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
     public RuntimeSessionEntry Attach(
         AgentSession session,
         bool hydrated = false,
-        ConversationDisplayCursor? olderDisplayCursor = null)
+        ConversationDisplayCursor? olderDisplayCursor = null,
+        bool sessionComplete = true)
     {
         ArgumentNullException.ThrowIfNull(session);
         var entry = _sessions.GetOrAdd(session.Id, _ => new RuntimeSessionEntry());
         lock (_gate)
         {
             entry.Session = session;
+            entry.SessionComplete = sessionComplete;
             if (hydrated)
             {
                 entry.Hydrated = true;
@@ -213,6 +222,13 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(session);
+        // ReplaceDisplayAsync rewrites the whole display log from the session it is handed, so it
+        // must never run against a metadata-only shell (that would erase the visible history).
+        if (_sessions.TryGetValue(session.Id, out var existing) && !existing.SessionComplete)
+        {
+            return;
+        }
+
         Attach(session);
         var sessionFlushLock = _sessionFlushLocks.GetOrAdd(session.Id, static _ => new SemaphoreSlim(1, 1));
         await sessionFlushLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -260,6 +276,7 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
     {
         ChatMessage[] pending;
         AgentSession? toSave;
+        bool complete;
         lock (_gate)
         {
             if (!_sessions.TryGetValue(sessionId, out var entry))
@@ -271,9 +288,14 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
             entry.PendingAppends.Clear();
             entry.PendingAppendIds.Clear();
             toSave = entry.Session;
+            complete = entry.SessionComplete;
         }
 
-        if (pending.Length == 0 && toSave is null)
+        // A partial session carries metadata only; writing it would wipe the on-disk history.
+        // Conversation rows still flush (they are append-only), and a later full attach (or
+        // MarkHydrated) restores the session write.
+        var sessionToWrite = complete ? toSave : null;
+        if (pending.Length == 0 && sessionToWrite is null)
         {
             return;
         }
@@ -289,9 +311,9 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
                 appendedCount++;
             }
 
-            if (toSave is not null)
+            if (sessionToWrite is not null)
             {
-                await _storage.SaveSessionAsync(toSave, cancellationToken).ConfigureAwait(false);
+                await _storage.SaveSessionAsync(sessionToWrite, cancellationToken).ConfigureAwait(false);
             }
         }
         catch

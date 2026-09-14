@@ -503,6 +503,35 @@ public sealed class FileStorageService(
         return Task.CompletedTask;
     }
 
+    public Task<SessionIndexEntry?> LoadSessionIndexEntryAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return Task.FromResult<SessionIndexEntry?>(null);
+        }
+
+        if (SessionDirectoryLayout.IsNestedSubAgentSessionId(paths.SessionsPath, sessionId))
+        {
+            return Task.FromResult<SessionIndexEntry?>(null);
+        }
+
+        // Only the direct layout is eligible for the fast path; anything else (index fallback,
+        // recovered/moved directories) returns null so the caller loads the full session instead
+        // of rendering a metadata-only shell from a path we are not sure about.
+        var directPath = Path.Combine(GetSessionDirectory(sessionId), "session.json");
+        if (!File.Exists(directPath))
+        {
+            return Task.FromResult<SessionIndexEntry?>(null);
+        }
+
+        var entry = SessionJsonIndexReader.TryRead(directPath);
+        return Task.FromResult(entry is null
+            || !string.Equals(entry.Id, sessionId, StringComparison.Ordinal)
+                ? null
+                : entry);
+    }
+
     public async Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(sessionId))

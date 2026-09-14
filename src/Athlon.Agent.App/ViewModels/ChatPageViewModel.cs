@@ -38,6 +38,7 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
     private Func<IReadOnlyList<string>>? _getIgnorePatterns;
     private Func<bool>? _tryCancelCompaction;
     private Func<ComposerSlashCommandContext>? _createSlashCommandContext;
+    private Func<Task>? _ensureSessionReady;
 
     public event EventHandler? FocusComposerRequested;
 
@@ -80,7 +81,8 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         Action<bool> setIsBusy,
         Func<IReadOnlyList<string>> getIgnorePatterns,
         Func<bool> tryCancelCompaction,
-        Func<ComposerSlashCommandContext> createSlashCommandContext)
+        Func<ComposerSlashCommandContext> createSlashCommandContext,
+        Func<Task> ensureSessionReady)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
@@ -93,6 +95,7 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         _getIgnorePatterns = getIgnorePatterns;
         _tryCancelCompaction = tryCancelCompaction;
         _createSlashCommandContext = createSlashCommandContext;
+        _ensureSessionReady = ensureSessionReady;
     }
 
     public void RequestFocusComposer() => FocusComposerRequested?.Invoke(this, EventArgs.Empty);
@@ -314,6 +317,14 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // A session switch loads the display page first and the full session payload shortly
+        // after. Sending before it lands would start the turn from an empty message list, so wait
+        // for the payload before consuming the composer.
+        if (_ensureSessionReady is not null)
+        {
+            await _ensureSessionReady().ConfigureAwait(true);
+        }
+
         var displayedSessionId = _getDisplayedSessionId!();
         var session = _getSession!();
         _sessionTurns.ReloadSkills();
@@ -429,7 +440,7 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         _notifyCommandStatesChanged!();
     }
 
-    public bool TrySubmitPlanInput(string input)
+    public async Task<bool> TrySubmitPlanInputAsync(string input)
     {
         if (string.IsNullOrWhiteSpace(input)
             || _getDisplayedSessionId is null
@@ -444,6 +455,11 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         {
             _showShellToast?.Invoke(_loc["AskUser_BusyCannotSubmit"], ShellToastKind.Error);
             return false;
+        }
+
+        if (_ensureSessionReady is not null)
+        {
+            await _ensureSessionReady().ConfigureAwait(true);
         }
 
         var trimmed = input.Trim();
@@ -469,18 +485,24 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         return true;
     }
 
-    public Task<bool> SendComputerUseAsync(string prompt)
+    public async Task<bool> SendComputerUseAsync(string prompt)
     {
         if (string.IsNullOrWhiteSpace(prompt) || IsReadingAttachments)
         {
-            return Task.FromResult(false);
+            return false;
         }
 
         var displayedSessionId = _getDisplayedSessionId!();
         if (_sessionTurns.IsRunning(displayedSessionId))
         {
             _showShellToast!.Invoke(Strings.Get("Chat_QueuedStatus"), ShellToastKind.Info);
-            return Task.FromResult(false);
+            return false;
+        }
+
+        // Same readiness gate as SendAsync: a metadata-only session has no context to send.
+        if (_ensureSessionReady is not null)
+        {
+            await _ensureSessionReady().ConfigureAwait(true);
         }
 
         var input = prompt.Trim();
@@ -504,13 +526,13 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         {
             _showShellToast!.Invoke(error, ShellToastKind.Error);
             _notifyCommandStatesChanged!();
-            return Task.FromResult(false);
+            return false;
         }
 
         ComposerText = string.Empty;
         UpdateDisplayedBusyState();
         _notifyCommandStatesChanged!();
-        return Task.FromResult(true);
+        return true;
     }
 
     [RelayCommand]

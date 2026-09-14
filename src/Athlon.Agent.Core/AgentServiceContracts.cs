@@ -65,6 +65,14 @@ public interface IFileStorageService
     string RootPath { get; }
     Task SaveSessionAsync(AgentSession session, CancellationToken cancellationToken = default);
     Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Fast path for session switching: reads only the scalar session metadata
+    /// (id/title/updatedAt/activeWorkspace) without deserializing the messages array.
+    /// Returns <c>null</c> when <c>session.json</c> is not at the direct path, in which case the
+    /// caller must fall back to the full <see cref="LoadSessionAsync"/>.
+    /// </summary>
+    Task<SessionIndexEntry?> LoadSessionIndexEntryAsync(string sessionId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<SessionIndexEntry?>(null);
     Task DeleteSessionAsync(string sessionId, CancellationToken cancellationToken = default);
     Task SaveContextSummaryAsync(ContextSummary summary, CancellationToken cancellationToken = default);
     Task<string> SaveTranscriptAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default);

@@ -24,21 +24,74 @@ public sealed class SessionNavigationStore
         _capacity = capacity;
     }
 
+    /// <summary>
+    /// Two-phase load. The returned snapshot always carries displayable content; its
+    /// <see cref="SessionNavigationSnapshot.Session"/> is the full session when it is already
+    /// cached or when the session has no fast metadata path, otherwise it is a metadata-only
+    /// shell (<see cref="SessionNavigationSnapshot.SessionIsPartial"/>) while the full session
+    /// loads in the background via <see cref="LoadFullSessionAsync"/>.
+    /// </summary>
     public async Task<SessionNavigationSnapshot?> LoadSnapshotAsync(
         string sessionId,
         CancellationToken cancellationToken = default)
     {
-        var sessionTask = LoadSessionAsync(sessionId, cancellationToken);
-        var displayTask = LoadFirstDisplayPageAsync(sessionId, cancellationToken);
-        await Task.WhenAll(sessionTask, displayTask).ConfigureAwait(true);
+        AgentSession session;
+        bool isPartial;
+        ConversationDisplayPage displayPage;
 
-        var session = await sessionTask.ConfigureAwait(true);
-        if (session is null)
+        if (TryGetCachedSession(sessionId, out var cached))
         {
-            return null;
+            // Cache hit: the full session is already in memory, skip the metadata probe entirely.
+            session = cached;
+            isPartial = false;
+            displayPage = await LoadFirstDisplayPageAsync(sessionId, cancellationToken).ConfigureAwait(true);
+        }
+        else
+        {
+            var metadataTask = LoadSessionIndexEntryAsync(sessionId, cancellationToken);
+            var displayTask = LoadFirstDisplayPageAsync(sessionId, cancellationToken);
+
+            // Metadata is a scalar-only read (cheap); resolving it first lets us avoid the full
+            // session.json read entirely while the display page loads concurrently.
+            var metadata = await metadataTask.ConfigureAwait(true);
+
+            if (metadata is not null)
+            {
+                session = CreateMetadataOnlySession(metadata);
+                isPartial = true;
+                // Kick off the full load now so it overlaps the caller's first paint. The snapshot
+                // does not await it; the shell awaits LoadFullSessionAsync once the timeline is up.
+                // Starting the load first also materializes the cache entry we flag below.
+                ObserveBackgroundLoad(LoadFullSessionAsync(sessionId, cancellationToken));
+                lock (_cacheLock)
+                {
+                    if (_cache.TryGetValue(sessionId, out var entry))
+                    {
+                        entry.ExistsOnDisk = true;
+                    }
+                }
+
+                displayPage = await displayTask.ConfigureAwait(true);
+            }
+            else
+            {
+                // No fast metadata path (index lookup / relocated directory): fall back to a full
+                // load so correctness wins over latency for these rare layouts. Run it alongside
+                // the already-started display read.
+                var fullTask = LoadFullSessionAsync(sessionId, cancellationToken);
+                await Task.WhenAll(fullTask, displayTask).ConfigureAwait(true);
+                var full = await fullTask.ConfigureAwait(true);
+                if (full is null)
+                {
+                    return null;
+                }
+
+                session = full;
+                isPartial = false;
+                displayPage = await displayTask.ConfigureAwait(true);
+            }
         }
 
-        var displayPage = await displayTask.ConfigureAwait(true);
         var activitySource = await ExpandActivitySourceToTurnStartAsync(
                 sessionId,
                 displayPage.Messages,
@@ -49,7 +102,55 @@ public sealed class SessionNavigationStore
             session,
             displayPage.Messages,
             displayPage.OlderCursor,
-            activitySource);
+            activitySource)
+        {
+            SessionIsPartial = isPartial
+        };
+    }
+
+    private Task<SessionIndexEntry?> LoadSessionIndexEntryAsync(string sessionId, CancellationToken cancellationToken) =>
+        _storage.LoadSessionIndexEntryAsync(sessionId, cancellationToken);
+
+    /// <summary>
+    /// The background kick-off is intentionally not awaited by <see cref="LoadSnapshotAsync"/>;
+    /// the shell awaits it later through <see cref="LoadFullSessionAsync"/> and handles failures.
+    /// Observe it here so a rejected load never surfaces as an unobserved task exception.
+    /// </summary>
+    private static void ObserveBackgroundLoad(Task<AgentSession?> task) =>
+        _ = task.ContinueWith(
+            static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
+
+    private static AgentSession CreateMetadataOnlySession(SessionIndexEntry entry) =>
+        new(
+            entry.Id,
+            entry.Title,
+            entry.UpdatedAt,
+            entry.UpdatedAt,
+            entry.ActiveWorkspace,
+            ActiveSkill: null,
+            ModelName: null,
+            Messages: Array.Empty<ChatMessage>())
+        {
+            ActiveWorkspaceId = entry.ActiveWorkspaceId
+        };
+
+    private bool TryGetCachedSession(string sessionId, out AgentSession session)
+    {
+        lock (_cacheLock)
+        {
+            if (_cache.TryGetValue(sessionId, out var cached) && cached.Session is not null)
+            {
+                Touch(cached);
+                session = cached.Session;
+                return true;
+            }
+        }
+
+        session = null!;
+        return false;
     }
 
     /// <summary>
@@ -102,27 +203,107 @@ public sealed class SessionNavigationStore
         CancellationToken cancellationToken = default) =>
         _storage.LoadConversationDisplayPageAsync(sessionId, cursor, pageSize, cancellationToken);
 
-    private async Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken)
+    /// <summary>
+    /// Loads the full session (with messages), reusing an in-flight load so a switch that already
+    /// started loading does not deserialize the same <c>session.json</c> twice.
+    /// </summary>
+    public Task<AgentSession?> LoadFullSessionAsync(string sessionId, CancellationToken cancellationToken = default)
     {
+        Task<AgentSession?> loadTask;
         lock (_cacheLock)
         {
-            if (_cache.TryGetValue(sessionId, out var cached) && cached.Session is not null)
+            if (_cache.TryGetValue(sessionId, out var cached))
             {
-                Touch(cached);
-                return cached.Session;
-            }
-        }
+                if (cached.Session is not null)
+                {
+                    Touch(cached);
+                    return Task.FromResult<AgentSession?>(cached.Session);
+                }
 
-        var loaded = await _storage.LoadSessionAsync(sessionId, cancellationToken).ConfigureAwait(true);
-        if (loaded is not null)
+                if (cached.FullSessionTask is not null)
+                {
+                    Touch(cached);
+                    return cached.FullSessionTask;
+                }
+
+                loadTask = StartFullSessionLoad(cached, sessionId, cancellationToken);
+                return loadTask;
+            }
+
+            var entry = GetOrCreateEntry(sessionId);
+            loadTask = StartFullSessionLoad(entry, sessionId, cancellationToken);
+            return loadTask;
+        }
+    }
+
+    private Task<AgentSession?> StartFullSessionLoad(
+        CacheEntry entry,
+        string sessionId,
+        CancellationToken cancellationToken)
+    {
+        var task = LoadFullSessionCoreAsync(sessionId, entry, cancellationToken);
+        entry.FullSessionTask = task;
+        return task;
+    }
+
+    private async Task<AgentSession?> LoadFullSessionCoreAsync(
+        string sessionId,
+        CacheEntry entry,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var loaded = await _storage.LoadSessionAsync(sessionId, cancellationToken).ConfigureAwait(false);
+            lock (_cacheLock)
+            {
+                if (loaded is not null && _cache.TryGetValue(sessionId, out var current)
+                    && ReferenceEquals(current, entry))
+                {
+                    current.Session = loaded;
+                    current.ExistsOnDisk = true;
+                }
+            }
+
+            return loaded;
+        }
+        finally
         {
             lock (_cacheLock)
             {
-                GetOrCreateEntry(sessionId).Session = loaded;
+                if (_cache.TryGetValue(sessionId, out var current) && ReferenceEquals(current, entry))
+                {
+                    current.FullSessionTask = null;
+                }
             }
         }
+    }
 
-        return loaded;
+    /// <summary>
+    /// Refreshes the cached session from live in-memory state without dropping the display page,
+    /// so switching back to a previously viewed session skips the full reload.
+    /// </summary>
+    public void UpdateCachedSession(AgentSession session)
+    {
+        lock (_cacheLock)
+        {
+            var entry = GetOrCreateEntry(session.Id);
+            entry.Session = session;
+        }
+    }
+
+    /// <summary>
+    /// Drops only the cached first display page (the conversation log moved on) while keeping the
+    /// cached session, so the next switch re-reads the tail but reuses the session payload.
+    /// </summary>
+    public void InvalidateDisplayPage(string sessionId)
+    {
+        lock (_cacheLock)
+        {
+            if (_cache.TryGetValue(sessionId, out var entry))
+            {
+                entry.DisplayPage = null;
+            }
+        }
     }
 
     private async Task<ConversationDisplayPage> LoadFirstDisplayPageAsync(
@@ -164,6 +345,14 @@ public sealed class SessionNavigationStore
             return true;
         }
 
+        lock (_cacheLock)
+        {
+            if (_cache.TryGetValue(session.Id, out var cached) && cached.ExistsOnDisk)
+            {
+                return true;
+            }
+        }
+
         return await _storage.LoadSessionAsync(session.Id, cancellationToken).ConfigureAwait(false) is not null;
     }
 
@@ -184,7 +373,10 @@ public sealed class SessionNavigationStore
             await _storage.SaveSessionAsync(toSave).ConfigureAwait(true);
         }
 
-        Invalidate(toSave.Id);
+        // Keep the session object so a switch back skips the full reload; only the display page is
+        // stale (the transcript changed).
+        UpdateCachedSession(toSave);
+        InvalidateDisplayPage(toSave.Id);
         return toSave;
     }
 
@@ -231,6 +423,10 @@ public sealed class SessionNavigationStore
         public LinkedListNode<string> Node { get; } = node;
         public AgentSession? Session { get; set; }
         public ConversationDisplayPage? DisplayPage { get; set; }
+        /// <summary>In-flight full-session load; shared so concurrent switches deserialize once.</summary>
+        public Task<AgentSession?>? FullSessionTask { get; set; }
+        /// <summary>True once we know a session.json exists for this id (metadata read or full load).</summary>
+        public bool ExistsOnDisk { get; set; }
     }
 }
 
@@ -240,6 +436,12 @@ public sealed record SessionNavigationSnapshot(
     ConversationDisplayCursor? OlderDisplayCursor,
     IReadOnlyList<ChatMessage>? ActivitySourceMessages = null)
 {
+    /// <summary>
+    /// True when <see cref="Session"/> carries metadata only and its messages still need to be
+    /// loaded via <see cref="SessionNavigationStore.LoadFullSessionAsync"/>.
+    /// </summary>
+    public bool SessionIsPartial { get; init; }
+
     /// <summary>
     /// Messages used to rebuild TURN_ACTIVITY / FILES_CHANGED. May be longer than
     /// <see cref="DisplayMessages"/> when the display page starts mid-turn.

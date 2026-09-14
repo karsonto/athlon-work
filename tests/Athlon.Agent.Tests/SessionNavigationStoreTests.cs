@@ -101,7 +101,107 @@ public sealed class SessionNavigationStoreTests
         Assert.NotNull(saved);
         Assert.Equal("please summarize this session", saved!.Title);
         Assert.Equal(saved, storage.SavedSession);
-        Assert.Equal(2, storage.LoadSessionCount);
+        // The session object is kept for reuse, so returning to it skips the full reload; only the
+        // display page is re-read (the transcript moved on).
+        Assert.Equal(1, storage.LoadSessionCount);
+        Assert.Equal(2, storage.LoadDisplayCount);
+    }
+
+    [Fact]
+    public async Task LoadSnapshotAsync_returns_partial_session_when_metadata_is_available()
+    {
+        var hello = ChatMessage.Create(MessageRole.User, "hello");
+        var storage = new CapturingStorage
+        {
+            SessionToLoad = AgentSession.Create("full").WithMessage(hello),
+            DisplayMessagesToLoad = [hello],
+            MetadataEntry = new SessionIndexEntry("partial", "Partial Title", "/tmp/partial", DateTimeOffset.UtcNow)
+        };
+        var store = new SessionNavigationStore(storage);
+
+        var snapshot = await store.LoadSnapshotAsync("partial");
+
+        Assert.NotNull(snapshot);
+        Assert.True(snapshot!.SessionIsPartial);
+        Assert.Equal("Partial Title", snapshot.Session.Title);
+        // The shell renders from the display page while the message list is still loading.
+        Assert.Empty(snapshot.Session.Messages);
+        Assert.Equal("hello", Assert.Single(snapshot.DisplayMessages).Content);
+    }
+
+    [Fact]
+    public async Task LoadSnapshotAsync_falls_back_to_full_load_without_metadata()
+    {
+        var session = AgentSession.Create("no-fast-path")
+            .WithMessage(ChatMessage.Create(MessageRole.User, "hello"));
+        var storage = new CapturingStorage
+        {
+            SessionToLoad = session,
+            MetadataEntry = null
+        };
+        var store = new SessionNavigationStore(storage);
+
+        var snapshot = await store.LoadSnapshotAsync(session.Id);
+
+        Assert.NotNull(snapshot);
+        Assert.False(snapshot!.SessionIsPartial);
+        Assert.Same(session, snapshot.Session);
+        Assert.Equal(1, storage.LoadSessionCount);
+    }
+
+    [Fact]
+    public async Task LoadFullSessionAsync_reuses_the_in_flight_load()
+    {
+        var full = AgentSession.Create("full").WithMessage(
+            ChatMessage.Create(MessageRole.User, "payload"));
+        var storage = new CapturingStorage
+        {
+            SessionToLoad = full,
+            MetadataEntry = new SessionIndexEntry("full", "Full", "/tmp/full", DateTimeOffset.UtcNow)
+        };
+        var store = new SessionNavigationStore(storage);
+
+        var snapshot = await store.LoadSnapshotAsync("full");
+        var first = await store.LoadFullSessionAsync("full");
+        var second = await store.LoadFullSessionAsync("full");
+
+        Assert.True(snapshot!.SessionIsPartial);
+        Assert.Same(full, first);
+        Assert.Same(full, second);
+        Assert.Equal(1, storage.LoadSessionCount);
+    }
+
+    [Fact]
+    public async Task UpdateCachedSession_lets_the_next_snapshot_skip_the_full_reload()
+    {
+        var session = AgentSession.Create("cached");
+        var storage = new CapturingStorage { SessionToLoad = session };
+        var store = new SessionNavigationStore(storage);
+
+        await store.LoadSnapshotAsync(session.Id);
+        var updated = session.WithMessage(ChatMessage.Create(MessageRole.User, "new"));
+        store.UpdateCachedSession(updated);
+
+        var snapshot = await store.LoadSnapshotAsync(session.Id);
+
+        Assert.Same(updated, snapshot!.Session);
+        Assert.Equal(1, storage.LoadSessionCount);
+    }
+
+    [Fact]
+    public async Task InvalidateDisplayPage_keeps_the_cached_session()
+    {
+        var session = AgentSession.Create("keep-session");
+        var storage = new CapturingStorage { SessionToLoad = session };
+        var store = new SessionNavigationStore(storage);
+
+        await store.LoadSnapshotAsync(session.Id);
+        store.InvalidateDisplayPage(session.Id);
+
+        var snapshot = await store.LoadSnapshotAsync(session.Id);
+
+        Assert.Same(session, snapshot!.Session);
+        Assert.Equal(1, storage.LoadSessionCount);
         Assert.Equal(2, storage.LoadDisplayCount);
     }
 
@@ -253,6 +353,7 @@ public sealed class SessionNavigationStoreTests
     {
         public string RootPath => "/tmp";
         public AgentSession? SessionToLoad { get; set; }
+        public SessionIndexEntry? MetadataEntry { get; set; }
         public IReadOnlyList<ChatMessage> DisplayMessagesToLoad { get; set; } = Array.Empty<ChatMessage>();
         public AgentSession? SavedSession { get; private set; }
         public int LoadSessionCount { get; private set; }
@@ -270,6 +371,11 @@ public sealed class SessionNavigationStoreTests
             SessionToLoad = session;
             return Task.CompletedTask;
         }
+
+        public Task<SessionIndexEntry?> LoadSessionIndexEntryAsync(
+            string sessionId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(MetadataEntry);
 
         public async Task<AgentSession?> LoadSessionAsync(string sessionId, CancellationToken cancellationToken = default)
         {
