@@ -269,7 +269,6 @@ function getMessageRoot() {
  */
 var SEQ_TURN_BAND = 1000000;
 var SEQ_USER = 0;
-var SEQ_ACTIVITY = 1000;
 var SEQ_CONTENT = 2000;
 var SEQ_FILES = 800000;
 var SEQ_COMPACTION = 900000;
@@ -1593,12 +1592,11 @@ function scrollTurnActivityThoughts(details) {
 /**
  * Renders (or refreshes) the turn-activity fold at its seq slot.
  *
- * The fold is keyed by the turn it belongs to, so a live fold that keeps growing and the fold
- * rebuilt from the transcript are the same entry: the second render overwrites the first's
- * contents and leaves the row where it is. No "insert after the last user row" step is needed —
- * the seq (TimelineOrderPolicy's activity slot, just after the turn's user message) already
- * places it, which is what makes the fold anchored to the turn's first activity instead of
- * jumping to the end of the turn when it is finalized.
+ * The fold is keyed by the turn and the fold's index within it, so a live fold that keeps growing
+ * and the fold rebuilt from the transcript are the same entry: the second render overwrites the
+ * first's contents and leaves the row where it is. No "insert after the last user row" step is
+ * needed — the fold and the content bubbles share one seq stream, so a fold sits exactly between
+ * the replies it ran between rather than at a fixed slot ahead of the whole turn.
  */
 function appendTurnActivityCard(event) {
   state.currentAssistantEl = null;
@@ -1609,7 +1607,10 @@ function appendTurnActivityCard(event) {
   }
 
   var key = turnActivityEntryKey(event);
-  var seq = resolveEventSeq(event, SEQ_ACTIVITY);
+  // A replayed fold carries its own seq. A live fold claims the next content slot the first time
+  // it is created and keeps that slot across upserts, so the fold and the bubble that follows it
+  // interleave exactly as they streamed.
+  var seq = resolveEventSeq(event, undefined);
   var row = getEntryRow(key);
   var details = row ? row.querySelector('.turn-activity') : null;
   // Preserve a fold the user already opened; a fresh/replayed fold starts collapsed.
@@ -1631,10 +1632,12 @@ function appendTurnActivityCard(event) {
       }
     });
     row.appendChild(details);
-    registerEntry(key, row, seq);
+    registerEntry(key, row, seq === undefined ? nextLiveContentSeq() : seq);
   } else {
     details.innerHTML = '';
-    insertBySeq(row, seq);
+    if (seq !== undefined) {
+      insertBySeq(row, seq);
+    }
   }
 
   var summary = document.createElement('summary');
@@ -1663,17 +1666,15 @@ function appendTurnActivityCard(event) {
   items.forEach(function (item) {
     var hasDiff = item.lines && item.lines.length;
     var hasThought = item.kind === 'thought' && item.body;
-    var hasNarration = item.kind === 'narration' && item.body;
     var entry = document.createElement('div');
     entry.className = 'turn-activity-item'
       + (hasDiff ? ' has-diff' : '')
-      + (hasThought ? ' has-thought' : '')
-      + (hasNarration ? ' has-narration' : '');
+      + (hasThought ? ' has-thought' : '');
 
-    if (hasThought || hasNarration) {
+    if (hasThought) {
       var thoughtLabel = document.createElement('div');
       thoughtLabel.className = 'turn-activity-thought-label';
-      thoughtLabel.textContent = item.verb || (hasNarration ? (t('said') || 'Said') : (t('thought') || 'Thought'));
+      thoughtLabel.textContent = item.verb || (t('thought') || 'Thought');
       entry.appendChild(thoughtLabel);
 
       var thought = document.createElement('div');
@@ -2143,18 +2144,6 @@ function handleEvent(event) {
         resolveEventMarkdown(event));
       if (!event.streaming) state.currentAssistantEl = null;
       break;
-    case 'REMOVE_ASSISTANT_BUBBLES': {
-      var ids = event.messageIds || [];
-      ids.forEach(function (id) {
-        if (!removeEntry('msg:' + id)) {
-          var row = findAssistantBubbleRow(id);
-          if (row && row.parentNode) row.parentNode.removeChild(row);
-        }
-        delete state.assistantStarted[id];
-      });
-      state.currentAssistantEl = null;
-      break;
-    }
     case 'TOOL_CALL_START':
       if (isPlanSpecialTool(event.toolCallName)) {
         state.currentAssistantEl = null;

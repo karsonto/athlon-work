@@ -291,9 +291,9 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("function insertBySeq", timelineJs, StringComparison.Ordinal);
         Assert.Contains("function registerEntry", timelineJs, StringComparison.Ordinal);
         Assert.Contains("seqForTurn(state.liveTurn", timelineJs, StringComparison.Ordinal);
-        // The seq bands must mirror TimelineOrderPolicy.cs so live and replay agree.
+        // The seq bands must mirror TimelineOrderPolicy.cs so live and replay agree. Activity folds
+        // and content bubbles share one band: they are numbered together in transcript order.
         Assert.Contains("SEQ_TURN_BAND = 1000000", timelineJs, StringComparison.Ordinal);
-        Assert.Contains("SEQ_ACTIVITY = 1000", timelineJs, StringComparison.Ordinal);
         Assert.Contains("SEQ_CONTENT = 2000", timelineJs, StringComparison.Ordinal);
         Assert.Contains("SEQ_FILES = 800000", timelineJs, StringComparison.Ordinal);
     }

@@ -150,7 +150,9 @@ internal static class ChatEventSerializer
         TurnActivitySummary summary,
         bool upsert = false,
         long? seq = null,
-        string? turnAnchorId = null)
+        string? turnAnchorId = null,
+        int activityBlockIndex = 0,
+        string? entryId = null)
     {
         var items = summary.Items.Select(item => new
         {
@@ -178,7 +180,7 @@ internal static class ChatEventSerializer
         return SerializeAgui("TURN_ACTIVITY", new
         {
             seq,
-            entryId = turnAnchorId is null ? null : "activity:" + turnAnchorId,
+            entryId = ResolveActivityEntryId(entryId, turnAnchorId, activityBlockIndex),
             upsert,
             editedFileCount = summary.EditedFileCount,
             exploredFileCount = summary.ExploredFileCount,
@@ -192,8 +194,29 @@ internal static class ChatEventSerializer
         });
     }
 
-    public static string SerializeRemoveAssistantBubbles(IReadOnlyList<string> messageIds) =>
-        SerializeAgui("REMOVE_ASSISTANT_BUBBLES", new { messageIds });
+    /// <summary>
+    /// Deterministic activity-fold entry id. A turn can hold several folds (one per assistant
+    /// bubble boundary), so the id is anchored on the turn boundary plus the fold's ordinal inside
+    /// that turn. Both the live publish and the replay derive the same id, so an upsert rewrites the
+    /// same entry instead of stacking a twin.
+    /// </summary>
+    public static string? ResolveActivityEntryId(
+        string? entryId,
+        string? turnAnchorId,
+        int activityBlockIndex)
+    {
+        if (!string.IsNullOrWhiteSpace(entryId))
+        {
+            return entryId;
+        }
+
+        if (string.IsNullOrWhiteSpace(turnAnchorId))
+        {
+            return null;
+        }
+
+        return "activity:" + turnAnchorId + ":" + Math.Max(0, activityBlockIndex);
+    }
 
     private static string LocalizeActivityVerb(TurnActivityKind kind) => kind switch
     {
@@ -203,7 +226,6 @@ internal static class ChatEventSerializer
         TurnActivityKind.Explored => Strings.Get("Chat_ActivityVerbExplored"),
         TurnActivityKind.Command => Strings.Get("Chat_ActivityVerbCommand"),
         TurnActivityKind.Thought => Strings.Get("Chat_ActivityVerbThought"),
-        TurnActivityKind.Narration => Strings.Get("Chat_ActivityVerbNarration"),
         _ => kind.ToString()
     };
 
@@ -498,8 +520,7 @@ internal static class ChatEventSerializer
                         [
                             SerializeUserMessage(user, TimelineOrderPolicy.User(turnIndex))
                         ],
-                        ActivityEvent: null,
-                        ContentEvents: Array.Empty<string>(),
+                        BlockEvents: Array.Empty<string>(),
                         CompactionEvent: null,
                         TurnIndex: turnIndex));
                 }
@@ -512,8 +533,7 @@ internal static class ChatEventSerializer
                 turnIndex++;
                 segments.Add(new ReplayTurnSegment(
                     UserEvents: Array.Empty<string>(),
-                    ActivityEvent: null,
-                    ContentEvents: Array.Empty<string>(),
+                    BlockEvents: Array.Empty<string>(),
                     CompactionEvent: SerializeCompactionCheckpoint(compaction) is { } compactionEvent
                         ? WithSeq(compactionEvent, TimelineOrderPolicy.Compaction(turnIndex))
                         : null,
@@ -524,61 +544,80 @@ internal static class ChatEventSerializer
             // A turn without a leading user message (mid-turn tail page) still needs its own band.
             turnIndex++;
             var currentTurn = turnIndex;
-            string? activityEvent = null;
-            if (segment.ActivitySegment.Count > 0)
-            {
-                var activity = TurnActivitySummaryBuilder.Build(segment.ActivitySegment);
-                if (activity is { HasContent: true })
-                {
-                    activityEvent = SerializeTurnActivity(
-                        activity,
-                        seq: TimelineOrderPolicy.Activity(currentTurn),
-                        turnAnchorId: segment.TurnAnchorId);
-                }
-            }
 
-            // Number tool cards and assistant replies consecutively in transcript order so the
-            // timeline keeps the exact interleaving the turn streamed with. A succeeded file edit
-            // renders as its own single-file card at its slot instead of a tool card, so file
-            // modifications appear along the timeline where they happened.
-            var contentEvents = new List<string>(segment.ContentMessages.Count);
-            var contentOrdinal = 0;
-            foreach (var content in segment.ContentMessages)
+            // Folds, tool cards, per-edit cards and assistant replies are numbered together in
+            // transcript order, so the rebuilt timeline keeps the exact interleaving the turn
+            // streamed with. A succeeded file edit renders as its own single-file card at its slot
+            // instead of a tool card, so file modifications appear where they happened.
+            var blockEvents = new List<string>();
+            var blockOrdinal = 0;
+            var activityBlockIndex = 0;
+
+            // The response duration is a property of the turn, shown on its last assistant reply
+            // only, so find it up front.
+            var lastAssistant = segment.Blocks
+                .OfType<ChatTimelineProjector.ContentBlock>()
+                .LastOrDefault(content =>
+                    !content.Message.IsTool
+                    && !string.IsNullOrWhiteSpace(content.Message.Content))
+                ?.Message;
+
+            foreach (var block in segment.Blocks)
             {
-                var seq = TimelineOrderPolicy.Content(currentTurn, contentOrdinal++);
-                if (content.IsTool)
+                var seq = TimelineOrderPolicy.Block(currentTurn, blockOrdinal++);
+                switch (block)
                 {
-                    if (ChatTimelineProjector.IsSucceededFileEdit(content))
-                    {
-                        var editEvent = SerializeEditCard(content, seq);
-                        if (editEvent is not null)
+                    case ChatTimelineProjector.ActivityBlock activityBlock:
+                        var activity = TurnActivitySummaryBuilder.Build(activityBlock.Messages);
+                        if (activity is { HasContent: true })
                         {
-                            contentEvents.Add(editEvent);
+                            blockEvents.Add(SerializeTurnActivity(
+                                activity,
+                                seq: seq,
+                                turnAnchorId: segment.TurnAnchorId,
+                                activityBlockIndex: activityBlockIndex));
+                            // The index counts emitted folds, matching the live controller's counter,
+                            // so a live upsert and this replayed fold resolve to one entry.
+                            activityBlockIndex++;
                         }
 
-                        continue;
-                    }
+                        break;
 
-                    contentEvents.AddRange(BuildReplayEventsForMessage(content, seq: seq));
-                    continue;
+                    case ChatTimelineProjector.ContentBlock { Message.IsTool: true } edit
+                        when ChatTimelineProjector.IsSucceededFileEdit(edit.Message):
+                        var editEvent = SerializeEditCard(edit.Message, seq);
+                        if (editEvent is not null)
+                        {
+                            blockEvents.Add(editEvent);
+                        }
+
+                        break;
+
+                    case ChatTimelineProjector.ContentBlock contentBlock:
+                        var content = contentBlock.Message;
+                        if (content.IsTool)
+                        {
+                            blockEvents.AddRange(BuildReplayEventsForMessage(content, seq: seq));
+                            break;
+                        }
+
+                        var durationMs = ReferenceEquals(content, lastAssistant)
+                            && segment.TurnUserCreatedAt is { } startedAt
+                            ? ComputeResponseDurationMs(startedAt, content.CreatedAtUtc)
+                            : null;
+                        blockEvents.AddRange(BuildReplayEventsForMessage(content, durationMs, seq));
+                        break;
                 }
-
-                var durationMs = segment.TurnUserCreatedAt is { } startedAt
-                    ? ComputeResponseDurationMs(startedAt, content.CreatedAtUtc)
-                    : null;
-                contentEvents.AddRange(BuildReplayEventsForMessage(content, durationMs, seq));
             }
 
-            if (activityEvent is not null
-                || contentEvents.Count > 0
+            if (blockEvents.Count > 0
                 // A turn whose only tool was publish_plan has no other events, but still owns the
                 // plan card's slot. Dropping the segment here would drop the card on replay.
                 || segment.HasPlanPublish)
             {
                 segments.Add(new ReplayTurnSegment(
                     UserEvents: Array.Empty<string>(),
-                    ActivityEvent: activityEvent,
-                    ContentEvents: contentEvents.ToArray(),
+                    BlockEvents: blockEvents.ToArray(),
                     CompactionEvent: null,
                     TurnIndex: currentTurn,
                     PlanSeq: segment.HasPlanPublish ? TimelineOrderPolicy.Plan(currentTurn) : null));
@@ -659,12 +698,7 @@ internal static class ChatEventSerializer
         foreach (var segment in segments)
         {
             events.AddRange(segment.UserEvents);
-            if (segment.ActivityEvent is not null)
-            {
-                events.Add(segment.ActivityEvent);
-            }
-
-            events.AddRange(segment.ContentEvents);
+            events.AddRange(segment.BlockEvents);
 
             if (segment.CompactionEvent is not null)
             {
@@ -685,8 +719,7 @@ internal static class ChatEventSerializer
 
     private sealed record ReplayTurnSegment(
         IReadOnlyList<string> UserEvents,
-        string? ActivityEvent,
-        IReadOnlyList<string> ContentEvents,
+        IReadOnlyList<string> BlockEvents,
         string? CompactionEvent,
         /// <summary>Index of this segment in the replay, paired with <see cref="TimelineOrderPolicy"/>.</summary>
         long TurnIndex = -1,

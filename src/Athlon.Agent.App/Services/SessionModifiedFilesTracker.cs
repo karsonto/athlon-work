@@ -88,9 +88,6 @@ public sealed class SessionModifiedFilesTracker
     /// </summary>
     public IReadOnlyList<EditFileCard> PeekSegmentEditCards() => _segmentEditCards;
 
-    /// <summary>Drops the segment's completed-edit cards once the segment is sealed.</summary>
-    public void ClearSegmentEditCards() => _segmentEditCards.Clear();
-
     /// <summary>
     /// Single-edit card payload for a succeeded file tool: one file for <c>file_edit</c> /
     /// <c>file_write</c>, one per touched path for <c>apply_patch</c>. Replay and the live tracker

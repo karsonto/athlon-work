@@ -6,11 +6,12 @@ namespace Athlon.Agent.App.Services;
 /// <summary>
 /// Projects a transcript into per-turn segments for AG-UI replay.
 ///
-/// A turn's content bubbles (tool cards and assistant replies) are kept in one
-/// <see cref="TurnSegment.ContentMessages"/> list in transcript order so the timeline can number
-/// them consecutively. Splitting them into separate tool/assistant lists and re-emitting tools
-/// first — as this projector used to — made a turn where the model interleaves text and tools
-/// render in a different order on replay than it did while streaming.
+/// A turn is projected into an ordered list of <see cref="TurnBlock"/>s so the timeline can
+/// interleave the activity fold with content bubbles exactly as they were produced: assistant
+/// replies, tool cards and per-edit cards keep their transcript order, and the reasoning / activity
+/// tools that surround them collapse into an <see cref="ActivityBlock"/> placed at that point.
+/// Folding a whole turn into a single activity card (plus one "final" reply) would force a fixed
+/// ordering that a fully rebuilt timeline cannot reproduce identically.
 ///
 /// The <c>publish_plan</c> call is deliberately absent from every list: it renders as a plan card
 /// that the plan store owns (see <see cref="PlanTimelinePolicy"/>), so its turn only exposes
@@ -18,11 +19,21 @@ namespace Athlon.Agent.App.Services;
 /// </summary>
 internal static class ChatTimelineProjector
 {
+    /// <summary>An ordered piece of a turn: either an activity fold or a content bubble.</summary>
+    internal abstract record TurnBlock;
+
+    /// <summary>Reasoning and activity tools collapsed into one fold at this point in the turn.</summary>
+    internal sealed record ActivityBlock(
+        IReadOnlyList<ChatMessageViewModel> Messages) : TurnBlock;
+
+    /// <summary>A single content bubble: an assistant reply, tool card, or per-edit card.</summary>
+    internal sealed record ContentBlock(
+        ChatMessageViewModel Message) : TurnBlock;
+
     internal sealed record TurnSegment(
         IReadOnlyList<ChatMessageViewModel> UserMessages,
-        IReadOnlyList<ChatMessageViewModel> ActivitySegment,
-        /// <summary>Tool cards and assistant replies, in transcript order.</summary>
-        IReadOnlyList<ChatMessageViewModel> ContentMessages,
+        /// <summary>Activity folds and content bubbles, in transcript order.</summary>
+        IReadOnlyList<TurnBlock> Blocks,
         ChatMessageViewModel? CompactionMessage,
         DateTimeOffset? TurnUserCreatedAt,
         /// <summary>
@@ -44,21 +55,33 @@ internal static class ChatTimelineProjector
         bool showToolCalls)
     {
         var segments = new List<TurnSegment>();
-        var activitySegment = new List<ChatMessageViewModel>();
-        var contentMessages = new List<ChatMessageViewModel>();
-        var finalAssistantMessageIds = FindFinalAssistantMessageIds(timeline);
+        var blocks = new List<TurnBlock>();
+        var activityBlock = new List<ChatMessageViewModel>();
         DateTimeOffset? turnUserCreatedAt = null;
         string? turnAnchorId = null;
         var hasPlanPublish = false;
 
-        void FlushTurnIntermediate()
+        // An activity fold only exists once it has content; an empty accumulator is dropped so a
+        // turn that went straight to a reply does not gain a phantom fold.
+        void FlushActivityBlock()
         {
-            if (activitySegment.Count > 0 || contentMessages.Count > 0 || hasPlanPublish)
+            if (activityBlock.Count == 0)
+            {
+                return;
+            }
+
+            blocks.Add(new ActivityBlock(activityBlock.ToArray()));
+            activityBlock.Clear();
+        }
+
+        void FlushTurn()
+        {
+            FlushActivityBlock();
+            if (blocks.Count > 0 || hasPlanPublish)
             {
                 segments.Add(new TurnSegment(
                     UserMessages: Array.Empty<ChatMessageViewModel>(),
-                    ActivitySegment: activitySegment.ToArray(),
-                    ContentMessages: contentMessages.ToArray(),
+                    Blocks: blocks.ToArray(),
                     CompactionMessage: null,
                     TurnUserCreatedAt: turnUserCreatedAt,
                     TurnAnchorId: turnAnchorId,
@@ -66,8 +89,7 @@ internal static class ChatTimelineProjector
                     HasPlanPublish: hasPlanPublish));
             }
 
-            activitySegment.Clear();
-            contentMessages.Clear();
+            blocks.Clear();
             hasPlanPublish = false;
         }
 
@@ -80,13 +102,12 @@ internal static class ChatTimelineProjector
 
             if (message.IsUser)
             {
-                FlushTurnIntermediate();
+                FlushTurn();
                 turnUserCreatedAt = message.CreatedAtUtc;
                 turnAnchorId = message.MessageId;
                 segments.Add(new TurnSegment(
                     UserMessages: [message],
-                    ActivitySegment: Array.Empty<ChatMessageViewModel>(),
-                    ContentMessages: Array.Empty<ChatMessageViewModel>(),
+                    Blocks: Array.Empty<TurnBlock>(),
                     CompactionMessage: null,
                     TurnUserCreatedAt: turnUserCreatedAt,
                     TurnAnchorId: turnAnchorId,
@@ -99,13 +120,12 @@ internal static class ChatTimelineProjector
             {
                 if (ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(message))
                 {
-                    FlushTurnIntermediate();
+                    FlushTurn();
                     turnUserCreatedAt = null;
                     turnAnchorId = message.MessageId;
                     segments.Add(new TurnSegment(
                         UserMessages: Array.Empty<ChatMessageViewModel>(),
-                        ActivitySegment: Array.Empty<ChatMessageViewModel>(),
-                        ContentMessages: Array.Empty<ChatMessageViewModel>(),
+                        Blocks: Array.Empty<TurnBlock>(),
                         CompactionMessage: message,
                         TurnUserCreatedAt: null,
                         TurnAnchorId: turnAnchorId,
@@ -121,7 +141,7 @@ internal static class ChatTimelineProjector
                 if (PlanTimelinePolicy.IsPublishPlanTool(message.ToolName))
                 {
                     // A dedicated plan-ready card renders this call; it is never a tool card and
-                    // never activity (folding it would hide the turn's final assistant reply).
+                    // never activity (folding it would hide the turn's publish slot).
                     hasPlanPublish = true;
                     continue;
                 }
@@ -130,21 +150,16 @@ internal static class ChatTimelineProjector
                 // turn's content stream — not folded into the activity summary and not aggregated
                 // into one per-turn "N files changed" card. Placing it here is what makes file
                 // modifications appear along the timeline in the order they happened.
-                if (IsSucceededFileEdit(message))
+                if (IsSucceededFileEdit(message) || ShouldEmitToolCard(showToolCalls, message))
                 {
-                    contentMessages.Add(message);
-                    continue;
-                }
-
-                if (ShouldEmitToolCard(showToolCalls, message))
-                {
-                    contentMessages.Add(message);
+                    FlushActivityBlock();
+                    blocks.Add(new ContentBlock(message));
                     continue;
                 }
 
                 if (TurnActivityClassifier.IsActivityTool(message.ToolName))
                 {
-                    activitySegment.Add(message);
+                    activityBlock.Add(message);
                 }
 
                 continue;
@@ -152,7 +167,7 @@ internal static class ChatTimelineProjector
 
             if (message.HasReasoning)
             {
-                activitySegment.Add(new ChatMessageViewModel(
+                activityBlock.Add(new ChatMessageViewModel(
                     ChatMessage.Create(
                         MessageRole.Assistant,
                         string.Empty,
@@ -161,18 +176,14 @@ internal static class ChatTimelineProjector
 
             if (!string.IsNullOrWhiteSpace(message.Content))
             {
-                if (finalAssistantMessageIds.Contains(message.MessageId))
-                {
-                    contentMessages.Add(message);
-                }
-                else
-                {
-                    activitySegment.Add(message);
-                }
+                // Every non-empty assistant reply is its own bubble; the activity that surrounded it
+                // stays in the fold(s) on either side of it.
+                FlushActivityBlock();
+                blocks.Add(new ContentBlock(message));
             }
         }
 
-        FlushTurnIntermediate();
+        FlushTurn();
         return segments;
     }
 
@@ -199,68 +210,4 @@ internal static class ChatTimelineProjector
         && ModifiedFilePathExtractor.IsFileTool(message.ToolName)
         && message.ToolApprovalState is not (ToolApprovalState.Pending or ToolApprovalState.Denied)
         && ModifiedFilePathExtractor.ToModifiedFileStatus(message.ToolCallStatus) == ModifiedFileStatus.Succeeded;
-
-    internal static HashSet<string> FindFinalAssistantMessageIds(
-        IReadOnlyList<ChatMessageViewModel> timeline)
-    {
-        var finals = new HashSet<string>(StringComparer.Ordinal);
-        var turnHasActivity = false;
-        var turnAssistantIds = new List<string>();
-
-        void CloseTurn()
-        {
-            if (turnAssistantIds.Count > 0)
-            {
-                if (turnHasActivity)
-                {
-                    finals.Add(turnAssistantIds[^1]);
-                }
-                else
-                {
-                    foreach (var id in turnAssistantIds)
-                    {
-                        finals.Add(id);
-                    }
-                }
-            }
-
-            turnHasActivity = false;
-            turnAssistantIds.Clear();
-        }
-
-        foreach (var message in timeline)
-        {
-            if (message.IsHiddenPlaceholder)
-            {
-                continue;
-            }
-
-            if (message.IsUser || message.IsCompaction)
-            {
-                CloseTurn();
-                continue;
-            }
-
-            if (message.IsTool)
-            {
-                if (!PlanTimelinePolicy.IsPublishPlanTool(message.ToolName)
-                    && TurnActivityClassifier.IsActivityTool(message.ToolName))
-                {
-                    turnHasActivity = true;
-                }
-            }
-            else if (message.HasReasoning)
-            {
-                turnHasActivity = true;
-            }
-
-            if (!message.IsTool && !string.IsNullOrWhiteSpace(message.Content))
-            {
-                turnAssistantIds.Add(message.MessageId);
-            }
-        }
-
-        CloseTurn();
-        return finals;
-    }
 }

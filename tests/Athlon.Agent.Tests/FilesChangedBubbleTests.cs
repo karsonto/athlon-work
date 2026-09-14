@@ -238,7 +238,7 @@ public sealed class FilesChangedBubbleTests
     }
 
     [Fact]
-    public void BuildReplayEvents_emits_single_activity_fold_for_whole_turn()
+    public void BuildReplayEvents_interleaves_activity_folds_with_assistant_bubbles()
     {
         var user = ChatMessage.Create(MessageRole.User, "analyze");
         var read1 = ChatMessage.Create(
@@ -269,18 +269,25 @@ public sealed class FilesChangedBubbleTests
         var events = ChatEventSerializer.BuildReplayEvents(display, showToolCalls: false, activitySourceMessages: source)
             .ToList();
 
-        var activities = events.Where(json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal)).ToList();
-        var texts = events.Where(json => json.Contains("STATIC_ASSISTANT_HTML", StringComparison.Ordinal)).ToList();
-        Assert.Single(activities);
-        Assert.Equal(1, texts.Count);
-        Assert.True(events.IndexOf(activities[0]) < events.IndexOf(texts[0]));
-        using var doc = JsonDocument.Parse(activities[0]);
-        Assert.Equal(2, doc.RootElement.GetProperty("exploredFileCount").GetInt32());
-        var kinds = doc.RootElement.GetProperty("items").EnumerateArray()
-            .Select(item => item.GetProperty("kind").GetString())
+        // Each assistant reply is its own bubble, and the reads on either side of it collapse into
+        // separate folds, so the turn alternates fold → bubble → fold → bubble.
+        var orderedKinds = events
+            .Where(json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal)
+                || json.Contains("STATIC_ASSISTANT_HTML", StringComparison.Ordinal))
+            .Select(json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal) ? "fold" : "reply")
             .ToList();
-        // Timeline order: read a.ts → narration「第一步」→ read b.ts (final「第二步」is bubble).
-        Assert.Equal(["read", "narration", "read"], kinds);
+        Assert.Equal(["fold", "reply", "fold", "reply"], orderedKinds);
+
+        var activities = events.Where(json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal)).ToList();
+        Assert.Equal(2, activities.Count);
+        var foldSeqs = activities
+            .Select(json => JsonDocument.Parse(json).RootElement.GetProperty("seq").GetInt64())
+            .ToList();
+        Assert.True(foldSeqs[0] < foldSeqs[1]);
+
+        using var firstFold = JsonDocument.Parse(activities[0]);
+        Assert.Equal(1, firstFold.RootElement.GetProperty("exploredFileCount").GetInt32());
+        Assert.Equal("activity:" + user.Id + ":0", firstFold.RootElement.GetProperty("entryId").GetString());
     }
 
     [Fact]
@@ -732,22 +739,28 @@ public sealed class FilesChangedBubbleTests
     }
 
     [Fact]
-    public void SessionTurnActivityTracker_live_narration_appears_in_snapshot_until_cleared()
+    public void SessionTurnActivityTracker_keeps_reasoning_across_a_segment_reset()
     {
         var tracker = new SessionTurnActivityTracker();
         tracker.BeginTurn();
-        tracker.Process(new AgentStreamEvent.ToolCallStart("c1", "file_read", 0));
-        tracker.SetLiveNarration("我先查看工作区文件。");
 
         var live = tracker.Snapshot();
-        Assert.NotNull(live);
-        Assert.Contains(live!.Items, item => item.Kind == TurnActivityKind.Narration && item.Body == "我先查看工作区文件。");
+        Assert.Null(live);
+        Assert.False(tracker.HasSegmentContent);
 
-        tracker.ClearLiveNarration();
-        tracker.AddNarration("我先查看工作区文件。");
-        var committed = tracker.Snapshot();
-        Assert.NotNull(committed);
-        Assert.Equal(1, committed!.Items.Count(item => item.Kind == TurnActivityKind.Narration));
+        tracker.Process(new AgentStreamEvent.ReasoningMessageStart("r1", "reasoning"));
+        tracker.Process(new AgentStreamEvent.ReasoningMessageContent("r1", "先看一下"));
+        tracker.Process(new AgentStreamEvent.ReasoningMessageEnd("r1"));
+
+        var thinking = tracker.Snapshot();
+        Assert.NotNull(thinking);
+        Assert.True(tracker.HasSegmentContent);
+        Assert.Contains(thinking!.Items, item => item.Kind == TurnActivityKind.Thought && item.Body == "先看一下");
+
+        // Sealing the segment starts a fresh fold; the cleared accumulator has no content.
+        tracker.BeginSegment();
+        Assert.False(tracker.HasSegmentContent);
+        Assert.Null(tracker.Snapshot());
     }
 
     [Fact]

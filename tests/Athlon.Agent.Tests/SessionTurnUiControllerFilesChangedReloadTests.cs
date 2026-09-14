@@ -297,8 +297,8 @@ public sealed class SessionTurnUiControllerFilesChangedReloadTests
         var file = Assert.Single(card.Files);
         Assert.Equal("c.ts", file.RelativePath);
 
-        // Sealing the segment drops the staged card so the next turn republishes its own.
-        tracker.ClearSegmentEditCards();
+        // Starting the next turn clears the staged card so it republishes its own edits.
+        tracker.BeginTurn();
         Assert.Empty(tracker.PeekSegmentEditCards());
     }
 

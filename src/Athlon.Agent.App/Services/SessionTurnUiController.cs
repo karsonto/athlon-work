@@ -75,12 +75,12 @@ public sealed partial class SessionTurnUiController
     /// </summary>
     private PlanRun? _visiblePlanRun;
     private Func<bool> _showToolCalls = () => true;
-    private readonly HashSet<string> _foldedAssistantMessageIds = new(StringComparer.Ordinal);
     /// <summary>
-    /// After the turn has used activity tools, intermediate assistant text streams into the
-    /// activity fold instead of flashing as a standalone bubble.
+    /// Ordinal of the activity fold being accumulated inside the current turn. The fold's entry id
+    /// is <c>activity:&lt;anchor&gt;:&lt;index&gt;</c>, and the index increments each time the fold is
+    /// sealed by an assistant bubble so the live publish and the replay agree on the same key.
     /// </summary>
-    private bool _turnSawActivityTool;
+    private int _activityBlockIndex;
 
     private Action _requestScroll = NoOpScroll;
     private Action _requestScrollImmediate = NoOpScroll;
@@ -631,8 +631,7 @@ public sealed partial class SessionTurnUiController
         {
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
-            _turnSawActivityTool = false;
-            _foldedAssistantMessageIds.Clear();
+            _activityBlockIndex = 0;
             var message = ChatMessage.Create(MessageRole.User, input, imageAttachments: imageAttachments);
             AppendActivitySourceMessage(message);
             Messages.Add(new ChatMessageViewModel(message));
@@ -651,8 +650,7 @@ public sealed partial class SessionTurnUiController
         {
             _modifiedFilesTracker.BeginTurn();
             _turnActivityTracker.BeginTurn();
-            _turnSawActivityTool = false;
-            _foldedAssistantMessageIds.Clear();
+            _activityBlockIndex = 0;
             _tokenBuffer.ClearBuffers();
             _tokenBuffer.StopFlushTimer();
             _streaming.Reset();
@@ -770,9 +768,6 @@ public sealed partial class SessionTurnUiController
                 {
                     message.MarkStreamingToolCancelled();
                 }
-
-                // Stopped mid-turn: fold remaining progress text into the activity (no orphan bubbles).
-                FoldTurnAssistantNarrations(includeAll: true);
             }
             else if (!string.IsNullOrWhiteSpace(errorMessage))
             {
@@ -781,15 +776,13 @@ public sealed partial class SessionTurnUiController
                 {
                     message.MarkStreamingToolCancelled();
                 }
-
-                FoldTurnAssistantNarrations(includeAll: true);
             }
 
+            // Any assistant text that streamed since the last tool boundary is already a bubble; the
+            // remaining fold (reasoning / trailing tools) is sealed here. No text is folded.
             _streaming.Reset();
             ReconcilePendingToolsFromSession(session);
             MergeActivitySourceFromSession(session);
-            // Drop provisional fold text so the final assistant reply is only a bubble.
-            _turnActivityTracker.ClearLiveNarration();
             _bulkChatViewSyncDepth++;
             try
             {
@@ -799,17 +792,16 @@ public sealed partial class SessionTurnUiController
             {
                 _bulkChatViewSyncDepth--;
                 FinalizeStreamingDisplay();
-                // Seal the now-finished segment: this drops the provisional live "running" text and
+                // Seal the now-finished segment: this drops the provisional live reasoning and
                 // reduces the fold to the transcript's own record.
-                SealCurrentSegment();
+                SealActivitySegment();
                 // Re-render from the transcript so the resting timeline is byte-for-byte what a
                 // session switch or restart would produce. The incremental live events only need to
                 // look right while the turn is in flight; this replay is what settles the timeline
                 // into the canonical projection.
                 SyncChatView(immediate: true, authoritative: true);
-                // Overlay the still-open agent narration (tool activity between the last segment
-                // seal and turn end) onto the replayed fold, keyed by the same turn anchor. Without
-                // this, speaking before calling a tool would drop that narration from the fold.
+                // Overlay the still-open fold (activity between the last seal and turn end) onto the
+                // replayed fold, keyed by the same turn anchor and block index.
                 RestoreLiveTurnCardsAfterReload();
 
                 if (IsDisplayed)
@@ -821,10 +813,11 @@ public sealed partial class SessionTurnUiController
     }
 
     /// <summary>
-    /// Finalizes the live activity / files bubbles for the whole turn (once),
-    /// then starts a fresh accumulator for the next turn.
+    /// Seals the activity fold currently being accumulated and starts a fresh one. Called when an
+    /// assistant bubble closes a segment, at a compaction boundary, and at turn end. Edits are keyed
+    /// by tool call id, so they are untouched here and keep their own slots.
     /// </summary>
-    private void SealCurrentSegment()
+    private void SealActivitySegment()
     {
         if (!CanTouchChatView)
         {
@@ -838,13 +831,15 @@ public sealed partial class SessionTurnUiController
         var summary = _turnActivityTracker.Snapshot();
         if (summary is { HasContent: true })
         {
-            _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: false, turnAnchorId: _currentTurnAnchorId);
+            _ = ChatView!.DispatchTurnActivityAsync(
+                summary,
+                upsert: false,
+                turnAnchorId: _currentTurnAnchorId,
+                activityBlockIndex: _activityBlockIndex);
+            // The block index tracks emitted activity folds, matching the replay's numbering, so it
+            // only advances when a fold actually exists.
+            _activityBlockIndex++;
         }
-
-        // File edits render as their own cards keyed by tool call id, so there is no per-turn
-        // aggregate card to seal here. Drop the segment's cards so the next segment republishes
-        // under its own tool call ids rather than replaying this segment's.
-        _modifiedFilesTracker.ClearSegmentEditCards();
 
         _turnActivityTracker.BeginSegment();
     }
@@ -862,7 +857,11 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
-        _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: upsert, turnAnchorId: _currentTurnAnchorId);
+        _ = ChatView!.DispatchTurnActivityAsync(
+            summary,
+            upsert: upsert,
+            turnAnchorId: _currentTurnAnchorId,
+            activityBlockIndex: _activityBlockIndex);
     }
 
     /// <summary>
@@ -885,15 +884,10 @@ public sealed partial class SessionTurnUiController
 
     private void ProcessUiStreamEvents(AgentStreamEvent streamEvent, bool notifyTracker)
     {
-        // Fold provisional assistant text before the next tool is appended to the activity list,
-        // so narrations keep timeline order (text → tool → text → tool).
-        if (streamEvent is AgentStreamEvent.ToolCallStart(_, var startingToolName, _)
-            && TurnActivityClassifier.IsActivityTool(startingToolName))
-        {
-            _turnActivityTracker.ClearLiveNarration();
-            FoldTurnAssistantNarrations(includeAll: true);
-            _turnSawActivityTool = true;
-        }
+        // An assistant bubble or a tool card closes the fold that preceded it. Sealing here keeps
+        // the fold and the content in transcript order: an activity tool that arrives after a reply
+        // must start a new fold rather than merging back into the one before the reply.
+        SealOpenActivityFoldBeforeContent(streamEvent);
 
         if (notifyTracker)
         {
@@ -907,6 +901,16 @@ public sealed partial class SessionTurnUiController
             DispatchToChatView(uiEvent);
             _streaming.Process(uiEvent, Messages);
             NotifyChatViewAfterStreamEvent(uiEvent);
+        }
+
+        if (streamEvent is AgentStreamEvent.ToolCallResult(var resultCallId, _, _)
+            && !string.IsNullOrWhiteSpace(resultCallId)
+            && _modifiedFilesTracker.PeekSegmentEditCards().Any(card =>
+                string.Equals(card.ToolCallId, resultCallId, StringComparison.Ordinal)))
+        {
+            // A succeeded file edit becomes its own card, which the projector places after the fold.
+            // Seal the fold before publishing the card so the live card lands after it too.
+            SealOpenActivityFoldBeforeContent(opensContent: true);
         }
 
         if (streamEvent is AgentStreamEvent.ToolCallStart
@@ -925,65 +929,28 @@ public sealed partial class SessionTurnUiController
     }
 
     /// <summary>
-    /// Moves assistant text bubbles from the current turn into the turn-activity fold.
-    /// When <paramref name="includeAll"/> is false, keeps the last assistant bubble as the final reply.
+    /// Seals the open fold when a content-producing event is about to be rendered above it. Activity
+    /// tools and reasoning keep accumulating; text and non-activity tool cards close the fold so they
+    /// land after it in the shared seq stream.
     /// </summary>
-    private void FoldTurnAssistantNarrations(bool includeAll)
+    private void SealOpenActivityFoldBeforeContent(
+        AgentStreamEvent? streamEvent = null,
+        bool opensContent = false)
     {
-        var lastUserIndex = -1;
-        for (var i = Messages.Count - 1; i >= 0; i--)
+        opensContent = opensContent || streamEvent switch
         {
-            if (Messages[i].IsUser)
-            {
-                lastUserIndex = i;
-                break;
-            }
-        }
+            AgentStreamEvent.TextMessageStart => true,
+            // A non-activity tool renders a card only when tool cards are shown; otherwise the
+            // projector drops it, so the live fold must not split either.
+            AgentStreamEvent.ToolCallStart(_, var toolName, _) =>
+                _showToolCalls() && !TurnActivityClassifier.IsActivityTool(toolName),
+            _ => false
+        };
 
-        var assistants = new List<ChatMessageViewModel>();
-        for (var i = lastUserIndex + 1; i < Messages.Count; i++)
+        if (opensContent && _turnActivityTracker.HasSegmentContent)
         {
-            var message = Messages[i];
-            if (message.IsUser
-                || message.IsTool
-                || message.IsCompaction
-                || message.IsHiddenPlaceholder
-                || string.IsNullOrWhiteSpace(message.Content)
-                || _foldedAssistantMessageIds.Contains(message.MessageId))
-            {
-                continue;
-            }
-
-            assistants.Add(message);
+            SealActivitySegment();
         }
-
-        if (assistants.Count == 0)
-        {
-            return;
-        }
-
-        var foldCount = includeAll ? assistants.Count : Math.Max(0, assistants.Count - 1);
-        if (foldCount == 0)
-        {
-            return;
-        }
-
-        var removedIds = new List<string>(foldCount);
-        for (var i = 0; i < foldCount; i++)
-        {
-            var message = assistants[i];
-            _turnActivityTracker.ClearLiveNarration();
-            _turnActivityTracker.AddNarration(message.Content);
-            _foldedAssistantMessageIds.Add(message.MessageId);
-            removedIds.Add(message.MessageId);
-        }
-
-        if (CanTouchChatView && removedIds.Count > 0)
-        {
-            _ = ChatView!.RemoveAssistantBubblesAsync(removedIds);
-        }
-
-        PublishTurnActivity(upsert: true);
     }
 
     public Task HydrateFromSessionAsync(AgentSession session) =>
@@ -1314,7 +1281,10 @@ public sealed partial class SessionTurnUiController
                         // must not seal, or replay+live upsert stacks two activity cards.
                         if (ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(single))
                         {
-                            SealCurrentSegment();
+                            SealActivitySegment();
+                            // A compaction checkpoint owns the turn boundary from here on.
+                            _currentTurnAnchorId = single.MessageId;
+                            _activityBlockIndex = 0;
                             if (CanTouchChatView)
                             {
                                 _ = ChatView!.ApplyToolResultMarkdownAsync(single);
@@ -1376,8 +1346,7 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
-        if (!string.IsNullOrWhiteSpace(message.Content)
-            && !_foldedAssistantMessageIds.Contains(message.MessageId))
+        if (!string.IsNullOrWhiteSpace(message.Content))
         {
             // Duration is attached only when sealing the final turn reply.
             _ = ChatView!.ApplyAssistantMarkdownAsync(message);
@@ -1428,8 +1397,7 @@ public sealed partial class SessionTurnUiController
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(message.Content)
-                && !_foldedAssistantMessageIds.Contains(message.MessageId))
+            if (!string.IsNullOrWhiteSpace(message.Content))
             {
                 if (lastAssistant is not null)
                 {
@@ -1668,41 +1636,54 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
-        var replayed = TurnActivitySummaryBuilder.Build(CurrentTurnActivitySourceViewModels());
+        // The still-open live fold is block N of the current turn. Overlay its live reasoning onto
+        // whatever the replay projected for block N, so the upsert rewrites that same entry instead
+        // of stacking a card that merges every fold of the turn.
+        var replayed = TurnActivitySummaryBuilder.Build(CurrentReplayedActivityBlock(_activityBlockIndex));
         var summary = TurnActivitySummaryBuilder.OverlayLiveThought(replayed, live);
         if (summary.HasContent)
         {
-            _ = ChatView!.DispatchTurnActivityAsync(summary, upsert: true, turnAnchorId: _currentTurnAnchorId);
+            _ = ChatView!.DispatchTurnActivityAsync(
+                summary,
+                upsert: true,
+                turnAnchorId: _currentTurnAnchorId,
+                activityBlockIndex: _activityBlockIndex);
         }
     }
 
-    private List<ChatMessageViewModel> CurrentTurnActivitySourceViewModels()
+    /// <summary>
+    /// Activity messages the replay projects for the current turn's block at <paramref name="blockIndex"/>.
+    /// Empty when that fold does not exist in the transcript yet (it is being streamed live).
+    /// </summary>
+    private IReadOnlyList<ChatMessageViewModel> CurrentReplayedActivityBlock(int blockIndex)
     {
-        var source = _activitySourceMessages;
-        var start = 0;
-        for (var i = source.Count - 1; i >= 0; i--)
+        if (string.IsNullOrWhiteSpace(_currentTurnAnchorId))
         {
-            if (source[i].Role == MessageRole.User)
-            {
-                start = i + 1;
-                break;
-            }
-
-            if (source[i].Role == MessageRole.Compaction
-                && ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(source[i]))
-            {
-                start = i + 1;
-                break;
-            }
+            return Array.Empty<ChatMessageViewModel>();
         }
 
-        var result = new List<ChatMessageViewModel>(Math.Max(0, source.Count - start));
-        for (var i = start; i < source.Count; i++)
+        var projected = ProjectActivitySourceViewModels(BuildReplayActivitySource());
+        var segments = ChatTimelineProjector.BuildSegments(projected, _showToolCalls());
+
+        // Anchor on the current turn's own segment. Scanning by anchor (rather than "last segment
+        // with activity") keeps a turn whose first fold has not been persisted yet from borrowing a
+        // previous turn's fold.
+        for (var i = segments.Count - 1; i >= 0; i--)
         {
-            result.Add(new ChatMessageViewModel(source[i]));
+            if (!string.Equals(segments[i].TurnAnchorId, _currentTurnAnchorId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var activityBlocks = segments[i].Blocks
+                .OfType<ChatTimelineProjector.ActivityBlock>()
+                .ToList();
+            return blockIndex >= 0 && blockIndex < activityBlocks.Count
+                ? activityBlocks[blockIndex].Messages
+                : Array.Empty<ChatMessageViewModel>();
         }
 
-        return result;
+        return Array.Empty<ChatMessageViewModel>();
     }
 
     /// <summary>
@@ -1859,22 +1840,12 @@ public sealed partial class SessionTurnUiController
         {
             var assistant = Messages.LastOrDefault(message =>
                 string.Equals(message.MessageId, endMessageId, StringComparison.Ordinal));
-            if (assistant is not null
-                && !string.IsNullOrWhiteSpace(assistant.Content)
-                && !_foldedAssistantMessageIds.Contains(assistant.MessageId))
+            if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
             {
-                if (_turnSawActivityTool)
-                {
-                    _turnActivityTracker.SetLiveNarration(assistant.Content);
-                    PublishTurnActivity(upsert: true);
-                }
-                else
-                {
-                    _ = ChatView.ApplyAssistantMarkdownAsync(
-                        assistant,
-                        streaming: false,
-                        ResolveTurnResponseDurationMs(assistant));
-                }
+                // The reply is its own bubble; seal the fold that preceded it so the next activity
+                // starts a fresh card after this bubble.
+                SealActivitySegment();
+                _ = ChatView.ApplyAssistantMarkdownAsync(assistant, streaming: false);
             }
 
             return;
@@ -1913,20 +1884,9 @@ public sealed partial class SessionTurnUiController
         {
             // Live-render Markdown from the accumulated assistant content (C# Markdig → HTML).
             var assistant = FindAssistantMessage(textMessageId);
-            if (assistant is not null
-                && !string.IsNullOrWhiteSpace(assistant.Content)
-                && !_foldedAssistantMessageIds.Contains(assistant.MessageId))
+            if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
             {
-                if (_turnSawActivityTool)
-                {
-                    // Keep intermediate replies inside the fold — no outside bubble flash.
-                    _turnActivityTracker.SetLiveNarration(assistant.Content);
-                    PublishTurnActivity(upsert: true);
-                }
-                else
-                {
-                    _ = ChatView.ApplyAssistantMarkdownAsync(assistant, streaming: true);
-                }
+                _ = ChatView.ApplyAssistantMarkdownAsync(assistant, streaming: true);
             }
         }
     }
@@ -1959,15 +1919,6 @@ public sealed partial class SessionTurnUiController
 
     private bool ShouldDispatchToChatView(AgentStreamEvent streamEvent)
     {
-        if (_turnSawActivityTool
-            && streamEvent is AgentStreamEvent.TextMessageStart
-                or AgentStreamEvent.TextMessageContent
-                or AgentStreamEvent.TextMessageEnd)
-        {
-            // Intermediate text is rendered inside TURN_ACTIVITY; avoid creating a bubble first.
-            return false;
-        }
-
         return streamEvent is not AgentStreamEvent.UsageRecorded
             and not AgentStreamEvent.ContextHygieneApplied
             and not AgentStreamEvent.ContextBudgetUpdated

@@ -16,8 +16,9 @@ namespace Athlon.Agent.App.Services;
 /// Layout inside a turn band:
 /// <code>
 ///   +0          user message
-///   +1_000      turn-activity fold (anchored before the turn's content bubbles)
-///   +2_000..    content bubbles: tool cards and assistant replies, in transcript order
+///   +2_000..    blocks: activity folds, tool cards, per-edit cards and assistant replies,
+///               numbered together in transcript order so a fold and the bubble that follows it
+///               occupy consecutive slots
 ///   +800_000    files-changed card (summarizes the turn, so it follows the replies)
 ///   +900_000    compaction checkpoint
 ///   +950_000    plan-ready card (published by publish_plan; ends the turn)
@@ -29,29 +30,26 @@ internal static class TimelineOrderPolicy
     private const long TurnBand = 1_000_000L;
 
     private const long UserOffset = 0L;
-    private const long ActivityOffset = 1_000L;
-    private const long ContentOffset = 2_000L;
+    private const long BlockOffset = 2_000L;
     private const long FilesOffset = 800_000L;
     private const long CompactionOffset = 900_000L;
     private const long PlanOffset = 950_000L;
 
     /// <summary>
-    /// Upper bound for <paramref name="ordinal"/>. Content ordinals beyond this are clamped so a
+    /// Upper bound for <paramref name="ordinal"/>. Block ordinals beyond this are clamped so a
     /// pathological turn can never collide with the files/compaction slots.
     /// </summary>
-    private const int MaxContentOrdinal = 700_000;
+    private const int MaxBlockOrdinal = 700_000;
 
     public static long User(long turnIndex) => Base(turnIndex) + UserOffset;
 
     /// <summary>
-    /// Turn-activity fold. Emitted at a fixed slot before the turn's content so a live fold that
-    /// is still growing occupies the same place as the fully rebuilt one.
+    /// One timeline entry inside the turn's ordered block stream: an activity fold, tool card,
+    /// per-edit card or assistant reply. Folds and bubbles share this single numbering so they
+    /// interleave in exactly the order the turn produced them.
     /// </summary>
-    public static long Activity(long turnIndex) => Base(turnIndex) + ActivityOffset;
-
-    /// <summary>Tool card or assistant reply, in transcript order within the turn.</summary>
-    public static long Content(long turnIndex, int ordinal) =>
-        Base(turnIndex) + ContentOffset + Math.Clamp(ordinal, 0, MaxContentOrdinal);
+    public static long Block(long turnIndex, int ordinal) =>
+        Base(turnIndex) + BlockOffset + Math.Clamp(ordinal, 0, MaxBlockOrdinal);
 
     public static long Files(long turnIndex) => Base(turnIndex) + FilesOffset;
 

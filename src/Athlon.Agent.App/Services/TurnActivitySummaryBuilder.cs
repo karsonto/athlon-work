@@ -12,9 +12,7 @@ public enum TurnActivityKind
     Command,
     Thought,
     /// <summary>Generic folded tool (memory_search, mcp_*, etc.).</summary>
-    Tool,
-    /// <summary>Intermediate model text folded into the turn activity.</summary>
-    Narration
+    Tool
 }
 
 public sealed record TurnActivityDiffLine(string Kind, string Text, int? Count = null);
@@ -150,21 +148,11 @@ public static class TurnActivitySummaryBuilder
             {
                 items.Add(CreateThoughtItem(message.ReasoningContent));
                 thoughtCount++;
-                if (!string.IsNullOrWhiteSpace(message.Content))
-                {
-                    items.Add(CreateNarrationItem(message.Content));
-                }
-
                 continue;
             }
 
             if (!message.IsTool)
             {
-                if (!string.IsNullOrWhiteSpace(message.Content))
-                {
-                    items.Add(CreateNarrationItem(message.Content));
-                }
-
                 continue;
             }
 
@@ -392,17 +380,6 @@ public static class TurnActivitySummaryBuilder
         return new TurnActivityItem(
             TurnActivityKind.Thought,
             "Thought",
-            preview,
-            Body: trimmed);
-    }
-
-    private static TurnActivityItem CreateNarrationItem(string content)
-    {
-        var trimmed = content.Trim();
-        var preview = Truncate(FirstLine(trimmed), 72);
-        return new TurnActivityItem(
-            TurnActivityKind.Narration,
-            "Said",
             preview,
             Body: trimmed);
     }

@@ -81,8 +81,60 @@ public sealed class ChatTimelineProjectorTests
             [user, tool1, assistant, tool2],
             showToolCalls: true);
 
-        var content = Assert.Single(segments, segment => segment.ContentMessages.Count > 0).ContentMessages;
+        var content = Assert.Single(segments, segment => segment.Blocks.Count > 0)
+            .Blocks
+            .OfType<ChatTimelineProjector.ContentBlock>()
+            .Select(block => block.Message);
         Assert.Equal(["cu-1", "next", "cu-2"], content.Select(ResolveKey));
+    }
+
+    [Fact]
+    public void BuildSegments_interleaves_activity_folds_between_assistant_bubbles()
+    {
+        // A thought, a tool, an assistant reply, another thought: the folds must sit between the
+        // replies rather than being hoisted to a single per-turn card.
+        var user = new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "go"));
+        var grep = CreateToolMessage("grep_files", "call-1", "Tool `grep_files`\nSummary: 3 matches");
+        var first = new ChatMessageViewModel(ChatMessage.Create(MessageRole.Assistant, "first"));
+        var read = CreateToolMessage("file_read", "call-2", "Tool `file_read`\nSummary: ok");
+        var second = new ChatMessageViewModel(ChatMessage.Create(MessageRole.Assistant, "second"));
+
+        var turn = Assert.Single(
+            ChatTimelineProjector.BuildSegments(
+                [user, grep, first, read, second],
+                showToolCalls: false),
+            segment => segment.Blocks.Count > 0);
+
+        var kinds = turn.Blocks
+            .Select(block => block switch
+            {
+                ChatTimelineProjector.ActivityBlock => "fold",
+                ChatTimelineProjector.ContentBlock { Message: var message } => ResolveKey(message),
+                _ => "?"
+            });
+        Assert.Equal(["fold", "first", "fold", "second"], kinds);
+    }
+
+    [Fact]
+    public void BuildSegments_keeps_a_reasoning_only_fold()
+    {
+        // A fold with reasoning but no tools still occupies a block; otherwise the thought would be
+        // dropped from the timeline entirely.
+        var user = new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "go"));
+        var thinking = new ChatMessageViewModel(ChatMessage.Create(
+            MessageRole.Assistant,
+            string.Empty,
+            reasoningContent: "weighing options"));
+        var reply = new ChatMessageViewModel(ChatMessage.Create(MessageRole.Assistant, "done"));
+
+        var turn = Assert.Single(
+            ChatTimelineProjector.BuildSegments([user, thinking, reply], showToolCalls: true),
+            segment => segment.Blocks.Count > 0);
+
+        var fold = Assert.IsType<ChatTimelineProjector.ActivityBlock>(turn.Blocks[0]);
+        Assert.Contains(fold.Messages, message => message.ReasoningContent == "weighing options");
+        var content = Assert.IsType<ChatTimelineProjector.ContentBlock>(turn.Blocks[1]);
+        Assert.Equal("done", content.Message.Content);
     }
 
     [Fact]
@@ -129,7 +181,7 @@ public sealed class ChatTimelineProjectorTests
 
         var activity = Assert.Single(events, json => json.Contains("TURN_ACTIVITY", StringComparison.Ordinal));
         using var doc = JsonDocument.Parse(activity);
-        Assert.Equal("activity:" + user.Id, doc.RootElement.GetProperty("entryId").GetString());
+        Assert.Equal("activity:" + user.Id + ":0", doc.RootElement.GetProperty("entryId").GetString());
     }
 
     private static string ResolveKey(ChatMessageViewModel message) =>

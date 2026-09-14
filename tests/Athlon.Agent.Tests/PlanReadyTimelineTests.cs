@@ -25,16 +25,18 @@ public sealed class PlanReadyTimelineTests
 
         var publishing = Assert.Single(segments, segment => segment.HasPlanPublish);
         Assert.Equal(UserMessageId, publishing.TurnAnchorId);
-        // publish_plan must not fold: doing so would make the turn "have activity" and relegate the
-        // final assistant reply out of the content bubbles.
+        // publish_plan must not appear as activity or as a content bubble: it renders as the plan
+        // card the caller places on the turn's plan slot.
         Assert.DoesNotContain(
-            publishing.ActivitySegment,
+            publishing.Blocks.OfType<ChatTimelineProjector.ActivityBlock>().SelectMany(block => block.Messages),
             message => PlanTimelinePolicy.IsPublishPlanTool(message.ToolName));
         Assert.DoesNotContain(
-            publishing.ContentMessages,
+            publishing.Blocks.OfType<ChatTimelineProjector.ContentBlock>().Select(block => block.Message),
             message => PlanTimelinePolicy.IsPublishPlanTool(message.ToolName));
         // The final reply survives as a content bubble.
-        Assert.Contains(publishing.ContentMessages, message => message.Content == "Plan is ready.");
+        Assert.Contains(
+            publishing.Blocks.OfType<ChatTimelineProjector.ContentBlock>().Select(block => block.Message),
+            message => message.Content == "Plan is ready.");
     }
 
     [Fact]
@@ -44,7 +46,9 @@ public sealed class PlanReadyTimelineTests
 
         var projected = ChatTimelineProjector.BuildSegments(messages, showToolCalls: true);
         var publishing = Assert.Single(projected, segment => segment.HasPlanPublish);
-        Assert.Contains(publishing.ContentMessages, message => message.Content == "Plan is ready.");
+        Assert.Contains(
+            publishing.Blocks.OfType<ChatTimelineProjector.ContentBlock>().Select(block => block.Message),
+            message => message.Content == "Plan is ready.");
     }
 
     [Fact]
@@ -65,9 +69,9 @@ public sealed class PlanReadyTimelineTests
         Assert.Equal(run.Id, root.GetProperty("runId").GetString());
         // The projector numbers a user message and its response as consecutive bands, so the first
         // turn's publish response is band 1. The card lands on that band's plan slot, which is after
-        // the reply (Content(1, 0)) and before the next user message (User(2)).
+        // the reply (Block(1, 0)) and before the next user message (User(2)).
         Assert.Equal(TimelineOrderPolicy.Plan(1), root.GetProperty("seq").GetInt64());
-        Assert.True(TimelineOrderPolicy.Plan(1) > TimelineOrderPolicy.Content(1, 0));
+        Assert.True(TimelineOrderPolicy.Plan(1) > TimelineOrderPolicy.Block(1, 0));
         Assert.True(TimelineOrderPolicy.Plan(1) < TimelineOrderPolicy.User(2));
     }
 
@@ -84,7 +88,7 @@ public sealed class PlanReadyTimelineTests
     [Fact]
     public void Plan_card_slot_sorts_after_the_turn_but_before_the_next_turn()
     {
-        Assert.True(TimelineOrderPolicy.Plan(1) > TimelineOrderPolicy.Content(1, 0));
+        Assert.True(TimelineOrderPolicy.Plan(1) > TimelineOrderPolicy.Block(1, 0));
         Assert.True(TimelineOrderPolicy.Plan(1) > TimelineOrderPolicy.Files(1));
         Assert.True(TimelineOrderPolicy.Plan(1) < TimelineOrderPolicy.User(2));
     }

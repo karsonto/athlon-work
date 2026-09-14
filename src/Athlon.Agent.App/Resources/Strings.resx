@@ -193,9 +193,6 @@
   <data name="Chat_ActivityVerbThought" xml:space="preserve">
     <value>思考</value>
   </data>
-  <data name="Chat_ActivityVerbNarration" xml:space="preserve">
-    <value>说过</value>
-  </data>
   <data name="Chat_CommandsOne" xml:space="preserve">
     <value>运行了 1 条命令</value>
   </data>

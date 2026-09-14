@@ -193,9 +193,6 @@
   <data name="Chat_ActivityVerbThought" xml:space="preserve">
     <value>Thought</value>
   </data>
-  <data name="Chat_ActivityVerbNarration" xml:space="preserve">
-    <value>Said</value>
-  </data>
   <data name="Chat_CommandsOne" xml:space="preserve">
     <value>ran 1 command</value>
   </data>

@@ -326,25 +326,19 @@ public partial class WebChatView : UserControl
     public Task DispatchTurnActivityAsync(
         TurnActivitySummary summary,
         bool upsert = true,
-        string? turnAnchorId = null)
+        string? turnAnchorId = null,
+        int activityBlockIndex = 0)
     {
         if (!summary.HasContent)
         {
             return Task.CompletedTask;
         }
 
-        PostTimelineEvent(ChatEventSerializer.SerializeTurnActivity(summary, upsert, turnAnchorId: turnAnchorId));
-        return Task.CompletedTask;
-    }
-
-    public Task RemoveAssistantBubblesAsync(IReadOnlyList<string> messageIds)
-    {
-        if (messageIds.Count == 0)
-        {
-            return Task.CompletedTask;
-        }
-
-        PostTimelineEvent(ChatEventSerializer.SerializeRemoveAssistantBubbles(messageIds));
+        PostTimelineEvent(ChatEventSerializer.SerializeTurnActivity(
+            summary,
+            upsert,
+            turnAnchorId: turnAnchorId,
+            activityBlockIndex: activityBlockIndex));
         return Task.CompletedTask;
     }
 

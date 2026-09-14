@@ -13,7 +13,6 @@ public sealed class SessionTurnActivityTracker
     private readonly List<ChatMessageViewModel> _turnMessages = new();
     private readonly StringBuilder _activeThought = new();
     private bool _hasActiveThought;
-    private string? _liveNarration;
     private DateTime _segmentStartedUtc = DateTime.UtcNow;
 
     public void BeginTurn()
@@ -29,7 +28,6 @@ public sealed class SessionTurnActivityTracker
         _turnMessages.Clear();
         _activeThought.Clear();
         _hasActiveThought = false;
-        _liveNarration = null;
         _segmentStartedUtc = DateTime.UtcNow;
     }
 
@@ -37,35 +35,9 @@ public sealed class SessionTurnActivityTracker
 
     /// <summary>True when the live activity fold still has unsealed content.</summary>
     public bool HasSegmentContent =>
-        _turnMessages.Count > 0 || _hasActiveThought || !string.IsNullOrWhiteSpace(_liveNarration);
+        _turnMessages.Count > 0 || _hasActiveThought;
 
     public void FinishPendingThought() => FinishActiveThought();
-
-    /// <summary>
-    /// Provisional intermediate assistant text shown inside the activity fold while streaming,
-    /// so it never flashes as a standalone bubble outside the fold.
-    /// </summary>
-    public void SetLiveNarration(string text)
-    {
-        var trimmed = text.TrimEnd();
-        _liveNarration = trimmed.Length == 0 ? null : trimmed;
-    }
-
-    public void ClearLiveNarration() => _liveNarration = null;
-
-    public void AddNarration(string text)
-    {
-        var trimmed = text.Trim();
-        if (trimmed.Length == 0)
-        {
-            return;
-        }
-
-        FinishActiveThought();
-        _liveNarration = null;
-        _turnMessages.Add(new ChatMessageViewModel(
-            ChatMessage.Create(MessageRole.Assistant, trimmed)));
-    }
 
     public string? ResolveToolName(string toolCallId) =>
         _toolCallIdToName.TryGetValue(toolCallId, out var name) ? name : null;
@@ -115,8 +87,7 @@ public sealed class SessionTurnActivityTracker
     public TurnActivitySummary? Snapshot()
     {
         if (_turnMessages.Count == 0
-            && (!_hasActiveThought || _activeThought.Length == 0)
-            && string.IsNullOrWhiteSpace(_liveNarration))
+            && (!_hasActiveThought || _activeThought.Length == 0))
         {
             return null;
         }
@@ -131,13 +102,6 @@ public sealed class SessionTurnActivityTracker
                     string.Empty,
                     reasoningContent: _activeThought.ToString()))
             };
-        }
-
-        if (!string.IsNullOrWhiteSpace(_liveNarration))
-        {
-            provisional ??= new List<ChatMessageViewModel>(_turnMessages);
-            provisional.Add(new ChatMessageViewModel(
-                ChatMessage.Create(MessageRole.Assistant, _liveNarration)));
         }
 
         var built = TurnActivitySummaryBuilder.Build(provisional ?? _turnMessages);
