@@ -26,7 +26,9 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
     private Action<PlanRun>? _onPlanTimeline;
     private Action<string?>? _setComposerHint;
     private Action? _onPlanTimelineCleared;
+    private Action? _setComposerFocus;
     private string? _lastTimelineKey;
+    private string? _lastRevisionNoticeKey;
 
     public PlanActionBarViewModel(
         SessionTurnCoordinator sessionTurns,
@@ -53,7 +55,8 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         Func<Task> onBuildApprovedAsync,
         Action<PlanRun>? onPlanTimeline = null,
         Action<string?>? setComposerHint = null,
-        Action? onPlanTimelineCleared = null)
+        Action? onPlanTimelineCleared = null,
+        Action? setComposerFocus = null)
     {
         _getDisplayedSessionId = getDisplayedSessionId;
         _getSession = getSession;
@@ -63,6 +66,7 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         _onPlanTimeline = onPlanTimeline;
         _setComposerHint = setComposerHint;
         _onPlanTimelineCleared = onPlanTimelineCleared;
+        _setComposerFocus = setComposerFocus;
         RequestRefreshFromActiveRun();
     }
 
@@ -85,6 +89,55 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
     {
         RequestRefreshFromActiveRun();
         DispatchPlanTimeline(e.Run);
+        SyncReviseState(e.Run);
+    }
+
+    /// <summary>
+    /// Keeps the revision affordance state honest across turn outcomes, and tells the user when a
+    /// revision turn ended without producing a new plan. Previously the old plan was kept silently,
+    /// so the user believed their edit had been applied.
+    /// </summary>
+    private void SyncReviseState(PlanRun? run)
+    {
+        if (run is null)
+        {
+            IsRevising = false;
+            return;
+        }
+
+        if (run.RevisionProducedNewPlan == true)
+        {
+            // A new plan is on the card; the revise round is over.
+            IsRevising = false;
+            return;
+        }
+
+        if (run.Phase == PlanPhase.Done)
+        {
+            // Build consumed the plan, so any pending revise intent is stale.
+            IsRevising = false;
+            return;
+        }
+
+        if (run.Phase != PlanPhase.AwaitConfirm)
+        {
+            return;
+        }
+
+        if (run.RevisionProducedNewPlan != false)
+        {
+            return;
+        }
+
+        IsRevising = false;
+        var key = run.Id + ":" + run.UpdatedAt.ToUnixTimeMilliseconds();
+        if (string.Equals(key, _lastRevisionNoticeKey, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastRevisionNoticeKey = key;
+        _showToast?.Invoke(_loc["Plan_ReviseNoNewPlan"], ShellToastKind.Info);
     }
 
     private void RequestRefreshFromActiveRun()
@@ -165,6 +218,67 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
         await ClearActiveRunAsync().ConfigureAwait(true);
     }
 
+    /// <summary>
+    /// Drops the timeline plan card and the composer hint when a run was already cleared
+    /// elsewhere (for example by <see cref="ISessionPlanArtifactsClearer"/>). Only the displayed
+    /// session's UI state is touched; other sessions keep their own cards.
+    /// </summary>
+    public void NotifyRunCleared(string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)
+            || !string.Equals(sessionId, _getDisplayedSessionId?.Invoke(), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastTimelineKey = null;
+        _setComposerHint?.Invoke(null);
+        _onPlanTimelineCleared?.Invoke();
+        RequestRefreshFromActiveRun();
+    }
+
+    /// <summary>
+    /// True once the user asked to revise the plan from the card. The composer is focused so the
+    /// user can type the change; sending it routes through the existing Revise continuation
+    /// (see <c>ChatPageViewModel</c>'s AwaitConfirm handling), which is why no turn starts here.
+    /// </summary>
+    public bool IsRevising { get; private set; }
+
+    /// <summary>
+    /// Enters revision mode for the displayed session's plan: focuses the composer and shows the
+    /// revision hint. Revising is a normal typed message, so this only sets up affordances.
+    /// </summary>
+    public bool EnterReviseMode()
+    {
+        var run = GetActiveRun();
+        if (run is not { Phase: PlanPhase.AwaitConfirm })
+        {
+            return false;
+        }
+
+        IsRevising = true;
+        _setComposerHint?.Invoke(_loc["Plan_ReviseComposerHint"]);
+        _setComposerFocus?.Invoke();
+        return true;
+    }
+
+    /// <summary>
+    /// Leaves revision mode without touching the run; the plan stays as it was. Returns false when
+    /// revise mode was not active, so callers can leave Escape and similar keys untouched.
+    /// </summary>
+    public bool CancelReviseMode()
+    {
+        if (!IsRevising)
+        {
+            return false;
+        }
+
+        IsRevising = false;
+        ApplyComposerHint(_getDisplayedSessionId is null ? null : GetActiveRun());
+        _showToast?.Invoke(_loc["Plan_ReviseCancelled"], ShellToastKind.Info);
+        return true;
+    }
+
     [RelayCommand(CanExecute = nameof(CanBuild))]
     private async Task BuildAsync()
     {
@@ -233,7 +347,10 @@ public sealed partial class PlanActionBarViewModel : ObservableObject
 
         if (run.Phase == PlanPhase.AwaitConfirm)
         {
-            _setComposerHint?.Invoke(_loc["Plan_ConfirmComposerHint"]);
+            // An explicit "Revise" click wins over the generic hint so the user gets the
+            // instruction that matches the affordance they just used.
+            _setComposerHint?.Invoke(
+                IsRevising ? _loc["Plan_ReviseComposerHint"] : _loc["Plan_ConfirmComposerHint"]);
             return;
         }
 

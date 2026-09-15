@@ -74,14 +74,15 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
         IsVisible = true;
         Pressure = pressure;
         var usable = budget.UsablePromptWindow;
-        var used = Math.Max(0, budget.DisplayedContentTokens);
-        var utilization = usable > 0 ? (double)used / usable : 0;
+        // Use the same metric as ContextPressureEvaluator (TotalUtilization) so the ring percent can
+        // never disagree with the pressure colour — e.g. showing 78% while already Critical.
+        var utilization = budget.TotalUtilization;
         var percent = (int)Math.Clamp(Math.Round(utilization * 100), 0, 999);
         PercentUsed = percent;
         PercentLabel = Strings.Format("Chat_ContextMeterPercent", percent);
         UsedCapacityLabel = Strings.Format(
             "Chat_ContextMeterCapacity",
-            TokenCountDisplay.FormatCompact(used),
+            TokenCountDisplay.FormatCompact(budget.EstimatedTotalPrompt),
             TokenCountDisplay.FormatCompact(usable));
         RingDashArray = FrozenDash(Math.Clamp(utilization, 0, 1) * RingCircumference);
         Categories = BuildCategories(budget.DisplayOccupancy, usable);

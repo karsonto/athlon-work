@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Athlon Agent — TrainingData 采集与 AI 能力进化</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f1f5f9;
+      --panel: #ffffff;
+      --panel2: #f8fafc;
+      --border: #e2e8f0;
+      --border-accent: #e0f2fe;
+      --text: #0f172a;
+      --muted: #64748b;
+      --blue: #0284c7;
+      --blue-dim: #e0f2fe;
+      --blue-text: #0369a1;
+      --green: #16a34a;
+      --green-dim: #dcfce7;
+      --green-text: #15803d;
+      --orange: #ea580c;
+      --orange-dim: #ffedd5;
+      --orange-text: #c2410c;
+      --purple: #9333ea;
+      --purple-dim: #f3e8ff;
+      --purple-text: #7e22ce;
+      --red: #dc2626;
+      --red-dim: #fee2e2;
+      --cyan: #0891b2;
+      --mono: "Cascadia Code", "JetBrains Mono", "SF Mono", Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    code {
+      font-family: var(--mono);
+      font-size: 0.92em;
+      padding: 1px 5px;
+      border-radius: 4px;
+      background: #f1f5f9;
+      color: var(--blue-text);
+    }
+    body {
+      font-family: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(147, 51, 234, 0.08), transparent 35%),
+        linear-gradient(to bottom, #faf8ff, var(--bg));
+      color: var(--text);
+      line-height: 1.65;
+    }
+    header {
+      padding: 32px 40px 24px;
+      border-bottom: 1px solid var(--border-accent);
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(147, 51, 234, 0.08);
+    }
+    header h1 { font-size: 26px; font-weight: 700; margin-bottom: 10px; }
+    header p { color: var(--muted); max-width: 960px; font-size: 14px; }
+    header .badge {
+      display: inline-block;
+      margin-top: 12px;
+      margin-right: 8px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      background: var(--purple-dim);
+      color: var(--purple-text);
+      font-size: 12px;
+      font-family: var(--mono);
+    }
+    main { padding: 28px 40px 60px; max-width: 1200px; }
+    h2 {
+      font-size: 18px;
+      margin: 36px 0 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    h3 { font-size: 15px; margin: 22px 0 10px; color: #334155; }
+    p, li { font-size: 14px; color: #475569; }
+    ul { padding-left: 20px; margin: 8px 0 14px; }
+    .muted { color: var(--muted); font-size: 13px; }
+
+    .flywheel {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin: 20px 0;
+      align-items: center;
+    }
+    @media (max-width: 900px) { .flywheel { grid-template-columns: 1fr; } }
+    .fw-step {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      text-align: center;
+      font-size: 13px;
+      position: relative;
+    }
+    .fw-step strong { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+    .fw-step.n1 { border-color: #93c5fd; background: var(--blue-dim); }
+    .fw-step.n2 { border-color: #fdba74; background: var(--orange-dim); }
+    .fw-step.n3 { border-color: #c4b5fd; background: var(--purple-dim); }
+    .fw-step.n4 { border-color: #86efac; background: var(--green-dim); }
+    .fw-step.n5 { border-color: #67e8f9; background: #ecfeff; }
+    .fw-arrow { text-align: center; color: var(--muted); font-size: 20px; }
+    @media (max-width: 900px) { .fw-arrow { transform: rotate(90deg); } }
+
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin: 16px 0;
+    }
+    .flow-step {
+      background: var(--panel2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      min-width: 110px;
+      text-align: center;
+    }
+    .flow-step strong { display: block; font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+    .flow-step.core { border-color: #c4b5fd; background: var(--purple-dim); color: var(--purple-text); }
+    .flow-step.io { border-color: #86efac; background: var(--green-dim); color: var(--green-text); }
+    .flow-arrow { color: var(--muted); font-size: 18px; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 16px 0; }
+    @media (max-width: 900px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    .card h4 { font-size: 14px; margin-bottom: 8px; }
+    .tag {
+      display: inline-block;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    .tag-sft { background: var(--green-dim); color: var(--green-text); }
+    .tag-dpo { background: var(--purple-dim); color: var(--purple-text); }
+    .tag-cot { background: var(--blue-dim); color: var(--blue-text); }
+    .tag-off { background: var(--orange-dim); color: var(--orange-text); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 14px 0;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--panel2); color: var(--muted); font-weight: 600; }
+
+    .timeline { position: relative; margin: 20px 0 20px 20px; padding-left: 24px; border-left: 2px solid var(--border); }
+    .tl-item { position: relative; margin-bottom: 20px; }
+    .tl-item::before {
+      content: "";
+      position: absolute;
+      left: -31px;
+      top: 6px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--blue);
+      border: 2px solid var(--bg);
+    }
+    .tl-item.fail::before { background: var(--red); }
+    .tl-item.fix::before { background: var(--orange); }
+    .tl-item.ok::before { background: var(--green); }
+    .tl-item.sys::before { background: var(--purple); }
+    .tl-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+    .tl-meta { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+    pre.sample {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 16px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      line-height: 1.55;
+      overflow-x: auto;
+      margin: 12px 0;
+      white-space: pre;
+    }
+    pre.sample .k { color: #7dd3fc; }
+    pre.sample .s { color: #86efac; }
+    pre.sample .n { color: #fcd34d; }
+    pre.sample .c { color: #64748b; }
+
+    .tabs { display: flex; gap: 8px; margin: 16px 0 0; flex-wrap: wrap; }
+    .tab {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .tab.active { background: var(--purple-dim); border-color: var(--purple); color: var(--purple-text); }
+    .tab-panel { display: none; margin-top: 16px; }
+    .tab-panel.active { display: block; }
+
+    .callout {
+      border-left: 4px solid var(--purple);
+      background: var(--purple-dim);
+      padding: 12px 16px;
+      border-radius: 0 8px 8px 0;
+      margin: 16px 0;
+      font-size: 13px;
+      color: #5b21b6;
+    }
+    .callout.warn {
+      border-left-color: var(--orange);
+      background: var(--orange-dim);
+      color: var(--orange-text);
+    }
+
+    .score-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 6px 0;
+      font-size: 12px;
+    }
+    .score-bar span:first-child { width: 180px; color: var(--muted); flex-shrink: 0; }
+    .bar-wrap {
+      flex: 1;
+      height: 18px;
+      background: #e2e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--purple), var(--blue));
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>TrainingData 采集与 AI 能力进化</h1>
+    <p>
+      Athlon Agent 在用户真实使用 Agent 的过程中，自动识别「工具失败被纠正」「超时后继续成功」等高价值片段，
+      导出 HuggingFace / TRL 兼容的 JSONL，再通过 SFT（监督微调）和 DPO（偏好优化）让模型学会更好的工具选型与推理习惯。
+    </p>
+    <span class="badge">默认关闭 · opt-in</span>
+    <span class="badge">src/Athlon.Agent.Core/TrainingData/</span>
+    <span class="badge">~/.athlon-agent/training-data/</span>
+  </header>
+
+  <main>
+
+    <h2>1. 飞轮：从使用到变强</h2>
+    <div class="flywheel">
+      <div class="fw-step n1"><strong>① 使用</strong>用户与 Agent 对话、调工具</div>
+      <div class="fw-arrow">→</div>
+      <div class="fw-step n2"><strong>② 检测</strong>CorrectionDetector 找失败→修正→成功</div>
+      <div class="fw-arrow">→</div>
+      <div class="fw-step n3"><strong>③ 导出</strong>JSONL（SFT + DPO + reasoning）</div>
+      <div class="fw-arrow">→</div>
+      <div class="fw-step n4"><strong>④ 训练</strong>LoRA SFT / DPO 微调基座模型</div>
+      <div class="fw-arrow">→</div>
+      <div class="fw-step n5"><strong>⑤ 部署</strong>更强模型接回 Agent 循环</div>
+    </div>
+    <p class="muted">核心思想：不是把所有聊天记录当训练集，而是优先采集「用户纠正过 Agent 错误」的片段——这类数据信息密度最高。</p>
+
+    <h2>2. 如何启用采集</h2>
+    <p>编辑 <code>%USERPROFILE%\.athlon-agent\config\settings.json</code>：</p>
+    <pre class="sample"><span class="k">{</span>
+  <span class="k">"trainingData"</span>: <span class="k">{</span>
+    <span class="k">"enabled"</span>: <span class="n">true</span>,
+    <span class="k">"outputDirectory"</span>: <span class="s">""</span>,
+    <span class="k">"sampleRate"</span>: <span class="n">1.0</span>
+  <span class="k">}</span>
+<span class="k">}</span></pre>
+    <table>
+      <thead>
+        <tr><th>字段</th><th>默认</th><th>说明</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>enabled</code></td><td><code>false</code></td><td>关闭时零开销，不创建采集器</td></tr>
+        <tr><td><code>outputDirectory</code></td><td>空</td><td>默认写入 <code>~/.athlon-agent/training-data/</code></td></tr>
+        <tr><td><code>sampleRate</code></td><td><code>1.0</code></td><td>随机采样比例；生产环境建议 <code>0.1</code></td></tr>
+      </tbody>
+    </table>
+
+    <h2>3. 代码里何时触发采集</h2>
+    <div class="flow">
+      <div class="flow-step">用户发消息</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step core">AgentRuntime 工具循环</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step">模型最终文本回复<br><span class="muted">无更多 tool call</span></div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step core">RecordTrainingDataAsync</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step io">写入 JSONL</div>
+    </div>
+    <ul>
+      <li>数据来源：内存中的 <code>AgentSession.Messages</code>（不是事后读磁盘日志）</li>
+      <li>每轮用户消息完成一次 Agent 循环后触发一次</li>
+      <li>中间只有 tool call、尚未结束的轮次不会采集</li>
+    </ul>
+
+    <h2>4. 采集流水线（代码模块）</h2>
+    <div class="grid-3">
+      <div class="card">
+        <h4>CorrectionDetector</h4>
+        <p class="muted">扫描消息列表，识别两类高价值模式</p>
+        <ul>
+          <li>工具失败 → 用户修正 → 同名工具成功</li>
+          <li>System 超时/溢出 → 用户「继续」→ 恢复成功</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>TurnTrajectoryExtractor</h4>
+        <p class="muted">把轨迹切片为训练样本</p>
+        <ul>
+          <li>SFT：<code>messages[]</code> 格式</li>
+          <li>DPO：<code>prompt/chosen/rejected</code></li>
+          <li>附带 <code>reasoning</code> 思维链字段</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>TrainingSampleStore</h4>
+        <p class="muted">追加写入 JSON Lines</p>
+        <ul>
+          <li><code>sft-traces-YYYY-MM-DD.jsonl</code></li>
+          <li><code>dpo-preference-YYYY-MM-DD.jsonl</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>5. 场景 A：工具失败 → 用户纠正（最有价值）</h2>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="tl-title">User：「帮我看看项目结构」</div>
+        <div class="tl-meta">role: user</div>
+      </div>
+      <div class="tl-item fail">
+        <div class="tl-title">Assistant 调用 grep_files(pattern=.*) — 失败</div>
+        <div class="tl-meta">reasoning: 「先全盘搜索文件内容…」 · tool result: Tool `grep_files` failed.</div>
+      </div>
+      <div class="tl-item fix">
+        <div class="tl-title">User：「别 grep 全盘，用 file_list 看 src/ 目录」</div>
+        <div class="tl-meta">CorrectionDetector 识别为修正指令</div>
+      </div>
+      <div class="tl-item ok">
+        <div class="tl-title">Assistant 调用 file_list(path=src/) — 成功</div>
+        <div class="tl-meta">同名/同类工具重试成功 → 整条轨迹被导出</div>
+      </div>
+    </div>
+
+    <h3>导出的 SFT 样本（含思维链）</h3>
+    <span class="tag tag-sft">sft-traces-*.jsonl</span>
+    <span class="tag tag-cot">reasoning 字段</span>
+    <pre class="sample"><span class="k">{</span>
+  <span class="k">"messages"</span>: [
+    <span class="k">{</span> <span class="k">"role"</span>: <span class="s">"user"</span>, <span class="k">"content"</span>: <span class="s">"帮我看看项目结构"</span> <span class="k">}</span>,
+    <span class="k">{</span>
+      <span class="k">"role"</span>: <span class="s">"assistant"</span>,
+      <span class="k">"content"</span>: <span class="n">null</span>,
+      <span class="k">"reasoning"</span>: <span class="s">"用户想看项目结构，我先用 grep 搜索所有文件内容…"</span>,
+      <span class="k">"tool_calls"</span>: [<span class="k">{</span>
+        <span class="k">"id"</span>: <span class="s">"call_1"</span>, <span class="k">"type"</span>: <span class="s">"function"</span>,
+        <span class="k">"function"</span>: <span class="k">{</span> <span class="k">"name"</span>: <span class="s">"grep_files"</span>, <span class="k">"arguments"</span>: <span class="s">"{\"pattern\":\".*\"}"</span> <span class="k">}</span>
+      <span class="k">}</span>]
+    <span class="k">}</span>,
+    <span class="k">{</span> <span class="k">"role"</span>: <span class="s">"tool"</span>, <span class="k">"tool_call_id"</span>: <span class="s">"call_1"</span>,
+      <span class="k">"content"</span>: <span class="s">"ToolCallId: call_1\nTool `grep_files` failed.\nPattern too broad for workspace root."</span> <span class="k">}</span>,
+    <span class="k">{</span> <span class="k">"role"</span>: <span class="s">"user"</span>, <span class="k">"content"</span>: <span class="s">"别 grep 全盘，用 file_list 看 src/ 目录"</span> <span class="k">}</span>,
+    <span class="k">{</span>
+      <span class="k">"role"</span>: <span class="s">"assistant"</span>,
+      <span class="k">"reasoning"</span>: <span class="s">"用户指定用 file_list 并限定 src/，这比 grep 更合适…"</span>,
+      <span class="k">"tool_calls"</span>: [<span class="k">{</span>
+        <span class="k">"id"</span>: <span class="s">"call_2"</span>, <span class="k">"type"</span>: <span class="s">"function"</span>,
+        <span class="k">"function"</span>: <span class="k">{</span> <span class="k">"name"</span>: <span class="s">"file_list"</span>, <span class="k">"arguments"</span>: <span class="s">"{\"path\":\"src/\"}"</span> <span class="k">}</span>
+      <span class="k">}</span>]
+    <span class="k">}</span>,
+    <span class="k">{</span> <span class="k">"role"</span>: <span class="s">"tool"</span>, <span class="k">"tool_call_id"</span>: <span class="s">"call_2"</span>,
+      <span class="k">"content"</span>: <span class="s">"src/\n  Athlon.Agent.App/\n  Athlon.Agent.Core/\n  …"</span> <span class="k">}</span>
+  ],
+  <span class="k">"metadata"</span>: <span class="k">{</span>
+    <span class="k">"source"</span>: <span class="s">"agent-correction"</span>,
+    <span class="k">"hasCorrection"</span>: <span class="n">true</span>,
+    <span class="k">"hasReasoning"</span>: <span class="n">true</span>,
+    <span class="k">"reasoningChainLength"</span>: <span class="n">2</span>,
+    <span class="k">"score"</span>: <span class="n">0.85</span>,
+    <span class="k">"model"</span>: <span class="s">"qwen3-32b"</span>,
+    <span class="k">"correctionSummary"</span>: <span class="s">"别 grep 全盘，用 file_list 看 src/ 目录"</span>
+  <span class="k">}</span>
+<span class="k">}</span></pre>
+
+    <h3>同一轨迹生成的 DPO 偏好对</h3>
+    <span class="tag tag-dpo">dpo-preference-*.jsonl</span>
+    <p class="muted">教模型：在相同 prompt 下，<strong>选 file_list</strong> 优于 <strong>选 grep_files</strong></p>
+    <pre class="sample"><span class="k">{</span>
+  <span class="k">"prompt"</span>: [
+    <span class="k">{</span> <span class="k">"role"</span>: <span class="s">"user"</span>, <span class="k">"content"</span>: <span class="s">"帮我看看项目结构"</span> <span class="k">}</span>
+  ],
+  <span class="k">"rejected"</span>: [
+    <span class="k">{</span> <span class="k">"role"</span>: <span class="s">"assistant"</span>, <span class="k">"tool_calls"</span>: [<span class="k">{</span> <span class="k">"function"</span>: <span class="k">{</span> <span class="k">"name"</span>: <span class="s">"grep_files"</span>, <span class="k">"arguments"</span>: <span class="s">"{\"pattern\":\".*\"}"</span> <span class="k">}</span> <span class="k">}</span>] <span class="k">}</span>,
+    <span class="k">{</span> <span class="k">"role"</span>: <span class="s">"tool"</span>, <span class="k">"content"</span>: <span class="s">"Tool `grep_files` failed."</span>, <span class="k">"tool_call_id"</span>: <span class="s">"call_1"</span> <span class="k">}</span>
+  ],
+  <span class="k">"chosen"</span>: [
+    <span class="k">{</span> <span class="k">"role"</span>: <span class="s">"assistant"</span>, <span class="k">"tool_calls"</span>: [<span class="k">{</span> <span class="k">"function"</span>: <span class="k">{</span> <span class="k">"name"</span>: <span class="s">"file_list"</span>, <span class="k">"arguments"</span>: <span class="s">"{\"path\":\"src/\"}"</span> <span class="k">}</span> <span class="k">}</span>] <span class="k">}</span>,
+    <span class="k">{</span> <span class="k">"role"</span>: <span class="s">"tool"</span>, <span class="k">"content"</span>: <span class="s">"src/ Athlon.Agent.App/ …"</span>, <span class="k">"tool_call_id"</span>: <span class="s">"call_2"</span> <span class="k">}</span>
+  ],
+  <span class="k">"metadata"</span>: <span class="k">{</span>
+    <span class="k">"source"</span>: <span class="s">"agent-correction-dpo"</span>,
+    <span class="k">"failedToolName"</span>: <span class="s">"grep_files"</span>,
+    <span class="k">"successToolName"</span>: <span class="s">"file_list"</span>
+  <span class="k">}</span>
+<span class="k">}</span></pre>
+
+    <h2>6. 场景 B：超时 / 溢出 → 用户「继续」</h2>
+    <div class="timeline">
+      <div class="tl-item sys">
+        <div class="tl-title">System：「超过配置的超时时间，已自动停止」</div>
+      </div>
+      <div class="tl-item fix">
+        <div class="tl-title">User：「继续」</div>
+      </div>
+      <div class="tl-item ok">
+        <div class="tl-title">Assistant：完成剩余分析并回复用户</div>
+        <div class="tl-meta">metadata.source = overflow-recovery · score ≈ 0.7</div>
+      </div>
+    </div>
+    <p class="muted">这类样本教模型：在中断后如何基于已有上下文继续任务，而不是从头乱来。</p>
+
+    <h2>7. 思维链（reasoning）如何被采集</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h4>运行时（始终）</h4>
+        <ul>
+          <li>模型 API 返回 <code>reasoning_content</code></li>
+          <li>存入 <code>ChatMessage.ReasoningContent</code></li>
+          <li>UI 展示 + 写入 <code>conversation.jsonl</code></li>
+          <li>默认<strong>不</strong>发回下一轮 API（省 token）</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>训练导出（enabled 时）</h4>
+        <ul>
+          <li><code>TurnTrajectoryExtractor</code> 复制到 <code>reasoning</code> 字段</li>
+          <li><code>metadata.hasReasoning</code> / <code>reasoningChainLength</code></li>
+          <li>失败消息有 reasoning → 质量分 <strong>+0.15</strong></li>
+          <li>训练脚本转为 Qwen3 <code>&lt;think&gt;</code> 块做 CoT 蒸馏</li>
+        </ul>
+      </div>
+    </div>
+
+    <h2>8. 训练如何改变 AI 能力</h2>
+    <div class="tabs" id="train-tabs">
+      <button class="tab active" data-tab="sft">SFT 监督微调</button>
+      <button class="tab" data-tab="dpo">DPO 偏好优化</button>
+      <button class="tab" data-tab="deploy">接回 Agent</button>
+    </div>
+
+    <div class="tab-panel active" id="panel-sft">
+      <div class="card">
+        <span class="tag tag-sft">修正轨迹 + 溢出恢复</span>
+        <h4>学什么</h4>
+        <ul>
+          <li>看到类似用户请求时，直接选对工具（file_list 而非 grep_files）</li>
+          <li>模仿成功轨迹里的 tool 参数写法</li>
+          <li>通过 reasoning 字段学习「先想什么、再调什么工具」</li>
+        </ul>
+        <h4>训练命令（项目自带脚本）</h4>
+        <pre class="sample"><span class="c"># 依赖: pip install torch transformers datasets peft trl accelerate</span>
+python tools/train-athlon-agent.py --mode sft --epochs 5</pre>
+        <p class="muted">读取 <code>sft-traces-*.jsonl</code> → Qwen chat template → LoRA 微调 → 输出 <code>tools/model/Qwen3-0.6B_sft_lora/</code></p>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panel-dpo">
+      <div class="card">
+        <span class="tag tag-dpo">chosen vs rejected</span>
+        <h4>学什么</h4>
+        <ul>
+          <li>同一 prompt 下，提高「正确工具调用」的概率</li>
+          <li>压低「导致 Error 的工具选择」的概率</li>
+          <li>比 SFT 更直接地对齐「用户偏好」</li>
+        </ul>
+        <pre class="sample">python tools/train-athlon-agent.py --mode dpo --epochs 3
+<span class="c"># 或在 SFT 基础上继续</span>
+python tools/train-athlon-agent.py --mode dpo --load ./tools/model/Qwen3-0.6B_sft_lora</pre>
+        <p class="muted">读取 <code>dpo-preference-*.jsonl</code> → TRL DPOTrainer（beta=0.1）</p>
+      </div>
+    </div>
+
+    <div class="tab-panel" id="panel-deploy">
+      <div class="card">
+        <h4>闭环：微调后的模型如何影响 Agent</h4>
+        <div class="flow" style="margin-top:12px">
+          <div class="flow-step">LoRA 权重合并 / 部署</div>
+          <span class="flow-arrow">→</span>
+          <div class="flow-step">settings.json 指向新模型端点</div>
+          <span class="flow-arrow">→</span>
+          <div class="flow-step core">AgentRuntime 调工具</div>
+          <span class="flow-arrow">→</span>
+          <div class="flow-step">更少失败 · 更少用户纠正</div>
+        </div>
+        <p style="margin-top:12px">Agent 本身逻辑不变；变的是<strong>模型在相同 prompt + tools 下的决策质量</strong>。用得越多 → 纠正越少 → 数据质量结构变化 → 下一轮微调更好。</p>
+      </div>
+    </div>
+
+    <h2>9. 质量评分（metadata.score）</h2>
+    <p>修正轨迹会自动打分，用于后续筛选高质量样本：</p>
+    <div class="card">
+      <div class="score-bar"><span>基础分</span><div class="bar-wrap"><div class="bar-fill" style="width:50%"></div></div><span>0.50</span></div>
+      <div class="score-bar"><span>修正指令 &gt; 20 字</span><div class="bar-wrap"><div class="bar-fill" style="width:65%"></div></div><span>+0.15</span></div>
+      <div class="score-bar"><span>修正指令 &gt; 100 字</span><div class="bar-wrap"><div class="bar-fill" style="width:75%"></div></div><span>+0.10</span></div>
+      <div class="score-bar"><span>失败调用有 reasoning</span><div class="bar-wrap"><div class="bar-fill" style="width:90%"></div></div><span>+0.15</span></div>
+      <div class="score-bar"><span>工具参数较复杂</span><div class="bar-wrap"><div class="bar-fill" style="width:85%"></div></div><span>+0.10~0.20</span></div>
+    </div>
+
+    <h2>10. 与会话日志的区别</h2>
+    <table>
+      <thead>
+        <tr><th>路径</th><th>内容</th><th>用途</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>sessions/*/conversation.jsonl</code></td>
+          <td>完整原始对话（含 reasoning）</td>
+          <td>UI 回放、审计</td>
+        </tr>
+        <tr>
+          <td><code>training-data/sft-traces-*.jsonl</code></td>
+          <td>高价值切片 + metadata</td>
+          <td>SFT / CoT 蒸馏</td>
+        </tr>
+        <tr>
+          <td><code>training-data/dpo-preference-*.jsonl</code></td>
+          <td>chosen / rejected 对</td>
+          <td>DPO 偏好对齐</td>
+        </tr>
+        <tr>
+          <td><code>audit/audit-*.jsonl</code></td>
+          <td>工具调用审计</td>
+          <td>合规，非训练专用</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>11. 当前限制（阅读代码时请知晓）</h2>
+    <div class="callout warn">
+      <ul style="margin:0;padding-left:18px">
+        <li><code>RecordSessionAsync</code>（整段会话 dump）已实现但未接入 AgentRuntime</li>
+        <li>每轮结束扫描<strong>全量历史</strong>，同一修正轨迹可能在后续轮次重复写入</li>
+        <li>失败判定依赖 tool result 文本启发式（<code>Tool `xxx` failed.</code> 等）</li>
+        <li>Settings UI 暂无开关，只能改 settings.json</li>
+      </ul>
+    </div>
+
+    <h2>12. 快速验证</h2>
+    <pre class="sample"><span class="c"># 1. 启用 trainingData.enabled</span>
+<span class="c"># 2. 故意让 Agent 调错工具，再纠正它</span>
+<span class="c"># 3. 查看输出</span>
+dir %USERPROFILE%\.athlon-agent\training-data\
+type %USERPROFILE%\.athlon-agent\training-data\sft-traces-2026-06-12.jsonl
+
+<span class="c"># 4. 格式校验</span>
+python tools/validate-training-data.py
+
+<span class="c"># 5. 训练（可选）</span>
+python tools/train-athlon-agent.py --mode sft --epochs 3</pre>
+
+    <p class="muted" style="margin-top:32px">
+      相关代码：<code>src/Athlon.Agent.Core/TrainingData/</code> ·
+      文档：<code>docs/development/training-data-flywheel.md</code> ·
+      训练脚本：<code>tools/train-athlon-agent.py</code>
+    </p>
+  </main>
+
+  <script>
+    document.querySelectorAll('#train-tabs .tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#train-tabs .tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

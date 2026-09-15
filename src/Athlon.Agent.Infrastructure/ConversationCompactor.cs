@@ -73,17 +73,18 @@ public sealed class ConversationCompactor(
             return new ConversationCompactResult(session, false);
         }
 
+        // The semantic planner is the only path that can advance the cutoff past the user message
+        // that opened the current turn, so it is used whenever the caller supplied a keep budget or
+        // semantic cutoff is on. Without it, only the legacy message/token windows apply.
         var keepTokenBudget = request.Plan?.KeepTokenBudget;
-        var cutoff = ConversationCutoffPlanner.DetermineCutoffIndex(
-            conversation,
-            estimatedTokens,
-            cfg,
-            keepTokenBudget);
-        if (cutoff <= 0 && isManualCompact)
+        var cutPlan = ResolveCutPlan(conversation, cfg, estimatedTokens, keepTokenBudget);
+        if (cutPlan.SummarizedEnd <= 0 && isManualCompact)
         {
-            cutoff = ResolveManualCompactCutoff(conversation, cfg);
+            cutPlan = SemanticCutoffPlanner.CreatePlanForCutoff(
+                conversation,
+                ResolveManualCompactCutoff(conversation, cfg));
         }
-        else if (cutoff <= 0
+        else if (cutPlan.SummarizedEnd <= 0
             && request.Force
             && request.Strategy == CompactionStrategy.ForceCompact
             && conversation.Count > 1)
@@ -92,11 +93,12 @@ public sealed class ConversationCompactor(
                 ? Math.Min(cfg.KeepMessages, conversation.Count - 1)
                 : 1;
             keepCount = Math.Max(1, Math.Min(keepCount, conversation.Count - 1));
-            cutoff = ConversationCutoffPlanner.FindSafeCutoffPoint(
+            cutPlan = SemanticCutoffPlanner.CreatePlanForCutoff(
                 conversation,
                 conversation.Count - keepCount);
         }
 
+        var cutoff = cutPlan.SummarizedEnd;
         if (cutoff <= 0)
         {
             _logger.Debug("Compaction triggered but safe cutoff is 0 — skipping");
@@ -107,8 +109,36 @@ public sealed class ConversationCompactor(
         // compaction can fold condensed context instead of dropping it.
         var prefix = conversation.Take(cutoff).ToList();
         var tail = conversation.Skip(cutoff).ToList();
+        var reattachedUser = cutPlan.NeedsUserReattach
+            ? conversation[cutPlan.UserAnchorIndex!.Value]
+            : null;
         var originalCount = conversation.Count;
         var tokensBefore = estimatedTokens;
+
+        // Idle guard: compaction must not spend a summary round trip when the projected payload
+        // barely shrinks. This is checked on the projected post-state (summary upper bound + tail)
+        // so a no-op pass costs nothing. Manual compaction is explicit user intent, so it is exempt,
+        // and non-dynamic mode keeps its historical behaviour.
+        if (cfg.DynamicCompaction.Enabled
+            && !isManualCompact
+            && !request.Force
+            && cfg.MinCompactionSavingsTokens > 0)
+        {
+            var projectedAfter = EstimateProjectedAfterTokens(
+                tail,
+                reattachedUser,
+                cfg,
+                ResolveSummaryMaxTokens(cfg, request.Plan?.Pressure, request.Force));
+            if (tokensBefore - projectedAfter < cfg.MinCompactionSavingsTokens)
+            {
+                _logger.Debug(
+                    "Skipped conversation compact for session {SessionId}: projected savings {Savings} < {Minimum}",
+                    session.Id,
+                    tokensBefore - projectedAfter,
+                    cfg.MinCompactionSavingsTokens);
+                return new ConversationCompactResult(session, false);
+            }
+        }
 
         string? transcriptPath = null;
         if (cfg.OffloadBeforeCompact)
@@ -245,16 +275,12 @@ public sealed class ConversationCompactor(
 
         var pressure = request.Plan?.Pressure;
         var utilization = request.RuntimeContext?.Budget.TotalUtilization;
-        var tokensAfterPreview = ContextTokenEstimator.Estimate(
-            new[] { summaryMessage }.Concat(tail).ToArray(),
-            cfg.IncludeReasoningInModelContext,
-            hygiene: cfg.RequestHistoryHygiene);
 
         if (request.EmitAudit)
         {
             var auditContent = CompactionMessageContent.CreateConversationCompact(
                 tokensBefore,
-                tokensAfterPreview,
+                EstimateCompactedTokens(summaryMessage, reattachedUser, tail, cfg),
                 originalCount,
                 transcriptPath,
                 summary,
@@ -269,7 +295,16 @@ public sealed class ConversationCompactor(
         }
 
         compactMessages.Add(summaryMessage);
+        // The cutoff can advance past the user message that opened the current turn. Re-attach it
+        // verbatim after the summary so the active instruction survives the cut instead of relying
+        // on the summary alone.
+        if (reattachedUser is not null)
+        {
+            compactMessages.Add(reattachedUser);
+        }
+
         compactMessages.AddRange(tail);
+        var tokensAfterPreview = EstimateCompactedTokens(summaryMessage, reattachedUser, tail, cfg);
 
         await storage.SaveContextSummaryAsync(
             new ContextSummary(
@@ -332,8 +367,32 @@ public sealed class ConversationCompactor(
             return new ConversationCompactResult(session, false);
         }
 
+        // Grow the retained head forward to a pairing-balanced prefix. A head ending on an assistant
+        // turn whose tool_call is answered inside the dropped middle would ship an unanswered
+        // tool_call, which the API rejects. Unlike the tail, the head count is a floor: extending it
+        // by a message or two keeps the tool pair whole, while trimming back could empty the window.
+        keepHead = ConversationCutoffPlanner.FindNextBalancedPrefixEnd(conversation, keepHead);
+        if (keepHead >= conversation.Count)
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
+        // Drop the middle span between a retained head and a retained tail. Moving the tail start
+        // forward keeps the drop boundary from splitting a tool pair: starting the tail on a
+        // tool_result would leave its tool_call behind in the summarized middle.
+        var tailStart = conversation.Count - keepTail;
+        while (tailStart < conversation.Count && conversation[tailStart].Role == MessageRole.Tool)
+        {
+            tailStart++;
+        }
+
+        if (tailStart >= conversation.Count || tailStart <= keepHead)
+        {
+            return new ConversationCompactResult(session, false);
+        }
+
         var middleStart = keepHead;
-        var middleCount = conversation.Count - keepHead - keepTail;
+        var middleCount = tailStart - keepHead;
         if (middleCount <= 0)
         {
             return new ConversationCompactResult(session, false);
@@ -341,7 +400,7 @@ public sealed class ConversationCompactor(
 
         var head = conversation.Take(keepHead).ToList();
         var middle = conversation.Skip(middleStart).Take(middleCount).ToList();
-        var tail = conversation.Skip(conversation.Count - keepTail).ToList();
+        var tail = conversation.Skip(tailStart).ToList();
 
         var summaryRequest = BuildSummaryRequest(
             middle,
@@ -455,6 +514,132 @@ public sealed class ConversationCompactor(
         }
 
         return new ConversationCompactResult(session, true);
+    }
+
+    /// <summary>
+    /// Picks the cut plan for this request.
+    ///
+    /// <para>Under dynamic compaction the semantic planner owns the cut: it is the only path that
+    /// can advance the cutoff past the user message that opened the current turn, and it applies
+    /// <see cref="ContextCompactionSettings.ProtectedTailMaxMessages"/>. Everywhere else the legacy
+    /// message/token window is preserved verbatim so non-dynamic behaviour is unchanged.</para>
+    /// </summary>
+    private static ConversationCutPlan ResolveCutPlan(
+        IReadOnlyList<ChatMessage> conversation,
+        ContextCompactionSettings cfg,
+        int estimatedTokens,
+        int? keepTokenBudget)
+    {
+        var semanticCutoffEnabled = cfg.DynamicCompaction.Enabled
+            && cfg.DynamicCompaction.EnableSemanticCutoff;
+        if (semanticCutoffEnabled)
+        {
+            var plan = SemanticCutoffPlanner.DetermineCutPlan(
+                conversation,
+                cfg,
+                keepTokenBudget is > 0
+                    ? keepTokenBudget.Value
+                    : ResolveSemanticKeepBudget(conversation, cfg, estimatedTokens));
+            if (plan.SummarizedEnd > 0)
+            {
+                return plan;
+            }
+        }
+
+        var legacyCutoff = ConversationCutoffPlanner.DetermineCutoffIndex(
+            conversation,
+            estimatedTokens,
+            cfg,
+            keepTokenBudget);
+        return legacyCutoff <= 0
+            ? new ConversationCutPlan(0, conversation.Count, null)
+            : SemanticCutoffPlanner.CreatePlanForCutoff(conversation, legacyCutoff);
+    }
+
+    /// <summary>
+    /// Keep budget to hand the semantic planner when the caller did not compute one (manual
+    /// compaction, forced passes). Mirrors the static keep floor so the retained tail stays in the
+    /// same size band as the non-semantic planner.
+    /// </summary>
+    private static int ResolveSemanticKeepBudget(
+        IReadOnlyList<ChatMessage> conversation,
+        ContextCompactionSettings cfg,
+        int estimatedTokens)
+    {
+        if (cfg.KeepTokens > 0)
+        {
+            return cfg.KeepTokens;
+        }
+
+        if (cfg.KeepMessages > 0 && conversation.Count > cfg.KeepMessages)
+        {
+            var tailStart = conversation.Count - cfg.KeepMessages;
+            return ContextTokenEstimator.EstimateSuffix(
+                conversation,
+                tailStart,
+                cfg.IncludeReasoningInModelContext,
+                cfg.MaxToolScreenshotsInModelContext,
+                cfg.RequestHistoryHygiene);
+        }
+
+        // No keep hint: allow the planner to target a modest share of the current history so the
+        // protected-tail cap decides the cut rather than a zero budget short-circuiting it.
+        return Math.Max(1, estimatedTokens / 4);
+    }
+
+    /// <summary>
+    /// Upper-bound estimate of the post-compaction payload: the summary is charged at
+    /// <paramref name="summaryMaxTokens"/> (its hard cap) so the guard never under-estimates.
+    /// </summary>
+    private static int EstimateProjectedAfterTokens(
+        IReadOnlyList<ChatMessage> tail,
+        ChatMessage? reattachedUser,
+        ContextCompactionSettings cfg,
+        int summaryMaxTokens)
+    {
+        // Envelope text: summary markers plus the optional transcript-path preamble.
+        const int SummaryEnvelopeSlackTokens = 128;
+        var summaryTokens = summaryMaxTokens
+            + SummaryEnvelopeSlackTokens
+            + ContextTokenEstimator.EstimateMessage(
+                SummaryMessageBuilder.CreateSummaryPlaceholder(string.Empty, null),
+                cfg.IncludeReasoningInModelContext);
+
+        var total = summaryTokens;
+        if (reattachedUser is not null)
+        {
+            total += ContextTokenEstimator.EstimateMessage(
+                reattachedUser,
+                cfg.IncludeReasoningInModelContext,
+                cfg.RequestHistoryHygiene);
+        }
+
+        total += ContextTokenEstimator.Estimate(
+            tail,
+            cfg.IncludeReasoningInModelContext,
+            maxToolScreenshots: cfg.MaxToolScreenshotsInModelContext,
+            hygiene: cfg.RequestHistoryHygiene);
+        return total;
+    }
+
+    /// <summary>Token estimate of the payload actually written back after compaction.</summary>
+    private static int EstimateCompactedTokens(
+        ChatMessage summaryMessage,
+        ChatMessage? reattachedUser,
+        IReadOnlyList<ChatMessage> tail,
+        ContextCompactionSettings cfg)
+    {
+        var messages = new List<ChatMessage>(tail.Count + 2) { summaryMessage };
+        if (reattachedUser is not null)
+        {
+            messages.Add(reattachedUser);
+        }
+
+        messages.AddRange(tail);
+        return ContextTokenEstimator.Estimate(
+            messages,
+            cfg.IncludeReasoningInModelContext,
+            hygiene: cfg.RequestHistoryHygiene);
     }
 
     private static int ResolveManualCompactCutoff(

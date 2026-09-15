@@ -2049,6 +2049,23 @@ function showPlanReady(event) {
     });
   }
   actions.appendChild(buildBtn);
+
+  // Revise: focuses the composer and switches it into revision mode, so editing the plan is
+  // discoverable instead of relying on the user guessing that typing here means "revise".
+  var reviseBtn = document.createElement('button');
+  reviseBtn.type = 'button';
+  reviseBtn.className = 'plan-card-button';
+  reviseBtn.dataset.i18n = 'planRevise';
+  reviseBtn.textContent = t('planRevise');
+  if (built) {
+    reviseBtn.disabled = true;
+  } else {
+    reviseBtn.addEventListener('click', function () {
+      post({ type: 'planRevise' });
+    });
+  }
+  actions.appendChild(reviseBtn);
+
   card.appendChild(actions);
 }
 

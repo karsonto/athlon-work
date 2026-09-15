@@ -549,13 +549,42 @@
                         </Style>
                     </Border.Style>
                     <StackPanel>
-                        <TextBlock Text="{loc:Localize Key=Nav_TaskPlan}"
-                                   Style="{StaticResource AppTextSection}"
-                                   Foreground="{DynamicResource Brush.SubtleText}"
-                                   Margin="0,0,0,6" />
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="{loc:Localize Key=Nav_TaskPlan}"
+                                       Style="{StaticResource AppTextSection}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       VerticalAlignment="Center" />
+                            <!-- Stop only matters while an auto-continuation round is pending. -->
+                            <Button Grid.Column="1"
+                                    Content="{loc:Localize Key=Harness_PlanAutoContinueStop}"
+                                    Command="{Binding ComposerHarness.StopAutoContinueCommand}"
+                                    Padding="6,1"
+                                    FontSize="11">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ComposerHarness.CanStopAutoContinue}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
+                        </Grid>
                         <ScrollViewer MaxHeight="200" VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding ComposerHarness.Tasks}" />
                         </ScrollViewer>
+                        <CheckBox Content="{loc:Localize Key=Harness_PlanAutoContinue}"
+                                  IsChecked="{Binding ComposerHarness.IsAutoContinueEnabled, Mode=TwoWay}"
+                                  Foreground="{DynamicResource Brush.SubtleText}"
+                                  FontSize="11"
+                                  Margin="0,6,0,0" />
                     </StackPanel>
                 </Border>
 

@@ -89,6 +89,74 @@ public sealed class ConversationCompactorMiddleCutTests
         Assert.Contains(sink.Events, evt => evt.errorCode == RuntimeDiagnosticErrorCodes.CompactionMiddleCutApplied);
     }
 
+    [Fact]
+    public async Task MiddleCut_strategy_keeps_tool_pairs_whole_at_both_boundaries()
+    {
+        // 25 messages: one user instruction followed by 12 assistant/tool rounds, so the naive
+        // tail start (count - 3 = 22) is the tool result of pair 10, and a head of 2 ends on the
+        // assistant turn whose tool_call would be dropped with the middle.
+        var session = BuildToolPairSession(12);
+        var settings = new AppSettings
+        {
+            ContextCompaction = new ContextCompactionSettings
+            {
+                Enabled = true,
+                MiddleCutKeepHeadMessages = 2,
+                MiddleCutKeepTailMessages = 3
+            }
+        };
+
+        var compactor = new ConversationCompactor(
+            settings,
+            new FixedSummaryModelClient("middle summary"),
+            new NoOpStorage(),
+            new TruncateArgsService(),
+            new NoOpUsageAccumulator(),
+            new NoOpLogger(),
+            null,
+            new CapturingRuntimeSink());
+
+        var result = await compactor.CompactIfNeededAsync(
+            session,
+            new CompactionExecutionRequest(
+                Kind: CompactionKind.ConversationCompact,
+                Force: true,
+                EmitAudit: false,
+                Strategy: CompactionStrategy.MiddleCutOnRetrySkipped));
+
+        Assert.True(result.Compacted);
+        var messages = ConversationMessageFilters.WithoutCompactionAudits(result.Session.Messages);
+        var summaryIndex = messages.FindIndex(SummaryMessageBuilder.IsSummaryMessage);
+
+        // The head grew from 2 to 3 messages so the first tool pair stays whole in the prefix.
+        Assert.Equal(3, summaryIndex);
+        Assert.True(ConversationCutoffPlanner.IsPairingBalancedBefore(messages, summaryIndex));
+
+        // The tail now starts on the assistant turn whose tool_call it still carries, instead of on
+        // the orphaned tool result at the naive cut.
+        var tailStart = summaryIndex + 1;
+        Assert.Equal(MessageRole.Assistant, messages[tailStart].Role);
+        Assert.Equal(MessageRole.Tool, messages[tailStart + 1].Role);
+        Assert.Contains("ToolCallId: c11", messages[tailStart + 1].Content, StringComparison.Ordinal);
+        Assert.True(ConversationCutoffPlanner.IsPairingBalancedInRange(messages, tailStart, messages.Count));
+    }
+
+    private static AgentSession BuildToolPairSession(int pairs)
+    {
+        var messages = new List<ChatMessage> { ChatMessage.Create(MessageRole.User, "u-01") };
+        for (var i = 0; i < pairs; i++)
+        {
+            var id = $"c{i}";
+            messages.Add(ChatMessage.Create(
+                MessageRole.Assistant,
+                $"a-{i:D2}",
+                toolCalls: [new AgentToolCall(id, "file_read", new Dictionary<string, string>())]));
+            messages.Add(ChatMessage.Create(MessageRole.Tool, $"ToolCallId: {id}\nresult-{i:D2}"));
+        }
+
+        return new AgentSession("s2", "title", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null, null, null, messages);
+    }
+
     private static AgentSession BuildSession(int messageCount)
     {
         var messages = Enumerable.Range(1, messageCount)

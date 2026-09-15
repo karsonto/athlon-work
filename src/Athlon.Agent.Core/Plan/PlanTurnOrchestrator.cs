@@ -108,6 +108,9 @@ public sealed class PlanTurnOrchestrator(
 
                 run.Status = PlanRunStatuses.Approved;
                 run.Phase = PlanPhase.Done;
+                // The revise conversation is over; a later Plan turn starts fresh.
+                run.IsRevisionTurn = false;
+                run.RevisionProducedNewPlan = null;
                 run.UpdatedAt = DateTimeOffset.UtcNow;
                 await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
                 break;
@@ -116,7 +119,21 @@ public sealed class PlanTurnOrchestrator(
                 run.Phase = PlanPhase.Draft;
                 run.Status = PlanRunStatuses.Draft;
                 run.UpdatedAt = DateTimeOffset.UtcNow;
+                // Remember the pre-revision markdown so we can tell whether this turn actually
+                // produced a new plan (revision is now multi-turn: an inconclusive turn must not
+                // silently keep the old plan nor fabricate a placeholder).
+                var markdownBeforeRevision = await runStore
+                    .ReadPlanMarkdownAsync(session.Id, cancellationToken)
+                    .ConfigureAwait(false)
+                    ?? run.PlanMarkdown;
+                run.PublishedThisTurn = false;
+                run.RevisionProducedNewPlan = null;
+                // Marks the transient revision state for the duration of the revise conversation
+                // (including a clarification asked mid-revision), so returning here does not depend
+                // on markdown presence, which an Explore turn would also satisfy.
+                run.IsRevisionTurn = true;
                 await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
+
                 var revisionInput = userInput?.Trim() ?? string.Empty;
                 session = await RunPhaseAsync(
                     session,
@@ -126,9 +143,53 @@ public sealed class PlanTurnOrchestrator(
                     cancellationToken,
                     appendUserMessage: revisionInput.Length > 0).ConfigureAwait(false);
                 run = phaseAccessor.GetActiveRun(session.Id)!;
-                if (run.Phase == PlanPhase.Draft)
+
+                if (run.Phase == PlanPhase.AwaitClarify)
                 {
-                    session = await SealDraftAsync(session, run, callbacks, cancellationToken).ConfigureAwait(false);
+                    // The model asked a follow-up question mid-revision. Park the run so the
+                    // QuestionBar can resume it, exactly as in Explore.
+                    run.Status = PlanRunStatuses.AwaitingClarification;
+                    run.UpdatedAt = DateTimeOffset.UtcNow;
+                    await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
+                    break;
+                }
+
+                if (run.PublishedThisTurn)
+                {
+                    // A new plan is on the store; seal it back to AwaitConfirm so Build stays available.
+                    var publishedMarkdown = await runStore
+                        .ReadPlanMarkdownAsync(session.Id, cancellationToken)
+                        .ConfigureAwait(false);
+                    session = await SealToAwaitConfirmAsync(
+                            session,
+                            run,
+                            string.IsNullOrWhiteSpace(publishedMarkdown)
+                                ? run.PlanMarkdown ?? string.Empty
+                                : publishedMarkdown,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    var sealedRun = phaseAccessor.GetActiveRun(session.Id) ?? run;
+                    sealedRun.RevisionProducedNewPlan = true;
+                    sealedRun.PublishedThisTurn = false;
+                    sealedRun.IsRevisionTurn = false;
+                    await PersistRunAsync(sealedRun, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    // Multi-turn revision: no publish_plan this turn. Keep the existing plan and go
+                    // back to AwaitConfirm so the user can continue the discussion instead of being
+                    // sealed into a fabricated plan. RevisionProducedNewPlan lets the UI say so.
+                    run.Phase = PlanPhase.AwaitConfirm;
+                    run.Status = PlanRunStatuses.AwaitingConfirmation;
+                    run.PlanMarkdown = markdownBeforeRevision;
+                    run.PublishedThisTurn = false;
+                    run.RevisionProducedNewPlan = false;
+                    // Stays true: the user is still inside the revise conversation, so a follow-up
+                    // revise turn (or a clarification) must not be mistaken for a fresh Explore.
+                    run.IsRevisionTurn = true;
+                    run.UpdatedAt = DateTimeOffset.UtcNow;
+                    await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
                 }
 
                 break;
@@ -148,7 +209,14 @@ public sealed class PlanTurnOrchestrator(
         CancellationToken cancellationToken)
     {
         userQuestions.Clear(session.Id);
-        run.Phase = PlanPhase.Explore;
+
+        // A clarification asked during a revision belongs to that revision: return to AwaitConfirm
+        // so the user can keep discussing the plan instead of falling back to Explore. The revise
+        // turn sets IsRevisionTurn, which is the only reliable signal (a plain markdown check would
+        // also match an Explore run that had already published).
+        var wasRevising = run.IsRevisionTurn;
+        run.PublishedThisTurn = false;
+        run.Phase = wasRevising ? PlanPhase.Draft : PlanPhase.Explore;
         run.Status = PlanRunStatuses.Draft;
         run.UpdatedAt = DateTimeOffset.UtcNow;
         await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
@@ -160,7 +228,61 @@ public sealed class PlanTurnOrchestrator(
             callbacks,
             cancellationToken,
             appendUserMessage: true).ConfigureAwait(false);
+
+        if (wasRevising)
+        {
+            return await FinalizeRevisionAsync(session, run, cancellationToken).ConfigureAwait(false);
+        }
+
         return await FinalizeConsultingAsync(session, callbacks, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Wraps up a revision turn that was resumed from a clarification: seal a newly published plan,
+    /// otherwise keep the previous one and tell the caller so the UI can say so.
+    /// </summary>
+    private async Task<AgentSession> FinalizeRevisionAsync(
+        AgentSession session,
+        PlanRun previous,
+        CancellationToken cancellationToken)
+    {
+        var run = phaseAccessor.GetActiveRun(session.Id) ?? previous;
+        if (run.Phase == PlanPhase.AwaitClarify)
+        {
+            run.Status = PlanRunStatuses.AwaitingClarification;
+            run.UpdatedAt = DateTimeOffset.UtcNow;
+            await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
+            return session;
+        }
+
+        if (run.PublishedThisTurn)
+        {
+            var published = await runStore.ReadPlanMarkdownAsync(session.Id, cancellationToken)
+                .ConfigureAwait(false);
+            session = await SealToAwaitConfirmAsync(
+                    session,
+                    run,
+                    string.IsNullOrWhiteSpace(published) ? run.PlanMarkdown ?? string.Empty : published,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var sealedRun = phaseAccessor.GetActiveRun(session.Id) ?? run;
+            sealedRun.RevisionProducedNewPlan = true;
+            sealedRun.PublishedThisTurn = false;
+            sealedRun.IsRevisionTurn = false;
+            await PersistRunAsync(sealedRun, cancellationToken).ConfigureAwait(false);
+            return session;
+        }
+
+        // Nothing new was published: preserve the plan the user was looking at.
+        run.Phase = PlanPhase.AwaitConfirm;
+        run.Status = PlanRunStatuses.AwaitingConfirmation;
+        run.PlanMarkdown = previous.PlanMarkdown;
+        run.PublishedThisTurn = false;
+        run.RevisionProducedNewPlan = false;
+        run.IsRevisionTurn = true;
+        run.UpdatedAt = DateTimeOffset.UtcNow;
+        await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
+        return session;
     }
 
     /// <summary>
@@ -229,38 +351,6 @@ public sealed class PlanTurnOrchestrator(
         run.UpdatedAt = DateTimeOffset.UtcNow;
         await PersistRunAsync(run, cancellationToken).ConfigureAwait(false);
         return session;
-    }
-
-    private async Task<AgentSession> SealDraftAsync(
-        AgentSession session,
-        PlanRun run,
-        AgentTurnCallbacks? callbacks,
-        CancellationToken cancellationToken)
-    {
-        // Prefer content written by publish_plan during the Draft (revise) turn.
-        var markdown = await runStore.ReadPlanMarkdownAsync(session.Id, cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(markdown) || !PlanDocumentParser.LooksComplete(markdown))
-        {
-            // One retry Draft turn if publish_plan was missing/incomplete.
-            session = await RunPhaseAsync(
-                session,
-                run,
-                string.Empty,
-                callbacks,
-                cancellationToken,
-                appendUserMessage: false).ConfigureAwait(false);
-            run = phaseAccessor.GetActiveRun(session.Id) ?? run;
-            markdown = await runStore.ReadPlanMarkdownAsync(session.Id, cancellationToken).ConfigureAwait(false);
-        }
-
-        if (string.IsNullOrWhiteSpace(markdown) || !PlanDocumentParser.LooksComplete(markdown))
-        {
-            var assistant = PlanDocumentParser.GetLastAssistantText(session);
-            markdown = PlanDocumentParser.FallbackMarkdownFromAssistant(assistant, run.Goal);
-            await runStore.WritePlanMarkdownAsync(session.Id, markdown, cancellationToken).ConfigureAwait(false);
-        }
-
-        return await SealToAwaitConfirmAsync(session, run, markdown, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<AgentSession> RunPhaseAsync(

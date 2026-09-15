@@ -49,6 +49,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             : SummaryMessageBuilder.IsSummaryMessage(message)
             || IsUser && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
             || ApprovedPlanPrompt.IsApprovedPlanMessage(message)
+            || PlanContinuePrompt.IsPlanContinueMessage(message)
             || IsAssistantToolCallsOnly(message);
         DisplayRole = IsUser
             ? Strings.Get("Chat_RoleUser")

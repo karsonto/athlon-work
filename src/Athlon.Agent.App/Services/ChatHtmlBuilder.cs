@@ -154,6 +154,7 @@ public sealed class ChatHtmlBuilder
             ["planClarifyAnswered"] = Strings.Get("Plan_ClarifyAnswered"),
             ["planReadyTitle"] = Strings.Get("Plan_ReadyCardTitle"),
             ["planBuild"] = Strings.Get("Harness_PlanBuild"),
+            ["planRevise"] = Strings.Get("Harness_PlanRevise"),
         };
 
     private static string BuildEmptyStateHtml(string? ssoDisplayName)

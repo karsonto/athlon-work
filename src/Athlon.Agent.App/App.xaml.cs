@@ -85,6 +85,7 @@ public partial class App : Application
             _services = services.BuildServiceProvider();
             StartupTrace("ServiceProvider built");
             _services.GetRequiredService<SubAgentCompletionContinuationService>();
+            _services.GetRequiredService<PlanExecutionContinuationService>();
 
             if (startupSettings.SubAgent.Enabled)
             {

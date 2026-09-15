@@ -83,4 +83,67 @@ public sealed class ContextOccupancyViewModelTests
         Assert.True(dash[1] > 0);
         Assert.True(dash[0] + dash[1] >= fullDash);
     }
+
+    [Fact]
+    public void Apply_PercentMatchesTotalUtilization_NotContentSum()
+    {
+        var occupancy = new ContextOccupancyViewModel();
+        // The content categories sum to 60_000 while the 40_000 safety margin is excluded from them,
+        // so a content-only share would read 60%. TotalUtilization (80_000) is the metric the
+        // pressure evaluator uses, and the ring must agree with it.
+        var budget = new ContextBudgetSnapshot(
+            100_000,
+            0,
+            40_000,
+            60_000,
+            40_000,
+            0.66,
+            20_000,
+            20_000,
+            40_000,
+            new ContextOccupancyBreakdown(SystemPrompt: 20_000, ToolDefinitions: 20_000, Conversation: 20_000));
+
+        occupancy.Apply(budget, ContextPressureLevel.Critical);
+
+        Assert.Equal(60_000, budget.DisplayedContentTokens);
+        Assert.Equal(80_000, budget.EstimatedTotalPrompt);
+        Assert.Equal((int)Math.Round(budget.TotalUtilization * 100), occupancy.PercentUsed);
+        Assert.Equal(80, occupancy.PercentUsed);
+        // The capacity label reports the same numerator the ring fills against.
+        Assert.Contains(
+            TokenCountDisplay.FormatCompact(budget.EstimatedTotalPrompt),
+            occupancy.UsedCapacityLabel,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Apply_AtCriticalBoundary_AgreesWithPressureEvaluator()
+    {
+        var dynamic = new DynamicCompactionSettings();
+        var target = dynamic.TargetUtilization;
+        var occupancy = new ContextOccupancyViewModel();
+
+        // Craft a budget whose TotalUtilization sits exactly on the Critical boundary.
+        const int window = 100_000;
+        const int overhead = 0;
+        var history = (int)Math.Round(target * window);
+        var budget = new ContextBudgetSnapshot(
+            window,
+            0,
+            overhead,
+            window,
+            history,
+            (double)history / window,
+            history,
+            0,
+            0,
+            new ContextOccupancyBreakdown(SystemPrompt: history));
+
+        var pressure = ContextPressureEvaluator.Evaluate(budget, dynamic);
+        occupancy.Apply(budget, pressure);
+
+        Assert.Equal(ContextPressureLevel.Critical, pressure);
+        Assert.Equal((int)Math.Round(target * 100), occupancy.PercentUsed);
+        Assert.True(occupancy.IsCompactCtaEmphasized);
+    }
 }

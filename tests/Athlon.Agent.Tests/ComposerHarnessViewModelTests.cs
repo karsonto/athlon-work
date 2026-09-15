@@ -3,6 +3,7 @@ using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Harness;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.Harness;
 
@@ -293,6 +294,393 @@ public sealed class ComposerHarnessViewModelTests
         Assert.False(vm.IsModePickerOpen);
         var list = await store.GetAsync("session-1");
         Assert.Empty(list.Items);
+    }
+
+    [Fact]
+    public async Task SelectModeAsync_PreservesTasks_WhenWorkHasAlreadyStarted()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "done", Status = AgentTaskStatuses.Completed },
+            new AgentTaskItem { Id = "2", Content = "open", Status = AgentTaskStatuses.Pending }
+        ]);
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
+        await vm.LoadForSessionAsync("session-1");
+
+        await vm.SelectModeCommand.ExecuteAsync(SessionAgentMode.Ask);
+
+        Assert.Equal(SessionAgentMode.Ask, vm.SelectedMode);
+        // Querying the model from Plan/Ask must not destroy an executing plan's task list.
+        var list = await store.GetAsync("session-1");
+        Assert.Equal(2, list.Items.Count);
+    }
+
+    [Fact]
+    public async Task SelectModeAsync_PreservesTasks_WhenAnyTaskIsInProgress()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "working", Status = AgentTaskStatuses.InProgress }
+        ]);
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
+        await vm.LoadForSessionAsync("session-1");
+
+        await vm.SelectModeCommand.ExecuteAsync(SessionAgentMode.Plan);
+
+        var list = await store.GetAsync("session-1");
+        Assert.Single(list.Items);
+    }
+
+    [Fact]
+    public async Task SelectModeAsync_PreservesCancelledOnlyList_WhenWorkNeverStarted()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "dropped", Status = AgentTaskStatuses.Cancelled }
+        ]);
+        var vm = new ComposerHarnessViewModel(harness, store, new NoOpTaskPlanCompletionNotifier(), Localization);
+        await vm.LoadForSessionAsync("session-1");
+
+        await vm.SelectModeCommand.ExecuteAsync(SessionAgentMode.Ask);
+
+        // Cancelled-only means execution never really started, so the list is reclaimed.
+        var list = await store.GetAsync("session-1");
+        Assert.Empty(list.Items);
+    }
+
+    [Fact]
+    public async Task RefreshTasksAsync_AllCompleted_SchedulesDelayedClear_InsteadOfClearingImmediately()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress }
+        ]);
+        var clearer = new RecordingPlanArtifactsClearer();
+        var scheduler = new ManualAutoClearScheduler();
+        var vm = CreateAutoClearingViewModel(harness, store, clearer, scheduler);
+        await vm.LoadForSessionAsync("session-1");
+
+        store.SetItems([new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed }]);
+        await vm.RefreshTasksAsync();
+        string? autoClearedSessionId = null;
+        vm.OnPlanAutoCleared = sessionId => autoClearedSessionId = sessionId;
+
+        // The completion state stays visible; nothing is cleared on the spot.
+        Assert.Single(vm.Tasks);
+        Assert.Equal(1, scheduler.PendingCount);
+        Assert.Equal(0, clearer.CallCount);
+
+        await scheduler.FireAsync();
+
+        Assert.Equal(1, clearer.CallCount);
+        Assert.Equal("session-1", clearer.LastSessionId);
+        Assert.Equal("session-1", autoClearedSessionId);
+    }
+
+    [Fact]
+    public async Task AutoClear_ThenRefresh_DropsThePanelItems()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed }
+        ]);
+        var clearer = new RecordingPlanArtifactsClearer();
+        var scheduler = new ManualAutoClearScheduler();
+        var vm = CreateAutoClearingViewModel(harness, store, clearer, scheduler);
+        await vm.LoadForSessionAsync("session-1");
+        await vm.RefreshTasksAsync();
+        Assert.Single(vm.Tasks);
+
+        await scheduler.FireAsync();
+        // In production the clearer notifies ITaskListChangedNotifier, which refreshes the panel.
+        store.SetItems([]);
+        await vm.RefreshTasksAsync();
+
+        Assert.Empty(vm.Tasks);
+        Assert.False(vm.ShowTaskPanel);
+    }
+
+    [Fact]
+    public async Task RefreshTasksAsync_PartiallyComplete_DoesNotScheduleAutoClear()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed },
+            new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.Pending }
+        ]);
+        var clearer = new RecordingPlanArtifactsClearer();
+        var scheduler = new ManualAutoClearScheduler();
+        var vm = CreateAutoClearingViewModel(harness, store, clearer, scheduler);
+
+        await vm.LoadForSessionAsync("session-1");
+
+        Assert.Equal(0, scheduler.PendingCount);
+        Assert.Equal(0, clearer.CallCount);
+    }
+
+    [Fact]
+    public async Task RefreshTasksAsync_AllCancelled_DoesNotScheduleAutoClear()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.InProgress }
+        ]);
+        var clearer = new RecordingPlanArtifactsClearer();
+        var scheduler = new ManualAutoClearScheduler();
+        var vm = CreateAutoClearingViewModel(harness, store, clearer, scheduler);
+        await vm.LoadForSessionAsync("session-1");
+
+        store.SetItems(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Cancelled },
+            new AgentTaskItem { Id = "2", Content = "second", Status = AgentTaskStatuses.Cancelled }
+        ]);
+        await vm.RefreshTasksAsync();
+
+        // All-cancelled is not "all completed"; the existing notification semantics rely on this.
+        Assert.Equal(0, scheduler.PendingCount);
+    }
+
+    [Fact]
+    public async Task AutoClearCallback_ReVerifiesTaskList_AndSkipsClearWhenNewTodosArrived()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed }
+        ]);
+        var clearer = new RecordingPlanArtifactsClearer();
+        var scheduler = new ManualAutoClearScheduler();
+        var vm = CreateAutoClearingViewModel(harness, store, clearer, scheduler);
+        await vm.LoadForSessionAsync("session-1");
+        await vm.RefreshTasksAsync();
+        Assert.Equal(1, scheduler.PendingCount);
+
+        // The model wrote a fresh todo during the delay; clearing would destroy it.
+        store.SetItems(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed },
+            new AgentTaskItem { Id = "9", Content = "follow-up", Status = AgentTaskStatuses.Pending }
+        ]);
+
+        await scheduler.FireAsync();
+
+        Assert.Equal(0, clearer.CallCount);
+    }
+
+    [Fact]
+    public async Task AutoClear_IsDisabledWhenTheSettingIsOff()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "first", Status = AgentTaskStatuses.Completed }
+        ]);
+        var clearer = new RecordingPlanArtifactsClearer();
+        var scheduler = new ManualAutoClearScheduler();
+        var settings = new AppSettings();
+        settings.AgentTurn.ClearPlanOnAllTasksCompleted = false;
+        var vm = new ComposerHarnessViewModel(
+            harness,
+            store,
+            new NoOpTaskPlanCompletionNotifier(),
+            Localization,
+            settings,
+            clearer,
+            new PlanContinuationTracker(),
+            new NoOpAppLogger(),
+            scheduler.Schedule);
+
+        await vm.LoadForSessionAsync("session-1");
+
+        Assert.Equal(0, scheduler.PendingCount);
+    }
+
+    [Fact]
+    public async Task ClearTaskPlanAsync_RoutesThroughTheUnifiedClearer_WhenAvailable()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "task", Status = AgentTaskStatuses.InProgress }
+        ]);
+        var clearer = new RecordingPlanArtifactsClearer();
+        var vm = new ComposerHarnessViewModel(
+            harness,
+            store,
+            new NoOpTaskPlanCompletionNotifier(),
+            Localization,
+            new AppSettings(),
+            clearer,
+            new PlanContinuationTracker(),
+            new NoOpAppLogger());
+
+        await vm.LoadForSessionAsync("session-1");
+        await vm.ClearTaskPlanAsync();
+
+        Assert.Equal(1, clearer.CallCount);
+        Assert.Equal("session-1", clearer.LastSessionId);
+        Assert.Empty(vm.Tasks);
+        Assert.False(vm.ShowTaskPanel);
+    }
+
+    [Fact]
+    public async Task StopAutoContinue_MarksTheSessionStopped_AndHidesTheStopButton()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore(
+        [
+            new AgentTaskItem { Id = "1", Content = "open", Status = AgentTaskStatuses.Pending }
+        ]);
+        var tracker = new PlanContinuationTracker();
+        var vm = new ComposerHarnessViewModel(
+            harness,
+            store,
+            new NoOpTaskPlanCompletionNotifier(),
+            Localization,
+            new AppSettings(),
+            new RecordingPlanArtifactsClearer(),
+            tracker,
+            new NoOpAppLogger());
+        await vm.LoadForSessionAsync("session-1");
+
+        Assert.True(vm.IsAutoContinueEnabled);
+        Assert.True(vm.CanStopAutoContinue);
+
+        vm.StopAutoContinueCommand.Execute(null);
+
+        Assert.True(tracker.IsStopped("session-1"));
+        Assert.False(vm.CanStopAutoContinue);
+    }
+
+    [Fact]
+    public void IsAutoContinueEnabled_IsOffWhenTheSettingIsOff()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore();
+        var settings = new AppSettings();
+        settings.AgentTurn.PlanAutoContinueEnabled = false;
+        var vm = new ComposerHarnessViewModel(
+            harness,
+            store,
+            new NoOpTaskPlanCompletionNotifier(),
+            Localization,
+            settings,
+            new RecordingPlanArtifactsClearer(),
+            new PlanContinuationTracker(),
+            new NoOpAppLogger());
+
+        Assert.False(vm.IsAutoContinueEnabled);
+        Assert.False(vm.CanStopAutoContinue);
+    }
+
+    [Fact]
+    public async Task IsAutoContinueEnabled_Setter_TogglesTheSettingAndNotifiesTheShell()
+    {
+        var harness = new StubHarnessState(SessionAgentMode.Agent);
+        var store = new MutableTaskListStore();
+        var settings = new AppSettings();
+        var persisted = 0;
+        var vm = new ComposerHarnessViewModel(
+            harness,
+            store,
+            new NoOpTaskPlanCompletionNotifier(),
+            Localization,
+            settings,
+            new RecordingPlanArtifactsClearer(),
+            new PlanContinuationTracker(),
+            new NoOpAppLogger())
+        {
+            OnAutoContinueSettingChangedAsync = () =>
+            {
+                persisted++;
+                return Task.CompletedTask;
+            }
+        };
+
+        vm.IsAutoContinueEnabled = false;
+
+        Assert.False(settings.AgentTurn.PlanAutoContinueEnabled);
+        Assert.Equal(1, persisted);
+
+        // Setting the same value again must not re-save.
+        vm.IsAutoContinueEnabled = false;
+        Assert.Equal(1, persisted);
+    }
+
+    private static ComposerHarnessViewModel CreateAutoClearingViewModel(
+        ISessionHarnessState harness,
+        ISessionTaskListStore store,
+        ISessionPlanArtifactsClearer clearer,
+        ManualAutoClearScheduler scheduler) =>
+        new(
+            harness,
+            store,
+            new NoOpTaskPlanCompletionNotifier(),
+            Localization,
+            new AppSettings(),
+            clearer,
+            new PlanContinuationTracker(),
+            new NoOpAppLogger(),
+            scheduler.Schedule);
+
+    /// <summary>Drives the delayed auto-clear deterministically instead of waiting on a dispatcher timer.</summary>
+    private sealed class ManualAutoClearScheduler
+    {
+        private readonly List<Func<Task>> _pending = new();
+
+        public int PendingCount => _pending.Count;
+
+        public IDisposable Schedule(TimeSpan delay, Func<Task> action)
+        {
+            _pending.Add(action);
+            return new Handle(_pending, action);
+        }
+
+        public async Task FireAsync()
+        {
+            var actions = _pending.ToArray();
+            _pending.Clear();
+            foreach (var action in actions)
+            {
+                await action();
+            }
+        }
+
+        private sealed class Handle(List<Func<Task>> pending, Func<Task> action) : IDisposable
+        {
+            public void Dispose() => pending.Remove(action);
+        }
+    }
+
+    private sealed class RecordingPlanArtifactsClearer : ISessionPlanArtifactsClearer
+    {
+        public int CallCount { get; private set; }
+
+        public string? LastSessionId { get; private set; }
+
+        public Task ClearAsync(string sessionId, bool resetAutoContinue = true, CancellationToken cancellationToken = default)
+        {
+            CallCount++;
+            LastSessionId = sessionId;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class NoOpAppLogger : IAppLogger
+    {
+        public void Debug(string messageTemplate, params object[] values) { }
+        public void Information(string messageTemplate, params object[] values) { }
+        public void Warning(string messageTemplate, params object[] values) { }
+        public void Error(Exception exception, string messageTemplate, params object[] values) { }
+        public IAppLogger ForContext(string sourceContext) => this;
     }
 
     private sealed class StubHarnessState(SessionAgentMode mode) : ISessionHarnessState

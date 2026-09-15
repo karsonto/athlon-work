@@ -81,6 +81,9 @@ public sealed class PublishPlanTool(
             run.Overview = overview;
             run.PlanMarkdown = markdown;
             run.Todos = todos;
+            // Transient signal consumed by PlanTurnOrchestrator to tell "this turn produced a plan"
+            // apart from "the model only talked", without diffing markdown text.
+            run.PublishedThisTurn = true;
             run.UpdatedAt = DateTimeOffset.UtcNow;
             phaseAccessor.SetActiveRun(run);
             planSessionState.NotifyChanged(run);

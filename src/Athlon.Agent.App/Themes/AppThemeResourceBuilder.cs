@@ -103,6 +103,14 @@ internal static class AppThemeResourceBuilder
             ["Brush.ScrollThumb"] = Brush(c.ScrollThumb, c.ScrollThumbOpacity),
             ["Brush.ChatBackground"] = Brush(c.ChatBackgroundTop),
         };
+
+        // The app loads MaterialDesign's control styles without installing its theme, so the keys
+        // those styles resolve are absent unless supplied here. See MaterialDesignBrushBridge.
+        foreach (var (key, value) in MaterialDesignBrushBridge.Build(c))
+        {
+            resources[key] = value;
+        }
+
         return resources;
     }
 

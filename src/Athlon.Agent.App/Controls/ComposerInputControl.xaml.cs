@@ -211,6 +211,13 @@ public partial class ComposerInputControl : UserControl
                     return;
             }
         }
+
+        // Escape also backs out of plan revision mode (the card's "Revise" button), so the
+        // affordance is cancellable without sending anything.
+        if (e.Key == Key.Escape && _viewModel.CancelPlanRevise())
+        {
+            e.Handled = true;
+        }
     }
 
     private async void ComposerTextBox_OnPastePreviewExecuted(object sender, ExecutedRoutedEventArgs e)

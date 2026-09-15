@@ -49,6 +49,24 @@ public sealed class PlanRuntimeContextContributor(
                 + "If answers are still insufficient, call ask_user again; otherwise explore the workspace or call publish_plan.");
         }
 
+        // A revision turn must see the plan it is revising. The only other copy is the publish_plan
+        // tool arguments in history, which TruncateArgsService reduces to "first 20 chars +
+        // ...(argument truncated)" once they leave the keep window — so without this the model would
+        // be editing blind.
+        if (run.Phase == PlanPhase.Draft && !string.IsNullOrWhiteSpace(run.PlanMarkdown))
+        {
+            builder.AppendLine();
+            builder.AppendLine("## Current Plan (revision base)");
+            builder.AppendLine();
+            builder.AppendLine(
+                "This is the plan currently shown to the user. Apply the requested changes to it and call "
+                + "publish_plan with the full revised document. Do not start over from scratch, and do not "
+                + "edit files or implement anything.");
+            builder.AppendLine();
+            builder.AppendLine(run.PlanMarkdown.Trim());
+            builder.AppendLine();
+        }
+
         builder.AppendLine();
     }
 
@@ -83,8 +101,9 @@ internal static class PlanPhaseInstructions
             "Phase AwaitClarify: questions were already asked in the QuestionBar and this turn should have ended. "
             + "Do not call publish_plan or ask_user again, and do not generate waiting copy.",
         PlanPhase.Draft =>
-            "Phase Draft: call publish_plan with title, overview, and a markdown body that includes "
-            + "`## Steps` (numbered) and `## Acceptance` (checklist). Optional todos array seeds Coding tasks after Build. "
+            "Phase Draft (revision): the user is revising the plan shown above. Call publish_plan with title, overview, "
+            + "and the full markdown body (including `## Steps` numbered and `## Acceptance` checklist) once the change is settled. "
+            + "If the request is ambiguous, ask_user a focused question first — the plan stays in AwaitConfirm for the next round. "
             + "Do not implement code.",
         PlanPhase.AwaitConfirm =>
             "Phase AwaitConfirm: the plan is waiting for the user. If they send new instructions, treat them as a revision request. "

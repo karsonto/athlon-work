@@ -136,6 +136,9 @@
   <data name="Chat_ContextMeterSubagent" xml:space="preserve">
     <value>Subagent definitions</value>
   </data>
+  <data name="Chat_ContextMeterBreakdownNote" xml:space="preserve">
+    <value>Categories are an approximate split (excluding the safety margin) and may differ from the percentage above.</value>
+  </data>
   <data name="Chat_OverflowRetrySkipped" xml:space="preserve">
     <value>Context is full and compaction did not shrink the request, so the retry was skipped.</value>
   </data>
@@ -1040,6 +1043,18 @@ Error: {1}</value>
   </data>
   <data name="Nav_TaskPlan" xml:space="preserve">
     <value>Task plan</value>
+  </data>
+  <data name="Harness_PlanAutoContinue" xml:space="preserve">
+    <value>Keep running automatically</value>
+  </data>
+  <data name="Harness_PlanAutoContinueStop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="Harness_TaskPlanCleared" xml:space="preserve">
+    <value>All tasks and the plan are complete and have been cleared</value>
+  </data>
+  <data name="Plan_ReviseNoNewPlan" xml:space="preserve">
+    <value>No new plan was produced this turn, so the previous plan was kept. Add more detail or click Revise again.</value>
   </data>
   <data name="Notification_TaskCompleteTitle" xml:space="preserve">
     <value>Task complete</value>

@@ -21,7 +21,8 @@ public sealed class HarnessPlanningSection : IEnvironmentPromptSection
         }
 
         builder.AppendLine("Long-task discipline:");
-        builder.AppendLine("- For multi-file, multi-step, or architectural work: explore first (grep_files, glob_files, file_read when advertised), then call todo_write with the COMPLETE list (merge=false on first write; merge=true later to update by id).");
+        builder.AppendLine("- For multi-file, multi-step, or architectural work: explore first (grep_files, glob_files, file_read when advertised), then call todo_write with the COMPLETE list.");
+        builder.AppendLine("- Choose the merge flag from what already exists, not from habit: if the task list is empty, the first write uses merge=false; if the list already exists (including a list pre-seeded from an approved plan), always use merge=true and update items by id. Never use merge=false on a non-empty list unless the user asked you to replace it.");
         builder.AppendLine("- Keep each todo content actionable and verifiable; at most one todo in_progress; mark completed only after its verification command passes.");
         builder.AppendLine("- If scope grows mid-work, update the todo list (merge=true) before continuing edits.");
         builder.AppendLine("- Your current todo list is re-injected every reasoning turn; treat it as the execution checklist.");

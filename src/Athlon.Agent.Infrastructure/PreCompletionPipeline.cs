@@ -115,11 +115,16 @@ public sealed class PreCompletionPipeline(
 
         if (plan.ApplyPrefixReEvict)
         {
-            var prefixCutoff = ConversationCutoffPlanner.DetermineTruncateArgsCutoffFromKeepBudget(
-                conversation,
-                plan.KeepTokenBudget,
-                cfg.IncludeReasoningInModelContext,
-                cfg.MaxToolScreenshotsInModelContext);
+            // Align the re-evict prefix with the cut the compactor will actually apply, so
+            // tightening targets the span that is about to be summarized and never reaches into
+            // the retained tail.
+            var prefixCutoff = plan.ApplyConversationCompact
+                ? ResolveAlignedPrefixCutoff(conversation, cfg, plan)
+                : ConversationCutoffPlanner.DetermineTruncateArgsCutoffFromKeepBudget(
+                    conversation,
+                    plan.KeepTokenBudget,
+                    cfg.IncludeReasoningInModelContext,
+                    cfg.MaxToolScreenshotsInModelContext);
             var (updatedMessages, changed) = PrefixToolResultReEvictor.Apply(
                 session.Messages,
                 cfg,
@@ -198,6 +203,31 @@ public sealed class PreCompletionPipeline(
         }
 
         return compactResult.Session;
+    }
+
+    /// <summary>
+    /// Cutoff the compactor will actually summarize, so prefix tightening stays inside the
+    /// summarized span. Falls back to the keep-budget window when no semantic plan is available.
+    /// </summary>
+    private static int ResolveAlignedPrefixCutoff(
+        IReadOnlyList<ChatMessage> conversation,
+        ContextCompactionSettings cfg,
+        DynamicCompactionPlan plan)
+    {
+        if (cfg.DynamicCompaction.EnableSemanticCutoff && plan.KeepTokenBudget > 0)
+        {
+            var cutPlan = SemanticCutoffPlanner.DetermineCutPlan(conversation, cfg, plan.KeepTokenBudget);
+            if (cutPlan.SummarizedEnd > 0)
+            {
+                return cutPlan.SummarizedEnd;
+            }
+        }
+
+        return ConversationCutoffPlanner.DetermineTruncateArgsCutoffFromKeepBudget(
+            conversation,
+            plan.KeepTokenBudget,
+            cfg.IncludeReasoningInModelContext,
+            cfg.MaxToolScreenshotsInModelContext);
     }
 
     private async Task<AgentSession> RunLegacyAsync(

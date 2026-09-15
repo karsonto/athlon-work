@@ -42,7 +42,8 @@ public sealed class CompactionTurnMiddleware(
         var compaction = settings.ContextCompaction;
         var multiplier = tokenEstimatorCalibrator.GetMultiplier(invocation.Session.Id);
         var promptOccupancy = invocation.FrozenPrompt?.Occupancy;
-        var budget = ContextBudgetCalculator.Compute(
+        var lastPromptTokens = promptPressureStore.GetLastPromptTokens(invocation.Session.Id);
+        var budget = ContextBudgetResolver.Resolve(
             environmentPrompt,
             tools,
             invocation.Session.Messages,
@@ -50,13 +51,13 @@ public sealed class CompactionTurnMiddleware(
             settings.Model,
             multiplier,
             invocation.RuntimeContext,
-            promptOccupancy);
+            promptOccupancy,
+            lastPromptTokens);
         var rawHistoryEstimate = Math.Abs(multiplier - 1.0) < 0.001
             ? budget.EstimatedHistory
             : ContextBudgetCalculator.EstimateRawHistory(
                 invocation.Session.Messages,
                 settings.ContextCompaction);
-        budget = ApplyPromptPressure(budget, invocation.Session.Id);
         var pressure = ContextPressureEvaluator.Evaluate(
             budget,
             compaction.DynamicCompaction,
@@ -71,12 +72,13 @@ public sealed class CompactionTurnMiddleware(
                 tools,
                 multiplier,
                 pressureOverride,
-                promptPressureStore.GetLastPromptTokens(invocation.Session.Id),
+                lastPromptTokens,
                 rawHistoryEstimate);
         }
 
         invocation.CompactionContext = runtimeContext;
         invocation.State.Compaction = runtimeContext;
+        var historyBeforeCompaction = invocation.Session.Messages;
         var messageIdsBefore = invocation.Session.Messages.Select(message => message.Id).ToHashSet(StringComparer.Ordinal);
         invocation.Session = await preCompletionPipeline.RunAsync(
             invocation.Session,
@@ -86,7 +88,16 @@ public sealed class CompactionTurnMiddleware(
         invocation.Session = await PersistCompactionAuditsAsync(invocation, messageIdsBefore, cancellationToken)
             .ConfigureAwait(false);
 
-        var afterBudget = ContextBudgetCalculator.Compute(
+        // The stored measurement describes the payload as it was *before* compaction. Keeping it
+        // would let ApplyPromptPressure push the freshly reduced estimate back up, so the occupancy
+        // meter and pressure level would never fall. Drop it; the next real API response records the
+        // new, smaller value.
+        if (DidCompact(historyBeforeCompaction, invocation.Session.Messages))
+        {
+            promptPressureStore.Clear(invocation.Session.Id);
+        }
+
+        var afterBudget = ContextBudgetResolver.Resolve(
             environmentPrompt,
             tools,
             invocation.Session.Messages,
@@ -94,14 +105,50 @@ public sealed class CompactionTurnMiddleware(
             settings.Model,
             multiplier,
             invocation.RuntimeContext,
-            promptOccupancy);
-        afterBudget = ApplyPromptPressure(afterBudget, invocation.Session.Id);
+            promptOccupancy,
+            promptPressureStore.GetLastPromptTokens(invocation.Session.Id));
         var afterPressure = ContextPressureEvaluator.Evaluate(
             afterBudget,
             compaction.DynamicCompaction,
             forceOverflow: pressureOverride == ContextPressureLevel.Overflow);
         await PublishBudgetAsync(invocation, afterBudget, afterPressure).ConfigureAwait(false);
         return invocation.Session;
+    }
+
+    /// <summary>
+    /// True when this round rewrote the payload in place or replaced part of it with a summary:
+    /// that is exactly when the stored prompt measurement stops describing the request.
+    /// Covers in-place rewrites too (truncate-args, prefix re-eviction), which replace message
+    /// content without changing ids.
+    /// </summary>
+    private static bool DidCompact(
+        IReadOnlyList<ChatMessage> before,
+        IReadOnlyList<ChatMessage> after)
+    {
+        if (after.Count == 0)
+        {
+            return false;
+        }
+
+        var beforeById = before.ToDictionary(message => message.Id, StringComparer.Ordinal);
+        var afterIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var message in after)
+        {
+            afterIds.Add(message.Id);
+            if (!beforeById.TryGetValue(message.Id, out var original))
+            {
+                return true;
+            }
+
+            if (!string.Equals(message.Content, original.Content, StringComparison.Ordinal)
+                || !string.Equals(message.ToolCallsJson, original.ToolCallsJson, StringComparison.Ordinal)
+                || !string.Equals(message.ReasoningContent, original.ReasoningContent, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return before.Any(message => !afterIds.Contains(message.Id));
     }
 
     private static Task PublishBudgetAsync(
@@ -111,23 +158,6 @@ public sealed class CompactionTurnMiddleware(
         AgentRuntime.PublishStreamEventsAsync(
             invocation.Callbacks,
             [new AgentStreamEvent.ContextBudgetUpdated(budget, pressure)]);
-
-    private ContextBudgetSnapshot ApplyPromptPressure(ContextBudgetSnapshot budget, string sessionId)
-    {
-        var lastPromptTokens = promptPressureStore.GetLastPromptTokens(sessionId);
-        if (lastPromptTokens is not > 0)
-        {
-            return budget;
-        }
-
-        var historyFromActual = Math.Max(0, lastPromptTokens.Value - budget.FixedOverhead);
-        if (historyFromActual <= budget.EstimatedHistory)
-        {
-            return budget;
-        }
-
-        return budget.WithHistoryEstimate(historyFromActual, budget.HistoryBudget);
-    }
 
     private async Task<AgentSession> PersistCompactionAuditsAsync(
         AgentTurnInvocation invocation,

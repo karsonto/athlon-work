@@ -59,6 +59,7 @@ public partial class WebChatView : UserControl
     public event EventHandler<ToolApprovalDecisionEventArgs>? ToolApprovalDecisionReceived;
     public event EventHandler<ToolDetailRequestEventArgs>? ToolDetailRequested;
     public event EventHandler? PlanBuildRequested;
+    public event EventHandler? PlanReviseRequested;
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
@@ -771,6 +772,9 @@ public partial class WebChatView : UserControl
                         break;
                     case "planBuild":
                         PlanBuildRequested?.Invoke(this, EventArgs.Empty);
+                        break;
+                    case "planRevise":
+                        PlanReviseRequested?.Invoke(this, EventArgs.Empty);
                         break;
                     case "requestToolDetail":
                     {

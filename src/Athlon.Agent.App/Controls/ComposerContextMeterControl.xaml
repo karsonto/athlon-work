@@ -190,6 +190,11 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <TextBlock Text="{loc:Localize Key=Chat_ContextMeterBreakdownNote}"
+                               Margin="0,2,0,0"
+                               FontSize="11"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource Brush.SubtleText}" />
                     <TextBlock Text="{loc:Localize Key=Shell_CompactingContext}"
                                Margin="0,4,0,0"
                                FontSize="12"

@@ -16,7 +16,9 @@ public sealed class SessionCompactionService(
     CompactionTurnMiddleware compactionMiddleware,
     IToolRouter toolRouter,
     ISystemPromptOrchestrator promptOrchestrator,
-    AppSettings settings)
+    AppSettings settings,
+    ITokenEstimatorCalibrator tokenEstimatorCalibrator,
+    IPromptPressureStore promptPressureStore)
 {
     public async Task<ManualCompactionResult> CompactAsync(
         AgentSession session,
@@ -72,16 +74,25 @@ public sealed class SessionCompactionService(
         var tools = toolRouter.ListTools();
         var frozen = promptOrchestrator.PrepareForTurn(session, tools);
         var runtimeContext = promptOrchestrator.BuildRuntimeContext(session, tools);
-        return ContextBudgetCalculator.Compute(
+        // Share the resolver with the agent loop so a manual recalculation reports exactly the same
+        // numbers as the streaming path: same calibration multiplier, same measured prompt_tokens.
+        return ContextBudgetResolver.Resolve(
             frozen.Text,
             tools,
             session.Messages,
             settings.ContextCompaction,
             settings.Model,
-            calibrationMultiplier: 1.0,
-            runtimeContext: runtimeContext,
-            promptOccupancy: frozen.Occupancy);
+            tokenEstimatorCalibrator.GetMultiplier(session.Id),
+            runtimeContext,
+            frozen.Occupancy,
+            promptPressureStore.GetLastPromptTokens(session.Id));
     }
+
+    /// <summary>
+    /// Drops any stored prompt measurement for the session. Called after the displayed context is
+    /// cleared, so the stale (larger) measurement cannot inflate the freshly emptied meter.
+    /// </summary>
+    public void ClearPromptPressure(string sessionId) => promptPressureStore.Clear(sessionId);
 
     private static bool HasCompactionStructureChange(AgentSession session, HashSet<string> messageIdsBefore)
     {

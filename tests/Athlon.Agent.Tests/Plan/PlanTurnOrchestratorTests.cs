@@ -149,7 +149,13 @@ public sealed class PlanTurnOrchestratorTests
         var orchestrator = new StubAgentOrchestrator(_ => ["Republishing with option B."]);
         orchestrator.OnTurn = _ =>
         {
+            // Mirrors PublishPlanTool: write the markdown, then flag the run as having published
+            // this turn. Without the flag the turn counts as an inconclusive revision and the old
+            // plan is deliberately kept.
             store.WritePlanMarkdownAsync(session.Id, revised).GetAwaiter().GetResult();
+            var current = phaseAccessor.GetActiveRun(session.Id)!;
+            current.PublishedThisTurn = true;
+            phaseAccessor.SetActiveRun(current);
         };
         var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
         session = await sut.RunUserTurnAsync(session, "Prefer option B", null, CancellationToken.None);
@@ -349,6 +355,106 @@ public sealed class PlanTurnOrchestratorTests
     }
 
     [Fact]
+    public async Task RunUserTurnAsync_RevisionAsksClarification_ThenAnswerKeepsOldPlanAndStaysMultiTurn()
+    {
+        var session = AgentSession.Create("plan-session");
+        var store = new InMemoryPlanRunStore();
+        var phaseAccessor = new PlanPhaseAccessor();
+        var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
+        var original = """
+            # Original plan
+
+            Original overview.
+
+            ## Steps
+            1. Original step
+
+            ## Acceptance
+            - [ ] Original OK
+            """;
+        await store.WritePlanMarkdownAsync(session.Id, original);
+        var run = new PlanRun
+        {
+            Id = "run1",
+            SessionId = session.Id,
+            Phase = PlanPhase.AwaitConfirm,
+            Status = PlanRunStatuses.AwaitingConfirmation,
+            Goal = "goal",
+            PlanMarkdown = original
+        };
+        await store.SaveActiveAsync(run);
+        phaseAccessor.SetActiveRun(run);
+
+        var question = new UserQuestion
+        {
+            RequestId = "q1",
+            Questions =
+            [
+                new UserQuestionItem
+                {
+                    Id = "scope",
+                    Prompt = "Which module?",
+                    Options =
+                    [
+                        new UserQuestionOption { Id = "auth", Label = "Auth" },
+                        new UserQuestionOption { Id = "ui", Label = "UI" }
+                    ]
+                }
+            ]
+        };
+
+        var orchestrator = new StubAgentOrchestrator(_ => ["Which module should this touch?"]);
+        orchestrator.OnTurn = turn =>
+        {
+            if (turn != 0)
+            {
+                return;
+            }
+
+            // Mirrors AskUserTool: park the run so the QuestionBar can resume it.
+            userQuestions.SetPending(session.Id, question);
+            var current = phaseAccessor.GetActiveRun(session.Id)!;
+            current.Phase = PlanPhase.AwaitClarify;
+            current.Status = PlanRunStatuses.AwaitingClarification;
+            phaseAccessor.SetActiveRun(current);
+            store.SaveActiveAsync(current).GetAwaiter().GetResult();
+        };
+
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
+        await sut.ContinueAsync(
+            session,
+            PlanContinuationKind.Revise,
+            null,
+            CancellationToken.None,
+            userInput: "Maybe rework the steps");
+
+        var asked = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(asked);
+        Assert.Equal(PlanPhase.AwaitClarify, asked.Phase);
+        // The revise conversation must survive the question: without this marker the answered
+        // clarification would fall back to Explore and the current plan would be lost.
+        Assert.True(asked.IsRevisionTurn);
+
+        // Second turn: the user answers, and the model still does not publish.
+        await sut.RunUserTurnAsync(
+            session,
+            UserQuestion.FormatUserAnswer(
+                question,
+                new Dictionary<string, IReadOnlyList<string>> { ["scope"] = ["auth"] },
+                null),
+            null,
+            CancellationToken.None);
+
+        var after = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(after);
+        Assert.Equal(PlanPhase.AwaitConfirm, after.Phase);
+        Assert.Equal(original, after.PlanMarkdown);
+        Assert.False(after.RevisionProducedNewPlan);
+        Assert.True(after.IsRevisionTurn);
+    }
+
+    [Fact]
     public async Task ContinueAsync_Build_MarksApprovedFromInMemoryMarkdown()
     {
         var session = AgentSession.Create("plan-session");
@@ -404,13 +510,24 @@ public sealed class PlanTurnOrchestratorTests
     }
 
     [Fact]
-    public async Task ContinueAsync_Revise_ReturnsToDraftThenAwait()
+    public async Task ContinueAsync_Revise_PublishesNewPlan_SealsBackToAwaitConfirm()
     {
         var session = AgentSession.Create("plan-session");
         var store = new InMemoryPlanRunStore();
         var phaseAccessor = new PlanPhaseAccessor();
         var sessionState = new PlanSessionState();
         var userQuestions = new UserQuestionState();
+        var original = """
+            # Original plan
+
+            Original overview.
+
+            ## Steps
+            1. Original step
+
+            ## Acceptance
+            - [ ] Original OK
+            """;
         var revised = """
             # Revised plan
 
@@ -422,21 +539,27 @@ public sealed class PlanTurnOrchestratorTests
             ## Acceptance
             - [ ] Revised OK
             """;
+        await store.WritePlanMarkdownAsync(session.Id, original);
         var run = new PlanRun
         {
             Id = "run1",
             SessionId = session.Id,
             Phase = PlanPhase.AwaitConfirm,
             Status = PlanRunStatuses.AwaitingConfirmation,
-            Goal = "goal"
+            Goal = "goal",
+            PlanMarkdown = original
         };
         await store.SaveActiveAsync(run);
         phaseAccessor.SetActiveRun(run);
 
         var orchestrator = new StubAgentOrchestrator(_ => ["Republishing plan."]);
-        orchestrator.OnTurn = _ =>
+        // Mirrors PublishPlanTool: write the markdown, then flag the run as having published.
+        orchestrator.OnTurn = turn =>
         {
             store.WritePlanMarkdownAsync(session.Id, revised).GetAwaiter().GetResult();
+            var current = phaseAccessor.GetActiveRun(session.Id)!;
+            current.PublishedThisTurn = true;
+            phaseAccessor.SetActiveRun(current);
         };
 
         var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
@@ -451,7 +574,95 @@ public sealed class PlanTurnOrchestratorTests
         Assert.NotNull(after);
         Assert.Equal(PlanPhase.AwaitConfirm, after.Phase);
         Assert.Contains("Revised", after.PlanMarkdown, StringComparison.Ordinal);
+        Assert.True(after.RevisionProducedNewPlan);
+        Assert.False(after.PublishedThisTurn);
         Assert.Contains(true, orchestrator.AppendUserMessageFlags);
+    }
+
+    [Fact]
+    public async Task ContinueAsync_Revise_WithoutPublish_KeepsOldPlanAndStaysMultiTurn()
+    {
+        var session = AgentSession.Create("plan-session");
+        var store = new InMemoryPlanRunStore();
+        var phaseAccessor = new PlanPhaseAccessor();
+        var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
+        var original = """
+            # Original plan
+
+            Original overview.
+
+            ## Steps
+            1. Original step
+
+            ## Acceptance
+            - [ ] Original OK
+            """;
+        await store.WritePlanMarkdownAsync(session.Id, original);
+        var run = new PlanRun
+        {
+            Id = "run1",
+            SessionId = session.Id,
+            Phase = PlanPhase.AwaitConfirm,
+            Status = PlanRunStatuses.AwaitingConfirmation,
+            Goal = "goal",
+            PlanMarkdown = original
+        };
+        await store.SaveActiveAsync(run);
+        phaseAccessor.SetActiveRun(run);
+
+        // The model only discusses the change and never calls publish_plan this turn.
+        var orchestrator = new StubAgentOrchestrator(_ => ["Which of the two options do you prefer?"]);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
+
+        session = await sut.ContinueAsync(
+            session,
+            PlanContinuationKind.Revise,
+            null,
+            CancellationToken.None,
+            userInput: "Maybe use option B?");
+
+        var after = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(after);
+        // Not sealed, not fabricated: the user can keep the discussion going and Build stays valid.
+        Assert.Equal(PlanPhase.AwaitConfirm, after.Phase);
+        Assert.Equal(PlanRunStatuses.AwaitingConfirmation, PlanRunStatuses.Normalize(after.Status));
+        Assert.Equal(original, after.PlanMarkdown);
+        Assert.False(after.RevisionProducedNewPlan);
+        Assert.Equal(1, orchestrator.TurnCount);
+        Assert.True(sut.IsAwaitingUser(session.Id));
+    }
+
+    [Fact]
+    public async Task ContinueAsync_Revise_WithoutPublish_DoesNotInventFallbackPlan()
+    {
+        var session = AgentSession.Create("plan-session");
+        var store = new InMemoryPlanRunStore();
+        var phaseAccessor = new PlanPhaseAccessor();
+        var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
+        var run = new PlanRun
+        {
+            Id = "run1",
+            SessionId = session.Id,
+            Phase = PlanPhase.AwaitConfirm,
+            Status = PlanRunStatuses.AwaitingConfirmation,
+            Goal = "goal"
+        };
+        await store.SaveActiveAsync(run);
+        phaseAccessor.SetActiveRun(run);
+
+        var orchestrator = new StubAgentOrchestrator(_ => ["Let me think."]);
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
+
+        await sut.ContinueAsync(session, PlanContinuationKind.Revise, null, CancellationToken.None);
+
+        var after = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(after);
+        Assert.Equal(PlanPhase.AwaitConfirm, after.Phase);
+        // The old code wrote "Review and refine this plan" placeholders here; it must not come back.
+        Assert.DoesNotContain("Review and refine", after.PlanMarkdown ?? string.Empty, StringComparison.Ordinal);
+        Assert.Equal(1, orchestrator.TurnCount);
     }
 
     private sealed class StubAgentOrchestrator(Func<int, IReadOnlyList<string>> responses) : IAgentOrchestrator

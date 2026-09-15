@@ -64,6 +64,7 @@ public sealed class SessionCompactionServiceTests
         var paths = new CompactionTests.TestAppPathProvider(root);
         paths.EnsureCreated();
         var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var promptPressureStore = new PromptPressureStore();
         var pipeline = new PreCompletionPipeline(
             new ConversationCompactor(
                 settings,
@@ -78,7 +79,7 @@ public sealed class SessionCompactionServiceTests
         var compactionMiddleware = new Athlon.Agent.Core.Middleware.CompactionTurnMiddleware(
             pipeline,
             new TokenEstimatorCalibrator(settings),
-            new PromptPressureStore(),
+            promptPressureStore,
             storage,
             settings);
         var orchestrator = PromptTestHelpers.CreateStaticOrchestrator();
@@ -86,7 +87,9 @@ public sealed class SessionCompactionServiceTests
             compactionMiddleware,
             new NoOpToolRouter(),
             orchestrator,
-            settings);
+            settings,
+            new TokenEstimatorCalibrator(settings),
+            promptPressureStore);
     }
 
     private sealed class SummaryModelClient(string content) : IAgentModelClient

@@ -60,6 +60,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly ITaskListChangedNotifier _taskListChangedNotifier;
     private readonly ISessionTaskListStore _taskListStore;
     private readonly IPlanRunStore _planRunStore;
+    private readonly IPlanArtifactStore _planArtifactStore;
+    private readonly ISessionPlanArtifactsClearer _planArtifactsClearer;
+    private readonly IPlanContinuationTracker _planContinuationTracker;
     private readonly ILocalizationService _loc;
     private readonly IUserNotifier _notifier;
     private readonly SshWorkspaceConnectionService _sshConnection;
@@ -121,6 +124,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ITaskListChangedNotifier taskListChangedNotifier,
         ISessionTaskListStore taskListStore,
         IPlanRunStore planRunStore,
+        IPlanArtifactStore planArtifactStore,
+        ISessionPlanArtifactsClearer planArtifactsClearer,
+        IPlanContinuationTracker planContinuationTracker,
         PageViewFactory pageViewFactory,
         ChatPageViewModel chatPage,
         ScheduleViewModel schedulePageVm,
@@ -153,6 +159,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _taskListChangedNotifier = taskListChangedNotifier;
         _taskListStore = taskListStore;
         _planRunStore = planRunStore;
+        _planArtifactStore = planArtifactStore;
+        _planArtifactsClearer = planArtifactsClearer;
+        _planContinuationTracker = planContinuationTracker;
         _loc = localization;
         _notifier = notifier;
         _sshConnection = sshConnection;
@@ -202,7 +211,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             StartFromApprovedPlanAsync,
             setComposerHint: SetComposerStatus,
             onPlanTimeline: _ => RefreshPlanCard(),
-            onPlanTimelineCleared: () => _activeUi.ClearPlanReady());
+            onPlanTimelineCleared: () => _activeUi.ClearPlanReady(),
+            setComposerFocus: () => chatPage.RequestFocusComposer());
         QuestionBar.Configure(
             () => _displayedSessionId,
             ShowShellToast,
@@ -210,6 +220,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             sessionId => _sessionTurns.TurnHost.IsRunning(sessionId));
         ComposerHarness.OnModePickerOpened = () => IsPlusMenuOpen = false;
         ComposerHarness.OnModeChangedAsync = OnComposerModeChangedAsync;
+        ComposerHarness.OnPlanAutoCleared = _ =>
+            ShowShellToast(_loc["Harness_TaskPlanCleared"], ShellToastKind.Success);
+        ComposerHarness.OnAutoContinueSettingChangedAsync = OnAutoContinueSettingChangedAsync;
         ChatPage = chatPage;
         ChatPage.Configure(
             () => _displayedSessionId,
@@ -1071,6 +1084,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
             _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
+            _savedChatView.PlanReviseRequested -= OnPlanReviseRequested;
         }
 
         _savedChatView = chatView;
@@ -1078,6 +1092,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         chatView.ExternalLinkRequested += OnChatExternalLinkRequested;
         chatView.ToolDetailRequested += OnToolDetailRequested;
         chatView.PlanBuildRequested += OnPlanBuildRequested;
+        chatView.PlanReviseRequested += OnPlanReviseRequested;
         _uiCache.AttachChatViewToAll(chatView);
         _activeUi.ChatView = chatView;
         _ = _activeUi.ReloadChatViewAsync();
@@ -1254,8 +1269,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         await _storage.ClearConversationDisplayAsync(_session.Id);
         PendingImageAttachments.Clear();
         PendingDocumentAttachments.Clear();
-        await ComposerHarness.ClearTaskPlanAsync();
-        _taskListChangedNotifier.Notify(_session.Id);
+        // Drop the task plan and the approved plan artifacts together: the plan is now durable on
+        // disk, so clearing only one of the two would let the plan be re-injected on the next switch.
+        await _planArtifactsClearer.ClearAsync(_session.Id).ConfigureAwait(true);
 
         await _storage.SaveSessionAsync(_session);
         _runtime.Attach(_session, hydrated: true);
@@ -1267,6 +1283,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             synthesizeInterruptedToolResults: false).ConfigureAwait(true);
         NotifyCommandStatesChanged();
         await RefreshSessionHistoryAsync().ConfigureAwait(true);
+        // The stored prompt measurement describes the payload that was just discarded. Clearing it
+        // keeps the emptied meter from being inflated back to the old size, then recompute so the
+        // ring reflects the empty conversation immediately.
+        _compactionService.ClearPromptPressure(_session.Id);
+        RefreshContextOccupancy();
     }
 
     [RelayCommand(CanExecute = nameof(CanCompactContext))]
@@ -1489,10 +1510,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             // Session deletion must succeed even if memory cleanup fails.
         }
 
+        // Clear tasks/plan artifacts before deleting the directory: the clearer writes an empty
+        // tasks.json, which would recreate the directory we just removed.
+        await _planArtifactsClearer.ClearAsync(item.Id).ConfigureAwait(true);
+
         await _storage.DeleteSessionAsync(item.Id);
         _sessionNavigation.Invalidate(item.Id);
-        // Plan runs live only in memory; drop the deleted session's entry so it cannot leak.
-        await _planRunStore.ClearActiveAsync(item.Id).ConfigureAwait(true);
 
         if (string.Equals(_session.Id, item.Id, StringComparison.Ordinal))
         {
@@ -1836,6 +1859,22 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         Application.Current?.Dispatcher.InvokeAsync(() => _ = ComposerHarness.RefreshTasksAsync());
     }
 
+    /// <summary>
+    /// Persists the task panel's auto-continue toggle. It lives in app settings rather than the
+    /// session, so it saves with the rest of the settings and survives restarts.
+    /// </summary>
+    public async Task OnAutoContinueSettingChangedAsync()
+    {
+        try
+        {
+            await _storage.SaveSettingsAsync(_appSettings).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            ShowShellToast(ex.Message, ShellToastKind.Error);
+        }
+    }
+
     private async Task OnComposerModeChangedAsync(SessionAgentMode from, SessionAgentMode to)
     {
         if (from == SessionAgentMode.Debug && to != SessionAgentMode.Debug)
@@ -1897,6 +1936,14 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
     }
 
+    private void OnPlanReviseRequested(object? sender, EventArgs e)
+    {
+        if (!PlanBar.EnterReviseMode())
+        {
+            ShowShellToast(_loc["Plan_BuildMissingPlan"], ShellToastKind.Error);
+        }
+    }
+
     private async Task StartFromApprovedPlanAsync()
     {
         await EnsureDisplayedSessionReadyAsync().ConfigureAwait(true);
@@ -1909,23 +1956,37 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
-        if (approved.Todos.Count > 0)
-        {
-            var list = new SessionTaskList
+        // Persist the plan before anything else can fail: from here on the plan must survive
+        // compaction and session switches, which is what ApprovedPlanRuntimeContributor reads.
+        await _planArtifactStore
+            .SaveAsync(sessionId, approved.PlanMarkdown, approved)
+            .ConfigureAwait(true);
+
+        // Seed with merge=true so a plan built on top of an existing list (for example a re-Build
+        // after a revision) updates items by id instead of silently replacing unrelated work.
+        // Existing items keep their status: re-building a plan must not reopen work already done.
+        var existingById = (await _taskListStore.GetAsync(sessionId).ConfigureAwait(true))
+            .Items
+            .ToDictionary(item => item.Id, StringComparer.OrdinalIgnoreCase);
+        var seeds = approved.Todos
+            .Where(t => !string.IsNullOrWhiteSpace(t.Id) && !string.IsNullOrWhiteSpace(t.Content))
+            .Select(t => new AgentTaskItem
             {
-                Items = approved.Todos
-                    .Where(t => !string.IsNullOrWhiteSpace(t.Id) && !string.IsNullOrWhiteSpace(t.Content))
-                    .Select(t => new AgentTaskItem
-                    {
-                        Id = t.Id,
-                        Content = t.Content,
-                        Status = AgentTaskStatuses.Pending
-                    })
-                    .ToList()
-            };
-            await _taskListStore.ReplaceAsync(sessionId, list).ConfigureAwait(true);
+                Id = t.Id,
+                Content = t.Content,
+                Status = existingById.TryGetValue(t.Id, out var existing)
+                    ? existing.Status
+                    : AgentTaskStatuses.Pending
+            })
+            .ToList();
+        if (seeds.Count > 0)
+        {
+            await _taskListStore.ApplyMergeAsync(sessionId, seeds, merge: true).ConfigureAwait(true);
             _taskListChangedNotifier.Notify(sessionId);
         }
+
+        // A fresh Build restarts the auto-continuation budget (including a previous manual stop).
+        _planContinuationTracker.Reset(sessionId);
 
         // Switching modes before starting the turn matters: SessionTurnHost picks the Plan
         // orchestrator while the harness state still says Plan.
@@ -1945,7 +2006,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         var error = _sessionTurns.TryStartTurn(
             sessionId,
             _session,
-            ApprovedPlanPrompt.BuildUserMessage(approved.PlanMarkdown),
+            BuildApprovedPlanMessage(approved.PlanMarkdown, seeds.Count > 0),
             Array.Empty<ImageAttachment>(),
             ui,
             appendUserMessage: true);
@@ -1955,8 +2016,25 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             return;
         }
 
-        // Consume the plan: it must not come back on reload or session switch.
+        // Consume the in-memory run only: the durable copy on disk is what keeps the plan in
+        // context for the rest of the session, and the timeline card is replaced by the
+        // execution state (the approved-plan message is hidden in the transcript).
         await PlanBar.ClearActiveRunAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Builds the hidden approved-plan message, appending the merge guidance the model needs to
+    /// update a pre-seeded list instead of overwriting it.
+    /// </summary>
+    private static string BuildApprovedPlanMessage(string markdown, bool taskListSeeded)
+    {
+        var message = ApprovedPlanPrompt.BuildUserMessage(markdown);
+        return taskListSeeded
+            ? message
+              + "\n\nThe session task list has already been seeded from this plan's steps. "
+              + "Update it with todo_write using merge=true (update items by id) and keep exactly one item in_progress. "
+              + "Do not use merge=false — that would discard the seeded list."
+            : message;
     }
 
     private void OnTurnCompleted(object? sender, SessionTurnCompletedEventArgs e)
@@ -1972,6 +2050,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
                 DebugBar.RefreshFromActiveRun();
                 PlanBar.RefreshFromActiveRun();
                 QuestionBar.RefreshFromActiveSession();
+                // The ring only updates from streaming pushes during a turn; recompute once here so
+                // the settled value reflects the final history (and any compaction that ran).
+                RefreshContextOccupancy();
             }
 
             // Cache the finished session so switching back re-reads only the display tail, but
@@ -3135,6 +3216,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
             _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
+            _savedChatView.PlanReviseRequested -= OnPlanReviseRequested;
         }
 
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;
@@ -3317,6 +3399,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     public void SetComposerStatus(string? message) =>
         StatusFeedback.SetComposerStatus(message);
+
+    /// <summary>
+    /// Backs out of plan revision mode (the card's "Revise" button) when it is active. Returns
+    /// false otherwise so Escape keeps its normal behavior in the composer.
+    /// </summary>
+    public bool CancelPlanRevise() => PlanBar.CancelReviseMode();
 }
 
 public sealed record AtCompletionItemViewModel(

@@ -156,21 +156,51 @@ public static class ConversationCutoffPlanner
     /// True when every assistant tool_call in <c>[0, index)</c> has a matching tool result
     /// in that same prefix (open-set empty). Aligns with DSH <c>toolPairingBalancedBefore</c>.
     /// </summary>
-    public static bool IsPairingBalancedBefore(IReadOnlyList<ChatMessage> messages, int index)
+    public static bool IsPairingBalancedBefore(IReadOnlyList<ChatMessage> messages, int index) =>
+        IsPairingBalancedInRange(messages, 0, index);
+
+    /// <summary>
+    /// True when the span <c>[start, end)</c> is self-contained: every tool_call it opens is also
+    /// closed inside it. Used to prove a retained window cannot leave an open <c>tool_call</c>.
+    /// </summary>
+    public static bool IsPairingBalancedInRange(
+        IReadOnlyList<ChatMessage> messages,
+        int start,
+        int end)
     {
-        if (index <= 0)
+        if (start >= end || end <= 0)
         {
             return true;
         }
 
         var open = new HashSet<string>(StringComparer.Ordinal);
-        var limit = Math.Min(index, messages.Count);
-        for (var i = 0; i < limit; i++)
+        var from = Math.Max(0, start);
+        var limit = Math.Min(end, messages.Count);
+        for (var i = from; i < limit; i++)
         {
             ApplyPairing(messages[i], open);
         }
 
         return open.Count == 0;
+    }
+
+    /// <summary>
+    /// True when a retained tail may begin at <paramref name="start"/>.
+    ///
+    /// <para>A tail must never open with a tool result: the assistant <c>tool_call</c> it answers
+    /// would sit in the summarized span, leaving an orphaned <c>tool_result</c> that the API
+    /// rejects. Note this is not covered by <see cref="IsPairingBalancedInRange"/>, which only
+    /// tracks unclosed calls — removing an unknown id is a no-op there.</para>
+    /// </summary>
+    public static bool IsRetainedTailStartSafe(IReadOnlyList<ChatMessage> messages, int start)
+    {
+        // Retaining from the beginning keeps everything, so nothing can be orphaned.
+        if (start <= 0 || start >= messages.Count)
+        {
+            return true;
+        }
+
+        return messages[start].Role != MessageRole.Tool;
     }
 
     /// <summary>
@@ -189,9 +219,49 @@ public static class ConversationCutoffPlanner
             return cutoffIndex;
         }
 
+        var lastBalanced = FindLastBalancedPrefixEnd(messages, cutoffIndex);
+        return IsPairingBalancedBefore(messages, cutoffIndex) ? cutoffIndex : lastBalanced;
+    }
+
+    /// <summary>
+    /// Smallest <c>end &gt;= minEnd</c> whose prefix <c>[0, end)</c> is pairing-balanced, or
+    /// <see cref="IReadOnlyList{T}.Count"/> when no such boundary exists. Used where a retained
+    /// count is a floor rather than a ceiling: growing it by a message or two keeps a tool pair
+    /// whole, whereas trimming back could discard the window entirely.
+    /// </summary>
+    public static int FindNextBalancedPrefixEnd(IReadOnlyList<ChatMessage> messages, int minEnd)
+    {
+        var open = new HashSet<string>(StringComparer.Ordinal);
+        var start = Math.Max(0, Math.Min(minEnd, messages.Count));
+        for (var i = 0; i < start; i++)
+        {
+            ApplyPairing(messages[i], open);
+        }
+
+        if (open.Count == 0)
+        {
+            return start;
+        }
+
+        for (var i = start; i < messages.Count; i++)
+        {
+            ApplyPairing(messages[i], open);
+            if (open.Count == 0)
+            {
+                return i + 1;
+            }
+        }
+
+        return messages.Count;
+    }
+
+    /// <summary>Largest <c>end &lt;= limit</c> whose prefix <c>[0, end)</c> is pairing-balanced.</summary>
+    private static int FindLastBalancedPrefixEnd(IReadOnlyList<ChatMessage> messages, int limit)
+    {
         var open = new HashSet<string>(StringComparer.Ordinal);
         var lastBalanced = 0;
-        for (var i = 0; i < cutoffIndex; i++)
+        var bound = Math.Min(limit, messages.Count);
+        for (var i = 0; i < bound; i++)
         {
             ApplyPairing(messages[i], open);
             if (open.Count == 0)
@@ -200,7 +270,7 @@ public static class ConversationCutoffPlanner
             }
         }
 
-        return open.Count == 0 ? cutoffIndex : lastBalanced;
+        return lastBalanced;
     }
 
     private static void ApplyPairing(ChatMessage message, HashSet<string> open)

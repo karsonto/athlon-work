@@ -11,6 +11,8 @@ using Athlon.Agent.Core.Harness;
 
 using Athlon.Agent.Core.Knowledge;
 
+using Athlon.Agent.Core.Plan;
+
 using Athlon.Agent.Core.Sso;
 
 using Athlon.Agent.Core.SubAgents;
@@ -79,6 +81,21 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ISubAgentCompletionNotifier>(sp =>
             sp.GetRequiredService<SubAgentCompletionContinuationService>());
+
+        services.AddSingleton<IPlanContinuationTracker, PlanContinuationTracker>();
+
+        services.AddSingleton<PlanExecutionContinuationService>();
+
+        services.AddSingleton<ISessionPlanArtifactsClearer>(sp =>
+            new SessionPlanArtifactsClearer(
+                sp.GetRequiredService<IPlanPhaseAccessor>(),
+                sp.GetRequiredService<IPlanRunStore>(),
+                sp.GetRequiredService<IPlanArtifactStore>(),
+                sp.GetRequiredService<ISessionTaskListStore>(),
+                sp.GetRequiredService<ITaskListChangedNotifier>(),
+                sp.GetRequiredService<IPlanContinuationTracker>(),
+                sp.GetRequiredService<PlanActionBarViewModel>(),
+                sp.GetRequiredService<IAppLogger>()));
 
         services.AddSingleton<SettingsViewModel>();
 
@@ -162,7 +179,11 @@ public static class ServiceCollectionExtensions
             sp.GetRequiredService<ISessionHarnessState>(),
             sp.GetRequiredService<ISessionTaskListStore>(),
             sp.GetRequiredService<ITaskPlanCompletionNotifier>(),
-            sp.GetRequiredService<ILocalizationService>()));
+            sp.GetRequiredService<ILocalizationService>(),
+            sp.GetRequiredService<AppSettings>(),
+            sp.GetRequiredService<ISessionPlanArtifactsClearer>(),
+            sp.GetRequiredService<IPlanContinuationTracker>(),
+            sp.GetRequiredService<IAppLogger>()));
 
         services.AddSingleton<DebugActionBarViewModel>();
         services.AddSingleton<PlanActionBarViewModel>();

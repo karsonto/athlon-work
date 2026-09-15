@@ -31,6 +31,28 @@ public sealed class PlanRun
 
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>
+    /// Transient: set by <c>publish_plan</c> when it writes a document during the current turn.
+    /// Reset at the start of a Draft (revision) turn. Without it, "did this turn produce a plan?"
+    /// can only be answered by comparing markdown text, which misreads a re-published identical
+    /// plan as "no output". Never persisted as a durable fact.
+    /// </summary>
+    public bool PublishedThisTurn { get; set; }
+
+    /// <summary>
+    /// Transient outcome of the most recent revision turn: true when the model published a new
+    /// plan, false when it answered without publishing, null when the run was not revising.
+    /// The UI reads this to tell the user the previous plan was kept.
+    /// </summary>
+    public bool? RevisionProducedNewPlan { get; set; }
+
+    /// <summary>
+    /// Transient: true while the run is inside a revision turn (including one resumed from a
+    /// clarification question). Distinguishes "this Draft came from a Revise" from an Explore
+    /// turn that happens to have markdown, which a markdown-presence check cannot tell apart.
+    /// </summary>
+    public bool IsRevisionTurn { get; set; }
+
     public bool IsAwaitingUser => Phase.IsAwaitingUser();
 
     public bool HasPlanContent =>
@@ -49,7 +71,10 @@ public sealed class PlanRun
         PlanMarkdown = PlanMarkdown,
         Todos = Todos.Select(t => new PlanTodoItem { Id = t.Id, Content = t.Content }).ToList(),
         CreatedAt = CreatedAt,
-        UpdatedAt = UpdatedAt
+        UpdatedAt = UpdatedAt,
+        PublishedThisTurn = PublishedThisTurn,
+        RevisionProducedNewPlan = RevisionProducedNewPlan,
+        IsRevisionTurn = IsRevisionTurn
     };
 }
 
