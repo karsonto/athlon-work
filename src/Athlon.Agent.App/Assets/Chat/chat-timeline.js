@@ -538,6 +538,9 @@ function enhanceOneCodeBlock(pre, index) {
   // Guard against stale nodes: a resetTimeline() between enqueue and flush detaches the
   // pre from the DOM, and a pre already wrapped in a .code-block must never be re-wrapped.
   if (!pre.isConnected || pre.closest('.code-block')) return;
+  // Markdig marks a ```mermaid fence as <pre class="mermaid"> (no <code> child). It renders
+  // through renderMermaidBlocks(), and a code-block header would fight the SVG.
+  if (pre.classList && pre.classList.contains('mermaid')) return;
   const code = pre.querySelector('code');
   if (!code) return;
 
@@ -637,6 +640,23 @@ var mermaidSeq = 0;
 var mermaidRenderTimer = null;
 var mermaidRenderRoots = [];
 
+// Markdig emits a bare <pre class="mermaid">…</pre> for a ```mermaid fence, while the user-bubble
+// path builds <pre><code class="language-mermaid">…</code></pre>. Match both shapes.
+var MERMAID_SELECTOR = 'pre.mermaid, pre > code.language-mermaid';
+
+/** Diagrams carry their source in the <pre> itself (Markdig) or in a child <code>. */
+function mermaidSourceOf(pre) {
+  if (!pre) return '';
+  var code = pre.querySelector('code');
+  return (code ? code.textContent : pre.textContent) || '';
+}
+
+/** The element that holds the diagram text for a matched node. */
+function mermaidPreOf(node) {
+  if (!node) return null;
+  return node.tagName === 'PRE' ? node : node.parentElement;
+}
+
 function mermaidThemeName() {
   return (window.__chatAssets && window.__chatAssets.theme) || 'dark';
 }
@@ -695,12 +715,19 @@ function renderMermaidBlocks(roots) {
   var blocks = [];
   (roots && roots.length ? roots : [document]).forEach(function (root) {
     if (!root || typeof root.querySelectorAll !== 'function') return;
-    root.querySelectorAll('pre > code.language-mermaid').forEach(function (code) {
-      var pre = code.parentElement;
+    root.querySelectorAll(MERMAID_SELECTOR).forEach(function (node) {
+      var pre = mermaidPreOf(node);
       if (pre && pre.dataset.mermaidDone !== '1') blocks.push(pre);
     });
   });
   if (!blocks.length) return;
+  // Deduplicate: <pre class="mermaid"> also matches the bare-pre part of the selector.
+  var seen = [];
+  blocks = blocks.filter(function (pre) {
+    if (seen.indexOf(pre) >= 0) return false;
+    seen.push(pre);
+    return true;
+  });
   ensureMermaidLoaded().then(function (loaded) {
     if (!loaded) return;
     blocks.forEach(function (pre) {
@@ -710,8 +737,7 @@ function renderMermaidBlocks(roots) {
 }
 
 function renderOneMermaidBlock(pre) {
-  var code = pre.querySelector('code');
-  var source = code ? code.textContent || '' : '';
+  var source = mermaidSourceOf(pre);
   if (!source.trim()) return;
   pre.dataset.mermaidDone = '1';
   mermaidRenderFigure(pre, source, null);
@@ -965,6 +991,15 @@ function createUserRow(content, images, startedAt, mentions, messageId) {
     text.className = 'message-content user-text';
     fillUserText(text, content, mentions);
     bubble.appendChild(text);
+    // Diagrams only render once attached; during a replay batch let endBatch flush them, else
+    // renderMermaidBlocks would skip the node because pre.isConnected is still false.
+    if (text.querySelector(MERMAID_SELECTOR)) {
+      if (state.batching) {
+        state.pendingEnhancementRoots.push(text);
+      } else {
+        scheduleMermaidRender(text);
+      }
+    }
   }
 
   stack.appendChild(bubble);
@@ -1079,27 +1114,92 @@ function createTypedMentionChip(kind, mention) {
   return chip;
 }
 
+// A user paste may carry a ```mermaid fence. Only the fence is special-cased: everything else
+// stays literal text, and the runtime (shared with the assistant timeline) swaps the raw block
+// for an SVG figure in place.
+var USER_MERMAID_FENCE = /```[ \t]*mermaid[ \t]*\r?\n([\s\S]*?)```/gi;
+
+/**
+ * Splits user text into literal runs and Mermaid fences. Returns null when there is no fence,
+ * so the common case keeps the plain-text fast path.
+ */
+function splitUserMermaidSegments(text) {
+  var source = text || '';
+  var segments = [];
+  var cursor = 0;
+  USER_MERMAID_FENCE.lastIndex = 0;
+  var match = USER_MERMAID_FENCE.exec(source);
+  if (!match) return null;
+  while (match) {
+    if (match.index > cursor) {
+      segments.push({ kind: 'text', start: cursor, end: match.index });
+    }
+    segments.push({ kind: 'mermaid', source: (match[1] || '').trim() });
+    cursor = USER_MERMAID_FENCE.lastIndex;
+    match = USER_MERMAID_FENCE.exec(source);
+  }
+  if (cursor < source.length) {
+    segments.push({ kind: 'text', start: cursor, end: source.length });
+  }
+  return segments;
+}
+
+/** A chart-shaped placeholder for renderMermaidBlocks(); failure leaves it as the raw fence. */
+function createUserMermaidBlock(source) {
+  var pre = document.createElement('pre');
+  var code = document.createElement('code');
+  code.className = 'language-mermaid';
+  // textContent only: the diagram source is user input and must never be parsed as HTML.
+  code.textContent = source;
+  pre.appendChild(code);
+  return pre;
+}
+
+/**
+ * Renders the [segStart, segEnd) window of `text` into `el`, splicing mention chips in by their
+ * absolute offsets. Mention offsets are relative to the whole message, so text segments after a
+ * diagram must stay offset-correct — re-length the segment rather than rebasing the mentions.
+ */
+function fillUserTextRange(el, text, segStart, segEnd, mentions) {
+  if (segEnd <= segStart) return;
+  if (!mentions.length) {
+    el.appendChild(document.createTextNode(text.slice(segStart, segEnd)));
+    return;
+  }
+
+  var last = segStart;
+  mentions.forEach(function (mention) {
+    var start = Math.max(segStart, Math.max(0, mention.start | 0));
+    var length = Math.max(0, mention.length | 0);
+    var end = Math.min(segEnd, Math.max(0, mention.start | 0) + length);
+    if (start < last || end <= start || start >= segEnd) return;
+    if (start > last) el.appendChild(document.createTextNode(text.slice(last, start)));
+    el.appendChild(createFileChip(mention));
+    last = end;
+  });
+  if (last < segEnd) el.appendChild(document.createTextNode(text.slice(last, segEnd)));
+}
+
 function fillUserText(el, content, mentions) {
   var text = content || '';
   var items = Array.isArray(mentions)
     ? mentions.slice().sort(function (a, b) { return (a.start || 0) - (b.start || 0); })
     : [];
-  if (!items.length) {
-    el.textContent = text;
+  var segments = splitUserMermaidSegments(text);
+  if (!segments) {
+    fillUserTextRange(el, text, 0, text.length, items);
+    if (!el.childNodes.length && text) el.appendChild(document.createTextNode(text));
     return;
   }
 
-  var last = 0;
-  items.forEach(function (mention) {
-    var start = Math.max(0, mention.start | 0);
-    var length = Math.max(0, mention.length | 0);
-    if (start < last || length <= 0 || start >= text.length) return;
-    if (start > last) el.appendChild(document.createTextNode(text.slice(last, start)));
-    el.appendChild(createFileChip(mention));
-    last = Math.min(text.length, start + length);
+  segments.forEach(function (segment) {
+    if (segment.kind === 'mermaid') {
+      el.appendChild(createUserMermaidBlock(segment.source));
+    } else {
+      fillUserTextRange(el, text, segment.start, segment.end, items);
+    }
   });
-  if (last < text.length) el.appendChild(document.createTextNode(text.slice(last)));
-  if (!el.childNodes.length) el.textContent = text;
+  if (!el.childNodes.length && text) el.appendChild(document.createTextNode(text));
 }
 
 function createAssistantRow(messageId) {

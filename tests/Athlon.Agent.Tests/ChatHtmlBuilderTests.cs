@@ -312,8 +312,33 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("function renderMermaidBlocks", timelineJs, StringComparison.Ordinal);
         Assert.Contains("function refreshMermaidTheme", timelineJs, StringComparison.Ordinal);
         Assert.Contains("window.__chatAssets", timelineJs, StringComparison.Ordinal);
-        Assert.Contains("'pre > code.language-mermaid'", timelineJs, StringComparison.Ordinal);
+        // Markdig emits <pre class="mermaid"> for a ```mermaid fence while the user-bubble path
+        // builds <pre><code class="language-mermaid">, so the selector must cover both shapes.
+        // Matching only the <code> form silently leaves every assistant diagram as raw text.
+        Assert.Contains("'pre.mermaid, pre > code.language-mermaid'", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("function mermaidSourceOf", timelineJs, StringComparison.Ordinal);
         Assert.Contains(".mermaid-figure", shellCss, StringComparison.Ordinal);
+        Assert.Contains("pre.mermaid", shellCss, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A user paste can carry a ```mermaid fence too. Only the fence is special-cased (the rest
+    /// stays literal text), mention offsets stay absolute, and replayed rows defer rendering to
+    /// endBatch so the unattached node is not skipped.
+    /// </summary>
+    [Fact]
+    public void BuildShellHtml_renders_mermaid_fences_in_user_bubbles()
+    {
+        var timelineJs = ReadChatAsset("chat-timeline.js");
+
+        Assert.Contains("var USER_MERMAID_FENCE =", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("function splitUserMermaidSegments", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("function createUserMermaidBlock", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("function fillUserTextRange", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("code.textContent = source", timelineJs, StringComparison.Ordinal);
+        Assert.Contains("state.pendingEnhancementRoots.push(text)", timelineJs, StringComparison.Ordinal);
+        // No fence means the plain-text fast path, so split returns null and nothing changes.
+        Assert.Contains("if (!match) return null;", timelineJs, StringComparison.Ordinal);
     }
 
     private static void AssertContainsLocalized(string html, string text)

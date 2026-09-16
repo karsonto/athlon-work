@@ -130,6 +130,13 @@ html.replaying .message-row { animation: none; }
   line-height: 1.75;
   color: var(--user-bubble-text);
 }
+/* A pasted diagram sits in the middle of the literal text flow; give it breathing room and keep
+   long LR charts inside the bubble via the figure's own overflow-x. */
+.user-text > pre {
+  margin: 10px 0;
+}
+.user-text > pre:first-child { margin-top: 0; }
+.user-text > pre:last-child { margin-bottom: 0; }
 .file-chip {
   display: inline-flex;
   align-items: center;
@@ -414,6 +421,21 @@ html.replaying .message-row { animation: none; }
   background: var(--md-code-block-bg);
   overflow-x: auto;
   text-align: center;
+}
+/* Markdig emits a bare <pre class="mermaid">. Until the SVG replaces it — and permanently if the
+   diagram source is malformed — show it as a readable code block rather than unstyled prose. */
+.message-content pre.mermaid {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--md-code-block-border);
+  border-radius: 16px;
+  background: var(--md-code-block-bg);
+  overflow-x: auto;
+  font-family: Consolas, "Cascadia Code", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--md-code-pre);
+  white-space: pre;
 }
 .mermaid-figure svg {
   max-width: 100%;
