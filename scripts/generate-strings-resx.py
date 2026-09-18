@@ -137,7 +137,6 @@ ENTRIES: dict[str, tuple[str, str]] = {
     "Sso_LogoutTooltip": ("点击退出登录", "Click to sign out"),
     "Shell_SwitchToDark": ("切换到深色模式", "Switch to dark mode"),
     "Shell_SwitchToLight": ("切换到浅色模式", "Switch to light mode"),
-    "Shell_ModifiedFilesHeader": ("已修改 {0} 个文件", "{0} modified file(s)"),
     "Shell_ContextSidebarOpen": ("打开右侧栏 (Ctrl+Alt+B)", "Open right sidebar (Ctrl+Alt+B)"),
     "Shell_ContextSidebarClose": ("关闭右侧栏 (Ctrl+Alt+B)", "Close right sidebar (Ctrl+Alt+B)"),
     "Shell_ShuttingDown": ("正在关闭…", "Shutting down…"),

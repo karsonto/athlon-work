@@ -8,20 +8,20 @@ namespace Athlon.Agent.Tests;
 public sealed class SessionModifiedFilesTrackerTests
 {
     [Fact]
-    public void FileWriteToolCallArgs_adds_pending_file()
+    public void FileWriteToolCallArgs_tracks_path_before_result()
     {
         var tracker = new SessionModifiedFilesTracker();
 
         tracker.Process(new AgentStreamEvent.ToolCallStart("call-1", "file_write", 0));
         tracker.Process(new AgentStreamEvent.ToolCallArgs("call-1", """{"path":"src/App.tsx","content":"hello"}"""));
 
-        Assert.Single(tracker.ModifiedFiles);
-        Assert.Equal("src/App.tsx", tracker.ModifiedFiles[0].RelativePath);
-        Assert.Equal(ModifiedFileStatus.Pending, tracker.ModifiedFiles[0].Status);
+        // A pending edit has no card yet, but it does mark the turn's live surface.
+        Assert.True(tracker.HasCurrentTurnPaths);
+        Assert.Empty(tracker.PeekSegmentEditCards());
     }
 
     [Fact]
-    public void FileEditToolCallResult_updates_status_to_succeeded()
+    public void FileEditToolCallResult_stages_a_card_with_diff_counts()
     {
         var tracker = new SessionModifiedFilesTracker();
         var diff = string.Join(
@@ -46,16 +46,17 @@ public sealed class SessionModifiedFilesTrackerTests
         tracker.Process(new AgentStreamEvent.ToolCallEnd("call-1"));
         tracker.Process(new AgentStreamEvent.ToolCallResult("call-1", result, "msg-1"));
 
-        Assert.Single(tracker.ModifiedFiles);
-        Assert.Equal("server.ts", tracker.ModifiedFiles[0].RelativePath);
-        Assert.Equal(ModifiedFileStatus.Succeeded, tracker.ModifiedFiles[0].Status);
-        Assert.True(tracker.ModifiedFiles[0].HasDiff);
-        Assert.Equal(1, tracker.ModifiedFiles[0].AddedCount);
-        Assert.Equal(1, tracker.ModifiedFiles[0].RemovedCount);
+        var card = Assert.Single(tracker.PeekSegmentEditCards());
+        Assert.Equal("call-1", card.ToolCallId);
+        var file = Assert.Single(card.Files);
+        Assert.Equal("server.ts", file.RelativePath);
+        Assert.True(file.HasDiff);
+        Assert.Equal(1, file.AddedCount);
+        Assert.Equal(1, file.RemovedCount);
     }
 
     [Fact]
-    public void SamePath_two_file_edits_accumulates_diff_counts()
+    public void Two_edits_on_the_same_path_stage_one_card_each()
     {
         var tracker = new SessionModifiedFilesTracker();
         ProcessSucceededFileEdit(
@@ -80,28 +81,32 @@ public sealed class SessionModifiedFilesTrackerTests
                 "@@ -10,0 +10,1 @@",
                 "+line-c"));
 
-        Assert.Single(tracker.ModifiedFiles);
-        var file = tracker.ModifiedFiles[0];
-        Assert.Equal(3, file.AddedCount);
-        Assert.Equal(0, file.RemovedCount);
-        Assert.Contains("line-a", file.UnifiedDiffText, StringComparison.Ordinal);
-        Assert.Contains("line-c", file.UnifiedDiffText, StringComparison.Ordinal);
+        // One independent card per edit, ordered by completion, instead of an aggregate per path.
+        var cards = tracker.PeekSegmentEditCards();
+        Assert.Equal(["call-1", "call-2"], cards.Select(card => card.ToolCallId));
+        Assert.All(cards, card => Assert.Single(card.Files));
+        Assert.All(cards, card => Assert.Equal("src/SqliteUsageRecorder.java", card.Files[0].RelativePath));
+
+        var first = Assert.Single(cards[0].Files);
+        Assert.Contains("line-a", first.UnifiedDiffText, StringComparison.Ordinal);
+        Assert.DoesNotContain("line-c", first.UnifiedDiffText, StringComparison.Ordinal);
+
+        var second = Assert.Single(cards[1].Files);
+        Assert.Contains("line-c", second.UnifiedDiffText, StringComparison.Ordinal);
+        Assert.DoesNotContain("line-a", second.UnifiedDiffText, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void SamePath_two_file_writes_replaces_diff_counts()
+    public void Repeated_result_for_one_tool_call_replaces_its_card_instead_of_stacking()
     {
         var tracker = new SessionModifiedFilesTracker();
-        ProcessSucceededFileWrite(tracker, "call-1", "a.ts", "one\ntwo\nthree");
-        ProcessSucceededFileWrite(tracker, "call-2", "a.ts", "only");
+        ProcessSucceededFileWrite(tracker, "call-1", "a.ts", "one");
+        ProcessSucceededFileWrite(tracker, "call-1", "a.ts", "two");
 
-        Assert.Single(tracker.ModifiedFiles);
-        var file = tracker.ModifiedFiles[0];
-        Assert.Equal(1, file.AddedCount);
-        Assert.Equal(0, file.RemovedCount);
-        Assert.DoesNotContain("two", file.UnifiedDiffText, StringComparison.Ordinal);
-        Assert.DoesNotContain("three", file.UnifiedDiffText, StringComparison.Ordinal);
-        Assert.Contains("only", file.UnifiedDiffText, StringComparison.Ordinal);
+        var card = Assert.Single(tracker.PeekSegmentEditCards());
+        Assert.Equal("call-1", card.ToolCallId);
+        var file = Assert.Single(card.Files);
+        Assert.Contains("two", file.UnifiedDiffText, StringComparison.Ordinal);
     }
 
     private static void ProcessSucceededFileEdit(
@@ -152,36 +157,7 @@ public sealed class SessionModifiedFilesTrackerTests
     }
 
     [Fact]
-    public void TakeCurrentTurnSucceededFiles_returns_only_this_turn()
-    {
-        var tracker = new SessionModifiedFilesTracker();
-        tracker.BeginTurn();
-        tracker.Process(new AgentStreamEvent.ToolCallStart("call-1", "file_write", 0));
-        tracker.Process(new AgentStreamEvent.ToolCallArgs("call-1", """{"path":"a.ts","content":"hello"}"""));
-        tracker.Process(new AgentStreamEvent.ToolCallResult(
-            "call-1",
-            string.Join(
-                Environment.NewLine,
-                "ToolCallId: call-1",
-                "Tool `file_write` succeeded.",
-                "",
-                "Arguments: path=a.ts",
-                "Summary: Wrote 5 chars to a.ts",
-                ""),
-            "msg-1"));
-
-        Assert.Single(tracker.TakeCurrentTurnSucceededFiles());
-
-        tracker.BeginTurn();
-        Assert.Empty(tracker.TakeCurrentTurnSucceededFiles());
-        // BeginTurn starts a fresh turn: the live list is per-turn only (prior turns are replayed
-        // from the transcript), so it is cleared rather than carrying the previous turn's files.
-        // See BeginTurn_clears_prior_turn_file_entries for the full contract.
-        Assert.Empty(tracker.ModifiedFiles);
-    }
-
-    [Fact]
-    public void ApplyPatchResult_adds_multiple_files()
+    public void ApplyPatchResult_stages_one_card_holding_every_touched_file()
     {
         var tracker = new SessionModifiedFilesTracker();
         var result = string.Join(
@@ -198,89 +174,38 @@ public sealed class SessionModifiedFilesTrackerTests
         tracker.Process(new AgentStreamEvent.ToolCallStart("call-2", "apply_patch", 0));
         tracker.Process(new AgentStreamEvent.ToolCallResult("call-2", result, "msg-2"));
 
-        Assert.Equal(2, tracker.ModifiedFiles.Count);
-        Assert.Contains(tracker.ModifiedFiles, file => file.RelativePath == "src/index.css");
-        Assert.Contains(tracker.ModifiedFiles, file => file.RelativePath == "src/App.tsx");
-        Assert.All(tracker.ModifiedFiles, file => Assert.Equal(ModifiedFileStatus.Succeeded, file.Status));
+        var card = Assert.Single(tracker.PeekSegmentEditCards());
+        Assert.Equal("call-2", card.ToolCallId);
+        Assert.Equal(2, card.Files.Count);
+        Assert.Contains(card.Files, file => file.RelativePath == "src/index.css");
+        Assert.Contains(card.Files, file => file.RelativePath == "src/App.tsx");
     }
 
     [Fact]
-    public void SamePath_is_deduplicated_and_status_updated()
+    public void Failed_result_stages_no_card_but_keeps_the_path_tracked()
     {
         var tracker = new SessionModifiedFilesTracker();
 
         tracker.Process(new AgentStreamEvent.ToolCallStart("call-a", "file_write", 0));
         tracker.Process(new AgentStreamEvent.ToolCallArgs("call-a", """{"path":"package.json","content":"v1"}"""));
-        tracker.Process(new AgentStreamEvent.ToolCallStart("call-b", "file_edit", 1));
-        tracker.Process(new AgentStreamEvent.ToolCallArgs("call-b", """{"path":"package.json","old_text":"v1","new_text":"v2"}"""));
-
-        Assert.Single(tracker.ModifiedFiles);
 
         var failedResult = string.Join(
             Environment.NewLine,
-            "ToolCallId: call-b",
-            "Tool `file_edit` failed.",
+            "ToolCallId: call-a",
+            "Tool `file_write` failed.",
             "",
             "Arguments: path=package.json",
-            "Summary: Text not found",
+            "Summary: Permission denied",
             "");
 
-        tracker.Process(new AgentStreamEvent.ToolCallResult("call-b", failedResult, "msg-b"));
+        tracker.Process(new AgentStreamEvent.ToolCallResult("call-a", failedResult, "msg-a"));
 
-        Assert.Equal(ModifiedFileStatus.Failed, tracker.ModifiedFiles[0].Status);
-    }
-
-    [Fact]
-    public void TakeAndClearSegmentSucceededFiles_removes_paths_from_current_turn()
-    {
-        var tracker = new SessionModifiedFilesTracker();
-        ProcessSucceededFileEdit(
-            tracker,
-            "call-1",
-            "a.java",
-            string.Join(
-                Environment.NewLine,
-                "--- a/a.java",
-                "+++ b/a.java",
-                "@@ -1,0 +1,1 @@",
-                "+x"));
-        ProcessSucceededFileEdit(
-            tracker,
-            "call-2",
-            "b.java",
-            string.Join(
-                Environment.NewLine,
-                "--- a/b.java",
-                "+++ b/b.java",
-                "@@ -1,0 +1,1 @@",
-                "+y"));
-
+        Assert.Empty(tracker.PeekSegmentEditCards());
         Assert.True(tracker.HasCurrentTurnPaths);
-        var first = tracker.TakeAndClearSegmentSucceededFiles();
-        Assert.Equal(2, first.Count);
-        Assert.False(tracker.HasCurrentTurnPaths);
-        Assert.Empty(tracker.TakeCurrentTurnSucceededFiles());
-        Assert.Empty(tracker.ModifiedFiles);
-
-        ProcessSucceededFileEdit(
-            tracker,
-            "call-3",
-            "c.java",
-            string.Join(
-                Environment.NewLine,
-                "--- a/c.java",
-                "+++ b/c.java",
-                "@@ -1,0 +1,1 @@",
-                "+z"));
-
-        var second = tracker.TakeCurrentTurnSucceededFiles();
-        Assert.Single(second);
-        Assert.Equal("c.java", second[0].RelativePath);
-        Assert.Single(tracker.ModifiedFiles);
     }
 
     [Fact]
-    public void BeginTurn_clears_prior_turn_file_entries()
+    public void BeginTurn_clears_prior_turn_file_state()
     {
         var tracker = new SessionModifiedFilesTracker();
         ProcessSucceededFileEdit(
@@ -295,14 +220,13 @@ public sealed class SessionModifiedFilesTrackerTests
                 "-a",
                 "+b"));
 
-        Assert.Single(tracker.ModifiedFiles);
         Assert.True(tracker.HasCurrentTurnPaths);
+        Assert.Single(tracker.PeekSegmentEditCards());
 
         tracker.BeginTurn();
 
-        Assert.Empty(tracker.ModifiedFiles);
         Assert.False(tracker.HasCurrentTurnPaths);
-        Assert.Empty(tracker.TakeCurrentTurnSucceededFiles());
+        Assert.Empty(tracker.PeekSegmentEditCards());
 
         ProcessSucceededFileEdit(
             tracker,
@@ -316,9 +240,9 @@ public sealed class SessionModifiedFilesTrackerTests
                 "-x",
                 "+y"));
 
-        var files = tracker.TakeCurrentTurnSucceededFiles();
-        Assert.Single(files);
-        Assert.Equal("b.ts", files[0].RelativePath);
+        var card = Assert.Single(tracker.PeekSegmentEditCards());
+        Assert.Equal("call-2", card.ToolCallId);
+        Assert.Equal("b.ts", Assert.Single(card.Files).RelativePath);
     }
 
     [Fact]
@@ -341,13 +265,15 @@ public sealed class SessionModifiedFilesTrackerTests
 
         tracker.RebuildFromMessages(messages);
 
-        Assert.Single(tracker.ModifiedFiles);
-        Assert.Equal("src/App.tsx", tracker.ModifiedFiles[0].RelativePath);
-        Assert.Equal(ModifiedFileStatus.Succeeded, tracker.ModifiedFiles[0].Status);
+        var card = Assert.Single(tracker.PeekSegmentEditCards());
+        Assert.Equal("call-1", card.ToolCallId);
+        var file = Assert.Single(card.Files);
+        Assert.Equal("src/App.tsx", file.RelativePath);
+        Assert.Equal(ModifiedFileStatus.Succeeded, file.Status);
     }
 
     [Fact]
-    public void RebuildFromMessages_keeps_only_current_turn_paths()
+    public void RebuildFromMessages_keeps_only_current_turn_edits()
     {
         static ChatMessageViewModel Edit(string id, string path) =>
             new(ChatMessage.Create(
@@ -379,12 +305,44 @@ public sealed class SessionModifiedFilesTrackerTests
         var tracker = new SessionModifiedFilesTracker();
         tracker.RebuildFromMessages(messages);
 
-        Assert.Single(tracker.ModifiedFiles);
-        Assert.Equal("b.ts", tracker.ModifiedFiles[0].RelativePath);
-        var current = tracker.TakeCurrentTurnSucceededFiles();
-        Assert.Single(current);
-        Assert.Equal("b.ts", current[0].RelativePath);
-        Assert.DoesNotContain(current, file => file.RelativePath == "a.ts");
+        // Only the last turn's edit is restorable; the earlier turn is owned by replay.
+        var card = Assert.Single(tracker.PeekSegmentEditCards());
+        Assert.Equal("call-2", card.ToolCallId);
+        Assert.Equal("b.ts", Assert.Single(card.Files).RelativePath);
+    }
+
+    [Fact]
+    public void RebuildFromMessages_drops_cards_for_a_turn_with_no_edits()
+    {
+        var tracker = new SessionModifiedFilesTracker();
+        tracker.RebuildFromMessages(
+        [
+            new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "edit")),
+            new ChatMessageViewModel(ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    "ToolCallId: call-a",
+                    "Tool `file_edit` succeeded.",
+                    "",
+                    "Arguments: path = a.ts",
+                    "Summary: Edited a.ts",
+                    "",
+                    "--- a/a.ts",
+                    "+++ b/a.ts",
+                    "@@ -1,1 +1,1 @@",
+                    "-old",
+                    "+new")))
+        ]);
+        Assert.Single(tracker.PeekSegmentEditCards());
+
+        tracker.RebuildFromMessages(
+        [
+            new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "just chatting"))
+        ]);
+
+        Assert.Empty(tracker.PeekSegmentEditCards());
+        Assert.False(tracker.HasCurrentTurnPaths);
     }
 
     [Fact]
@@ -409,8 +367,7 @@ public sealed class SessionModifiedFilesTrackerTests
         tracker.Process(new AgentStreamEvent.ToolCallStart("call-1", "file_write", 0));
         tracker.Process(new AgentStreamEvent.ToolCallArgs("call-1", """{"path":"x.ts","content":"abc"""));
 
-        Assert.Single(tracker.ModifiedFiles);
-        Assert.Equal("x.ts", tracker.ModifiedFiles[0].RelativePath);
+        Assert.True(tracker.HasCurrentTurnPaths);
     }
 
     [Theory]

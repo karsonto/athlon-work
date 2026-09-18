@@ -111,9 +111,11 @@ public sealed partial class SessionTurnUiController
 
     public ObservableCollection<ChatMessageViewModel> Messages { get; }
 
-    public ObservableCollection<ModifiedFileViewModel> ModifiedFiles => _modifiedFilesTracker.ModifiedFiles;
-
-    public bool HasModifiedFiles => _modifiedFilesTracker.HasModifiedFiles;
+    /// <summary>
+    /// True while the current turn has touched a file. Part of the live-turn gate: a full replay
+    /// while it holds would re-emit cards the live per-edit publish already rendered.
+    /// </summary>
+    internal bool HasLiveFileEdits => _modifiedFilesTracker.HasCurrentTurnPaths;
 
     public Action RequestScroll
     {

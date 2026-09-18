@@ -1703,9 +1703,6 @@ The system prompt will be rebuilt on the next message (workspace, tools, skills,
   <data name="Shell_LoadingConversation" xml:space="preserve">
     <value>Loading conversation…</value>
   </data>
-  <data name="Shell_ModifiedFilesHeader" xml:space="preserve">
-    <value>{0} modified file(s)</value>
-  </data>
   <data name="Shell_NoWorkspace" xml:space="preserve">
     <value>No workspace configured</value>
   </data>

@@ -39,8 +39,8 @@ public sealed class SessionTurnUiControllerFilesChangedReloadTests
         // in-flight activity tool: it anchors the live-turn surface across the refresh.
         await EmitPendingActivityTool(callbacks, "call-read-1", "file_read", "src/Other.cs");
 
-        // Precondition: the turn really owns a live files card.
-        Assert.True(await dispatcher.InvokeAsync(() => ui.ModifiedFiles.Count) > 0);
+        // Precondition: the turn really owns live file edits.
+        Assert.True(await dispatcher.InvokeAsync(() => ui.HasLiveFileEdits));
 
         await ui.RefreshDisplayForSettingsAsync();
 
@@ -74,7 +74,7 @@ public sealed class SessionTurnUiControllerFilesChangedReloadTests
         await ui.RefreshDisplayForSettingsAsync();
 
         Assert.Equal(1, Volatile.Read(ref reloadCount));
-        Assert.False(ui.HasModifiedFiles);
+        Assert.False(ui.HasLiveFileEdits);
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public sealed class SessionTurnUiControllerFilesChangedReloadTests
 
         await dispatcher.InvokeAsync(() => ui.ResetForTurn());
         await EmitFileWrite(callbacks, "call-write-2", "src/App.tsx");
-        Assert.True(await dispatcher.InvokeAsync(() => ui.ModifiedFiles.Count) > 0);
+        Assert.True(await dispatcher.InvokeAsync(() => ui.HasLiveFileEdits));
 
         // Authoritative render (session switch / first paint) must not be deferred.
         await ui.HydrateDisplayAsync(
@@ -168,7 +168,7 @@ public sealed class SessionTurnUiControllerFilesChangedReloadTests
 
         await EmitFileWrite(callbacks, "call-write-anchor", "src/App.tsx");
         await EmitPendingActivityTool(callbacks, "call-read-anchor", "file_read", "src/Other.cs");
-        Assert.True(await dispatcher.InvokeAsync(() => ui.ModifiedFiles.Count) > 0);
+        Assert.True(await dispatcher.InvokeAsync(() => ui.HasLiveFileEdits));
 
         var provisionalAnchor = ui.CurrentTurnAnchorId;
         Assert.False(string.IsNullOrWhiteSpace(provisionalAnchor));

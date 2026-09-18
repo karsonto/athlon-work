@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Streaming;
@@ -6,9 +5,16 @@ using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.App.Services;
 
+/// <summary>
+/// Live state for the current turn's file edits.
+///
+/// <para>Successful edits are published as independent per-edit timeline cards keyed by tool call
+/// id; there is no aggregate "N files changed" card. This tracker only keeps (a) the per-edit cards
+/// the live publish re-emits, and (b) the set of paths touched this turn, which anchors the live
+/// turn surface so a refresh/reload is deferred instead of stacking a twin card.</para>
+/// </summary>
 public sealed class SessionModifiedFilesTracker
 {
-    private readonly Dictionary<string, ModifiedFileViewModel> _byPath = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> _toolCallIdToName = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _toolCallIdToArgs = new(StringComparer.Ordinal);
     private readonly HashSet<string> _currentTurnPaths = new(StringComparer.OrdinalIgnoreCase);
@@ -21,63 +27,25 @@ public sealed class SessionModifiedFilesTracker
     /// </summary>
     public sealed record EditFileCard(string ToolCallId, IReadOnlyList<ModifiedFileViewModel> Files);
 
-    public ObservableCollection<ModifiedFileViewModel> ModifiedFiles { get; } = new();
-
-    public bool HasModifiedFiles => ModifiedFiles.Count > 0;
-
-    /// <summary>True while this turn still tracks paths for a live FILES_CHANGED card.</summary>
+    /// <summary>
+    /// True while the current turn has touched a file. This is the live-turn gate: a full replay
+    /// while it holds would re-emit cards the live publish already rendered.
+    /// </summary>
     public bool HasCurrentTurnPaths => _currentTurnPaths.Count > 0;
 
     public void Clear()
     {
-        _byPath.Clear();
         _toolCallIdToName.Clear();
         _toolCallIdToArgs.Clear();
         _currentTurnPaths.Clear();
         _segmentEditCards.Clear();
-        ModifiedFiles.Clear();
     }
 
-    /// <summary>Starts a new user turn: drop prior-turn file entries so the list is per-turn only.</summary>
+    /// <summary>Starts a new user turn: drop prior-turn file entries so the state is per-turn only.</summary>
     public void BeginTurn()
     {
         _currentTurnPaths.Clear();
-        _byPath.Clear();
         _segmentEditCards.Clear();
-        ModifiedFiles.Clear();
-    }
-
-    /// <summary>
-    /// Cumulative view of the current turn: every succeeded file so far. The live card upserts this
-    /// list under the turn's entry id, which is exactly the id replay uses, so a live update and a
-    /// replayed card resolve to one entry instead of duplicating.
-    /// </summary>
-    public IReadOnlyList<ModifiedFileViewModel> TakeCurrentTurnSucceededFiles()
-    {
-        if (_currentTurnPaths.Count == 0)
-        {
-            return Array.Empty<ModifiedFileViewModel>();
-        }
-
-        return ModifiedFiles
-            .Where(file =>
-                _currentTurnPaths.Contains(file.RelativePath)
-                && file.Status == ModifiedFileStatus.Succeeded)
-            .ToList();
-    }
-
-    /// <summary>Takes succeeded files for the current segment and clears them so the next bubble is independent.</summary>
-    public IReadOnlyList<ModifiedFileViewModel> TakeAndClearSegmentSucceededFiles()
-    {
-        var files = TakeCurrentTurnSucceededFiles();
-        foreach (var file in files)
-        {
-            _currentTurnPaths.Remove(file.RelativePath);
-            _byPath.Remove(file.RelativePath);
-            ModifiedFiles.Remove(file);
-        }
-
-        return files;
     }
 
     /// <summary>
@@ -168,7 +136,7 @@ public sealed class SessionModifiedFilesTracker
                     var path = ModifiedFilePathExtractor.ExtractPathFromArguments(argsJson);
                     if (path is not null)
                     {
-                        Upsert(path, argsToolName, ModifiedFileStatus.Pending);
+                        TrackPath(path);
                     }
                 }
 
@@ -181,7 +149,7 @@ public sealed class SessionModifiedFilesTracker
                     var path = ModifiedFilePathExtractor.ExtractPathFromArguments(endArgs);
                     if (path is not null)
                     {
-                        Upsert(path, endToolName, ModifiedFileStatus.Pending);
+                        TrackPath(path);
                     }
                 }
 
@@ -196,9 +164,8 @@ public sealed class SessionModifiedFilesTracker
 
     /// <summary>
     /// Rebuilds live tracking from the <em>current turn only</em> (messages after the last
-    /// user / visible compaction). Prior turns are rendered by FILES_CHANGED replay; putting
-    /// them in <see cref="_currentTurnPaths"/> would make RestoreLive upsert overwrite the
-    /// last card with a session-wide file list.
+    /// user / visible compaction). Prior turns are rendered by FILES_CHANGED replay; restoring
+    /// them here would make RestoreLive upsert overwrite a replayed card with stale paths.
     /// </summary>
     public void RebuildFromMessages(IReadOnlyList<ChatMessageViewModel> messages)
     {
@@ -233,23 +200,16 @@ public sealed class SessionModifiedFilesTracker
             {
                 foreach (var path in ModifiedFilePathExtractor.ExtractApplyPatchPaths(message.Content))
                 {
-                    var item = Upsert(path, message.ToolName, status);
-                    TryAttachDiff(item, message.ToolName, argsText, message.Content);
+                    TrackPath(path);
                 }
 
                 continue;
             }
 
             var relativePath = ModifiedFilePathExtractor.ExtractPathFromArguments(argsText);
-            if (relativePath is null)
+            if (relativePath is not null)
             {
-                continue;
-            }
-
-            var file = Upsert(relativePath, message.ToolName, status);
-            if (status == ModifiedFileStatus.Succeeded)
-            {
-                TryAttachDiff(file, message.ToolName, argsText, message.Content);
+                TrackPath(relativePath);
             }
         }
     }
@@ -272,79 +232,6 @@ public sealed class SessionModifiedFilesTracker
         }
 
         return 0;
-    }
-
-    /// <summary>Builds per-turn file-change groups from display messages (for WebChat replay).</summary>
-    public static IReadOnlyList<IReadOnlyList<ModifiedFileViewModel>> BuildTurnFileGroups(
-        IReadOnlyList<ChatMessageViewModel> messages)
-    {
-        var groups = new List<IReadOnlyList<ModifiedFileViewModel>>();
-        var current = new List<ModifiedFileViewModel>();
-        var byPath = new Dictionary<string, ModifiedFileViewModel>(StringComparer.OrdinalIgnoreCase);
-
-        void Flush()
-        {
-            if (current.Count > 0)
-            {
-                groups.Add(current.ToList());
-                current.Clear();
-                byPath.Clear();
-            }
-        }
-
-        foreach (var message in messages)
-        {
-            if (message.IsUser)
-            {
-                Flush();
-                continue;
-            }
-
-            if (!message.IsTool || !ModifiedFilePathExtractor.IsFileTool(message.ToolName))
-            {
-                continue;
-            }
-
-            var status = ModifiedFilePathExtractor.ToModifiedFileStatus(message.ToolCallStatus);
-            if (status != ModifiedFileStatus.Succeeded)
-            {
-                continue;
-            }
-
-            void AddOrUpdate(string path)
-            {
-                var normalized = ToolPathNormalizer.ForModel(path);
-                if (byPath.TryGetValue(normalized, out var existing))
-                {
-                    TryAttachDiff(existing, message.ToolName, message.ToolArgumentsText, message.Content);
-                    return;
-                }
-
-                var item = new ModifiedFileViewModel(normalized, message.ToolName, status);
-                TryAttachDiff(item, message.ToolName, message.ToolArgumentsText, message.Content);
-                byPath[normalized] = item;
-                current.Add(item);
-            }
-
-            if (string.Equals(message.ToolName, "apply_patch", StringComparison.Ordinal))
-            {
-                foreach (var path in ModifiedFilePathExtractor.ExtractApplyPatchPaths(message.Content))
-                {
-                    AddOrUpdate(path);
-                }
-
-                continue;
-            }
-
-            var relativePath = ModifiedFilePathExtractor.ExtractPathFromArguments(message.ToolArgumentsText);
-            if (relativePath is not null)
-            {
-                AddOrUpdate(relativePath);
-            }
-        }
-
-        Flush();
-        return groups;
     }
 
     private void HandleToolCallResult(string toolCallId, string content)
@@ -389,11 +276,7 @@ public sealed class SessionModifiedFilesTracker
             {
                 foreach (var path in paths)
                 {
-                    var item = Upsert(path, toolName, status);
-                    if (status == ModifiedFileStatus.Succeeded)
-                    {
-                        TryAttachDiff(item, toolName, args, content);
-                    }
+                    TrackPath(path);
                 }
 
                 return;
@@ -417,36 +300,19 @@ public sealed class SessionModifiedFilesTracker
 
         if (relativePath is not null)
         {
-            var item = Upsert(relativePath, toolName, status);
-            if (status == ModifiedFileStatus.Succeeded)
-            {
-                TryAttachDiff(item, toolName, args, content);
-            }
+            TrackPath(relativePath);
         }
     }
 
-    private ModifiedFileViewModel Upsert(string relativePath, string toolName, ModifiedFileStatus status)
+    /// <summary>Records a touched path so the turn keeps its live surface until replay owns it.</summary>
+    private void TrackPath(string relativePath)
     {
         if (string.IsNullOrWhiteSpace(relativePath))
         {
-            throw new ArgumentException("Path is required.", nameof(relativePath));
+            return;
         }
 
-        var normalized = ToolPathNormalizer.ForModel(relativePath);
-        _currentTurnPaths.Add(normalized);
-
-        if (_byPath.TryGetValue(normalized, out var existing))
-        {
-            existing.SetToolName(toolName);
-            existing.Status = status;
-            existing.LastModifiedAt = DateTimeOffset.UtcNow;
-            return existing;
-        }
-
-        var item = new ModifiedFileViewModel(normalized, toolName, status);
-        _byPath[normalized] = item;
-        ModifiedFiles.Add(item);
-        return item;
+        _currentTurnPaths.Add(ToolPathNormalizer.ForModel(relativePath));
     }
 
     private static void TryAttachDiff(

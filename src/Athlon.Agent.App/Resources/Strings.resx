@@ -1712,9 +1712,6 @@
   <data name="Shell_LoadingConversation" xml:space="preserve">
     <value>正在加载对话…</value>
   </data>
-  <data name="Shell_ModifiedFilesHeader" xml:space="preserve">
-    <value>已修改 {0} 个文件</value>
-  </data>
   <data name="Shell_NoWorkspace" xml:space="preserve">
     <value>未配置工作区</value>
   </data>
