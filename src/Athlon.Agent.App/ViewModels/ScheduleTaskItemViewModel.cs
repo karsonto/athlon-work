@@ -133,17 +133,23 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
             _ => _task.Kind
         };
 
-        NextRunDisplay = string.IsNullOrWhiteSpace(_task.NextRunAt)
-            ? "-"
-            : FormatDateTime(_task.NextRunAt);
+        var consumedOneShot = ScheduleTiming.IsConsumedOneShot(_task);
 
-        (StatusIcon, StatusDisplay) = _task.LastStatus switch
-        {
-            "running" => ("▶️", _loc["Schedule_StatusRunning"]),
-            "success" => ("✅", _loc["Schedule_StatusSuccess"]),
-            "error" => ("❌", _loc["Schedule_StatusError"]),
-            _ => ("⏳", _loc["Schedule_StatusReady"])
-        };
+        NextRunDisplay = consumedOneShot
+            ? _loc["Schedule_StatusCompleted"]
+            : string.IsNullOrWhiteSpace(_task.NextRunAt)
+                ? "-"
+                : FormatDateTime(_task.NextRunAt);
+
+        (StatusIcon, StatusDisplay) = consumedOneShot
+            ? ("⏹️", _loc["Schedule_StatusCompleted"])
+            : _task.LastStatus switch
+            {
+                "running" => ("▶️", _loc["Schedule_StatusRunning"]),
+                "success" => ("✅", _loc["Schedule_StatusSuccess"]),
+                "error" => ("❌", _loc["Schedule_StatusError"]),
+                _ => ("⏳", _loc["Schedule_StatusReady"])
+            };
     }
 
     [RelayCommand]
@@ -232,7 +238,9 @@ public sealed partial class ScheduleTaskItemViewModel : ObservableObject
             return "-";
         }
 
-        return FormatDateTime(atTime);
+        return ScheduleTiming.TryParseAtTime(atTime, out var parsed)
+            ? parsed.ToString("MM-dd HH:mm")
+            : atTime;
     }
 
     private static string FormatDateTime(string iso)

@@ -2,6 +2,13 @@ namespace Athlon.Agent.Core;
 
 public static class ScheduleTiming
 {
+    /// <summary>
+    /// Exact format written by the schedule editor and persisted in <c>settings.json</c>.
+    /// Parsing must not depend on the ambient culture, otherwise a non-ISO culture can
+    /// misread a stored one-time value and fire the task at the wrong moment.
+    /// </summary>
+    public const string AtTimeFormat = "yyyy-MM-dd HH:mm";
+
     public static bool IsDue(ScheduledTask task, DateTime? utcNow = null)
     {
         var now = utcNow ?? DateTime.UtcNow;
@@ -24,10 +31,46 @@ public static class ScheduleTiming
         {
             "manual" => false,
             "interval" => task.EveryMinutes > 0 && string.IsNullOrWhiteSpace(task.LastRunAt),
-            "at" => DateTime.TryParse(task.AtTime, out var at) && DateTime.UtcNow >= at.ToUniversalTime(),
+            "at" => TryParseAtTime(task.AtTime, out var at) && DateTime.UtcNow >= at.ToUniversalTime(),
             "daily" => false,
             _ => false
         };
+
+    /// <summary>
+    /// True when a one-time task already fired and was auto-disabled by the scheduler. Used by the
+    /// UI to render "completed" instead of a blank next-run, and by the editor to allow rescheduling.
+    /// </summary>
+    public static bool IsConsumedOneShot(ScheduledTask task) =>
+        string.Equals(task.Kind, "at", StringComparison.OrdinalIgnoreCase)
+        && !task.Enabled
+        && !string.IsNullOrWhiteSpace(task.LastRunAt);
+
+    /// <summary>True when a one-time task is armed for a moment that is still in the future.</summary>
+    public static bool IsOneShotScheduledInFuture(ScheduledTask task, DateTime? utcNow = null) =>
+        string.Equals(task.Kind, "at", StringComparison.OrdinalIgnoreCase)
+        && TryParseAtTime(task.AtTime, out var at)
+        && at.ToUniversalTime() > (utcNow ?? DateTime.UtcNow);
+
+    /// <summary>
+    /// Parses a stored one-time value. Prefers the exact editor format (culture-independent) and
+    /// falls back to the lenient parser so values written by older builds keep working.
+    /// </summary>
+    public static bool TryParseAtTime(string? value, out DateTime local)
+    {
+        local = default;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return DateTime.TryParseExact(
+                   value,
+                   AtTimeFormat,
+                   System.Globalization.CultureInfo.InvariantCulture,
+                   System.Globalization.DateTimeStyles.None,
+                   out local)
+            || DateTime.TryParse(value, out local);
+    }
 
     public static string ComputeNextRun(ScheduledTask task, DateTime? utcNow = null)
     {
@@ -37,7 +80,7 @@ public static class ScheduleTiming
         {
             "daily" => ComputeNextDaily(task, now),
             "interval" when task.EveryMinutes > 0 => now.AddMinutes(task.EveryMinutes).ToString("O"),
-            "at" when DateTime.TryParse(task.AtTime, out var at) && at.ToUniversalTime() > now => at.ToUniversalTime().ToString("O"),
+            "at" when TryParseAtTime(task.AtTime, out var at) && at.ToUniversalTime() > now => at.ToUniversalTime().ToString("O"),
             "manual" => "",
             _ => ""
         };

@@ -369,6 +369,7 @@ ENTRIES: dict[str, tuple[str, str]] = {
     "Schedule_DeleteTitle": ("删除定时任务", "Delete scheduled task"),
     "Schedule_DeleteMessage": ('确定要删除定时任务「{0}」吗？', 'Delete scheduled task "{0}"?'),
     "Schedule_StatusReady": ("就绪", "Ready"),
+    "Schedule_StatusCompleted": ("已完成", "Completed"),
     "Schedule_StatusRunning": ("运行中", "Running"),
     "Schedule_StatusSuccess": ("成功", "Succeeded"),
     "Schedule_StatusError": ("失败", "Failed"),

@@ -106,6 +106,15 @@ public sealed partial class ScheduleViewModel : ObservableObject
             Tasks.Clear();
             foreach (var task in _settings.Schedule.Tasks)
             {
+                // Backfill a missing NextRunAt (legacy/abnormal data): an empty value makes daily and
+                // interval tasks silently never fire, since only "at"/"interval(fresh)" self-arm.
+                if (!string.Equals(task.Kind, "manual", StringComparison.OrdinalIgnoreCase)
+                    && string.IsNullOrWhiteSpace(task.NextRunAt)
+                    && !ScheduleTiming.IsConsumedOneShot(task))
+                {
+                    ScheduleTiming.EnsureNextRunAt(task);
+                }
+
                 Tasks.Add(CreateTaskItem(task));
             }
 
@@ -144,9 +153,26 @@ public sealed partial class ScheduleViewModel : ObservableObject
         TaskSummary = HasTasks
             ? _loc.Format("Schedule_TaskSummary", Tasks.Count, enabledCount)
             : _loc["Schedule_NoTasks"];
-        IsEnabled = _settings.Schedule.Enabled;
+
+        // Mirroring the settings value back into the toggle must not look like a user edit:
+        // OnIsEnabledChanged would persist settings and start/stop the scheduler as a side effect.
+        var wasSyncing = _isSyncing;
+        _isSyncing = true;
+        try
+        {
+            IsEnabled = _settings.Schedule.Enabled;
+        }
+        finally
+        {
+            _isSyncing = wasSyncing;
+        }
+
         HasTasks = Tasks.Count > 0;
         IsSchedulerRunning = _scheduler.IsRunning;
+
+        // The guarded assignment above no longer reaches OnIsEnabledChanged, so sync the scheduler
+        // explicitly. Start/Stop are idempotent.
+        UpdateSchedulerState();
     }
 
     private void ApplyFilter()
@@ -174,6 +200,14 @@ public sealed partial class ScheduleViewModel : ObservableObject
 
     private void OnTaskStatusChanged(object? sender, ScheduledTaskStatusEventArgs e)
     {
+        // Raised from the scheduler's poll timer thread; marshal before touching bound state.
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess())
+        {
+            dispatcher.InvokeAsync(() => OnTaskStatusChanged(sender, e));
+            return;
+        }
+
         var match = Tasks.FirstOrDefault(t => t.Id == e.TaskId);
         if (match is not null)
         {

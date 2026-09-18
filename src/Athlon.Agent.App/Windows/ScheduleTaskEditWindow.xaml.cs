@@ -276,7 +276,7 @@ public partial class ScheduleTaskEditWindow : Window
         // Store the pickers as a local, round-trippable timestamp; ScheduleTiming converts it to
         // UTC itself when it decides whether the task is due.
         _task.AtTime = kind == "at" && ReadAtTime() is { } atValue
-            ? atValue.ToString("yyyy-MM-dd HH:mm")
+            ? atValue.ToString(ScheduleTiming.AtTimeFormat)
             : _task.AtTime;
         _task.WorkspaceRoot = workspace;
         _task.Mode = (ModeCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "agent";
@@ -287,6 +287,15 @@ public partial class ScheduleTaskEditWindow : Window
         _task.McpServerNames = _mcpRows.Where(r => r.IsChecked).Select(r => r.Id).ToList();
         _task.KnowledgeModuleIds = _knowledgeRows.Where(r => r.IsChecked).Select(r => r.Id).ToList();
         _task.UpdatedAt = DateTime.UtcNow.ToString("O");
+
+        // A consumed one-shot is auto-disabled after firing. Moving it to a future moment is an
+        // explicit reschedule, so re-arm it instead of leaving it silently switched off.
+        if (ScheduleTiming.IsConsumedOneShot(_task)
+            && ScheduleTiming.IsOneShotScheduledInFuture(_task))
+        {
+            _task.Enabled = true;
+        }
+
         ScheduleTiming.EnsureNextRunAt(_task);
 
         DialogResult = true;

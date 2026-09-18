@@ -1242,6 +1242,9 @@
   <data name="Schedule_StatusError" xml:space="preserve">
     <value>失败</value>
   </data>
+  <data name="Schedule_StatusCompleted" xml:space="preserve">
+    <value>已完成</value>
+  </data>
   <data name="Schedule_StatusReady" xml:space="preserve">
     <value>就绪</value>
   </data>

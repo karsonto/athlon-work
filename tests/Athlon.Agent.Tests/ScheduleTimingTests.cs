@@ -136,4 +136,153 @@ public sealed class ScheduleTimingTests
         Assert.True(allowToolCalls);
         Assert.Null(maxRounds);
     }
+
+    [Fact]
+    public void IsConsumedOneShot_TrueOnlyWhenDisabledAndFired()
+    {
+        var consumed = new ScheduledTask
+        {
+            Kind = "at",
+            AtTime = "2025-06-11 10:00",
+            Enabled = false,
+            LastRunAt = "2025-06-11T02:00:00.000Z"
+        };
+
+        Assert.True(ScheduleTiming.IsConsumedOneShot(consumed));
+    }
+
+    [Fact]
+    public void IsConsumedOneShot_FalseForUserDisabledNeverRun()
+    {
+        // The user switched it off before it ever fired: not "completed".
+        var disabled = new ScheduledTask
+        {
+            Kind = "at",
+            AtTime = "2099-06-11 10:00",
+            Enabled = false,
+            LastRunAt = ""
+        };
+
+        Assert.False(ScheduleTiming.IsConsumedOneShot(disabled));
+    }
+
+    [Fact]
+    public void IsConsumedOneShot_FalseForOtherKinds()
+    {
+        var daily = new ScheduledTask
+        {
+            Kind = "daily",
+            Enabled = false,
+            LastRunAt = "2025-06-11T02:00:00.000Z"
+        };
+
+        Assert.False(ScheduleTiming.IsConsumedOneShot(daily));
+    }
+
+    [Fact]
+    public void ComputeNextRun_OneShotPast_ReturnsEmpty()
+    {
+        var utcNow = new DateTime(2025, 6, 11, 12, 0, 0, DateTimeKind.Utc);
+        var task = new ScheduledTask
+        {
+            Kind = "at",
+            AtTime = utcNow.ToLocalTime().AddMinutes(-5).ToString(ScheduleTiming.AtTimeFormat)
+        };
+
+        Assert.Equal("", ScheduleTiming.ComputeNextRun(task, utcNow));
+    }
+
+    [Fact]
+    public void ComputeNextRun_OneShotFuture_ReturnsScheduledMoment()
+    {
+        var utcNow = new DateTime(2025, 6, 11, 12, 0, 0, DateTimeKind.Utc);
+        var localFuture = utcNow.ToLocalTime().AddHours(2);
+        var task = new ScheduledTask
+        {
+            Kind = "at",
+            AtTime = localFuture.ToString(ScheduleTiming.AtTimeFormat)
+        };
+
+        var next = ScheduleTiming.ComputeNextRun(task, utcNow);
+
+        Assert.False(string.IsNullOrEmpty(next));
+        Assert.Equal(
+            DateTime.ParseExact(localFuture.ToString(ScheduleTiming.AtTimeFormat), ScheduleTiming.AtTimeFormat, null)
+                .ToUniversalTime(),
+            DateTime.Parse(next).ToUniversalTime());
+    }
+
+    [Fact]
+    public void ShouldRunImmediately_OneShotPastWithLastRun_StillTrueForRetry()
+    {
+        // Re-enabling a consumed one-shot means "run it again": it must fire once more, then be
+        // auto-disabled again. This is why ShouldRunImmediately keeps no LastRunAt guard.
+        var task = new ScheduledTask
+        {
+            Kind = "at",
+            Enabled = true,
+            AtTime = DateTime.UtcNow.ToLocalTime().AddMinutes(-30).ToString(ScheduleTiming.AtTimeFormat),
+            LastRunAt = "2025-06-11T02:00:00.000Z"
+        };
+
+        Assert.True(ScheduleTiming.ShouldRunImmediately(task));
+    }
+
+    [Fact]
+    public void IsOneShotScheduledInFuture_TrueForFutureMomentAndFalseForPast()
+    {
+        var utcNow = new DateTime(2025, 6, 11, 12, 0, 0, DateTimeKind.Utc);
+
+        var future = new ScheduledTask
+        {
+            Kind = "at",
+            AtTime = utcNow.ToLocalTime().AddHours(1).ToString(ScheduleTiming.AtTimeFormat)
+        };
+        var past = new ScheduledTask
+        {
+            Kind = "at",
+            AtTime = utcNow.ToLocalTime().AddHours(-1).ToString(ScheduleTiming.AtTimeFormat)
+        };
+
+        Assert.True(ScheduleTiming.IsOneShotScheduledInFuture(future, utcNow));
+        Assert.False(ScheduleTiming.IsOneShotScheduledInFuture(past, utcNow));
+    }
+
+    [Fact]
+    public void TryParseAtTime_UsesExactFormatIndependentOfCulture()
+    {
+        var original = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            // A culture whose short date pattern is day-first would misread a month-first string.
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
+
+            Assert.True(ScheduleTiming.TryParseAtTime("2025-12-31 18:00", out var parsed));
+            Assert.Equal(2025, parsed.Year);
+            Assert.Equal(12, parsed.Month);
+            Assert.Equal(31, parsed.Day);
+            Assert.Equal(18, parsed.Hour);
+            Assert.Equal(0, parsed.Minute);
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = original;
+        }
+    }
+
+    [Fact]
+    public void TryParseAtTime_FallsBackToLenientParseForLegacyValues()
+    {
+        Assert.True(ScheduleTiming.TryParseAtTime("2025/12/31 18:00", out var parsed));
+        Assert.Equal(2025, parsed.Year);
+        Assert.Equal(31, parsed.Day);
+    }
+
+    [Fact]
+    public void TryParseAtTime_ReturnsFalseForBlankOrInvalid()
+    {
+        Assert.False(ScheduleTiming.TryParseAtTime("", out _));
+        Assert.False(ScheduleTiming.TryParseAtTime("   ", out _));
+        Assert.False(ScheduleTiming.TryParseAtTime("not-a-date", out _));
+    }
 }

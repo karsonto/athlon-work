@@ -89,24 +89,44 @@ public sealed class SchedulerService : IDisposable
             return;
         }
 
-        foreach (var task in _settings.Schedule.Tasks)
+        // Snapshot: the UI thread can add/remove tasks while this poll runs.
+        ScheduledTask[] tasks;
+        try
         {
-            if (!task.Enabled || task.Kind == "manual")
-            {
-                continue;
-            }
+            tasks = _settings.Schedule.Tasks.ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("Failed to snapshot scheduled tasks: {Message}", ex.Message);
+            return;
+        }
 
-            if (_runningTasks.ContainsKey(task.Id))
+        foreach (var task in tasks)
+        {
+            try
             {
-                continue;
-            }
+                if (!task.Enabled || task.Kind == "manual")
+                {
+                    continue;
+                }
 
-            if (!ScheduleTiming.IsDue(task))
+                if (_runningTasks.ContainsKey(task.Id))
+                {
+                    continue;
+                }
+
+                if (!ScheduleTiming.IsDue(task))
+                {
+                    continue;
+                }
+
+                _ = ExecuteTaskAsync(task);
+            }
+            catch (Exception ex)
             {
-                continue;
+                // One malformed task must not abort the whole poll cycle.
+                _logger.Warning("Scheduled task evaluation failed for {Title}: {Message}", task.Title, ex.Message);
             }
-
-            _ = ExecuteTaskAsync(task);
         }
     }
 
@@ -281,8 +301,26 @@ public sealed class SchedulerService : IDisposable
                 SystemKeepAwakeHelper.Release();
             }
 
+            // One-shot tasks are "fire once" by definition: consume them here regardless of
+            // outcome. Otherwise ComputeNextRun returns an empty NextRunAt for a past AtTime,
+            // which IsDue maps to ShouldRunImmediately -> permanently due -> a 15s poll loop
+            // that also survives restarts because the empty value is persisted.
+            var consumedOneShot = false;
+            if (string.Equals(task.Kind, "at", StringComparison.OrdinalIgnoreCase) && task.Enabled)
+            {
+                task.Enabled = false;
+                consumedOneShot = true;
+            }
+
             task.NextRunAt = ScheduleTiming.ComputeNextRun(task);
             await PersistSettingsAsync();
+
+            // The status callback above ran before the task was consumed, so the list still shows
+            // it as enabled. Notify once more to surface the auto-disabled/"completed" state.
+            if (consumedOneShot)
+            {
+                NotifyStatus(task, task.LastStatus, task.LastMessage);
+            }
         }
     }
 
