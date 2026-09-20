@@ -68,6 +68,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly SshWorkspaceConnectionService _sshConnection;
     private readonly ICredentialStore _credentialStore;
     private readonly ISshWorkspaceClient _sshClient;
+    /// <summary>
+    /// While a session is being deleted its directory must not be re-read: a pending task-list
+    /// refresh would reopen tasks.json (or re-create the directory) and race the delete.
+    /// </summary>
+    private bool _suppressTaskListRefresh;
     private readonly SshWorkspaceTransferService _sshTransfer;
     private readonly ILongTermMemory _longTermMemory;
     private readonly AthlonWebStaticServer _athlonWebServer;
@@ -1512,9 +1517,27 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
         // Clear tasks/plan artifacts before deleting the directory: the clearer writes an empty
         // tasks.json, which would recreate the directory we just removed.
-        await _planArtifactsClearer.ClearAsync(item.Id).ConfigureAwait(true);
-
-        await _storage.DeleteSessionAsync(item.Id);
+        // Its task-list notification triggers an async refresh (fire-and-forget on the dispatcher)
+        // that would reopen tasks.json and rebuild the directory, racing the delete below. That is
+        // the sharing violation behind "tasks.json is being used by another process", so mute the
+        // notification for this window; the post-delete session switch reloads the composer anyway.
+        _suppressTaskListRefresh = true;
+        try
+        {
+            await _planArtifactsClearer.ClearAsync(item.Id).ConfigureAwait(true);
+            await _storage.DeleteSessionAsync(item.Id);
+        }
+        catch (Exception ex)
+        {
+            // Report rather than let this escape the AsyncRelayCommand and crash the dispatcher.
+            _notifier.Warning("Shell_DeleteFailedTitle", "Shell_DeleteFailedMessage", item.Title, ex.Message);
+            ShowShellToast(_loc.Format("Shell_DeleteFailedStatus", ex.Message), ShellToastKind.Error);
+            return;
+        }
+        finally
+        {
+            _suppressTaskListRefresh = false;
+        }
         _sessionNavigation.Invalidate(item.Id);
 
         if (string.Equals(_session.Id, item.Id, StringComparison.Ordinal))
@@ -1851,6 +1874,14 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
 
     private void OnTaskListChanged(string sessionId)
     {
+        // Deleting a session clears its tasks, which fires this notification. Refreshing here would
+        // re-read (and, for a missing directory, re-create) the files being deleted right before
+        // Directory.Delete runs, so the delete is muted for that window.
+        if (_suppressTaskListRefresh)
+        {
+            return;
+        }
+
         if (!string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
         {
             return;

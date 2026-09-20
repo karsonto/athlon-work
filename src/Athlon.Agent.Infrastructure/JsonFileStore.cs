@@ -36,10 +36,26 @@ public sealed class JsonFileStore : IJsonFileStore
             return default;
         }
 
-        await using var stream = File.OpenRead(path);
+        await using var stream = OpenReadShared(path);
         return await JsonSerializer.DeserializeAsync<T>(stream, Options, cancellationToken)
             .ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Opens a file for reading without vetoing a concurrent delete.
+    ///
+    /// <para><see cref="File.OpenRead"/> shares only <see cref="FileShare.Read"/>, so a reader
+    /// holding the file open makes <see cref="Directory.Delete(string, bool)"/> fail with
+    /// ERROR_SHARING_VIOLATION (0x80070020) — the "tasks.json is being used by another process"
+    /// error when a session is deleted while its task list is being refreshed. Adding
+    /// <see cref="FileShare.Delete"/> lets the delete proceed; the reader still finishes from its
+    /// open handle.</para>
+    /// </summary>
+    internal static FileStream OpenReadShared(string path) => new(
+        path,
+        FileMode.Open,
+        FileAccess.Read,
+        FileShare.ReadWrite | FileShare.Delete);
 
     public async Task AppendJsonLineAsync(string path, object value, CancellationToken cancellationToken = default, bool prettyPrint = false)
     {

@@ -625,7 +625,7 @@ public sealed class FileStorageService(
 
                 if (!string.IsNullOrWhiteSpace(entry.Path) && Directory.Exists(entry.Path))
                 {
-                    Directory.Delete(entry.Path, true);
+                    await DeleteDirectoryResilientAsync(entry.Path, cancellationToken).ConfigureAwait(false);
                     deleted.Add(entry.Path);
                 }
             }
@@ -633,7 +633,7 @@ public sealed class FileStorageService(
             var directDir = GetSessionDirectory(sessionId);
             if (Directory.Exists(directDir) && !deleted.Contains(directDir))
             {
-                Directory.Delete(directDir, true);
+                await DeleteDirectoryResilientAsync(directDir, cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -641,6 +641,23 @@ public sealed class FileStorageService(
         SessionWriteLock.RemoveSession(sessionId);
         _logger.Information("Deleted session {SessionId}", sessionId);
     }
+
+    /// <summary>
+    /// <see cref="Directory.Delete(string, bool)"/> fails outright if any file inside is still open
+    /// — a reader mid-deserialization, the search indexer, or antivirus. Retrying rides out those
+    /// short-lived handles instead of surfacing a sharing violation and leaving the session
+    /// half-deleted. Callers suppress their own background readers; this covers everything else.
+    /// </summary>
+    private static Task DeleteDirectoryResilientAsync(string path, CancellationToken cancellationToken) =>
+        FileIoRetry.RunAsync(() =>
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, true);
+            }
+
+            return Task.CompletedTask;
+        }, cancellationToken);
 
     public async Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default)
     {
