@@ -103,6 +103,41 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string composerText = string.Empty;
 
+    /// <summary>
+    /// Per-session composer drafts, so switching A -&gt; B -&gt; A restores what the user had typed in A.
+    /// A session that was never visited has no entry and therefore starts empty, matching the old
+    /// unconditional-clear behaviour for a fresh conversation.
+    /// </summary>
+    private readonly Dictionary<string, string> _composerDrafts = new(StringComparer.Ordinal);
+
+    /// <summary>Remembers the current draft text for a session before the shell switches away.</summary>
+    public void SaveComposerDraft(string? sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        _composerDrafts[sessionId] = ComposerText ?? string.Empty;
+    }
+
+    /// <summary>Restores a session's draft text (empty when it was never visited).</summary>
+    public void RestoreComposerDraft(string? sessionId)
+    {
+        ComposerText = sessionId is not null && _composerDrafts.TryGetValue(sessionId, out var draft)
+            ? draft
+            : string.Empty;
+    }
+
+    /// <summary>Drops a session's draft (deleted conversation).</summary>
+    public void ForgetComposerDraft(string? sessionId)
+    {
+        if (!string.IsNullOrEmpty(sessionId))
+        {
+            _composerDrafts.Remove(sessionId);
+        }
+    }
+
     [ObservableProperty]
     private bool isAtCompletionOpen;
 

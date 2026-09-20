@@ -31,7 +31,10 @@ public sealed class ChatHtmlBuilder
             $"<script src=\"{assets}highlight.min.js{cache}\"></script>" +
             "<script>" + BuildI18nBootstrapScript() + "</script>" +
             "<script>" + BuildAssetConfigScript() + "</script>" +
-            $"<script src=\"{assets}chat-timeline.js{cache}\"></script>" +
+            $"<script src=\"{assets}timeline-state.js{cache}\"></script>" +
+            $"<script src=\"{assets}timeline-render.js{cache}\"></script>" +
+            $"<script src=\"{assets}timeline-cards.js{cache}\"></script>" +
+            $"<script src=\"{assets}timeline-protocol.js{cache}\"></script>" +
             "</body></html>";
     }
 

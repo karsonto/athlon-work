@@ -147,13 +147,14 @@ docs/
 4. **Workspace safety** — File tools must respect `WorkspaceGuard`. Writes/edits go through `AtomicFile` with backups.
 5. **No hardcoded paths** — Use `IAppPathProvider` (folder: `.athlon-agent` under the user profile). Do not use `%LocalAppData%` or `AthlonAgent` for default data paths.
 6. **Minimal diffs** — Match surrounding style. Avoid drive-by refactors in the same PR as a feature fix.
+7. **No giant files** — Do not grow the known hot files. New session-switch/render logic goes into the focused files (`MainShellViewModel.SessionSwitch.cs`, `SessionTurnUiController.Display.cs`, the `timeline-*.js` modules, the split theme dictionaries) — see [`docs/session-switch-architecture.md`](docs/session-switch-architecture.md). If a file is already large, extract a focused `partial`/module first rather than adding to it.
 
 ---
 
 ## Coding Conventions
 
 - **C#** — Follow existing naming, nullable reference types, and `sealed`/`partial` patterns in the codebase.
-- **XAML** — Prefer `DynamicResource Brush.*` for theme-aware colors. Use shared styles in `Themes/Controls.xaml`, `ChatStyles.xaml`, `Overlays.xaml`.
+- **XAML** — Prefer `DynamicResource Brush.*` for theme-aware colors. Shared styles live in `Themes/Controls*.xaml`, `Themes/ChatStyles*.xaml`, `Theme.xaml`, `Overlays.xaml`; `Controls.xaml` / `ChatStyles.xaml` are merge entry points for the per-family dictionaries, so add to the family file, not the entry point.
 - **Comments** — Only for non-obvious business logic; code should be self-explanatory where possible.
 - **Tests** — Add tests for real behavior (parsers, guards, compaction logic). Skip tests that only assert trivial getters.
 

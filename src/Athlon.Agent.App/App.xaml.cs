@@ -3,6 +3,7 @@ using Athlon.Agent.App.Licensing;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.Diagnostics;
 using Athlon.Agent.App.Services.SlashCommands;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
@@ -68,7 +69,9 @@ public partial class App : Application
             StartupTrace("Infrastructure registered");
             services.AddSingleton(sp => new SessionUiCache(
                 System.Windows.Threading.Dispatcher.CurrentDispatcher,
-                sp.GetRequiredService<AppSettings>()));
+                sp.GetRequiredService<AppSettings>(),
+                replayCache: sp.GetRequiredService<ChatReplaySnapshotCache>()));
+            services.AddSingleton<ChatReplaySnapshotCache>();
             services.AddSingleton<SessionTurnHost>();
             services.AddSingleton<IDesktopSessionRunProbe>(sp =>
                 new SessionTurnHostRunProbe(sp.GetRequiredService<SessionTurnHost>()));
@@ -84,6 +87,9 @@ public partial class App : Application
             services.AddAthlonViewModels();
             _services = services.BuildServiceProvider();
             StartupTrace("ServiceProvider built");
+            SessionSwitchProfiler.Initialize(
+                _services.GetService<IAppLogger>(),
+                _services.GetService<Athlon.Agent.Core.RuntimeDiagnostics.IRuntimeDiagnosticEventSink>());
             _services.GetRequiredService<SubAgentCompletionContinuationService>();
             _services.GetRequiredService<PlanExecutionContinuationService>();
 
@@ -96,6 +102,8 @@ public partial class App : Application
             var settings = _services.GetRequiredService<AppSettings>();
             AppCultureManager.ApplyFromSettings(settings.Ui);
             AppThemeManager.ApplyFromSettings(settings.Ui);
+            _services.GetRequiredService<ChatReplaySnapshotCache>().Enabled =
+                settings.Ui.FastSessionSwitch && settings.Ui.CacheReplayEvents;
             StartupTrace($"Theme applied: {AppThemeManager.CurrentKind}");
 
             StartupTrace("Resolving MainWindow...");

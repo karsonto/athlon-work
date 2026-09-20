@@ -34,14 +34,14 @@ internal static class ChatMarkdownAssets
             try
             {
                 var css = Path.Combine(AssetsDirectory, "chat-shell.css");
-                var js = Path.Combine(AssetsDirectory, "chat-timeline.js");
                 var stamp = 0L;
                 if (File.Exists(css))
                 {
                     stamp = Math.Max(stamp, File.GetLastWriteTimeUtc(css).Ticks);
                 }
 
-                if (File.Exists(js))
+                // Stamp every chat script so the timeline module split still busts the WebView cache.
+                foreach (var js in Directory.EnumerateFiles(AssetsDirectory, "*.js"))
                 {
                     stamp = Math.Max(stamp, File.GetLastWriteTimeUtc(js).Ticks);
                 }

@@ -13,6 +13,31 @@ public static class MarkdownHtmlRenderer
         .UseSoftlineBreakAsHardlineBreak()
         .Build();
 
+    // Markdown -> HTML is a pure, comparatively expensive transform, and the same text is rendered
+    // repeatedly (a session switch re-renders the whole transcript; a tool result can be re-rendered
+    // on reload). Memoizing the result makes those repeats cheap even for a cold session.
+    private const int HtmlCacheCapacity = 256;
+    private const int HtmlCacheMaxEntryChars = 32_768;
+    private static readonly object HtmlCacheGate = new();
+    private static readonly Dictionary<string, string> HtmlCache = new(StringComparer.Ordinal);
+    private static readonly LinkedList<string> HtmlCacheLru = new();
+    private static int _renderInvocationCount;
+
+    /// <summary>Test hook: how many times the Markdown pipeline actually ran (cache misses).</summary>
+    internal static int RenderInvocationCount => Volatile.Read(ref _renderInvocationCount);
+
+    /// <summary>Test hook: clears the memoization cache and resets the pipeline-run counter.</summary>
+    internal static void ResetRenderCacheForTests()
+    {
+        lock (HtmlCacheGate)
+        {
+            HtmlCache.Clear();
+            HtmlCacheLru.Clear();
+        }
+
+        Interlocked.Exchange(ref _renderInvocationCount, 0);
+    }
+
     /// <summary>将纯文本转为 HTML 片段，不经过 Markdig（用于简单状态文案）。</summary>
     public static string ToPlainTextHtmlFragment(string? text)
     {
@@ -32,6 +57,50 @@ public static class MarkdownHtmlRenderer
             return string.Empty;
         }
 
+        var cacheable = markdown.Length <= HtmlCacheMaxEntryChars;
+        if (cacheable)
+        {
+            lock (HtmlCacheGate)
+            {
+                if (HtmlCache.TryGetValue(markdown, out var cached))
+                {
+                    HtmlCacheLru.Remove(markdown);
+                    HtmlCacheLru.AddFirst(markdown);
+                    return cached;
+                }
+            }
+        }
+
+        var html = RenderMarkdown(markdown);
+
+        if (cacheable)
+        {
+            lock (HtmlCacheGate)
+            {
+                if (HtmlCache.TryAdd(markdown, html))
+                {
+                    HtmlCacheLru.AddFirst(markdown);
+                    while (HtmlCache.Count > HtmlCacheCapacity)
+                    {
+                        var coldest = HtmlCacheLru.Last;
+                        if (coldest is null)
+                        {
+                            break;
+                        }
+
+                        HtmlCacheLru.RemoveLast();
+                        HtmlCache.Remove(coldest.Value);
+                    }
+                }
+            }
+        }
+
+        return html;
+    }
+
+    private static string RenderMarkdown(string markdown)
+    {
+        Interlocked.Increment(ref _renderInvocationCount);
         try
         {
             return Markdown.ToHtml(markdown, Pipeline);

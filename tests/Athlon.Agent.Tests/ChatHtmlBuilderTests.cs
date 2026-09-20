@@ -10,6 +10,14 @@ namespace Athlon.Agent.Tests;
 public sealed class ChatHtmlBuilderTests
 {
     private readonly ChatHtmlBuilder _builder = new();
+    private static readonly string[] TimelineModules =
+    [
+        "timeline-state.js",
+        "timeline-render.js",
+        "timeline-cards.js",
+        "timeline-protocol.js"
+    ];
+
     private static readonly Lazy<string> TimelineJs = new(() => ReadChatAsset("chat-timeline.js"));
     private static readonly Lazy<string> ShellCss = new(() => ReadChatAsset("chat-shell.css"));
 
@@ -23,6 +31,18 @@ public sealed class ChatHtmlBuilderTests
 
     private static string ReadChatAsset(string fileName)
     {
+        // The timeline script was split into focused modules; tests keep reading it as one source.
+        if (string.Equals(fileName, "chat-timeline.js", StringComparison.Ordinal))
+        {
+            var combined = new System.Text.StringBuilder();
+            foreach (var module in TimelineModules)
+            {
+                combined.Append(ReadChatAsset(module));
+            }
+
+            return combined.ToString();
+        }
+
         var fromBase = Path.Combine(AppContext.BaseDirectory, "Assets", "Chat", fileName);
         if (File.Exists(fromBase))
             return File.ReadAllText(fromBase);
@@ -45,7 +65,7 @@ public sealed class ChatHtmlBuilderTests
         Assert.Contains("id=\"chat-scroll\"", surface, StringComparison.Ordinal);
         Assert.Contains("id=\"empty-state\"", surface, StringComparison.Ordinal);
         Assert.Contains("chat-shell.css", surface, StringComparison.Ordinal);
-        Assert.Contains("chat-timeline.js", surface, StringComparison.Ordinal);
+        Assert.Contains("timeline-protocol.js", surface, StringComparison.Ordinal);
         Assert.Contains("updateEmptyStateVisibility", surface, StringComparison.Ordinal);
         Assert.Contains("scroller.scrollTop", surface, StringComparison.Ordinal);
         Assert.DoesNotContain("avatar-user", surface, StringComparison.Ordinal);

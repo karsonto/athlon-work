@@ -5,10 +5,29 @@ namespace Athlon.Agent.Tests;
 
 public sealed class ChatHtmlBuilderCopyActionTests
 {
+    private static readonly string[] TimelineModules =
+    [
+        "timeline-state.js",
+        "timeline-render.js",
+        "timeline-cards.js",
+        "timeline-protocol.js"
+    ];
+
     private static string TimelineJs => ReadChatAsset("chat-timeline.js");
 
     private static string ReadChatAsset(string fileName)
     {
+        if (string.Equals(fileName, "chat-timeline.js", StringComparison.Ordinal))
+        {
+            var combined = new System.Text.StringBuilder();
+            foreach (var module in TimelineModules)
+            {
+                combined.Append(ReadChatAsset(module));
+            }
+
+            return combined.ToString();
+        }
+
         var fromBase = Path.Combine(AppContext.BaseDirectory, "Assets", "Chat", fileName);
         if (File.Exists(fromBase))
             return File.ReadAllText(fromBase);

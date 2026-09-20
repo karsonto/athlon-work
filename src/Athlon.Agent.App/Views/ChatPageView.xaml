@@ -86,7 +86,8 @@
 
                 <Grid Grid.Row="1"
                       Grid.Column="0"
-                      ClipToBounds="True">
+                      ClipToBounds="True"
+                      Background="{DynamicResource Brush.ChatBackground}">
                 <!-- WebView2：空会话时缩到角落，避免 HWND airspace 盖住居中 Composer；勿 Collapsed -->
                 <controls:WebChatView x:Name="ChatWebView"
                                       Margin="0"
@@ -97,6 +98,9 @@
                             <Setter Property="VerticalAlignment" Value="Stretch" />
                             <Setter Property="Opacity" Value="1" />
                             <Setter Property="IsHitTestVisible" Value="True" />
+                            <!-- Opaque themed base even before CoreWebView2 exists, so the reused
+                                 WebView never flashes white while a switch clears/rebuilds it. -->
+                            <Setter Property="Background" Value="{DynamicResource Brush.ChatBackground}" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding HasChatMessages}" Value="False">
                                     <Setter Property="HorizontalAlignment" Value="Left" />

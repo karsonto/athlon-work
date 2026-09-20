@@ -1,0 +1,174 @@
+using System.Collections.Concurrent;
+using Athlon.Agent.App.Services.Diagnostics;
+using Athlon.Agent.Core.RuntimeDiagnostics;
+
+namespace Athlon.Agent.Tests;
+
+/// <summary>Serializes tests that share the static <see cref="SessionSwitchProfiler"/> state.</summary>
+public static class SessionSwitchProfilerCollection
+{
+    public const string Name = "session-switch-profiler";
+}
+
+[CollectionDefinition(SessionSwitchProfilerCollection.Name, DisableParallelization = true)]
+public sealed class SessionSwitchProfilerCollectionDefinition;
+
+[Collection(SessionSwitchProfilerCollection.Name)]
+public sealed class SessionSwitchProfilerTests
+{
+    [Fact]
+    public void Complete_aggregates_phases_and_reports_sample()
+    {
+        SessionSwitchProfiler.Initialize(logger: null, sink: null, enabled: true);
+        SessionSwitchProfiler.Begin("s1", SessionSwitchHitKind.Replay);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.Prepare, 3.0);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.Prepare, 2.0);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.ReplayBuild, 10.0);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 40.0);
+        SessionSwitchProfiler.Complete(endToEndMs: 100.0);
+
+        var sample = SessionSwitchProfiler.LastSample;
+        Assert.NotNull(sample);
+        Assert.Equal("s1", sample!.SessionId);
+        Assert.Equal(SessionSwitchHitKind.Replay, sample.HitKind);
+        Assert.Equal(5.0, sample.PhaseMs[SessionSwitchPhases.Prepare], 3);
+        Assert.Equal(10.0, sample.PhaseMs[SessionSwitchPhases.ReplayBuild], 3);
+        Assert.Equal(40.0, sample.PhaseMs[SessionSwitchPhases.JsRender], 3);
+        Assert.Equal(100.0, sample.EndToEndMs);
+    }
+
+    [Fact]
+    public void Record_is_ignored_when_no_switch_is_active()
+    {
+        SessionSwitchProfiler.Initialize(logger: null, sink: null, enabled: true);
+        SessionSwitchProfiler.Begin("idle", SessionSwitchHitKind.Cold);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 1.0);
+        SessionSwitchProfiler.Complete();
+
+        // Everything below happens after the switch (and its grace window) is done.
+        SessionSwitchProfiler.Record(SessionSwitchPhases.ReplayBuild, 999.0);
+
+        var sample = SessionSwitchProfiler.LastSample;
+        Assert.NotNull(sample);
+        Assert.False(sample!.PhaseMs.ContainsKey(SessionSwitchPhases.ReplayBuild));
+    }
+
+    [Fact]
+    public void Emits_structured_event_with_hit_kind_and_phases()
+    {
+        var sink = new CapturingSink();
+        SessionSwitchProfiler.Initialize(logger: null, sink: sink, enabled: true);
+        SessionSwitchProfiler.Begin("s2", SessionSwitchHitKind.Cold);
+        SessionSwitchProfiler.SetHitKind(SessionSwitchHitKind.Snapshot);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.VmRebuild, 7.0);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 12.0);
+        SessionSwitchProfiler.Complete();
+
+        var evt = Assert.Single(sink.Events);
+        Assert.Equal("session.switch", evt.eventType);
+        Assert.Equal(RuntimeDiagnosticComponent.UiSessionSwitch, evt.component);
+        Assert.Equal(RuntimeDiagnosticPhase.Switch, evt.phase);
+        Assert.Equal("s2", evt.sessionId);
+        Assert.Contains("hit=snapshot", evt.message);
+        Assert.Contains("vmRebuild=7", evt.message);
+    }
+
+    [Fact]
+    public async Task Late_js_render_lands_in_sample_within_grace()
+    {
+        var sink = new CapturingSink();
+        SessionSwitchProfiler.Initialize(logger: null, sink: sink, enabled: true);
+        SessionSwitchProfiler.Begin("s3", SessionSwitchHitKind.Replay);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.FirstPaint, 5.0);
+
+        // The shell completes before the page reports its render time; the emit is deferred so the
+        // late jsRender still belongs to this sample.
+        SessionSwitchProfiler.Complete();
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 33.0);
+
+        var evt = await WaitForEventAsync(sink).ConfigureAwait(false);
+        Assert.Contains("hit=replay", evt.message);
+        Assert.Contains("jsRender=33", evt.message);
+    }
+
+    [Fact]
+    public void New_begin_discards_a_pending_emit()
+    {
+        var sink = new CapturingSink();
+        SessionSwitchProfiler.Initialize(logger: null, sink: sink, enabled: true);
+
+        SessionSwitchProfiler.Begin("old", SessionSwitchHitKind.Cold);
+        SessionSwitchProfiler.Complete();
+
+        SessionSwitchProfiler.Begin("new", SessionSwitchHitKind.Replay);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 2.0);
+        SessionSwitchProfiler.Complete();
+
+        var sample = SessionSwitchProfiler.LastSample;
+        Assert.NotNull(sample);
+        Assert.Equal("new", sample!.SessionId);
+        Assert.Single(sink.Events);
+        Assert.True(sink.Events.TryPeek(out var emitted));
+        Assert.Equal("new", emitted.sessionId);
+    }
+
+    [Fact]
+    public void Disabled_profiler_records_sample_without_emitting()
+    {
+        var sink = new CapturingSink();
+        SessionSwitchProfiler.Initialize(logger: null, sink: sink, enabled: false);
+        SessionSwitchProfiler.Begin("s4", SessionSwitchHitKind.Cold);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 1.0);
+        SessionSwitchProfiler.Complete();
+
+        Assert.NotNull(SessionSwitchProfiler.LastSample);
+        Assert.Empty(sink.Events);
+    }
+
+    [Fact]
+    public void FormatSample_orders_phases_by_descending_duration()
+    {
+        var sample = new SessionSwitchSample(
+            "fmt",
+            SessionSwitchHitKind.Replay,
+            new Dictionary<string, double>(StringComparer.Ordinal)
+            {
+                [SessionSwitchPhases.Prepare] = 1.0,
+                [SessionSwitchPhases.JsRender] = 50.0
+            },
+            TotalMs: 60.0,
+            EndToEndMs: null);
+
+        var text = SessionSwitchProfiler.FormatSample(sample);
+
+        Assert.StartsWith("hit=replay total=60", text);
+        Assert.True(
+            text.IndexOf(SessionSwitchPhases.JsRender, StringComparison.Ordinal)
+                < text.IndexOf(SessionSwitchPhases.Prepare, StringComparison.Ordinal));
+    }
+
+    private static async Task<RuntimeDiagnosticEvent> WaitForEventAsync(CapturingSink sink)
+    {
+        for (var i = 0; i < 100 && sink.Events.IsEmpty; i++)
+        {
+            await Task.Delay(10).ConfigureAwait(false);
+        }
+
+        Assert.False(sink.Events.IsEmpty, "Expected a session.switch event within the grace window.");
+        Assert.True(sink.Events.TryPeek(out var evt));
+        return evt;
+    }
+
+    private sealed class CapturingSink : IRuntimeDiagnosticEventSink
+    {
+        public ConcurrentQueue<RuntimeDiagnosticEvent> Events { get; } = new();
+
+        public ValueTask EnqueueAsync(RuntimeDiagnosticEvent evt, CancellationToken cancellationToken = default)
+        {
+            Events.Enqueue(evt);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask FlushAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
+    }
+}

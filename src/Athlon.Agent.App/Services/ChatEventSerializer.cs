@@ -448,12 +448,42 @@ internal static class ChatEventSerializer
         string command,
         IReadOnlyList<string> events,
         int? renderGeneration = null,
-        bool replayComplete = false) =>
+        bool replayComplete = false,
+        string? sessionId = null,
+        string? revision = null) =>
         SerializeWebMessageCommand(
             command,
             events,
             renderGeneration: renderGeneration,
-            replayComplete: replayComplete);
+            replayComplete: replayComplete,
+            sessionId: sessionId,
+            revision: revision);
+
+    /// <summary>
+    /// Asks the timeline to swap a previously rendered session's DOM back in (the Phase-4 fast
+    /// path). The page answers <c>snapshotRestored</c> or <c>snapshotMiss</c>; a miss (or no answer
+    /// in time) means the caller must run the normal replay.
+    /// </summary>
+    public static string SerializeSwitchSessionCommand(string sessionId, string revision, int renderGeneration) =>
+        JsonSerializer.Serialize(
+            new
+            {
+                command = "switchSession",
+                sessionId,
+                revision,
+                renderGeneration
+            },
+            AppJson.Options);
+
+    /// <summary>Drops a session's rendered DOM snapshot in the page (content changed / evicted).</summary>
+    public static string SerializeInvalidateSessionCommand(string sessionId) =>
+        JsonSerializer.Serialize(
+            new
+            {
+                command = "invalidateSession",
+                sessionId
+            },
+            AppJson.Options);
 
     public static string SerializeResetCommand() =>
         SerializeWebMessageCommand("reset", Array.Empty<string>());
@@ -911,7 +941,9 @@ internal static class ChatEventSerializer
         IReadOnlyList<string> events,
         bool? hasOlderMessages = null,
         int? renderGeneration = null,
-        bool replayComplete = false)
+        bool replayComplete = false,
+        string? sessionId = null,
+        string? revision = null)
     {
         var buffer = new MemoryStream();
         using (var writer = new Utf8JsonWriter(buffer))
@@ -937,9 +969,19 @@ internal static class ChatEventSerializer
                 writer.WriteNumber("renderGeneration", renderGeneration.Value);
             }
 
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                writer.WriteString("sessionId", sessionId);
+            }
+
             if (replayComplete)
             {
                 writer.WriteBoolean("replayComplete", true);
+            }
+
+            if (!string.IsNullOrEmpty(revision))
+            {
+                writer.WriteString("revision", revision);
             }
 
             writer.WriteEndObject();

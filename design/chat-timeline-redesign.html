@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>聊天时间线重设计 · Athlon Agent</title>
+<style>
+  /* ─── tokens ─────────────────────────────────────────────────────────
+     Bound to the Athlon Agent "Calm Intelligence" system.
+     Dark = DarkAppThemePalette, Light = LightAppThemePalette.
+     The ONLY place colors are declared. */
+  :root {
+    --bg:          #0A0A0C;   /* AppBackground */
+    --chrome:      #121214;   /* Chrome / chat surface */
+    --chat-bg:     #121214;   /* ChatBackground (flat) */
+    --panel:       #1A1A1E;   /* Panel — cards, tool bodies */
+    --panel-2:     #222226;   /* PanelAlt — inset wells */
+    --composer:    #1C1C1E;
+    --code-bg:     #18181B;
+    --code-bg-2:   #202023;
+    --code-border: #1E293B;
+    --border:      #27272A;
+    --border-strong:#3F3F46;
+
+    --fg:          #F9FAFB;   /* Text */
+    --fg-2:        #D1D5DB;   /* TextSecondary */
+    --muted:       #A1A1AA;   /* SubtleText */
+    --disabled:    #71717A;   /* DisabledText */
+    --on-accent:   #FFFFFF;
+
+    --accent:      #6366F1;   /* Indigo */
+    --accent-hover:#4F46E5;
+    --accent-active:#4338CA;
+    --accent-soft: color-mix(in srgb, var(--accent) 20%, transparent);
+
+    --user-bubble: #3A3A3C;
+    --user-bubble-text:#F9FAFB;
+
+    --success:     #10B981;
+    --danger:      #EF4444;
+    --warning:     #F59E0B;
+    --success-soft:color-mix(in srgb, var(--success) 16%, transparent);
+    --danger-soft: color-mix(in srgb, var(--danger) 16%, transparent);
+    --warning-soft:color-mix(in srgb, var(--warning) 16%, transparent);
+
+    --diff-add-bg: color-mix(in srgb, var(--success) 12%, transparent);
+    --diff-del-bg: color-mix(in srgb, var(--danger) 12%, transparent);
+
+    --chip-bg:     #262628;
+    --chip-border: #323236;
+    --chip-text:   #9CA3AF;
+
+    --ft-csharp:   #519ABA;
+    --ft-css:      #42A5F5;
+    --ft-js:       #F0DB4F;
+    --ft-ts:       #3178C6;
+    --ft-json:     #CBCB41;
+    --ft-md:       #519ABA;
+    --ft-generic:  #6B7280;
+
+    --scroll-thumb: rgba(136,136,160,0.50);
+    --shadow-color:#000000;
+    --shadow-sm: 0 1px 2px color-mix(in srgb, var(--shadow-color) 45%, transparent);
+    --shadow-md: 0 6px 22px color-mix(in srgb, var(--shadow-color) 40%, transparent);
+    --shadow-lg: 0 28px 70px color-mix(in srgb, var(--shadow-color) 55%, transparent);
+
+    --font-display:"Segoe UI Variable Display","Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","PingFang SC",system-ui,sans-serif;
+    --font-body:   "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","PingFang SC",system-ui,sans-serif;
+    --font-mono:   Consolas,"Cascadia Code",ui-monospace,SFMono-Regular,Menlo,monospace;
+
+    --fs-h1: clamp(34px, 4.8vw, 56px);
+    --fs-h2: clamp(24px, 3.2vw, 32px);
+    --fs-lead: 16px;
+    --fs-body: 15px;
+    --fs-meta: 13px;
+
+    --gap-xs: 8px;  --gap-sm: 12px; --gap-md: 20px;
+    --gap-lg: 32px; --gap-xl: 56px; --gap-2xl: 88px;
+    --container: 1180px; --gutter: 28px;
+    --radius: 10px; --radius-lg: 16px;
+  }
+  html[data-theme="light"] {
+    --bg:          #F5F5F7;   /* Sidebar */
+    --chrome:      #FFFFFF;   /* Workspace */
+    --chat-bg:     #FFFFFF;
+    --panel:       #FFFFFF;
+    --panel-2:     #F8FAFC;
+    --composer:    #FFFFFF;
+    --code-bg:     #F1F5F9;
+    --code-bg-2:   #F8FAFC;
+    --code-border: #CBD5E1;
+    --border:      #E8E8EA;
+    --border-strong:#CBD5E1;
+
+    --fg:          #0F172A;
+    --fg-2:        #475569;
+    --muted:       #64748B;
+    --disabled:    #94A3B8;
+    --on-accent:   #FFFFFF;
+
+    --user-bubble: #F2F2F2;
+    --user-bubble-text:#0F172A;
+
+    --success:     #16A34A;
+    --danger:      #E11D48;
+    --warning:     #F59E0B;
+
+    --chip-bg:     #F8FAFC;
+    --chip-border: #E2E8F0;
+    --chip-text:   #64748B;
+
+    --ft-js:       #B58900;
+    --ft-json:     #9A8B00;
+    --ft-generic:  #94A3B8;
+
+    --scroll-thumb: rgba(100,116,139,0.40);
+    --shadow-color:#0F172A;
+  }
+
+  /* ─── reset & base ──────────────────────────────────────────────── */
+  *,*::before,*::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    font-size: var(--fs-body);
+    line-height: 1.55;
+    -webkit-font-smoothing: auto;
+  }
+  img,svg { display:block; max-width:100%; }
+  a { color:inherit; text-decoration:none; }
+  button { font:inherit; cursor:pointer; }
+  p { text-wrap: pretty; }
+  h1,h2,h3 { text-wrap: balance; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    border:2px solid transparent; border-radius:9999px;
+    background: var(--scroll-thumb); background-clip: padding-box;
+  }
+
+  /* ─── page layout ───────────────────────────────────────────────── */
+  .container { max-width: var(--container); margin-inline:auto; padding-inline: var(--gutter); }
+  .section { padding-block: clamp(36px, 6vw, var(--gap-2xl)); }
+  .stack { display:flex; flex-direction:column; }
+  .row-between { display:flex; align-items:center; justify-content:space-between; gap: var(--gap-md); }
+
+  .topnav {
+    position: sticky; top:0; z-index:40;
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topnav-inner { display:flex; align-items:center; justify-content:space-between; padding-block: 13px; }
+  .brand { display:flex; align-items:center; gap:10px; }
+  .brand .mark {
+    width:28px; height:28px; border-radius:8px;
+    display:grid; place-items:center;
+    background: var(--panel); border:1px solid var(--border); color: var(--accent);
+  }
+  .brand .mark svg { width:16px; height:16px; }
+  .brand .name { font-family: var(--font-display); font-size:17px; font-weight:600; letter-spacing:-0.01em; }
+  .brand .sep { color: var(--border-strong); }
+  .brand .sub { font-family: var(--font-mono); font-size:11px; letter-spacing:0.06em; text-transform:uppercase; color: var(--muted); }
+  .topnav-right { display:flex; align-items:center; gap:12px; }
+
+  .icon-btn {
+    width:34px; height:34px; display:grid; place-items:center;
+    border:1px solid var(--border); border-radius:9px;
+    background: var(--panel); color: var(--fg-2);
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .icon-btn:hover { border-color: var(--border-strong); color: var(--fg); }
+  .icon-btn svg { width:16px; height:16px; }
+  html[data-theme="dark"] .icon-btn .i-sun { display:none; }
+  html[data-theme="light"] .icon-btn .i-moon { display:none; }
+
+  .eyebrow {
+    font-family: var(--font-mono); font-size:12px; letter-spacing:0.1em;
+    text-transform:uppercase; color: var(--muted); margin:0 0 16px;
+  }
+  .h1 { font-family: var(--font-display); font-size: var(--fs-h1); line-height:1.05; letter-spacing:-0.02em; margin:0; font-weight:600; }
+  .h2 { font-family: var(--font-display); font-size: var(--fs-h2); line-height:1.12; letter-spacing:-0.015em; margin:0; font-weight:600; }
+  .lead { font-size: var(--fs-lead); line-height:1.6; color: var(--muted); max-width:62ch; margin:16px 0 0; }
+  .meta { font-family: var(--font-mono); font-size: var(--fs-meta); color: var(--muted); }
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+  .legend { display:flex; flex-wrap:wrap; gap:8px; margin-top:26px; }
+  .tag {
+    display:inline-flex; align-items:center; gap:7px;
+    padding:5px 11px; border:1px solid var(--border); border-radius:999px;
+    font-size:12px; color: var(--muted); background: var(--panel);
+  }
+  .tag::before { content:""; width:5px; height:5px; border-radius:50%; background: var(--accent); opacity:.7; }
+
+  /* ─── app window mock ───────────────────────────────────────────── */
+  .app-frame {
+    border:1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--chrome);
+    box-shadow: var(--shadow-lg);
+    overflow:hidden;
+    height: min(84vh, 840px);
+    display:flex; flex-direction:column;
+    margin-top: 34px;
+  }
+  .app-titlebar {
+    display:flex; align-items:center; gap:10px;
+    padding:9px 14px; border-bottom:1px solid var(--border);
+    background: var(--bg);
+  }
+  .tb-dots { display:flex; gap:6px; }
+  .tb-dots span { width:11px; height:11px; border-radius:50%; background: var(--border-strong); opacity:.8; }
+  .tb-title { font-size:12px; color: var(--muted); margin-inline:auto; font-family: var(--font-mono); letter-spacing:0.02em; }
+  .tb-spacer { width:45px; }
+
+  .app-body { flex:1; display:flex; min-height:0; }
+
+  /* sidebar */
+  .side {
+    width:264px; flex:0 0 auto;
+    border-right:1px solid var(--border);
+    background: var(--bg);
+    display:flex; flex-direction:column; min-height:0;
+  }
+  .side-head { padding:14px; }
+  .side-brand { display:flex; align-items:center; gap:9px; }
+  .side-brand .mark { width:26px; height:26px; border-radius:7px; display:grid; place-items:center; background: var(--panel); border:1px solid var(--border); color: var(--accent); }
+  .side-brand .mark svg { width:15px; height:15px; }
+  .side-brand .name { font-size:14px; font-weight:600; }
+  .side-new {
+    margin-top:14px; display:flex; align-items:center; gap:8px;
+    padding:8px 11px; border:1px solid var(--border); border-radius:9px;
+    color: var(--fg-2); font-size:13px; background: var(--panel);
+  }
+  .side-new svg { width:14px; height:14px; }
+  .side-scroll { flex:1; overflow-y:auto; padding: 4px 8px 12px; }
+  .side-group { font-family: var(--font-mono); font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase; color: var(--disabled); padding:12px 8px 6px; }
+  .side-item {
+    display:flex; align-items:center; gap:9px;
+    padding:8px 9px; border-radius:8px; font-size:13px; color: var(--muted);
+    white-space:nowrap; overflow:hidden;
+  }
+  .side-item .si-ico { width:14px; height:14px; flex:0 0 auto; opacity:.8; }
+  .side-item span { overflow:hidden; text-overflow:ellipsis; }
+  .side-item:hover { background: var(--panel); color: var(--fg-2); }
+  .side-item.active { background: var(--accent-soft); color: var(--fg); }
+  .side-item.active .si-ico { color: var(--accent); opacity:1; }
+  .side-foot { border-top:1px solid var(--border); padding:11px 14px; display:flex; align-items:center; gap:9px; }
+  .avatar { width:24px; height:24px; border-radius:50%; display:grid; place-items:center; font-size:10px; font-weight:700; background: var(--panel-2); color: var(--fg-2); border:1px solid var(--border); }
+  .side-foot .u { font-size:12px; color: var(--muted); }
+
+  /* main column */
+  .main { flex:1; min-width:0; display:flex; flex-direction:column; background: var(--chat-bg); }
+  .chat-header {
+    display:flex; align-items:center; gap:12px;
+    padding: 0 20px; height:50px; flex:0 0 auto;
+  }
+  .chat-title { font-size:14px; font-weight:500; color: var(--fg-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .chat-header-right { margin-left:auto; display:flex; align-items:center; gap:6px; }
+
+  .chat-scroll { flex:1; min-height:0; overflow-y:auto; padding: 12px 26px 26px; }
+  .timeline { display:flex; flex-direction:column; gap:18px; max-width: 860px; margin: 0 auto; }
+
+  /* ─── message rows ──────────────────────────────────────────────── */
+  .msg { display:flex; }
+  .msg.user { justify-content:flex-end; }
+  .msg.assistant { justify-content:flex-start; }
+
+  .u-stack { display:flex; flex-direction:column; align-items:flex-end; max-width:78%; gap:6px; }
+  .u-bubble {
+    background: var(--user-bubble); color: var(--user-bubble-text);
+    border-radius: 18px 18px 6px 18px;
+    padding: 11px 15px;
+    font-size:14px; line-height:1.72;
+    word-break: break-word;
+  }
+  .u-chips { display:flex; flex-wrap:wrap; gap:7px; justify-content:flex-end; }
+  .chip {
+    display:inline-flex; align-items:center; gap:6px;
+    padding:3px 9px 3px 6px; border:1px solid var(--chip-border); border-radius:999px;
+    background: var(--chip-bg); color: var(--chip-text);
+    font-size:12px; font-family: var(--font-mono); max-width:100%;
+  }
+  .chip .c-badge { width:15px; height:15px; border-radius:4px; display:grid; place-items:center; font-size:8px; font-weight:700; background: color-mix(in srgb, var(--ft-color) 22%, transparent); color: var(--ft-color); }
+  .chip .c-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  .a-stack { max-width:100%; width:100%; }
+  .md { font-size:14px; line-height:1.72; color: var(--fg); }
+  .md p { margin:0 0 11px; }
+  .md p:last-child { margin-bottom:0; }
+  .md strong { font-weight:600; }
+  .md ul { margin:0 0 11px; padding-left:20px; }
+  .md li { margin-bottom:5px; }
+  .md code {
+    font-family: var(--font-mono); font-size:0.9em;
+    background: var(--code-bg); border:1px solid var(--border);
+    border-radius:6px; padding:1px 5px; color: var(--fg-2);
+  }
+
+  /* clamp / 折叠气泡 */
+  .clamp { position:relative; }
+  .clamp.is-clamped .clamp-text { max-height:84px; overflow:hidden; }
+  .clamp.is-clamped::after {
+    content:""; position:absolute; left:0; right:0; bottom:30px; height:70px;
+    background: linear-gradient(to bottom, transparent, var(--chat-bg));
+    pointer-events:none;
+  }
+  .clamp-toggle {
+    margin-top:8px; border:0; background:transparent; padding:0;
+    color: var(--accent); font-size:12.5px; font-weight:600;
+  }
+  .clamp-toggle:hover { color: var(--accent-hover); }
+
+  /* ─── code block ────────────────────────────────────────────────── */
+  .code-block { margin:14px 0; border:1px solid var(--code-border); border-radius:12px; overflow:hidden; background: var(--code-bg); }
+  .code-head { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 13px; border-bottom:1px solid var(--code-border); font-family: var(--font-mono); font-size:11.5px; color: var(--muted); }
+  .code-lang { letter-spacing:0.05em; text-transform:uppercase; }
+  .code-btn { border:1px solid var(--border); border-radius:6px; background: var(--panel); color: var(--fg-2); padding:3px 9px; font-size:11px; }
+  .code-btn:hover { border-color: var(--border-strong); color: var(--fg); }
+  .code-block pre { margin:0; padding:13px 15px; overflow-x:auto; font-family: var(--font-mono); font-size:12.5px; line-height:1.62; color: var(--fg-2); }
+  .code-block .k { color: var(--accent); }
+  .code-block .s { color: var(--success); }
+  .code-block .c { color: var(--disabled); }
+
+  /* ─── folds (reasoning / compaction / activity) ─────────────────── */
+  .fold { margin:0; }
+  .fold > summary { list-style:none; cursor:pointer; user-select:none; }
+  .fold > summary::-webkit-details-marker { display:none; }
+  .fold-chev { transition: transform .18s ease; }
+  .fold[open] > summary .fold-chev { transform: rotate(90deg); }
+
+  .think { border-left:2px solid color-mix(in srgb, var(--accent) 42%, var(--border)); padding-left:12px; }
+  .think > summary { display:flex; align-items:center; gap:8px; padding:3px 0; font-size:12.5px; color: var(--muted); }
+  .think > summary:hover .think-label { color: var(--fg-2); }
+  .think-ico { width:14px; height:14px; color: var(--muted); flex:0 0 auto; }
+  .think-label { font-weight:500; }
+  .think-dur { color: var(--disabled); font-family: var(--font-mono); font-size:11.5px; }
+  .think-body { margin-top:7px; max-height:230px; overflow:auto; white-space:pre-wrap; word-break:break-word; font-size:12.5px; line-height:1.72; color: var(--fg-2); opacity:.92; }
+
+  .compact { border:1px dashed var(--border-strong); border-radius:12px; }
+  .compact > summary { display:flex; align-items:center; gap:9px; padding:9px 12px; font-size:12px; color: var(--muted); border-radius:12px; }
+  .compact > summary:hover { color: var(--fg-2); }
+  .compact-ico { width:14px; height:14px; flex:0 0 auto; }
+  .compact-body { padding:0 12px 11px 34px; font-family: var(--font-mono); font-size:11.5px; color: var(--muted); white-space:pre-wrap; }
+
+  .activity { margin:2px 0; }
+  .activity > summary { display:flex; align-items:center; gap:9px; padding:6px 2px; border-radius:6px; font-size:12.5px; color: var(--muted); }
+  .activity > summary:hover .act-text { color: var(--fg); text-decoration: underline; text-underline-offset:3px; }
+  .act-ico { width:15px; height:15px; flex:0 0 auto; color: var(--muted); }
+  .act-text { color: var(--fg-2); font-weight:500; }
+  .act-counts { display:inline-flex; gap:9px; font-family: var(--font-mono); font-size:11.5px; font-weight:600; font-variant-numeric: tabular-nums; }
+  .act-counts .add { color: var(--success); }
+  .act-counts .del { color: var(--danger); }
+  .act-dur { font-family: var(--font-mono); font-size:11.5px; color: var(--disabled); }
+  .act-chev { margin-left:auto; color: var(--muted); }
+  .act-body { margin:4px 0 8px; padding:4px 0 2px 18px; border-left:2px solid var(--border); display:flex; flex-direction:column; gap:2px; }
+  .activity[open] .act-body { border-left-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+  .act-item { display:flex; align-items:center; gap:9px; padding:3px 0; font-size:12px; color: var(--muted); }
+  .act-item .ai-ico { width:14px; height:14px; flex:0 0 auto; color: var(--muted); }
+  .act-item.ok .ai-ico { color: var(--success); }
+  .act-item.bad .ai-ico { color: var(--danger); }
+  .act-line { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .act-line b { color: var(--fg-2); font-weight:600; }
+  .act-item .ai-stat { font-family: var(--font-mono); font-size:11px; font-variant-numeric: tabular-nums; font-weight:600; flex:0 0 auto; }
+  .ai-stat .add { color: var(--success); } .ai-stat .del { color: var(--danger); } .ai-stat .muted { color: var(--muted); }
+
+  /* ─── tool card (工具使用) ──────────────────────────────────────── */
+  .tool { position:relative; border:1px solid var(--border); border-radius:14px; background: var(--panel); overflow:hidden; box-shadow: var(--shadow-sm); }
+  .tool::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--muted); opacity:.45; }
+  .tool.status-success::before { background: var(--success); }
+  .tool.status-failed::before { background: var(--danger); }
+  .tool.status-running::before { background: var(--accent); }
+  .tool[open] { box-shadow: var(--shadow-md); }
+  .tool > summary { list-style:none; cursor:pointer; user-select:none; display:flex; align-items:center; gap:11px; padding:11px 14px 11px 16px; }
+  .tool > summary::-webkit-details-marker { display:none; }
+  .tool:hover > summary { background: color-mix(in srgb, var(--fg) 3%, transparent); }
+  .tool-ico { width:27px; height:27px; border-radius:8px; flex:0 0 auto; display:grid; place-items:center; background: var(--panel-2); color: var(--fg-2); }
+  .tool-ico svg { width:15px; height:15px; }
+  .tool-id { display:flex; align-items:baseline; gap:9px; min-width:0; flex:1; }
+  .tool-name { font-family: var(--font-mono); font-size:12.5px; font-weight:600; color: var(--fg); flex:0 0 auto; }
+  .tool-arg { font-family: var(--font-mono); font-size:12px; color: var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .tool .fold-chev { color: var(--muted); flex:0 0 auto; }
+
+  .status { display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:600; line-height:1.5; flex:0 0 auto; }
+  .status .dot { width:6px; height:6px; border-radius:50%; background: currentColor; }
+  .status.running { color: var(--accent); background: var(--accent-soft); }
+  .status.success { color: var(--success); background: var(--success-soft); }
+  .status.failed  { color: var(--danger);  background: var(--danger-soft); }
+  .status.pending { color: var(--warning); background: var(--warning-soft); }
+  .status.running .dot { animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+
+  .tool-body { padding:0 14px 14px 16px; border-top:1px solid var(--border); }
+  .io-label { font-family: var(--font-mono); font-size:10.5px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color: var(--muted); margin:12px 0 5px; }
+  .io { font-family: var(--font-mono); font-size:11.5px; line-height:1.62; color: var(--fg-2); background: var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:9px 11px; white-space:pre-wrap; word-break:break-word; overflow:auto; max-height:210px; }
+  .io .err { color: var(--danger); }
+  .io .ok { color: var(--success); }
+
+  /* ─── file edit card (文件修改) ─────────────────────────────────── */
+  .filecard { border:1px solid var(--border); border-radius:14px; background: var(--panel); overflow:hidden; box-shadow: var(--shadow-sm); }
+  .filecard > summary { list-style:none; cursor:pointer; user-select:none; display:flex; align-items:center; gap:11px; padding:10px 13px; }
+  .filecard > summary::-webkit-details-marker { display:none; }
+  .filecard:hover > summary { background: color-mix(in srgb, var(--fg) 3%, transparent); }
+  .fc-badge { width:28px; height:28px; border-radius:8px; flex:0 0 auto; display:grid; place-items:center; font-family: var(--font-mono); font-size:9.5px; font-weight:700; letter-spacing:-0.02em; background: color-mix(in srgb, var(--ft-color) 18%, transparent); color: var(--ft-color); border:1px solid color-mix(in srgb, var(--ft-color) 30%, transparent); }
+  .fc-id { min-width:0; display:flex; flex-direction:column; gap:1px; flex:1; }
+  .fc-name { font-size:13px; font-weight:600; color: var(--fg); }
+  .fc-path { font-family: var(--font-mono); font-size:11px; color: var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .fc-stats { display:flex; align-items:center; gap:9px; flex:0 0 auto; }
+  .fc-stat { font-family: var(--font-mono); font-size:11.5px; font-weight:600; font-variant-numeric: tabular-nums; }
+  .fc-stat.add { color: var(--success); }
+  .fc-stat.del { color: var(--danger); }
+  .fc-body { border-top:1px solid var(--border); }
+
+  .diff { font-family: var(--font-mono); font-size:11.5px; line-height:1.68; background: var(--code-bg); overflow:auto; max-height:288px; }
+  .dline { display:flex; white-space:pre; min-width:100%; }
+  .dnum { width:46px; flex:0 0 auto; text-align:right; padding-right:13px; color: var(--disabled); opacity:.65; user-select:none; }
+  .dtext { padding-inline:14px 16px; white-space:pre; color: var(--fg-2); }
+  .dline.add { background: var(--diff-add-bg); }
+  .dline.add .dtext { color: var(--success); }
+  .dline.del { background: var(--diff-del-bg); }
+  .dline.del .dtext { color: var(--danger); }
+  .dline.hunk { background: var(--code-bg-2); border-block:1px solid var(--border); }
+  .dline.hunk .dtext { color: var(--muted); }
+  .dline.skip .dtext { color: var(--disabled); }
+
+  .changeset { border:1px solid var(--border); border-radius:14px; background: var(--panel); overflow:hidden; max-width:640px; box-shadow: var(--shadow-sm); }
+  .cs-head { display:flex; align-items:center; gap:9px; padding:11px 14px; font-size:12.5px; font-weight:600; color: var(--fg-2); }
+  .cs-head svg { width:15px; height:15px; color: var(--muted); }
+  .cs-head .cs-total { margin-left:auto; font-family: var(--font-mono); font-size:11.5px; font-variant-numeric: tabular-nums; }
+  .cs-total .add { color: var(--success); } .cs-total .del { color: var(--danger); }
+  .cs-row { display:flex; align-items:center; gap:10px; padding:8px 14px; border-top:1px solid var(--border); font-size:12.5px; }
+  .cs-badge { width:20px; height:20px; border-radius:6px; flex:0 0 auto; display:grid; place-items:center; font-family: var(--font-mono); font-size:8px; font-weight:700; background: color-mix(in srgb, var(--ft-color) 18%, transparent); color: var(--ft-color); }
+  .cs-name { font-family: var(--font-mono); font-size:12px; color: var(--fg-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .cs-stat { font-family: var(--font-mono); font-size:11px; font-weight:600; font-variant-numeric: tabular-nums; flex:0 0 auto; }
+  .cs-stat.add { color: var(--success); } .cs-stat.del { color: var(--danger); }
+
+  /* ─── approval ──────────────────────────────────────────────────── */
+  .approval { position:relative; border:1px solid var(--border); border-radius:14px; background: var(--panel); overflow:hidden; box-shadow: var(--shadow-sm); max-width:640px; }
+  .approval::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background: var(--warning); }
+  .ap-body { padding:13px 15px 15px 16px; }
+  .ap-title { font-size:13px; font-weight:600; color: var(--fg); display:flex; align-items:center; gap:8px; }
+  .ap-title svg { width:15px; height:15px; color: var(--warning); }
+  .ap-desc { margin-top:5px; font-size:12.5px; color: var(--muted); line-height:1.6; }
+  .ap-args { margin-top:10px; font-family: var(--font-mono); font-size:11.5px; color: var(--fg-2); background: var(--code-bg); border:1px solid var(--border); border-radius:10px; padding:9px 11px; white-space:pre-wrap; overflow:auto; max-height:150px; }
+  .ap-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+
+  /* ─── plan card (计划任务) ──────────────────────────────────────── */
+  .plan { max-width:760px; border:1px solid var(--border); border-radius:16px; background: var(--panel); overflow:hidden; box-shadow: var(--shadow-md); }
+  .plan-head { display:flex; align-items:center; gap:11px; padding:14px 16px; border-bottom:1px solid var(--border); }
+  .plan-mark { width:30px; height:30px; border-radius:9px; flex:0 0 auto; display:grid; place-items:center; background: var(--accent-soft); color: var(--accent); }
+  .plan-mark svg { width:16px; height:16px; }
+  .plan-title { font-size:14px; font-weight:600; color: var(--fg); }
+  .plan-tag { margin-left:auto; font-size:11px; font-weight:600; padding:3px 10px; border-radius:999px; background: var(--accent-soft); color: var(--accent); flex:0 0 auto; }
+  .plan-body { padding:14px 16px 6px; font-size:13px; line-height:1.68; color: var(--fg-2); }
+  .plan-body p { margin:0 0 10px; }
+  .plan-subhead { font-family: var(--font-mono); font-size:10.5px; font-weight:700; letter-spacing:0.07em; text-transform:uppercase; color: var(--muted); margin:14px 16px 2px; }
+  .plan-todos { margin:0 16px; }
+  .todo { display:flex; align-items:flex-start; gap:10px; padding:7px 0; border-top:1px solid var(--border); font-size:13px; color: var(--fg-2); }
+  .todo:first-child { border-top:0; }
+  .todo-mark { width:17px; height:17px; flex:0 0 auto; margin-top:1px; }
+  .todo.done .todo-mark { color: var(--success); }
+  .todo.doing .todo-mark { color: var(--accent); }
+  .todo.pending .todo-mark { color: var(--disabled); }
+  .todo.done .todo-text { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--border-strong); }
+  .plan-actions { display:flex; justify-content:flex-end; gap:8px; padding:13px 16px; margin-top:12px; border-top:1px solid var(--border); background: var(--code-bg-2); }
+
+  .btn { display:inline-flex; align-items:center; gap:7px; padding:7px 14px; border:1px solid var(--border); border-radius:9px; background: var(--panel); color: var(--fg-2); font-size:12.5px; font-weight:600; transition: background .15s ease, border-color .15s ease, color .15s ease; }
+  .btn:hover { border-color: var(--border-strong); color: var(--fg); }
+  .btn svg { width:14px; height:14px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--on-accent); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.ghost:hover { color: var(--fg); }
+
+  /* ─── composer ──────────────────────────────────────────────────── */
+  .composer-wrap { flex:0 0 auto; padding: 10px 26px 20px; }
+  .composer { max-width:860px; margin:0 auto; border:1px solid var(--border-strong); border-radius:16px; background: var(--composer); box-shadow: var(--shadow-md); overflow:hidden; }
+  .composer-top { display:flex; flex-wrap:wrap; gap:7px; padding:10px 12px 0; }
+  .composer-input { padding:11px 14px; font-size:14px; line-height:1.6; color: var(--fg-2); }
+  .composer-input .caret { display:inline-block; width:2px; height:16px; background: var(--accent); vertical-align:-2px; animation: blink 1.1s step-end infinite; }
+  @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+  .composer-bar { display:flex; align-items:center; gap:8px; padding:8px 12px 12px; }
+  .c-add { width:30px; height:30px; border-radius:8px; border:1px solid var(--border); background: var(--panel); color: var(--fg-2); display:grid; place-items:center; }
+  .c-add svg { width:15px; height:15px; }
+  .mode-pill { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:999px; border:1px solid var(--border); background: var(--panel); font-size:12px; color: var(--fg-2); }
+  .mode-pill svg { width:13px; height:13px; color: var(--accent); }
+  .meter { margin-left:auto; display:flex; align-items:center; gap:8px; font-family: var(--font-mono); font-size:11px; color: var(--muted); }
+  .meter-bar { width:52px; height:4px; border-radius:999px; background: var(--panel-2); overflow:hidden; }
+  .meter-bar i { display:block; height:100%; width:17%; background: var(--accent); border-radius:999px; }
+  .send { width:32px; height:32px; border-radius:9px; border:1px solid var(--accent); background: var(--accent); color: var(--on-accent); display:grid; place-items:center; }
+  .send svg { width:15px; height:15px; }
+
+  /* ─── component index ───────────────────────────────────────────── */
+  .log-row { display:grid; grid-template-columns: 168px 1fr 132px; gap: var(--gap-lg); padding:20px 0; border-top:1px solid var(--border); align-items:baseline; }
+  .log-row .lkey { font-family: var(--font-mono); font-size:12px; color: var(--accent); }
+  .log-row h3 { font-size:15px; font-weight:600; margin:0 0 4px; font-family: var(--font-body); }
+  .log-row p { margin:0; color: var(--muted); font-size:13.5px; }
+  .log-row .pull { text-align:right; font-family: var(--font-mono); font-size:12px; color: var(--muted); }
+  @media (max-width: 720px) { .log-row { grid-template-columns: 1fr; gap:6px; } .log-row .pull { text-align:left; } }
+
+  .pagefoot { padding-block: var(--gap-xl); border-top:1px solid var(--border); color: var(--muted); font-size:13px; }
+  .pagefoot .row-between { flex-wrap:wrap; gap: var(--gap-md); }
+
+  /* ─── reflow ────────────────────────────────────────────────────── */
+  @media (max-width: 920px) {
+    .side { display:none; }
+    .app-frame { height: min(78vh, 720px); }
+    .chat-scroll, .composer-wrap { padding-inline: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topnav" data-od-id="topnav">
+  <div class="container topnav-inner">
+    <div class="brand">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v10l-7 4-7-4V7z"/><path d="M12 12l7-4M12 12v9M12 12L5 8"/></svg>
+      </span>
+      <span class="name">Athlon Agent</span>
+      <span class="sep">/</span>
+      <span class="sub">聊天时间线重设计</span>
+    </div>
+    <div class="topnav-right">
+      <span class="meta" style="color:var(--disabled)">Calm Intelligence</span>
+      <button class="icon-btn" data-theme-toggle aria-pressed="true" aria-label="切换深浅主题">
+        <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 019.5 4a7 7 0 1010.5 10.5z"/></svg>
+        <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="section" data-od-id="intro">
+    <div class="container">
+      <p class="eyebrow">对话时间线 · 组件重设计</p>
+      <h1 class="h1">让工具调用、折叠摘要与文件改动，一眼读得懂。</h1>
+      <p class="lead">把历史气泡、工具卡片、思考折层、文件 diff 与计划卡收拢到同一套语言：低对比的安静底色、按状态着色的细轨、等宽数字与真实差异行。以下为深色主题实机效果。</p>
+      <div class="legend">
+        <span class="tag">历史对话气泡</span>
+        <span class="tag">工具调用卡片</span>
+        <span class="tag">折叠摘要与思考</span>
+        <span class="tag">文件修改 diff</span>
+        <span class="tag">计划任务卡</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:0" data-od-id="showcase">
+    <div class="container">
+      <div class="app-frame">
+        <div class="app-titlebar">
+          <div class="tb-dots"><span></span><span></span><span></span></div>
+          <div class="tb-title">Athlon Agent — 会话 · 聊天时间线：折叠与 diff 重设计</div>
+          <span class="tb-spacer"></span>
+        </div>
+
+        <div class="app-body">
+          <!-- sidebar -->
+          <aside class="side">
+            <div class="side-head">
+              <div class="side-brand">
+                <span class="mark" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v10l-7 4-7-4V7z"/><path d="M12 12l7-4M12 12v9M12 12L5 8"/></svg>
+                </span>
+                <span class="name">Athlon Agent</span>
+              </div>
+              <div class="side-new">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                新建会话
+              </div>
+            </div>
+            <div class="side-scroll">
+              <div class="side-group">今天</div>
+              <div class="side-item active">
+                <svg class="si-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                <span>聊天时间线：折叠与 diff 重设计</span>
+              </div>
+              <div class="side-item">
+                <svg class="si-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                <span>修复 Composer 焦点丢失</span>
+              </div>
+              <div class="side-item">
+                <svg class="si-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                <span>重构 MCP 连接池</span>
+              </div>
+              <div class="side-group">昨天</div>
+              <div class="side-item">
+                <svg class="si-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                <span>浅色主题 token 对齐</span>
+              </div>
+              <div class="side-item">
+                <svg class="si-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+                <span>计划卡文案本地化</span>
+              </div>
+            </div>
+            <div class="side-foot">
+              <span class="avatar">KA</span>
+              <span class="u">karson · 本地工作区</span>
+            </div>
+          </aside>
+
+          <!-- main -->
+          <section class="main">
+            <div class="chat-header">
+              <div class="chat-title">聊天时间线：折叠与 diff 重设计</div>
+              <div class="chat-header-right">
+                <button class="icon-btn" data-theme-toggle aria-pressed="true" aria-label="切换深浅主题">
+                  <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 019.5 4a7 7 0 1010.5 10.5z"/></svg>
+                  <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>
+                </button>
+                <button class="icon-btn" aria-label="切换右侧栏">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="chat-scroll">
+              <div class="timeline">
+
+                <!-- 压缩检查点 · 折叠 -->
+                <details class="fold compact">
+                  <summary>
+                    <svg class="compact-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h16M4 12h16M4 16h16"/></svg>
+                    <span>会话已压缩 · 保留最近 12 轮对话，历史已摘要</span>
+                    <svg class="fold-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                  </summary>
+                  <div class="compact-body">tokens 128,431 → 24,908（−80.6%）· 模型 claude-sonnet-4.5 · 检查点 #7</div>
+                </details>
+
+                <!-- 用户气泡 -->
+                <div class="msg user">
+                  <div class="u-stack">
+                    <div class="u-chips">
+                      <span class="chip" style="--ft-color:var(--ft-js)">
+                        <span class="c-badge">JS</span><span class="c-name">chat-timeline.js</span>
+                      </span>
+                      <span class="chip" style="--ft-color:var(--ft-css)">
+                        <span class="c-badge">CSS</span><span class="c-name">chat-shell.css</span>
+                      </span>
+                    </div>
+                    <div class="u-bubble">把工具调用卡片重做一下。折叠时要一眼看出这轮改了哪些文件，展开能看具体 diff；思考过程别那么抢眼。</div>
+                    <div class="meta" style="color:var(--disabled)">10:24</div>
+                  </div>
+                </div>
+
+                <!-- 助手回复 + 代码块 -->
+                <div class="msg assistant">
+                  <div class="a-stack">
+                    <div class="md">
+                      <p>明白。我按三层信息密度来重做：<strong>折叠态</strong>只留一行「工具名 · 结论 · 变更统计」，<strong>展开态</strong>给出参数与结果，文件改动则单独升格为一张 <code>FileEditCard</code>，带行号与增删着色。</p>
+                      <p>折叠摘要从纯文本改成带状态轨的条目列表：</p>
+                    </div>
+                    <div class="code-block">
+                      <div class="code-head">
+                        <span class="code-lang">js · turn-activity</span>
+                        <button class="code-btn">复制</button>
+                      </div>
+<pre><span class="c">// 折叠态：一行摘要，含文件数与增删计数</span>
+summary.innerHTML =
+  <span class="s">`本轮处理 ${steps} 个步骤`</span> +
+  <span class="s">`${files} 个文件`</span> +
+  <span class="k">`+${added} −${removed}`</span> +
+  <span class="s">`· ${duration}`</span>;</pre>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 思考折层（折叠气泡） -->
+                <details class="fold think">
+                  <summary>
+                    <svg class="think-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-4 10.5V15h8v-1.5A6 6 0 0012 3z"/></svg>
+                    <svg class="fold-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                    <span class="think-label">思考过程</span>
+                    <span class="think-dur">· 6s</span>
+                  </summary>
+                  <div class="think-body">先确认现有结构：.message.tool 是 details，turn-activity 是另一套折叠族，两者语义重叠。
+把公共部分抽成 .fold，状态色统一走 --success / --danger / --accent。
+文件改动原来散在 turn-activity-diff 里，应该提出来做独立卡片，折叠时也能看到 +/− 统计。</div>
+                </details>
+
+                <!-- 本轮活动折叠 · 展开 -->
+                <details class="fold activity" open>
+                  <summary>
+                    <svg class="act-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+                    <span class="act-text">本轮处理 9 个步骤 · 3 个文件</span>
+                    <span class="act-counts"><span class="add">+181</span><span class="del">−45</span></span>
+                    <span class="act-dur">12.4s</span>
+                    <svg class="fold-chev act-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                  </summary>
+                  <div class="act-body">
+                    <div class="act-item ok">
+                      <svg class="ai-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                      <span class="act-line"><b>read_file</b> · Assets/Chat/chat-shell.css</span>
+                      <span class="ai-stat"><span class="muted">932 行</span></span>
+                    </div>
+                    <div class="act-item ok">
+                      <svg class="ai-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                      <span class="act-line"><b>read_file</b> · Assets/Chat/chat-timeline.js</span>
+                      <span class="ai-stat"><span class="muted">2377 行</span></span>
+                    </div>
+                    <div class="act-item ok">
+                      <svg class="ai-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                      <span class="act-line"><b>grep</b> · "turn-activity" · 命中 6 处</span>
+                      <span class="ai-stat"><span class="muted">0.4s</span></span>
+                    </div>
+                    <div class="act-item ok">
+                      <svg class="ai-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+                      <span class="act-line"><b>apply_patch</b> · chat-shell.css</span>
+                      <span class="ai-stat"><span class="add">+86</span> <span class="del">−12</span></span>
+                    </div>
+                    <div class="act-item ok">
+                      <svg class="ai-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+                      <span class="act-line"><b>apply_patch</b> · chat-timeline.js</span>
+                      <span class="ai-stat"><span class="add">+62</span> <span class="del">−25</span></span>
+                    </div>
+                    <div class="act-item ok">
+                      <svg class="ai-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>
+                      <span class="act-line"><b>apply_patch</b> · ChatMessageViewModel.cs</span>
+                      <span class="ai-stat"><span class="add">+33</span> <span class="del">−8</span></span>
+                    </div>
+                    <div class="act-item bad">
+                      <svg class="ai-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+                      <span class="act-line"><b>run_command</b> · dotnet test</span>
+                      <span class="ai-stat" style="color:var(--danger)">12 项失败</span>
+                    </div>
+                    <div class="act-item ok">
+                      <svg class="ai-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                      <span class="act-line"><b>run_command</b> · dotnet test · 0 失败</span>
+                      <span class="ai-stat"><span class="muted">5.1s</span></span>
+                    </div>
+                  </div>
+                </details>
+
+                <!-- 工具卡 · 成功（折叠） -->
+                <details class="fold tool status-success">
+                  <summary>
+                    <span class="tool-ico" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5"/></svg>
+                    </span>
+                    <span class="tool-id">
+                      <span class="tool-name">read_file</span>
+                      <span class="tool-arg">src/Athlon.Agent.App/Assets/Chat/chat-timeline.js</span>
+                    </span>
+                    <span class="status success"><span class="dot"></span>完成</span>
+                    <svg class="fold-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                  </summary>
+                  <div class="tool-body">
+                    <div class="io-label">参数</div>
+                    <div class="io">{ "path": "src/Athlon.Agent.App/Assets/Chat/chat-timeline.js" }</div>
+                    <div class="io-label">结果</div>
+                    <div class="io"><span class="ok">2377 lines · 90.6 KB · UTF-8 · LF</span></div>
+                  </div>
+                </details>
+
+                <!-- 工具卡 · 失败（展开） -->
+                <details class="fold tool status-failed" open>
+                  <summary>
+                    <span class="tool-ico" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>
+                    </span>
+                    <span class="tool-id">
+                      <span class="tool-name">run_command</span>
+                      <span class="tool-arg">dotnet test --filter ChatTimeline</span>
+                    </span>
+                    <span class="status failed"><span class="dot"></span>失败</span>
+                    <svg class="fold-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                  </summary>
+                  <div class="tool-body">
+                    <div class="io-label">参数</div>
+                    <div class="io">{ "command": "dotnet test --filter ChatTimeline" }</div>
+                    <div class="io-label">输出</div>
+                    <div class="io"><span class="err">Failed!  —  Failed: 12, Passed: 48, Skipped: 0</span>
+<span class="err">error: expected summary to contain '+181 −45' but got '+181 -45'</span>
+   at Athlon.Agent.Tests.ChatTimelineTests.FoldSummary()</div>
+                  </div>
+                </details>
+
+                <!-- 文件修改卡片（展开） -->
+                <details class="fold filecard" open style="--ft-color:var(--ft-js)">
+                  <summary>
+                    <span class="fc-badge">JS</span>
+                    <span class="fc-id">
+                      <span class="fc-name">chat-timeline.js</span>
+                      <span class="fc-path">src/Athlon.Agent.App/Assets/Chat/</span>
+                    </span>
+                    <span class="fc-stats">
+                      <span class="fc-stat add">+62</span>
+                      <span class="fc-stat del">−25</span>
+                    </span>
+                    <svg class="fold-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+                  </summary>
+                  <div class="fc-body">
+                    <div class="diff">
+                      <div class="dline hunk"><span class="dnum"></span><span class="dtext">@@ -1128,9 +1128,15 @@ function createToolCard(tool) {</span></div>
+                      <div class="dline"><span class="dnum">1128</span><span class="dtext">  const details = document.createElement('details');</span></div>
+                      <div class="dline"><span class="dnum">1129</span><span class="dtext">  details.className = 'message tool';</span></div>
+                      <div class="dline add"><span class="dnum">1130</span><span class="dtext">+ details.dataset.status = tool.status || 'running';</span></div>
+                      <div class="dline add"><span class="dnum">1131</span><span class="dtext">+ details.classList.add('status-' + details.dataset.status);</span></div>
+                      <div class="dline add"><span class="dnum">1132</span><span class="dtext">+</span></div>
+                      <div class="dline"><span class="dnum">1133</span><span class="dtext">  const summary = document.createElement('summary');</span></div>
+                      <div class="dline del"><span class="dnum">1134</span><span class="dtext">-  summary.textContent = tool.name;</span></div>
+                      <div class="dline add"><span class="dnum">1134</span><span class="dtext">+  summary.appendChild(buildToolHead(tool));</span></div>
+                      <div class="dline add"><span class="dnum">1135</span><span class="dtext">+  summary.appendChild(buildStatusPill(tool.status));</span></div>
+                      <div class="dline"><span class="dnum">1136</span><span class="dtext">  details.appendChild(summary);</span></div>
+                      <div class="dline skip"><span class="dnum">  ⋯</span><span class="dtext">  ⋯ 18 unchanged lines</span></div>
+                      <div class="dline hunk"><span class="dnum"></span><span class="dtext">@@ -1189,6 +1196,11 @@ function buildStatusPill(status) {</span></div>
+                      <div class="dline add"><span class="dnum">1196</span><span class="dtext">+  const pill = document.createElement('span');</span></div>
+                      <div class="dline add"><span class="dnum">1197</span><span class="dtext">+  pill.className = 'status ' + status;</span></div>
+                      <div class="dline add"><span class="dnum">1198</span><span class="dtext">+  pill.innerHTML = '<span class="dot"></span>';</span></div>
+                      <div class="dline add"><span class="dnum">1199</span><span class="dtext">+  return pill;</span></div>
+                    </div>
+                  </div>
+                </details>
+
+                <!-- 变更集总览 -->
+                <div class="changeset">
+                  <div class="cs-head">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                    本轮修改 4 个文件
+                    <span class="cs-total"><span class="add">+181</span> <span class="del">−45</span></span>
+                  </div>
+                  <div class="cs-row">
+                    <span class="cs-badge" style="--ft-color:var(--ft-js)">JS</span>
+                    <span class="cs-name">chat-timeline.js</span>
+                    <span class="cs-stat"><span class="add">+62</span> <span class="del">−25</span></span>
+                  </div>
+                  <div class="cs-row">
+                    <span class="cs-badge" style="--ft-color:var(--ft-css)">CSS</span>
+                    <span class="cs-name">chat-shell.css</span>
+                    <span class="cs-stat"><span class="add">+86</span> <span class="del">−12</span></span>
+                  </div>
+                  <div class="cs-row">
+                    <span class="cs-badge" style="--ft-color:var(--ft-csharp)">CS</span>
+                    <span class="cs-name">ChatMessageViewModel.cs</span>
+                    <span class="cs-stat"><span class="add">+24</span> <span class="del">−8</span></span>
+                  </div>
+                  <div class="cs-row">
+                    <span class="cs-badge" style="--ft-color:var(--ft-json)">JSON</span>
+                    <span class="cs-name">zh-CN.json</span>
+                    <span class="cs-stat"><span class="add">+9</span> <span class="del">−0</span></span>
+                  </div>
+                </div>
+
+                <!-- 工具审批 -->
+                <div class="approval">
+                  <div class="ap-body">
+                    <div class="ap-title">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 001.7 3h16.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+                      需要你确认：写入文件
+                    </div>
+                    <div class="ap-desc">apply_patch 将修改 <code style="font-family:var(--font-mono);font-size:12px;color:var(--fg-2)">zh-CN.json</code> 中的 9 行本地化文案。这是本会话内第 4 次写操作。</div>
+                    <div class="ap-args">{
+  "path": "src/Athlon.Agent.App/Localization/zh-CN.json",
+  "ops": [ "add FoldSummary.text", "add FoldSummary.files", "set ToolCard.status.*" ]
+}</div>
+                    <div class="ap-actions">
+                      <button class="btn">拒绝</button>
+                      <button class="btn primary">批准并继续</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 助手收尾（可折叠长回复） -->
+                <div class="msg assistant">
+                  <div class="a-stack">
+                    <div class="clamp is-clamped" data-clamp>
+                      <div class="md clamp-text">
+                        <p>改完了。核心变化是把三个原本各写一套的折叠组件统一到 <code>.fold</code>：折叠摘要现在是「图标 + 工具名 + 结论 + 增删统计 + 耗时」的一行，展开后参数与结果分区；文件改动升格为独立的 FileEditCard，头部就带 <span style="color:var(--success)">+62</span> / <span style="color:var(--danger)">−25</span>，展开是带行号的真实 diff。思考过程降级为左侧一道细轨，不再抢主内容的注意力。</p>
+                        <p>浅色主题下所有新增 token 都从 LightAppThemePalette 取值，diff 底色用 color-mix 从语义色推导，不再写死十六进制。测试里那条断言把全角减号写成了半角，已顺手修正。下一轮可以把计划卡里的待办状态接上真实的运行进度。</p>
+                      </div>
+                      <button class="clamp-toggle" data-clamp-toggle>展开全文</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 计划任务卡 -->
+                <div class="plan">
+                  <div class="plan-head">
+                    <span class="plan-mark" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h6M9 12h6M9 19h3M5 3h14v18H5z"/></svg>
+                    </span>
+                    <span class="plan-title">实现方案：聊天时间线折叠 + diff 查看</span>
+                    <span class="plan-tag">待构建</span>
+                  </div>
+                  <div class="plan-body">
+                    <p>统一 <code>.message.tool</code> 与 <code>turn-activity</code> 的折叠语义，抽出公共 <code>.fold</code>；新增 FileEditCard 承载文件改动；所有状态色改走语义 token，深浅主题共用一套变量。</p>
+                  </div>
+                  <div class="plan-subhead">任务清单</div>
+                  <div class="plan-todos">
+                    <div class="todo done">
+                      <svg class="todo-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>
+                      <span class="todo-text">统一折叠语义，抽出公共 .fold 组件</span>
+                    </div>
+                    <div class="todo done">
+                      <svg class="todo-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>
+                      <span class="todo-text">新增 FileEditCard：行号 + 增删着色</span>
+                    </div>
+                    <div class="todo doing">
+                      <svg class="todo-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                      <span class="todo-text">工具卡增加按状态着色的左侧轨</span>
+                    </div>
+                    <div class="todo pending">
+                      <svg class="todo-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>
+                      <span class="todo-text">补齐浅色主题 token 与对比度校验</span>
+                    </div>
+                    <div class="todo pending">
+                      <svg class="todo-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/></svg>
+                      <span class="todo-text">更新折叠摘要的本地化文案</span>
+                    </div>
+                  </div>
+                  <div class="plan-actions">
+                    <button class="btn">在编辑器中打开</button>
+                    <button class="btn primary">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 5l7 7-7 7"/></svg>
+                      开始构建
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- composer -->
+            <div class="composer-wrap">
+              <div class="composer">
+                <div class="composer-top">
+                  <span class="chip" style="--ft-color:var(--ft-json)">
+                    <span class="c-badge">JSON</span><span class="c-name">zh-CN.json</span>
+                  </span>
+                </div>
+                <div class="composer-input">把计划卡里的待办接上真实运行进度，完成一项就点亮一项<span class="caret"></span></div>
+                <div class="composer-bar">
+                  <button class="c-add" aria-label="添加附件">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                  </button>
+                  <span class="mode-pill">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h6M9 12h6M9 19h3M5 3h14v18H5z"/></svg>
+                    Plan
+                  </span>
+                  <span class="meter">
+                    <span>6% · 12.4k / 200k</span>
+                    <span class="meter-bar"><i></i></span>
+                  </span>
+                  <button class="send" aria-label="发送">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h13M12 5l7 7-7 7"/></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <p class="meta" style="margin-top:14px;color:var(--disabled)">深色主题 · 视口 1180×840 · 简体中文 · 点击卡片可展开 / 收起</p>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:0" data-od-id="component-index">
+    <div class="container">
+      <p class="eyebrow" style="margin-bottom:12px">组件清单</p>
+      <h2 class="h2">本次重设计的五组元素</h2>
+      <div style="margin-top:22px">
+        <article class="log-row">
+          <span class="lkey">.msg.user → .u-bubble</span>
+          <div>
+            <h3>历史对话气泡</h3>
+            <p>右下角微收的圆角、78% 最大宽度、可内联文件 chip；悬停才出现复制 / 编辑操作。</p>
+          </div>
+          <span class="pull">气泡</span>
+        </article>
+        <article class="log-row">
+          <span class="lkey">.tool.status-*</span>
+          <div>
+            <h3>工具调用卡片</h3>
+            <p>按状态着色的左侧细轨 + 状态胶囊；折叠态一行，展开态参数 / 结果分区显示。</p>
+          </div>
+          <span class="pull">工具</span>
+        </article>
+        <article class="log-row">
+          <span class="lkey">.fold.think / .activity</span>
+          <div>
+            <h3>折叠摘要与思考</h3>
+            <p>思考降为左侧细轨；本轮活动折叠显示步骤、文件数与 +/− 统计，展开为条目列表。</p>
+          </div>
+          <span class="pull">折叠</span>
+        </article>
+        <article class="log-row">
+          <span class="lkey">.filecard / .diff</span>
+          <div>
+            <h3>文件修改</h3>
+            <p>独立卡片：文件类型徽标、路径、增删统计、带行号与着色 hunk 的真实 diff，另有变更集总览。</p>
+          </div>
+          <span class="pull">文件</span>
+        </article>
+        <article class="log-row">
+          <span class="lkey">.plan / .todo</span>
+          <div>
+            <h3>计划任务卡</h3>
+            <p>计划标题 + 状态标签 + 概述 + 五态待办清单，底部为「打开 / 构建」动作条。</p>
+          </div>
+          <span class="pull">计划</span>
+        </article>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="pagefoot" data-od-id="footer">
+  <div class="container row-between">
+    <span>Athlon Agent · 聊天时间线重设计</span>
+    <span class="meta">Calm Intelligence · 强调色克制的 Indigo · 2026</span>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var root = document.documentElement;
+    var toggles = document.querySelectorAll('[data-theme-toggle]');
+    toggles.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var isLight = root.getAttribute('data-theme') === 'light';
+        root.setAttribute('data-theme', isLight ? 'dark' : 'light');
+        toggles.forEach(function (b) { b.setAttribute('aria-pressed', String(!isLight)); });
+      });
+    });
+
+    var clamp = document.querySelector('[data-clamp]');
+    var clampBtn = document.querySelector('[data-clamp-toggle]');
+    if (clamp && clampBtn) {
+      clampBtn.addEventListener('click', function () {
+        var clamped = clamp.classList.toggle('is-clamped');
+        clampBtn.textContent = clamped ? '展开全文' : '收起';
+      });
+    }
+  })();
+</script>
+</body>
+</html>

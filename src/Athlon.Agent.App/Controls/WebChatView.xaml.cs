@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.Diagnostics;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -36,6 +37,18 @@ public partial class WebChatView : UserControl
     private bool _pendingShowToolCalls;
     private IReadOnlyList<ChatMessage>? _pendingActivitySourceMessages;
     private Athlon.Agent.Core.Plan.PlanRun? _pendingPlanRun;
+    private string? _pendingSessionId;
+
+    /// <summary>
+    /// Pending reply to a Phase-4 <c>switchSession</c> probe: set while the timeline is asked to
+    /// swap a session's rendered DOM back in, cleared when the page answers
+    /// <c>snapshotRestored</c> / <c>snapshotMiss</c>. A timeout falls back to the normal replay,
+    /// which stays authoritative.
+    /// </summary>
+    private TaskCompletionSource<bool>? _pendingSnapshotSwitch;
+
+    private static readonly TimeSpan SnapshotSwitchTimeout = TimeSpan.FromMilliseconds(400);
+    private ChatReplaySnapshotCache? _pendingReplayCache;
     private bool _needsRender;
     private bool _renderRetryScheduled;
     private bool _renderInProgress;
@@ -252,7 +265,9 @@ public partial class WebChatView : UserControl
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls = false,
         IReadOnlyList<ChatMessage>? activitySourceMessages = null,
-        Athlon.Agent.Core.Plan.PlanRun? planRun = null)
+        Athlon.Agent.Core.Plan.PlanRun? planRun = null,
+        string? sessionId = null,
+        ChatReplaySnapshotCache? replayCache = null)
     {
         // Snapshot immediately rather than holding the live per-session collection.
         // Concurrent hydration can otherwise mutate the collection mid-render (e.g. a
@@ -261,6 +276,8 @@ public partial class WebChatView : UserControl
         _pendingShowToolCalls = showToolCalls;
         _pendingActivitySourceMessages = activitySourceMessages?.ToArray();
         _pendingPlanRun = planRun;
+        _pendingSessionId = sessionId;
+        _pendingReplayCache = replayCache;
         _needsRender = true;
         var generation = StartRenderGeneration();
         await RunRenderPipelineSafeAsync(generation).ConfigureAwait(true);
@@ -517,7 +534,9 @@ public partial class WebChatView : UserControl
                 var showToolCalls = _pendingShowToolCalls;
                 var activitySource = _pendingActivitySourceMessages;
                 var planRun = _pendingPlanRun;
-                await PostReplayInBatchesAsync(messages, showToolCalls, activitySource, planRun, expectedGeneration)
+                var sessionId = _pendingSessionId;
+                var replayCache = _pendingReplayCache;
+                await PostReplayInBatchesAsync(messages, showToolCalls, activitySource, planRun, expectedGeneration, sessionId, replayCache)
                     .ConfigureAwait(true);
                 if (expectedGeneration != _renderGeneration)
                 {
@@ -553,19 +572,48 @@ public partial class WebChatView : UserControl
         bool showToolCalls,
         IReadOnlyList<ChatMessage>? activitySource,
         Athlon.Agent.Core.Plan.PlanRun? planRun,
-        int expectedGeneration)
+        int expectedGeneration,
+        string? sessionId,
+        ChatReplaySnapshotCache? replayCache)
     {
         const int batchSize = ConversationDisplayLimits.WebViewReplayBatchSize;
         // Build the full timeline once so turn folding (final assistant vs activity) stays correct,
         // then post event batches to keep the UI responsive.
-        var allEvents = await Task.Run(
-                () => ChatEventSerializer.BuildReplayEvents(
-                    messages,
-                    showToolCalls,
-                    includeReset: true,
-                    activitySourceMessages: activitySource,
-                    planRun: planRun))
-            .ConfigureAwait(true);
+        var revision = replayCache is { Enabled: true } && !string.IsNullOrEmpty(sessionId)
+            ? ChatReplayRevision.Compute(messages, showToolCalls, activitySource, planRun)
+            : null;
+        if (revision is not null
+            && await TrySwitchSessionSnapshotAsync(sessionId!, revision, expectedGeneration).ConfigureAwait(true))
+        {
+            // The timeline swapped this session's rendered DOM back in, so there is no replay to run.
+            return;
+        }
+
+        if (revision is not null && replayCache!.TryGet(sessionId!, revision, out var cachedBatches))
+        {
+            // Reuse the serialized shards: skip the markdown->HTML replay build entirely.
+            await PostCachedBatchesAsync(cachedBatches, expectedGeneration, sessionId, revision).ConfigureAwait(true);
+            return;
+        }
+
+        IReadOnlyList<string> allEvents;
+        using (SessionSwitchProfiler.Measure(SessionSwitchPhases.ReplayBuild))
+        {
+            allEvents = await Task.Run(
+                    () => ChatEventSerializer.BuildReplayEvents(
+                        messages,
+                        showToolCalls,
+                        includeReset: true,
+                        activitySourceMessages: activitySource,
+                        planRun: planRun))
+                .ConfigureAwait(true);
+        }
+
+        if (revision is not null && replayCache is { Enabled: true })
+        {
+            replayCache.Set(sessionId!, revision, SliceBatches(allEvents, batchSize));
+        }
+
         if (expectedGeneration != _renderGeneration)
         {
             return;
@@ -578,7 +626,8 @@ public partial class WebChatView : UserControl
                     "replay",
                     Array.Empty<string>(),
                     expectedGeneration,
-                    replayComplete: true));
+                    replayComplete: true,
+                    revision: revision));
             return;
         }
 
@@ -597,15 +646,179 @@ public partial class WebChatView : UserControl
                     isFirst ? "replay" : "append",
                     slice,
                     expectedGeneration,
-                    replayComplete: isLast))
+                    replayComplete: isLast,
+                    sessionId: isFirst ? sessionId : null,
+                    revision: isLast ? revision : null))
                 .ConfigureAwait(true);
             if (expectedGeneration != _renderGeneration)
             {
                 return;
             }
 
-            ChatWebView.CoreWebView2.PostWebMessageAsJson(json);
+            using (SessionSwitchProfiler.Measure(SessionSwitchPhases.PostBatches))
+            {
+                ChatWebView.CoreWebView2.PostWebMessageAsJson(json);
+            }
+
             if (offset + take < allEvents.Count)
+            {
+                await Dispatcher.Yield(DispatcherPriority.Background);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Slices a full replay event stream into the fixed-size shards the timeline is fed in. Shards
+    /// (not the final command JSON) are cached because the render generation changes on every render
+    /// and would otherwise poison the cache.
+    /// </summary>
+    private static IReadOnlyList<IReadOnlyList<string>> SliceBatches(
+        IReadOnlyList<string> allEvents,
+        int batchSize)
+    {
+        if (allEvents.Count == 0)
+        {
+            return Array.Empty<IReadOnlyList<string>>();
+        }
+
+        var batches = new List<IReadOnlyList<string>>((allEvents.Count + batchSize - 1) / batchSize);
+        for (var offset = 0; offset < allEvents.Count; offset += batchSize)
+        {
+            var take = Math.Min(batchSize, allEvents.Count - offset);
+            var slice = new string[take];
+            for (var i = 0; i < take; i++)
+            {
+                slice[i] = allEvents[offset + i];
+            }
+
+            batches.Add(slice);
+        }
+
+        return batches;
+    }
+
+    /// <summary>
+    /// Tells the page to drop a session's saved DOM snapshot (its controller was released or
+    /// evicted). Fire-and-forget: a page that is gone or shutting down is not an error.
+    /// </summary>
+    public void InvalidateSessionSnapshotInPage(string? sessionId)
+    {
+        if (string.IsNullOrEmpty(sessionId) || ChatWebView?.CoreWebView2 is null)
+        {
+            return;
+        }
+
+        try
+        {
+            ChatWebView.CoreWebView2.PostWebMessageAsJson(
+                ChatEventSerializer.SerializeInvalidateSessionCommand(sessionId));
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"invalidateSession post failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Asks the timeline to swap a previously rendered session back in (the Phase-4 fast path, which
+    /// is reached only when the replay cache switch is on, i.e. <c>Ui.FastSessionSwitch</c> &amp;&amp;
+    /// <c>Ui.CacheReplayEvents</c>). Returns true only when the page answered
+    /// <c>snapshotRestored</c> for the current generation; every other outcome (miss, timeout,
+    /// superseded render) returns false so the caller falls back to the authoritative replay.
+    /// </summary>
+    private async Task<bool> TrySwitchSessionSnapshotAsync(string sessionId, string revision, int expectedGeneration)
+    {
+        if (expectedGeneration != _renderGeneration || ChatWebView?.CoreWebView2 is null)
+        {
+            return false;
+        }
+
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pendingSnapshotSwitch = completion;
+        try
+        {
+            ChatWebView.CoreWebView2.PostWebMessageAsJson(
+                ChatEventSerializer.SerializeSwitchSessionCommand(sessionId, revision, expectedGeneration));
+
+            var finished = await Task.WhenAny(completion.Task, Task.Delay(SnapshotSwitchTimeout)).ConfigureAwait(true);
+            if (finished != completion.Task || expectedGeneration != _renderGeneration)
+            {
+                return false;
+            }
+
+            var restored = await completion.Task.ConfigureAwait(true);
+            if (restored)
+            {
+                SessionSwitchProfiler.SetHitKind(SessionSwitchHitKind.Snapshot);
+                // This path sends no replayComplete (nothing was replayed), so the render barrier is
+                // completed here to release any waiter on this generation.
+                CompleteRenderGeneration(expectedGeneration, rendered: true);
+            }
+
+            return restored;
+        }
+        finally
+        {
+            _pendingSnapshotSwitch = null;
+        }
+    }
+
+    /// <summary>
+    /// Posts a cached shard set. Serialization (and the render generation stamped into each command)
+    /// still runs per render; only the expensive markdown-to-HTML replay build is skipped.
+    /// </summary>
+    private async Task PostCachedBatchesAsync(
+        IReadOnlyList<IReadOnlyList<string>> batches,
+        int expectedGeneration,
+        string? sessionId,
+        string? revision)
+    {
+        if (expectedGeneration != _renderGeneration)
+        {
+            return;
+        }
+
+        if (batches.Count == 0)
+        {
+            ChatWebView.CoreWebView2.PostWebMessageAsJson(
+                ChatEventSerializer.SerializeEventsCommand(
+                    "replay",
+                    Array.Empty<string>(),
+                    expectedGeneration,
+                    replayComplete: true,
+                    revision: revision));
+            return;
+        }
+
+        for (var index = 0; index < batches.Count; index++)
+        {
+            if (expectedGeneration != _renderGeneration)
+            {
+                return;
+            }
+
+            var slice = batches[index];
+            var isFirst = index == 0;
+            var isLast = index == batches.Count - 1;
+            var json = await Task.Run(() => ChatEventSerializer.SerializeEventsCommand(
+                    isFirst ? "replay" : "append",
+                    slice,
+                    expectedGeneration,
+                    replayComplete: isLast,
+                    sessionId: isFirst ? sessionId : null,
+                    revision: isLast ? revision : null))
+                .ConfigureAwait(true);
+            if (expectedGeneration != _renderGeneration)
+            {
+                return;
+            }
+
+            using (SessionSwitchProfiler.Measure(SessionSwitchPhases.PostBatches))
+            {
+                ChatWebView.CoreWebView2.PostWebMessageAsJson(json);
+            }
+
+            if (!isLast)
             {
                 await Dispatcher.Yield(DispatcherPriority.Background);
             }
@@ -715,12 +928,24 @@ public partial class WebChatView : UserControl
                 switch (type.GetString())
                 {
                     case "replayComplete":
+                        if (root.TryGetProperty("renderMs", out var renderMsElement)
+                            && renderMsElement.TryGetDouble(out var renderMs))
+                        {
+                            SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, renderMs);
+                        }
+
                         if (root.TryGetProperty("renderGeneration", out var generationElement)
                             && generationElement.TryGetInt32(out var completedGeneration))
                         {
                             CompleteRenderGeneration(completedGeneration, rendered: true);
                         }
 
+                        break;
+                    case "snapshotRestored":
+                        _pendingSnapshotSwitch?.TrySetResult(true);
+                        break;
+                    case "snapshotMiss":
+                        _pendingSnapshotSwitch?.TrySetResult(false);
                         break;
                     case "copy":
                         var text = root.TryGetProperty("text", out var textElement)

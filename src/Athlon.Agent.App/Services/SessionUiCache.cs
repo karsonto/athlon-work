@@ -19,14 +19,20 @@ public sealed class SessionUiCache
     private readonly object _gate = new();
     private readonly Dispatcher _dispatcher;
     private readonly AppSettings _settings;
+    private readonly ChatReplaySnapshotCache? _replayCache;
     private readonly int _capacity;
 
-    public SessionUiCache(Dispatcher dispatcher, AppSettings settings, int capacity = DefaultCapacity)
+    public SessionUiCache(
+        Dispatcher dispatcher,
+        AppSettings settings,
+        int capacity = DefaultCapacity,
+        ChatReplaySnapshotCache? replayCache = null)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
         _dispatcher = dispatcher;
         _settings = settings;
         _capacity = capacity;
+        _replayCache = replayCache;
     }
 
     public void AttachChatViewToAll(Controls.WebChatView? chatView)
@@ -53,7 +59,12 @@ public sealed class SessionUiCache
         {
             if (!_controllers.TryGetValue(sessionId, out controller!))
             {
-                controller = new SessionTurnUiController(_dispatcher, requestScroll, requestScrollImmediate);
+                controller = new SessionTurnUiController(_dispatcher, requestScroll, requestScrollImmediate)
+                {
+                    SessionId = sessionId,
+                    ReplayCache = _replayCache,
+                    PreserveSessionScroll = _settings.Ui.PreserveSessionUiState
+                };
                 _controllers[sessionId] = controller;
                 _lru.AddFirst(sessionId);
                 evicted = EvictOverflowLocked();
@@ -118,6 +129,7 @@ public sealed class SessionUiCache
         }
 
         controller?.Release();
+        _replayCache?.Remove(sessionId);
     }
 
     /// <summary>
@@ -169,6 +181,7 @@ public sealed class SessionUiCache
             if (_controllers.Remove(node.Value, out var controller))
             {
                 (evicted ??= []).Add(controller);
+                _replayCache?.Remove(node.Value);
             }
         }
 

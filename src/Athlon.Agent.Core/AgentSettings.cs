@@ -281,4 +281,23 @@ public sealed class UiSettings
     /// workspace activity tools still fold into the turn-activity summary.
     /// </summary>
     public bool ShowToolCalls { get; set; } = true;
+
+    /// <summary>
+    /// Master rollback switch for the session-switch fast path (C# replay cache + per-session chat
+    /// snapshot). False restores the pre-optimization switch path end to end.
+    /// </summary>
+    public bool FastSessionSwitch { get; set; } = true;
+
+    /// <summary>
+    /// Reuse the serialized chat replay shards when switching back to a recently rendered session.
+    /// Granular rollback switch for the C# replay cache: false restores the pre-cache replay path.
+    /// </summary>
+    public bool CacheReplayEvents { get; set; } = true;
+
+    /// <summary>
+    /// Preserve per-session composer drafts and chat scroll position across session switches.
+    /// Rollback switch for the Phase-3 UX work: false restores clearing the composer and scrolling
+    /// to the bottom on every switch.
+    /// </summary>
+    public bool PreserveSessionUiState { get; set; } = true;
 }

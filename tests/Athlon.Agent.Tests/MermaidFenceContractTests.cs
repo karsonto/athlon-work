@@ -59,8 +59,28 @@ public sealed class MermaidFenceContractTests
         Assert.Contains("pre.classList.contains('mermaid')", timelineJs, StringComparison.Ordinal);
     }
 
+    private static readonly string[] TimelineModules =
+    [
+        "timeline-state.js",
+        "timeline-render.js",
+        "timeline-cards.js",
+        "timeline-protocol.js"
+    ];
+
     private static string ReadChatAsset(string name)
     {
+        // The timeline script was split into focused modules; tests keep reading it as one source.
+        if (string.Equals(name, "chat-timeline.js", StringComparison.Ordinal))
+        {
+            var combined = new System.Text.StringBuilder();
+            foreach (var module in TimelineModules)
+            {
+                combined.Append(ReadChatAsset(module));
+            }
+
+            return combined.ToString();
+        }
+
         var dir = Path.Combine(AppContext.BaseDirectory, "Assets", "Chat");
         return File.ReadAllText(Path.Combine(dir, name));
     }
