@@ -35,14 +35,21 @@ public static class SkillFileSystemHelper
         }
 
         var skillMdContent = File.ReadAllText(skillFile, Encoding.UTF8);
-        var resourcePaths = ListResourcePaths(skillDir, skillFile);
         if (loadResourceContents)
         {
+            // Eager path: resources are read now, so the path listing is needed anyway.
+            var resourcePaths = ListResourcePaths(skillDir, skillFile);
             var resources = LoadResources(skillDir, skillFile);
             return SkillUtil.CreateFrom(skillMdContent, resources, resourcePaths, skillDir);
         }
 
-        return SkillUtil.CreateFrom(skillMdContent, resourcePaths: resourcePaths, skillDirectory: skillDir);
+        // Defer the recursive resource walk: it is only needed to build a "resource not found"
+        // message, and doing it here costs a full directory enumeration per skill on every load.
+        return SkillUtil.CreateFrom(
+            skillMdContent,
+            resourcePaths: null,
+            skillDirectory: skillDir,
+            listResourcePaths: () => ListResourcePaths(skillDir, skillFile));
     }
 
     public static bool TryReadResourceFile(string skillDirectory, string relativePath, out string content)

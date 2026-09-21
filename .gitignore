@@ -46,6 +46,10 @@ Desktop.ini
 # Node (icon generation, etc.)
 **/node_modules/
 
+# Python bytecode (tools/wikiskill)
+__pycache__/
+*.pyc
+
 # Build temp directories
 .build-tmp/
 .obj-tmp/

@@ -8,7 +8,8 @@ public static class SkillUtil
         string skillMd,
         IReadOnlyDictionary<string, string>? resources = null,
         IReadOnlyList<string>? resourcePaths = null,
-        string? skillDirectory = null)
+        string? skillDirectory = null,
+        Func<IReadOnlyList<string>>? listResourcePaths = null)
     {
         var parsed = MarkdownSkillParser.Parse(skillMd);
         var metadata = parsed.Metadata.ToDictionary(static pair => pair.Key, static pair => pair.Value);
@@ -38,6 +39,7 @@ public static class SkillUtil
             parsed.Content,
             resources ?? new Dictionary<string, string>(),
             resourcePaths,
-            skillDirectory);
+            skillDirectory,
+            listResourcePaths);
     }
 }

@@ -864,11 +864,12 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         ActiveWorkspaceName = ResolveActiveWorkspaceName();
-        // The skill rescan is synchronous directory + file IO on the UI thread, so it gets its own
-        // phase: it is the one step in here known to block rather than await.
+        // Deliberately NOT reloadSkills: a session switch does not change the installed skills, and
+        // the rescan walks every skill folder on the UI thread (measured ~8-10s). Skill changes have
+        // their own handler (OnSkillConfigurationChanged), which already reloads the catalog.
         using (SessionSwitchProfiler.Measure(SessionSwitchPhases.SkillReload))
         {
-            RefreshAtCompletionSources(reloadSkills: true);
+            RefreshAtCompletionSources();
         }
 
         using (SessionSwitchProfiler.Measure(SessionSwitchPhases.WorkspaceTree))
@@ -879,10 +880,11 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ConfigureWorkspaceWatcher();
         // MCP stdio servers start with the workspace root as their cwd; refresh so a
         // workspace/session change re-evaluates (and reconnects when the root actually moved).
-        using (SessionSwitchProfiler.Measure(SessionSwitchPhases.McpRefresh))
-        {
-            await RefreshMcpRuntimeAsync().ConfigureAwait(true);
-        }
+        // Started here, then awaited OUTSIDE the switch's measurement window: this can block on the
+        // MCP refresh lock or on reconnecting stdio servers (measured ~9s), none of which belongs to
+        // the switch. Tracking the task keeps it alive and surfaces failures via the guard.
+        var mcpRefresh = RefreshMcpRuntimeAsync();
+        _ = RunGuardedAsync(() => mcpRefresh, "MCP runtime refresh (session switch)");
 
         OnPropertyChanged(nameof(Sidebar));
         OnPropertyChanged(nameof(HasSessionWorkspace));
@@ -1054,7 +1056,9 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     {
         _skillCatalog.Reload();
         Sidebar.Refresh(_appSettings);
-        RefreshAtCompletionSources(reloadSkills: true);
+        // The catalog was just reloaded above; passing reloadSkills again would walk every skill
+        // folder a second time in the same handler.
+        RefreshAtCompletionSources();
         OnPropertyChanged(nameof(Sidebar));
     }
 

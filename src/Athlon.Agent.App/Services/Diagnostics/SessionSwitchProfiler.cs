@@ -74,14 +74,13 @@ public static class SessionSwitchPhases
     public const string TailWait = "tailWait";
 
     /// <summary>
-    /// The synchronous skill-catalog rescan (<c>IAgentSkillCatalog.Reload</c>) triggered by the
-    /// workspace refresh. Known to be blocking directory + file IO; measured separately because
-    /// it runs inline on the UI thread from a <c>FireAndForget</c> call.
+    /// The skill-catalog rescan path (<c>IAgentSkillCatalog.Reload</c>) invoked by the workspace
+    /// refresh. It was the single largest cost on a session switch (~10s) because it walked every
+    /// skill folder synchronously on the UI thread; the switch no longer reloads skills, so this
+    /// phase is now expected to be sub-millisecond. Kept as a probe: if it regresses, the cache was
+    /// invalidated when it should not have been.
     /// </summary>
     public const string SkillReload = "skillReload";
-
-    /// <summary>MCP registry refresh (can include network round-trips to servers).</summary>
-    public const string McpRefresh = "mcpRefresh";
 
     /// <summary>Workspace tree read/walk for the sidebar.</summary>
     public const string WorkspaceTree = "workspaceTree";
@@ -221,6 +220,11 @@ public static class SessionSwitchProfiler
     /// <summary>
     /// Adds a phase duration in milliseconds. Accepted while the switch is active or inside the
     /// post-<see cref="Complete"/> grace window; ignored otherwise.
+    ///
+    /// <para>Prefer <see cref="Measure"/> so the duration is measured rather than supplied. A phase
+    /// that is only recorded when its scope actually ends (e.g. work started during the switch and
+    /// finished after <see cref="Complete"/>) is dropped rather than attributed to whatever switch
+    /// happens to be active when the continuation lands.</para>
     /// </summary>
     public static void Record(string phase, double milliseconds)
     {
@@ -292,6 +296,11 @@ public static class SessionSwitchProfiler
     /// Finalizes the current measurement and schedules the emit. The event is written after a
     /// short grace window so a late <see cref="SessionSwitchPhases.JsRender"/> still lands in the
     /// same sample; a new <see cref="Begin"/> cancels a still-pending emit.
+    ///
+    /// <para>Must be called exactly once per switch. A phase whose scope ends only after this point
+    /// is dropped rather than attributed to whichever switch is active when its continuation lands,
+    /// so a background task started during the switch (e.g. the MCP refresh) has to be recorded
+    /// before reaching here.</para>
     /// </summary>
     public static void Complete(double? endToEndMs = null)
     {
