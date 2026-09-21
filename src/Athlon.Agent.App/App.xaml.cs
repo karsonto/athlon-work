@@ -90,6 +90,7 @@ public partial class App : Application
             SessionSwitchProfiler.Initialize(
                 _services.GetService<IAppLogger>(),
                 _services.GetService<Athlon.Agent.Core.RuntimeDiagnostics.IRuntimeDiagnosticEventSink>());
+            SessionSwitchHotspotProfiler.Initialize();
             _services.GetRequiredService<SubAgentCompletionContinuationService>();
             _services.GetRequiredService<PlanExecutionContinuationService>();
 

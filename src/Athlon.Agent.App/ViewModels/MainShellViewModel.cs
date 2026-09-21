@@ -44,6 +44,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     private readonly AppSettings _appSettings;
     private readonly IImpSsoSessionStore? _ssoSessionStore;
     private readonly IAgentSkillCatalog _skillCatalog;
+    /// <summary>For switch-diagnostic queueing gaps, which are logged rather than emitted.</summary>
+    private readonly IAppLogger _logger;
     private readonly SessionTurnCoordinator _sessionTurns;
     private readonly SessionCompactionService _compactionService;
     private readonly ComposerCoordinator _composer;
@@ -144,7 +146,8 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         ISshWorkspaceClient sshClient,
         ILongTermMemory longTermMemory,
         AppUpdateService updateService,
-        AthlonWebStaticServer athlonWebServer)
+        AthlonWebStaticServer athlonWebServer,
+        IAppLogger logger)
     {
         _storage = storage;
         _workspaceContext = workspaceContext;
@@ -177,6 +180,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         _longTermMemory = longTermMemory;
         _athlonWebServer = athlonWebServer;
         _skillCatalog = skillCatalog;
+        _logger = logger;
         _appSettings = settings;
         _contextSidebarEdgeGutterWidth = 0;
         _ssoSessionStore = settings.Sso.Enabled ? ssoSessionStore : null;
@@ -860,12 +864,26 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         }
 
         ActiveWorkspaceName = ResolveActiveWorkspaceName();
-        RefreshAtCompletionSources(reloadSkills: true);
-        await RefreshWorkspaceTreeAsync().ConfigureAwait(true);
+        // The skill rescan is synchronous directory + file IO on the UI thread, so it gets its own
+        // phase: it is the one step in here known to block rather than await.
+        using (SessionSwitchProfiler.Measure(SessionSwitchPhases.SkillReload))
+        {
+            RefreshAtCompletionSources(reloadSkills: true);
+        }
+
+        using (SessionSwitchProfiler.Measure(SessionSwitchPhases.WorkspaceTree))
+        {
+            await RefreshWorkspaceTreeAsync().ConfigureAwait(true);
+        }
+
         ConfigureWorkspaceWatcher();
         // MCP stdio servers start with the workspace root as their cwd; refresh so a
         // workspace/session change re-evaluates (and reconnects when the root actually moved).
-        await RefreshMcpRuntimeAsync().ConfigureAwait(true);
+        using (SessionSwitchProfiler.Measure(SessionSwitchPhases.McpRefresh))
+        {
+            await RefreshMcpRuntimeAsync().ConfigureAwait(true);
+        }
+
         OnPropertyChanged(nameof(Sidebar));
         OnPropertyChanged(nameof(HasSessionWorkspace));
         OnPropertyChanged(nameof(WorkspacePanelActionLabel));

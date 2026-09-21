@@ -60,6 +60,31 @@ public static class SessionSwitchPhases
     /// every path resolution and is invisible in every other measurement.
     /// </summary>
     public const string DirectoryProbe = "dirProbe";
+
+    /// <summary>
+    /// The post-first-paint tail: after <c>firstPaintDone</c> is signalled, the switch awaits the
+    /// adopt task and then refreshes workspace chrome.
+    ///
+    /// <para>This exists because a switch could report <c>total=19s</c> with every other phase at
+    /// ~0ms. An earlier attempt blamed <c>session.json</c> deserialization; the switch's own
+    /// measurements proved that wrong (<c>fullSessionLoad=0ms</c>). The unaccounted time lives
+    /// here, after the last phase, so this phase makes that span visible instead of inferring it
+    /// by subtraction.</para>
+    /// </summary>
+    public const string TailWait = "tailWait";
+
+    /// <summary>
+    /// The synchronous skill-catalog rescan (<c>IAgentSkillCatalog.Reload</c>) triggered by the
+    /// workspace refresh. Known to be blocking directory + file IO; measured separately because
+    /// it runs inline on the UI thread from a <c>FireAndForget</c> call.
+    /// </summary>
+    public const string SkillReload = "skillReload";
+
+    /// <summary>MCP registry refresh (can include network round-trips to servers).</summary>
+    public const string McpRefresh = "mcpRefresh";
+
+    /// <summary>Workspace tree read/walk for the sidebar.</summary>
+    public const string WorkspaceTree = "workspaceTree";
 }
 
 /// <summary>Immutable snapshot of one completed session-switch measurement.</summary>
@@ -69,7 +94,14 @@ public sealed record SessionSwitchSample(
     IReadOnlyDictionary<string, double> PhaseMs,
     double TotalMs,
     double? EndToEndMs,
-    IReadOnlyDictionary<string, double>? PhaseCounts = null);
+    IReadOnlyDictionary<string, double>? PhaseCounts = null,
+    /// <summary>
+    /// Per phase, the offset from <see cref="SessionSwitchProfiler.Begin"/> at which that phase was
+    /// last recorded. This is what makes the unmeasured spans computable: phases are a scatter of
+    /// durations with no shared origin, so <c>total</c> minus the latest phase end, and the gaps
+    /// between consecutive phase ends, are the only way to see time that no phase covers.
+    /// </summary>
+    IReadOnlyDictionary<string, double>? PhaseEndMs = null);
 
 /// <summary>
 /// Lightweight, behavior-neutral instrument for session switching. Phases are recorded with
@@ -96,6 +128,7 @@ public static class SessionSwitchProfiler
     private static readonly object Gate = new();
     private static readonly Dictionary<string, double> PhaseMs = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, double> PhaseCounts = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, double> PhaseEnds = new(StringComparer.Ordinal);
     private static readonly Stopwatch Total = new();
 
     private static IAppLogger? _logger;
@@ -157,6 +190,7 @@ public static class SessionSwitchProfiler
         {
             PhaseMs.Clear();
             PhaseCounts.Clear();
+            PhaseEnds.Clear();
             _sessionId = sessionId;
             _hitKind = hitKind;
             _active = true;
@@ -204,6 +238,7 @@ public static class SessionSwitchProfiler
             }
 
             PhaseMs[phase] = PhaseMs.GetValueOrDefault(phase) + milliseconds;
+            PhaseEnds[phase] = Total.Elapsed.TotalMilliseconds;
 
             // A late jsRender is the last signal we expect; flush as soon as it arrives.
             if (_emitPending && phase == SessionSwitchPhases.JsRender)
@@ -314,13 +349,15 @@ public static class SessionSwitchProfiler
             _emitPending = false;
             var phases = new Dictionary<string, double>(PhaseMs, StringComparer.Ordinal);
             var counts = new Dictionary<string, double>(PhaseCounts, StringComparer.Ordinal);
+            var ends = new Dictionary<string, double>(PhaseEnds, StringComparer.Ordinal);
             sample = new SessionSwitchSample(
                 _sessionId,
                 _hitKind,
                 phases,
                 Total.Elapsed.TotalMilliseconds,
                 _endToEndMs,
-                counts);
+                counts,
+                ends);
             _lastSample = sample;
         }
 
@@ -383,6 +420,17 @@ public static class SessionSwitchProfiler
         foreach (var (phase, ms) in sample.PhaseMs.OrderByDescending(p => p.Value))
         {
             parts.Add($"{phase}={ms:0.#}ms");
+        }
+
+        // The single most useful number when total dwarfs every phase: how much of the switch no
+        // phase accounted for. Measured from the last phase to complete rather than from the sum of
+        // the durations — `firstPaint` is recorded as elapsed-since-Begin, so summing would
+        // double-count every phase that ran before it.
+        if (sample.PhaseEndMs is { Count: > 0 } ends)
+        {
+            var lastEnd = ends.Values.Max();
+            parts.Add($"lastPhaseEnd={lastEnd:0.#}ms");
+            parts.Add($"unmeasured={Math.Max(0, sample.TotalMs - lastEnd):0.#}ms");
         }
 
         if (sample.EndToEndMs is { } endToEnd)

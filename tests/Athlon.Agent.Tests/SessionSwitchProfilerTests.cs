@@ -195,8 +195,68 @@ public sealed class SessionSwitchProfilerTests
         Assert.Contains("dirProbe#=3", text);
         Assert.Contains("endToEnd=42", text);
     }
-    private static async Task<RuntimeDiagnosticEvent> WaitForEventAsync(CapturingSink sink)
+
+    [Fact]
+    public void FormatSample_reports_the_unmeasured_span()
     {
+        // The failure mode this guards: phases summing to milliseconds while total is seconds.
+        // Without this number the gap is invisible and every phase looks innocent — which is how
+        // a 19s switch was reported with fullSessionLoad=0ms and adopt=0ms.
+        SessionSwitchProfiler.Initialize(logger: null, sink: null, enabled: true);
+        SessionSwitchProfiler.Begin("gapped");
+        SessionSwitchProfiler.Record(SessionSwitchPhases.FullSessionLoad, 1.0);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.Adopt, 1.0);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 1.0);
+        SessionSwitchProfiler.Complete(endToEndMs: 19062.0);
+
+        var sample = SessionSwitchProfiler.LastSample!;
+
+        // Every phase recorded an end offset, so the span after the last one is attributable.
+        Assert.Equal(sample.PhaseMs.Count, sample.PhaseEndMs!.Count);
+
+        var text = SessionSwitchProfiler.FormatSample(sample);
+        Assert.Contains("lastPhaseEnd=", text);
+        Assert.Contains("unmeasured=", text);
+    }
+
+    [Fact]
+    public void Phase_end_offsets_track_the_latest_record_for_each_phase()
+    {
+        SessionSwitchProfiler.Initialize(logger: null, sink: null, enabled: true);
+        SessionSwitchProfiler.Begin("offsets");
+        SessionSwitchProfiler.Record(SessionSwitchPhases.Prepare, 5.0);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.Prepare, 5.0);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 1.0);
+        SessionSwitchProfiler.Complete();
+
+        var sample = SessionSwitchProfiler.LastSample!;
+
+        // The duration accumulates across records; the end offset is the latest of them.
+        Assert.Equal(10.0, sample.PhaseMs[SessionSwitchPhases.Prepare], 3);
+        Assert.True(
+            sample.PhaseEndMs![SessionSwitchPhases.Prepare]
+                <= sample.PhaseEndMs[SessionSwitchPhases.JsRender]);
+    }
+
+    [Fact]
+    public void Begin_clears_phase_end_offsets_from_the_previous_switch()
+    {
+        SessionSwitchProfiler.Initialize(logger: null, sink: null, enabled: true);
+        SessionSwitchProfiler.Begin("first");
+        SessionSwitchProfiler.Record(SessionSwitchPhases.Prepare, 1.0);
+        SessionSwitchProfiler.Complete();
+
+        SessionSwitchProfiler.Begin("second");
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 1.0);
+        SessionSwitchProfiler.Complete();
+
+        // A stale offset would make the next sample's `unmeasured` meaningless.
+        var sample = SessionSwitchProfiler.LastSample!;
+        Assert.False(sample.PhaseEndMs!.ContainsKey(SessionSwitchPhases.Prepare));
+        Assert.True(sample.PhaseEndMs.ContainsKey(SessionSwitchPhases.JsRender));
+    }
+
+    private static async Task<RuntimeDiagnosticEvent> WaitForEventAsync(CapturingSink sink)    {
         for (var i = 0; i < 100 && sink.Events.IsEmpty; i++)
         {
             await Task.Delay(10).ConfigureAwait(false);

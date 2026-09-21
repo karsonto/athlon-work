@@ -41,11 +41,19 @@ namespace Athlon.Agent.App.ViewModels;
 /// </summary>
 public partial class MainShellViewModel
 {
+    /// <summary>
+    /// Marker name for the adopt await in <see cref="LoadSessionInternalAsync"/>. Distinct from
+    /// <see cref="SessionSwitchPhases.Adopt"/> because the phase measures the adopt work while this
+    /// measures how long the continuation waited for the UI thread to get back to it.
+    /// </summary>
+    private const string AdoptMarker = "adoptAwait";
+
     public async Task OpenSessionByIdAsync(string sessionId)
     {
         CurrentPage = AppPage.Chat;
         SessionSwitchProfiler.Begin(sessionId);
         SessionDirectoryLayout.ResetProbeStats();
+        SessionSwitchHotspotProfiler.Reset();
         var switchStarted = Stopwatch.GetTimestamp();
         try
         {
@@ -182,7 +190,15 @@ public partial class MainShellViewModel
                 NotifyCommandStatesChanged();
 
                 firstPaintDone.TrySetResult();
-                await _displayedSessionReady.ConfigureAwait(true);
+                // `tailWait` covers first paint → adopt completion. The `adoptAwait` marker is lowered
+                // here and continued by the adopt task the moment it resumes, so the gap it reports is
+                // time the adopt continuation spent queued behind other UI work rather than working.
+                SessionSwitchHotspotProfiler.Begin(AdoptMarker);
+                SessionSwitchHotspotProfiler.Lower(AdoptMarker);
+                using (SessionSwitchProfiler.Measure(SessionSwitchPhases.TailWait))
+                {
+                    await _displayedSessionReady.ConfigureAwait(true);
+                }
             }
             finally
             {
@@ -250,6 +266,11 @@ public partial class MainShellViewModel
         // The full payload is ready, but do not adopt it until the display page has been painted:
         // adopting earlier would make the ready-task complete while the timeline is still empty.
         await firstPaintDone.ConfigureAwait(true);
+
+        // Paired with the Begin/Lower raised when first paint completed. This is where the adopt
+        // continuation actually resumes, so the gap is the delay the UI thread imposed on it.
+        SessionSwitchHotspotProfiler.Continue(AdoptMarker, _logger);
+
         if (full is null)
         {
             if (IsSessionLoadCurrent(loadGeneration))
