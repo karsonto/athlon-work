@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.App.Services.Diagnostics;
 
 namespace Athlon.Agent.App.Services;
 
@@ -42,6 +43,9 @@ public sealed class SessionNavigationStore
         if (TryGetCachedSession(sessionId, out var cached))
         {
             // Cache hit: the full session is already in memory, skip the metadata probe entirely.
+            // Report it as a replay-level hit so this switch is not bucketed with cold loads that
+            // paid for session.json deserialization.
+            SessionSwitchProfiler.SetHitKind(SessionSwitchHitKind.Replay);
             session = cached;
             isPartial = false;
             displayPage = await LoadFirstDisplayPageAsync(sessionId, cancellationToken).ConfigureAwait(true);

@@ -41,6 +41,10 @@ public sealed class FileSubAgentSessionStore(IAppPathProvider paths, IJsonFileSt
     {
         var directory = GetSubAgentDirectory(parentSessionId, subSessionId);
         Directory.CreateDirectory(directory);
+        // The nested directory now exists, so any cached "this id is not a sub-agent" answer is
+        // stale. Invalidating here keeps the very first artifact write for a new sub-agent from
+        // landing in the top-level layout.
+        SessionDirectoryLayout.InvalidateNestedIndex(paths.SessionsPath);
         await jsonFileStore.SaveAsync(Path.Combine(directory, "session.json"), bundle.Session, cancellationToken);
         await SaveRoleAsync(directory, bundle.Role, cancellationToken);
     }

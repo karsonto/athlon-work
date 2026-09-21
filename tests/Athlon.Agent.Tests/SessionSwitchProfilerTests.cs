@@ -4,7 +4,11 @@ using Athlon.Agent.Core.RuntimeDiagnostics;
 
 namespace Athlon.Agent.Tests;
 
-/// <summary>Serializes tests that share the static <see cref="SessionSwitchProfiler"/> state.</summary>
+/// <summary>
+/// Serializes tests that share process-wide static state. The switch profiler's phases are static,
+/// and <see cref="SessionDirectoryLayoutTests"/> resets the directory-probe counters on that same
+/// timer, so both collections must be disabled from parallelization together.
+/// </summary>
 public static class SessionSwitchProfilerCollection
 {
     public const string Name = "session-switch-profiler";
@@ -145,8 +149,52 @@ public sealed class SessionSwitchProfilerTests
         Assert.True(
             text.IndexOf(SessionSwitchPhases.JsRender, StringComparison.Ordinal)
                 < text.IndexOf(SessionSwitchPhases.Prepare, StringComparison.Ordinal));
+        Assert.DoesNotContain("endToEnd", text);
     }
 
+    [Fact]
+    public void SetHitKind_never_downgrades_a_stronger_hit()
+    {
+        SessionSwitchProfiler.Initialize(logger: null, sink: null, enabled: true);
+
+        // The payload was reused (replay) and then the DOM snapshot was restored on top of it.
+        SessionSwitchProfiler.Begin("s5");
+        SessionSwitchProfiler.SetHitKind(SessionSwitchHitKind.Replay);
+        SessionSwitchProfiler.SetHitKind(SessionSwitchHitKind.Snapshot);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 1.0);
+        SessionSwitchProfiler.Complete();
+
+        Assert.Equal(SessionSwitchHitKind.Snapshot, SessionSwitchProfiler.LastSample!.HitKind);
+
+        // The reverse order must also stay at snapshot: a later weaker signal cannot undo it.
+        SessionSwitchProfiler.Begin("s6");
+        SessionSwitchProfiler.SetHitKind(SessionSwitchHitKind.Snapshot);
+        SessionSwitchProfiler.SetHitKind(SessionSwitchHitKind.Replay);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 1.0);
+        SessionSwitchProfiler.Complete();
+
+        Assert.Equal(SessionSwitchHitKind.Snapshot, SessionSwitchProfiler.LastSample!.HitKind);
+    }
+
+    [Fact]
+    public void Records_phase_counts_and_renders_probe_count()
+    {
+        SessionSwitchProfiler.Initialize(logger: null, sink: null, enabled: true);
+        SessionSwitchProfiler.Begin("counted");
+        SessionSwitchProfiler.Record(
+            SessionSwitchPhases.DirectoryProbe,
+            SessionDirectoryLayout.ProbeElapsed.TotalMilliseconds);
+        SessionSwitchProfiler.RecordCount("dirProbe", 3);
+        SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, 2.0);
+        SessionSwitchProfiler.Complete(endToEndMs: 42.0);
+
+        var sample = SessionSwitchProfiler.LastSample!;
+        Assert.Equal(3, sample.PhaseCounts!["dirProbe"]);
+
+        var text = SessionSwitchProfiler.FormatSample(sample);
+        Assert.Contains("dirProbe#=3", text);
+        Assert.Contains("endToEnd=42", text);
+    }
     private static async Task<RuntimeDiagnosticEvent> WaitForEventAsync(CapturingSink sink)
     {
         for (var i = 0; i < 100 && sink.Events.IsEmpty; i++)

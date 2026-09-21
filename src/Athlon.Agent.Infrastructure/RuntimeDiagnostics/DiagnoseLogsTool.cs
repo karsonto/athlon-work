@@ -230,16 +230,11 @@ public sealed class DiagnoseLogsTool(
         var resolved = runContextAccessor.ResolveSessionDirectory(sessionsPath, sessionId);
 
         // Mirror sink resolution rules (best-effort).
-        if (runContextAccessor.Current?.Kind == AgentRunKind.SubAgent)
-        {
-            return Path.Combine(resolved, "diagnostics", "runtime-events.jsonl");
-        }
-
-        if (SessionDirectoryLayout.IsTopLevelSessionDirectory(sessionsPath, resolved)
-            && SessionDirectoryLayout.TryFindNestedSubAgentDirectory(sessionsPath, sessionId) is { } nested)
-        {
-            resolved = nested;
-        }
+        resolved = SessionDirectoryLayout.ResolveEffectiveSessionDirectory(
+            sessionsPath,
+            sessionId,
+            resolved,
+            runContextAccessor.Current?.Kind ?? AgentRunKind.Root);
 
         return Path.Combine(resolved, "diagnostics", "runtime-events.jsonl");
     }

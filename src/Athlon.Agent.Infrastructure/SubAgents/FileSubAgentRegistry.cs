@@ -94,6 +94,9 @@ public sealed class FileSubAgentRegistry(IAppPathProvider paths, IJsonFileStore 
     {
         var directory = GetSubAgentDirectory(parentSessionId, subSessionId);
         Directory.CreateDirectory(directory);
+        // Registration is what makes a new sub-agent visible to nested-directory resolution;
+        // drop the cached index so the next resolution sees this directory instead of waiting TTL.
+        SessionDirectoryLayout.InvalidateNestedIndex(paths.SessionsPath);
         await jsonFileStore.SaveAsync(Path.Combine(directory, "meta.json"), meta, cancellationToken).ConfigureAwait(false);
     }
 

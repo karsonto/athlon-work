@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Runtime.InteropServices;
@@ -28,6 +29,7 @@ public sealed class FileStorageService(
     private readonly SessionIndexCoordinator _indexCoordinator = new(paths, jsonFileStore, runContextAccessor);
     private readonly IRuntimeDiagnosticEventSink? _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
     private ToolCallLogWriteQueue? _toolCallLogQueue;
+    private readonly ConcurrentDictionary<string, byte> _ensuredSessionDirs = new(StringComparer.OrdinalIgnoreCase);
 
     private ToolCallLogWriteQueue ToolCallLogQueue =>
         _toolCallLogQueue ??= new ToolCallLogWriteQueue(WriteToolCallLogCoreAsync, _logger);
@@ -214,6 +216,83 @@ public sealed class FileStorageService(
             await FileIoRetry.RunAsync(
                 () => File.WriteAllTextAsync(path, builder.ToString(), Utf8Bom, cancellationToken),
                 cancellationToken);
+        }
+    }
+
+    public async Task ReplaceConversationDisplayOffThreadAsync(
+        string sessionId,
+        IReadOnlyList<ChatMessage> messages,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return;
+        }
+
+        using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
+        {
+            await EnsureSessionLogDirectoriesAsync(sessionId).ConfigureAwait(false);
+            var path = GetConversationDisplayPath(sessionId);
+
+            // Building the payload is the expensive half for a long conversation, so it moves with
+            // the write rather than staying on the caller's thread.
+            var json = await BackgroundFileIo.RunAsync(() =>
+            {
+                var builder = new StringBuilder();
+                foreach (var message in messages)
+                {
+                    builder.AppendLine(JsonSerializer.Serialize(message, JsonFileStore.JsonLineOptions));
+                }
+
+                return builder.ToString();
+            }).ConfigureAwait(false);
+
+            await FileIoRetry.RunAsync(
+                () => File.WriteAllTextAsync(path, json, Utf8Bom, cancellationToken),
+                cancellationToken);
+        }
+    }
+
+    public async Task SaveSessionOffThreadAsync(AgentSession session, CancellationToken cancellationToken = default)
+    {
+        // Serialization is CPU work proportional to the whole message list, so it must not happen
+        // on a caller that is painting. The write itself already runs on the pool.
+        var json = await BackgroundFileIo.RunAsync(
+            () => JsonSerializer.Serialize(session, JsonFileStore.Options)).ConfigureAwait(false);
+
+        string sessionDir;
+        try
+        {
+            using (await SessionWriteLock.AcquireAsync(session.Id, cancellationToken).ConfigureAwait(false))
+            {
+                await EnsureSessionLogDirectoriesAsync(session.Id).ConfigureAwait(false);
+                sessionDir = GetSessionDirectory(session);
+                await FileIoRetry.RunAsync(
+                    () => AtomicFile.WriteAllTextAsync(Path.Combine(sessionDir, "session.json"), json, cancellationToken),
+                    cancellationToken);
+                _logger.Information("Session persisted to {SessionDir}", sessionDir);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await EnqueueStorageDiagnosticAsync(
+                session.Id,
+                RuntimeDiagnosticPhase.Persist,
+                "storage.persist_failed",
+                RuntimeDiagnosticSeverity.Error,
+                RuntimeDiagnosticErrorCodes.StoragePersistFailed,
+                ex.Message).ConfigureAwait(false);
+            throw;
+        }
+
+        if (SessionDirectoryLayout.IsTopLevelSessionDirectory(paths.SessionsPath, sessionDir)
+            && !SessionDirectoryLayout.IsNestedSubAgentSessionId(paths.SessionsPath, session.Id))
+        {
+            _indexCoordinator.ScheduleUpdate(session);
         }
     }
 
@@ -635,10 +714,18 @@ public sealed class FileStorageService(
             {
                 await DeleteDirectoryResilientAsync(directDir, cancellationToken).ConfigureAwait(false);
             }
+
+            // A removed sub-agent session must stop resolving; the delete may have taken out the
+            // last nested directory for this id.
+            SessionDirectoryLayout.InvalidateNestedIndex(paths.SessionsPath);
         }
 
         await _indexCoordinator.RefreshIndexImmediateAsync(cancellationToken);
         SessionWriteLock.RemoveSession(sessionId);
+        // The directory is gone, so the "already prepared" marker must go too: if the same id is
+        // written again, its folders have to be recreated rather than assumed present. Keyed off the
+        // plain top-level path because that is what a non-sub-agent context resolves to.
+        _ensuredSessionDirs.TryRemove(Path.Combine(paths.SessionsPath, sessionId), out _);
         _logger.Information("Deleted session {SessionId}", sessionId);
     }
 
@@ -702,29 +789,39 @@ public sealed class FileStorageService(
     private void EnsureSessionLogDirectories(string sessionId)
     {
         var sessionDir = GetSessionDirectory(sessionId);
+        // Directory.CreateDirectory is cheap per call but this runs on every save (session,
+        // conversation, display, tasks). The dictionary keeps the whole check off the disk for
+        // sessions already prepared.
+        if (_ensuredSessionDirs.ContainsKey(sessionDir))
+        {
+            return;
+        }
+
         Directory.CreateDirectory(sessionDir);
         Directory.CreateDirectory(Path.Combine(sessionDir, "summaries"));
         Directory.CreateDirectory(Path.Combine(sessionDir, "transcripts"));
         Directory.CreateDirectory(Path.Combine(sessionDir, "evicted"));
+        _ensuredSessionDirs.TryAdd(sessionDir, 0);
     }
+
+    /// <summary>
+    /// Creates the session log directories on the thread pool. Used from the post-first-paint adopt
+    /// path, where the four <c>CreateDirectory</c> calls would otherwise run on the UI thread and
+    /// stall the frame the user is looking at.
+    /// </summary>
+    private Task EnsureSessionLogDirectoriesAsync(string sessionId) =>
+        BackgroundFileIo.RunAsync(() => EnsureSessionLogDirectories(sessionId));
 
     private string GetSessionDirectory(AgentSession session) => GetSessionDirectory(session.Id);
 
     private string GetSessionDirectory(string sessionId)
     {
         var resolved = runContextAccessor.ResolveSessionDirectory(paths.SessionsPath, sessionId);
-        if (runContextAccessor.Current?.Kind == AgentRunKind.SubAgent)
-        {
-            return resolved;
-        }
-
-        if (SessionDirectoryLayout.IsTopLevelSessionDirectory(paths.SessionsPath, resolved)
-            && SessionDirectoryLayout.TryFindNestedSubAgentDirectory(paths.SessionsPath, sessionId) is { } nested)
-        {
-            return nested;
-        }
-
-        return resolved;
+        return SessionDirectoryLayout.ResolveEffectiveSessionDirectory(
+            paths.SessionsPath,
+            sessionId,
+            resolved,
+            runContextAccessor.Current?.Kind ?? AgentRunKind.Root);
     }
 
     private async Task EnqueueStorageDiagnosticAsync(

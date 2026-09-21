@@ -43,6 +43,23 @@ public static class SessionSwitchPhases
 
     /// <summary>Time until the first painted frame of the new session.</summary>
     public const string FirstPaint = "firstPaint";
+
+    /// <summary>Rebuild + publish of the session payload after it has been loaded from disk.</summary>
+    public const string Adopt = "adopt";
+
+    /// <summary>
+    /// Full payload load + adopt that runs <em>after</em> first paint (the tail of
+    /// <c>LoadSessionInternalAsync</c>). Without this phase that tail is invisible while still
+    /// being counted in <c>total</c>, which is how a switch could read as 20s with 250ms of phases.
+    /// </summary>
+    public const string FullSessionLoad = "fullSessionLoad";
+
+    /// <summary>
+    /// Time spent resolving session directories by probing the filesystem for nested
+    /// sub-agent folders. Kept as a phase (rather than a hidden cost) because that probe runs on
+    /// every path resolution and is invisible in every other measurement.
+    /// </summary>
+    public const string DirectoryProbe = "dirProbe";
 }
 
 /// <summary>Immutable snapshot of one completed session-switch measurement.</summary>
@@ -51,7 +68,8 @@ public sealed record SessionSwitchSample(
     SessionSwitchHitKind HitKind,
     IReadOnlyDictionary<string, double> PhaseMs,
     double TotalMs,
-    double? EndToEndMs);
+    double? EndToEndMs,
+    IReadOnlyDictionary<string, double>? PhaseCounts = null);
 
 /// <summary>
 /// Lightweight, behavior-neutral instrument for session switching. Phases are recorded with
@@ -77,6 +95,7 @@ public static class SessionSwitchProfiler
 
     private static readonly object Gate = new();
     private static readonly Dictionary<string, double> PhaseMs = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, double> PhaseCounts = new(StringComparer.Ordinal);
     private static readonly Stopwatch Total = new();
 
     private static IAppLogger? _logger;
@@ -137,6 +156,7 @@ public static class SessionSwitchProfiler
         lock (Gate)
         {
             PhaseMs.Clear();
+            PhaseCounts.Clear();
             _sessionId = sessionId;
             _hitKind = hitKind;
             _active = true;
@@ -147,14 +167,19 @@ public static class SessionSwitchProfiler
         Total.Restart();
     }
 
-    /// <summary>Refines the hit kind as the switch discovers cache hits.</summary>
+    /// <summary>
+    /// Refines the hit kind as the switch discovers cache hits. Keeps the strongest hit seen:
+    /// a switch that reused the payload (replay) and later also restored the DOM snapshot must
+    /// still report <see cref="SessionSwitchHitKind.Snapshot"/>, not be downgraded by the earlier,
+    /// weaker signal.
+    /// </summary>
     public static void SetHitKind(SessionSwitchHitKind hitKind)
     {
         lock (Gate)
         {
             if (_active || _emitPending)
             {
-                _hitKind = hitKind;
+                _hitKind = (SessionSwitchHitKind)Math.Max((int)_hitKind, (int)hitKind);
             }
         }
     }
@@ -204,6 +229,29 @@ public static class SessionSwitchProfiler
 
     /// <summary>Measures the phase for the lifetime of the returned scope.</summary>
     public static IDisposable Measure(string phase) => new MeasureScope(phase);
+
+    /// <summary>
+    /// Records an invocation count for a phase that is accumulated by repeated
+    /// <see cref="Measure"/> scopes. The sum alone is ambiguous: <c>dirProbe=180ms</c> could be one
+    /// slow probe or sixty cheap ones, so the count is reported alongside it.
+    /// </summary>
+    public static void RecordCount(string phase, double count)
+    {
+        if (string.IsNullOrEmpty(phase) || !double.IsFinite(count) || count < 0)
+        {
+            return;
+        }
+
+        lock (Gate)
+        {
+            if (!_active && !_emitPending)
+            {
+                return;
+            }
+
+            PhaseCounts[phase] = count;
+        }
+    }
 
     /// <summary>
     /// Finalizes the current measurement and schedules the emit. The event is written after a
@@ -265,12 +313,14 @@ public static class SessionSwitchProfiler
 
             _emitPending = false;
             var phases = new Dictionary<string, double>(PhaseMs, StringComparer.Ordinal);
+            var counts = new Dictionary<string, double>(PhaseCounts, StringComparer.Ordinal);
             sample = new SessionSwitchSample(
                 _sessionId,
                 _hitKind,
                 phases,
                 Total.Elapsed.TotalMilliseconds,
-                _endToEndMs);
+                _endToEndMs,
+                counts);
             _lastSample = sample;
         }
 
@@ -338,6 +388,14 @@ public static class SessionSwitchProfiler
         if (sample.EndToEndMs is { } endToEnd)
         {
             parts.Add($"endToEnd={endToEnd:0.#}ms");
+        }
+
+        if (sample.PhaseCounts is { Count: > 0 } counts)
+        {
+            foreach (var (phase, count) in counts.OrderByDescending(p => p.Value))
+            {
+                parts.Add($"{phase}#={count:0.#}");
+            }
         }
 
         return string.Join(' ', parts);

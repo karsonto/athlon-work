@@ -96,6 +96,22 @@ public interface IFileStorageService
         return new ConversationDisplayPage(messages.TakeLast(pageSize).ToArray(), null);
     }
     Task ReplaceConversationDisplayAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Same contract as <see cref="ReplaceConversationDisplayAsync"/> but renders the JSONL payload
+    /// and creates the session directories on the thread pool. The post-first-paint adopt path calls
+    /// this so rebuilding a display log never renders on (or blocks) the UI thread.
+    /// </summary>
+    Task ReplaceConversationDisplayOffThreadAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default) =>
+        ReplaceConversationDisplayAsync(sessionId, messages, cancellationToken);
+
+    /// <summary>
+    /// Same contract as <see cref="SaveSessionAsync"/> but serializes and writes on the thread pool.
+    /// Only for callers that are not going to read the value back before the task completes.
+    /// </summary>
+    Task SaveSessionOffThreadAsync(AgentSession session, CancellationToken cancellationToken = default) =>
+        SaveSessionAsync(session, cancellationToken);
+
     Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default);
     Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default);
     Task AppendAttemptEventAsync(string sessionId, AgentAttemptEvent entry, CancellationToken cancellationToken = default) =>

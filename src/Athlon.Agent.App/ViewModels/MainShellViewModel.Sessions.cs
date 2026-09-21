@@ -305,6 +305,8 @@ public partial class MainShellViewModel
         }
 
         SessionSwitchProfiler.Begin(item.Id);
+        SessionDirectoryLayout.ResetProbeStats();
+        var switchStarted = Stopwatch.GetTimestamp();
         try
         {
             var previousSession = _session;
@@ -324,7 +326,8 @@ public partial class MainShellViewModel
         }
         finally
         {
-            SessionSwitchProfiler.Complete();
+            RecordDirectoryProbeStats();
+            SessionSwitchProfiler.Complete(Stopwatch.GetElapsedTime(switchStarted).TotalMilliseconds);
         }
     }
 

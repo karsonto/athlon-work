@@ -243,9 +243,11 @@ public sealed class SessionRuntimeStore : IConversationTranscriptWriter, IDispos
                 }
             }
 
-            await _storage.ReplaceConversationDisplayAsync(session.Id, messages, cancellationToken)
+            // Off-thread variants: this runs from the post-first-paint adopt path, so the display
+            // rewrite and the session serialization must not block the frame the user just saw.
+            await _storage.ReplaceConversationDisplayOffThreadAsync(session.Id, messages, cancellationToken)
                 .ConfigureAwait(false);
-            await _storage.SaveSessionAsync(session, cancellationToken).ConfigureAwait(false);
+            await _storage.SaveSessionOffThreadAsync(session, cancellationToken).ConfigureAwait(false);
         }
         finally
         {

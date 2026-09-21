@@ -152,17 +152,11 @@ public sealed class RuntimeDiagnosticEventSink : IRuntimeDiagnosticEventSink, ID
         }
 
         var resolved = _runContextAccessor.ResolveSessionDirectory(_paths.SessionsPath, sessionId);
-
-        if (_runContextAccessor.Current?.Kind == AgentRunKind.SubAgent)
-        {
-            return Path.Combine(resolved, "diagnostics", "runtime-events.jsonl");
-        }
-
-        if (SessionDirectoryLayout.IsTopLevelSessionDirectory(_paths.SessionsPath, resolved)
-            && SessionDirectoryLayout.TryFindNestedSubAgentDirectory(_paths.SessionsPath, sessionId) is { } nested)
-        {
-            resolved = nested;
-        }
+        resolved = SessionDirectoryLayout.ResolveEffectiveSessionDirectory(
+            _paths.SessionsPath,
+            sessionId,
+            resolved,
+            _runContextAccessor.Current?.Kind ?? AgentRunKind.Root);
 
         return Path.Combine(resolved, "diagnostics", "runtime-events.jsonl");
     }

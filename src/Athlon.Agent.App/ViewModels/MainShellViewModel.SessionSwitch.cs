@@ -45,6 +45,8 @@ public partial class MainShellViewModel
     {
         CurrentPage = AppPage.Chat;
         SessionSwitchProfiler.Begin(sessionId);
+        SessionDirectoryLayout.ResetProbeStats();
+        var switchStarted = Stopwatch.GetTimestamp();
         try
         {
             if (!string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
@@ -59,8 +61,29 @@ public partial class MainShellViewModel
         }
         finally
         {
-            SessionSwitchProfiler.Complete();
+            RecordDirectoryProbeStats();
+            SessionSwitchProfiler.Complete(Stopwatch.GetElapsedTime(switchStarted).TotalMilliseconds);
         }
+    }
+
+    /// <summary>
+    /// Attributes the nested-directory index builds performed during this switch to the sample.
+    /// Both the cost and the count are reported: after the index is warm the count is the useful
+    /// signal (a healthy switch does at most one build), while the cost covers the residual case
+    /// where the first switch pays for the initial enumeration.
+    /// </summary>
+    private static void RecordDirectoryProbeStats()
+    {
+        var probes = SessionDirectoryLayout.ProbeCount;
+        if (probes <= 0)
+        {
+            return;
+        }
+
+        SessionSwitchProfiler.Record(
+            SessionSwitchPhases.DirectoryProbe,
+            SessionDirectoryLayout.ProbeElapsed.TotalMilliseconds);
+        SessionSwitchProfiler.RecordCount(SessionSwitchPhases.DirectoryProbe, probes);
     }
 
     private void CancelPendingSessionLoad() =>
@@ -206,7 +229,12 @@ public partial class MainShellViewModel
         AgentSession? full;
         try
         {
-            full = await _sessionNavigation.LoadFullSessionAsync(sessionId).ConfigureAwait(true);
+            // Reported separately from the adopt below so the log shows which half of the
+            // post-first-paint tail actually cost the time: deserialization or UI adoption.
+            using (SessionSwitchProfiler.Measure(SessionSwitchPhases.FullSessionLoad))
+            {
+                full = await _sessionNavigation.LoadFullSessionAsync(sessionId).ConfigureAwait(true);
+            }
         }
         catch (Exception ex)
         {
@@ -251,33 +279,53 @@ public partial class MainShellViewModel
 
         // We hold the full payload now: flip the entry back to SessionComplete so the flush path
         // may persist again (the guard in ReplaceDisplayAsync/FlushSessionCore depends on it), and
-        // refresh the navigation cache so switching back skips the reload.
-        _runtime.Attach(adopted, sessionComplete: true);
-        _session = adopted;
-        _sessionNavigation.UpdateCachedSession(adopted);
-
-        // A session that had no display rows yet (fresh or migrated) can only be rebuilt now, once
-        // the messages are actually in memory.
-        if (displayMessages.Count == 0 && adopted.Messages.Count > 0)
+        // refresh the navigation cache so switching back skips the reload. The whole tail is one
+        // `adopt` phase so the log can split "session.json loaded" (fullSessionLoad) from
+        // "payload published to the UI" (adopt) instead of hiding both inside `total`.
+        using (SessionSwitchProfiler.Measure(SessionSwitchPhases.Adopt))
         {
-            await _runtime.ReplaceDisplayAsync(adopted, adopted.Messages).ConfigureAwait(true);
-            _sessionNavigation.InvalidateDisplayPage(sessionId);
-            var rebuiltMessages = adopted.Messages
-                .TakeLast(ConversationDisplayLimits.PageSize)
-                .ToArray();
+            _runtime.Attach(adopted, sessionComplete: true);
+            _session = adopted;
+            _sessionNavigation.UpdateCachedSession(adopted);
 
-            if (!IsSessionLoadCurrent(loadGeneration))
+            // A session that had no display rows yet (fresh or migrated) can only be rebuilt now, once
+            // the messages are actually in memory.
+            if (displayMessages.Count == 0 && adopted.Messages.Count > 0)
             {
-                return;
+                await AdoptRebuiltDisplayAsync(sessionId, adopted, loadGeneration, preserveActiveTurn)
+                    .ConfigureAwait(true);
             }
-
-            await _activeUi.HydrateDisplayAsync(
-                adopted,
-                rebuiltMessages,
-                synthesizeInterruptedToolResults: false,
-                activitySourceMessages: rebuiltMessages,
-                preserveActiveTurn: preserveActiveTurn).ConfigureAwait(true);
         }
+    }
+
+    /// <summary>
+    /// Rebuilds and paints the timeline for a session that had no display rows on disk. Kept out of
+    /// the adopt scope's body so the scope reads as "publish the loaded payload" and this
+    /// generation-guarded rebuild stays in one place.
+    /// </summary>
+    private async Task AdoptRebuiltDisplayAsync(
+        string sessionId,
+        AgentSession adopted,
+        int loadGeneration,
+        bool preserveActiveTurn)
+    {
+        await _runtime.ReplaceDisplayAsync(adopted, adopted.Messages).ConfigureAwait(true);
+        _sessionNavigation.InvalidateDisplayPage(sessionId);
+        var rebuiltMessages = adopted.Messages
+            .TakeLast(ConversationDisplayLimits.PageSize)
+            .ToArray();
+
+        if (!IsSessionLoadCurrent(loadGeneration))
+        {
+            return;
+        }
+
+        await _activeUi.HydrateDisplayAsync(
+            adopted,
+            rebuiltMessages,
+            synthesizeInterruptedToolResults: false,
+            activitySourceMessages: rebuiltMessages,
+            preserveActiveTurn: preserveActiveTurn).ConfigureAwait(true);
     }
 
     /// <summary>
