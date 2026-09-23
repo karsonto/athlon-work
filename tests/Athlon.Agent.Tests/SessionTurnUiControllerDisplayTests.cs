@@ -122,6 +122,162 @@ public sealed class SessionTurnUiControllerDisplayTests
         Assert.Equal(6, doc.RootElement.GetProperty("exploredFileCount").GetInt32());
     }
 
+    /// <summary>
+    /// Regression: a turn whose answer needs no tool call lost its reply from the timeline.
+    ///
+    /// The turn-end authoritative replay rebuilds the timeline from the activity source, which is
+    /// what the timeline actually renders. <c>AddUserMessage</c> appends the provisional user row
+    /// it minted, while the runtime persists that turn's user message under a different id. With no
+    /// tool result appended after it, the source's tail was an id that cannot exist in the
+    /// transcript, so the merge's anchor lookup missed and the transcript continuation — the final
+    /// assistant reply — was never added. The replay then erased it from the screen, and only a
+    /// rebuild from disk (session switch) brought it back.
+    /// </summary>
+    [Fact]
+    public async Task FinalizeTurn_keeps_the_final_reply_when_the_turn_had_no_tool_result()
+    {
+        var dispatcher = await StartStaDispatcherAsync();
+        var ui = new SessionTurnUiController(dispatcher);
+        ui.ReloadChatViewOverride = () => Task.CompletedTask;
+        ui.SetDisplayed(true);
+
+        var session = AgentSession.Create("no-tools");
+        var callbacks = ui.BuildCallbacks(new LiveAgentSession(session));
+        await dispatcher.InvokeAsync(() => ui.ResetForTurn());
+
+        // The UI mints its own provisional user row; the runtime would persist a different id.
+        await dispatcher.InvokeAsync(() => ui.AddUserMessage("explain this", Array.Empty<ImageAttachment>()));
+        await EmitText(callbacks, MessageId1, "the answer");
+        await EmitTextEnd(callbacks, MessageId1);
+
+        // Normal completion: no cancellation, so the runtime persists nothing through
+        // persistedTurnMessages and the reply can only reach the timeline via the activity source.
+        var transcriptUser = ChatMessage.Create(MessageRole.User, "explain this");
+        var transcriptAssistant = ChatMessage.CreateWithId(MessageId1, MessageRole.Assistant, "the answer");
+        var persistedSession = session.WithMessages([transcriptUser, transcriptAssistant]);
+
+        await dispatcher.InvokeAsync(() => ui.FinalizeTurn(
+            persistedSession,
+            Array.Empty<ChatMessage>(),
+            cancelled: false,
+            timedOut: false,
+            turnTimeoutMinutes: 30));
+
+        var source = await dispatcher.InvokeAsync(() => ui.ActivitySourceMessages.ToList());
+        Assert.Contains(source, message => message.Id == transcriptAssistant.Id);
+
+        var display = await dispatcher.InvokeAsync(() => ui.Messages.ToList());
+        var events = ChatEventSerializer.BuildReplayEvents(
+            display,
+            showToolCalls: false,
+            activitySourceMessages: source);
+
+        var replayed = string.Join('\n', events);
+        Assert.Contains("the answer", replayed, StringComparison.Ordinal);
+
+        // The provisional row must not survive alongside the transcript's own user row, or the
+        // reply comes back with the question duplicated above it.
+        Assert.Equal(1, CountOccurrences(replayed, "explain this"));
+    }
+
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+        for (var i = text.IndexOf(value, StringComparison.Ordinal);
+             i >= 0;
+             i = text.IndexOf(value, i + value.Length, StringComparison.Ordinal))
+        {
+            count++;
+        }
+
+        return count;
+    }
+
+    [Fact]
+    public void TryAdoptProvisionalTurnOpener_pairs_the_tail_with_the_transcript_user_message()
+    {
+        var provisional = ChatMessage.Create(MessageRole.User, "explain this");
+        var source = new List<ChatMessage> { provisional };
+        var transcriptUser = ChatMessage.Create(MessageRole.User, "explain this");
+        var transcript = new List<ChatMessage> { transcriptUser };
+
+        Assert.True(TurnOpenerReconciler.TryAdoptProvisionalTurnOpener(source, transcript));
+
+        // The source keeps its length (no duplicate row) but adopts the persisted id, which is what
+        // lets the merge anchor resolve on the next call.
+        Assert.Single(source);
+        Assert.Equal(transcriptUser.Id, source[^1].Id);
+    }
+
+    [Fact]
+    public void TryAdoptProvisionalTurnOpener_binds_to_the_newest_match_not_an_older_turn()
+    {
+        // A brand-new session's opening turn has no transcript-backed prefix to anchor on, so the
+        // only signal is content. Scanning backward is what keeps a repeated question bound to the
+        // turn being finalized instead of the older turn that asked the same thing.
+        var provisional = ChatMessage.Create(MessageRole.User, "same text");
+        var source = new List<ChatMessage> { provisional };
+
+        var olderUser = ChatMessage.Create(MessageRole.User, "same text");
+        var olderAssistant = ChatMessage.Create(MessageRole.Assistant, "older reply");
+        var currentUser = ChatMessage.Create(MessageRole.User, "same text");
+        var currentAssistant = ChatMessage.Create(MessageRole.Assistant, "current reply");
+        var transcript = new List<ChatMessage>
+        {
+            olderUser,
+            olderAssistant,
+            currentUser,
+            currentAssistant
+        };
+
+        Assert.True(TurnOpenerReconciler.TryAdoptProvisionalTurnOpener(source, transcript));
+        Assert.Equal(currentUser.Id, source[^1].Id);
+        Assert.NotEqual(olderUser.Id, source[^1].Id);
+    }
+
+    [Fact]
+    public void TryAdoptProvisionalTurnOpener_leaves_a_transcript_backed_tail_alone()
+    {
+        var transcriptUser = ChatMessage.Create(MessageRole.User, "already durable");
+        var source = new List<ChatMessage> { transcriptUser };
+        var transcript = new List<ChatMessage> { transcriptUser };
+
+        Assert.False(TurnOpenerReconciler.TryAdoptProvisionalTurnOpener(source, transcript));
+    }
+
+    [Fact]
+    public void TryAdoptProvisionalTurnOpener_pairs_below_a_compaction_checkpoint()
+    {
+        // A checkpoint can sit between the agreed prefix and this turn's opener; treating it as a
+        // stop would reintroduce the miss this method prevents.
+        var olderUser = ChatMessage.Create(MessageRole.User, "first question");
+        var checkpoint = ChatMessage.Create(MessageRole.Compaction, "CompactionKind: manual");
+        var source = new List<ChatMessage> { olderUser, checkpoint, ChatMessage.Create(MessageRole.User, "next") };
+
+        var transcriptUser = ChatMessage.Create(MessageRole.User, "next");
+        var transcript = new List<ChatMessage> { olderUser, checkpoint, transcriptUser };
+
+        Assert.True(TurnOpenerReconciler.TryAdoptProvisionalTurnOpener(source, transcript));
+        Assert.Equal(transcriptUser.Id, source[^1].Id);
+    }
+
+    [Fact]
+    public void TryAdoptProvisionalTurnOpener_refuses_when_the_prefix_is_gone()
+    {
+        // Compaction removed the message the source still anchors on: there is no verifiable span to
+        // pair within, so the source must stay untouched rather than bind to an arbitrary message.
+        var provisional = ChatMessage.Create(MessageRole.User, "orphaned");
+        var source = new List<ChatMessage>
+        {
+            ChatMessage.Create(MessageRole.User, "long gone"),
+            provisional
+        };
+        var transcript = new List<ChatMessage> { ChatMessage.Create(MessageRole.User, "orphaned") };
+
+        Assert.False(TurnOpenerReconciler.TryAdoptProvisionalTurnOpener(source, transcript));
+        Assert.Equal(provisional.Id, source[^1].Id);
+    }
+
     [Fact]
     public async Task ReplayActivitySource_slices_to_displayed_user_window()
     {

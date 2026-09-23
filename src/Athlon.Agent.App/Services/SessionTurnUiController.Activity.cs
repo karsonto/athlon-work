@@ -137,6 +137,15 @@ public sealed partial class SessionTurnUiController
         }
     }
 
+    /// <summary>
+    /// Replaces a provisional turn opener at the activity source's tail with the transcript's own
+    /// user message, so the merge anchor resolves. See
+    /// <see cref="TurnOpenerReconciler.TryAdoptProvisionalTurnOpener"/> for why the provisional row
+    /// exists and how it is paired back.
+    /// </summary>
+    private void AdoptProvisionalTurnOpener(AgentSession session) =>
+        TurnOpenerReconciler.TryAdoptProvisionalTurnOpener(_activitySourceMessages, session.Messages);
+
     private void RestoreLiveTurnCardsAfterReload()
     {
         if (_streaming.ActiveAssistantBubble is null
@@ -282,6 +291,11 @@ public sealed partial class SessionTurnUiController
         int startIndex;
         if (_activitySourceMessages.Count > 0)
         {
+            // Reconcile the provisional turn opener before resolving the anchor, or its id (minted
+            // by the UI, never persisted) is looked up in the transcript, missed, and the whole
+            // continuation below is skipped.
+            AdoptProvisionalTurnOpener(session);
+
             var lastId = _activitySourceMessages[^1].Id;
             var lastIndex = -1;
             for (var i = 0; i < session.Messages.Count; i++)
@@ -293,7 +307,9 @@ public sealed partial class SessionTurnUiController
                 }
             }
 
-            // Missing last id: keep the existing paged source instead of copying the full transcript.
+            // Still missing after reconciling: the source shares no id with the transcript at all
+            // (compaction replaced it). Keep the existing source instead of copying the whole
+            // transcript — there is no anchor to continue from.
             startIndex = lastIndex >= 0 ? lastIndex + 1 : session.Messages.Count;
         }
         else
