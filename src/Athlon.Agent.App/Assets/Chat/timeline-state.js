@@ -113,6 +113,24 @@ function post(payload) {
   }
 }
 
+/**
+ * Reports a page-side failure or anomaly to C# so it lands in the log.
+ *
+ * The timeline's catch blocks only wrote to console.warn, which nothing reads in the packaged app,
+ * so a replay that parsed half its events or a render that produced no rows was indistinguishable
+ * from one that worked. `kind` is a stable token the C# side logs verbatim; `detail` is free-form
+ * and truncated because this is an observability channel, not a data path.
+ */
+function reportRenderIssue(kind, detail) {
+  try {
+    post({
+      type: 'renderIssue',
+      kind: String(kind || 'unknown'),
+      detail: detail == null ? '' : String(detail).slice(0, 300)
+    });
+  } catch (e) { /* reporting must never break the render */ }
+}
+
 var pendingToolDetailRequests = Object.create(null);
 var toolDetailRequestSeq = 0;
 

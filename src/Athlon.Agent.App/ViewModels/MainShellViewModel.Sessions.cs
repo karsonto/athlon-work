@@ -267,6 +267,23 @@ public partial class MainShellViewModel
         ClearContextCommand.NotifyCanExecuteChanged();
         CompactContextCommand.NotifyCanExecuteChanged();
 
+        // HasChatMessages drives a DataTrigger that shrinks the chat WebView to 2x2 and hides it, so
+        // a Clear narrows the viewport that the render pipeline sees. Recorded for every action
+        // (including the Clear/refill pair a session switch performs) because the resulting window of
+        // "not renderable" is one of the ways a render request can be dropped on the floor.
+        if (e.Action is NotifyCollectionChangedAction.Reset or NotifyCollectionChangedAction.Remove)
+        {
+            ChatRenderTrace.Record(
+                "messagesCleared",
+                $"count={Messages.Count} action={e.Action} hasChatMessages={HasChatMessages}");
+        }
+        else if (e.Action == NotifyCollectionChangedAction.Add && Messages.Count == 1)
+        {
+            // First message of a (re)fill: the moment the 2x2 viewport is restored, and therefore the
+            // last chance for the size trigger to rescue a render that was dropped while it was small.
+            ChatRenderTrace.Record("messagesRefilled", $"hasChatMessages={HasChatMessages}");
+        }
+
         if (IsBusy && e.Action == NotifyCollectionChangedAction.Add)
         {
             _chatScroll.ScrollToBottom();

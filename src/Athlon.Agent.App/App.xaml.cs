@@ -91,6 +91,7 @@ public partial class App : Application
                 _services.GetService<IAppLogger>(),
                 _services.GetService<Athlon.Agent.Core.RuntimeDiagnostics.IRuntimeDiagnosticEventSink>());
             SessionSwitchHotspotProfiler.Initialize();
+            ChatRenderTrace.Initialize(_services.GetService<IAppLogger>());
             _services.GetRequiredService<SubAgentCompletionContinuationService>();
             _services.GetRequiredService<PlanExecutionContinuationService>();
 

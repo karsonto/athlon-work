@@ -336,6 +336,7 @@ function replayEvents(events) {
   resetTimeline();
   var list = Array.isArray(events) ? events : [];
   var maxSeq = -1;
+  var parseFailures = 0;
   for (const raw of list) {
     try {
       const event = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -343,13 +344,24 @@ function replayEvents(events) {
         maxSeq = event.seq;
       }
       handleEvent(event);
-    } catch (e) { console.warn('replayEvents parse failed', e); }
+    } catch (e) {
+      // Reported as well as logged: a partially-parsed replay silently renders fewer rows than the
+      // transcript holds, which is indistinguishable from a short conversation in the UI.
+      parseFailures++;
+      console.warn('replayEvents parse failed', e);
+    }
   }
   // Continue the live cursor from where the replay ended so a mid-turn reload's next live card
   // does not land in a stale turn band.
   syncLiveCursorFromSeq(maxSeq);
   state.trackReasoningDuration = true;
   endBatch(true);
+  // Row count after the replay is the single best page-side signal that a render did nothing:
+  // events went in, and #messages came out empty.
+  var root = document.getElementById('messages');
+  reportRenderIssue(
+    'replayApplied',
+    'events=' + list.length + ' rows=' + (root ? root.children.length : -1) + ' parseFailed=' + parseFailures);
 }
 
 function appendEvents(events) {
@@ -361,6 +373,7 @@ function appendEvents(events) {
   state.trackReasoningDuration = false;
   var list = Array.isArray(events) ? events : [];
   var maxSeq = -1;
+  var parseFailures = 0;
   for (const raw of list) {
     try {
       const event = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -368,10 +381,16 @@ function appendEvents(events) {
         maxSeq = event.seq;
       }
       handleEvent(event);
-    } catch (e) { console.warn('appendEvents parse failed', e); }
+    } catch (e) {
+      parseFailures++;
+      console.warn('appendEvents parse failed', e);
+    }
   }
   state.batchTarget = null;
   state.trackReasoningDuration = true;
+  if (parseFailures > 0) {
+    reportRenderIssue('appendParseFailed', 'events=' + list.length + ' parseFailed=' + parseFailures);
+  }
   root.appendChild(fragment);
   // Merge the freshly appended rows into the global seq order (older pages can interleave).
   sortMessageRoot();

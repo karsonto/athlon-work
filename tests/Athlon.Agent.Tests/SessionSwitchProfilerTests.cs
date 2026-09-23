@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Athlon.Agent.App.Services.Diagnostics;
 using Athlon.Agent.Core.RuntimeDiagnostics;
+using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
 

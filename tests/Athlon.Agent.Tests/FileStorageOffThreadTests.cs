@@ -127,4 +127,20 @@ public sealed class FileStorageOffThreadTests
         Assert.True(Directory.Exists(Path.Combine(temp.Root, "sessions", session.Id, "transcripts")));
         Assert.NotNull(await storage.LoadSessionAsync(session.Id));
     }
+
+    private sealed class TestAppPathProvider(string root) : IAppPathProvider
+    {
+        public string RootPath { get; } = root;
+        public string ConfigPath => Path.Combine(RootPath, "config");
+        public string SessionsPath => Path.Combine(RootPath, "sessions");
+        public string AuditPath => Path.Combine(RootPath, "audit");
+        public string LogsPath => Path.Combine(RootPath, "logs");
+        public string CredentialsPath => Path.Combine(RootPath, "credentials");
+        public string SkillsPath => Path.Combine(RootPath, "skills");
+
+        public void EnsureCreated() => Directory.CreateDirectory(RootPath);
+
+        public string ResolveSkillPath(string path) =>
+            string.IsNullOrWhiteSpace(path) ? path : Path.Combine(SkillsPath, path);
+    }
 }

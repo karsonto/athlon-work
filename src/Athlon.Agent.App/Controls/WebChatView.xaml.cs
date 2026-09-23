@@ -26,7 +26,6 @@ public partial class WebChatView : UserControl
     private bool _initialized;
     private bool _documentReady;
     private TaskCompletionSource<bool> _documentReadyTcs = CreateCompletedDocumentReadyTcs();
-    private bool _loggedCanRenderBlock;
     private int _navigationGeneration;
     private int _renderGeneration;
     private readonly SemaphoreSlim _renderOperationGate = new(1, 1);
@@ -48,6 +47,13 @@ public partial class WebChatView : UserControl
     private TaskCompletionSource<bool>? _pendingSnapshotSwitch;
 
     private static readonly TimeSpan SnapshotSwitchTimeout = TimeSpan.FromMilliseconds(400);
+
+    /// <summary>
+    /// How long a wanted render may stay unrendered before it is reported as dropped. Long enough
+    /// that a normally-scheduled retry settles first, short enough to catch a stall within the same
+    /// user action rather than minutes later.
+    /// </summary>
+    private static readonly TimeSpan OrphanWatchDelay = TimeSpan.FromMilliseconds(1500);
     private ChatReplaySnapshotCache? _pendingReplayCache;
     private bool _needsRender;
     private bool _renderRetryScheduled;
@@ -173,6 +179,9 @@ public partial class WebChatView : UserControl
     {
         if (IsVisible)
         {
+            // Reported with needsRender because this is one of the few events that can rescue an
+            // orphaned render; seeing it fire with needsRender=true is how we learn the rescue worked.
+            ChatRenderTrace.Record("visibleChanged", $"now=True needsRender={_needsRender}");
             _ = RunRenderPipelineSafeAsync(_renderGeneration);
         }
     }
@@ -181,6 +190,9 @@ public partial class WebChatView : UserControl
     {
         if (_needsRender && CanRender())
         {
+            ChatRenderTrace.Record(
+                "sizeChangedRescue",
+                $"w={ActualWidth:0.##} h={ActualHeight:0.##} gen={_renderGeneration}");
             _ = RunRenderPipelineSafeAsync(_renderGeneration);
         }
     }
@@ -211,6 +223,12 @@ public partial class WebChatView : UserControl
         {
             if (_renderBarrierGeneration != generation)
             {
+                // The generation was superseded before we even started waiting. The discarded side
+                // used to vanish without a trace, which made "never rendered" and "rendered for a
+                // stale generation" look identical.
+                ChatRenderTrace.Record(
+                    "barrierSuperseded",
+                    $"want={generation} current={_renderBarrierGeneration}");
                 return false;
             }
 
@@ -219,7 +237,24 @@ public partial class WebChatView : UserControl
 
         var completed = await Task.WhenAny(barrier, Task.Delay(TimeSpan.FromSeconds(5)))
             .ConfigureAwait(true);
-        return ReferenceEquals(completed, barrier) && await barrier.ConfigureAwait(true);
+        if (!ReferenceEquals(completed, barrier))
+        {
+            // Was previously silent. A timeout here means the page never reported replayComplete,
+            // so distinguishing it from "no render was ever attempted" is essential.
+            ChatRenderTrace.Record(
+                "barrierTimeout",
+                $"gen={generation} doc={_documentReady} needsRender={_needsRender} inProgress={_renderInProgress}");
+            return false;
+        }
+
+        var rendered = await barrier.ConfigureAwait(true);
+        if (!rendered)
+        {
+            // Released as false: either an explicit supersede or a render that ran without painting.
+            ChatRenderTrace.Record("barrierUnrendered", $"gen={generation}");
+        }
+
+        return rendered;
     }
 
     private void CompleteRenderGeneration(int generation, bool rendered)
@@ -280,6 +315,14 @@ public partial class WebChatView : UserControl
         _pendingReplayCache = replayCache;
         _needsRender = true;
         var generation = StartRenderGeneration();
+        // Logged with the message count and the live viewport/size state. The decisive combination is
+        // a request that arrives while CanRender() is false: that is the collision between "a switch
+        // clears the collection, shrinking the WebView to 2x2" and "a render was asked for right
+        // then", and it is the moment an orphan gets created.
+        ChatRenderTrace.Record(
+            "request",
+            $"gen={generation} msgs={_pendingMessages.Count} session={sessionId ?? "-"} "
+            + $"canRender={CanRender()} visible={IsVisible} w={ActualWidth:0.##} h={ActualHeight:0.##}");
         await RunRenderPipelineSafeAsync(generation).ConfigureAwait(true);
 
         if (_needsRender && generation == _renderGeneration)
@@ -489,18 +532,20 @@ public partial class WebChatView : UserControl
         ResetRenderBarrierForRetry(expectedGeneration);
         if (!CanRender())
         {
-            if (!_loggedCanRenderBlock)
-            {
-                _loggedCanRenderBlock = true;
-                App.StartupTrace(
-                    $"WebChatView CanRender=false (visible={IsVisible}, width={ActualWidth:0.##}, height={ActualHeight:0.##})");
-            }
+            // Counted on every miss rather than once per transition: the bare chat page holds the
+            // WebView at 2x2 while HasChatMessages is false, and a switch clears the collection
+            // before refilling it, so this gate is reached on ordinary switches. A single trace
+            // could not show that it fired repeatedly.
+            ChatRenderTrace.Record(
+                "canRenderFalse",
+                $"visible={IsVisible} w={ActualWidth:0.##} h={ActualHeight:0.##} gen={expectedGeneration}");
 
+            // The drop is recorded above; this additionally reports it if it never recovers, which is
+            // the state the user describes as needing a session switch to clear.
             CompleteRenderGeneration(expectedGeneration, rendered: false);
+            WatchForStalledRender(expectedGeneration);
             return;
         }
-
-        _loggedCanRenderBlock = false;
 
         if (_renderInProgress)
         {
@@ -563,8 +608,58 @@ public partial class WebChatView : UserControl
             else
             {
                 _renderQueuedWhileInProgress = false;
+                // Not detectable from inside the pipeline: LoadMessagesAsync only schedules its retry
+                // after this call returns, so at this instant a pending retry is normal. Watch
+                // _needsRender asynchronously instead and report only if it is *still* pending after
+                // a grace period, which is the actual definition of a dropped render.
+                WatchForStalledRender(expectedGeneration);
             }
         }
+    }
+
+    /// <summary>
+    /// Reports <c>orphan</c> when a render is still wanted some time after the pipeline finished.
+    ///
+    /// <para>This deliberately measures state over time rather than snapshotting it at one instant.
+    /// A synchronous check inside the pipeline cannot tell a dropped render from one whose retry is
+    /// scheduled a few statements later, and would fire on every ordinary load. The property that
+    /// actually matters is "no retry arrived and nothing is running", and only elapsed time shows
+    /// it.</para>
+    ///
+    /// <para>The delay doubles as the measurement: the reported <c>stuck=</c> value is how long the
+    /// content stayed unrendered, which is the number needed to tell a flicker from the reported
+    /// "switch session to make it appear".</para>
+    ///
+    /// <para>Reported rather than repaired on purpose. The fix belongs behind evidence of which gate
+    /// is actually being hit; acting on the theory would risk papering over a second cause.</para>
+    /// </summary>
+    private void WatchForStalledRender(int generation)
+    {
+        if (!_needsRender)
+        {
+            return;
+        }
+
+        _ = Dispatcher.InvokeAsync(async () =>
+        {
+            await Task.Delay(OrphanWatchDelay);
+            if (!_needsRender
+                || generation != _renderGeneration
+                || _renderInProgress
+                || _renderRetryScheduled
+                || _renderQueuedWhileInProgress)
+            {
+                // Resolved (rendered or superseded) or a retry is in flight: nothing was dropped.
+                return;
+            }
+
+            ChatRenderTrace.Record(
+                "orphan",
+                $"gen={generation} stuck>{OrphanWatchDelay.TotalMilliseconds:0}ms "
+                + $"visible={IsVisible} w={ActualWidth:0.##} h={ActualHeight:0.##} "
+                + $"canRender={CanRender()} doc={_documentReady} init={_initialized} "
+                + $"msgs={_pendingMessages.Count}");
+        });
     }
 
     private async Task PostReplayInBatchesAsync(
@@ -621,6 +716,12 @@ public partial class WebChatView : UserControl
 
         if (allEvents.Count == 0)
         {
+            // Zero events means the page receives replayComplete without a single row. That is a
+            // legitimate outcome for an empty session, but it is also what a "collection was empty
+            // when snapshotted" bug looks like, so the count is always reported.
+            ChatRenderTrace.Record(
+                "replayEmpty",
+                $"gen={expectedGeneration} msgs={messages.Count} session={sessionId ?? "-"}");
             ChatWebView.CoreWebView2.PostWebMessageAsJson(
                 ChatEventSerializer.SerializeEventsCommand(
                     "replay",
@@ -631,10 +732,17 @@ public partial class WebChatView : UserControl
             return;
         }
 
+        var postedLast = false;
         for (var offset = 0; offset < allEvents.Count; offset += batchSize)
         {
             if (expectedGeneration != _renderGeneration)
             {
+                // Bailing out mid-stream leaves replayComplete unsent for this generation, so any
+                // waiter on its barrier can only time out. Reported because the abandoned render and
+                // a genuinely slow one look the same from the outside otherwise.
+                ChatRenderTrace.Record(
+                    "batchesAbandoned",
+                    $"gen={expectedGeneration} now={_renderGeneration} sent={offset}/{allEvents.Count} lastSent={postedLast}");
                 return;
             }
 
@@ -652,6 +760,9 @@ public partial class WebChatView : UserControl
                 .ConfigureAwait(true);
             if (expectedGeneration != _renderGeneration)
             {
+                ChatRenderTrace.Record(
+                    "batchesAbandoned",
+                    $"gen={expectedGeneration} now={_renderGeneration} sent={offset}/{allEvents.Count} lastSent={postedLast}");
                 return;
             }
 
@@ -660,11 +771,17 @@ public partial class WebChatView : UserControl
                 ChatWebView.CoreWebView2.PostWebMessageAsJson(json);
             }
 
+            postedLast = isLast;
+
             if (offset + take < allEvents.Count)
             {
                 await Dispatcher.Yield(DispatcherPriority.Background);
             }
         }
+
+        ChatRenderTrace.Record(
+            "batchesPosted",
+            $"gen={expectedGeneration} events={allEvents.Count} batches={(allEvents.Count + batchSize - 1) / batchSize} complete={postedLast}");
     }
 
     /// <summary>
@@ -928,18 +1045,40 @@ public partial class WebChatView : UserControl
                 switch (type.GetString())
                 {
                     case "replayComplete":
+                        var renderMs = 0d;
                         if (root.TryGetProperty("renderMs", out var renderMsElement)
-                            && renderMsElement.TryGetDouble(out var renderMs))
+                            && renderMsElement.TryGetDouble(out var parsedRenderMs))
                         {
+                            renderMs = parsedRenderMs;
                             SessionSwitchProfiler.Record(SessionSwitchPhases.JsRender, renderMs);
                         }
 
                         if (root.TryGetProperty("renderGeneration", out var generationElement)
                             && generationElement.TryGetInt32(out var completedGeneration))
                         {
+                            ChatRenderTrace.Record(
+                                "replayComplete",
+                                $"gen={completedGeneration} current={_renderGeneration} renderMs={renderMs:0.#}");
                             CompleteRenderGeneration(completedGeneration, rendered: true);
                         }
+                        else
+                        {
+                            // A completion without a generation can never release a barrier, so it is
+                            // reported rather than silently ignored.
+                            ChatRenderTrace.Record("replayCompleteNoGen", $"current={_renderGeneration}");
+                        }
 
+                        break;
+                    case "renderIssue":
+                        // Page-side failure or anomaly. Logged verbatim so the JS report and the C#
+                        // gate reports read as one timeline in the same file.
+                        var issueKind = root.TryGetProperty("kind", out var kindElement)
+                            ? kindElement.GetString()
+                            : "unknown";
+                        var issueDetail = root.TryGetProperty("detail", out var detailElement)
+                            ? detailElement.GetString()
+                            : "";
+                        ChatRenderTrace.Record("page", $"kind={issueKind} detail={issueDetail}");
                         break;
                     case "snapshotRestored":
                         _pendingSnapshotSwitch?.TrySetResult(true);
