@@ -539,6 +539,15 @@
   <data name="ComputerUse_StatusToolFormat" xml:space="preserve">
     <value>{0} · {1}</value>
   </data>
+  <data name="ComputerUse_ApprovalTitle" xml:space="preserve">
+    <value>需要授权才能继续</value>
+  </data>
+  <data name="Common_Approve" xml:space="preserve">
+    <value>允许</value>
+  </data>
+  <data name="Common_Deny" xml:space="preserve">
+    <value>拒绝</value>
+  </data>
   <data name="Workspace_BrowserBack" xml:space="preserve">
     <value>后退</value>
   </data>
@@ -1515,6 +1524,54 @@
   </data>
   <data name="Settings_Title" xml:space="preserve">
     <value>设置</value>
+  </data>
+  <data name="Settings_ComputerUseTitle" xml:space="preserve">
+    <value>Computer Use</value>
+  </data>
+  <data name="Settings_ComputerUseHint" xml:space="preserve">
+    <value>控制桌面观察与动作的截图、UI 树、稳定采样、超时和历史保留。数值越大越稳但更慢、更耗 token。</value>
+  </data>
+  <data name="Settings_ComputerUseScreenshotEdge" xml:space="preserve">
+    <value>截图最长边（像素）</value>
+  </data>
+  <data name="Settings_ComputerUseScreenshotQuality" xml:space="preserve">
+    <value>截图 JPEG 质量（1-100）</value>
+  </data>
+  <data name="Settings_ComputerUseTreeDepth" xml:space="preserve">
+    <value>UI 树默认深度</value>
+  </data>
+  <data name="Settings_ComputerUseMaxNodes" xml:space="preserve">
+    <value>UI 树默认节点数</value>
+  </data>
+  <data name="Settings_ComputerUseSettleInterval" xml:space="preserve">
+    <value>稳定采样间隔（毫秒）</value>
+  </data>
+  <data name="Settings_ComputerUseSettleSamples" xml:space="preserve">
+    <value>稳定判定最少采样数</value>
+  </data>
+  <data name="Settings_ComputerUseUiaTimeout" xml:space="preserve">
+    <value>UIA 调用超时（毫秒）</value>
+  </data>
+  <data name="Settings_ComputerUseOverlayDelay" xml:space="preserve">
+    <value>隐藏 overlay 后等待（毫秒）</value>
+  </data>
+  <data name="Settings_ComputerUseHistoryRetention" xml:space="preserve">
+    <value>历史保留完整 UI 树的帧数</value>
+  </data>
+  <data name="Settings_ComputerUseScreenshotRetention" xml:space="preserve">
+    <value>截图磁盘保留（分钟，0 关闭清理）</value>
+  </data>
+  <data name="Settings_ComputerUsePruneUiTree" xml:space="preserve">
+    <value>剥离历史 UI 树</value>
+  </data>
+  <data name="Settings_ComputerUsePruneUiTreeHint" xml:space="preserve">
+    <value>把较旧的 computer_observe 结果中的 ui_tree 替换为紧凑摘要，只保留最近若干帧的完整树。默认关闭，验证后再开启。</value>
+  </data>
+  <data name="Settings_ComputerUseSkipKeyboardScreenshot" xml:space="preserve">
+    <value>键盘动作不返回截图</value>
+  </data>
+  <data name="Settings_ComputerUseSkipKeyboardScreenshotHint" xml:space="preserve">
+    <value>type_text / key / hotkey 不附带动作后截图，可显著省 token；需要确认时模型会自行调用 computer_observe。</value>
   </data>
   <data name="Settings_ToolStorm" xml:space="preserve">
     <value>Tool storm 抑制</value>

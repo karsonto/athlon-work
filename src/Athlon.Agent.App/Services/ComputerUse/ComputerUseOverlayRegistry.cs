@@ -1,11 +1,15 @@
 using Athlon.Agent.App.Windows;
+using Athlon.Agent.Core;
+using Athlon.Agent.Core.ComputerUse;
 
 namespace Athlon.Agent.App.Services.ComputerUse;
 
-public sealed class ComputerUseOverlayRegistry
+public sealed class ComputerUseOverlayRegistry(AppSettings settings)
 {
     private readonly object _gate = new();
     private ComputerUseOverlayWindow? _window;
+
+    private int OverlayHideDelayMs => Math.Max(0, settings.ComputerUse.OverlayHideDelayMs);
 
     public void Register(ComputerUseOverlayWindow window)
     {
@@ -72,9 +76,9 @@ public sealed class ComputerUseOverlayRegistry
 
         try
         {
-            if (restore)
+            if (restore && OverlayHideDelayMs > 0)
             {
-                await Task.Delay(80, cancellationToken).ConfigureAwait(false);
+                await Task.Delay(OverlayHideDelayMs, cancellationToken).ConfigureAwait(false);
             }
 
             cancellationToken.ThrowIfCancellationRequested();

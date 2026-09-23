@@ -54,4 +54,13 @@ public sealed class ComputerUseFrameFreshnessTests
         Assert.False(ComputerUseFrameFreshness.ContainsPoint(0, 0, 100, 100, 100, 50));
         Assert.False(ComputerUseFrameFreshness.ContainsPoint(0, 0, 100, 100, -1, 10));
     }
+
+    [Fact]
+    public void RequiresCursorRelativeGates_OnlyForUntargetedFrames()
+    {
+        // Cursor-relative frames still verify the monitor and foreground window did not change.
+        Assert.True(ComputerUseFrameFreshness.RequiresCursorRelativeGates(false));
+        // Targeted frames point elsewhere by design, so those gates would always fail.
+        Assert.False(ComputerUseFrameFreshness.RequiresCursorRelativeGates(true));
+    }
 }

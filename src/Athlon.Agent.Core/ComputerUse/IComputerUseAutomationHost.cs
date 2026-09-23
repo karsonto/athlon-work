@@ -2,12 +2,25 @@ namespace Athlon.Agent.Core.ComputerUse;
 
 public sealed record ComputerUseObserveRequest(
     bool IncludeUiTree = true,
-    int MaxTreeDepth = 4,
-    int MaxNodes = 80);
+    int MaxTreeDepth = ComputerUseSettingsDefaults.DefaultMaxTreeDepth,
+    int MaxNodes = ComputerUseSettingsDefaults.DefaultMaxNodes,
+    int? MonitorIndex = null,
+    string? WindowTitle = null,
+    string? WindowProcessName = null);
+
+/// <summary>
+/// Optional capture target for <see cref="ComputerUseObserveRequest"/>. Without a target the host
+/// captures whichever monitor holds the cursor, which forced the model to move the real pointer and
+/// raise the window it wanted before it could see it.
+/// </summary>
+public sealed record ComputerUseObserveTarget(
+    int? MonitorIndex = null,
+    string? WindowTitle = null,
+    string? WindowProcessName = null);
 
 public sealed record ComputerUseObservation(
     string FrameId,
-    ImageAttachment Screenshot,
+    ImageAttachment? Screenshot,
     int Left,
     int Top,
     int Width,
@@ -23,7 +36,8 @@ public sealed record ComputerUseObservation(
     string? AppliedAction = null,
     string? UsedElementId = null,
     int? ResolvedX = null,
-    int? ResolvedY = null);
+    int? ResolvedY = null,
+    string? ResolvedVia = null);
 
 public sealed record ComputerUseInteractRequest(
     string FrameId,

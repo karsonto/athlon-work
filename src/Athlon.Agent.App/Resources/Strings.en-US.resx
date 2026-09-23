@@ -539,6 +539,15 @@ Hold to talk</value>
   <data name="ComputerUse_StatusToolFormat" xml:space="preserve">
     <value>{0} · {1}</value>
   </data>
+  <data name="ComputerUse_ApprovalTitle" xml:space="preserve">
+    <value>Approval required to continue</value>
+  </data>
+  <data name="Common_Approve" xml:space="preserve">
+    <value>Approve</value>
+  </data>
+  <data name="Common_Deny" xml:space="preserve">
+    <value>Deny</value>
+  </data>
   <data name="Workspace_BrowserBack" xml:space="preserve">
     <value>Back</value>
   </data>
@@ -1506,6 +1515,54 @@ Save anyway?</value>
   </data>
   <data name="Settings_Title" xml:space="preserve">
     <value>Settings</value>
+  </data>
+  <data name="Settings_ComputerUseTitle" xml:space="preserve">
+    <value>Computer Use</value>
+  </data>
+  <data name="Settings_ComputerUseHint" xml:space="preserve">
+    <value>Controls screenshots, UI tree, stability sampling, timeouts, and history retention for desktop observation and actions. Larger values are steadier but slower and cost more tokens.</value>
+  </data>
+  <data name="Settings_ComputerUseScreenshotEdge" xml:space="preserve">
+    <value>Screenshot longest edge (px)</value>
+  </data>
+  <data name="Settings_ComputerUseScreenshotQuality" xml:space="preserve">
+    <value>Screenshot JPEG quality (1-100)</value>
+  </data>
+  <data name="Settings_ComputerUseTreeDepth" xml:space="preserve">
+    <value>Default UI tree depth</value>
+  </data>
+  <data name="Settings_ComputerUseMaxNodes" xml:space="preserve">
+    <value>Default UI tree nodes</value>
+  </data>
+  <data name="Settings_ComputerUseSettleInterval" xml:space="preserve">
+    <value>Stability sample interval (ms)</value>
+  </data>
+  <data name="Settings_ComputerUseSettleSamples" xml:space="preserve">
+    <value>Minimum stability samples</value>
+  </data>
+  <data name="Settings_ComputerUseUiaTimeout" xml:space="preserve">
+    <value>UIA call timeout (ms)</value>
+  </data>
+  <data name="Settings_ComputerUseOverlayDelay" xml:space="preserve">
+    <value>Wait after hiding overlay (ms)</value>
+  </data>
+  <data name="Settings_ComputerUseHistoryRetention" xml:space="preserve">
+    <value>Frames keeping a full UI tree</value>
+  </data>
+  <data name="Settings_ComputerUseScreenshotRetention" xml:space="preserve">
+    <value>Screenshot disk retention (minutes, 0 disables)</value>
+  </data>
+  <data name="Settings_ComputerUsePruneUiTree" xml:space="preserve">
+    <value>Strip historical UI trees</value>
+  </data>
+  <data name="Settings_ComputerUsePruneUiTreeHint" xml:space="preserve">
+    <value>Replaces the ui_tree in older computer_observe results with a compact summary, keeping only the newest frames complete. Off by default until validated in real sessions.</value>
+  </data>
+  <data name="Settings_ComputerUseSkipKeyboardScreenshot" xml:space="preserve">
+    <value>No screenshot for keyboard actions</value>
+  </data>
+  <data name="Settings_ComputerUseSkipKeyboardScreenshotHint" xml:space="preserve">
+    <value>type_text / key / hotkey return no post-action screenshot, which saves a lot of tokens; the model calls computer_observe when it needs to confirm.</value>
   </data>
   <data name="Settings_ToolStorm" xml:space="preserve">
     <value>Tool storm suppression</value>

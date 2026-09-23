@@ -183,6 +183,30 @@ public partial class ComputerUseOverlayWindow : Window
 
     private void CloseButton_OnClick(object sender, RoutedEventArgs e) => Close();
 
+    private void ApproveApprovalButton_OnClick(object sender, RoutedEventArgs e) =>
+        ResolveOldestApproval(approve: true);
+
+    private void DenyApprovalButton_OnClick(object sender, RoutedEventArgs e) =>
+        ResolveOldestApproval(approve: false);
+
+    private void ResolveOldestApproval(bool approve)
+    {
+        if (_shell is not { ComputerUseApprovals.Count: > 0 } shell)
+        {
+            return;
+        }
+
+        var oldest = shell.ComputerUseApprovals[0];
+        if (approve)
+        {
+            shell.ResolveComputerUseApprovalCommand.Execute(oldest);
+        }
+        else
+        {
+            shell.DenyComputerUseApprovalCommand.Execute(oldest);
+        }
+    }
+
     private void DragHandle_OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left)

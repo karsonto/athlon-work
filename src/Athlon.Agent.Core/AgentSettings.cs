@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Serialization;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.ComputerUse;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Core.SubAgents;
@@ -83,6 +84,7 @@ public sealed class AppSettings
     public TrainingDataSettings TrainingData { get; set; } = new();
     public SsoSettings Sso { get; set; } = new();
     public BehaviorReportSettings BehaviorReport { get; set; } = new();
+    public ComputerUseSettings ComputerUse { get; set; } = new();
 }
 
 public sealed class UpdateSettings

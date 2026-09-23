@@ -1,10 +1,13 @@
 using System.Runtime.InteropServices;
+using Athlon.Agent.Core;
 using Athlon.Agent.Core.ComputerUse;
 
 namespace Athlon.Agent.App.Services.ComputerUse;
 
-public sealed class ComputerUseInputService
+public sealed class ComputerUseInputService(AppSettings settings)
 {
+    private readonly ComputerUseSettings _settings = settings.ComputerUse;
+
     public async Task ExecuteAsync(
         string action,
         int x,
@@ -26,7 +29,7 @@ public sealed class ComputerUseInputService
             case "double_click":
                 MoveCursor(x, y);
                 SendMouseClick(MouseLeftDown, MouseLeftUp);
-                await Task.Delay(80, CancellationToken.None).ConfigureAwait(false);
+                await Task.Delay(DoubleClickIntervalMs, CancellationToken.None).ConfigureAwait(false);
                 SendMouseClick(MouseLeftDown, MouseLeftUp);
                 break;
             case "right_click":
@@ -60,7 +63,9 @@ public sealed class ComputerUseInputService
         }
     }
 
-    private static async Task DragAsync(int startX, int startY, int endX, int endY)
+    private int DoubleClickIntervalMs => Math.Max(0, _settings.DoubleClickIntervalMs);
+
+    private async Task DragAsync(int startX, int startY, int endX, int endY)
     {
         MoveCursor(startX, startY);
         var mouseDown = false;
@@ -69,16 +74,16 @@ public sealed class ComputerUseInputService
             SendMouse(MouseLeftDown, 0);
             mouseDown = true;
             // Give the target time to arm press-and-drag before movement starts.
-            await Task.Delay(120, CancellationToken.None).ConfigureAwait(false);
+            await Task.Delay(Math.Max(0, _settings.DragArmDelayMs), CancellationToken.None).ConfigureAwait(false);
 
-            var path = ComputerUseDragPath.Build(startX, startY, endX, endY);
+            var path = ComputerUseDragPath.Build(startX, startY, endX, endY, _settings.DragSteps);
             foreach (var (pointX, pointY) in path)
             {
                 MoveCursor(pointX, pointY);
-                await Task.Delay(16, CancellationToken.None).ConfigureAwait(false);
+                await Task.Delay(Math.Max(0, _settings.DragStepDelayMs), CancellationToken.None).ConfigureAwait(false);
             }
 
-            await Task.Delay(80, CancellationToken.None).ConfigureAwait(false);
+            await Task.Delay(Math.Max(0, _settings.DragHoldDelayMs), CancellationToken.None).ConfigureAwait(false);
         }
         finally
         {

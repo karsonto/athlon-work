@@ -90,7 +90,7 @@ public sealed class ComputerUseWave1OptimizationTests
     }
 
     [Fact]
-    public void FromObservation_CoordinateHintPrefersScreenshotPixels()
+    public void FromObservation_OmitsCoordinateHint_AndReportsResolvedPoint()
     {
         var observation = new ComputerUseObservation(
             FrameId: "frame-1",
@@ -110,15 +110,17 @@ public sealed class ComputerUseWave1OptimizationTests
             AppliedAction: "click",
             UsedElementId: null,
             ResolvedX: 960,
-            ResolvedY: 540);
+            ResolvedY: 540,
+            ResolvedVia: "image_point");
 
         var result = ComputerUseToolHelper.FromObservation("ok", observation);
         using var document = JsonDocument.Parse(result.Content!);
         var root = document.RootElement;
-        var hint = root.GetProperty("coordinate_hint").GetString();
-        Assert.Contains("screenshot pixels", hint, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("do not multiply by dpi_scale", hint, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("image coordinates win", hint, StringComparison.OrdinalIgnoreCase);
+
+        // The 464-character static hint moved to the system prompt; repeating it in every result
+        // multiplied it across the whole history.
+        Assert.False(root.TryGetProperty("coordinate_hint", out _));
+        Assert.Equal("image_point", root.GetProperty("resolved_via").GetString());
 
         var resolved = root.GetProperty("action").GetProperty("resolved_point");
         Assert.Equal(960, resolved.GetProperty("physical_x").GetInt32());
@@ -288,9 +290,30 @@ public sealed class ComputerUseWave1OptimizationTests
     public void ObserveRequest_DefaultsAreSlim()
     {
         var request = new ComputerUseObserveRequest();
-        Assert.Equal(4, request.MaxTreeDepth);
-        Assert.Equal(80, request.MaxNodes);
+        Assert.Equal(ComputerUseSettingsDefaults.DefaultMaxTreeDepth, request.MaxTreeDepth);
+        Assert.Equal(ComputerUseSettingsDefaults.DefaultMaxNodes, request.MaxNodes);
         Assert.True(request.IncludeUiTree);
+        // No target means "whatever monitor holds the cursor", the historical behavior.
+        Assert.Null(request.MonitorIndex);
+        Assert.Null(request.WindowTitle);
+    }
+
+    [Fact]
+    public void ObserveRequest_CarriesTargetingArguments()
+    {
+        var request = new ComputerUseObserveRequest(
+            IncludeUiTree: false,
+            MonitorIndex: 1,
+            WindowTitle: "Notepad",
+            WindowProcessName: "notepad");
+        var target = new ComputerUseObserveTarget(
+            request.MonitorIndex,
+            request.WindowTitle,
+            request.WindowProcessName);
+
+        Assert.Equal(1, target.MonitorIndex);
+        Assert.Equal("Notepad", target.WindowTitle);
+        Assert.Equal("notepad", target.WindowProcessName);
     }
 
     [Fact]

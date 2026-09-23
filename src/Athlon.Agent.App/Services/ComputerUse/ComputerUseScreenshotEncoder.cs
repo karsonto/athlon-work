@@ -10,7 +10,11 @@ public static class ComputerUseScreenshotEncoder
 {
     public const string MimeType = "image/jpeg";
 
-    public static EncodedScreenshot Encode(BitmapSource source, int captureWidth, int captureHeight)
+    public static EncodedScreenshot Encode(
+        BitmapSource source,
+        int captureWidth,
+        int captureHeight,
+        ComputerUseScreenshotOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(source);
         if (captureWidth <= 0 || captureHeight <= 0)
@@ -18,7 +22,10 @@ public static class ComputerUseScreenshotEncoder
             throw new ArgumentOutOfRangeException(nameof(captureWidth));
         }
 
-        var (imageWidth, imageHeight) = ComputerUseScreenshotSizing.FitWithin(captureWidth, captureHeight);
+        var maxLongestEdge = options?.MaxLongestEdge ?? ComputerUseScreenshotSizing.MaxLongestEdge;
+        var quality = options?.JpegQuality ?? ComputerUseScreenshotSizing.JpegQuality;
+
+        var (imageWidth, imageHeight) = ComputerUseScreenshotSizing.FitWithin(captureWidth, captureHeight, maxLongestEdge);
         BitmapSource toEncode = source;
         if (imageWidth != captureWidth || imageHeight != captureHeight)
         {
@@ -33,7 +40,7 @@ public static class ComputerUseScreenshotEncoder
 
         var encoder = new JpegBitmapEncoder
         {
-            QualityLevel = ComputerUseScreenshotSizing.JpegQuality
+            QualityLevel = quality
         };
         encoder.Frames.Add(BitmapFrame.Create(toEncode));
         using var stream = new MemoryStream();

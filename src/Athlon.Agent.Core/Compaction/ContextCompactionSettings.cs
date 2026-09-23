@@ -1,3 +1,5 @@
+using Athlon.Agent.Core.ComputerUse;
+
 namespace Athlon.Agent.Core.Compaction;
 
 public sealed class ContextCompactionSettings
@@ -102,7 +104,27 @@ public sealed class ContextCompactionSettings
     /// </summary>
     public bool PreferMeasuredPromptTokens { get; set; } = true;
 
-    public RequestHistoryHygieneSettings RequestHistoryHygiene { get; set; } = new();
+    public RequestHistoryHygieneSettings RequestHistoryHygiene { get; set; } = CreateDefaultHistoryHygiene();
+
+    /// <summary>
+    /// Default per-tool hygiene budgets. Computer Use observations are large and expire quickly, so
+    /// they get a tighter result budget than the global default. Values live here (not only in
+    /// <see cref="ComputerUseSettings"/>) because hygiene runs in the Core request path.
+    /// </summary>
+    private static RequestHistoryHygieneSettings CreateDefaultHistoryHygiene()
+    {
+        var settings = new RequestHistoryHygieneSettings();
+        var limit = new ToolResultLimit(
+            ComputerUseSettingsDefaults.ObservationResultMaxLines,
+            ComputerUseSettingsDefaults.ObservationResultMaxBytes,
+            ComputerUseSettingsDefaults.ObservationResultMaxTokens);
+        foreach (var toolName in ComputerUseToolNames.All)
+        {
+            settings.ToolResultOverrides[toolName] = limit;
+        }
+
+        return settings;
+    }
 
     public ToolStormSettings ToolStorm { get; set; } = new();
 }

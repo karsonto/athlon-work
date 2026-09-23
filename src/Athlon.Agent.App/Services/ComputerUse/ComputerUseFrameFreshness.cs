@@ -58,4 +58,12 @@ internal static class ComputerUseFrameFreshness
         int x,
         int y) =>
         x >= left && y >= top && x < left + width && y < top + height;
+
+    /// <summary>
+    /// Window- and monitor-targeted observations deliberately capture something other than the
+    /// cursor monitor, and a window-scoped frame often belongs to a background window. Comparing
+    /// those frames against the cursor-derived defaults would reject every targeted frame, so the
+    /// monitor/foreground freshness gates only apply to cursor-relative observations.
+    /// </summary>
+    internal static bool RequiresCursorRelativeGates(bool isTargetedObservation) => !isTargetedObservation;
 }

@@ -494,6 +494,141 @@
                         </Grid>
                     </Border>
 
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
+                            <TextBlock Text="{loc:Localize Key=Settings_ComputerUseTitle}"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,14" />
+                            <TextBlock Text="{loc:Localize Key=Settings_ComputerUseHint}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,0,0,12" />
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseScreenshotEdge}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ComputerUseScreenshotLongestEdgeText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseScreenshotQuality}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ComputerUseScreenshotJpegQualityText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseTreeDepth}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ComputerUseDefaultMaxTreeDepthText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseMaxNodes}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ComputerUseDefaultMaxNodesText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseSettleInterval}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ComputerUseSettleSampleIntervalMsText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseSettleSamples}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ComputerUseSettleMinimumSamplesText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseUiaTimeout}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ComputerUseUiaCallTimeoutMsText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseOverlayDelay}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ComputerUseOverlayHideDelayMsText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseHistoryRetention}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ComputerUseHistoryUiTreeRetentionText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseScreenshotRetention}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding ComputerUseScreenshotRetentionMinutesText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUsePruneUiTree}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUsePruneUiTreeHint}"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               TextWrapping="Wrap"
+                                               FontSize="12"
+                                               Margin="0,6,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          IsChecked="{Binding ComputerUsePruneHistoricalUiTree, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                            <Grid Margin="0,0,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseSkipKeyboardScreenshot}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{loc:Localize Key=Settings_ComputerUseSkipKeyboardScreenshotHint}"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               TextWrapping="Wrap"
+                                               FontSize="12"
+                                               Margin="0,6,0,0" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="1"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          IsChecked="{Binding Settings.ComputerUse.SkipScreenshotForKeyboardActions, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,24">
                         <TextBlock Text="{Binding SettingsStatus}" Foreground="{DynamicResource Brush.SubtleText}" VerticalAlignment="Center" Margin="0,0,12,0" />
                         <Button Content="{loc:Localize Key=Settings_SaveSettings}" Command="{Binding SaveSettingsCommand}" Style="{StaticResource GhostButtonStyle}" />

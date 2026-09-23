@@ -7,6 +7,12 @@ public interface IImageAttachmentStore
     ImageAttachment SaveFromFile(string sessionId, string sourcePath);
 
     ImageAttachment SaveBytes(string sessionId, string fileName, string mimeType, byte[] bytes);
+
+    /// <summary>
+    /// Saves a disposable frame capture. Files written through this overload carry a recognizable
+    /// name prefix so maintenance can prune them without ever touching user-uploaded images.
+    /// </summary>
+    ImageAttachment SaveByteFrame(string sessionId, string fileName, string mimeType, byte[] bytes);
 }
 
 public sealed class ImageAttachmentStore : IImageAttachmentStore
@@ -45,7 +51,21 @@ public sealed class ImageAttachmentStore : IImageAttachmentStore
             LocalPath: destination);
     }
 
-    public ImageAttachment SaveBytes(string sessionId, string fileName, string mimeType, byte[] bytes)
+    public ImageAttachment SaveBytes(string sessionId, string fileName, string mimeType, byte[] bytes) =>
+        Save(sessionId, fileName, mimeType, bytes, storedNamePrefix: string.Empty);
+
+    /// <summary>Prefix marking a disposable Computer Use frame capture.</summary>
+    public const string FrameFilePrefix = "cu-frame-";
+
+    public ImageAttachment SaveByteFrame(string sessionId, string fileName, string mimeType, byte[] bytes) =>
+        Save(sessionId, fileName, mimeType, bytes, FrameFilePrefix);
+
+    private ImageAttachment Save(
+        string sessionId,
+        string fileName,
+        string mimeType,
+        byte[] bytes,
+        string storedNamePrefix)
     {
         if (string.IsNullOrWhiteSpace(sessionId))
         {
@@ -73,7 +93,7 @@ public sealed class ImageAttachmentStore : IImageAttachmentStore
         }
 
         var directory = GetAttachmentsDirectory(sessionId);
-        var destination = Path.Combine(directory, $"{Guid.NewGuid():N}{extension}");
+        var destination = Path.Combine(directory, $"{storedNamePrefix}{Guid.NewGuid():N}{extension}");
         File.WriteAllBytes(destination, bytes);
 
         return new ImageAttachment(

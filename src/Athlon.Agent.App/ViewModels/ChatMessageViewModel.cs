@@ -1,6 +1,7 @@
 using System.Text;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.ComputerUse;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Plan;
@@ -161,8 +162,12 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     [ObservableProperty]
     private string _content = string.Empty;
 
-    partial void OnContentChanged(string value) =>
+    partial void OnContentChanged(string value)
+    {
         OnPropertyChanged(nameof(IsComputerUseTranscriptVisible));
+        OnPropertyChanged(nameof(ComputerUseActionLine));
+        OnPropertyChanged(nameof(IsComputerUseActionLineVisible));
+    }
 
     [ObservableProperty]
     private string _reasoningContent = string.Empty;
@@ -202,6 +207,18 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         && !IsCompaction
         && !IsHiddenPlaceholder
         && !string.IsNullOrWhiteSpace(Content);
+
+    /// <summary>
+    /// Compact one-line action log for Computer Use tool messages. The overlay transcript hides
+    /// tool cards (they are unreadable in a floating, non-scrolling surface), so this line is what
+    /// tells the user which action ran and how it was resolved.
+    /// </summary>
+    public string ComputerUseActionLine => IsTool
+        && ToolName.StartsWith("computer_", StringComparison.OrdinalIgnoreCase)
+            ? ComputerUseStatusFormatter.FormatActionLine(ToolName, ToolArgumentsText, Content, ToolStatusLabel)
+            : string.Empty;
+
+    public bool IsComputerUseActionLineVisible => !string.IsNullOrEmpty(ComputerUseActionLine);
     public string CardTitle => IsCompaction
         ? (string.IsNullOrWhiteSpace(CompactionCardTitle) ? Strings.Get("Chat_CompactionDefault") : CompactionCardTitle)
         : Strings.Get("Chat_ToolCallTitle");
@@ -267,6 +284,14 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasToolArguments));
         OnPropertyChanged(nameof(ShowToolArgumentsPanel));
+        OnPropertyChanged(nameof(ComputerUseActionLine));
+        OnPropertyChanged(nameof(IsComputerUseActionLineVisible));
+    }
+
+    partial void OnToolNameChanged(string value)
+    {
+        OnPropertyChanged(nameof(ComputerUseActionLine));
+        OnPropertyChanged(nameof(IsComputerUseActionLineVisible));
     }
 
     partial void OnIsToolArgumentsStreamingChanged(bool value) => OnPropertyChanged(nameof(ShowToolArgumentsPanel));
@@ -276,12 +301,16 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         OnPropertyChanged(nameof(ToolStatusLabel));
         OnPropertyChanged(nameof(ShowToolStatusLabel));
         OnPropertyChanged(nameof(ShowToolArgumentsPanel));
+        OnPropertyChanged(nameof(ComputerUseActionLine));
+        OnPropertyChanged(nameof(IsComputerUseActionLineVisible));
     }
 
     partial void OnToolApprovalStateChanged(ToolApprovalState value)
     {
         OnPropertyChanged(nameof(ToolStatusLabel));
         OnPropertyChanged(nameof(ShowToolStatusLabel));
+        OnPropertyChanged(nameof(ComputerUseActionLine));
+        OnPropertyChanged(nameof(IsComputerUseActionLineVisible));
     }
 
     public bool ShowToolStatusLabel =>

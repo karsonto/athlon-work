@@ -13,10 +13,15 @@ public sealed class ComputerUseAutomationHost(
     ComputerUseOverlayRegistry overlayRegistry,
     IImageAttachmentStore imageAttachmentStore,
     IAgentRunContextAccessor runContextAccessor,
-    AuditLogService auditLog) : IComputerUseAutomationHost
+    AuditLogService auditLog,
+    AppSettings settings,
+    IImageAttachmentPruner attachmentPruner) : IComputerUseAutomationHost
 {
+    private readonly ComputerUseSettings _settings = settings.ComputerUse;
     private readonly SemaphoreSlim _operationGate = new(1, 1);
-    private readonly SemaphoreSlim _uiaSlots = new(4, 4);
+    private readonly SemaphoreSlim _uiaSlots = new(
+        Math.Max(1, settings.ComputerUse.UiaMaxConcurrentCalls),
+        Math.Max(1, settings.ComputerUse.UiaMaxConcurrentCalls));
     private FrameState? _latestFrame;
 
     public async Task<ComputerUseObservation> ObserveAsync(
@@ -26,7 +31,11 @@ public sealed class ComputerUseAutomationHost(
         await _operationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var observation = await ObserveCoreAsync(request, cancellationToken).ConfigureAwait(false);
+            var phaseTimings = new ComputerUsePhaseTimings();
+            var started = ComputerUseTiming.Stamp();
+            var observation = await ObserveCoreAsync(request, phaseTimings, cancellationToken)
+                .ConfigureAwait(false);
+            phaseTimings.TotalMs = ComputerUseTiming.ElapsedMs(started);
             await auditLog.WriteAsync(
                 "computer_observe",
                 new
@@ -39,7 +48,12 @@ public sealed class ComputerUseAutomationHost(
                     observation.ImageWidth,
                     observation.ImageHeight,
                     observation.ForegroundWindowTitle,
-                    observation.ForegroundProcessName
+                    observation.ForegroundProcessName,
+                    ui_tree_nodes = phaseTimings.UiTreeNodes,
+                    ui_tree_included = request.IncludeUiTree,
+                    max_tree_depth = phaseTimings.MaxTreeDepth,
+                    max_nodes = phaseTimings.MaxNodes,
+                    timings = phaseTimings.ToPayload()
                 },
                 cancellationToken).ConfigureAwait(false);
             return observation;
@@ -134,6 +148,17 @@ public sealed class ComputerUseAutomationHost(
                 && target is not null
                 && request.Action is "type_text" or "key" or "hotkey";
 
+            // Pre-action telemetry: which channel the arguments imply before any UIA probe. The
+            // element-native attempt can upgrade this, so `actualStrategy` tracks what really ran.
+            var resolveStrategy = ComputerUseResolveStrategyClassifier.Classify(
+                isPointerAction,
+                hasElementId,
+                hasImagePoint,
+                hasPhysicalPoint);
+            var actualStrategy = resolveStrategy;
+            // Set inside the overlay-hidden closure, then read by the audit log and observation.
+            var usedElementNative = false;
+
             int resolvedX = 0;
             int resolvedY = 0;
             int? resolvedEndX = request.EndX;
@@ -142,9 +167,12 @@ public sealed class ComputerUseAutomationHost(
                 ? request.ElementId
                 : null;
 
+            var overlayHiddenAt = ComputerUseTiming.Stamp();
+            var phaseTimings = new ComputerUsePhaseTimings();
             var result = await overlayRegistry.RunWithOverlayHiddenAsync(async ct =>
             {
                 ct.ThrowIfCancellationRequested();
+                phaseTimings.OverlayHideMs = ComputerUseTiming.ElapsedMs(overlayHiddenAt);
                 // Validate against the observed monitor, not wherever the cursor drifted.
                 var monitorX = frame.Left + Math.Max(0, frame.Width / 2);
                 var monitorY = frame.Top + Math.Max(0, frame.Height / 2);
@@ -152,7 +180,10 @@ public sealed class ComputerUseAutomationHost(
                 var currentForeground = await RunBoundedUiAutomationAsync(
                     uiAutomationService.GetForegroundWindowIdentity,
                     ct).ConfigureAwait(false);
-                if (!ComputerUseFrameFreshness.MatchesMonitor(
+                // Window- and monitor-targeted frames intentionally point somewhere other than the
+                // cursor monitor, so the cursor-relative freshness gates are skipped for them.
+                if (ComputerUseFrameFreshness.RequiresCursorRelativeGates(frame.ObserveTarget is not null)
+                    && !ComputerUseFrameFreshness.MatchesMonitor(
                         frame.Left,
                         frame.Top,
                         frame.Width,
@@ -168,7 +199,8 @@ public sealed class ComputerUseAutomationHost(
                         "The visible desktop changed since observation.");
                 }
 
-                if (!ComputerUseFrameFreshness.MatchesForegroundWindow(
+                if (ComputerUseFrameFreshness.RequiresCursorRelativeGates(frame.ObserveTarget is not null)
+                    && !ComputerUseFrameFreshness.MatchesForegroundWindow(
                         frame.ForegroundWindowHandle,
                         currentForeground.Handle,
                         frame.ForegroundProcessName,
@@ -184,6 +216,26 @@ public sealed class ComputerUseAutomationHost(
                 var y = 0;
                 int? endX = null;
                 int? endY = null;
+
+                // Element-native channel: when only an element_id was supplied and the action has a
+                // native form, drive the control through its own UI Automation pattern. The pointer
+                // never moves, so the user's cursor is untouched. Falls through to coordinate input
+                // when the control exposes no usable pattern.
+                usedElementNative = await TryRunElementNativeAsync(
+                    request,
+                    target,
+                    hasElementId,
+                    hasImagePoint,
+                    hasPhysicalPoint,
+                    isPointerAction,
+                    ct).ConfigureAwait(false);
+                if (usedElementNative)
+                {
+                    actualStrategy = ComputerUseResolveStrategy.ElementNative;
+                    // Native actions change layout too (Invoke navigates), so settle before capturing.
+                    return await SettleAndCaptureAsync().ConfigureAwait(false);
+                }
+
                 if ((useElementForPointer || useElementForTyping)
                     && target is not null)
                 {
@@ -266,6 +318,7 @@ public sealed class ComputerUseAutomationHost(
                 _latestFrame = null;
 
                 ct.ThrowIfCancellationRequested();
+                var inputStarted = ComputerUseTiming.Stamp();
                 if (useElementForTyping)
                 {
                     await inputService.ExecuteAsync(
@@ -290,33 +343,66 @@ public sealed class ComputerUseAutomationHost(
                     request.Key,
                     request.ScrollDelta,
                     CancellationToken.None).ConfigureAwait(false);
-                // Once input starts, complete observation even if the caller cancels; never report a
-                // cancellable half-action that could be retried against the same frame.
-                try
-                {
-                    await ComputerUsePostActionSettler.WaitForStableAsync(
-                            _ => Task.FromResult(captureService.CaptureSignatureAt(monitorX, monitorY)),
-                            CancellationToken.None)
-                        .ConfigureAwait(false);
-                }
-                catch
-                {
-                    // Stability probing is an optimization. Preserve the previous safe delay
-                    // when a display driver cannot provide sampled pixels.
-                    await Task.Delay(250, CancellationToken.None).ConfigureAwait(false);
-                }
+                phaseTimings.InputMs = ComputerUseTiming.ElapsedMs(inputStarted);
+                return await SettleAndCaptureAsync().ConfigureAwait(false);
 
-                // Return a fresh screenshot + frame only. A shallow post-action UI tree pushed
-                // models onto coarse element_id clicks; prefer image_x/image_y next, and
-                // computer_observe when a full tree is needed.
-                return await CaptureStateAsync(
-                    includeUiTree: false,
-                    maxDepth: 1,
-                    maxNodes: 1,
-                    CancellationToken.None,
-                    monitorX,
-                    monitorY).ConfigureAwait(false);
+                // Shared tail for both channels: wait for the desktop to stop changing, then decide
+                // whether a screenshot is worth the tokens. Declared as a local function so the
+                // element-native early return and the coordinate path settle identically.
+                async Task<CapturedState?> SettleAndCaptureAsync()
+                {
+                    // Once input starts, complete observation even if the caller cancels; never report a
+                    // cancellable half-action that could be retried against the same frame.
+                    var settleStarted = ComputerUseTiming.Stamp();
+                    try
+                    {
+                        await ComputerUsePostActionSettler.WaitForStableAsync(
+                            _ => Task.FromResult(captureService.CaptureSignatureAt(monitorX, monitorY)),
+                            CancellationToken.None,
+                            minimumSamples: IsLayoutNeutralAction(request.Action)
+                                ? _settings.SettleKeyboardMinimumSamples
+                                : _settings.SettleMinimumSamples,
+                            maxSamples: _settings.SettleMaxSamples,
+                            sampleInterval: TimeSpan.FromMilliseconds(_settings.SettleSampleIntervalMs),
+                            requiredConsecutiveMatches: _settings.SettleRequiredConsecutiveMatches)
+                            .ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // Stability probing is an optimization. Preserve the previous safe delay
+                        // when a display driver cannot provide sampled pixels.
+                        await Task.Delay(_settings.SettleFallbackDelayMs, CancellationToken.None)
+                            .ConfigureAwait(false);
+                    }
+
+                    phaseTimings.SettleMs = ComputerUseTiming.ElapsedMs(settleStarted);
+
+                    // Keyboard-only actions do not reflow the window, so the model can usually predict
+                    // the outcome. Returning a screenshot for every keystroke is pure token cost; offer
+                    // computer_observe for callers that need visual confirmation.
+                    if (_settings.SkipScreenshotForKeyboardActions
+                        && request.Action is "type_text" or "key" or "hotkey")
+                    {
+                        return null;
+                    }
+
+                    // Return a fresh screenshot + frame only. A shallow post-action UI tree pushed
+                    // models onto coarse element_id clicks; prefer image_x/image_y next, and
+                    // computer_observe when a full tree is needed.
+                    var captureStarted = ComputerUseTiming.Stamp();
+                    var captured = await CaptureStateAsync(
+                        includeUiTree: false,
+                        maxDepth: 1,
+                        maxNodes: 1,
+                        CancellationToken.None,
+                        monitorX,
+                        monitorY).ConfigureAwait(false);
+                    phaseTimings.CaptureMs = ComputerUseTiming.ElapsedMs(captureStarted);
+                    return captured;
+                }
             }, cancellationToken).ConfigureAwait(false);
+
+            phaseTimings.TotalMs = ComputerUseTiming.ElapsedMs(overlayHiddenAt);
 
             await auditLog.WriteAsync(
                 "computer_interact",
@@ -327,25 +413,86 @@ public sealed class ComputerUseAutomationHost(
                     request.ElementId,
                     used_element_id = usedElementId,
                     used_image_point = useImageForPointer,
-                    resolved_x = resolvedX,
-                    resolved_y = resolvedY,
+                    // Element-native actions never resolve a coordinate, so report null rather than a
+                    // misleading 0,0 in the audit trail.
+                    resolved_x = usedElementNative ? (int?)null : resolvedX,
+                    resolved_y = usedElementNative ? (int?)null : resolvedY,
                     end_x = resolvedEndX,
                     end_y = resolvedEndY,
-                    foreground_window = result.Ui.ForegroundWindowTitle
+                    resolved_via = ComputerUseResolveStrategyClassifier.ToWireValue(actualStrategy),
+                    foreground_window = result?.Ui.ForegroundWindowTitle ?? frame.ForegroundWindowTitle,
+                    timings = phaseTimings.ToPayload()
                 },
                 CancellationToken.None).ConfigureAwait(false);
 
-            return BuildObservation(
+            return await BuildObservationAsync(
                 result,
+                CancellationToken.None,
                 appliedAction: request.Action,
                 usedElementId: usedElementId,
-                resolvedX: resolvedX,
-                resolvedY: resolvedY);
+                resolvedX: usedElementNative ? null : resolvedX,
+                resolvedY: usedElementNative ? null : resolvedY,
+                resolvedVia: ComputerUseResolveStrategyClassifier.ToWireValue(actualStrategy))
+                .ConfigureAwait(false);
         }
         finally
         {
             _operationGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Actions that do not reflow the window: typing, single keys, and scrolling. These keep the
+    /// short settle budget because a stable verdict arrives much sooner.
+    /// </summary>
+    private static bool IsLayoutNeutralAction(string action) =>
+        ComputerUseActionKinds.IsLayoutNeutralAction(action);
+
+    /// <summary>
+    /// Runs the element-native channel when the arguments select it. Returns false when the action
+    /// has no native form, no element was supplied, pixel coordinates were given, or the control
+    /// exposes no usable pattern — in every one of those cases the caller falls back to coordinate
+    /// input so no functionality is lost.
+    /// </summary>
+    private async Task<bool> TryRunElementNativeAsync(
+        ComputerUseInteractRequest request,
+        AutomationElement? target,
+        bool hasElementId,
+        bool hasImagePoint,
+        bool hasPhysicalPoint,
+        bool isPointerAction,
+        CancellationToken cancellationToken)
+    {
+        if (target is null || hasImagePoint)
+        {
+            return false;
+        }
+
+        // Only the pure "element_id and nothing else" shape activates the native channel. Pixels
+        // still win, and explicit physical coordinates mean the caller wants real pointer input.
+        if (ComputerUseResolveStrategyClassifier.Resolve(
+                request.Action,
+                hasElementId,
+                hasImagePoint,
+                hasPhysicalPoint) != ComputerUseResolveStrategy.ElementNative)
+        {
+            return false;
+        }
+
+        if (isPointerAction && !ComputerUseResolveStrategyClassifier.HasElementNativeForm(request.Action))
+        {
+            return false;
+        }
+
+        var outcome = await RunBoundedUiAutomationAsync(
+            () => uiAutomationService.TryExecuteElementAction(
+                target,
+                request.Action,
+                request.Key,
+                request.ScrollDelta,
+                request.Text),
+            cancellationToken).ConfigureAwait(false);
+        return outcome.Applied;
     }
 
     private static void EnsureImagePointInFrame(
@@ -374,6 +521,7 @@ public sealed class ComputerUseAutomationHost(
         try
         {
             ValidateWaitRequest(request);
+            var waitStarted = ComputerUseTiming.Stamp();
             var result = await overlayRegistry.RunWithOverlayHiddenAsync(async ct =>
             {
                 var timeout = TimeSpan.FromMilliseconds(Math.Clamp(request.TimeoutMs, 200, 30000));
@@ -411,7 +559,8 @@ public sealed class ComputerUseAutomationHost(
                     request.ElementId,
                     request.Name,
                     request.WindowTitle,
-                    request.TimeoutMs
+                    request.TimeoutMs,
+                    elapsed_ms = Math.Round(ComputerUseTiming.ElapsedMs(waitStarted), 1)
                 },
                 cancellationToken).ConfigureAwait(false);
             return result;
@@ -424,16 +573,42 @@ public sealed class ComputerUseAutomationHost(
 
     private async Task<ComputerUseObservation> ObserveCoreAsync(
         ComputerUseObserveRequest request,
+        ComputerUsePhaseTimings phaseTimings,
         CancellationToken cancellationToken)
     {
+        var maxDepth = Math.Clamp(
+            request.MaxTreeDepth,
+            ComputerUseObservationLimits.MinTreeDepth,
+            ComputerUseObservationLimits.MaxTreeDepth);
+        var maxNodes = Math.Clamp(
+            request.MaxNodes,
+            ComputerUseObservationLimits.MinNodes,
+            ComputerUseObservationLimits.MaxNodes);
+        phaseTimings.MaxTreeDepth = maxDepth;
+        phaseTimings.MaxNodes = maxNodes;
+
+        var target = request.MonitorIndex is null
+            && string.IsNullOrWhiteSpace(request.WindowTitle)
+                ? null
+                : new ComputerUseObserveTarget(
+                    request.MonitorIndex,
+                    request.WindowTitle,
+                    request.WindowProcessName);
+
+        var captureStarted = ComputerUseTiming.Stamp();
         var result = await overlayRegistry.RunWithOverlayHiddenAsync(
             ct => CaptureStateAsync(
                 request.IncludeUiTree,
-                Math.Clamp(request.MaxTreeDepth, 1, 10),
-                Math.Clamp(request.MaxNodes, 20, 1000),
-                ct),
+                maxDepth,
+                maxNodes,
+                ct,
+                target: target),
             cancellationToken).ConfigureAwait(false);
-        return BuildObservation(result);
+        phaseTimings.OverlayHideMs = ComputerUseTiming.ElapsedMs(captureStarted);
+        phaseTimings.CaptureMs = phaseTimings.OverlayHideMs;
+        phaseTimings.UiTreeChars = result.Ui.Json.Length;
+        phaseTimings.UiTreeNodes = ComputerUseUiTreeMetrics.CountNodes(result.Ui.Json);
+        return await BuildObservationAsync(result, cancellationToken).ConfigureAwait(false);
     }
 
     private CapturedState CaptureState(
@@ -441,11 +616,10 @@ public sealed class ComputerUseAutomationHost(
         int maxDepth,
         int maxNodes,
         int? monitorX = null,
-        int? monitorY = null)
+        int? monitorY = null,
+        ComputerUseObserveTarget? target = null)
     {
-        var desktop = monitorX is int x && monitorY is int y
-            ? captureService.CaptureAt(x, y)
-            : captureService.CaptureCursorMonitor();
+        var (desktop, rootHandle) = ResolveDesktopCapture(monitorX, monitorY, target);
         var foreground = uiAutomationService.Capture(
             includeUiTree ? maxDepth : 1,
             includeUiTree ? maxNodes : 1,
@@ -454,7 +628,8 @@ public sealed class ComputerUseAutomationHost(
             desktop.Width,
             desktop.Height,
             desktop.ImageWidth,
-            desktop.ImageHeight);
+            desktop.ImageHeight,
+            rootHandle);
         var ui = includeUiTree
             ? foreground
             : foreground with
@@ -462,7 +637,73 @@ public sealed class ComputerUseAutomationHost(
                 Json = "[]",
                 Elements = new Dictionary<string, AutomationElement>()
             };
-        return new CapturedState(desktop, ui);
+        return new CapturedState(desktop, ui, target);
+    }
+
+    /// <summary>
+    /// Picks the desktop region to capture. A window target wins over a monitor index, and both win
+    /// over the cursor-monitor default, so the model can aim Computer Use at a specific app or
+    /// display without the user first moving the pointer or raising the window. The returned handle
+    /// is the window whose UI tree should be walked (default when the cursor monitor is used).
+    /// </summary>
+    private (ComputerUseCapturedDesktop Desktop, nint RootHandle) ResolveDesktopCapture(
+        int? monitorX,
+        int? monitorY,
+        ComputerUseObserveTarget? target)
+    {
+        if (target is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(target.WindowTitle))
+            {
+                if (!ComputerUseCaptureService.TryFindWindowBounds(
+                        target.WindowTitle!,
+                        target.WindowProcessName,
+                        out var windowBounds,
+                        out var windowHandle))
+                {
+                    throw new ComputerUseException(
+                        "window_not_found",
+                        $"No visible window matching '{target.WindowTitle}'.");
+                }
+
+                // DPI is only used for reporting; a window rect is already in physical pixels.
+                return (
+                    captureService.CaptureRect(
+                        windowBounds.Left,
+                        windowBounds.Top,
+                        windowBounds.Width,
+                        windowBounds.Height,
+                        ResolveMonitorDpiScale(windowBounds),
+                        null,
+                        null),
+                    windowHandle);
+            }
+
+            if (target.MonitorIndex is int index)
+            {
+                return (captureService.CaptureMonitorIndex(index), IntPtr.Zero);
+            }
+        }
+
+        return (
+            monitorX is int x && monitorY is int y
+                ? captureService.CaptureAt(x, y)
+                : captureService.CaptureCursorMonitor(),
+            IntPtr.Zero);
+    }
+
+    private static double ResolveMonitorDpiScale(ComputerUseMonitorBounds bounds)
+    {
+        try
+        {
+            return ComputerUseCaptureService.ProbeDpiScaleAt(
+                bounds.Left + (bounds.Width / 2),
+                bounds.Top + (bounds.Height / 2));
+        }
+        catch
+        {
+            return 1;
+        }
     }
 
     private Task<CapturedState> CaptureStateAsync(
@@ -471,10 +712,15 @@ public sealed class ComputerUseAutomationHost(
         int maxNodes,
         CancellationToken cancellationToken,
         int? monitorX = null,
-        int? monitorY = null) =>
+        int? monitorY = null,
+        ComputerUseObserveTarget? target = null) =>
         RunBoundedUiAutomationAsync(
-            () => CaptureState(includeUiTree, maxDepth, maxNodes, monitorX, monitorY),
+            () => CaptureState(includeUiTree, maxDepth, maxNodes, monitorX, monitorY, target),
             cancellationToken);
+
+    private TimeSpan UiaCallTimeout => _settings.UiaCallTimeoutMs > 0
+        ? TimeSpan.FromMilliseconds(_settings.UiaCallTimeoutMs)
+        : TimeSpan.FromSeconds(5);
 
     private async Task<T> RunBoundedUiAutomationAsync<T>(
         Func<T> action,
@@ -496,23 +742,25 @@ public sealed class ComputerUseAutomationHost(
         try
         {
             return await task
-                .WaitAsync(TimeSpan.FromSeconds(5), cancellationToken)
+                .WaitAsync(UiaCallTimeout, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
             throw new ComputerUseException(
                 "uia_timeout",
-                "Windows UI Automation did not respond within 5 seconds.");
+                $"Windows UI Automation did not respond within {(int)UiaCallTimeout.TotalSeconds} seconds.");
         }
     }
 
-    private ComputerUseObservation BuildObservation(
-        CapturedState state,
+    private async Task<ComputerUseObservation> BuildObservationAsync(
+        CapturedState? state,
+        CancellationToken cancellationToken,
         string? appliedAction = null,
         string? usedElementId = null,
         int? resolvedX = null,
-        int? resolvedY = null)
+        int? resolvedY = null,
+        string? resolvedVia = null)
     {
         var sessionId = runContextAccessor.Current?.SessionId;
         var runId = runContextAccessor.Current?.RunId;
@@ -523,15 +771,51 @@ public sealed class ComputerUseAutomationHost(
                 "Computer Use requires an active agent run context.");
         }
 
+        if (state is null)
+        {
+            // Keyboard-only action with screenshot suppression: reuse the previous frame geometry
+            // so the model can keep chaining keystrokes without a redundant observation round trip.
+            var previous = _latestFrame;
+            if (previous is null)
+            {
+                throw new ComputerUseException(
+                    "stale_frame",
+                    "No previous frame is available; call computer_observe.");
+            }
+
+            return new ComputerUseObservation(
+                previous.FrameId,
+                Screenshot: null,
+                previous.Left,
+                previous.Top,
+                previous.Width,
+                previous.Height,
+                previous.DpiScale,
+                previous.CursorX,
+                previous.CursorY,
+                previous.ForegroundWindowTitle,
+                previous.ForegroundProcessName,
+                "[]",
+                previous.ImageWidth,
+                previous.ImageHeight,
+                appliedAction,
+                usedElementId,
+                resolvedX,
+                resolvedY,
+                resolvedVia);
+        }
+
         var frameId = $"frame_{Guid.NewGuid():N}";
         var extension = state.Desktop.MimeType.Equals("image/jpeg", StringComparison.OrdinalIgnoreCase)
             ? ".jpg"
             : ".png";
-        var screenshot = imageAttachmentStore.SaveBytes(
+        var screenshot = imageAttachmentStore.SaveByteFrame(
             sessionId,
             $"{frameId}{extension}",
             state.Desktop.MimeType,
             state.Desktop.ImageBytes);
+        // Frame screenshots accumulate one file per observation; trim old ones opportunistically.
+        await attachmentPruner.PruneAsync(sessionId, cancellationToken).ConfigureAwait(false);
         _latestFrame = new FrameState(
             frameId,
             sessionId,
@@ -544,11 +828,15 @@ public sealed class ComputerUseAutomationHost(
             state.Desktop.Height,
             state.Desktop.ImageWidth,
             state.Desktop.ImageHeight,
+            state.Desktop.DpiScale,
+            state.Desktop.CursorX,
+            state.Desktop.CursorY,
             state.Ui.ForegroundWindowTitle,
             state.Ui.ForegroundProcessName,
             state.Ui.ForegroundWindowHandle,
             DateTimeOffset.UtcNow,
-            state.Ui.Elements);
+            state.Ui.Elements,
+            state.ObserveTarget);
 
         return new ComputerUseObservation(
             frameId,
@@ -568,7 +856,8 @@ public sealed class ComputerUseAutomationHost(
             appliedAction,
             usedElementId,
             resolvedX,
-            resolvedY);
+            resolvedY,
+            resolvedVia);
     }
 
     private bool IsScreenStable(ref string? previousHash, ref int stableSamples)
@@ -709,7 +998,8 @@ public sealed class ComputerUseAutomationHost(
 
     private sealed record CapturedState(
         ComputerUseCapturedDesktop Desktop,
-        ComputerUseUiSnapshot Ui);
+        ComputerUseUiSnapshot Ui,
+        ComputerUseObserveTarget? ObserveTarget = null);
 
     private sealed record FrameState(
         string FrameId,
@@ -723,11 +1013,15 @@ public sealed class ComputerUseAutomationHost(
         int CaptureHeight,
         int ImageWidth,
         int ImageHeight,
+        double DpiScale,
+        int CursorX,
+        int CursorY,
         string ForegroundWindowTitle,
         string ForegroundProcessName,
         nint ForegroundWindowHandle,
         DateTimeOffset CreatedAt,
-        IReadOnlyDictionary<string, AutomationElement> Elements);
+        IReadOnlyDictionary<string, AutomationElement> Elements,
+        ComputerUseObserveTarget? ObserveTarget = null);
 
     private sealed record ClickPoint(int X, int Y);
 

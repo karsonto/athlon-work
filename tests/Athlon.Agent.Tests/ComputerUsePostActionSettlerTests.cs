@@ -75,4 +75,78 @@ public sealed class ComputerUsePostActionSettlerTests
                 CancellationToken.None,
                 static (_, _) => Task.CompletedTask));
     }
+
+    // ---- Configurable budget (Phase 2.1) ---------------------------------
+
+    [Fact]
+    public async Task WaitForStableAsync_LayoutNeutralBudgetSettlesInTwoSamples()
+    {
+        // Typing and key presses do not reflow the window, so they keep the short budget and return
+        // well before the conservative default.
+        var started = DateTime.UtcNow;
+
+        var result = await ComputerUsePostActionSettler.WaitForStableAsync(
+            _ => Task.FromResult(7UL),
+            CancellationToken.None,
+            static (_, _) => Task.CompletedTask,
+            minimumSamples: 2,
+            maxSamples: 8);
+
+        Assert.True(result.IsStable);
+        Assert.Equal(2, result.Samples);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
+    public async Task WaitForStableAsync_RespectsConfiguredMaxSamples()
+    {
+        ulong signature = 0;
+
+        var result = await ComputerUsePostActionSettler.WaitForStableAsync(
+            _ => Task.FromResult(++signature),
+            CancellationToken.None,
+            static (_, _) => Task.CompletedTask,
+            minimumSamples: 4,
+            maxSamples: 5);
+
+        Assert.False(result.IsStable);
+        Assert.Equal(5, result.Samples);
+        Assert.Equal(5UL, signature);
+    }
+
+    [Fact]
+    public async Task WaitForStableAsync_ClampsMisconfiguredBudget()
+    {
+        // A settings file could set minimumSamples above maxSamples; the loop must still terminate
+        // with at least two samples so a stable desktop can be detected.
+        var result = await ComputerUsePostActionSettler.WaitForStableAsync(
+            _ => Task.FromResult(3UL),
+            CancellationToken.None,
+            static (_, _) => Task.CompletedTask,
+            minimumSamples: 99,
+            maxSamples: 0);
+
+        Assert.True(result.IsStable);
+        Assert.Equal(2, result.Samples);
+    }
+
+    [Fact]
+    public async Task WaitForStableAsync_UsesConfiguredSampleInterval()
+    {
+        TimeSpan? observed = null;
+
+        await ComputerUsePostActionSettler.WaitForStableAsync(
+            _ => Task.FromResult(1UL),
+            CancellationToken.None,
+            (delay, _) =>
+            {
+                observed ??= delay;
+                return Task.CompletedTask;
+            },
+            minimumSamples: 2,
+            maxSamples: 4,
+            sampleInterval: TimeSpan.FromMilliseconds(12));
+
+        Assert.Equal(TimeSpan.FromMilliseconds(12), observed);
+    }
 }

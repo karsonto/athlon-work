@@ -574,9 +574,95 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
     [ObservableProperty]
     private string computerUseAssistantSummary = string.Empty;
 
+    /// <summary>
+    /// Compact recent action lines (`computer_interact · click · element_native`) shown in the
+    /// overlay. The overlay transcript hides tool cards, so without this the user cannot see what
+    /// the agent is actually doing.
+    /// </summary>
+    [ObservableProperty]
+    private IReadOnlyList<string> _computerUseActionLog = [];
+
     private readonly HashSet<ChatMessageViewModel> _computerUseStatusMessageSubscriptions = new();
 
     public bool ComputerUseStatusVisible => IsComputerUseOverlayActive && IsBusy;
+
+    /// <summary>
+    /// Pending tool approvals shown inside the Computer Use overlay. The overlay has no chat
+    /// surface, so approvals must render here or the run blocks forever on the minimized main
+    /// window's approval card.
+    /// </summary>
+    public System.Collections.ObjectModel.ObservableCollection<ComputerUseApprovalViewModel> ComputerUseApprovals { get; } = [];
+
+    public bool HasComputerUseApprovals => ComputerUseApprovals.Count > 0;
+
+    public string ComputerUseApprovalToolName =>
+        ComputerUseApprovals.Count > 0 ? ComputerUseApprovals[0].ToolName : string.Empty;
+
+    public string ComputerUseApprovalArguments =>
+        ComputerUseApprovals.Count > 0 ? ComputerUseApprovals[0].Arguments : string.Empty;
+
+    public IReadOnlyList<ComputerUseApprovalViewModel> ComputerUseApprovalQueue => ComputerUseApprovals;
+
+    public bool HasComputerUseActionLog => ComputerUseActionLog.Count > 0;
+
+    private void RefreshComputerUseApprovals()
+    {
+        var source = _activeUi?.PendingApprovalsSnapshot ?? [];
+        ComputerUseApprovals.Clear();
+        foreach (var approval in source)
+        {
+            ComputerUseApprovals.Add(new ComputerUseApprovalViewModel(
+                approval.ToolCallId,
+                approval.ToolName,
+                FormatApprovalArguments(approval)));
+        }
+
+        OnPropertyChanged(nameof(HasComputerUseApprovals));
+        OnPropertyChanged(nameof(ComputerUseApprovalToolName));
+        OnPropertyChanged(nameof(ComputerUseApprovalArguments));
+        OnPropertyChanged(nameof(ComputerUseApprovalQueue));
+    }
+
+    private static string FormatApprovalArguments(PendingToolApproval approval)
+    {
+        var formatted = ToolMessageDisplayParser.FormatArgumentsFull(approval.Arguments, approval.ToolName);
+        return formatted.Length > ApprovalArgumentsMaxLength
+            ? string.Concat(formatted.AsSpan(0, ApprovalArgumentsMaxLength), "…")
+            : formatted;
+    }
+
+    /// <summary>Approves or denies the oldest pending approval from the overlay.</summary>
+    [RelayCommand]
+    private void ResolveComputerUseApproval(ComputerUseApprovalViewModel? approval)
+    {
+        var target = approval ?? (ComputerUseApprovals.Count > 0 ? ComputerUseApprovals[0] : null);
+        if (target is null)
+        {
+            return;
+        }
+
+        if (_activeUi?.TryResolveToolApproval(target.ToolCallId, ToolApprovalDecision.Approved) == true)
+        {
+            RefreshComputerUseApprovals();
+        }
+    }
+
+    [RelayCommand]
+    private void DenyComputerUseApproval(ComputerUseApprovalViewModel? approval)
+    {
+        var target = approval ?? (ComputerUseApprovals.Count > 0 ? ComputerUseApprovals[0] : null);
+        if (target is null)
+        {
+            return;
+        }
+
+        if (_activeUi?.TryResolveToolApproval(target.ToolCallId, ToolApprovalDecision.Denied) == true)
+        {
+            RefreshComputerUseApprovals();
+        }
+    }
+
+    private const int ApprovalArgumentsMaxLength = 600;
 
     public bool IsContextSidebarVisible => _appSettings.Ui.ContextSidebarVisible;
 

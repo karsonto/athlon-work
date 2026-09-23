@@ -538,15 +538,21 @@ public partial class MainShellViewModel
                 ContextOccupancy.ApplyOverflow();
                 ShowShellToast(_loc["Chat_OverflowRetrySkipped"], ShellToastKind.Info);
             });
+        ui.PendingApprovalsChanged += OnPendingApprovalsChanged;
+        RefreshComputerUseApprovals();
         SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
         RefreshContextOccupancy();
     }
 
-    private static void UnwireSessionUsageUi(SessionTurnUiController ui)
+    private void OnPendingApprovalsChanged(object? sender, EventArgs e) =>
+        RunOnUi(RefreshComputerUseApprovals);
+
+    private void UnwireSessionUsageUi(SessionTurnUiController ui)
     {
         ui.OnUsageRecorded = null;
         ui.OnContextBudgetUpdated = null;
         ui.OnOverflowRetrySkipped = null;
+        ui.PendingApprovalsChanged -= OnPendingApprovalsChanged;
     }
 
     private static void RunOnUi(Action action)

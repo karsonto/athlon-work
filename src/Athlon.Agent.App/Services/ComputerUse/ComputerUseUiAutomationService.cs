@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Windows.Automation;
 using Athlon.Agent.Core.ComputerUse;
@@ -28,9 +29,12 @@ public sealed class ComputerUseUiAutomationService
         int? monitorWidth = null,
         int? monitorHeight = null,
         int? imageWidth = null,
-        int? imageHeight = null)
+        int? imageHeight = null,
+        nint rootHandle = default)
     {
-        var foreground = GetForegroundWindow();
+        // A window-targeted observation walks the requested window; everything else follows the
+        // foreground window as before.
+        var foreground = rootHandle != IntPtr.Zero ? rootHandle : GetForegroundWindow();
         if (foreground == IntPtr.Zero)
         {
             return EmptySnapshot();
@@ -52,13 +56,14 @@ public sealed class ComputerUseUiAutomationService
         }
 
         var elements = new Dictionary<string, AutomationElement>(StringComparer.Ordinal);
-        var nodes = new List<object>();
+        var nodes = new StringBuilder();
         var walker = TreeWalker.ControlViewWalker;
         var nextId = 1;
+        var nodeCount = 0;
 
         void Visit(AutomationElement element, string? parentId, int depth)
         {
-            if (depth > maxDepth || nodes.Count >= maxNodes)
+            if (depth > maxDepth || nodeCount >= maxNodes)
             {
                 return;
             }
@@ -84,64 +89,41 @@ public sealed class ComputerUseUiAutomationService
                 {
                     id = $"ui_{nextId++}";
                     elements[id] = element;
-                    object? imageBounds = null;
-                    if (!bounds.IsEmpty
-                        && monitorLeft is int captureLeft
-                        && monitorTop is int captureTop
-                        && monitorWidth is int captureWidth
-                        && monitorHeight is int captureHeight
-                        && imageWidth is > 0
-                        && imageHeight is > 0)
+                    if (nodeCount > 0)
                     {
-                        var mapped = ComputerUseCoordinateMapper.PhysicalRectToImage(
-                            (int)Math.Round(bounds.Left),
-                            (int)Math.Round(bounds.Top),
-                            (int)Math.Round(bounds.Width),
-                            (int)Math.Round(bounds.Height),
-                            captureLeft,
-                            captureTop,
-                            captureWidth,
-                            captureHeight,
-                            imageWidth.Value,
-                            imageHeight.Value);
-                        imageBounds = new
-                        {
-                            x = mapped.X,
-                            y = mapped.Y,
-                            width = mapped.Width,
-                            height = mapped.Height
-                        };
+                        nodes.Append(',');
                     }
 
-                    nodes.Add(new
-                    {
-                        element_id = id,
-                        parent_id = parentId,
+                    nodes.Append('\n');
+                    ComputerUseUiTreeWriter.WriteNode(
+                        nodes,
+                        id,
+                        parentId,
                         depth,
-                        name = current.Name,
-                        control_type = NormalizeControlType(current.ControlType),
-                        automation_id = current.AutomationId,
-                        enabled = current.IsEnabled,
-                        offscreen = current.IsOffscreen,
-                        focusable = current.IsKeyboardFocusable,
-                        bounds = bounds.IsEmpty
-                            ? null
-                            : new
-                            {
-                                x = (int)Math.Round(bounds.Left),
-                                y = (int)Math.Round(bounds.Top),
-                                width = (int)Math.Round(bounds.Width),
-                                height = (int)Math.Round(bounds.Height)
-                            },
-                        image_bounds = imageBounds
-                    });
+                        current.Name,
+                        NormalizeControlType(current.ControlType),
+                        current.AutomationId,
+                        current.IsEnabled,
+                        current.IsOffscreen,
+                        current.IsKeyboardFocusable,
+                        bounds.IsEmpty ? null : (int)Math.Round(bounds.Left),
+                        bounds.IsEmpty ? null : (int)Math.Round(bounds.Top),
+                        bounds.IsEmpty ? null : (int)Math.Round(bounds.Width),
+                        bounds.IsEmpty ? null : (int)Math.Round(bounds.Height),
+                        monitorLeft,
+                        monitorTop,
+                        monitorWidth,
+                        monitorHeight,
+                        imageWidth,
+                        imageHeight);
+                    nodeCount++;
                 }
 
                 // Continue walking children even when the parent was filtered so nested
                 // on-screen controls remain reachable under a later included ancestor.
                 var childParentId = id ?? parentId;
                 var child = walker.GetFirstChild(element);
-                while (child is not null && nodes.Count < maxNodes)
+                while (child is not null && nodeCount < maxNodes)
                 {
                     Visit(child, childParentId, depth + 1);
                     child = walker.GetNextSibling(child);
@@ -154,8 +136,11 @@ public sealed class ComputerUseUiAutomationService
         }
 
         Visit(root, null, 0);
+        var json = nodeCount == 0
+            ? "[]"
+            : $"[{nodes}\n]";
         return new ComputerUseUiSnapshot(
-            JsonSerializer.Serialize(nodes),
+            json,
             elements,
             SafeCurrent(root, static current => current.Name),
             ResolveProcessName(root),
@@ -188,6 +173,144 @@ public sealed class ComputerUseUiAutomationService
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Attempts to execute an action through the element's own UI Automation pattern so the pointer
+    /// never moves. Probing and invoking happen in the same call to avoid a time-of-check /
+    /// time-of-use gap between "does this pattern exist" and "use it".
+    /// </summary>
+    /// <remarks>
+    /// Must run inside <c>RunBoundedUiAutomationAsync</c>: cross-process marshalling can block, and
+    /// the host relies on that wrapper for the timeout and concurrency limits. Returns a failure
+    /// reason instead of throwing so the caller can fall back to coordinate input.
+    /// </remarks>
+    public ComputerUseElementActionResult TryExecuteElementAction(
+        AutomationElement element,
+        string action,
+        string? key,
+        int scrollDelta,
+        string? text)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        var patterns = ComputerUseElementActionResolver.CandidatePatterns(action, key);
+        if (patterns.Count == 0)
+        {
+            return ComputerUseElementActionResult.Unavailable();
+        }
+
+        if (ComputerUseElementActionResolver.IsActivationKey(key))
+        {
+            // Keys were already validated by the host; route them to the activation patterns.
+            patterns = ComputerUseElementActionResolver.CandidatePatterns("click", key: null);
+        }
+
+        foreach (var candidate in patterns)
+        {
+            var outcome = TryApplyPattern(element, candidate, scrollDelta, text);
+            if (outcome is not null)
+            {
+                return outcome;
+            }
+        }
+
+        return ComputerUseElementActionResult.Unavailable();
+    }
+
+    private static ComputerUseElementActionResult? TryApplyPattern(
+        AutomationElement element,
+        ComputerUseElementPattern pattern,
+        int scrollDelta,
+        string? text)
+    {
+        switch (pattern)
+        {
+            case ComputerUseElementPattern.Invoke:
+                if (!element.TryGetCurrentPattern(InvokePattern.Pattern, out var invoke))
+                {
+                    return null;
+                }
+
+                ((InvokePattern)invoke).Invoke();
+                return ComputerUseElementActionResult.Success();
+            case ComputerUseElementPattern.SelectionItem:
+                if (!element.TryGetCurrentPattern(SelectionItemPattern.Pattern, out var selection))
+                {
+                    return null;
+                }
+
+                ((SelectionItemPattern)selection).Select();
+                return ComputerUseElementActionResult.Success();
+            case ComputerUseElementPattern.Toggle:
+                if (!element.TryGetCurrentPattern(TogglePattern.Pattern, out var toggle))
+                {
+                    return null;
+                }
+
+                ((TogglePattern)toggle).Toggle();
+                return ComputerUseElementActionResult.Success();
+            case ComputerUseElementPattern.ExpandCollapse:
+                if (!element.TryGetCurrentPattern(ExpandCollapsePattern.Pattern, out var expand))
+                {
+                    return null;
+                }
+
+                ((ExpandCollapsePattern)expand).Expand();
+                return ComputerUseElementActionResult.Success();
+            case ComputerUseElementPattern.Value:
+                if (text is null || !element.TryGetCurrentPattern(ValuePattern.Pattern, out var value))
+                {
+                    return null;
+                }
+
+                var valuePattern = (ValuePattern)value;
+                if (valuePattern.Current.IsReadOnly)
+                {
+                    return ComputerUseElementActionResult.ReadOnly();
+                }
+
+                valuePattern.SetValue(text);
+                // Write-back verification: masked/validating controls accept the call and then
+                // discard or reformat the text, which would otherwise look like success.
+                var written = valuePattern.Current.Value;
+                return string.Equals(written, text, StringComparison.Ordinal)
+                    ? ComputerUseElementActionResult.Success()
+                    : ComputerUseElementActionResult.WriteNotApplied(written);
+            case ComputerUseElementPattern.Scroll:
+                if (!element.TryGetCurrentPattern(ScrollPattern.Pattern, out var scroll))
+                {
+                    return null;
+                }
+
+                var scrollPattern = (ScrollPattern)scroll;
+                if (scrollPattern.Current.VerticallyScrollable)
+                {
+                    scrollPattern.Scroll(
+                        System.Windows.Automation.ScrollAmount.NoAmount,
+                        scrollDelta >= 0 ? ScrollAmount.SmallIncrement : ScrollAmount.SmallDecrement);
+                    return ComputerUseElementActionResult.Success();
+                }
+
+                if (scrollPattern.Current.HorizontallyScrollable)
+                {
+                    scrollPattern.Scroll(
+                        scrollDelta >= 0 ? ScrollAmount.SmallIncrement : ScrollAmount.SmallDecrement,
+                        ScrollAmount.NoAmount);
+                    return ComputerUseElementActionResult.Success();
+                }
+
+                return null;
+            case ComputerUseElementPattern.ScrollItem:
+                if (!element.TryGetCurrentPattern(ScrollItemPattern.Pattern, out var scrollItem))
+                {
+                    return null;
+                }
+
+                ((ScrollItemPattern)scrollItem).ScrollIntoView();
+                return ComputerUseElementActionResult.Success();
+            default:
+                return null;
+        }
     }
 
     public bool MatchesCurrentDesktop(string? elementId, string? name)

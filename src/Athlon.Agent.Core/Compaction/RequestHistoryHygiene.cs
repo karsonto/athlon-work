@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Athlon.Agent.Core.ComputerUse;
 
 namespace Athlon.Agent.Core.Compaction;
 
@@ -69,13 +70,59 @@ public static partial class RequestHistoryHygiene
             .Select(message => message.ToolCallId!)
             .ToHashSet(StringComparer.Ordinal);
 
-        var changed = false;
-        var output = new List<AgentModelMessage>(messages.Count);
+        // Tool messages only carry the call id, so resolve names from the assistant calls that
+        // precede them. Needed to apply per-tool result budgets.
+        var toolNamesByCallId = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var message in messages)
         {
+            if (message.ToolCalls is not { Count: > 0 } calls)
+            {
+                continue;
+            }
+
+            foreach (var call in calls)
+            {
+                if (!string.IsNullOrWhiteSpace(call.Id))
+                {
+                    toolNamesByCallId[call.Id] = call.Name;
+                }
+            }
+        }
+
+        var changed = false;
+        var output = new List<AgentModelMessage>(messages.Count);
+
+        // Historical Computer Use frames are superseded by every newer observation, so their trees
+        // are stripped to a summary. Counted newest-first so the newest N stay complete.
+        var remainingFullUiTrees = Math.Max(0, settings.HistoryUiTreeRetention);
+        var stripUiTreeIndexes = settings.PruneHistoricalUiTree
+            ? ResolveUiTreeStripIndexes(messages, toolNamesByCallId, remainingFullUiTrees)
+            : null;
+
+        for (var index = 0; index < messages.Count; index++)
+        {
+            var message = messages[index];
+            if (stripUiTreeIndexes is not null && stripUiTreeIndexes.Contains(index))
+            {
+                var stripped = StripUiTree(GetTextContent(message.Content));
+                if (!string.Equals(stripped, GetTextContent(message.Content), StringComparison.Ordinal))
+                {
+                    changed = true;
+                    output.Add(message with { Content = stripped });
+                    continue;
+                }
+            }
+
             if (IsToolPayloadMessage(message))
             {
-                var compacted = CompactToolPayload(GetTextContent(message.Content), settings);
+                var toolName = message.ToolCallId is { Length: > 0 } callId
+                    && toolNamesByCallId.TryGetValue(callId, out var resolved)
+                        ? resolved
+                        : null;
+                var compacted = CompactToolPayload(
+                    GetTextContent(message.Content),
+                    settings,
+                    settings.ResolveToolResultLimit(toolName));
                 if (!string.Equals(compacted, GetTextContent(message.Content), StringComparison.Ordinal))
                 {
                     changed = true;
@@ -107,9 +154,152 @@ public static partial class RequestHistoryHygiene
         return new ApplyResult(output, Math.Max(0, beforeTokens - afterTokens));
     }
 
-    private static bool IsToolPayloadMessage(AgentModelMessage message)
+    /// <summary>
+    /// Indexes of Computer Use observations whose <c>ui_tree</c> should be summarized. Walks newest
+    /// first so the most recent <paramref name="retention"/> full trees are preserved.
+    /// </summary>
+    private static HashSet<int> ResolveUiTreeStripIndexes(
+        IReadOnlyList<AgentModelMessage> messages,
+        Dictionary<string, string> toolNamesByCallId,
+        int retention)
     {
-        if (string.Equals(message.Role, "tool", StringComparison.Ordinal))
+        var retained = 0;
+        var strip = new HashSet<int>();
+        for (var index = messages.Count - 1; index >= 0; index--)
+        {
+            var message = messages[index];
+            if (!IsToolPayloadMessage(message))
+            {
+                continue;
+            }
+
+            var callId = ModelMessageBuilder.ExtractToolCallId(GetTextContent(message.Content));
+            if (string.IsNullOrWhiteSpace(callId)
+                || !toolNamesByCallId.TryGetValue(callId!, out var toolName)
+                || !string.Equals(toolName, ComputerUseToolNames.Observe, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (!GetTextContent(message.Content).Contains("\"ui_tree\"", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (retained < retention)
+            {
+                retained++;
+                continue;
+            }
+
+            strip.Add(index);
+        }
+
+        return strip;
+    }
+
+    /// <summary>
+    /// Replaces the <c>ui_tree</c> array in an observation payload with a compact summary containing
+    /// the frame id, foreground window, cursor, and node count. Everything else (the screenshot
+    /// reference and geometry) is preserved so older turns stay interpretable.
+    /// </summary>
+    internal static string StripUiTree(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            return content;
+        }
+
+        var marker = "\"ui_tree\":";
+        var start = content.IndexOf(marker, StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return content;
+        }
+
+        var valueStart = start + marker.Length;
+        while (valueStart < content.Length && char.IsWhiteSpace(content[valueStart]))
+        {
+            valueStart++;
+        }
+
+        if (valueStart >= content.Length || content[valueStart] != '[')
+        {
+            return content;
+        }
+
+        var end = FindArrayEnd(content, valueStart);
+        if (end < 0)
+        {
+            return content;
+        }
+
+        var treeJson = content[valueStart..(end + 1)];
+        var nodeCount = ComputerUseUiTreeMetrics.CountNodes(treeJson);
+        var summary = $"[ui_tree stripped from history: {nodeCount} node(s) in a superseded frame; "
+            + "call computer_observe for the current tree]";
+        return string.Concat(
+            content.AsSpan(0, valueStart),
+            System.Text.Json.JsonSerializer.Serialize(summary),
+            content.AsSpan(end + 1));
+    }
+
+    /// <summary>
+    /// Finds the matching <c>]</c> for the array starting at <paramref name="openIndex"/>, honouring
+    /// string literals and escapes so braces inside node names cannot terminate the scan early.
+    /// </summary>
+    private static int FindArrayEnd(string text, int openIndex)
+    {
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+        for (var index = openIndex; index < text.Length; index++)
+        {
+            var ch = text[index];
+            if (escaped)
+            {
+                escaped = false;
+                continue;
+            }
+
+            if (inString)
+            {
+                if (ch == '\\')
+                {
+                    escaped = true;
+                }
+                else if (ch == '"')
+                {
+                    inString = false;
+                }
+
+                continue;
+            }
+
+            switch (ch)
+            {
+                case '"':
+                    inString = true;
+                    break;
+                case '[':
+                    depth++;
+                    break;
+                case ']':
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return index;
+                    }
+
+                    break;
+            }
+        }
+
+        return -1;
+    }
+
+    private static bool IsToolPayloadMessage(AgentModelMessage message)
+    {        if (string.Equals(message.Role, "tool", StringComparison.Ordinal))
         {
             return true;
         }
@@ -189,7 +379,10 @@ public static partial class RequestHistoryHygiene
         return changed ? new ToolCallArguments(output) : arguments;
     }
 
-    private static string CompactToolPayload(string text, RequestHistoryHygieneSettings settings)
+    private static string CompactToolPayload(
+        string text,
+        RequestHistoryHygieneSettings settings,
+        ToolResultLimit? limit = null)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -202,25 +395,29 @@ public static partial class RequestHistoryHygiene
             return CompactEmbeddedBase64(text);
         }
 
+        var effective = limit ?? new ToolResultLimit(
+            settings.MaxToolResultLines,
+            settings.MaxToolResultBytes,
+            settings.MaxToolResultTokens);
         var originalBytes = Encoding.UTF8.GetByteCount(text);
         var originalLines = CountLines(text);
         var originalTokens = ContextTokenEstimator.EstimateTextTokens(text);
-        if (originalBytes <= settings.MaxToolResultBytes
-            && originalLines <= settings.MaxToolResultLines
-            && originalTokens <= settings.MaxToolResultTokens)
+        if (originalBytes <= effective.MaxBytes
+            && originalLines <= effective.MaxLines
+            && originalTokens <= effective.MaxTokens)
         {
             return CompactEmbeddedBase64(text);
         }
 
         var normalized = NormalizeTextBlock(text);
         var lines = normalized.Split('\n');
-        var selected = SelectUsefulLines(lines, settings.MaxToolResultLines);
+        var selected = SelectUsefulLines(lines, effective.MaxLines);
         var marker =
             $"[cache hygiene: omitted {Math.Max(0, lines.Length - selected.Count)} line(s); use narrower read/grep/execute_command ranges for details]";
         var fitted = FitLinesToBudget(
             selected.Select(CompactLine).ToList(),
-            settings.MaxToolResultBytes - Encoding.UTF8.GetByteCount(marker) - 1,
-            settings.MaxToolResultTokens - ContextTokenEstimator.EstimateTextTokens(marker) - 1);
+            effective.MaxBytes - Encoding.UTF8.GetByteCount(marker) - 1,
+            effective.MaxTokens - ContextTokenEstimator.EstimateTextTokens(marker) - 1);
         return string.Join('\n', fitted.Append(marker));
     }
 

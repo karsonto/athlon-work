@@ -1,3 +1,5 @@
+using Athlon.Agent.Core.ComputerUse;
+
 namespace Athlon.Agent.Core.Compaction;
 
 /// <summary>
@@ -108,6 +110,10 @@ public static class ContextTokenEstimator
         }
 
         var pairedToolCallIds = ResolvePairedToolCallIds(messages, hygiene);
+        var toolNamesByCallId = ResolveToolNamesByCallId(messages);
+        var uiTreeStripIndexes = hygiene is { Enabled: true }
+            ? ResolveUiTreeStripIndexes(messages, hygiene, toolNamesByCallId)
+            : null;
         var remainingToolScreenshots = Math.Max(0, maxToolScreenshots);
         var total = 0;
         // Newest-first allocation for Tool screenshots (matches RetainLatestToolScreenshots).
@@ -124,7 +130,9 @@ public static class ContextTokenEstimator
                 includeReasoningInModelContext,
                 ref remainingToolScreenshots,
                 hygiene,
-                pairedToolCallIds);
+                pairedToolCallIds,
+                toolNamesByCallId,
+                uiTreeStripIndexes?.Contains(index) == true);
         }
 
         return calibrationMultiplier <= 0 || Math.Abs(calibrationMultiplier - 1.0) < 0.001
@@ -162,11 +170,19 @@ public static class ContextTokenEstimator
         bool includeReasoningInModelContext,
         ref int remainingToolScreenshots,
         RequestHistoryHygieneSettings? hygiene,
-        HashSet<string>? pairedToolCallIds)
+        HashSet<string>? pairedToolCallIds,
+        Dictionary<string, string>? toolNamesByCallId = null,
+        bool uiTreeStripped = false)
     {
         if (message.Role == MessageRole.Compaction)
         {
             return 0;
+        }
+
+        var content = message.Content;
+        if (uiTreeStripped && !string.IsNullOrEmpty(content))
+        {
+            content = RequestHistoryHygiene.StripUiTree(content);
         }
 
         var tokens = MessageOverhead;
@@ -179,8 +195,8 @@ public static class ContextTokenEstimator
             case MessageRole.System:
             case MessageRole.Summary:
                 tokens += IsToolPayloadMessage(message, hygiene)
-                    ? EstimateClampedToolResultTokens(message.Content, hygiene)
-                    : EstimateRawTextTokens(message.Content);
+                    ? EstimateClampedToolResultTokens(content, hygiene, ResolveLimitForMessage(message, hygiene, toolNamesByCallId))
+                    : EstimateRawTextTokens(content);
                 if (ReasoningInModelContext.CountsTowardEstimate(message, includeReasoningInModelContext))
                 {
                     tokens += EstimateRawTextTokens(message.ReasoningContent);
@@ -190,10 +206,10 @@ public static class ContextTokenEstimator
                 break;
             case MessageRole.Tool:
                 tokens += ToolResultOverhead;
-                tokens += EstimateClampedToolResultTokens(message.Content, hygiene);
+                tokens += EstimateClampedToolResultTokens(content, hygiene, ResolveLimitForMessage(message, hygiene, toolNamesByCallId));
                 break;
             default:
-                tokens += EstimateRawTextTokens(message.Content);
+                tokens += EstimateRawTextTokens(content);
                 break;
         }
 
@@ -304,7 +320,106 @@ public static class ContextTokenEstimator
             || message.Content.Contains("ToolCallId:", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static int EstimateClampedToolResultTokens(string? content, RequestHistoryHygieneSettings? hygiene)
+    /// <summary>
+    /// Maps tool-call ids to tool names by scanning assistant messages. Hygiene uses the same lookup
+    /// to pick per-tool result budgets; both sides must agree or budgets drift.
+    /// </summary>
+    private static Dictionary<string, string>? ResolveToolNamesByCallId(IReadOnlyList<ChatMessage> messages)
+    {
+        Dictionary<string, string>? names = null;
+        foreach (var message in messages)
+        {
+            var calls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
+            if (calls is not { Count: > 0 })
+            {
+                continue;
+            }
+
+            foreach (var call in calls)
+            {
+                if (!string.IsNullOrWhiteSpace(call.Id))
+                {
+                    names ??= new Dictionary<string, string>(StringComparer.Ordinal);
+                    names[call.Id] = call.Name;
+                }
+            }
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// Indexes of Computer Use observations whose <c>ui_tree</c> history hygiene summarizes.
+    /// Mirrors <see cref="RequestHistoryHygiene"/>'s newest-first retention so the estimate matches
+    /// the payload that is actually sent.
+    /// </summary>
+    private static HashSet<int>? ResolveUiTreeStripIndexes(
+        IReadOnlyList<ChatMessage> messages,
+        RequestHistoryHygieneSettings hygiene,
+        Dictionary<string, string>? toolNamesByCallId)
+    {
+        if (!hygiene.PruneHistoricalUiTree || toolNamesByCallId is null)
+        {
+            return null;
+        }
+
+        var retained = 0;
+        var strip = new HashSet<int>();
+        for (var index = messages.Count - 1; index >= 0; index--)
+        {
+            var message = messages[index];
+            if (message.Role != MessageRole.Tool
+                || string.IsNullOrWhiteSpace(message.Content)
+                || !message.Content.Contains("\"ui_tree\"", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var callId = ModelMessageBuilder.ExtractToolCallId(message.Content);
+            if (string.IsNullOrWhiteSpace(callId)
+                || !toolNamesByCallId.TryGetValue(callId!, out var toolName)
+                || !string.Equals(toolName, ComputerUseToolNames.Observe, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (retained < hygiene.HistoryUiTreeRetention)
+            {
+                retained++;
+                continue;
+            }
+
+            strip.Add(index);
+        }
+
+        return strip;
+    }
+
+    private static ToolResultLimit? ResolveLimitForMessage(
+        ChatMessage message,
+        RequestHistoryHygieneSettings? hygiene,
+        Dictionary<string, string>? toolNamesByCallId)
+    {
+        if (hygiene is not { Enabled: true } || hygiene.ToolResultOverrides.Count == 0)
+        {
+            return null;
+        }
+
+        var callId = ModelMessageBuilder.ExtractToolCallId(message.Content);
+        if (string.IsNullOrWhiteSpace(callId)
+            || toolNamesByCallId is null
+            || !toolNamesByCallId.TryGetValue(callId!, out var toolName))
+        {
+            return null;
+        }
+
+        return hygiene.ResolveToolResultLimit(toolName);
+    }
+
+    private static int EstimateClampedToolResultTokens(
+        string? content,
+        RequestHistoryHygieneSettings? hygiene,
+        ToolResultLimit? limit = null)
     {
         var tokens = EstimateRawTextTokens(content);
         if (hygiene is not { Enabled: true })
@@ -312,7 +427,8 @@ public static class ContextTokenEstimator
             return tokens;
         }
 
-        return Math.Min(tokens, Math.Max(0, hygiene.MaxToolResultTokens));
+        var maxTokens = limit?.MaxTokens ?? hygiene.MaxToolResultTokens;
+        return Math.Min(tokens, Math.Max(0, maxTokens));
     }
 
     private static int EstimateToolCallsTokens(

@@ -146,6 +146,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.ComputerUseCaptureService>();
         services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.ComputerUseUiAutomationService>();
         services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.ComputerUseInputService>();
+        services.AddSingleton<Athlon.Agent.App.Services.ComputerUse.IImageAttachmentPruner,
+            Athlon.Agent.App.Services.ComputerUse.ComputerUseAttachmentPruner>();
         services.AddSingleton<Athlon.Agent.Core.ComputerUse.IComputerUseAutomationHost>(sp =>
             new Athlon.Agent.App.Services.ComputerUse.ComputerUseAutomationHost(
                 sp.GetRequiredService<Athlon.Agent.App.Services.ComputerUse.ComputerUseCaptureService>(),
@@ -154,7 +156,9 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<Athlon.Agent.App.Services.ComputerUse.ComputerUseOverlayRegistry>(),
                 sp.GetRequiredService<IImageAttachmentStore>(),
                 sp.GetRequiredService<IAgentRunContextAccessor>(),
-                sp.GetRequiredService<AuditLogService>()));
+                sp.GetRequiredService<AuditLogService>(),
+                sp.GetRequiredService<AppSettings>(),
+                sp.GetRequiredService<Athlon.Agent.App.Services.ComputerUse.IImageAttachmentPruner>()));
 
         services.AddSingleton(sp => new KnowledgeViewModel(
             sp.GetRequiredService<IKnowledgeStore>(),

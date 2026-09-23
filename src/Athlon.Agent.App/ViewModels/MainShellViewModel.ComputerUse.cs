@@ -41,14 +41,18 @@ namespace Athlon.Agent.App.ViewModels;
 /// </summary>
 public partial class MainShellViewModel
 {
+    private const int ComputerUseActionLogLimit = 6;
+
     private void RefreshComputerUseStatus()
     {
         OnPropertyChanged(nameof(ComputerUseStatusVisible));
         OnPropertyChanged(nameof(HasComputerUseTranscript));
+        RefreshComputerUseActionLog();
         if (!ComputerUseStatusVisible)
         {
             ComputerUseActiveToolText = string.Empty;
             ComputerUseAssistantSummary = string.Empty;
+            ComputerUseActionLog = [];
             return;
         }
 
@@ -61,6 +65,34 @@ public partial class MainShellViewModel
 
         var assistant = ComputerUseStatusFormatter.FindLatestAssistantWithContent(Messages);
         ComputerUseAssistantSummary = ComputerUseStatusFormatter.FormatAssistantSummary(assistant?.Content);
+    }
+
+    /// <summary>
+    /// Compact action log for the overlay. The overlay transcript deliberately hides tool cards,
+    /// which left users with no signal about what the agent was doing; this surfaces the most
+    /// recent actions as one line each.
+    /// </summary>
+    private void RefreshComputerUseActionLog()
+    {
+        var lines = new List<string>(ComputerUseActionLogLimit);
+        for (var index = Messages.Count - 1; index >= 0 && lines.Count < ComputerUseActionLogLimit; index--)
+        {
+            var line = Messages[index].ComputerUseActionLine;
+            if (!string.IsNullOrEmpty(line))
+            {
+                lines.Add(line);
+            }
+        }
+
+        if (lines.Count == 0)
+        {
+            ComputerUseActionLog = [];
+            return;
+        }
+
+        // Collected newest-first; the overlay reads top-down like a log.
+        lines.Reverse();
+        ComputerUseActionLog = lines;
     }
 
     private void AttachComputerUseStatusMessageListeners()
@@ -129,6 +161,7 @@ public partial class MainShellViewModel
     {
         if (e.PropertyName is nameof(ChatMessageViewModel.Content)
             or nameof(ChatMessageViewModel.ToolName)
+            or nameof(ChatMessageViewModel.ToolArgumentsText)
             or nameof(ChatMessageViewModel.ToolCallStatus)
             or nameof(ChatMessageViewModel.ToolApprovalState)
             or nameof(ChatMessageViewModel.IsStreaming)
@@ -140,4 +173,7 @@ public partial class MainShellViewModel
     }
 
     partial void OnIsCompactingChanged(bool value) => NotifyComposerCompactionStateChanged();
+
+    partial void OnComputerUseActionLogChanged(IReadOnlyList<string> value) =>
+        OnPropertyChanged(nameof(HasComputerUseActionLog));
 }

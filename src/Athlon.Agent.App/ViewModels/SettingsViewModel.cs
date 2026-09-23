@@ -490,6 +490,99 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             ParseNonNegativeInt(value, Settings.ContextCompaction.MaxToolScreenshotsInModelContext);
     }
 
+    // ---- Computer Use (Phase 1/2 tunables) --------------------------------
+
+    public string ComputerUseScreenshotLongestEdgeText
+    {
+        get => Settings.ComputerUse.ScreenshotMaxLongestEdge.ToString();
+        set => Settings.ComputerUse.ScreenshotMaxLongestEdge =
+            ParsePositiveInt(value, Settings.ComputerUse.ScreenshotMaxLongestEdge);
+    }
+
+    public string ComputerUseScreenshotJpegQualityText
+    {
+        get => Settings.ComputerUse.ScreenshotJpegQuality.ToString();
+        set => Settings.ComputerUse.ScreenshotJpegQuality =
+            ParsePositiveInt(value, Settings.ComputerUse.ScreenshotJpegQuality);
+    }
+
+    public string ComputerUseDefaultMaxTreeDepthText
+    {
+        get => Settings.ComputerUse.DefaultMaxTreeDepth.ToString();
+        set => Settings.ComputerUse.DefaultMaxTreeDepth =
+            ParsePositiveInt(value, Settings.ComputerUse.DefaultMaxTreeDepth);
+    }
+
+    public string ComputerUseDefaultMaxNodesText
+    {
+        get => Settings.ComputerUse.DefaultMaxNodes.ToString();
+        set => Settings.ComputerUse.DefaultMaxNodes =
+            ParsePositiveInt(value, Settings.ComputerUse.DefaultMaxNodes);
+    }
+
+    public string ComputerUseSettleSampleIntervalMsText
+    {
+        get => Settings.ComputerUse.SettleSampleIntervalMs.ToString();
+        set => Settings.ComputerUse.SettleSampleIntervalMs =
+            ParsePositiveInt(value, Settings.ComputerUse.SettleSampleIntervalMs);
+    }
+
+    public string ComputerUseSettleMinimumSamplesText
+    {
+        get => Settings.ComputerUse.SettleMinimumSamples.ToString();
+        set => Settings.ComputerUse.SettleMinimumSamples =
+            ParsePositiveInt(value, Settings.ComputerUse.SettleMinimumSamples);
+    }
+
+    public string ComputerUseUiaCallTimeoutMsText
+    {
+        get => Settings.ComputerUse.UiaCallTimeoutMs.ToString();
+        set => Settings.ComputerUse.UiaCallTimeoutMs =
+            ParsePositiveInt(value, Settings.ComputerUse.UiaCallTimeoutMs);
+    }
+
+    public string ComputerUseOverlayHideDelayMsText
+    {
+        get => Settings.ComputerUse.OverlayHideDelayMs.ToString();
+        set => Settings.ComputerUse.OverlayHideDelayMs =
+            ParseNonNegativeInt(value, Settings.ComputerUse.OverlayHideDelayMs);
+    }
+
+    /// <summary>History depth for full UI trees; older frames are collapsed to a summary.</summary>
+    public string ComputerUseHistoryUiTreeRetentionText
+    {
+        get => Settings.ContextCompaction.RequestHistoryHygiene.HistoryUiTreeRetention.ToString();
+        set => Settings.ContextCompaction.RequestHistoryHygiene.HistoryUiTreeRetention =
+            ParseNonNegativeInt(value, Settings.ContextCompaction.RequestHistoryHygiene.HistoryUiTreeRetention);
+    }
+
+    /// <summary>
+    /// Master switch for history UI-tree stripping. Defaults to off (see
+    /// <see cref="RequestHistoryHygieneSettings.PruneHistoricalUiTree"/>), so the retention value
+    /// above has no effect until the user opts in.
+    /// </summary>
+    public bool ComputerUsePruneHistoricalUiTree
+    {
+        get => Settings.ContextCompaction.RequestHistoryHygiene.PruneHistoricalUiTree;
+        set
+        {
+            if (Settings.ContextCompaction.RequestHistoryHygiene.PruneHistoricalUiTree == value)
+            {
+                return;
+            }
+
+            Settings.ContextCompaction.RequestHistoryHygiene.PruneHistoricalUiTree = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string ComputerUseScreenshotRetentionMinutesText
+    {
+        get => Settings.ComputerUse.ScreenshotRetentionMinutes.ToString();
+        set => Settings.ComputerUse.ScreenshotRetentionMinutes =
+            ParseNonNegativeInt(value, Settings.ComputerUse.ScreenshotRetentionMinutes);
+    }
+
     private static int? ParseOptionalPositiveInt(string? text)
     {
         if (string.IsNullOrWhiteSpace(text))

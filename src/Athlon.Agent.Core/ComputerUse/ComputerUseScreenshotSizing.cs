@@ -1,5 +1,8 @@
 namespace Athlon.Agent.Core.ComputerUse;
 
+/// <summary>Encoded-screenshot budget resolved from <see cref="ComputerUseSettings"/>.</summary>
+public sealed record ComputerUseScreenshotOptions(int MaxLongestEdge, int JpegQuality);
+
 public static class ComputerUseScreenshotSizing
 {
     public const int MaxLongestEdge = 1600;

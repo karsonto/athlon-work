@@ -124,6 +124,9 @@ internal static class ComposerTestFactory
 
         public ImageAttachment SaveBytes(string sessionId, string fileName, string mimeType, byte[] bytes) =>
             new(fileName, mimeType, LocalPath: Path.Combine(Path.GetTempPath(), fileName));
+
+        public ImageAttachment SaveByteFrame(string sessionId, string fileName, string mimeType, byte[] bytes) =>
+            new(fileName, mimeType, LocalPath: Path.Combine(Path.GetTempPath(), fileName));
     }
 
     internal sealed class StubSkillCatalog(IReadOnlyList<AgentSkill> skills) : IAgentSkillCatalog

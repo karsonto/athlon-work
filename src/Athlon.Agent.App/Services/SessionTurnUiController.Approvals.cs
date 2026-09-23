@@ -36,6 +36,8 @@ public sealed partial class SessionTurnUiController
                 await ShowToolApprovalAsync(pending).ConfigureAwait(false);
             }
 
+            RaisePendingApprovalsChanged();
+
             var decision = await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
             await RunOnUiAsync(() => ApplyToolApprovalDecisionToViewModel(approval.ToolCallId, decision))
                 .ConfigureAwait(false);
@@ -50,10 +52,24 @@ public sealed partial class SessionTurnUiController
         finally
         {
             _pendingApprovals.TryRemove(approval.ToolCallId, out _);
+            RaisePendingApprovalsChanged();
         }
     }
 
     internal int PendingApprovalCount => _pendingApprovals.Count;
+
+    /// <summary>
+    /// Raised when a tool approval appears or resolves while the Computer Use overlay is the only
+    /// visible shell surface. The overlay has no <c>WebChatView</c>, so without this the approval
+    /// card would render only in the minimized main window and the run would deadlock.
+    /// </summary>
+    internal event EventHandler? PendingApprovalsChanged;
+
+    /// <summary>Pending approvals in arrival order, for display outside the chat surface.</summary>
+    internal IReadOnlyList<PendingToolApproval> PendingApprovalsSnapshot =>
+        _pendingApprovals.Values.Select(pending => pending.Approval).ToList();
+
+    private void RaisePendingApprovalsChanged() => PendingApprovalsChanged?.Invoke(this, EventArgs.Empty);
 
     private void EnsureToolApprovalBubble(PendingUiApproval pending)
     {
