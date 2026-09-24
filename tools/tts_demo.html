@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qwen3-TTS 本地服务 · 流式试听</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 20px;
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI",
+          "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f6f8; color: #1c1e21;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #16181c; color: #e8eaed; }
+    .card { background: #202327 !important; border-color: #33373d !important; }
+    input, select, textarea {
+      background: #16181c !important; color: #e8eaed !important;
+      border-color: #3a3f46 !important;
+    }
+    .meta { background: #1a1d21 !important; border-color: #33373d !important; }
+    .hint { color: #9aa0a6 !important; }
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #6b7280; font-size: 13px; margin-bottom: 20px; }
+  .card {
+    background: #fff; border: 1px solid #e3e5e8; border-radius: 10px;
+    padding: 18px; margin-bottom: 16px;
+  }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  textarea, input, select {
+    width: 100%; padding: 9px 11px; font-size: 14px; font-family: inherit;
+    border: 1px solid #d5d8dc; border-radius: 7px; background: #fff;
+  }
+  textarea { min-height: 84px; resize: vertical; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 150px; }
+  .field { margin-bottom: 14px; }
+  button {
+    padding: 10px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+    border: none; border-radius: 7px; background: #1a73e8; color: #fff;
+  }
+  button:hover:not(:disabled) { background: #1666cf; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button.stop { background: #d93025; }
+  button.stop:hover:not(:disabled) { background: #b3261c; }
+  .meta {
+    background: #f8f9fa; border: 1px solid #e3e5e8; border-radius: 7px;
+    padding: 11px 13px; font: 12.5px/1.55 ui-monospace, Menlo, monospace;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .hint { font-size: 12.5px; color: #6b7280; margin-top: 10px; }
+  .bar { height: 5px; background: #e3e5e8; border-radius: 3px; overflow: hidden; margin-top: 12px; }
+  .bar > i { display: block; height: 100%; width: 0; background: #1a73e8; transition: width .12s; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Qwen3-TTS 本地服务</h1>
+  <div class="sub">流式试听 · 模型在本机推理，音频经 SSE 逐块送达</div>
+
+  <div class="card">
+    <div class="field">
+      <label for="text">合成文本</label>
+      <textarea id="text">你好，欢迎使用本地部署的语音合成服务，这是流式试听页面。</textarea>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="voice">音色</label>
+        <select id="voice"></select>
+      </div>
+      <div class="field">
+        <label for="instruct">风格指令（可选）</label>
+        <input id="instruct" placeholder="如：用温柔而欢快的语气">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="speed">语速 <span id="speedVal">1.0</span>×</label>
+        <input id="speed" type="range" min="0.5" max="2" step="0.1" value="1">
+      </div>
+      <div class="field">
+        <label for="mode">传输方式</label>
+        <select id="mode">
+          <option value="sse">SSE 事件流（逐块，推荐）</option>
+          <option value="http">HTTP chunked（原始 PCM）</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row" style="align-items:center">
+      <button id="go">开始合成</button>
+      <button id="stop" class="stop" disabled>停止</button>
+    </div>
+    <div class="bar"><i id="prog"></i></div>
+  </div>
+
+  <div class="card">
+    <label>状态</label>
+    <div class="meta" id="log">就绪。</div>
+    <div class="hint">
+      音频由浏览器 Web Audio 逐块排队播放，边合成边出声，无需等待整段完成。
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const logEl = $("log");
+let ctx = null, nextTime = 0, active = [], abort = null;
+
+function log(msg) {
+  const t = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  logEl.textContent += `\n[${t}] ${msg}`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// 载入可用音色
+fetch("/health").then(r => r.json()).then(h => {
+  const sel = $("voice");
+  sel.innerHTML = "";
+  (h.voices || []).forEach(v => {
+    const o = document.createElement("option");
+    o.value = o.textContent = v;
+    sel.appendChild(o);
+  });
+  log(`服务就绪 · 采样率 ${h.sample_rate}Hz · ffmpeg ${h.ffmpeg ? "可用" : "不可用"}`
+      + `\n可用音色 ${h.voices.length} 个`);
+}).catch(e => log("无法连接服务：" + e));
+
+$("speed").addEventListener("input", e => $("speedVal").textContent = e.target.value);
+$("stop").addEventListener("click", () => {
+  if (abort) abort.abort();
+  stopPlayback();
+  setBusy(false);
+  log("已停止。");
+});
+
+function setBusy(b) {
+  $("go").disabled = b;
+  $("stop").disabled = !b;
+}
+
+function stopPlayback() {
+  active.forEach(s => { try { s.stop(); } catch (_) {} });
+  active = [];
+  nextTime = 0;
+}
+
+// 把一块 Int16 PCM 排队到 Web Audio，实现无缝增量播放
+function enqueuePCM(buf, sampleRate) {
+  if (!ctx) { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
+  if (ctx.state === "suspended") ctx.resume();
+
+  const i16 = new Int16Array(buf);
+  if (!i16.length) return;
+  const f32 = new Float32Array(i16.length);
+  for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768;
+
+  const audioBuf = ctx.createBuffer(1, f32.length, sampleRate);
+  audioBuf.copyToChannel(f32, 0);
+
+  const src = ctx.createBufferSource();
+  src.buffer = audioBuf;
+  src.connect(ctx.destination);
+
+  const now = ctx.currentTime;
+  if (nextTime < now) nextTime = now + 0.02;   // 首次/欠载时留一点缓冲
+  src.start(nextTime);
+  nextTime += audioBuf.duration;
+
+  active.push(src);
+  src.onended = () => { active = active.filter(s => s !== src); };
+}
+
+async function run() {
+  stopPlayback();
+  logEl.textContent = "开始…";
+  setBusy(true);
+  $("prog").style.width = "0%";
+
+  const text = $("text").value.trim();
+  if (!text) { log("文本为空。"); setBusy(false); return; }
+
+  const body = {
+    input: text,
+    voice: $("voice").value,
+    speed: parseFloat($("speed").value),
+    response_format: "pcm",
+  };
+  const ins = $("instruct").value.trim();
+  if (ins) body.instructions = ins;
+
+  const mode = $("mode").value;
+  const url = mode === "sse"
+    ? "/v1/audio/speech?protocol=realtime"
+    : "/v1/audio/speech?stream=true";
+
+  abort = new AbortController();
+  const t0 = performance.now();
+  let chunks = 0, bytes = 0, ttfa = null, sseBuf = "";
+
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: abort.signal,
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      log(`请求失败 ${resp.status}: ${err.error?.message || resp.statusText}`);
+      setBusy(false); return;
+    }
+
+    const sr = parseInt(resp.headers.get("X-Sample-Rate") || "24000", 10);
+    const reader = resp.body.getReader();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value || !value.length) continue;
+
+      if (mode === "sse") {
+        sseBuf += new TextDecoder().decode(value, { stream: true });
+        const lines = sseBuf.split("\n");
+        sseBuf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6).trim();
+          if (payload === "[DONE]") continue;
+          let ev; try { ev = JSON.parse(payload); } catch (_) { continue; }
+          if (ev.type === "response.audio.delta") {
+            const raw = atob(ev.delta);
+            const u8 = new Uint8Array(raw.length);
+            for (let i = 0; i < raw.length; i++) u8[i] = raw.charCodeAt(i);
+            if (ttfa === null) {
+              ttfa = performance.now() - t0;
+              log(`首块音频 ${ttfa.toFixed(0)}ms 到达`);
+            }
+            enqueuePCM(u8.buffer, ev.sample_rate || sr);
+            chunks++; bytes += u8.length;
+            $("prog").style.width =
+              Math.min(100, bytes / (sr * 2 * 6) * 100) + "%";
+          } else if (ev.type === "error") {
+            log("服务端错误：" + (ev.error?.message || "unknown"));
+          }
+        }
+      } else {
+        if (ttfa === null) {
+          ttfa = performance.now() - t0;
+          log(`首块音频 ${ttfa.toFixed(0)}ms 到达`);
+        }
+        enqueuePCM(value.buffer.slice(value.byteOffset,
+                                      value.byteOffset + value.byteLength), sr);
+        chunks++; bytes += value.length;
+        $("prog").style.width = Math.min(100, bytes / (sr * 2 * 6) * 100) + "%";
+      }
+    }
+
+    const total = performance.now() - t0;
+    $("prog").style.width = "100%";
+    log(`完成 · ${chunks} 块 / ${bytes} 字节 / ${(bytes / (sr * 2)).toFixed(2)}s 音频`
+        + `\n首块 ${ttfa === null ? "-" : ttfa.toFixed(0) + "ms"} · 总耗时 ${total.toFixed(0)}ms`);
+  } catch (e) {
+    if (e.name === "AbortError") log("已取消。");
+    else log("出错：" + e);
+  } finally {
+    setBusy(false);
+  }
+}
+
+$("go").addEventListener("click", run);
+</script>
+</body>
+</html>
