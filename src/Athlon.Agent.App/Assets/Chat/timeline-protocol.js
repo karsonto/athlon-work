@@ -506,6 +506,9 @@ function handleWebMessage(message) {
     }
   } else if (command.command === 'historyAvailability') {
     setOlderMessagesAvailable(!!command.hasOlderMessages);
+  } else if (command.command === 'ttsState') {
+    // Read-aloud status pushed by the desktop TTS controller: loading / playing / ended / error.
+    applyTtsState(command);
   } else if (command.command === 'toolDetail') {
     applyToolDetailPayload(command);
   } else if (command.command === 'switchSession') {

@@ -35,6 +35,11 @@ public partial class SettingsPageView : UserControl
             {
                 PasswordBoxBindingBehavior.SyncBoundPassword(KnowledgeEmbeddingApiKeyPasswordBox);
             }
+
+            if (!settings.IsTtsApiKeyRevealed)
+            {
+                PasswordBoxBindingBehavior.SyncBoundPassword(TtsApiKeyPasswordBox);
+            }
         };
     }
 }

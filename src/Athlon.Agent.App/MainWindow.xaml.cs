@@ -18,6 +18,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
 {
     private readonly MainShellViewModel _viewModel;
     private readonly ClipboardImageAttachmentReader _clipboardImageReader;
+    private readonly Services.Chat.ChatTtsController _chatTtsController;
     private readonly MainWindowLayoutBinder _layoutBinder;
     private readonly MainWindowShutdownCoordinator _shutdownCoordinator;
     private readonly PageViewFactory _pageViewFactory;
@@ -46,7 +47,8 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         MainWindowShutdownCoordinator shutdownCoordinator,
         Services.ComputerUse.ComputerUseOverlayRegistry computerUseOverlayRegistry,
         IAgentRunContextAccessor runContextAccessor,
-        IRuntimeDiagnosticEventSink runtimeDiagnosticEventSink)
+        IRuntimeDiagnosticEventSink runtimeDiagnosticEventSink,
+        Services.Chat.ChatTtsController chatTtsController)
     {
         App.StartupTrace("MainWindow constructor entered");
         InitializeComponent();
@@ -54,6 +56,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
         Behaviors.MaximizedWindowWorkArea.Attach(this);
         _viewModel = viewModel;
         _clipboardImageReader = clipboardImageReader;
+        _chatTtsController = chatTtsController;
         _pageViewFactory = pageViewFactory;
         _shutdownCoordinator = shutdownCoordinator;
         _computerUseOverlayRegistry = computerUseOverlayRegistry;
@@ -119,6 +122,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
             _layoutBinder.ApplyAll();
             ChatWebView.InitializationFailed += OnChatWebViewInitializationFailed;
             ChatWebView.ScriptExecutionFailed += OnChatWebViewScriptExecutionFailed;
+            ChatWebView.TtsController = _chatTtsController;
             _viewModel.AttachChatView(ChatWebView);
             RegisterChatScrollService(chatPage);
         }
@@ -271,6 +275,7 @@ public partial class MainWindow : Window, IMainWindowLayoutHost
                 _layoutBinder.ApplyComposer();
                 ((IChatLayoutSurface)chatPage).ChatWebView.InitializationFailed += OnChatWebViewInitializationFailed;
                 ((IChatLayoutSurface)chatPage).ChatWebView.ScriptExecutionFailed += OnChatWebViewScriptExecutionFailed;
+                ((IChatLayoutSurface)chatPage).ChatWebView.TtsController = _chatTtsController;
                 _viewModel.AttachChatView(((IChatLayoutSurface)chatPage).ChatWebView);
                 RegisterChatScrollService(chatPage);
             }

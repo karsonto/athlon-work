@@ -17,6 +17,8 @@ using Athlon.Agent.Core.SubAgents;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Sso;
 using Athlon.Agent.Core.Knowledge;
+using Athlon.Agent.Core.Audio;
+using Athlon.Agent.Infrastructure.Audio;
 using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Infrastructure.Knowledge;
 using Athlon.Agent.Infrastructure.Licensing;
@@ -139,6 +141,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITaskListChangedNotifier, TaskListChangedNotifier>();
         services.AddHttpClient<IEmbeddingClient, OpenAiCompatibleEmbeddingClient>(
                 static client => client.Timeout = TimeSpan.FromMinutes(5))
+            .ConfigurePrimaryHttpMessageHandler(static () => ModelHttpClientHandler.Create());
+        // TTS synthesis streams audio, so the timeout must be infinite: the deadline applies to the
+        // whole response body, and a long utterance can legitimately take minutes to synthesize.
+        services.AddHttpClient<ITtsClient, OpenAiCompatibleTtsClient>(
+                static client => client.Timeout = Timeout.InfiniteTimeSpan)
             .ConfigurePrimaryHttpMessageHandler(static () => ModelHttpClientHandler.Create());
         services.AddSingleton<AuditLogService>();
         services.AddSingleton<RuntimeDiagnosticEventSink>();

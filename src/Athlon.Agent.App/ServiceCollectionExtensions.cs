@@ -1,6 +1,8 @@
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Navigation;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.Audio;
+using Athlon.Agent.App.Services.Chat;
 using Athlon.Agent.App.Services.Speech;
 
 using Athlon.Agent.App.ViewModels;
@@ -42,6 +44,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITaskPlanCompletionNotifier, TaskPlanCompletionNotifier>();
         services.AddSingleton<IChatScrollService, ChatScrollService>();
         services.AddSingleton<ISpeechToTextService, SystemSpeechToTextService>();
+        // Read-aloud: the player owns the output device, the controller owns the synthesis loop.
+        services.AddSingleton<IPcmAudioPlayer, PcmAudioPlayer>();
+        services.AddSingleton<ChatTtsController>();
         services.AddSingleton<MainWindowShutdownCoordinator>();
 
         services.AddSingleton<ComposerCoordinator>();

@@ -107,6 +107,14 @@ html.replaying .message-row { animation: none; }
   color: #6EE7B7;
   opacity: 1;
 }
+.message-action-btn.playing {
+  color: #60A5FA;
+  opacity: 1;
+}
+.message-action-btn.tts-error {
+  color: #F87171;
+  opacity: 1;
+}
 .message-row.user .message-action-btn:hover {
   color: var(--user-bubble-text);
 }

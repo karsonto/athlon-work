@@ -67,7 +67,25 @@ public partial class MainShellViewModel
         await RefreshMcpRuntimeAsync().ConfigureAwait(true);
         ApplySessionWorkspace();
         ComposerKnowledge.NotifyEmbeddingConfigurationChanged();
+        // Read-aloud may have been just enabled/disabled; stop any utterance and republish the flag.
+        await PushTtsConfigAsync().ConfigureAwait(true);
         CurrentPage = AppPage.Chat;
+    }
+
+    /// <summary>
+    /// Stops in-flight read-aloud and re-publishes the enabled flag so the bubble button appears or
+    /// disappears without a page reload.
+    /// </summary>
+    private async Task PushTtsConfigAsync()
+    {
+        var chatView = _savedChatView;
+        if (chatView is null)
+        {
+            return;
+        }
+
+        chatView.TtsController?.Stop();
+        await chatView.PushTtsConfigAsync().ConfigureAwait(true);
     }
 
     public Task OpenWorkspaceFileInEditorAsync(string path) =>

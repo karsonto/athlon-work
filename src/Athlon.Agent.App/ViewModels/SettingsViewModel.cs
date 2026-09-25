@@ -4,6 +4,7 @@ using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Audio;
 using Athlon.Agent.Core.Knowledge;
 using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Mcp;
@@ -22,6 +23,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly IFileStorageService _storage;
     private readonly ApiKeySecretMigrationService _apiKeySecretMigration;
     private readonly ILocalizationService _loc;
+    private readonly ITtsClient _ttsClient;
     private bool _disposed;
 
     public SettingsViewModel(
@@ -32,7 +34,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         ICredentialStore credentialStore,
         IFileStorageService storage,
         ApiKeySecretMigrationService apiKeySecretMigration,
-        ILocalizationService localization)
+        ILocalizationService localization,
+        ITtsClient ttsClient)
     {
         Settings = settings;
         _mcpRegistry = mcpRegistry;
@@ -42,6 +45,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         _storage = storage;
         _apiKeySecretMigration = apiKeySecretMigration;
         _loc = localization;
+        _ttsClient = ttsClient;
         Language = Settings.Ui.Language;
         TerminalShell = WorkspaceTerminalBootstrap.NormalizeShellPreference(Settings.Ui.TerminalShell);
         SettingsStatus = _loc["Settings_DefaultStatus"];
@@ -59,6 +63,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     public event EventHandler? SkillConfigurationChanged;
     public event EventHandler? SettingsSaved;
     public event EventHandler<bool>? EmbeddingApiKeyAvailabilityChanged;
+    /// <summary>Raised when TTS settings change in a way the chat timeline must pick up.</summary>
+    public event EventHandler? TtsConfigurationChanged;
 
     /// <summary>Set by <c>SettingsPageView</c> to flush PasswordBox values before save.</summary>
     public Action? SyncPendingSecrets { get; set; }
@@ -96,6 +102,25 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(ShowKnowledgeEmbeddingApiKeyMask))]
     private bool isKnowledgeEmbeddingApiKeyRevealed;
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowTtsApiKeyMask))]
+    private string ttsApiKey = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowTtsApiKeyMask))]
+    private bool hasStoredTtsApiKey;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowTtsApiKeyMask))]
+    private bool isTtsApiKeyRevealed;
+
+    /// <summary>Connection probe status shown under the TTS card.</summary>
+    [ObservableProperty]
+    private string ttsTestStatus = string.Empty;
+
+    /// <summary>Voices reported by the TTS service, feeding the editable voice combo box.</summary>
+    public ObservableCollection<string> TtsVoices { get; } = new();
+
     public bool ShowApiKeyMask =>
         HasStoredApiKey && !IsApiKeyRevealed && string.IsNullOrWhiteSpace(ApiKey);
 
@@ -103,6 +128,11 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         HasStoredKnowledgeEmbeddingApiKey
         && !IsKnowledgeEmbeddingApiKeyRevealed
         && string.IsNullOrWhiteSpace(KnowledgeEmbeddingApiKey);
+
+    public bool ShowTtsApiKeyMask =>
+        HasStoredTtsApiKey
+        && !IsTtsApiKeyRevealed
+        && string.IsNullOrWhiteSpace(TtsApiKey);
 
     public string McpConfigPath => SettingsConfigPath;
 
@@ -113,6 +143,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             .ConfigureAwait(true);
         HasStoredKnowledgeEmbeddingApiKey = await _credentialStore
             .HasSecretAsync(KnowledgeEmbeddingSettings.ApiKeySecretName)
+            .ConfigureAwait(true);
+        HasStoredTtsApiKey = await _credentialStore
+            .HasSecretAsync(TtsSettings.ApiKeySecretName)
             .ConfigureAwait(true);
         EmbeddingApiKeyAvailabilityChanged?.Invoke(this, HasStoredKnowledgeEmbeddingApiKey);
     }
@@ -164,6 +197,63 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
+    private async Task ToggleTtsApiKeyRevealAsync()
+    {
+        if (IsTtsApiKeyRevealed)
+        {
+            IsTtsApiKeyRevealed = false;
+            TtsApiKey = string.Empty;
+            OnPropertyChanged(nameof(TtsApiKey));
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(TtsApiKey) && HasStoredTtsApiKey)
+        {
+            var secret = await _credentialStore
+                .GetSecretAsync(TtsSettings.ApiKeySecretName)
+                .ConfigureAwait(true);
+            TtsApiKey = secret ?? string.Empty;
+            OnPropertyChanged(nameof(TtsApiKey));
+        }
+
+        IsTtsApiKeyRevealed = true;
+    }
+
+    /// <summary>
+    /// Probes <c>{Endpoint}/health</c> and surfaces readiness plus the voice list, so the user can
+    /// pick a valid voice instead of typing one blind.
+    /// </summary>
+    [RelayCommand]
+    private async Task TestTtsConnectionAsync()
+    {
+        SyncPendingSecrets?.Invoke();
+        TtsTestStatus = _loc["Settings_TtsTestRunning"];
+
+        try
+        {
+            var result = await _ttsClient.ProbeAsync(CancellationToken.None).ConfigureAwait(true);
+
+            TtsVoices.Clear();
+            foreach (var voice in result.Voices)
+            {
+                TtsVoices.Add(voice);
+            }
+
+            TtsTestStatus = result.Voices.Count == 0
+                ? Strings.Format("Settings_TtsTestOkNoVoices", result.SampleRate)
+                : Strings.Format(
+                    "Settings_TtsTestOk",
+                    result.Model ?? "-",
+                    result.SampleRate,
+                    result.Voices.Count);
+        }
+        catch (Exception ex)
+        {
+            TtsTestStatus = Strings.Format("Settings_TtsTestFailed", ex.Message);
+        }
+    }
+
+    [RelayCommand]
     private async Task SaveSettingsAsync()
     {
         SyncPendingSecrets?.Invoke();
@@ -195,6 +285,19 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             embeddingKeySaved = true;
         }
 
+        var ttsKeySaved = false;
+        if (!string.IsNullOrWhiteSpace(TtsApiKey))
+        {
+            await _credentialStore
+                .SaveSecretAsync(TtsSettings.ApiKeySecretName, TtsApiKey.Trim())
+                .ConfigureAwait(true);
+            TtsApiKey = string.Empty;
+            IsTtsApiKeyRevealed = false;
+            HasStoredTtsApiKey = true;
+            OnPropertyChanged(nameof(TtsApiKey));
+            ttsKeySaved = true;
+        }
+
         Settings.Model.LegacyApiKeyCredentialName = null;
         PruneEmptyWorkspaces(Settings);
         SyncSkillsFromCatalog();
@@ -202,11 +305,15 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         Settings.Ui.TerminalShell = WorkspaceTerminalBootstrap.NormalizeShellPreference(TerminalShell);
         AppCultureManager.ApplyFromSettings(Settings.Ui);
         await _storage.SaveSettingsAsync(Settings).ConfigureAwait(true);
-        SettingsStatus = BuildSaveStatusMessage(modelKeySaved, embeddingKeySaved);
+        SettingsStatus = BuildSaveStatusMessage(modelKeySaved, embeddingKeySaved, ttsKeySaved);
         SettingsSaved?.Invoke(this, EventArgs.Empty);
+        TtsConfigurationChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public static string BuildSaveStatusMessage(bool modelKeySaved, bool embeddingKeySaved)
+    public static string BuildSaveStatusMessage(
+        bool modelKeySaved,
+        bool embeddingKeySaved,
+        bool ttsKeySaved = false)
     {
         var time = AppTimeZone.Now.ToString("HH:mm:ss");
         if (modelKeySaved && embeddingKeySaved)
@@ -222,6 +329,11 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         if (embeddingKeySaved)
         {
             return Strings.Format("Settings_SaveStatusEmbedding", time);
+        }
+
+        if (ttsKeySaved)
+        {
+            return Strings.Format("Settings_SaveStatusTts", time);
         }
 
         return Strings.Format("Settings_SaveStatusNoChange", time);
@@ -488,6 +600,14 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         get => Settings.ContextCompaction.MaxToolScreenshotsInModelContext.ToString();
         set => Settings.ContextCompaction.MaxToolScreenshotsInModelContext =
             ParseNonNegativeInt(value, Settings.ContextCompaction.MaxToolScreenshotsInModelContext);
+    }
+
+    // ---- Text-to-speech (audio model) -------------------------------------
+
+    public string TtsSpeedText
+    {
+        get => Settings.Tts.Speed.ToString("0.##");
+        set => Settings.Tts.Speed = ParseDouble(value, Settings.Tts.Speed, 0.5, 2.0);
     }
 
     // ---- Computer Use (Phase 1/2 tunables) --------------------------------

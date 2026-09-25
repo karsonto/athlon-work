@@ -154,6 +154,21 @@
   <data name="Chat_Copy" xml:space="preserve">
     <value>复制</value>
   </data>
+  <data name="Chat_Play" xml:space="preserve">
+    <value>朗读这条消息</value>
+  </data>
+  <data name="Chat_Stop" xml:space="preserve">
+    <value>停止朗读</value>
+  </data>
+  <data name="Chat_Playing" xml:space="preserve">
+    <value>正在朗读</value>
+  </data>
+  <data name="Chat_TtsFailed" xml:space="preserve">
+    <value>朗读失败：{0}</value>
+  </data>
+  <data name="Chat_TtsNotConfigured" xml:space="preserve">
+    <value>未启用语音合成，请先在设置中配置音频模型。</value>
+  </data>
   <data name="Chat_FilesChangedOne" xml:space="preserve">
     <value>1 个文件已修改</value>
   </data>
@@ -1498,6 +1513,9 @@
   <data name="Settings_SaveStatusNoChange" xml:space="preserve">
     <value>已保存（{0}）；Model API Key 未变更（PasswordBox 为空时沿用已保存的 Key）</value>
   </data>
+  <data name="Settings_SaveStatusTts" xml:space="preserve">
+    <value>已保存（{0}），TTS API Key 已更新</value>
+  </data>
   <data name="Settings_ShowToolCalls" xml:space="preserve">
     <value>显示工具调用</value>
   </data>
@@ -1587,6 +1605,57 @@
   </data>
   <data name="Settings_TopK" xml:space="preserve">
     <value>TopK</value>
+  </data>
+  <data name="Settings_TtsTitle" xml:space="preserve">
+    <value>语音合成（Audio Model）</value>
+  </data>
+  <data name="Settings_TtsDescription" xml:space="preserve">
+    <value>配置后，助手消息气泡下方会出现朗读按钮。合成与播放均在本地进程完成，API Key 不会下发到页面。</value>
+  </data>
+  <data name="Settings_TtsEnabled" xml:space="preserve">
+    <value>启用语音合成</value>
+  </data>
+  <data name="Settings_TtsEndpoint" xml:space="preserve">
+    <value>TTS Endpoint</value>
+  </data>
+  <data name="Settings_TtsModel" xml:space="preserve">
+    <value>模型名称</value>
+  </data>
+  <data name="Settings_TtsVoice" xml:space="preserve">
+    <value>音色</value>
+  </data>
+  <data name="Settings_TtsVoiceHint" xml:space="preserve">
+    <value>可直接输入，或点击「测试连接」从服务端拉取可用音色。</value>
+  </data>
+  <data name="Settings_TtsSpeed" xml:space="preserve">
+    <value>语速（0.5 - 2.0）</value>
+  </data>
+  <data name="Settings_TtsInstructions" xml:space="preserve">
+    <value>风格指令（可选）</value>
+  </data>
+  <data name="Settings_TtsInstructionsHint" xml:space="preserve">
+    <value>如「用温柔而欢快的语气」。留空则不发送该字段。</value>
+  </data>
+  <data name="Settings_TtsApiKey" xml:space="preserve">
+    <value>TTS API Key</value>
+  </data>
+  <data name="Settings_TtsApiKeyHint" xml:space="preserve">
+    <value>留空时不发送 Authorization 请求头；服务端未设置 TTS_API_KEY 时无需填写。</value>
+  </data>
+  <data name="Settings_TtsTest" xml:space="preserve">
+    <value>测试连接</value>
+  </data>
+  <data name="Settings_TtsTestRunning" xml:space="preserve">
+    <value>正在连接语音合成服务…</value>
+  </data>
+  <data name="Settings_TtsTestOk" xml:space="preserve">
+    <value>连接成功 · 模型 {0} · 采样率 {1}Hz · 可用音色 {2} 个</value>
+  </data>
+  <data name="Settings_TtsTestOkNoVoices" xml:space="preserve">
+    <value>连接成功 · 采样率 {0}Hz · 服务端未返回音色列表</value>
+  </data>
+  <data name="Settings_TtsTestFailed" xml:space="preserve">
+    <value>连接失败：{0}</value>
   </data>
   <data name="Settings_TrainingDataDescription" xml:space="preserve">
     <value>自动从修正轨迹、溢出恢复轨迹、工具选型 DPO 中提取训练数据，写入 ~/.athlon-agent/training-data/。仅当 agent 调用工具失败→用户修正→重试成功、或超时→继续→完成时产出样本，不影响正常使用。</value>

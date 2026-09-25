@@ -3,6 +3,7 @@ using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Audio;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -22,7 +23,8 @@ public sealed class SettingsViewModelTests
             new RecordingCredentialStore(),
             new NoOpStorage(),
             new ApiKeySecretMigrationService(new RecordingCredentialStore()),
-            new LocalizationService());
+            new LocalizationService(),
+            new StubTtsClient());
 
         viewModel.Language = "zh-CN";
 
@@ -41,6 +43,107 @@ public sealed class SettingsViewModelTests
         AppCultureManager.SetCulture("zh-CN");
         var message = SettingsViewModel.BuildSaveStatusMessage(modelKeySaved, embeddingKeySaved);
         Assert.Contains(expectedFragment, message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BuildSaveStatusMessage_reports_tts_key_update()
+    {
+        AppCultureManager.SetCulture("zh-CN");
+        var message = SettingsViewModel.BuildSaveStatusMessage(
+            modelKeySaved: false,
+            embeddingKeySaved: false,
+            ttsKeySaved: true);
+        Assert.Contains("TTS API Key 已更新", message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SaveSettingsAsync_persists_tts_api_key_and_persists_tts_settings()
+    {
+        using var temp = new TempDirectoryScope("athlon-settings-tts");
+        var paths = new TestAppPathProvider(temp.Root);
+        paths.EnsureCreated();
+        var credentials = new RecordingCredentialStore();
+        var storage = new FileStorageService(
+            new NoOpLogger(),
+            paths,
+            new JsonFileStore(),
+            new AgentRunContextAccessor());
+        var settings = new AppSettings
+        {
+            Tts = { Endpoint = "http://127.0.0.1:9000/v1", Voice = "Cherry", Speed = 1.25, Enabled = false }
+        };
+        var viewModel = new SettingsViewModel(
+            settings,
+            new TestMcpRegistry(),
+            new EmptySkillCatalog(),
+            paths,
+            credentials,
+            storage,
+            new ApiKeySecretMigrationService(credentials),
+            new LocalizationService(),
+            new StubTtsClient())
+        {
+            TtsApiKey = "tts-secret-key"
+        };
+
+        await viewModel.SaveSettingsCommand.ExecuteAsync(null);
+
+        Assert.Equal("tts-secret-key", credentials.GetSaved(TtsSettings.ApiKeySecretName));
+        Assert.True(viewModel.HasStoredTtsApiKey);
+        Assert.Equal(string.Empty, viewModel.TtsApiKey);
+
+        var json = await File.ReadAllTextAsync(Path.Combine(paths.ConfigPath, "settings.json"));
+        var reloaded = System.Text.Json.JsonSerializer.Deserialize<AppSettings>(json, JsonFileStore.Options);
+        Assert.NotNull(reloaded);
+        Assert.Equal("http://127.0.0.1:9000/v1", reloaded!.Tts.Endpoint);
+        Assert.Equal("Cherry", reloaded.Tts.Voice);
+        Assert.Equal(1.25, reloaded.Tts.Speed, 3);
+        Assert.False(reloaded.Tts.Enabled);
+    }
+
+    [Fact]
+    public async Task TestTtsConnection_populates_voice_list_and_status()
+    {
+        AppCultureManager.SetCulture("zh-CN");
+        var ttsClient = new StubTtsClient
+        {
+            Probe = new TtsProbeResult("qwen3-tts", 24_000, true, ["Vivian", "Cherry"], ["pcm", "wav"])
+        };
+        var viewModel = new SettingsViewModel(
+            new AppSettings(),
+            new TestMcpRegistry(),
+            new EmptySkillCatalog(),
+            new TestAppPathProvider(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
+            new RecordingCredentialStore(),
+            new NoOpStorage(),
+            new ApiKeySecretMigrationService(new RecordingCredentialStore()),
+            new LocalizationService(),
+            ttsClient);
+
+        await viewModel.TestTtsConnectionCommand.ExecuteAsync(null);
+
+        Assert.Equal(["Vivian", "Cherry"], viewModel.TtsVoices.ToArray());
+        Assert.Contains("24000", viewModel.TtsTestStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TestTtsConnection_surfaces_failure_message()
+    {
+        AppCultureManager.SetCulture("zh-CN");
+        var viewModel = new SettingsViewModel(
+            new AppSettings(),
+            new TestMcpRegistry(),
+            new EmptySkillCatalog(),
+            new TestAppPathProvider(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
+            new RecordingCredentialStore(),
+            new NoOpStorage(),
+            new ApiKeySecretMigrationService(new RecordingCredentialStore()),
+            new LocalizationService(),
+            new StubTtsClient { ProbeError = new TtsClientException("connection refused") });
+
+        await viewModel.TestTtsConnectionCommand.ExecuteAsync(null);
+
+        Assert.Contains("connection refused", viewModel.TtsTestStatus, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -64,7 +167,8 @@ public sealed class SettingsViewModelTests
             credentials,
             storage,
             new ApiKeySecretMigrationService(credentials),
-            new LocalizationService())
+            new LocalizationService(),
+            new StubTtsClient())
         {
             ApiKey = "sk-or-v1-test-key"
         };
@@ -98,7 +202,8 @@ public sealed class SettingsViewModelTests
             new RecordingCredentialStore(),
             storage,
             new ApiKeySecretMigrationService(new RecordingCredentialStore()),
-            new LocalizationService())
+            new LocalizationService(),
+            new StubTtsClient())
         {
             Language = "zh-CN"
         };
@@ -131,12 +236,40 @@ public sealed class SettingsViewModelTests
             credentials,
             storage,
             new ApiKeySecretMigrationService(credentials),
-            new LocalizationService());
+            new LocalizationService(),
+            new StubTtsClient());
         viewModel.SyncPendingSecrets = () => viewModel.ApiKey = "sk-or-v1-from-password-box";
 
         await viewModel.SaveSettingsCommand.ExecuteAsync(null);
 
         Assert.Equal("sk-or-v1-from-password-box", credentials.GetSaved(ModelSettings.ApiKeySecretName));
+    }
+
+    private sealed class StubTtsClient : ITtsClient
+    {
+        public TtsProbeResult Probe { get; init; } =
+            new("qwen3-tts", 24_000, false, [], ["pcm"]);
+
+        public Exception? ProbeError { get; init; }
+
+        public IReadOnlyList<TtsAudioChunk> Chunks { get; init; } = [];
+
+        public Task<TtsProbeResult> ProbeAsync(CancellationToken cancellationToken) =>
+            ProbeError is not null
+                ? Task.FromException<TtsProbeResult>(ProbeError)
+                : Task.FromResult(Probe);
+
+        public async IAsyncEnumerable<TtsAudioChunk> StreamAsync(
+            TtsRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            foreach (var chunk in Chunks)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return chunk;
+                await Task.Yield();
+            }
+        }
     }
 
     private sealed class RecordingCredentialStore : ICredentialStore

@@ -338,6 +338,169 @@
 
                     <Border Style="{StaticResource SettingsCardStyle}">
                         <StackPanel>
+                            <Grid Margin="0,0,0,14">
+                                <StackPanel>
+                                    <TextBlock Text="{loc:Localize Key=Settings_TtsTitle}"
+                                               FontSize="16"
+                                               FontWeight="SemiBold" />
+                                    <TextBlock Text="{loc:Localize Key=Settings_TtsDescription}"
+                                               Foreground="{DynamicResource Brush.SubtleText}"
+                                               TextWrapping="Wrap"
+                                               FontSize="12"
+                                               Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Localize Key=Settings_TtsEnabled}" VerticalAlignment="Center" />
+                                <CheckBox Grid.Column="1"
+                                          Style="{StaticResource McpToggleSwitchStyle}"
+                                          IsChecked="{Binding Settings.Tts.Enabled, UpdateSourceTrigger=PropertyChanged}"
+                                          VerticalAlignment="Center" />
+                            </Grid>
+
+                            <TextBlock Text="{loc:Localize Key=Settings_TtsEndpoint}" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding Settings.Tts.Endpoint, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,6,0,10" />
+                            <TextBlock Text="{loc:Localize Key=Settings_TtsModel}" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding Settings.Tts.ModelName, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,6,0,10" />
+
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="{loc:Localize Key=Settings_TtsVoice}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <ComboBox ItemsSource="{Binding TtsVoices}"
+                                              Text="{Binding Settings.Tts.Voice, UpdateSourceTrigger=PropertyChanged}"
+                                              IsEditable="True"
+                                              Margin="0,6,0,0" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="{loc:Localize Key=Settings_TtsSpeed}" Foreground="{DynamicResource Brush.SubtleText}" />
+                                    <TextBox Text="{Binding TtsSpeedText, UpdateSourceTrigger=PropertyChanged}"
+                                             Margin="0,6,0,0" />
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="{loc:Localize Key=Settings_TtsVoiceHint}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="11"
+                                       Margin="0,0,0,10" />
+
+                            <TextBlock Text="{loc:Localize Key=Settings_TtsInstructions}" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <TextBox Text="{Binding Settings.Tts.Instructions, UpdateSourceTrigger=PropertyChanged}"
+                                     Margin="0,6,0,4" />
+                            <TextBlock Text="{loc:Localize Key=Settings_TtsInstructionsHint}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="11"
+                                       Margin="0,0,0,10" />
+
+                            <TextBlock Text="{loc:Localize Key=Settings_TtsApiKey}" Foreground="{DynamicResource Brush.SubtleText}" />
+                            <Grid Margin="0,6,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0">
+                                    <PasswordBox x:Name="TtsApiKeyPasswordBox"
+                                                 behaviors:PasswordBoxBindingBehavior.BoundPassword="{Binding TtsApiKey, UpdateSourceTrigger=PropertyChanged}">
+                                        <PasswordBox.Style>
+                                            <Style TargetType="PasswordBox" BasedOn="{StaticResource {x:Type PasswordBox}}">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsTtsApiKeyRevealed}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </PasswordBox.Style>
+                                    </PasswordBox>
+                                    <TextBox Text="{Binding TtsApiKey, UpdateSourceTrigger=PropertyChanged}"
+                                             VerticalContentAlignment="Center">
+                                        <TextBox.Style>
+                                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsTtsApiKeyRevealed}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBox.Style>
+                                    </TextBox>
+                                    <TextBlock Text="*****"
+                                               IsHitTestVisible="False"
+                                               VerticalAlignment="Center"
+                                               Margin="12,0,0,0"
+                                               Foreground="{DynamicResource Brush.SubtleText}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding ShowTtsApiKeyMask}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                                <Button Grid.Column="1"
+                                        Command="{Binding ToggleTtsApiKeyRevealCommand}"
+                                        ToolTip="{loc:Localize Key=Settings_ToggleApiKeyVisibility}"
+                                        Width="36"
+                                        Height="36"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource GhostIconButtonStyle}">
+                                    <materialDesign:PackIcon>
+                                        <materialDesign:PackIcon.Style>
+                                            <Style TargetType="materialDesign:PackIcon" BasedOn="{StaticResource SettingsPackIconStyle}">
+                                                <Setter Property="Kind" Value="Eye" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsTtsApiKeyRevealed}" Value="True">
+                                                        <Setter Property="Kind" Value="EyeOff" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </materialDesign:PackIcon.Style>
+                                    </materialDesign:PackIcon>
+                                </Button>
+                            </Grid>
+                            <TextBlock Text="{Binding HasStoredTtsApiKey, StringFormat=已保存 TTS API Key：{0}}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       FontSize="12" />
+                            <TextBlock Text="{loc:Localize Key=Settings_TtsApiKeyHint}"
+                                       Foreground="{DynamicResource Brush.SubtleText}"
+                                       TextWrapping="Wrap"
+                                       FontSize="12"
+                                       Margin="0,6,0,0" />
+
+                            <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                <Button Command="{Binding TestTtsConnectionCommand}"
+                                        Content="{loc:Localize Key=Settings_TtsTest}"
+                                        Style="{StaticResource GhostButtonStyle}"
+                                        Padding="14,6" />
+                                <TextBlock Text="{Binding TtsTestStatus}"
+                                           Foreground="{DynamicResource Brush.SubtleText}"
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center"
+                                           Margin="12,0,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SettingsCardStyle}">
+                        <StackPanel>
                             <TextBlock Text="{loc:Localize Key=Settings_ContextCompactionTitle}" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
                             <Grid Margin="0,0,0,8">
                                 <Grid.ColumnDefinitions>

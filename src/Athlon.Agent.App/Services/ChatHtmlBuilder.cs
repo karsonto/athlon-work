@@ -10,7 +10,7 @@ namespace Athlon.Agent.App.Services;
 /// <summary>构建 WebChatView 外壳 HTML；静态 shell CSS/JS 经 athlon.chat.assets 虚拟主机加载。</summary>
 public sealed class ChatHtmlBuilder
 {
-    public string BuildShellHtml(string? ssoDisplayName = null)
+    public string BuildShellHtml(string? ssoDisplayName = null, bool ttsEnabled = false)
     {
         var assets = ChatMarkdownAssets.VirtualBaseUrl;
         var cache = ChatMarkdownAssets.AssetCacheQuery;
@@ -31,6 +31,7 @@ public sealed class ChatHtmlBuilder
             $"<script src=\"{assets}highlight.min.js{cache}\"></script>" +
             "<script>" + BuildI18nBootstrapScript() + "</script>" +
             "<script>" + BuildAssetConfigScript() + "</script>" +
+            "<script>" + BuildTtsConfigScript(ttsEnabled) + "</script>" +
             $"<script src=\"{assets}timeline-state.js{cache}\"></script>" +
             $"<script src=\"{assets}timeline-render.js{cache}\"></script>" +
             $"<script src=\"{assets}timeline-cards.js{cache}\"></script>" +
@@ -61,10 +62,11 @@ public sealed class ChatHtmlBuilder
     public string BuildDocumentHtml(
         IReadOnlyList<ChatMessageViewModel> messages,
         bool showToolCalls = false,
-        string? ssoDisplayName = null)
+        string? ssoDisplayName = null,
+        bool ttsEnabled = false)
     {
         const string footer = "</body></html>";
-        var shell = BuildShellHtml(ssoDisplayName);
+        var shell = BuildShellHtml(ssoDisplayName, ttsEnabled);
         if (!shell.EndsWith(footer, StringComparison.Ordinal))
         {
             return shell;
@@ -113,11 +115,26 @@ public sealed class ChatHtmlBuilder
             ["theme"] = ThemeHtmlStyles.GetMermaidPalette().MermaidTheme,
         }) + ";";
 
+    /// <summary>
+    /// Publishes the read-aloud capability flag to the timeline. Deliberately carries no endpoint,
+    /// model, voice, or API key: synthesis happens in the desktop process, so the page only needs to
+    /// know whether the button should exist.
+    /// </summary>
+    public static string BuildTtsConfigScript(bool enabled) =>
+        "window.__chatTts=" + JsonSerializer.Serialize(new Dictionary<string, bool>(StringComparer.Ordinal)
+        {
+            ["enabled"] = enabled,
+        }) + ";if(typeof applyChatTtsConfig==='function')applyChatTtsConfig();";
+
     private static IReadOnlyDictionary<string, string> BuildChatI18n() =>
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["copy"] = Strings.Get("Chat_Copy"),
             ["copied"] = Strings.Get("Chat_Copied"),
+            ["play"] = Strings.Get("Chat_Play"),
+            ["stop"] = Strings.Get("Chat_Stop"),
+            ["playing"] = Strings.Get("Chat_Playing"),
+            ["ttsFailed"] = Strings.Get("Chat_TtsFailed"),
             ["preview"] = Strings.Get("Markdown_PreviewButton"),
             ["code"] = Strings.Get("Chat_Code"),
             ["thinking"] = Strings.Get("Chat_Thinking"),

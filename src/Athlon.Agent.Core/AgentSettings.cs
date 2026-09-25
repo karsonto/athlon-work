@@ -85,6 +85,7 @@ public sealed class AppSettings
     public SsoSettings Sso { get; set; } = new();
     public BehaviorReportSettings BehaviorReport { get; set; } = new();
     public ComputerUseSettings ComputerUse { get; set; } = new();
+    public TtsSettings Tts { get; set; } = new();
 }
 
 public sealed class UpdateSettings
@@ -159,6 +160,31 @@ public sealed class ModelSettings
     [JsonPropertyName("ApiKeyCredentialName")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public string? LegacyApiKeyCredentialName { get; set; }
+}
+
+/// <summary>
+/// Text-to-speech (audio) model configuration. Synthesis and playback both run in the desktop
+/// process; the chat UI only sends play/stop commands and renders the button state.
+/// </summary>
+public sealed class TtsSettings
+{
+    public const string ApiKeySecretName = "tts-api-key";
+
+    /// <summary>When false, the chat bubble hides the play button entirely.</summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>OpenAI-compatible base URL, e.g. <c>http://127.0.0.1:8000/v1</c>.</summary>
+    public string Endpoint { get; set; } = "http://127.0.0.1:8000/v1";
+
+    public string ModelName { get; set; } = "qwen3-tts";
+
+    /// <summary>Voice name understood by the TTS server (see its <c>/health</c> voices list).</summary>
+    public string Voice { get; set; } = "Vivian";
+
+    public double Speed { get; set; } = 1.0;
+
+    /// <summary>Optional style instruction, e.g. "用温柔而欢快的语气". Empty means omitted.</summary>
+    public string Instructions { get; set; } = string.Empty;
 }
 public sealed class LoggingSettings
 {

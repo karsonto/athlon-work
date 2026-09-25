@@ -154,6 +154,21 @@
   <data name="Chat_Copy" xml:space="preserve">
     <value>Copy</value>
   </data>
+  <data name="Chat_Play" xml:space="preserve">
+    <value>Read this message aloud</value>
+  </data>
+  <data name="Chat_Stop" xml:space="preserve">
+    <value>Stop reading</value>
+  </data>
+  <data name="Chat_Playing" xml:space="preserve">
+    <value>Reading aloud</value>
+  </data>
+  <data name="Chat_TtsFailed" xml:space="preserve">
+    <value>Read aloud failed: {0}</value>
+  </data>
+  <data name="Chat_TtsNotConfigured" xml:space="preserve">
+    <value>Text-to-speech is disabled. Configure the audio model in Settings first.</value>
+  </data>
   <data name="Chat_FilesChangedOne" xml:space="preserve">
     <value>1 File Changed</value>
   </data>
@@ -1489,6 +1504,9 @@ Save anyway?</value>
   <data name="Settings_SaveStatusNoChange" xml:space="preserve">
     <value>Saved ({0}); model API key unchanged (empty field keeps the stored key)</value>
   </data>
+  <data name="Settings_SaveStatusTts" xml:space="preserve">
+    <value>Saved ({0}), TTS API key updated</value>
+  </data>
   <data name="Settings_ShowToolCalls" xml:space="preserve">
     <value>Show tool calls</value>
   </data>
@@ -1578,6 +1596,57 @@ Save anyway?</value>
   </data>
   <data name="Settings_TopK" xml:space="preserve">
     <value>TopK</value>
+  </data>
+  <data name="Settings_TtsTitle" xml:space="preserve">
+    <value>Speech Synthesis (Audio Model)</value>
+  </data>
+  <data name="Settings_TtsDescription" xml:space="preserve">
+    <value>Once configured, assistant bubbles gain a read-aloud button. Synthesis and playback both run in the local process, so the API key never reaches the page.</value>
+  </data>
+  <data name="Settings_TtsEnabled" xml:space="preserve">
+    <value>Enable speech synthesis</value>
+  </data>
+  <data name="Settings_TtsEndpoint" xml:space="preserve">
+    <value>TTS endpoint</value>
+  </data>
+  <data name="Settings_TtsModel" xml:space="preserve">
+    <value>Model name</value>
+  </data>
+  <data name="Settings_TtsVoice" xml:space="preserve">
+    <value>Voice</value>
+  </data>
+  <data name="Settings_TtsVoiceHint" xml:space="preserve">
+    <value>Type a voice name directly, or click Test connection to load the server's voice list.</value>
+  </data>
+  <data name="Settings_TtsSpeed" xml:space="preserve">
+    <value>Speed (0.5 - 2.0)</value>
+  </data>
+  <data name="Settings_TtsInstructions" xml:space="preserve">
+    <value>Style instruction (optional)</value>
+  </data>
+  <data name="Settings_TtsInstructionsHint" xml:space="preserve">
+    <value>For example "speak in a gentle, cheerful tone". Left empty, the field is omitted.</value>
+  </data>
+  <data name="Settings_TtsApiKey" xml:space="preserve">
+    <value>TTS API key</value>
+  </data>
+  <data name="Settings_TtsApiKeyHint" xml:space="preserve">
+    <value>When empty, no Authorization header is sent; not needed if the server has no TTS_API_KEY set.</value>
+  </data>
+  <data name="Settings_TtsTest" xml:space="preserve">
+    <value>Test connection</value>
+  </data>
+  <data name="Settings_TtsTestRunning" xml:space="preserve">
+    <value>Connecting to the speech synthesis service…</value>
+  </data>
+  <data name="Settings_TtsTestOk" xml:space="preserve">
+    <value>Connected · model {0} · sample rate {1} Hz · {2} voices available</value>
+  </data>
+  <data name="Settings_TtsTestOkNoVoices" xml:space="preserve">
+    <value>Connected · sample rate {0} Hz · the server returned no voice list</value>
+  </data>
+  <data name="Settings_TtsTestFailed" xml:space="preserve">
+    <value>Connection failed: {0}</value>
   </data>
   <data name="Settings_TrainingDataDescription" xml:space="preserve">
     <value>Automatically extracts training data from correction trajectories, overflow recovery, and tool-selection DPO into ~/.athlon-agent/training-data/. Samples are produced only when tool failure→user fix→retry succeeds, or timeout→continue→complete; normal use is unaffected.</value>

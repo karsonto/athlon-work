@@ -58,6 +58,11 @@ function applyChatI18n() {
   document.querySelectorAll('[data-i18n]').forEach(function (element) {
     element.textContent = t(element.dataset.i18n);
   });
+  // Play buttons carry their label in aria-label, and the icon depends on the current state, so a
+  // language switch must re-apply both rather than just swapping text content.
+  document.querySelectorAll('.message-action-btn[data-tts-state]').forEach(function (button) {
+    setPlayButtonState(button, button.dataset.ttsState || 'idle');
+  });
   document.querySelectorAll('.reasoning-label').forEach(function (label) {
     const row = label.closest('.reasoning-row');
     const messageId = row && row.dataset.messageId;
@@ -278,12 +283,161 @@ function updateCopyText(row, text) {
   row.dataset.copyText = text == null ? '' : String(text);
 }
 
+// ---- Read aloud (TTS) -------------------------------------------------------
+// Audio is synthesized and played by the desktop process, so this side only owns the button state
+// machine; C# answers with ttsState commands (loading / playing / ended / error).
+
+/**
+ * Strips Markdown syntax so the synthesizer reads prose rather than punctuation. Code is dropped
+ * entirely: reading source aloud is never what the user wants.
+ */
+function toSpeakableText(markdown) {
+  if (!markdown) return '';
+  let text = String(markdown);
+
+  // Fenced code blocks: keep nothing, they are not prose.
+  text = text.replace(/```[\s\S]*?```/g, ' ');
+  text = text.replace(/~~~[\s\S]*?~~~/g, ' ');
+  // Inline code: keep the content, drop the backticks.
+  text = text.replace(/`([^`]*)`/g, '$1');
+  // Images: drop entirely; links: keep the label text.
+  text = text.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');
+  text = text.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+  // Headings, blockquotes, list markers, emphasis.
+  text = text.replace(/^\s{0,3}#{1,6}\s+/gm, '');
+  text = text.replace(/^\s{0,3}>\s?/gm, '');
+  text = text.replace(/^\s{0,3}[-*+]\s+/gm, '');
+  text = text.replace(/^\s{0,3}\d+\.\s+/gm, '');
+  text = text.replace(/(\*\*|__)(.*?)\1/g, '$2');
+  text = text.replace(/(\*|_)(.*?)\1/g, '$2');
+  text = text.replace(/~~(.*?)~~/g, '$1');
+  // Horizontal rules and remaining table pipes.
+  text = text.replace(/^\s{0,3}([-*_])\s*(\1\s*){2,}$/gm, ' ');
+  text = text.replace(/^\s*\|.*\|\s*$/gm, ' ');
+  // Collapse whitespace so the synthesizer does not receive long runs of blanks.
+  return text.replace(/[ \t]+/g, ' ').replace(/\n{2,}/g, '\n').trim();
+}
+
+const playIconSvg =
+  '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<path d="M5.5 3.6v8.8a.6.6 0 0 0 .92.5l6.9-4.4a.6.6 0 0 0 0-1L6.42 3.1a.6.6 0 0 0-.92.5Z" fill="currentColor"></path>' +
+  '</svg>';
+
+const stopIconSvg =
+  '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor"></rect>' +
+  '</svg>';
+
+function ttsEnabled() {
+  return !!(window.__chatTts && window.__chatTts.enabled);
+}
+
+function setPlayButtonState(button, buttonState) {
+  if (!button) return;
+  button.dataset.ttsState = buttonState;
+  button.classList.toggle('playing', buttonState === 'loading' || buttonState === 'playing');
+  button.classList.toggle('tts-error', buttonState === 'error');
+  button.innerHTML = buttonState === 'loading' || buttonState === 'playing' ? stopIconSvg : playIconSvg;
+  button.setAttribute('aria-label', buttonState === 'loading' || buttonState === 'playing' ? t('stop') : t('play'));
+}
+
+function createPlayButton(row) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'message-action-btn';
+  btn.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const current = btn.dataset.ttsState || 'idle';
+    if (current === 'loading' || current === 'playing') {
+      post({ type: 'stopAudio', messageId: row.dataset.messageId || '' });
+      setPlayButtonState(btn, 'idle');
+      return;
+    }
+
+    const text = toSpeakableText(resolveRowCopyText(row));
+    if (!text) return;
+    resetOtherPlayButtons(row);
+    setPlayButtonState(btn, 'loading');
+    post({ type: 'playAudio', messageId: row.dataset.messageId || '', text: text });
+  });
+  setPlayButtonState(btn, 'idle');
+  return btn;
+}
+
+/**
+ * Only one message can be read at a time, so starting a new one must visually reset the others
+ * instead of waiting for C#'s stop confirmation.
+ */
+function resetOtherPlayButtons(exceptRow) {
+  document.querySelectorAll('.message-row').forEach(function (row) {
+    if (row === exceptRow) return;
+    const button = row.querySelector('.message-action-btn[data-tts-state]');
+    if (button && button.dataset.ttsState !== 'idle') {
+      setPlayButtonState(button, 'idle');
+    }
+  });
+}
+
+function findPlayButton(messageId) {
+  if (!messageId) return null;
+  const row = document.querySelector(
+    '.message-row[data-message-id="' + cssEscape(messageId) + '"]');
+  return row ? row.querySelector('.message-action-btn[data-tts-state]') : null;
+}
+
+/**
+ * Applies a ttsState command from C#. `ended` and `error` both return the button to idle; an error
+ * also surfaces the message, since a silent failure would look like a broken button.
+ */
+function applyTtsState(command) {
+  const button = findPlayButton(command.messageId);
+  if (!button) return;
+
+  const nextState = command.state === 'loading' || command.state === 'playing'
+    ? command.state
+    : 'idle';
+  if (nextState === 'loading' || nextState === 'playing') {
+    resetOtherPlayButtons(button.closest('.message-row'));
+  }
+
+  setPlayButtonState(button, nextState);
+  if (command.state === 'error') {
+    const message = command.error ? t('ttsFailed').replace('{0}', command.error) : t('ttsFailed');
+    button.title = message;
+    button.classList.add('tts-error');
+  } else {
+    button.title = '';
+  }
+}
+
+/** Rebuilds buttons after the enabled flag changes (settings save) without reloading the page. */
+function applyChatTtsConfig() {
+  document.querySelectorAll('.message-row').forEach(function (row) {
+    const existing = row.querySelector('.message-action-btn[data-tts-state]');
+    const isAssistant = row.classList.contains('assistant-row');
+    if (ttsEnabled() && isAssistant && !existing) {
+      const actions = row.querySelector('.message-actions');
+      if (actions) actions.appendChild(createPlayButton(row));
+      return;
+    }
+
+    if (!ttsEnabled() && existing) {
+      existing.remove();
+    }
+  });
+}
+
 function createMessageActions(row) {
   const actions = document.createElement('div');
   actions.className = 'message-actions';
   actions.appendChild(createCopyButton(function (button) {
     copyMessageText(resolveRowCopyText(row), button);
   }));
+  // Read aloud is assistant-only; user messages have nothing to speak.
+  if (ttsEnabled() && row.classList.contains('assistant-row')) {
+    actions.appendChild(createPlayButton(row));
+  }
   return actions;
 }
 

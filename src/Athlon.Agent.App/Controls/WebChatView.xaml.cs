@@ -8,6 +8,7 @@ using System.Windows.Threading;
 using Athlon.Agent.App.Localization;
 using Athlon.Agent.App.Resources;
 using Athlon.Agent.App.Services;
+using Athlon.Agent.App.Services.Chat;
 using Athlon.Agent.App.Services.Diagnostics;
 using Athlon.Agent.App.Themes;
 using Athlon.Agent.App.ViewModels;
@@ -80,10 +81,18 @@ public partial class WebChatView : UserControl
     public event EventHandler? PlanBuildRequested;
     public event EventHandler? PlanReviseRequested;
 
+    /// <summary>
+    /// Read-aloud orchestration, assigned by the window once services are resolved. Null leaves the
+    /// timeline's play button inert (the button is also hidden when TTS is disabled).
+    /// </summary>
+    public ChatTtsController? TtsController { get; set; }
+
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         AppThemeManager.ThemeChanged -= OnAppThemeChanged;
         AppCultureManager.CultureChanged -= OnAppCultureChanged;
+        // Leaving the chat page must silence any in-flight utterance; the WebView may be recreated.
+        TtsController?.Stop();
     }
 
     private void OnAppThemeChanged(object? sender, EventArgs e)
@@ -1096,6 +1105,22 @@ public partial class WebChatView : UserControl
                         }
 
                         break;
+                    case "playAudio":
+                        var ttsMessageId = root.TryGetProperty("messageId", out var ttsMessageIdElement)
+                            ? ttsMessageIdElement.GetString()
+                            : null;
+                        var ttsText = root.TryGetProperty("text", out var ttsTextElement)
+                            ? ttsTextElement.GetString()
+                            : null;
+                        if (!string.IsNullOrEmpty(ttsMessageId) && !string.IsNullOrEmpty(ttsText))
+                        {
+                            _ = TtsController?.PlayAsync(ttsMessageId, ttsText);
+                        }
+
+                        break;
+                    case "stopAudio":
+                        TtsController?.Stop();
+                        break;
                     case "preview":
                         var html = root.TryGetProperty("html", out var htmlElement)
                             ? htmlElement.GetString()
@@ -1349,7 +1374,8 @@ public partial class WebChatView : UserControl
         try
         {
             ChatWebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
-            ChatWebView.NavigateToString(_htmlBuilder.BuildShellHtml(ResolveSsoDisplayName()));
+            ChatWebView.NavigateToString(
+                _htmlBuilder.BuildShellHtml(ResolveSsoDisplayName(), TtsController?.Enabled ?? false));
             var success = await _documentReadyTcs.Task.ConfigureAwait(true);
             if (!success || generation != _navigationGeneration)
             {
@@ -1362,6 +1388,36 @@ public partial class WebChatView : UserControl
             App.StartupTrace($"WebChatView shell navigation failed: {ex}");
             throw;
         }
+
+        // Re-attach read-aloud after every navigation: the previous page (and its post target) is gone.
+        AttachTtsTransport();
+        await PushTtsConfigAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Points the controller's status channel at this WebView instance, so a recreated page does not
+    /// keep pushing state into a disposed one.
+    /// </summary>
+    private void AttachTtsTransport() =>
+        TtsController?.AttachPostTarget(json => PostToPageAsync(json));
+
+    /// <summary>
+    /// Tells the timeline whether the read-aloud button should exist. Called after navigation and
+    /// again after settings are saved, so toggling the feature takes effect without a reload.
+    /// </summary>
+    public Task PushTtsConfigAsync() =>
+        ExecuteScriptWhenReadyAsync(ChatHtmlBuilder.BuildTtsConfigScript(TtsController?.Enabled ?? false));
+
+    private Task PostToPageAsync(string json)
+    {
+        var core = ChatWebView?.CoreWebView2;
+        if (core is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        core.PostWebMessageAsJson(json);
+        return Task.CompletedTask;
     }
 
     public Task ScrollToBottomAsync() =>
