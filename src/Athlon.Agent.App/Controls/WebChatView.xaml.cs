@@ -1390,8 +1390,15 @@ public partial class WebChatView : UserControl
         }
 
         // Re-attach read-aloud after every navigation: the previous page (and its post target) is gone.
+        // The enabled flag was already baked into the shell by the line above, so no script push is
+        // needed here.
+        //
+        // Deliberately NOT awaiting PushTtsConfigAsync(): it goes through ExecuteScriptWhenReadyAsync,
+        // which awaits EnsureReadyAsync(), which awaits _initTask -- and _initTask is the very
+        // InitializeWebViewAsync call that is executing this method. _initialized only flips true
+        // after this method returns, so awaiting it here deadlocks the UI thread and every later
+        // render/replay (including session switches) blocks forever behind it.
         AttachTtsTransport();
-        await PushTtsConfigAsync().ConfigureAwait(true);
     }
 
     /// <summary>
@@ -1402,11 +1409,26 @@ public partial class WebChatView : UserControl
         TtsController?.AttachPostTarget(json => PostToPageAsync(json));
 
     /// <summary>
-    /// Tells the timeline whether the read-aloud button should exist. Called after navigation and
-    /// again after settings are saved, so toggling the feature takes effect without a reload.
+    /// Tells the timeline whether the read-aloud button should exist. Called after settings are
+    /// saved, so toggling the feature takes effect without a page reload.
     /// </summary>
-    public Task PushTtsConfigAsync() =>
-        ExecuteScriptWhenReadyAsync(ChatHtmlBuilder.BuildTtsConfigScript(TtsController?.Enabled ?? false));
+    /// <remarks>
+    /// Guarded on <c>_initialized</c> rather than calling <c>EnsureReadyAsync</c> unconditionally.
+    /// During shell startup this method would await <c>_initTask</c> -- the very navigation that is
+    /// still executing -- and deadlock the UI thread, which stalls every later render and session
+    /// switch too. Before initialization the flag is already embedded in the shell HTML by
+    /// <see cref="ChatHtmlBuilder.BuildShellHtml"/>, so skipping is correct rather than lossy.
+    /// </remarks>
+    public Task PushTtsConfigAsync()
+    {
+        if (!_initialized)
+        {
+            ChatRenderTrace.Record("ttsConfigSkipped", "view not initialized; flag comes from shell HTML");
+            return Task.CompletedTask;
+        }
+
+        return ExecuteScriptWhenReadyAsync(ChatHtmlBuilder.BuildTtsConfigScript(TtsController?.Enabled ?? false));
+    }
 
     private Task PostToPageAsync(string json)
     {

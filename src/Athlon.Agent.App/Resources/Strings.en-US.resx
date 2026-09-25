@@ -1616,7 +1616,7 @@ Save anyway?</value>
     <value>Voice</value>
   </data>
   <data name="Settings_TtsVoiceHint" xml:space="preserve">
-    <value>Type a voice name directly, or click Test connection to load the server's voice list.</value>
+    <value>Using the default voice: </value>
   </data>
   <data name="Settings_TtsSpeed" xml:space="preserve">
     <value>Speed (0.5 - 2.0)</value>

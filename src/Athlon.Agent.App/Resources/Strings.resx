@@ -1625,7 +1625,7 @@
     <value>音色</value>
   </data>
   <data name="Settings_TtsVoiceHint" xml:space="preserve">
-    <value>可直接输入，或点击「测试连接」从服务端拉取可用音色。</value>
+    <value>当前使用默认音色：</value>
   </data>
   <data name="Settings_TtsSpeed" xml:space="preserve">
     <value>语速（0.5 - 2.0）</value>
