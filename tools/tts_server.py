@@ -1093,7 +1093,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="并发合成上限（单卡建议 1）")
 
     s = p.add_argument_group("服务")
-    s.add_argument("--host", default="127.0.0.1")
+    s.add_argument("--host", default="0.0.0.0")
     s.add_argument("--port", type=int, default=8000)
     s.add_argument("--api-key", default=None,
                    help="API 密钥（不推荐：会暴露在 ps 中）。"

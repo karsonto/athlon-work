@@ -281,6 +281,9 @@ class LocalStreamingTTS:
         from qwen_tts import Qwen3TTSModel
 
         self.torch = torch
+        # cuDNN 卷积路径在该环境故障（CUDNN_STATUS_NOT_INITIALIZED），
+        # 禁用后 conv1d/conv2d 自动回退 native kernel，vocoder 完全兼容。
+        torch.backends.cudnn.enabled = False
         dtype = getattr(torch, self.dtype_str)
         kwargs: Dict[str, Any] = {"device_map": self.device, "dtype": dtype}
         if self.attn_implementation and self.attn_implementation != "none":
