@@ -65,7 +65,10 @@ public partial class App : Application
 
             var services = new ServiceCollection();
             StartupTrace("ServiceCollection created");
-            services.AddAthlonInfrastructure();
+            services.AddAthlonInfrastructure(
+                productName: Athlon.Agent.App.Services.AppVersionInfo.ProductName,
+                productVersion: Athlon.Agent.App.Services.AppVersionInfo.VersionDisplay,
+                productFileVersion: Athlon.Agent.App.Services.AppVersionInfo.FileVersion);
             StartupTrace("Infrastructure registered");
             services.AddSingleton(sp => new SessionUiCache(
                 System.Windows.Threading.Dispatcher.CurrentDispatcher,

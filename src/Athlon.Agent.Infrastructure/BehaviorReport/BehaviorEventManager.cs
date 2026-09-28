@@ -49,7 +49,9 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
         IImpSsoSessionStore? ssoStore = null,
         Func<string>? screenResolver = null,
         string productName = "athlon",
-        string productVersion = "dev")
+        string productVersion = "dev",
+        string productFileVersion = "",
+        ICredentialStore? credentialStore = null)
     {
         lock (_gate)
         {
@@ -64,8 +66,10 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
                     sessionStore: ssoStore,
                     screenResolutionProvider: screenResolver,
                     appName: productName,
-                    appVersion: productVersion),
-                _logger);
+                    appVersion: productVersion,
+                    appFileVersion: productFileVersion),
+                _logger,
+                credentialStore);
         }
 
         return this;

@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
@@ -10,7 +11,8 @@ public sealed class BehaviorReportUploader(
     AppSettings settings,
     BehaviorEventLocalStore store,
     ClientDeviceInfo deviceInfo,
-    IAppLogger logger)
+    IAppLogger logger,
+    ICredentialStore? credentialStore = null)
 {
     private readonly IAppLogger _logger = logger.ForContext("BehaviorReportUploader");
 
@@ -32,9 +34,23 @@ public sealed class BehaviorReportUploader(
         var endpoint = report.BaseUrl.TrimEnd('/') + "/agent/report";
         var body = BuildRequestBody(device, pending);
 
+        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = JsonContent.Create(body)
+        };
+
+        // Identity: the model API key doubles as the dashboard credential (the server matches
+        // SHA-256(key) against api_keys.api_key_hash). Reporting stays best-effort, so a missing key
+        // downgrades the report to anonymous rather than dropping it.
+        var apiKey = await ResolveApiKeyAsync(cancellationToken).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        }
+
         try
         {
-            using var response = await httpClient.PostAsJsonAsync(endpoint, body, cancellationToken)
+            using var response = await httpClient.SendAsync(request, cancellationToken)
                 .ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
@@ -63,6 +79,25 @@ public sealed class BehaviorReportUploader(
         return uploadedIds.Count;
     }
 
+    private async Task<string?> ResolveApiKeyAsync(CancellationToken cancellationToken)
+    {
+        if (credentialStore is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await ModelApiKeyResolver.ResolveAsync(credentialStore, settings, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.Warning("Behavior report api key resolution failed: {Error}", ex.Message);
+            return null;
+        }
+    }
+
     /// <summary>
     /// Builds POST /agent/report body: device fields + batched <c>events</c>.
     /// </summary>
@@ -75,6 +110,7 @@ public sealed class BehaviorReportUploader(
             os_version = device.OsVersion,
             app_name = device.AppName,
             app_version = device.AppVersion,
+            app_file_version = device.AppFileVersion,
             screen_resolution = device.ScreenResolution,
             events = events.Select(BuildEventItem).ToArray()
         };

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Reflection;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
@@ -41,9 +42,40 @@ namespace Athlon.Agent.Infrastructure;
 
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// Registers the infrastructure graph.
+    /// </summary>
+    /// <param name="productName">
+    /// Display name reported to the behavior-report service (the management dashboard groups by it).
+    /// </param>
+    /// <param name="productVersion">
+    /// Primary version reported upstream. Callers should pass the <c>AssemblyInformationalVersion</c>
+    /// (the Velopack release version, e.g. <c>3.3.1</c>); omitting it previously left every report
+    /// stamped with the literal "dev", which made per-version dashboards meaningless.
+    /// </param>
+    /// <param name="productFileVersion">
+    /// Secondary version (<c>AssemblyVersion</c> / <c>FileVersion</c>, e.g. <c>3.0.1.0</c>). It is sent
+    /// alongside the primary one because the two disagree today: the csproj pins 3.0.1 while Release
+    /// publishes with <c>-p:Version=&lt;tag&gt;</c>. Reporting both lets the dashboard tell which
+    /// version semantic it is looking at instead of guessing.
+    /// </param>
     [SupportedOSPlatform("windows")]
-    public static IServiceCollection AddAthlonInfrastructure(this IServiceCollection services)
+    public static IServiceCollection AddAthlonInfrastructure(
+        this IServiceCollection services,
+        string? productName = null,
+        string? productVersion = null,
+        string? productFileVersion = null)
     {
+        var resolvedProductName = string.IsNullOrWhiteSpace(productName)
+            ? "Athlon Agent"
+            : productName.Trim();
+        var resolvedProductVersion = string.IsNullOrWhiteSpace(productVersion)
+            ? ResolveFallbackVersion(informational: true)
+            : productVersion.Trim();
+        var resolvedFileVersion = string.IsNullOrWhiteSpace(productFileVersion)
+            ? ResolveFallbackVersion(informational: false)
+            : productFileVersion.Trim();
+
         var paths = new AppPathProvider();
         paths.EnsureCreated();
         var jsonFileStore = new JsonFileStore();
@@ -81,7 +113,11 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<IAppPathProvider>(),
                 httpClient,
                 sp.GetRequiredService<IAppLogger>(),
-                sessionStore);
+                sessionStore,
+                productName: resolvedProductName,
+                productVersion: resolvedProductVersion,
+                productFileVersion: resolvedFileVersion,
+                credentialStore: sp.GetService<ICredentialStore>());
             return BehaviorEventManager.Instance;
         });
         services.AddSingleton<IFileStorageService, FileStorageService>();
@@ -274,5 +310,35 @@ public static class ServiceCollectionExtensions
         }
 
         return settings;
+    }
+
+    /// <summary>
+    /// Reads this assembly's version when the host did not supply one. The App layer normally passes
+    /// the values explicitly (it owns the entry assembly), so this only covers direct Infrastructure
+    /// consumers such as tests and the CLI.
+    /// </summary>
+    private static string ResolveFallbackVersion(bool informational)
+    {
+        try
+        {
+            var assembly = typeof(ServiceCollectionExtensions).Assembly;
+            if (informational)
+            {
+                var value = assembly
+                    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+                    .InformationalVersion;
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    // Strip the "+<commit>" metadata suffix the SDK appends.
+                    return value.Split('+')[0];
+                }
+            }
+
+            return assembly.GetName().Version?.ToString(3) ?? "unknown";
+        }
+        catch
+        {
+            return "unknown";
+        }
     }
 }

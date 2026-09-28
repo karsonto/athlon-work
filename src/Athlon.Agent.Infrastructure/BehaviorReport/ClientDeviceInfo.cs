@@ -14,6 +14,14 @@ public sealed record ClientDeviceSnapshot
     public string OsVersion { get; init; } = "";
     public string AppName { get; init; } = "Athlon Agent";
     public string AppVersion { get; init; } = "unknown";
+
+    /// <summary>
+    /// Assembly / file version, reported alongside <see cref="AppVersion"/>. The two disagree today
+    /// (the csproj pins 3.0.1 while Release publishes 3.3.1 via <c>-p:Version</c>), so the dashboard
+    /// needs both to tell which version semantic it is reading instead of guessing.
+    /// </summary>
+    public string AppFileVersion { get; init; } = "";
+
     public string ScreenResolution { get; init; } = "";
 }
 
@@ -23,18 +31,21 @@ public sealed class ClientDeviceInfo
     private readonly Func<string>? _screenResolutionProvider;
     private readonly string _appName;
     private readonly string _appVersion;
+    private readonly string _appFileVersion;
     private ClientDeviceSnapshot? _cached;
 
     public ClientDeviceInfo(
         IImpSsoSessionStore? sessionStore = null,
         Func<string>? screenResolutionProvider = null,
         string? appName = null,
-        string? appVersion = null)
+        string? appVersion = null,
+        string? appFileVersion = null)
     {
         _sessionStore = sessionStore;
         _screenResolutionProvider = screenResolutionProvider;
         _appName = string.IsNullOrWhiteSpace(appName) ? "Athlon Agent" : appName.Trim();
         _appVersion = string.IsNullOrWhiteSpace(appVersion) ? "unknown" : appVersion.Trim();
+        _appFileVersion = appFileVersion?.Trim() ?? string.Empty;
     }
 
     public ClientDeviceSnapshot GetSnapshot(bool forceRefresh = false)
@@ -59,6 +70,7 @@ public sealed class ClientDeviceInfo
             OsVersion = RuntimeInformation.OSDescription,
             AppName = _appName,
             AppVersion = _appVersion,
+            AppFileVersion = _appFileVersion,
             ScreenResolution = SafeResolveScreenResolution()
         };
         return _cached;
