@@ -22,6 +22,14 @@ public static class BehaviorEventIds
 {
     public const string AppStart = "app_start";
     public const string AppShutdown = "app_shutdown";
+
+    /// <summary>
+    /// Liveness ping carrying the device/version envelope on a fixed cadence. Without it the roster
+    /// cannot tell an idle-but-running Agent from one that went offline, because device fields only
+    /// reach the server attached to real business events.
+    /// </summary>
+    public const string Heartbeat = "agent_heartbeat";
+
     public const string UserLogin = "user_login";
     public const string UserLoginFailed = "user_login_failed";
     public const string UserSession = "user_session";

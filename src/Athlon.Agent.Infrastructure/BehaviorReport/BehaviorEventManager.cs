@@ -28,6 +28,8 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
     private readonly Task _workerTask;
     private CancellationTokenSource? _uploadCts;
     private Task? _uploadTask;
+    private CancellationTokenSource? _heartbeatCts;
+    private Task? _heartbeatTask;
 
     private BehaviorEventManager()
     {
@@ -37,6 +39,7 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
     public static void ResetForTests()
     {
         Singleton.StopUploadLoop();
+        Singleton.StopHeartbeatLoop();
         Singleton.StartedAt = DateTimeOffset.UtcNow;
         Singleton._started = false;
     }
@@ -137,22 +140,61 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
         }
     }
 
+    /// <summary>
+    /// Sends an event-less liveness ping: the device/version envelope on its own fixed cadence.
+    /// Returns true when the server accepted it. Exposed for the heartbeat timer and tests.
+    /// </summary>
+    internal async Task<bool> SendHeartbeatAsync(CancellationToken cancellationToken = default)
+    {
+        await DrainChannelAsync(cancellationToken).ConfigureAwait(false);
+
+        BehaviorReportUploader? uploader;
+        lock (_gate)
+        {
+            uploader = _uploader;
+        }
+
+        if (uploader is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            await uploader.UploadPendingAsync(cancellationToken, sendWhenEmpty: true).ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // A failed heartbeat is not worth surfacing to the user; the next tick retries.
+            _logger.Warning("Behavior heartbeat failed: {Error}", ex.Message);
+            return false;
+        }
+    }
+
     public void Start()
     {
         StartedAt = DateTimeOffset.UtcNow;
         _started = true;
         StartUploadLoop();
+        StartHeartbeatLoop();
     }
 
     public void Stop()
     {
         _started = false;
         StopUploadLoop();
+        StopHeartbeatLoop();
     }
 
     public void Dispose()
     {
         StopUploadLoop();
+        StopHeartbeatLoop();
         _cts.Cancel();
         try
         {
@@ -284,6 +326,108 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
         }
 
         return uploaded;
+    }
+
+    private void StartHeartbeatLoop()
+    {
+        lock (_gate)
+        {
+            if (_heartbeatTask is { IsCompleted: false })
+            {
+                return;
+            }
+
+            _heartbeatCts?.Dispose();
+            _heartbeatCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+            var ct = _heartbeatCts.Token;
+            _heartbeatTask = Task.Run(() => RunHeartbeatLoopAsync(ct), ct);
+        }
+    }
+
+    private void StopHeartbeatLoop()
+    {
+        CancellationTokenSource? cts;
+        Task? task;
+        lock (_gate)
+        {
+            cts = _heartbeatCts;
+            task = _heartbeatTask;
+            _heartbeatCts = null;
+            _heartbeatTask = null;
+        }
+
+        try
+        {
+            cts?.Cancel();
+        }
+        catch
+        {
+            // ignore
+        }
+
+        try
+        {
+            task?.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch
+        {
+            // ignore shutdown races
+        }
+
+        cts?.Dispose();
+    }
+
+    /// <summary>
+    /// Liveness cadence, deliberately separate from the business-event upload loop so tuning one does
+    /// not disturb the other. The first tick fires after one interval; startup is already covered by
+    /// the queued <c>app_start</c> event.
+    /// </summary>
+    private async Task RunHeartbeatLoopAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                int minutes;
+                lock (_gate)
+                {
+                    minutes = Math.Max(1, _settings.BehaviorReport.HeartbeatIntervalMinutes);
+                }
+
+                using var timer = new PeriodicTimer(TimeSpan.FromMinutes(minutes));
+                while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    try
+                    {
+                        await SendHeartbeatAsync(cancellationToken).ConfigureAwait(false);
+
+                        // Recreate timer if the configured interval changed.
+                        int latestMinutes;
+                        lock (_gate)
+                        {
+                            latestMinutes = Math.Max(1, _settings.BehaviorReport.HeartbeatIntervalMinutes);
+                        }
+
+                        if (latestMinutes != minutes)
+                        {
+                            break;
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning("Behavior heartbeat cycle failed: {Error}", ex.Message);
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // normal stop
+        }
     }
 
     private async Task DrainChannelAsync(CancellationToken cancellationToken)

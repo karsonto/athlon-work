@@ -16,7 +16,15 @@ public sealed class BehaviorReportUploader(
 {
     private readonly IAppLogger _logger = logger.ForContext("BehaviorReportUploader");
 
-    public async Task<int> UploadPendingAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Uploads pending events. When <paramref name="sendWhenEmpty"/> is true an event-less request is
+    /// still sent: that is the liveness heartbeat, whose only payload is the device/version envelope.
+    /// The device snapshot is then refreshed so a changed IP/MAC (VPN, DHCP) is reflected immediately
+    /// instead of waiting for the next cache miss.
+    /// </summary>
+    public async Task<int> UploadPendingAsync(
+        CancellationToken cancellationToken = default,
+        bool sendWhenEmpty = false)
     {
         var report = settings.BehaviorReport;
         if (!report.Enabled || string.IsNullOrWhiteSpace(report.BaseUrl))
@@ -25,14 +33,17 @@ public sealed class BehaviorReportUploader(
         }
 
         var pending = await store.ReadAllAsync(cancellationToken).ConfigureAwait(false);
-        if (pending.Count == 0)
+        if (pending.Count == 0 && !sendWhenEmpty)
         {
             return 0;
         }
 
-        var device = deviceInfo.GetSnapshot();
+        var device = deviceInfo.GetSnapshot(forceRefresh: sendWhenEmpty);
         var endpoint = report.BaseUrl.TrimEnd('/') + "/agent/report";
-        var body = BuildRequestBody(device, pending);
+        // Only an event-less ping is a heartbeat; a batch that happens to contain events is a normal
+        // report even when the timer fired it.
+        var isHeartbeat = sendWhenEmpty && pending.Count == 0;
+        var body = BuildRequestBody(device, pending, isHeartbeat);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
         {
@@ -100,8 +111,13 @@ public sealed class BehaviorReportUploader(
 
     /// <summary>
     /// Builds POST /agent/report body: device fields + batched <c>events</c>.
+    /// <paramref name="isHeartbeat"/> marks an event-less liveness ping so the server can record it as
+    /// "last reported" without inventing a business event.
     /// </summary>
-    internal static object BuildRequestBody(ClientDeviceSnapshot device, IReadOnlyList<BehaviorEvent> events) =>
+    internal static object BuildRequestBody(
+        ClientDeviceSnapshot device,
+        IReadOnlyList<BehaviorEvent> events,
+        bool isHeartbeat = false) =>
         new
         {
             user_id = device.UserId,
@@ -112,6 +128,7 @@ public sealed class BehaviorReportUploader(
             app_version = device.AppVersion,
             app_file_version = device.AppFileVersion,
             screen_resolution = device.ScreenResolution,
+            heartbeat = isHeartbeat,
             events = events.Select(BuildEventItem).ToArray()
         };
 

@@ -6,6 +6,28 @@
 
 ---
 
+## 心跳（liveness）
+
+除业务事件批量上报外，另有一条**独立心跳**：每 `heartbeatIntervalMinutes`（默认 **5 分钟**）发送一次仅含设备信封、`events` 为空的请求（`heartbeat: true`）。
+
+- 目的：设备字段（版本 / IP / MAC / OS）原本只随业务事件上送，导致「挂着不操作」的用户在管理端无法与「已离线」区分。
+- 服务端把心跳写入独立的 `agent_status` 表，**不**在 `behavior_events` 中伪造事件行（该表无保留期清理，5 分钟一行会无限膨胀）。
+- 两个节奏互相独立：`uploadIntervalMinutes`（默认 10）控制业务事件批量，`heartbeatIntervalMinutes`（默认 5）控制心跳。
+- 心跳与业务批量共用同一上传器；若心跳到点时正好有待上报事件，则按普通批量上送（`heartbeat: false`），不会重复标记。
+- 心跳会 `forceRefresh` 设备快照，因此切换 VPN/DHCP 后 IP 变化能立即反映。
+
+服务端 `agent_status` 语义：
+
+| 字段 | 含义 |
+|------|------|
+| `last_report_ms` | 最近一次任何形式的上报（含心跳），即「Agent 存活至此刻」 |
+| `last_heartbeat_ms` | 最近一次显式心跳，用于区分「空闲但运行中」与「离线」 |
+| `report_count` / `heartbeat_count` | 累计上报次数，可用于发现卡在重试循环的客户端 |
+
+界面依据心跳判断在线状态：超过 3 个心跳周期（15 分钟）无上报即显示「离线」。
+
+---
+
 ## 上报体（设备字段 + events 数组）
 
 一次请求上送当前 pending 中的全部事件（成功则整批删除，失败整批保留重试）：
@@ -18,8 +40,10 @@
 | `os_version` | 操作系统版本 |
 | `app_name` | Athlon Agent |
 | `app_version` | 应用版本号 |
+| `app_file_version` | AssemblyFileVersion，与 `app_version` 不一致时说明仍在用旧构建 |
+| `heartbeat` | true 表示这是一次仅含设备信封的存活心跳 |
 | `screen_resolution` | 主屏分辨率 |
-| `events` | 事件数组 |
+| `events` | 事件数组（心跳时为 `[]`） |
 
 每个 `events[]` 元素：
 

@@ -349,6 +349,108 @@ public sealed class BehaviorReportTests : IDisposable
         Assert.Single(remaining);
     }
 
+    [Fact]
+    public void BuildRequestBody_MarksHeartbeatAndKeepsVersionFields()
+    {
+        var device = new ClientDeviceSnapshot
+        {
+            UserId = "000000001",
+            AppVersion = "3.4.0",
+            AppFileVersion = "3.0.1.0"
+        };
+
+        var heartbeatJson = JsonSerializer.Serialize(
+            BehaviorReportUploader.BuildRequestBody(device, Array.Empty<BehaviorEvent>(), isHeartbeat: true));
+        using (var doc = JsonDocument.Parse(heartbeatJson))
+        {
+            var root = doc.RootElement;
+            Assert.True(root.GetProperty("heartbeat").GetBoolean());
+            Assert.Equal("3.4.0", root.GetProperty("app_version").GetString());
+            Assert.Equal("3.0.1.0", root.GetProperty("app_file_version").GetString());
+            Assert.Equal(0, root.GetProperty("events").GetArrayLength());
+        }
+
+        // A normal batch must not be flagged as a heartbeat.
+        var batchJson = JsonSerializer.Serialize(
+            BehaviorReportUploader.BuildRequestBody(device, new[]
+            {
+                new BehaviorEvent { EventId = BehaviorEventIds.AppStart, EventType = BehaviorEventTypes.Event }
+            }));
+        using (var doc = JsonDocument.Parse(batchJson))
+        {
+            Assert.False(doc.RootElement.GetProperty("heartbeat").GetBoolean());
+            Assert.Equal(1, doc.RootElement.GetProperty("events").GetArrayLength());
+        }
+    }
+
+    [Fact]
+    public async Task Uploader_Heartbeat_SendsEvenWithNoPendingEvents()
+    {
+        var paths = new TestPaths(_root);
+        paths.EnsureCreated();
+        var store = new BehaviorEventLocalStore(paths);
+        var settings = new AppSettings
+        {
+            BehaviorReport = new BehaviorReportSettings { Enabled = true, BaseUrl = "https://example.com" }
+        };
+        var capturing = new CapturingHandler();
+        var uploader = new BehaviorReportUploader(
+            new HttpClient(capturing),
+            settings,
+            store,
+            new ClientDeviceInfo(appName: "Athlon Agent", appVersion: "3.4.0"),
+            new NoOpLogger());
+
+        // No pending events: a normal cycle is a no-op, a heartbeat still reaches the server.
+        Assert.Equal(0, await uploader.UploadPendingAsync());
+        Assert.Equal(0, capturing.RequestCount);
+
+        await uploader.UploadPendingAsync(sendWhenEmpty: true);
+        Assert.Equal(1, capturing.RequestCount);
+        Assert.Contains("\"heartbeat\":true", capturing.LastRequestBody, StringComparison.Ordinal);
+        Assert.Contains("\"events\":[]", capturing.LastRequestBody, StringComparison.Ordinal);
+        Assert.Contains("3.4.0", capturing.LastRequestBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EventManager_HeartbeatSendsDeviceEnvelopeWithoutEvents()
+    {
+        var paths = new TestPaths(_root);
+        paths.EnsureCreated();
+        var settings = new AppSettings
+        {
+            BehaviorReport = new BehaviorReportSettings
+            {
+                Enabled = true,
+                BaseUrl = "https://example.com",
+                UploadIntervalMinutes = 60,
+                HeartbeatIntervalMinutes = 5
+            }
+        };
+
+        var capturing = new CapturingHandler();
+        var em = BehaviorEventManager.Instance;
+        em.Configure(
+            settings, paths, new HttpClient(capturing), new NoOpLogger(),
+            productName: "Athlon Agent", productVersion: "3.4.0", productFileVersion: "3.0.1.0");
+        em.Start();
+        try
+        {
+            var sent = await em.SendHeartbeatAsync();
+            Assert.True(sent);
+            Assert.Equal(1, capturing.RequestCount);
+            Assert.Contains("\"heartbeat\":true", capturing.LastRequestBody, StringComparison.Ordinal);
+            Assert.Contains("3.0.1.0", capturing.LastRequestBody, StringComparison.Ordinal);
+            // The heartbeat must not fabricate a business event.
+            Assert.Contains("\"events\":[]", capturing.LastRequestBody, StringComparison.Ordinal);
+            Assert.False(File.Exists(Path.Combine(paths.BehaviorPath, "pending.jsonl")));
+        }
+        finally
+        {
+            em.Stop();
+        }
+    }
+
     private sealed class TestPaths(string root) : IAppPathProvider
     {
         public string RootPath { get; } = root;
