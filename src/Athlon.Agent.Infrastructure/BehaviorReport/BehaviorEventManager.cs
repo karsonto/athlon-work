@@ -96,12 +96,38 @@ public sealed class BehaviorEventManager : IEventManager, IDisposable
             EventId = eventId ?? string.Empty,
             EventType = string.IsNullOrWhiteSpace(eventType) ? BehaviorEventTypes.Event : eventType,
             MessageContent = string.IsNullOrWhiteSpace(messageContent) ? eventId ?? string.Empty : messageContent,
-            Parameters = parameters is null
-                ? new Dictionary<string, object?>(StringComparer.Ordinal)
-                : new Dictionary<string, object?>(parameters, StringComparer.Ordinal)
+            Parameters = BuildParameters(parameters)
         };
 
         _channel.Writer.TryWrite(evt);
+    }
+
+    /// <summary>
+    /// Copies event parameters while dropping null values. Every optional field in the event schema
+    /// (reason, expires_at, version, error_type…) means "not applicable" when it has no value, and that
+    /// is expressed by the key being absent. Serializing null instead produced a literal
+    /// <c>"version":null</c> in both the local pending file and the upload payload, which carries no
+    /// extra information while forcing every reader to handle null and missing separately.
+    /// </summary>
+    private static Dictionary<string, object?> BuildParameters(IReadOnlyDictionary<string, object?>? parameters)
+    {
+        var result = new Dictionary<string, object?>(StringComparer.Ordinal);
+        if (parameters is null)
+        {
+            return result;
+        }
+
+        foreach (var pair in parameters)
+        {
+            if (pair.Value is null)
+            {
+                continue;
+            }
+
+            result[pair.Key] = pair.Value;
+        }
+
+        return result;
     }
 
     public void RecordAttempt(AgentAttemptEvent attempt)

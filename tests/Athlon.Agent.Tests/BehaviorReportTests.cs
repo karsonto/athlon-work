@@ -451,6 +451,104 @@ public sealed class BehaviorReportTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task EventManager_DropsNullParametersFromPendingFile()
+    {
+        var paths = new TestPaths(_root);
+        paths.EnsureCreated();
+        var settings = new AppSettings
+        {
+            BehaviorReport = new BehaviorReportSettings
+            {
+                Enabled = true,
+                BaseUrl = "https://example.com",
+                UploadIntervalMinutes = 60,
+                HeartbeatIntervalMinutes = 60
+            }
+        };
+
+        var em = BehaviorEventManager.Instance;
+        em.Configure(settings, paths, new HttpClient(new FailHandler()), new NoOpLogger());
+        em.Start();
+        try
+        {
+            // Mirrors AppUpdateService: an optional field with no value must be absent, not "null".
+            em.Record(
+                BehaviorEventIds.AppUpdateCheck,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.AppUpdateCheck,
+                new Dictionary<string, object?>
+                {
+                    ["has_update"] = false,
+                    ["version"] = null
+                });
+
+            var pending = Path.Combine(paths.BehaviorPath, "pending.jsonl");
+            for (var i = 0; i < 40 && !File.Exists(pending); i++)
+            {
+                await Task.Delay(50);
+            }
+
+            var text = await File.ReadAllTextAsync(pending);
+            Assert.Contains("\"has_update\":false", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("version", text, StringComparison.Ordinal);
+        }
+        finally
+        {
+            em.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task UploadPayload_OmitsKeysThatHadNullValues()
+    {
+        var paths = new TestPaths(_root);
+        paths.EnsureCreated();
+        var settings = new AppSettings
+        {
+            BehaviorReport = new BehaviorReportSettings
+            {
+                Enabled = true,
+                BaseUrl = "https://example.com",
+                UploadIntervalMinutes = 60,
+                HeartbeatIntervalMinutes = 60
+            }
+        };
+
+        var capturing = new CapturingHandler();
+        var em = BehaviorEventManager.Instance;
+        em.Configure(settings, paths, new HttpClient(capturing), new NoOpLogger());
+        em.Start();
+        try
+        {
+            em.Record(
+                BehaviorEventIds.AppUpdateCheck,
+                BehaviorEventTypes.Event,
+                BehaviorEventIds.AppUpdateCheck,
+                new Dictionary<string, object?>
+                {
+                    ["has_update"] = false,
+                    ["version"] = null
+                });
+
+            var pending = Path.Combine(paths.BehaviorPath, "pending.jsonl");
+            for (var i = 0; i < 40 && !File.Exists(pending); i++)
+            {
+                await Task.Delay(50);
+            }
+
+            Assert.Equal(1, await em.RunUploadCycleAsync());
+            // The key must be absent end-to-end, not "version":null.
+            Assert.DoesNotContain("version", capturing.LastRequestBody, StringComparison.Ordinal);
+            Assert.Contains("\"has_update\":false", capturing.LastRequestBody, StringComparison.Ordinal);
+            Assert.Contains("\"event_kind\":\"event\"", capturing.LastRequestBody, StringComparison.Ordinal);
+        }
+        finally
+        {
+            em.Stop();
+        }
+    }
+
     private sealed class TestPaths(string root) : IAppPathProvider
     {
         public string RootPath { get; } = root;

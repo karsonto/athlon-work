@@ -56,6 +56,16 @@
 
 ---
 
+## 空值约定
+
+`event_params` 中**值为 null 的键会被丢弃**，不写 `"key":null`。带 `?` 标注的可选参数
+（`reason?` / `expires_at?` / `tool_count?` / `version` 等）在无值时表现为**键不存在**，
+语义是"不适用"。这样本地 JSONL 与上报 payload 都不再需要读者区分 null 与缺键。
+
+注意：`false`、`0`、空字符串**不是** null，会被正常保留。
+
+---
+
 ## 已实现 event_id（18）
 
 | # | 分类 | event_id | type | event_params 要点 | 挂钩位置 |
@@ -65,7 +75,7 @@
 | 3 | 身份与应用 | `user_login` | event | `logged_in_at`, `expires_at`, `source`(new/cached) | `ImpSsoStartupGate` |
 | 4 | 身份与应用 | `user_login_failed` | event | `status` | `ImpSsoStartupGate` |
 | 5 | 身份与应用 | `user_session` | event | `action`(expired/logout), `reason?`, `expires_at?` | Gate 过期 / `NavigationCoordinator.ClearSsoSession` |
-| 6 | 身份与应用 | `app_update_check` | event | `has_update`, `version` | `StartupUpdateGate` / `AppUpdateService` |
+| 6 | 身份与应用 | `app_update_check` | event | `has_update`, `version`（无更新时不带此键） | `StartupUpdateGate` / `AppUpdateService` |
 | 7 | 大模型 | `model_call` | action | `purpose`(Chat/Summary/Memory/SubAgent/Embedding), tokens, `latency_ms`, `result`, `session_id`… | `AppendAttemptEvent` / Embedding Client |
 | 8 | 大模型 | `model_usage_summary` | event | `window_minutes`, 各 purpose 的 calls/tokens | BehaviorEventManager 上送周期内聚合 |
 | 9 | MCP | `mcp_tool` | action | `server_name`/`tool_name`/`gateway`, `mode`(direct/search), `success`, `latency_ms` | Attempt 分流（MCP 工具名） |
