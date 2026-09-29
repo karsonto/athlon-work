@@ -49,8 +49,9 @@ public static class SemanticCutoffPlanner
         var summarizedEnd = ConversationCutoffPlanner.FindSafeCutoffPoint(conversation, rawCutoff);
         summarizedEnd = SnapToRetainedTailBoundary(conversation, summarizedEnd);
         var userAnchor = ResolveUserAnchorIndex(conversation, settings, anchorIndex, summarizedEnd);
+        var planAnchor = ResolvePlanAnchorIndex(conversation, summarizedEnd);
 
-        return new ConversationCutPlan(summarizedEnd, summarizedEnd, userAnchor);
+        return new ConversationCutPlan(summarizedEnd, summarizedEnd, userAnchor, planAnchor);
     }
 
     /// <summary>
@@ -90,9 +91,16 @@ public static class SemanticCutoffPlanner
     {
         var summarizedEnd = ConversationCutoffPlanner.FindSafeCutoffPoint(conversation, cutoff);
         summarizedEnd = SnapToRetainedTailBoundary(conversation, summarizedEnd);
-        return summarizedEnd <= 0
-            ? new ConversationCutPlan(0, conversation.Count, null)
-            : new ConversationCutPlan(summarizedEnd, summarizedEnd, null);
+        if (summarizedEnd <= 0)
+        {
+            return new ConversationCutPlan(0, conversation.Count, null);
+        }
+
+        return new ConversationCutPlan(
+            summarizedEnd,
+            summarizedEnd,
+            null,
+            ResolvePlanAnchorIndex(conversation, summarizedEnd));
     }
 
     public static string? BuildMustPreserveAppendix(
@@ -111,6 +119,7 @@ public static class SemanticCutoffPlanner
             return null;
         }
 
+        const int MaxAppendixChars = 4_000;
         var builder = new StringBuilder();
         builder.AppendLine("<must_preserve>");
         builder.AppendLine("The following facts from earlier history MUST appear in your summary:");
@@ -118,12 +127,19 @@ public static class SemanticCutoffPlanner
         for (var index = 0; index < cutoff; index++)
         {
             var message = conversation[index];
-            if (!SemanticMessageScorer.ShouldPreserveInSummary(message))
+            if (IsHiddenControlMessage(message)
+                || !SemanticMessageScorer.ShouldPreserveInSummary(message))
             {
                 continue;
             }
 
-            builder.AppendLine($"- [{message.Role}] {TruncateForAppendix(message.Content)}");
+            var line = $"- [{message.Role}] {TruncateForAppendix(message.Content)}";
+            if (builder.Length + line.Length + 32 > MaxAppendixChars)
+            {
+                break;
+            }
+
+            builder.AppendLine(line);
         }
 
         builder.AppendLine("</must_preserve>");
@@ -197,12 +213,35 @@ public static class SemanticCutoffPlanner
     }
 
     /// <summary>
+    /// Latest approved-plan message inside the summarized span. It stays out of the protected-tail
+    /// anchor so it is not treated as the active user instruction, but it is re-attached verbatim.
+    /// </summary>
+    private static int? ResolvePlanAnchorIndex(IReadOnlyList<ChatMessage> conversation, int summarizedEnd)
+    {
+        if (summarizedEnd <= 0)
+        {
+            return null;
+        }
+
+        for (var index = summarizedEnd - 1; index >= 0; index--)
+        {
+            if (ApprovedPlanPrompt.IsApprovedPlanMessage(conversation[index]))
+            {
+                return index;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Synthetic user messages that drive automation (auto-continue, approved plan, background
     /// sub-agent wake-ups) carry a marker. They are control messages rather than user intent, so
     /// they must not anchor the protected tail or be re-attached as the active instruction.
     /// </summary>
     private static bool IsHiddenControlMessage(ChatMessage message) =>
         PlanContinuePrompt.IsPlanContinueMessage(message)
+        || PlanPublishRepairPrompt.IsRepairMessage(message)
         || SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
         || ApprovedPlanPrompt.IsApprovedPlanMessage(message);
 

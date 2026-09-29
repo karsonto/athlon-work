@@ -82,7 +82,7 @@ internal static class FileReadLineReader
                 && lineIndex + 1 >= selection.StartLine
                 && lineIndex + 1 <= selection.EndLine)
             {
-                var formatted = FormatLine(lineIndex + 1, line, settings.MaxLineChars);
+                var formatted = FormatLine(line, settings.MaxLineChars);
                 var prefix = linesReturned == 0 ? string.Empty : Environment.NewLine;
                 var addition = prefix + formatted;
                 if (content.Length + addition.Length > settings.MaxResponseChars)
@@ -179,7 +179,7 @@ internal static class FileReadLineReader
                 && lineIndex + 1 >= selection.StartLine
                 && lineIndex + 1 <= selection.EndLine)
             {
-                var formatted = FormatLine(lineIndex + 1, line, settings.MaxLineChars);
+                var formatted = FormatLine(line, settings.MaxLineChars);
                 var prefix = linesReturned == 0 ? string.Empty : Environment.NewLine;
                 var addition = prefix + formatted;
                 if (content.Length + addition.Length > settings.MaxResponseChars)
@@ -235,14 +235,14 @@ internal static class FileReadLineReader
         return new ReadResult(body, totalLines, linesReturned, selection.StartLine, truncated, nextStartLine);
     }
 
-    internal static string FormatLine(int lineNumber, string line, int maxLineChars)
+    internal static string FormatLine(string line, int maxLineChars)
     {
         if (line.Length > maxLineChars)
         {
             line = line[..maxLineChars] + LineTruncatedSuffix;
         }
 
-        return $"{lineNumber}|{line}";
+        return line;
     }
 
     internal static string AppendMetaFooter(

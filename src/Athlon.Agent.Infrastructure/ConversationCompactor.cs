@@ -1,6 +1,7 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.BehaviorReport;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Core.RuntimeDiagnostics;
 using System.Diagnostics;
@@ -109,6 +110,9 @@ public sealed class ConversationCompactor(
         // compaction can fold condensed context instead of dropping it.
         var prefix = conversation.Take(cutoff).ToList();
         var tail = conversation.Skip(cutoff).ToList();
+        var reattachedPlan = cutPlan.NeedsPlanReattach
+            ? conversation[cutPlan.PlanAnchorIndex!.Value]
+            : null;
         var reattachedUser = cutPlan.NeedsUserReattach
             ? conversation[cutPlan.UserAnchorIndex!.Value]
             : null;
@@ -126,6 +130,7 @@ public sealed class ConversationCompactor(
         {
             var projectedAfter = EstimateProjectedAfterTokens(
                 tail,
+                reattachedPlan,
                 reattachedUser,
                 cfg,
                 ResolveSummaryMaxTokens(cfg, request.Plan?.Pressure, request.Force));
@@ -178,7 +183,7 @@ public sealed class ConversationCompactor(
                     summaryStopwatch.ElapsedMilliseconds),
                 cancellationToken).ConfigureAwait(false);
 
-            summary = summaryResponse.Content.Trim();
+            summary = SummaryPreservation.EnsureFacts(summaryResponse.Content.Trim(), mustPreserve);
             if (string.IsNullOrWhiteSpace(summary))
             {
                 _logger.Warning(
@@ -280,7 +285,7 @@ public sealed class ConversationCompactor(
         {
             var auditContent = CompactionMessageContent.CreateConversationCompact(
                 tokensBefore,
-                EstimateCompactedTokens(summaryMessage, reattachedUser, tail, cfg),
+                EstimateCompactedTokens(summaryMessage, reattachedPlan, reattachedUser, tail, cfg),
                 originalCount,
                 transcriptPath,
                 summary,
@@ -295,6 +300,13 @@ public sealed class ConversationCompactor(
         }
 
         compactMessages.Add(summaryMessage);
+        // Approved plans are control messages, so they are not the protected-tail anchor. When the
+        // cut still covers one, keep the body verbatim ahead of the active user instruction.
+        if (reattachedPlan is not null)
+        {
+            compactMessages.Add(reattachedPlan);
+        }
+
         // The cutoff can advance past the user message that opened the current turn. Re-attach it
         // verbatim after the summary so the active instruction survives the cut instead of relying
         // on the summary alone.
@@ -304,7 +316,7 @@ public sealed class ConversationCompactor(
         }
 
         compactMessages.AddRange(tail);
-        var tokensAfterPreview = EstimateCompactedTokens(summaryMessage, reattachedUser, tail, cfg);
+        var tokensAfterPreview = EstimateCompactedTokens(summaryMessage, reattachedPlan, reattachedUser, tail, cfg);
 
         await storage.SaveContextSummaryAsync(
             new ContextSummary(
@@ -401,9 +413,26 @@ public sealed class ConversationCompactor(
         var head = conversation.Take(keepHead).ToList();
         var middle = conversation.Skip(middleStart).Take(middleCount).ToList();
         var tail = conversation.Skip(tailStart).ToList();
+        ChatMessage? reattachedPlan = null;
+        var summarizedMiddle = new List<ChatMessage>(middle.Count);
+        foreach (var message in middle)
+        {
+            if (ApprovedPlanPrompt.IsApprovedPlanMessage(message))
+            {
+                reattachedPlan = message;
+                continue;
+            }
+
+            summarizedMiddle.Add(message);
+        }
+
+        if (summarizedMiddle.Count == 0)
+        {
+            return new ConversationCompactResult(session, false);
+        }
 
         var summaryRequest = BuildSummaryRequest(
-            middle,
+            summarizedMiddle,
             cfg,
             request,
             request.Plan?.MustPreserveAppendix,
@@ -422,7 +451,7 @@ public sealed class ConversationCompactor(
             summaryStopwatch.Stop();
             sessionUsageAccumulator.RecordCall(
                 session.Id, summaryAttemptId, ModelCallPurpose.Summary, usage);
-            summary = summaryResponse.Content.Trim();
+            summary = SummaryPreservation.EnsureFacts(summaryResponse.Content.Trim(), request.Plan?.MustPreserveAppendix);
             if (string.IsNullOrWhiteSpace(summary))
             {
                 return new ConversationCompactResult(session, false);
@@ -465,6 +494,11 @@ public sealed class ConversationCompactor(
         var compactMessages = new List<ChatMessage>(head.Count + tail.Count + 2);
         compactMessages.AddRange(head);
         compactMessages.Add(hiddenSummary);
+        if (reattachedPlan is not null)
+        {
+            compactMessages.Add(reattachedPlan);
+        }
+
         compactMessages.AddRange(tail);
 
         if (request.EmitAudit)
@@ -593,6 +627,7 @@ public sealed class ConversationCompactor(
     /// </summary>
     private static int EstimateProjectedAfterTokens(
         IReadOnlyList<ChatMessage> tail,
+        ChatMessage? reattachedPlan,
         ChatMessage? reattachedUser,
         ContextCompactionSettings cfg,
         int summaryMaxTokens)
@@ -606,6 +641,14 @@ public sealed class ConversationCompactor(
                 cfg.IncludeReasoningInModelContext);
 
         var total = summaryTokens;
+        if (reattachedPlan is not null)
+        {
+            total += ContextTokenEstimator.EstimateMessage(
+                reattachedPlan,
+                cfg.IncludeReasoningInModelContext,
+                cfg.RequestHistoryHygiene);
+        }
+
         if (reattachedUser is not null)
         {
             total += ContextTokenEstimator.EstimateMessage(
@@ -625,11 +668,17 @@ public sealed class ConversationCompactor(
     /// <summary>Token estimate of the payload actually written back after compaction.</summary>
     private static int EstimateCompactedTokens(
         ChatMessage summaryMessage,
+        ChatMessage? reattachedPlan,
         ChatMessage? reattachedUser,
         IReadOnlyList<ChatMessage> tail,
         ContextCompactionSettings cfg)
     {
-        var messages = new List<ChatMessage>(tail.Count + 2) { summaryMessage };
+        var messages = new List<ChatMessage>(tail.Count + 3) { summaryMessage };
+        if (reattachedPlan is not null)
+        {
+            messages.Add(reattachedPlan);
+        }
+
         if (reattachedUser is not null)
         {
             messages.Add(reattachedUser);
@@ -714,7 +763,7 @@ public sealed class ConversationCompactor(
         var built = ModelMessagesForApiBuilder.Build(
             cache: null,
             environmentPrompt,
-            prefix,
+            SummaryToolTrace.Apply(prefix),
             cfg);
         var hygieneResult = RequestHistoryHygiene.ApplyToModelMessages(built.Messages, hygieneSettings);
         var messages = hygieneResult.Messages.ToList();
@@ -732,7 +781,7 @@ public sealed class ConversationCompactor(
 
         return new AgentModelRequest(
             messages,
-            runtime?.Tools ?? Array.Empty<ToolDefinition>(),
+            Array.Empty<ToolDefinition>(),
             AllowToolCalls: false,
             MaxTokens: effectiveMaxTokens);
     }

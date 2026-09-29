@@ -21,10 +21,15 @@ namespace Athlon.Agent.Core.Compaction;
 /// Index of the last real user message when it falls inside the summarized span (so it can be
 /// re-attached), or <c>null</c> when no re-attachment is needed.
 /// </param>
+/// <param name="PlanAnchorIndex">
+/// Index of the latest approved-plan message inside the summarized span, so the plan body can be
+/// re-attached after the summary. Not a user-intent anchor.
+/// </param>
 public sealed record ConversationCutPlan(
     int SummarizedEnd,
     int RetainedTailStart,
-    int? UserAnchorIndex)
+    int? UserAnchorIndex,
+    int? PlanAnchorIndex = null)
 {
     /// <summary>True when this plan summarizes nothing and must not trigger a compaction pass.</summary>
     public bool IsEmpty => SummarizedEnd <= 0;
@@ -34,4 +39,7 @@ public sealed record ConversationCutPlan(
     /// re-attached after the summary.
     /// </summary>
     public bool NeedsUserReattach => UserAnchorIndex is not null;
+
+    /// <summary>True when an approved plan in the summarized span must be kept verbatim.</summary>
+    public bool NeedsPlanReattach => PlanAnchorIndex is not null;
 }

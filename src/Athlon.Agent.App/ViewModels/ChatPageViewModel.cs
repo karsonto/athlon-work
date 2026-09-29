@@ -24,6 +24,7 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
     private readonly ISpeechToTextService _speechToText;
     private readonly ILocalizationService _loc;
     private readonly IPlanPhaseAccessor _planPhaseAccessor;
+    private readonly IUserQuestionState _userQuestions;
     private string? _speechDraftBase;
     private bool _disposed;
 
@@ -42,6 +43,8 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
 
     public event EventHandler? FocusComposerRequested;
 
+    public event EventHandler? PlanBuildRequested;
+
     public ChatPageViewModel(
         ComposerCoordinator composer,
         SessionTurnCoordinator sessionTurns,
@@ -50,7 +53,8 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         IChatScrollService chatScroll,
         ISpeechToTextService speechToText,
         ILocalizationService localization,
-        IPlanPhaseAccessor planPhaseAccessor)
+        IPlanPhaseAccessor planPhaseAccessor,
+        IUserQuestionState userQuestions)
     {
         _composer = composer;
         _sessionTurns = sessionTurns;
@@ -60,6 +64,7 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         _speechToText = speechToText;
         _loc = localization;
         _planPhaseAccessor = planPhaseAccessor;
+        _userQuestions = userQuestions;
 
         _speechToText.AvailabilityChanged += OnSpeechAvailabilityChanged;
         _speechToText.PartialText += OnSpeechPartialText;
@@ -423,8 +428,37 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
             AddPendingImages([visual]);
         }
 
-        var imageAttachments = _composer.PersistPendingImages(displayedSessionId, PendingImageAttachments);
         var planPhase = _planPhaseAccessor.GetPhase(displayedSessionId);
+        if (planPhase == PlanPhase.AwaitConfirm
+            && PendingImageAttachments.Count == 0
+            && extractionResults.Count == 0
+            && !string.IsNullOrWhiteSpace(input))
+        {
+            if (_sessionTurns.IsRunning(displayedSessionId))
+            {
+                _showShellToast!.Invoke(_loc["Plan_BusyCannotRevise"], ShellToastKind.Error);
+                return;
+            }
+
+            var intent = PlanBuildIntent.Classify(input);
+            if (intent == PlanSubmitIntent.Build)
+            {
+                ComposerText = string.Empty;
+                _userQuestions.Clear(displayedSessionId);
+                PlanBuildRequested?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
+            if (intent == PlanSubmitIntent.Ask)
+            {
+                ComposerText = string.Empty;
+                var english = _loc.CurrentCulture.Name.StartsWith("en", StringComparison.OrdinalIgnoreCase);
+                _userQuestions.SetPending(displayedSessionId, PlanBuildIntent.CreateQuestion(english));
+                return;
+            }
+        }
+
+        var imageAttachments = _composer.PersistPendingImages(displayedSessionId, PendingImageAttachments);
         var revisePlan = planPhase == PlanPhase.AwaitConfirm;
         if (revisePlan && string.IsNullOrWhiteSpace(input))
         {
@@ -498,6 +532,21 @@ public sealed partial class ChatPageViewModel : ObservableObject, IDisposable
         }
 
         var trimmed = input.Trim();
+        if (_planPhaseAccessor.GetPhase(displayedSessionId) == PlanPhase.AwaitConfirm
+            && PlanBuildIntent.TryParseChoice(trimmed, out var choice))
+        {
+            _userQuestions.Clear(displayedSessionId);
+            if (choice == PlanBuildChoice.Build)
+            {
+                PlanBuildRequested?.Invoke(this, EventArgs.Empty);
+                return true;
+            }
+
+            _showShellToast?.Invoke(_loc["Plan_ReviseComposerHint"], ShellToastKind.Info);
+            FocusComposerRequested?.Invoke(this, EventArgs.Empty);
+            return true;
+        }
+
         var session = _getSession();
         _syncWorkspaceContext?.Invoke();
         var ui = _sessionTurns.GetOrCreateUi(displayedSessionId, RequestScrollToBottom, RequestScrollToBottomImmediate);

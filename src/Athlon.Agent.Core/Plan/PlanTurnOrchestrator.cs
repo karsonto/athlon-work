@@ -292,7 +292,8 @@ public sealed class PlanTurnOrchestrator(
     private async Task<AgentSession> FinalizeConsultingAsync(
         AgentSession session,
         AgentTurnCallbacks? callbacks,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowPublishRepair = true)
     {
         var run = phaseAccessor.GetActiveRun(session.Id);
         if (run is null)
@@ -318,6 +319,21 @@ public sealed class PlanTurnOrchestrator(
         if (!string.IsNullOrWhiteSpace(markdown) && PlanDocumentParser.LooksComplete(markdown))
         {
             return await SealToAwaitConfirmAsync(session, run, markdown, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (allowPublishRepair
+            && !run.PublishedThisTurn
+            && PlanPublishRepairPrompt.TryExtractProse(session) is { } prose)
+        {
+            session = await RunPhaseAsync(
+                session,
+                run,
+                PlanPublishRepairPrompt.Build(prose),
+                callbacks,
+                cancellationToken,
+                appendUserMessage: true).ConfigureAwait(false);
+            return await FinalizeConsultingAsync(session, callbacks, cancellationToken, allowPublishRepair: false)
+                .ConfigureAwait(false);
         }
 
         // Stay in Explore so the model can ask again or publish on a later user turn.

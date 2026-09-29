@@ -1,5 +1,6 @@
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
+using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -44,8 +45,11 @@ public sealed class CompactionTests
     {
         var settings = new ContextCompactionSettings();
 
-        Assert.False(settings.Enabled);
-        Assert.False(settings.DynamicCompaction.Enabled);
+        Assert.True(settings.Enabled);
+        Assert.True(settings.DynamicCompaction.Enabled);
+        Assert.Equal(0.45, settings.DynamicCompaction.PostCompactionUtilization);
+        Assert.Equal(131_072, settings.ContextWindowTokens);
+        Assert.Equal("128K", TokenCountDisplay.FormatWindow(settings.ContextWindowTokens));
         Assert.Equal(50, settings.TriggerMessages);
         Assert.Equal(80_000, settings.TriggerTokens);
         Assert.Equal(20, settings.KeepMessages);
@@ -1046,7 +1050,7 @@ public sealed class CompactionTests
     }
 
     [Fact]
-    public void ResolveKeepTokenBudget_AfterFullPassTargetsThirtyPercent()
+    public void ResolveKeepTokenBudget_AfterFullPassTargetsPostCompactionUtilization()
     {
         var settings = CreateDynamicCompactionSettings();
         var conversation = new[] { ChatMessage.Create(MessageRole.User, "hello") };
@@ -1112,7 +1116,7 @@ public sealed class CompactionTests
     }
 
     [Fact]
-    public void DynamicCompactionPlan_Elevated_AppliesTruncateOnlyWhenStaticTriggered()
+    public void DynamicCompactionPlan_Elevated_ReEvictsWithoutTruncateOrCompact()
     {
         var settings = CreateDynamicCompactionSettings();
         var conversation = Enumerable.Range(0, 30)
@@ -1121,6 +1125,8 @@ public sealed class CompactionTests
         var estimated = ContextTokenEstimator.Estimate(conversation);
         var budget = new ContextBudgetSnapshot(200_000, 8192, 20_000, 100_000, estimated, 0.6);
 
+        Assert.True(ContextPressureEvaluator.MeetsStaticTruncateThreshold(conversation, settings));
+
         var plan = DynamicCompactionPlan.Create(
             ContextPressureLevel.Elevated,
             budget,
@@ -1128,8 +1134,8 @@ public sealed class CompactionTests
             settings,
             force: false);
 
-        Assert.True(plan.ApplyTruncateArgs);
-        Assert.False(plan.ApplyPrefixReEvict);
+        Assert.False(plan.ApplyTruncateArgs);
+        Assert.True(plan.ApplyPrefixReEvict);
         Assert.False(plan.ApplyConversationCompact);
     }
 
@@ -1150,6 +1156,81 @@ public sealed class CompactionTests
         Assert.NotNull(appendix);
         Assert.Contains("<must_preserve>", appendix, StringComparison.Ordinal);
         Assert.Contains("Foo.cs", appendix, StringComparison.Ordinal);
+        Assert.DoesNotContain("[Assistant]", appendix, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SemanticCutoffPlanner_BuildMustPreserveAppendix_SkipsReadToolResults()
+    {
+        var settings = new ContextCompactionSettings();
+        var read = AgentRuntime.FormatToolResult(
+            new AgentToolCall("read-1", "file_read", new Dictionary<string, string> { ["path"] = "src/Foo.cs" }),
+            ToolResult.Success("ok", "entire file body that should not be pinned"));
+        var write = AgentRuntime.FormatToolResult(
+            new AgentToolCall("write-1", "file_write", new Dictionary<string, string> { ["path"] = "src/Foo.cs" }),
+            ToolResult.Success("wrote", "updated Foo"));
+        var conversation = new[]
+        {
+            ChatMessage.Create(MessageRole.User, "change Foo"),
+            ChatMessage.Create(MessageRole.Tool, read),
+            ChatMessage.Create(MessageRole.Tool, write),
+            ChatMessage.Create(MessageRole.User, "latest"),
+            ChatMessage.Create(MessageRole.Assistant, "working")
+        };
+
+        var appendix = SemanticCutoffPlanner.BuildMustPreserveAppendix(conversation, settings, keepTokenBudget: 20);
+
+        Assert.NotNull(appendix);
+        Assert.Contains("file_write", appendix, StringComparison.Ordinal);
+        Assert.DoesNotContain("entire file body", appendix, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SummaryToolTrace_CollapsesReadResultsAndKeepsWrites()
+    {
+        var read = ChatMessage.Create(
+            MessageRole.Tool,
+            AgentRuntime.FormatToolResult(
+                new AgentToolCall("read-1", "file_read", new Dictionary<string, string> { ["path"] = "src/Foo.cs" }),
+                ToolResult.Success("ok", new string('x', 2_000))));
+        var write = ChatMessage.Create(
+            MessageRole.Tool,
+            AgentRuntime.FormatToolResult(
+                new AgentToolCall("write-1", "file_write", new Dictionary<string, string> { ["path"] = "src/Foo.cs" }),
+                ToolResult.Success("wrote", "full write body")));
+
+        var traced = SummaryToolTrace.Apply([read, write]);
+
+        Assert.DoesNotContain(new string('x', 200), traced[0].Content, StringComparison.Ordinal);
+        Assert.Contains("Tool `file_read`", traced[0].Content, StringComparison.Ordinal);
+        Assert.Contains("path=", traced[0].Content, StringComparison.Ordinal);
+        Assert.Contains("full write body", traced[1].Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DetermineCutPlan_ReattachesApprovedPlanInsideSummarizedSpan()
+    {
+        var settings = new ContextCompactionSettings
+        {
+            ProtectedTailMaxMessages = 2,
+            ReattachLatestUserMessage = true,
+            DynamicCompaction = new DynamicCompactionSettings { EnableSemanticCutoff = true }
+        };
+        var planMessage = ChatMessage.Create(MessageRole.User, ApprovedPlanPrompt.BuildUserMessage("# Plan\n\n## Steps\n1. Do it\n\n## Acceptance\n- [ ] Done"));
+        var conversation = new[]
+        {
+            planMessage,
+            ChatMessage.Create(MessageRole.Assistant, "working"),
+            ChatMessage.Create(MessageRole.User, "continue the implementation"),
+            ChatMessage.Create(MessageRole.Assistant, new string('z', 4_000)),
+            ChatMessage.Create(MessageRole.Assistant, new string('y', 4_000))
+        };
+
+        var plan = SemanticCutoffPlanner.DetermineCutPlan(conversation, settings, keepTokenBudget: 1);
+
+        Assert.True(plan.SummarizedEnd > plan.PlanAnchorIndex);
+        Assert.Equal(0, plan.PlanAnchorIndex);
+        Assert.True(plan.NeedsPlanReattach);
     }
 
     [Fact]
@@ -1796,7 +1877,7 @@ public sealed class CompactionTests
             var request = capturing.LastRequest!;
             Assert.Equal("system", request.Messages[0].Role);
             Assert.Equal(environmentPrompt, request.Messages[0].Content as string);
-            Assert.Equal("file_read", Assert.Single(request.Tools).Name);
+            Assert.Empty(request.Tools);
             Assert.False(request.AllowToolCalls);
             var instruction = request.Messages[^1];
             Assert.Equal("user", instruction.Role);
@@ -2213,6 +2294,78 @@ public sealed class CompactionTests
                     SummaryMessageBuilder.CreateSummaryPlaceholder("summary", null)
                 }),
                 true));
+        }
+    }
+
+    [Fact]
+    public async Task ConversationCompactor_AppendsMustPreserveFactMissingFromSummary()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-compact-tests", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            const string fact = "- [User] preserve-token-alpha-bravo-charlie-delta-echo";
+            var settings = new AppSettings
+            {
+                ContextCompaction = new ContextCompactionSettings
+                {
+                    TriggerMessages = 2,
+                    KeepMessages = 1,
+                    SummaryMaxTokens = 512,
+                    MaxConversationCharsForSummary = 10_000,
+                    OffloadBeforeCompact = false
+                }
+            };
+            var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+            var capturing = new CapturingModelClient("short summary");
+            var session = AgentSession.Create("missing-fact")
+                .WithMessages(
+                [
+                    ChatMessage.Create(MessageRole.User, "implement Foo.cs"),
+                    ChatMessage.Create(MessageRole.Assistant, "done"),
+                    ChatMessage.Create(MessageRole.User, "continue"),
+                    ChatMessage.Create(MessageRole.Assistant, "ok")
+                ]);
+            var runtime = new CompactionRuntimeContext(
+                new ContextBudgetSnapshot(100_000, 1_000, 1_000, 90_000, 50_000, 0.5),
+                "You are Athlon.",
+                []);
+            var plan = new DynamicCompactionPlan(
+                ContextPressureLevel.Critical,
+                ApplyTruncateArgs: false,
+                ApplyPrefixReEvict: false,
+                ApplyConversationCompact: true,
+                KeepTokenBudget: 0,
+                MustPreserveAppendix: "<must_preserve>\n" + fact + "\n</must_preserve>");
+
+            var result = await new ConversationCompactor(
+                settings,
+                capturing,
+                storage,
+                new TruncateArgsService(),
+                new SessionUsageAccumulator(),
+                new NoOpLogger()).CompactIfNeededAsync(
+                session,
+                new CompactionExecutionRequest(
+                    CompactionKind.ConversationCompact,
+                    Force: true,
+                    EmitAudit: true,
+                    RuntimeContext: runtime,
+                    Plan: plan));
+
+            Assert.True(result.Compacted);
+            var saved = string.Join("\n", result.Session.Messages.Select(message => message.Content));
+            Assert.Contains("Missing from summary:", saved, StringComparison.Ordinal);
+            Assert.Contains(fact, saved, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
         }
     }
 

@@ -455,7 +455,7 @@ public static class ContextTokenEstimator
             {
                 tokens += EstimateRawTextTokens(argument.Key);
                 tokens += clampArguments
-                    ? EstimateClampedArgumentTokens(argument.Key, argument.Value, hygiene!)
+                    ? EstimateClampedArgumentTokens(call.Name, argument.Key, argument.Value, hygiene!)
                     : EstimateRawTextTokens(argument.Value.GetRawText());
             }
         }
@@ -464,14 +464,17 @@ public static class ContextTokenEstimator
     }
 
     private static int EstimateClampedArgumentTokens(
+        string toolName,
         string key,
         System.Text.Json.JsonElement value,
         RequestHistoryHygieneSettings hygiene)
     {
         var rawTokens = EstimateRawTextTokens(value.GetRawText());
         // Hygiene only rewrites plain string arguments that are not continuity-critical.
+        // publish_plan body is counted in full; a later approved plan may truncate it, which only
+        // overestimates until the next request.
         if (value.ValueKind != System.Text.Json.JsonValueKind.String
-            || RequestHistoryHygiene.IsContinuityArgument(key))
+            || RequestHistoryHygiene.KeepsArgumentVerbatim(toolName, key, preservePublishPlanBody: true))
         {
             return rawTokens;
         }

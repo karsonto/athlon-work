@@ -17,7 +17,7 @@ internal static class McpSearchGatewayTools
         [
             new GatewayTool(
                 SearchToolName,
-                "Search connected MCP tools by natural-language intent. In search mode, always call this before mcp_call when the target MCP tool is not already known.",
+                "Search connected MCP tools by natural-language intent. In search mode, call this before mcp_call when the target tool is not already known. If a result has requiresDescribe=false, call mcp_call directly. Call mcp_describe only when requiresDescribe or schemaTruncated is true.",
                 ToolSchema.Object()
                     .String("query", "The user intent or task to find MCP tools for.", required: true, minLength: 1)
                     .Integer("topK", "Maximum number of matching tools to return.", minimum: 1, maximum: searchSettings.TopKMax)

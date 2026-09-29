@@ -30,4 +30,35 @@ public sealed class ToolStormBreakerTests
         Assert.False(breaker.TryInspect(third, out var reason));
         Assert.Contains("repeat-loop guard", reason);
     }
+
+    [Fact]
+    public void TryInspect_suppresses_third_file_read_of_same_path_with_different_ranges()
+    {
+        var breaker = new ToolStormBreaker(new ToolStormSettings { Threshold = 3 });
+        var first = new AgentToolCall("1", "file_read", new Dictionary<string, string>
+        {
+            ["path"] = "src/App.cs",
+            ["start_line"] = "1",
+            ["end_line"] = "20"
+        });
+        var second = new AgentToolCall("2", "file_read", new Dictionary<string, string>
+        {
+            ["path"] = "src/App.cs",
+            ["start_line"] = "21",
+            ["end_line"] = "40"
+        });
+        var third = new AgentToolCall("3", "file_read", new Dictionary<string, string>
+        {
+            ["path"] = "src/App.cs",
+            ["start_line"] = "41",
+            ["end_line"] = "60"
+        });
+
+        Assert.True(breaker.TryInspect(first, out _));
+        Assert.True(breaker.TryInspect(second, out _));
+        Assert.False(breaker.TryInspect(third, out var reason));
+        Assert.Contains("lines 1-20", reason, StringComparison.Ordinal);
+        Assert.Contains("lines 21-40", reason, StringComparison.Ordinal);
+        Assert.Contains("src/App.cs", reason, StringComparison.Ordinal);
+    }
 }

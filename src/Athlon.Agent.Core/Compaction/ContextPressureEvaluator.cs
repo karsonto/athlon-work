@@ -43,7 +43,7 @@ public static class ContextPressureEvaluator
 
     /// <summary>
     /// History keep budget after compaction. When a full 3-level pass includes LLM compact (or overflow),
-    /// targets <see cref="DynamicCompactionSettings.PostCompactionUtilization"/> (~30% window).
+    /// targets <see cref="DynamicCompactionSettings.PostCompactionUtilization"/> (~45% window).
     /// Truncate/re-evict-only passes fall back to the static keep floor.
     /// </summary>
     public static int ResolveKeepTokenBudget(
@@ -88,6 +88,12 @@ public static class ContextPressureEvaluator
             return true;
         }
 
+        // Elevated is the free band: tighten already-evicted tool previews only.
+        if (pressure == ContextPressureLevel.Elevated)
+        {
+            return false;
+        }
+
         if (MeetsStaticTruncateThreshold(conversation, settings, knownRawHistoryEstimate))
         {
             return true;
@@ -105,6 +111,11 @@ public static class ContextPressureEvaluator
         bool? truncateArgsDecision = null,
         int? knownRawHistoryEstimate = null)
     {
+        if (pressure == ContextPressureLevel.Elevated)
+        {
+            return true;
+        }
+
         var applyTruncate = truncateArgsDecision
             ?? ShouldApplyTruncateArgs(budget, conversation, settings, pressure, force, knownRawHistoryEstimate);
 

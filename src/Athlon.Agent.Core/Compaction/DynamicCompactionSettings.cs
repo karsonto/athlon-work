@@ -7,7 +7,7 @@ namespace Athlon.Agent.Core.Compaction;
 /// </summary>
 public sealed class DynamicCompactionSettings
 {
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
 
     /// <summary>
     /// Raised trigger ceiling on the usable prompt window (default 80%).
@@ -17,9 +17,9 @@ public sealed class DynamicCompactionSettings
 
     /// <summary>
     /// After a full 3-level pass (truncateArgs → prefix re-evict → LLM compact),
-    /// keep enough history to land near this utilization (default 30%).
+    /// keep enough history to land near this utilization (default 45%).
     /// </summary>
-    public double PostCompactionUtilization { get; set; } = 0.30;
+    public double PostCompactionUtilization { get; set; } = 0.45;
 
     public double SafetyMarginRatio { get; set; } = 0.08;
 

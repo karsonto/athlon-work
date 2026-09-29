@@ -138,6 +138,7 @@ internal static class ChatTimelineHydrator
         || message.Role == MessageRole.User && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
         || ApprovedPlanPrompt.IsApprovedPlanMessage(message)
         || PlanContinuePrompt.IsPlanContinueMessage(message)
+        || PlanPublishRepairPrompt.IsRepairMessage(message)
         || ChatMessageViewModel.IsAssistantToolCallsOnly(message)
         || message.Role == MessageRole.Compaction
             && !ChatDisplayPolicy.ShouldDisplayCompactionCheckpoint(message);

@@ -77,9 +77,8 @@ public static class ToolAvailabilityPolicy
             static ctx => ctx.Mode == SessionAgentMode.Ask || ctx.Mode == SessionAgentMode.Plan,
             static (_, facets) => facets.HasFlag(ToolFacet.HarnessTodo) ? false : null),
         new(
-            "plan-document-explore-or-draft",
-            static ctx => ctx.Mode != SessionAgentMode.Plan
-                || ctx.ActivePlanPhase is not (PlanPhase.Explore or PlanPhase.Draft),
+            "plan-document-plan-mode-only",
+            static ctx => ctx.Mode != SessionAgentMode.Plan,
             static (_, facets) => facets.HasFlag(ToolFacet.PlanDocument) ? false : null),
         new(
             "plan-block-writes-shell-subagents",

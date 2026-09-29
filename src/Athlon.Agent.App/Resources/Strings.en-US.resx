@@ -92,13 +92,13 @@
     <value>Compacted</value>
   </data>
   <data name="Chat_CompactionCollapsedTitleWithTokens" xml:space="preserve">
-    <value>Compacted · ~{0} tokens</value>
+    <value>Compacted · ~{0} tokens. Earlier text is in the session transcript</value>
   </data>
   <data name="Chat_CompactionForceTitle" xml:space="preserve">
     <value>Context full — compacted and continued</value>
   </data>
   <data name="Chat_CompactionForceTitleWithTokens" xml:space="preserve">
-    <value>Context full — compacted and continued · ~{0}</value>
+    <value>Context full — compacted and continued · ~{0}. Earlier text is in the session transcript</value>
   </data>
   <data name="Chat_CompactionDetails" xml:space="preserve">
     <value>Details</value>
@@ -110,7 +110,7 @@
     <value>{0}% used</value>
   </data>
   <data name="Chat_ContextMeterCapacity" xml:space="preserve">
-    <value>~{0} / {1} Tokens</value>
+    <value>~{0} / {1} window</value>
   </data>
   <data name="Chat_ContextMeterMessages" xml:space="preserve">
     <value>Conversation</value>
@@ -1521,6 +1521,12 @@ Save anyway?</value>
   </data>
   <data name="Settings_StormThreshold" xml:space="preserve">
     <value>Storm threshold</value>
+  </data>
+  <data name="Settings_ContextWindowTokens" xml:space="preserve">
+    <value>Context window (tokens)</value>
+  </data>
+  <data name="Settings_ContextWindowTokensTooltip" xml:space="preserve">
+    <value>Default is 128K (131072). Compaction and the occupancy meter use this window. Change it when the model window differs.</value>
   </data>
   <data name="Settings_MaxToolScreenshots" xml:space="preserve">
     <value>Tool screenshots kept</value>

@@ -19,14 +19,11 @@ public sealed class PlanModePromptSection : IEnvironmentPromptSection
 
         builder.AppendLine("Plan mode workflow:");
         builder.AppendLine("- You are producing an implementation plan for the user to review before any coding.");
-        builder.AppendLine("- Follow the active plan phase instructions injected in runtime context.");
-        builder.AppendLine("- Explore with read/search tools only; never edit project files or run shell in Plan mode.");
-        builder.AppendLine("- You own a multi-turn consulting loop: ask with ask_user when ambiguous, or reply with a short follow-up question in plain text when the QuestionBar is unnecessary.");
-        builder.AppendLine("- When calling ask_user: finish exploration for this turn first, keep reasoning short, call ask_user as the last tool, then stop — do not keep narrating after the call.");
-        builder.AppendLine("- When information is sufficient, call publish_plan yourself (title, overview, ## Steps, ## Acceptance). Nothing auto-advances to drafting.");
-        builder.AppendLine("- Prefer mermaid flowcharts for multi-step architecture when helpful.");
-        builder.AppendLine("- After publishing, stop — the user will Build (switch to Coding) or send a revision.");
-        builder.AppendLine("- Do not start implementing, applying patches, or claiming the work is done.");
+        builder.AppendLine("- Read and search only. Do not edit project files, run shell, or start implementing.");
+        builder.AppendLine("- You own a multi-turn consulting loop: ask with ask_user when ambiguous, then stop.");
+        builder.AppendLine("- When information is sufficient, call publish_plan yourself. Nothing auto-advances to drafting.");
+        builder.AppendLine("- After publishing, stop. The user will Build or send a revision.");
+        builder.AppendLine("- Follow the active plan phase instructions in runtime context.");
         builder.AppendLine();
     }
 }

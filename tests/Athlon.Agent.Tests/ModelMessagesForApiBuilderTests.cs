@@ -80,8 +80,8 @@ public sealed class ModelMessagesForApiBuilderTests
         Assert.Equal("runtime one", first.Messages[^1].Content);
         Assert.Equal("runtime one", unchanged.Messages[^1].Content);
         Assert.Equal("runtime two", changed.Messages[^1].Content);
-        Assert.Contains("superseded by newer runtime context", Assert.IsType<string>(changed.Messages[^2].Content), StringComparison.Ordinal);
-        Assert.Contains("runtime one", Assert.IsType<string>(changed.Messages[^2].Content), StringComparison.Ordinal);
+        Assert.Equal("Runtime context updated.", changed.Messages[^2].Content);
+        Assert.DoesNotContain("runtime one", Assert.IsType<string>(changed.Messages[^2].Content), StringComparison.Ordinal);
         Assert.Single(unchanged.Messages, message => Equals(message.Content, "runtime one"));
         Assert.Equal("system", unchanged.Messages[0].Content);
         Assert.True(firstChanged);
@@ -103,7 +103,7 @@ public sealed class ModelMessagesForApiBuilderTests
 
         Assert.Equal("runtime two", third.Messages[^1].Content);
         Assert.Single(third.Messages, message => message.Content is string text && text.Contains("runtime two", StringComparison.Ordinal));
-        Assert.DoesNotContain(third.Messages, message => message.Content is string text && text.Contains("superseded", StringComparison.Ordinal));
+        Assert.DoesNotContain(third.Messages, message => message.Content is string text && text.Contains("Runtime context updated.", StringComparison.Ordinal));
     }
 
     [Fact]

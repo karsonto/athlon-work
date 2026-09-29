@@ -28,10 +28,9 @@ public sealed class RequestHistoryHygieneSettings
     /// <summary>
     /// When true, <c>ui_tree</c> payloads in all but the newest
     /// <see cref="HistoryUiTreeRetention"/> Computer Use observations are replaced with a compact
-    /// summary. Defaults to false: the stripping rule changes what the model sees, so it ships
-    /// behind a switch and is enabled only after it is validated in real sessions.
+    /// summary. Defaults to true. An explicit false in settings keeps every historical tree.
     /// </summary>
-    public bool PruneHistoricalUiTree { get; set; }
+    public bool PruneHistoricalUiTree { get; set; } = true;
 
     /// <summary>Number of newest Computer Use observations whose full <c>ui_tree</c> stays in history.</summary>
     public int HistoryUiTreeRetention { get; set; } = 2;

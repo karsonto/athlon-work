@@ -50,13 +50,87 @@ public sealed class ToolStormBreaker
             return false;
         }
 
-        _recent.Add(new RecentToolCall(call.Name, args, readOnly));
+        if (TrySuppressSamePath(call, out reason))
+        {
+            return false;
+        }
+
+        _recent.Add(new RecentToolCall(call.Name, args, readOnly, TryGetPath(call), Describe(call)));
         while (_recent.Count > _windowSize)
         {
             _recent.RemoveAt(0);
         }
 
         return true;
+    }
+
+    private bool TrySuppressSamePath(AgentToolCall call, out string? reason)
+    {
+        reason = null;
+        if (!PathScopedReadTools.Contains(call.Name))
+        {
+            return false;
+        }
+
+        var path = TryGetPath(call);
+        if (string.IsNullOrEmpty(path))
+        {
+            return false;
+        }
+
+        var earlier = _recent
+            .Where(entry =>
+                string.Equals(entry.Name, call.Name, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(entry.Path, path, StringComparison.Ordinal))
+            .ToList();
+        if (earlier.Count < _threshold - 1)
+        {
+            return false;
+        }
+
+        var seen = string.Join("; ", earlier.Select(entry => entry.Detail).Where(detail => !string.IsNullOrWhiteSpace(detail)));
+        reason = string.IsNullOrEmpty(seen)
+            ? $"{call.Name} already inspected `{path}` {earlier.Count + 1} times in this turn. Use the earlier results instead of reading the same path again."
+            : $"{call.Name} already inspected `{path}` {earlier.Count + 1} times in this turn ({seen}). Use the earlier results instead of reading the same path again.";
+        return true;
+    }
+
+    private static readonly HashSet<string> PathScopedReadTools = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "file_read",
+        "grep_files",
+        "glob_files",
+        "file_list"
+    };
+
+    private static string? TryGetPath(AgentToolCall call)
+    {
+        var path = call.Arguments.GetString(ToolPathNormalizer.PathArgumentName);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        return StabilizePath(path);
+    }
+
+    private static string Describe(AgentToolCall call)
+    {
+        if (string.Equals(call.Name, "file_read", StringComparison.OrdinalIgnoreCase))
+        {
+            var start = call.Arguments.TryGetInt32("start_line", out var startLine) ? startLine : 1;
+            var end = call.Arguments.TryGetInt32("end_line", out var endLine) ? endLine.ToString() : "open";
+            return $"lines {start}-{end}";
+        }
+
+        if (string.Equals(call.Name, "grep_files", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(call.Name, "glob_files", StringComparison.OrdinalIgnoreCase))
+        {
+            var pattern = call.Arguments.GetString("pattern");
+            return string.IsNullOrWhiteSpace(pattern) ? call.Name : $"pattern {pattern}";
+        }
+
+        return "directory listing";
     }
 
     private void ClearReadOnlyEntries()
@@ -115,5 +189,5 @@ public sealed class ToolStormBreaker
         return normalized;
     }
 
-    private sealed record RecentToolCall(string Name, string Args, bool ReadOnly);
+    private sealed record RecentToolCall(string Name, string Args, bool ReadOnly, string? Path, string? Detail);
 }

@@ -6,11 +6,13 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, Ap
 {
     public ToolDefinition Definition { get; } = new(
         "file_read",
-        "Read file content with line numbers (N|line) for display only. Paths may be inside or outside the workspace. "
+        "Read file content exactly as stored on disk. The body has no line-number prefixes; "
+            + "line numbers are only in the footer (start_line, end_line, next_start_line). "
+            + "Paths may be inside or outside the workspace. "
             + "Use 1-based start_line/end_line to read in chunks; "
             + "do not assume a single read covers the whole file. When the result has truncated:true or next_start_line, "
             + "continue from that 1-based line. Prefer grep_files/glob_files to locate content in large files first. "
-            + "Do not use N| prefixes in file_edit old_text.",
+            + "file_edit old_text must copy this body, not a line-number prefix.",
         ToolSchema.Object()
             .String("path", "Absolute or workspace-relative file path to read.", required: true, minLength: 1)
             .Integer("start_line", "1-based start line (default 1)", defaultValue: 1, minimum: 1)
@@ -30,7 +32,9 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, Ap
         }
         if (!File.Exists(fullPath))
         {
-            return ToolResult.Failure("File not found", fullPath);
+            return ToolResult.Failure(
+                SimilarFileNameSuggester.FormatNotFound(SuggestSimilarNames(fullPath)),
+                fullPath);
         }
         if (invocation.Arguments.TryGetInt32("start_line", out var startLine)
             && invocation.Arguments.TryGetInt32("end_line", out var endLine)
@@ -77,6 +81,29 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, Ap
             : read.Body;
 
         return ToolResult.Success(summary, content);
+    }
+
+    private static IReadOnlyList<string> SuggestSimilarNames(string fullPath)
+    {
+        var directory = Path.GetDirectoryName(fullPath);
+        var name = Path.GetFileName(fullPath);
+        if (string.IsNullOrEmpty(directory) || string.IsNullOrEmpty(name) || !Directory.Exists(directory))
+        {
+            return [];
+        }
+
+        try
+        {
+            var names = Directory.EnumerateFileSystemEntries(directory)
+                .Select(Path.GetFileName)
+                .OfType<string>()
+                .Take(400);
+            return SimilarFileNameSuggester.Suggest(name, names);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
     }
 }
 

@@ -341,30 +341,46 @@ public sealed class AgentRuntime(
                 }
 
                 var endsTurn = false;
-                if (ParallelToolPolicy.CanParallelizeBatch(
+                var toolGroups = ParallelToolPolicy.Partition(
                     response.ToolCalls,
                     settings.ParallelToolExecution,
-                    ResolveToolRouter()))
+                    ResolveToolRouter());
+                foreach (var group in toolGroups)
                 {
-                    turnInvocation.Session = session;
-                    (session, endsTurn) = await InvokeParallelToolBatchAsync(
-                        turnInvocation,
-                        parentMessageId,
-                        response.ToolCalls,
-                        cancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    foreach (var toolCall in response.ToolCalls)
+                    var slice = response.ToolCalls.Skip(group.Start).Take(group.Count).ToArray();
+                    if (group.Parallel)
                     {
                         turnInvocation.Session = session;
-                        bool toolEndsTurn;
-                        (session, toolEndsTurn) = await InvokeToolAndPersistAsync(
+                        bool groupEndsTurn;
+                        (session, groupEndsTurn) = await InvokeParallelToolBatchAsync(
                             turnInvocation,
                             parentMessageId,
-                            toolCall,
+                            slice,
                             cancellationToken).ConfigureAwait(false);
-                        endsTurn |= toolEndsTurn;
+                        endsTurn |= groupEndsTurn;
+                    }
+                    else
+                    {
+                        foreach (var toolCall in slice)
+                        {
+                            turnInvocation.Session = session;
+                            bool toolEndsTurn;
+                            (session, toolEndsTurn) = await InvokeToolAndPersistAsync(
+                                turnInvocation,
+                                parentMessageId,
+                                toolCall,
+                                cancellationToken).ConfigureAwait(false);
+                            endsTurn |= toolEndsTurn;
+                            if (endsTurn)
+                            {
+                                break;
+                            }
+                        }
+                    }
+
+                    if (endsTurn)
+                    {
+                        break;
                     }
                 }
 

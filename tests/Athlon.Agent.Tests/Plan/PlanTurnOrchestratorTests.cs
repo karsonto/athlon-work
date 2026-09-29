@@ -69,6 +69,50 @@ public sealed class PlanTurnOrchestratorTests
     }
 
     [Fact]
+    public async Task RunUserTurnAsync_ProsePlan_RepairsOnceWithPublishPlan()
+    {
+        var session = AgentSession.Create("plan-session");
+        var store = new InMemoryPlanRunStore();
+        var phaseAccessor = new PlanPhaseAccessor();
+        var sessionState = new PlanSessionState();
+        var userQuestions = new UserQuestionState();
+        var prose = """
+            # Fix auth token refresh
+
+            Refresh OAuth tokens before expiry so sessions stay signed in.
+
+            ## Steps
+            1. Read the token store
+            2. Add a refresh timer
+
+            ## Acceptance
+            - [ ] Tokens refresh before expiry
+            """;
+        var orchestrator = new StubAgentOrchestrator(turn => turn == 0
+            ? [prose]
+            : ["Publishing the plan now."]);
+        orchestrator.OnTurn = turn =>
+        {
+            if (turn == 1)
+            {
+                store.WritePlanMarkdownAsync(session.Id, prose).GetAwaiter().GetResult();
+                var current = phaseAccessor.GetActiveRun(session.Id)!;
+                current.PublishedThisTurn = true;
+                phaseAccessor.SetActiveRun(current);
+            }
+        };
+
+        var sut = new PlanTurnOrchestrator(orchestrator, store, phaseAccessor, sessionState, userQuestions);
+        await sut.RunUserTurnAsync(session, "Add token refresh", null, CancellationToken.None);
+
+        Assert.Equal(2, orchestrator.TurnCount);
+        Assert.Contains(PlanPublishRepairPrompt.Marker, orchestrator.Inputs[1], StringComparison.Ordinal);
+        var run = phaseAccessor.GetActiveRun(session.Id);
+        Assert.NotNull(run);
+        Assert.Equal(PlanPhase.AwaitConfirm, run.Phase);
+    }
+
+    [Fact]
     public async Task RunUserTurnAsync_FollowUpInExplore_PublishesAwaitConfirm()
     {
         var session = AgentSession.Create("plan-session");
@@ -673,6 +717,8 @@ public sealed class PlanTurnOrchestratorTests
 
         public List<bool> AppendUserMessageFlags { get; } = [];
 
+        public List<string> Inputs { get; } = [];
+
         public Action<int>? OnTurn { get; set; }
 
         public Task<AgentSession> SendAsync(
@@ -685,6 +731,7 @@ public sealed class PlanTurnOrchestratorTests
             bool appendUserMessage = true)
         {
             AppendUserMessageFlags.Add(appendUserMessage);
+            Inputs.Add(userInput);
             OnTurn?.Invoke(_turn);
             var list = responses(_turn++);
             var content = list.Count == 0

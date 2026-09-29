@@ -5,9 +5,9 @@ namespace Athlon.Agent.Core.Compaction;
 public sealed class ContextCompactionSettings
 {
     /// <summary>Master switch. When false, proactive compaction is skipped (API overflow retry still runs).</summary>
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
 
-    public int ContextWindowTokens { get; set; } = 65_535;
+    public int ContextWindowTokens { get; set; } = 131_072;
 
     /// <summary>
     /// When &gt; 0 with <see cref="ContextWindowTokens"/>, compaction also triggers when estimated

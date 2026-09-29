@@ -194,9 +194,13 @@ public sealed class ComputerUseHistoryHygieneTests
     }
 
     [Fact]
-    public void ApplyToModelMessages_PruningDisabledByDefault()
+    public void ApplyToModelMessages_ExplicitPruneOff_KeepsHistoricalTrees()
     {
-        var settings = new RequestHistoryHygieneSettings { HistoryUiTreeRetention = 0 };
+        var settings = new RequestHistoryHygieneSettings
+        {
+            PruneHistoricalUiTree = false,
+            HistoryUiTreeRetention = 0
+        };
         var messages = new List<AgentModelMessage>
         {
             new("system", "sys")
@@ -206,9 +210,30 @@ public sealed class ComputerUseHistoryHygieneTests
 
         var result = RequestHistoryHygiene.ApplyToModelMessages(messages, settings);
 
-        Assert.False(settings.PruneHistoricalUiTree);
         var oldContent = Assert.IsType<string>(result.Messages[2].Content);
         Assert.DoesNotContain("ui_tree stripped from history", oldContent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PruneHistoricalUiTree_DefaultsToTrue_AndKeepsNewestTwo()
+    {
+        var settings = new RequestHistoryHygieneSettings();
+        Assert.True(settings.PruneHistoricalUiTree);
+        Assert.Equal(2, settings.HistoryUiTreeRetention);
+
+        var messages = new List<AgentModelMessage> { new("system", "sys") };
+        messages.AddRange(BuildObserveExchange("call-1", "frame_old"));
+        messages.AddRange(BuildObserveExchange("call-2", "frame_mid"));
+        messages.AddRange(BuildObserveExchange("call-3", "frame_new"));
+
+        var result = RequestHistoryHygiene.ApplyToModelMessages(messages, settings);
+
+        var oldest = Assert.IsType<string>(result.Messages[2].Content);
+        var middle = Assert.IsType<string>(result.Messages[4].Content);
+        var newest = Assert.IsType<string>(result.Messages[6].Content);
+        Assert.Contains("ui_tree stripped from history", oldest, StringComparison.Ordinal);
+        Assert.Contains("\"element_id\"", middle, StringComparison.Ordinal);
+        Assert.Contains("\"element_id\"", newest, StringComparison.Ordinal);
     }
 
     private static List<AgentModelMessage> BuildObserveExchange(string callId, string frameId)

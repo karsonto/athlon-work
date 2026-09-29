@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Athlon.Agent.Core.Plan;
 
 namespace Athlon.Agent.Core.Compaction;
 
@@ -75,6 +76,15 @@ public sealed class TruncateArgsService
             }
         }
 
+        var approvedPlanIndex = -1;
+        for (var i = 0; i < conversation.Count; i++)
+        {
+            if (ApprovedPlanPrompt.IsApprovedPlanMessage(conversation[i]))
+            {
+                approvedPlanIndex = i;
+            }
+        }
+
         var updatedConversation = new List<ChatMessage>(conversation.Count);
         for (var i = 0; i < conversation.Count; i++)
         {
@@ -86,7 +96,8 @@ public sealed class TruncateArgsService
                 var truncatedJson = TruncateToolCallsJson(
                     message.ToolCallsJson,
                     truncateSettings.MaxArgLength,
-                    truncateSettings.TruncationText);
+                    truncateSettings.TruncationText,
+                    preservePublishPlanBody: approvedPlanIndex < i);
 
                 if (!string.Equals(truncatedJson, message.ToolCallsJson, StringComparison.Ordinal))
                 {
@@ -117,7 +128,8 @@ public sealed class TruncateArgsService
     internal static string TruncateToolCallsJson(
         string toolCallsJson,
         int maxArgLength,
-        string truncationText)
+        string truncationText,
+        bool preservePublishPlanBody = true)
     {
         var calls = AssistantToolCallsCodec.Deserialize(toolCallsJson);
         if (calls is null or { Count: 0 })
@@ -130,7 +142,12 @@ public sealed class TruncateArgsService
 
         foreach (var call in calls)
         {
-            var truncatedArgs = TruncateArguments(call.Arguments, maxArgLength, truncationText);
+            var truncatedArgs = TruncateArguments(
+                call.Name,
+                call.Arguments,
+                maxArgLength,
+                truncationText,
+                preservePublishPlanBody);
             if (!ReferenceEquals(truncatedArgs, call.Arguments)
                 && !ArgumentsEqual(truncatedArgs, call.Arguments))
             {
@@ -146,9 +163,11 @@ public sealed class TruncateArgsService
     }
 
     private static ToolCallArguments TruncateArguments(
+        string toolName,
         ToolCallArguments arguments,
         int maxArgLength,
-        string truncationText)
+        string truncationText,
+        bool preservePublishPlanBody)
     {
         if (arguments.Count == 0)
         {
@@ -160,6 +179,12 @@ public sealed class TruncateArgsService
 
         foreach (var argument in arguments)
         {
+            if (RequestHistoryHygiene.KeepsArgumentVerbatim(toolName, argument.Key, preservePublishPlanBody))
+            {
+                updated[argument.Key] = argument.Value;
+                continue;
+            }
+
             var truncated = TruncateArgumentValue(argument.Value, maxArgLength, truncationText);
             if (!string.Equals(truncated.GetRawText(), argument.Value.GetRawText(), StringComparison.Ordinal))
             {

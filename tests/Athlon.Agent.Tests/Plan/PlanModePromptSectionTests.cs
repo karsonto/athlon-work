@@ -191,7 +191,7 @@ public sealed class PlanDocumentParserTests
 public sealed class PlanRuntimeContextContributorTests
 {
     [Fact]
-    public void Append_InjectsTheFullPlanText_DuringADraftRevisionTurn()
+    public void Append_PointsAtPublishPlanBody_DuringADraftRevisionTurn()
     {
         var session = AgentSession.Create("plan-revision");
         var phaseAccessor = new PlanPhaseAccessor();
@@ -211,10 +211,8 @@ public sealed class PlanRuntimeContextContributorTests
 
         var text = builder.ToString();
         Assert.Contains("## Current Plan (revision base)", text, StringComparison.Ordinal);
-        // The whole body must be present: once the publish_plan arguments fall out of the keep
-        // window they are truncated to 20 characters, so this is the model's only readable copy.
-        Assert.Contains("Read the token store before touching the refresh path", text, StringComparison.Ordinal);
-        Assert.Contains("## Acceptance", text, StringComparison.Ordinal);
+        Assert.Contains("latest publish_plan", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("Read the token store before touching the refresh path", text, StringComparison.Ordinal);
     }
 
     [Fact]

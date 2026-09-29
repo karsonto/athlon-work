@@ -83,7 +83,7 @@ public sealed partial class ContextOccupancyViewModel : ObservableObject
         UsedCapacityLabel = Strings.Format(
             "Chat_ContextMeterCapacity",
             TokenCountDisplay.FormatCompact(budget.EstimatedTotalPrompt),
-            TokenCountDisplay.FormatCompact(usable));
+            TokenCountDisplay.FormatWindow(budget.TotalWindow));
         RingDashArray = FrozenDash(Math.Clamp(utilization, 0, 1) * RingCircumference);
         Categories = BuildCategories(budget.DisplayOccupancy, usable);
     }

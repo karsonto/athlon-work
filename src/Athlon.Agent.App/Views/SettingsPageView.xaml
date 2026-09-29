@@ -531,6 +531,17 @@
                                     <ColumnDefinition Width="160" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
+                                <TextBlock Text="{loc:Localize Key=Settings_ContextWindowTokens}" VerticalAlignment="Center"
+                                           ToolTip="{loc:Localize Key=Settings_ContextWindowTokensTooltip}" />
+                                <TextBox Grid.Column="1"
+                                         Text="{Binding ContextWindowTokensText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="{loc:Localize Key=Settings_ContextWindowTokensTooltip}" />
+                            </Grid>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
                                 <TextBlock Text="{loc:Localize Key=Settings_StormThreshold}" VerticalAlignment="Center" />
                                 <TextBox Grid.Column="1"
                                          Text="{Binding Settings.ContextCompaction.ToolStorm.Threshold, UpdateSourceTrigger=PropertyChanged}" />

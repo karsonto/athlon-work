@@ -247,6 +247,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             TryCancelCompaction,
             CreateSlashCommandContext,
             EnsureDisplayedSessionReadyAsync);
+        ChatPage.PlanBuildRequested += OnPlanBuildRequested;
         _onMcpConfigurationChanged = (_, _) => _ = RunGuardedAsync(RefreshMcpRuntimeAsync, "MCP runtime refresh");
         _onSkillConfigurationChanged = (_, _) => OnSkillConfigurationChanged();
         _onSettingsSaved = (_, _) => _ = RunGuardedAsync(OnSettingsSavedAsync, "settings saved handler");

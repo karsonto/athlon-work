@@ -92,13 +92,13 @@
     <value>已压缩</value>
   </data>
   <data name="Chat_CompactionCollapsedTitleWithTokens" xml:space="preserve">
-    <value>已压缩 · 约 {0} tokens</value>
+    <value>已压缩 · 约 {0} tokens。早期原文在会话 transcript</value>
   </data>
   <data name="Chat_CompactionForceTitle" xml:space="preserve">
     <value>上下文已满，已压缩后继续</value>
   </data>
   <data name="Chat_CompactionForceTitleWithTokens" xml:space="preserve">
-    <value>上下文已满，已压缩后继续 · 约 {0}</value>
+    <value>上下文已满，已压缩后继续 · 约 {0}。早期原文在会话 transcript</value>
   </data>
   <data name="Chat_CompactionDetails" xml:space="preserve">
     <value>详情</value>
@@ -110,7 +110,7 @@
     <value>{0}% 已用</value>
   </data>
   <data name="Chat_ContextMeterCapacity" xml:space="preserve">
-    <value>~{0} / {1} Tokens</value>
+    <value>~{0} / {1} 窗口</value>
   </data>
   <data name="Chat_ContextMeterMessages" xml:space="preserve">
     <value>对话历史</value>
@@ -1530,6 +1530,12 @@
   </data>
   <data name="Settings_StormThreshold" xml:space="preserve">
     <value>Storm 阈值</value>
+  </data>
+  <data name="Settings_ContextWindowTokens" xml:space="preserve">
+    <value>上下文窗口（token）</value>
+  </data>
+  <data name="Settings_ContextWindowTokensTooltip" xml:space="preserve">
+    <value>默认 128K（131072）。压缩和占用环都按这个窗口计算；模型窗口不同时再改。</value>
   </data>
   <data name="Settings_MaxToolScreenshots" xml:space="preserve">
     <value>工具截图保留数</value>

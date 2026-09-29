@@ -114,6 +114,10 @@ public sealed class ContextOccupancyViewModelTests
             TokenCountDisplay.FormatCompact(budget.EstimatedTotalPrompt),
             occupancy.UsedCapacityLabel,
             StringComparison.Ordinal);
+        Assert.Contains(
+            TokenCountDisplay.FormatWindow(budget.TotalWindow),
+            occupancy.UsedCapacityLabel,
+            StringComparison.Ordinal);
     }
 
     [Fact]

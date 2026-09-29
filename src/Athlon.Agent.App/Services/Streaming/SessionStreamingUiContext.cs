@@ -223,7 +223,8 @@ public sealed class SessionStreamingUiContext
             || message.Role == MessageRole.User
                 && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
             || ApprovedPlanPrompt.IsApprovedPlanMessage(message)
-            || PlanContinuePrompt.IsPlanContinueMessage(message))
+            || PlanContinuePrompt.IsPlanContinueMessage(message)
+            || PlanPublishRepairPrompt.IsRepairMessage(message))
         {
             RemoveEmptyActiveAssistantBubble(messages);
             return;

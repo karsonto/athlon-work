@@ -49,21 +49,15 @@ public sealed class PlanRuntimeContextContributor(
                 + "If answers are still insufficient, call ask_user again; otherwise explore the workspace or call publish_plan.");
         }
 
-        // A revision turn must see the plan it is revising. The only other copy is the publish_plan
-        // tool arguments in history, which TruncateArgsService reduces to "first 20 chars +
-        // ...(argument truncated)" once they leave the keep window — so without this the model would
-        // be editing blind.
-        if (run.Phase == PlanPhase.Draft && !string.IsNullOrWhiteSpace(run.PlanMarkdown))
+        if (run.Phase == PlanPhase.Draft)
         {
             builder.AppendLine();
             builder.AppendLine("## Current Plan (revision base)");
             builder.AppendLine();
             builder.AppendLine(
-                "This is the plan currently shown to the user. Apply the requested changes to it and call "
-                + "publish_plan with the full revised document. Do not start over from scratch, and do not "
-                + "edit files or implement anything.");
-            builder.AppendLine();
-            builder.AppendLine(run.PlanMarkdown.Trim());
+                "The plan shown to the user is the body of the latest publish_plan call, which is kept in history. "
+                + "Apply the requested changes and call publish_plan with the full revised document. "
+                + "Do not start over from scratch, and do not edit files or implement anything.");
             builder.AppendLine();
         }
 
@@ -106,8 +100,9 @@ internal static class PlanPhaseInstructions
             + "If the request is ambiguous, ask_user a focused question first — the plan stays in AwaitConfirm for the next round. "
             + "Do not implement code.",
         PlanPhase.AwaitConfirm =>
-            "Phase AwaitConfirm: the plan is waiting for the user. If they send new instructions, treat them as a revision request. "
-            + "Do not call publish_plan, edit files, or start implementation unless this turn is a revision Draft.",
+            "Phase AwaitConfirm: the plan is waiting for the user. Do not call publish_plan in this phase. "
+            + "If the user sends revision instructions, the next turn enters Draft; publish the revision there. "
+            + "Do not edit files or start implementation.",
         PlanPhase.Done =>
             "Phase Done: this plan run is finished. Do not continue planning.",
         _ => "Follow Plan mode rules."

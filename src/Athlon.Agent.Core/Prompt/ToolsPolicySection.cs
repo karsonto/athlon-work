@@ -90,7 +90,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
             if (PromptModeHelper.IsPlanMode(context))
             {
-                builder.AppendLine("  2. In Draft only: call publish_plan once with a complete plan; do not edit project files or run shell.");
+                builder.AppendLine("  2. Call publish_plan when the active phase says to publish; do not edit project files or run shell.");
                 builder.AppendLine("  3. Reject other mutation: do not call write/patch/shell/sub-agent tools.");
             }
             else
@@ -120,7 +120,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
         builder.AppendLine("  1. Inspect with the narrowest native read tool whose schema matches the need; do not guess file contents.");
 
-        builder.AppendLine("  2. Run independent read-only calls in parallel when advertised; preserve dependency order and never mix writes or execute_command into that round.");
+        builder.AppendLine("  2. Consecutive read-only calls may be sent together; keep writes and execute_command in their own groups, and preserve dependency order.");
 
         var step = 3;
 

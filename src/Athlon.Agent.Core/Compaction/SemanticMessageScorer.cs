@@ -2,69 +2,44 @@ namespace Athlon.Agent.Core.Compaction;
 
 public static class SemanticMessageScorer
 {
-    private const int PreserveScoreThreshold = 3;
+    private static readonly string[] MutationToolNames =
+    [
+        "file_write",
+        "file_edit",
+        "apply_patch",
+        "execute_command"
+    ];
 
-    public static int Score(ChatMessage message)
+    /// <summary>
+    /// Facts the summary must keep: real user turns, prior compaction summaries, and mutating
+    /// tool results. Read and search output is left to the structured tool trace.
+    /// </summary>
+    public static bool ShouldPreserveInSummary(ChatMessage message)
     {
         if (SummaryMessageBuilder.IsSummaryMessage(message))
         {
-            return -5;
+            return true;
         }
 
-        var score = message.Role switch
+        if (message.Role == MessageRole.User)
         {
-            MessageRole.User => 3,
-            MessageRole.Tool => ScoreToolMessage(message),
-            MessageRole.Assistant => 0,
-            _ => 0
-        };
-
-        score += ScorePathSignals(message.Content);
-        if (!string.IsNullOrWhiteSpace(message.ReasoningContent))
-        {
-            score += ScorePathSignals(message.ReasoningContent);
+            return true;
         }
 
-        return score;
-    }
+        if (message.Role != MessageRole.Tool)
+        {
+            return false;
+        }
 
-    public static bool ShouldPreserveInSummary(ChatMessage message) => Score(message) >= PreserveScoreThreshold;
-
-    private static int ScoreToolMessage(ChatMessage message)
-    {
         var content = message.Content ?? string.Empty;
-        if (content.Contains("evicted/", StringComparison.OrdinalIgnoreCase)
-            || content.Contains("Archived at:", StringComparison.OrdinalIgnoreCase))
+        foreach (var name in MutationToolNames)
         {
-            return 1;
+            if (content.Contains($"Tool `{name}`", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
         }
 
-        if (content.Contains("file_write", StringComparison.OrdinalIgnoreCase)
-            || content.Contains("file_edit", StringComparison.OrdinalIgnoreCase)
-            || content.Contains("execute_command", StringComparison.OrdinalIgnoreCase))
-        {
-            return 2;
-        }
-
-        return 0;
-    }
-
-    private static int ScorePathSignals(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return 0;
-        }
-
-        if (text.Contains(".cs", StringComparison.OrdinalIgnoreCase)
-            || text.Contains(".tsx", StringComparison.OrdinalIgnoreCase)
-            || text.Contains(".json", StringComparison.OrdinalIgnoreCase)
-            || text.Contains('\\')
-            || text.Contains('/'))
-        {
-            return 2;
-        }
-
-        return 0;
+        return false;
     }
 }

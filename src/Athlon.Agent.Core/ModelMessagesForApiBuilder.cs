@@ -83,13 +83,9 @@ public sealed class RuntimeContextInjectionState
         List<AgentModelMessage> messages;
         if (FingerprintChanged && !string.IsNullOrWhiteSpace(_previousContext))
         {
-            var superseded = _previousContext
-                + Environment.NewLine
-                + Environment.NewLine
-                + "(superseded by newer runtime context)";
             messages =
             [
-                new AgentModelMessage("user", superseded),
+                new AgentModelMessage("user", "Runtime context updated."),
                 new AgentModelMessage("user", runtimeContext)
             ];
         }

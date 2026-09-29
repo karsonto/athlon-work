@@ -51,6 +51,20 @@ public sealed class ParallelToolExecutionTests
 
         Assert.True(ParallelToolPolicy.CanParallelizeBatch(parallelBatch, settings, PolicyRouter));
         Assert.False(ParallelToolPolicy.CanParallelizeBatch(mixedBatch, settings, PolicyRouter));
+
+        var groups = ParallelToolPolicy.Partition(
+            [
+                new AgentToolCall("1", "file_read", new Dictionary<string, string> { ["path"] = "a" }),
+                new AgentToolCall("2", "grep_files", new Dictionary<string, string> { ["pattern"] = "x" }),
+                new AgentToolCall("3", "file_write", new Dictionary<string, string> { ["path"] = "a" }),
+                new AgentToolCall("4", "file_read", new Dictionary<string, string> { ["path"] = "b" })
+            ],
+            settings,
+            PolicyRouter);
+        Assert.Equal(3, groups.Count);
+        Assert.Equal(new ToolCallGroup(true, 0, 2), groups[0]);
+        Assert.Equal(new ToolCallGroup(false, 2, 1), groups[1]);
+        Assert.Equal(new ToolCallGroup(false, 3, 1), groups[2]);
         Assert.False(ParallelToolPolicy.CanParallelizeBatch(
             [new AgentToolCall("1", "file_read", new Dictionary<string, string>())],
             settings,
@@ -153,6 +167,54 @@ public sealed class ParallelToolExecutionTests
         Assert.Equal(2, router.InvokeCount);
         Assert.Equal(1, router.MaxConcurrent);
         Assert.True(sw.Elapsed >= TimeSpan.FromMilliseconds(150), $"expected serial wall time, actual={sw.ElapsedMilliseconds}ms");
+    }
+
+    [Fact]
+    public async Task SendAsync_ReadReadWrite_OverlapsReadsThenWrites()
+    {
+        var storage = new NoOpStorage();
+        var router = new ConcurrentTrackingToolRouter(TimeSpan.FromMilliseconds(80));
+        var settings = new AppSettings { ParallelToolExecution = new ParallelToolExecutionSettings { Enabled = true } };
+        var runtime = CreateRuntime(storage, router, settings, new ScriptedModelClient(
+            new AgentModelResponse(string.Empty, new[]
+            {
+                new AgentToolCall("r1", "file_read", new Dictionary<string, string> { ["path"] = "a.txt" }),
+                new AgentToolCall("r2", "grep_files", new Dictionary<string, string> { ["pattern"] = "class" }),
+                new AgentToolCall("w1", "file_write", new Dictionary<string, string> { ["path"] = "a.txt", ["content"] = "x" })
+            }),
+            new AgentModelResponse("done", Array.Empty<AgentToolCall>())));
+
+        await runtime.SendAsync(AgentSession.Create("grouped-parallel"), "edit");
+
+        Assert.Equal(3, router.InvokeCount);
+        Assert.True(router.MaxConcurrent >= 2, $"expected the two reads to overlap, max={router.MaxConcurrent}");
+        var reads = router.Spans.Where(span => span.ToolName is "file_read" or "grep_files").ToArray();
+        var write = Assert.Single(router.Spans, span => span.ToolName == "file_write");
+        Assert.Equal(2, reads.Length);
+        Assert.True(reads[0].Started < reads[1].Ended && reads[1].Started < reads[0].Ended);
+        Assert.True(write.Started >= reads.Max(span => span.Ended));
+    }
+
+    [Fact]
+    public async Task SendAsync_EndsTurn_SkipsLaterGroups()
+    {
+        var storage = new NoOpStorage();
+        var router = new ConcurrentTrackingToolRouter(TimeSpan.FromMilliseconds(5));
+        var settings = new AppSettings { ParallelToolExecution = new ParallelToolExecutionSettings { Enabled = true } };
+        var runtime = CreateRuntime(storage, router, settings, new ScriptedModelClient(
+            new AgentModelResponse(string.Empty, new[]
+            {
+                new AgentToolCall("r1", "file_read", new Dictionary<string, string> { ["path"] = "a.txt" }),
+                new AgentToolCall("r2", "file_read", new Dictionary<string, string> { ["path"] = "b.txt" }),
+                new AgentToolCall("ask", "ask_user", new Dictionary<string, string>()),
+                new AgentToolCall("r3", "file_read", new Dictionary<string, string> { ["path"] = "c.txt" })
+            }),
+            new AgentModelResponse("done", Array.Empty<AgentToolCall>())));
+
+        await runtime.SendAsync(AgentSession.Create("ends-turn"), "ask");
+
+        Assert.Equal(3, router.InvokeCount);
+        Assert.DoesNotContain(router.Spans, span => span.ToolName == "file_read" && span.ArgumentsPath == "c.txt");
     }
 
     [Fact]
@@ -446,15 +508,30 @@ public sealed class ParallelToolExecutionTests
         private int _active;
         private int _maxConcurrent;
         private int _invokeCount;
+        private readonly List<InvocationSpan> _spans = [];
+        private readonly object _spanGate = new();
 
         public int MaxConcurrent => _maxConcurrent;
         public int InvokeCount => _invokeCount;
+        public IReadOnlyList<InvocationSpan> Spans
+        {
+            get
+            {
+                lock (_spanGate)
+                {
+                    return _spans.ToArray();
+                }
+            }
+        }
+
+        public sealed record InvocationSpan(string ToolName, string? ArgumentsPath, long Started, long Ended);
 
         public IReadOnlyList<ToolDefinition> ListTools() =>
         [
             new ToolDefinition("file_read", "read", ToolSchema.Object().AllowAdditionalProperties().Build()),
             new ToolDefinition("grep_files", "grep", ToolSchema.Object().AllowAdditionalProperties().Build()),
-            new ToolDefinition("file_write", "write", ToolSchema.Object().AllowAdditionalProperties().Build())
+            new ToolDefinition("file_write", "write", ToolSchema.Object().AllowAdditionalProperties().Build()),
+            new ToolDefinition("ask_user", "ask", ToolSchema.Object().AllowAdditionalProperties().Build())
         ];
 
         public bool IsParallelizable(string toolName) =>
@@ -466,13 +543,22 @@ public sealed class ParallelToolExecutionTests
             Interlocked.Increment(ref _invokeCount);
             var active = Interlocked.Increment(ref _active);
             UpdateMax(active);
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var path = invocation.Arguments.GetString("path");
             try
             {
                 await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
-                return ToolResult.Success($"ran {invocation.ToolName}", $"ToolCallId: {invocation.ToolName}");
+                var endsTurn = string.Equals(invocation.ToolName, "ask_user", StringComparison.OrdinalIgnoreCase);
+                return ToolResult.Success($"ran {invocation.ToolName}", $"ToolCallId: {invocation.ToolName}", endsTurn: endsTurn);
             }
             finally
             {
+                var ended = System.Diagnostics.Stopwatch.GetTimestamp();
+                lock (_spanGate)
+                {
+                    _spans.Add(new InvocationSpan(invocation.ToolName, path, started, ended));
+                }
+
                 Interlocked.Decrement(ref _active);
             }
         }

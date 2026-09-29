@@ -18,7 +18,7 @@ public sealed class FileReadToolTests
     }
 
     [Fact]
-    public async Task InvokeAsync_ReadsSmallFileWithLinePrefixes()
+    public async Task InvokeAsync_ReadsSmallFileWithoutLinePrefixes()
     {
         await using var env = await FileReadTestEnvironment.CreateAsync();
         await File.WriteAllTextAsync(env.FilePath, "alpha\nbeta\n");
@@ -27,9 +27,26 @@ public sealed class FileReadToolTests
             new ToolInvocation("file_read", new Dictionary<string, string> { ["path"] = "demo.txt" }));
 
         Assert.True(result.Succeeded, result.Error);
-        Assert.Contains("1|alpha", result.Content, StringComparison.Ordinal);
-        Assert.Contains("2|beta", result.Content, StringComparison.Ordinal);
+        var body = result.Content!.Split(FileReadLineReader.MetaHeader)[0];
+        Assert.Contains("alpha", body, StringComparison.Ordinal);
+        Assert.Contains("beta", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("1|alpha", body, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"(?m)^\d+\|", body);
         Assert.Contains(FileReadLineReader.MetaHeader, result.Content, StringComparison.Ordinal);
+        Assert.Contains("start_line:", result.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_MissingFile_SuggestsSimilarNames()
+    {
+        await using var env = await FileReadTestEnvironment.CreateAsync();
+        await File.WriteAllTextAsync(env.FilePath, "alpha\n");
+
+        var result = await env.Tool.InvokeAsync(
+            new ToolInvocation("file_read", new Dictionary<string, string> { ["path"] = "demoo.txt" }));
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("demo.txt", result.Summary, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -128,10 +145,12 @@ public sealed class FileReadToolTests
             }));
 
         Assert.True(result.Succeeded, result.Error);
-        Assert.Contains("2|b", result.Content, StringComparison.Ordinal);
-        Assert.Contains("3|c", result.Content, StringComparison.Ordinal);
-        Assert.DoesNotContain("1|a", result.Content, StringComparison.Ordinal);
-        Assert.DoesNotContain("4|d", result.Content, StringComparison.Ordinal);
+        var body = result.Content!.Split(FileReadLineReader.MetaHeader)[0];
+        Assert.Contains("b", body, StringComparison.Ordinal);
+        Assert.Contains("c", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("1|", body, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"(?m)^\d+\|", body);
+        Assert.Contains("start_line: 2", result.Content, StringComparison.Ordinal);
     }
 
     [Fact]

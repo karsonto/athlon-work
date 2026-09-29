@@ -11,11 +11,13 @@ public sealed class SshFileReadTool(
 {
     public ToolDefinition Definition { get; } = new(
         "file_read",
-        "Read file content with line numbers (N|line) for display only. Paths may be inside or outside the workspace. "
+        "Read file content exactly as stored on disk. The body has no line-number prefixes; "
+            + "line numbers are only in the footer (start_line, end_line, next_start_line). "
+            + "Paths may be inside or outside the workspace. "
             + "Use 1-based start_line/end_line to read in chunks; "
             + "do not assume a single read covers the whole file. When the result has truncated:true or next_start_line, "
             + "continue from that 1-based line. Prefer grep_files/glob_files to locate content in large files first. "
-            + "Do not use N| prefixes in file_edit old_text.",
+            + "file_edit old_text must copy this body, not a line-number prefix.",
         ToolSchema.Object()
             .String("path", "Absolute or workspace-relative file path to read.", required: true, minLength: 1)
             .Integer("start_line", "1-based start line (default 1)", defaultValue: 1, minimum: 1)
@@ -40,7 +42,8 @@ public sealed class SshFileReadTool(
             var info = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
             if (info is null)
             {
-                return ToolResult.Failure("File not found", fullPath);
+                var suggestions = await SuggestSimilarNamesAsync(fullPath, cancellationToken).ConfigureAwait(false);
+                return ToolResult.Failure(SimilarFileNameSuggester.FormatNotFound(suggestions), fullPath);
             }
 
             if (info.IsDirectory)
@@ -104,5 +107,45 @@ public sealed class SshFileReadTool(
         {
             return ToolResult.Failure("Read failed", ex.Message);
         }
+    }
+
+    private async Task<IReadOnlyList<string>> SuggestSimilarNamesAsync(string fullPath, CancellationToken cancellationToken)
+    {
+        var slash = fullPath.LastIndexOf('/');
+        if (slash <= 0)
+        {
+            return [];
+        }
+
+        var directory = fullPath[..slash];
+        var name = fullPath[(slash + 1)..];
+        if (name.Length == 0)
+        {
+            return [];
+        }
+
+        var names = new List<string>();
+        try
+        {
+            await foreach (var entry in client.ListAsync(directory, cancellationToken).ConfigureAwait(false))
+            {
+                if (entry.Name is "." or "..")
+                {
+                    continue;
+                }
+
+                names.Add(entry.Name);
+                if (names.Count >= 400)
+                {
+                    break;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return [];
+        }
+
+        return SimilarFileNameSuggester.Suggest(name, names);
     }
 }

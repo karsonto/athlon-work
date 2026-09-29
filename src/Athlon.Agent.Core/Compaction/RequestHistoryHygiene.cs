@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Athlon.Agent.Core.ComputerUse;
+using Athlon.Agent.Core.Plan;
 
 namespace Athlon.Agent.Core.Compaction;
 
@@ -32,6 +33,21 @@ public static partial class RequestHistoryHygiene
     /// Shared with <see cref="ContextTokenEstimator"/> so estimation clamps exactly what hygiene rewrites.
     /// </summary>
     public static bool IsContinuityArgument(string name) => ContinuityArgumentNames.Contains(name);
+
+    /// <summary>
+    /// <c>body</c> stays verbatim only for <c>publish_plan</c>, and only until a later approved-plan
+    /// message makes that copy redundant. Every other argument uses the continuity name list.
+    /// </summary>
+    public static bool KeepsArgumentVerbatim(string? toolName, string key, bool preservePublishPlanBody)
+    {
+        if (string.Equals(key, "body", StringComparison.OrdinalIgnoreCase))
+        {
+            return preservePublishPlanBody
+                && string.Equals(toolName, "publish_plan", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return ContinuityArgumentNames.Contains(key);
+    }
 
     public sealed record ApplyResult(IReadOnlyList<AgentModelMessage> Messages, int EstimatedSavingsTokens);
 
@@ -98,6 +114,14 @@ public static partial class RequestHistoryHygiene
         var stripUiTreeIndexes = settings.PruneHistoricalUiTree
             ? ResolveUiTreeStripIndexes(messages, toolNamesByCallId, remainingFullUiTrees)
             : null;
+        var approvedPlanIndex = -1;
+        for (var index = 0; index < messages.Count; index++)
+        {
+            if (IsApprovedPlanModelMessage(messages[index]))
+            {
+                approvedPlanIndex = index;
+            }
+        }
 
         for (var index = 0; index < messages.Count; index++)
         {
@@ -133,7 +157,11 @@ public static partial class RequestHistoryHygiene
             else if (string.Equals(message.Role, "assistant", StringComparison.Ordinal)
                      && message.ToolCalls is { Count: > 0 })
             {
-                var compactedCalls = CompactToolCalls(message.ToolCalls, settings, pairedToolCallIds);
+                var compactedCalls = CompactToolCalls(
+                    message.ToolCalls,
+                    settings,
+                    pairedToolCallIds,
+                    preservePublishPlanBody: approvedPlanIndex < index);
                 if (!ReferenceEquals(compactedCalls, message.ToolCalls))
                 {
                     changed = true;
@@ -314,10 +342,15 @@ public static partial class RequestHistoryHygiene
             || text.Contains("ToolCallId:", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsApprovedPlanModelMessage(AgentModelMessage message) =>
+        string.Equals(message.Role, "user", StringComparison.Ordinal)
+        && GetTextContent(message.Content).Contains(ApprovedPlanPrompt.Marker, StringComparison.Ordinal);
+
     private static IReadOnlyList<AgentToolCall> CompactToolCalls(
         IReadOnlyList<AgentToolCall> toolCalls,
         RequestHistoryHygieneSettings settings,
-        HashSet<string> pairedToolCallIds)
+        HashSet<string> pairedToolCallIds,
+        bool preservePublishPlanBody)
     {
         var changed = false;
         var output = new List<AgentToolCall>(toolCalls.Count);
@@ -329,7 +362,7 @@ public static partial class RequestHistoryHygiene
                 continue;
             }
 
-            var compactedArgs = CompactArguments(call.Name, call.Arguments, settings);
+            var compactedArgs = CompactArguments(call.Name, call.Arguments, settings, preservePublishPlanBody);
             if (!ReferenceEquals(compactedArgs, call.Arguments))
             {
                 changed = true;
@@ -347,13 +380,14 @@ public static partial class RequestHistoryHygiene
     private static ToolCallArguments CompactArguments(
         string toolName,
         ToolCallArguments arguments,
-        RequestHistoryHygieneSettings settings)
+        RequestHistoryHygieneSettings settings,
+        bool preservePublishPlanBody)
     {
         var changed = false;
         var output = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
         foreach (var (key, value) in arguments)
         {
-            if (ContinuityArgumentNames.Contains(key) || value.ValueKind != JsonValueKind.String)
+            if (KeepsArgumentVerbatim(toolName, key, preservePublishPlanBody) || value.ValueKind != JsonValueKind.String)
             {
                 output[key] = value;
                 continue;
