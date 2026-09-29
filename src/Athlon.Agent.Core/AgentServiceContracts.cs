@@ -79,6 +79,31 @@ public interface IFileStorageService
     Task<string> SaveEvictedToolResultAsync(string sessionId, string toolCallId, string content, CancellationToken cancellationToken = default);
     Task<string?> TryReadEvictedToolResultAsync(string sessionId, string toolCallId, CancellationToken cancellationToken = default) =>
         Task.FromResult<string?>(null);
+
+    Task<IReadOnlyList<SessionTranscriptInfo>> ListSessionTranscriptsAsync(string sessionId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<SessionTranscriptInfo>>([]);
+
+    Task<string?> ReadSessionTranscriptAsync(
+        string sessionId,
+        string fileName,
+        int offsetChars,
+        int limitChars,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<string?>(null);
+
+    Task<IReadOnlyList<SessionTranscriptMatch>> SearchSessionTranscriptsAsync(
+        string sessionId,
+        string query,
+        int limit,
+        int previewChars,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<SessionTranscriptMatch>>([]);
+
+    Task<string> ReadHandoffNoteAsync(string sessionId, CancellationToken cancellationToken = default) =>
+        Task.FromResult(string.Empty);
+
+    Task<bool> TryAppendHandoffNoteAsync(string sessionId, string text, CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
     /// <summary>
     /// Loads the latest unstripped conversation.jsonl line for <paramref name="messageId"/> (last-wins).
     /// </summary>

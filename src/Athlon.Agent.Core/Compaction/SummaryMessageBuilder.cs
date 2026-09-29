@@ -40,11 +40,12 @@ public static class SummaryMessageBuilder
             : ConversationCompactionDefaults.SummaryMessageMarker;
         if (!string.IsNullOrWhiteSpace(transcriptPath))
         {
+            var fileName = Path.GetFileName(transcriptPath);
             return
                 "You are in the middle of a conversation that has been summarized.\n\n" +
-                "The full conversation history has been saved to " +
-                transcriptPath +
-                " should you need to refer back to it for details.\n\n" +
+                "The summary is an outline. The full history was archived as transcript file " +
+                fileName +
+                ". Use history_list_transcripts, history_read_transcript, or history_search_transcripts to recover details. Use history_read_evicted for truncated tool output.\n\n" +
                 "A condensed summary follows:\n\n" +
                 "<summary>\n" +
                 trimmedSummary +

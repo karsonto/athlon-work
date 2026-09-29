@@ -11,7 +11,8 @@ public static class ModelMessagesForApiBuilder
         IReadOnlyList<ChatMessage> history,
         ContextCompactionSettings compaction,
         string? runtimeContext = null,
-        RuntimeContextInjectionState? runtimeContextState = null)
+        RuntimeContextInjectionState? runtimeContextState = null,
+        string? tokenBudgetNotice = null)
     {
         List<AgentModelMessage> messages;
         if (cache is not null)
@@ -30,31 +31,49 @@ public static class ModelMessagesForApiBuilder
             messages,
             compaction.MaxToolScreenshotsInModelContext);
 
-        var result = cache is not null
+        var hygieneResult = cache is not null
             ? cache.ApplyHygiene(compaction.RequestHistoryHygiene)
             : RequestHistoryHygiene.ApplyToModelMessages(messages, compaction.RequestHistoryHygiene);
 
+        RequestHistoryHygiene.ApplyResult result;
         if (runtimeContextState is null)
         {
             if (string.IsNullOrWhiteSpace(runtimeContext))
             {
-                return result;
+                result = hygieneResult;
             }
-
-            var withContext = result.Messages.ToList();
-            withContext.Add(new AgentModelMessage("user", runtimeContext));
-            return new RequestHistoryHygiene.ApplyResult(withContext, result.EstimatedSavingsTokens);
+            else
+            {
+                var withContext = hygieneResult.Messages.ToList();
+                withContext.Add(new AgentModelMessage("user", runtimeContext));
+                result = new RequestHistoryHygiene.ApplyResult(withContext, hygieneResult.EstimatedSavingsTokens);
+            }
+        }
+        else
+        {
+            var injection = runtimeContextState.SelectForInjection(runtimeContext);
+            if (injection.Messages.Count == 0)
+            {
+                result = hygieneResult;
+            }
+            else
+            {
+                var messagesWithRuntimeContext = hygieneResult.Messages.ToList();
+                messagesWithRuntimeContext.AddRange(injection.Messages);
+                result = new RequestHistoryHygiene.ApplyResult(
+                    messagesWithRuntimeContext,
+                    hygieneResult.EstimatedSavingsTokens);
+            }
         }
 
-        var injection = runtimeContextState.SelectForInjection(runtimeContext);
-        if (injection.Messages.Count == 0)
+        if (string.IsNullOrWhiteSpace(tokenBudgetNotice))
         {
             return result;
         }
 
-        var messagesWithRuntimeContext = result.Messages.ToList();
-        messagesWithRuntimeContext.AddRange(injection.Messages);
-        return new RequestHistoryHygiene.ApplyResult(messagesWithRuntimeContext, result.EstimatedSavingsTokens);
+        var withNotice = result.Messages.ToList();
+        withNotice.Add(new AgentModelMessage("user", tokenBudgetNotice));
+        return new RequestHistoryHygiene.ApplyResult(withNotice, result.EstimatedSavingsTokens);
     }
 }
 

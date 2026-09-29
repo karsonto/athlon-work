@@ -9,7 +9,8 @@ public sealed class CompactionTurnMiddleware(
     IPromptPressureStore promptPressureStore,
     IFileStorageService storage,
     AppSettings settings,
-    IConversationTranscriptWriter? transcriptWriter = null) : AgentTurnMiddlewareBase
+    IConversationTranscriptWriter? transcriptWriter = null,
+    IContextCompactRequestStore? compactRequests = null) : AgentTurnMiddlewareBase
 {
     public override async ValueTask OnBeforeModelRoundAsync(
         AgentTurnInvocation invocation,
@@ -21,9 +22,12 @@ public sealed class CompactionTurnMiddleware(
         }
 
         var historyBeforePreCompletion = invocation.Session.Messages;
+        var options = compactRequests?.TryConsume(invocation.Session.Id) == true
+            ? PreCompletionOptions.ModelRequested
+            : PreCompletionOptions.AgentLoop;
         invocation.Session = await RunPreCompletionAsync(
             invocation,
-            PreCompletionOptions.AgentLoop,
+            options,
             invocation.EnvironmentPrompt,
             invocation.Tools,
             cancellationToken).ConfigureAwait(false);
@@ -112,6 +116,7 @@ public sealed class CompactionTurnMiddleware(
             compaction.DynamicCompaction,
             forceOverflow: pressureOverride == ContextPressureLevel.Overflow);
         await PublishBudgetAsync(invocation, afterBudget, afterPressure).ConfigureAwait(false);
+        invocation.TokenBudgetNotice = TokenBudgetNotice.Format(afterBudget, afterPressure);
         return invocation.Session;
     }
 

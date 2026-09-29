@@ -19,7 +19,7 @@ internal sealed class AgentTurnCoordinator(
     IFileStorageService storage,
     AppSettings settings,
     IAgentRunContextAccessor runContextAccessor,
-    Func<AgentSession, AgentTurnCallbacks?, PreCompletionOptions, string, string?, IReadOnlyList<ToolDefinition>, ContextPressureLevel, CancellationToken, Task<AgentSession>> runPreCompletionPipelineAsync,
+    Func<AgentSession, AgentTurnCallbacks?, PreCompletionOptions, string, string?, IReadOnlyList<ToolDefinition>, ContextPressureLevel, CancellationToken, Task<(AgentSession Session, string? TokenBudgetNotice)>> runPreCompletionPipelineAsync,
     IAppLogger logger,
     IEventManager? eventManager = null,
     IRuntimeDiagnosticEventSink runtimeDiagnosticEventSink = null!)
@@ -90,7 +90,7 @@ internal sealed class AgentTurnCoordinator(
                     ["failed_tokens"] = failedTokens
                 });
 
-            session = await runPreCompletionPipelineAsync(
+            var compacted = await runPreCompletionPipelineAsync(
                 session,
                 callbacks,
                 PreCompletionOptions.ForceCompact,
@@ -99,6 +99,7 @@ internal sealed class AgentTurnCoordinator(
                 tools,
                 ContextPressureLevel.Overflow,
                 cancellationToken).ConfigureAwait(false);
+            session = compacted.Session;
 
             modelMessageCache?.Invalidate();
             var retryResult = ModelMessagesForApiBuilder.Build(
@@ -106,7 +107,8 @@ internal sealed class AgentTurnCoordinator(
                 frozenPrompt.Text,
                 session.Messages,
                 settings.ContextCompaction,
-                runtimeContext);
+                runtimeContext,
+                tokenBudgetNotice: compacted.TokenBudgetNotice);
             var retryTokens = RequestHistoryHygiene.EstimatePayloadTokens(retryResult.Messages);
             var allowToolCalls = ScheduleTurnScope.Current?.AllowToolCalls ?? true;
             if (retryTokens >= failedTokens)
@@ -179,7 +181,7 @@ internal sealed class AgentTurnCoordinator(
                     MiddleCutAttemptsByRun[runId] = attempts + 1;
                 }
 
-                var middleCutSession = await runPreCompletionPipelineAsync(
+                var middleCut = await runPreCompletionPipelineAsync(
                     session,
                     callbacks,
                     new PreCompletionOptions
@@ -195,6 +197,7 @@ internal sealed class AgentTurnCoordinator(
                     tools,
                     ContextPressureLevel.Overflow,
                     cancellationToken).ConfigureAwait(false);
+                var middleCutSession = middleCut.Session;
 
                 modelMessageCache?.Invalidate();
                 var middleCutResult = ModelMessagesForApiBuilder.Build(
@@ -202,7 +205,8 @@ internal sealed class AgentTurnCoordinator(
                     frozenPrompt.Text,
                     middleCutSession.Messages,
                     settings.ContextCompaction,
-                    runtimeContext);
+                    runtimeContext,
+                    tokenBudgetNotice: middleCut.TokenBudgetNotice);
                 var middleRetryTokens = RequestHistoryHygiene.EstimatePayloadTokens(middleCutResult.Messages);
                 if (middleRetryTokens >= failedTokens)
                 {

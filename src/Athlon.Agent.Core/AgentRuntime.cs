@@ -236,7 +236,8 @@ public sealed class AgentRuntime(
                     session.Messages,
                     settings.ContextCompaction,
                     turnInvocation.RuntimeContext,
-                    runtimeContextState);
+                    runtimeContextState,
+                    turnInvocation.TokenBudgetNotice);
                 var runtimeContextForRequest = runtimeContextState.LastSelectedContext;
 
                 var assistantMessageId = IdGen.NewId();
@@ -426,7 +427,7 @@ public sealed class AgentRuntime(
         }
     }
 
-    private async Task<AgentSession> RunForceCompactPreCompletionAsync(
+    private async Task<(AgentSession Session, string? TokenBudgetNotice)> RunForceCompactPreCompletionAsync(
         AgentSession session,
         AgentTurnCallbacks? callbacks,
         PreCompletionOptions options,
@@ -447,13 +448,14 @@ public sealed class AgentRuntime(
             RuntimeContext = runtimeContext,
             Tools = tools
         };
-        return await compactionMiddleware.RunPreCompletionAsync(
+        var sessionAfter = await compactionMiddleware.RunPreCompletionAsync(
             invocation,
             options,
             environmentPrompt,
             tools,
             cancellationToken,
             pressureOverride).ConfigureAwait(false);
+        return (sessionAfter, invocation.TokenBudgetNotice);
     }
 
     private async Task<(AgentSession Session, bool EndsTurn)> InvokeToolAndPersistAsync(

@@ -22,6 +22,7 @@ public sealed class MemoryPolicySection : IEnvironmentPromptSection
 
         builder.AppendLine("Project session memory:");
         builder.AppendLine("- Long-term memory is scoped to the current workspace and this conversation session.");
+        builder.AppendLine("- memory_search reads curated memory only. Archived conversation transcripts are not memory files; use the history transcript tools for those.");
         if (PromptModeHelper.HasTool(context, "memory_search"))
         {
             builder.AppendLine("- Call memory_search before answering questions about past work, preferences, or decisions in this session.");

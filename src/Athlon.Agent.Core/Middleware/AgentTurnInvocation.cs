@@ -21,6 +21,9 @@ public sealed class AgentTurnInvocation
 
     public string? RuntimeContext { get; set; }
 
+    /// <summary>Appended after runtime context. Not part of the runtime-context fingerprint.</summary>
+    public string? TokenBudgetNotice { get; set; }
+
     public IReadOnlyList<ToolDefinition>? Tools { get; set; }
 
     public FrozenSystemPrompt? FrozenPrompt { get; set; }

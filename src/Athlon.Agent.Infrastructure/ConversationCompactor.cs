@@ -87,7 +87,7 @@ public sealed class ConversationCompactor(
         }
         else if (cutPlan.SummarizedEnd <= 0
             && request.Force
-            && request.Strategy == CompactionStrategy.ForceCompact
+            && request.Strategy is CompactionStrategy.ForceCompact or CompactionStrategy.ConversationCompact
             && conversation.Count > 1)
         {
             var keepCount = cfg.KeepMessages > 0
@@ -264,6 +264,7 @@ public sealed class ConversationCompactor(
         }
 
         var summaryMessage = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath);
+        var handoffMessage = await LoadHandoffMessageAsync(session.Id, cancellationToken).ConfigureAwait(false);
         var compactMessages = new List<ChatMessage>();
 
         var strategy = request.Strategy;
@@ -285,7 +286,7 @@ public sealed class ConversationCompactor(
         {
             var auditContent = CompactionMessageContent.CreateConversationCompact(
                 tokensBefore,
-                EstimateCompactedTokens(summaryMessage, reattachedPlan, reattachedUser, tail, cfg),
+                EstimateCompactedTokens(summaryMessage, reattachedPlan, reattachedUser, tail, cfg, handoffMessage),
                 originalCount,
                 transcriptPath,
                 summary,
@@ -300,6 +301,11 @@ public sealed class ConversationCompactor(
         }
 
         compactMessages.Add(summaryMessage);
+        if (handoffMessage is not null)
+        {
+            compactMessages.Add(handoffMessage);
+        }
+
         // Approved plans are control messages, so they are not the protected-tail anchor. When the
         // cut still covers one, keep the body verbatim ahead of the active user instruction.
         if (reattachedPlan is not null)
@@ -316,7 +322,7 @@ public sealed class ConversationCompactor(
         }
 
         compactMessages.AddRange(tail);
-        var tokensAfterPreview = EstimateCompactedTokens(summaryMessage, reattachedPlan, reattachedUser, tail, cfg);
+        var tokensAfterPreview = EstimateCompactedTokens(summaryMessage, reattachedPlan, reattachedUser, tail, cfg, handoffMessage);
 
         await storage.SaveContextSummaryAsync(
             new ContextSummary(
@@ -491,9 +497,14 @@ public sealed class ConversationCompactor(
         }
 
         var hiddenSummary = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath: null, hiddenFromTimeline: true);
-        var compactMessages = new List<ChatMessage>(head.Count + tail.Count + 2);
+        var handoffMessage = await LoadHandoffMessageAsync(session.Id, cancellationToken).ConfigureAwait(false);
+        var compactMessages = new List<ChatMessage>(head.Count + tail.Count + 3);
         compactMessages.AddRange(head);
         compactMessages.Add(hiddenSummary);
+        if (handoffMessage is not null)
+        {
+            compactMessages.Add(handoffMessage);
+        }
         if (reattachedPlan is not null)
         {
             compactMessages.Add(reattachedPlan);
@@ -665,15 +676,26 @@ public sealed class ConversationCompactor(
         return total;
     }
 
+    private async Task<ChatMessage?> LoadHandoffMessageAsync(string sessionId, CancellationToken cancellationToken)
+    {
+        var note = await storage.ReadHandoffNoteAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        return string.IsNullOrWhiteSpace(note) ? null : SessionHandoffNote.CreateMessage(note);
+    }
+
     /// <summary>Token estimate of the payload actually written back after compaction.</summary>
     private static int EstimateCompactedTokens(
         ChatMessage summaryMessage,
         ChatMessage? reattachedPlan,
         ChatMessage? reattachedUser,
         IReadOnlyList<ChatMessage> tail,
-        ContextCompactionSettings cfg)
+        ContextCompactionSettings cfg,
+        ChatMessage? handoffMessage = null)
     {
-        var messages = new List<ChatMessage>(tail.Count + 3) { summaryMessage };
+        var messages = new List<ChatMessage>(tail.Count + 4) { summaryMessage };
+        if (handoffMessage is not null)
+        {
+            messages.Add(handoffMessage);
+        }
         if (reattachedPlan is not null)
         {
             messages.Add(reattachedPlan);

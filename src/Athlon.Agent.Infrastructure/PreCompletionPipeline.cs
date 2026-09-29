@@ -152,6 +152,7 @@ public sealed class PreCompletionPipeline(
 
         pressure = ContextPressureEvaluator.Evaluate(budget, cfg.DynamicCompaction, forceOverflow: false);
         var stillNeedsCompact = isManualCompact
+            || options.ApplyEvenWhenBelowThreshold
             || ContextPressureEvaluator.ShouldCompact(
                 budget,
                 conversation,
