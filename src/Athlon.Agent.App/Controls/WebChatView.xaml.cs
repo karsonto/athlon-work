@@ -411,6 +411,17 @@ public partial class WebChatView : UserControl
         return Task.CompletedTask;
     }
 
+    public Task DispatchTurnActivityOutputAsync(string toolCallId, string delta)
+    {
+        if (string.IsNullOrEmpty(toolCallId) || string.IsNullOrEmpty(delta))
+        {
+            return Task.CompletedTask;
+        }
+
+        PostTimelineEvent(ChatEventSerializer.SerializeTurnActivityOutput(toolCallId, delta));
+        return Task.CompletedTask;
+    }
+
     public Task DispatchEventAsync(AgentStreamEvent streamEvent)
     {
         PostTimelineEvent(ChatEventSerializer.Serialize(streamEvent));

@@ -331,6 +331,45 @@ function scrollTurnActivityThoughts(details) {
   });
 }
 
+function findTurnActivityEntry(toolCallId) {
+  if (!toolCallId) return null;
+  var entries = document.querySelectorAll('.turn-activity-item[data-tool-call-id]');
+  var match = null;
+  for (var i = 0; i < entries.length; i++) {
+    if (entries[i].dataset.toolCallId === toolCallId) {
+      match = entries[i];
+    }
+  }
+  return match;
+}
+
+function appendTurnActivityOutput(event) {
+  var toolCallId = event && event.toolCallId;
+  var delta = event && event.delta || '';
+  if (!toolCallId || !delta) return;
+  var entry = findTurnActivityEntry(toolCallId);
+  if (!entry) return;
+
+  var panel = entry.querySelector('.turn-activity-tool-detail');
+  if (!panel) {
+    panel = document.createElement('pre');
+    panel.className = 'turn-activity-tool-detail';
+    entry.dataset.toolCallId = toolCallId;
+    entry.dataset.hydrated = '1';
+    entry.appendChild(panel);
+  }
+
+  entry.classList.add('open');
+  panel.textContent += delta;
+  panel.scrollTop = panel.scrollHeight;
+
+  var details = entry.closest('details.turn-activity');
+  if (details && !details.open) {
+    details.open = true;
+  }
+  scrollToBottom();
+}
+
 /**
  * Renders (or refreshes) the turn-activity fold at its seq slot.
  *
@@ -474,6 +513,10 @@ function appendTurnActivityCard(event) {
       }
       if (item.messageId) entry.dataset.messageId = item.messageId;
       if (item.toolCallId) entry.dataset.toolCallId = item.toolCallId;
+      if (item.kind === 'command' && item.body) {
+        entry.classList.add('open');
+        detailPanel.scrollTop = detailPanel.scrollHeight;
+      }
       button.addEventListener('click', function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -492,7 +535,11 @@ function appendTurnActivityCard(event) {
 
   details.appendChild(body);
   // A live fold preserves an already-opened state; a final/replayed fold starts collapsed.
-  details.open = keepOpen;
+  // A live command with output opens the fold so the stream stays visible after a refresh.
+  var openForCommand = event.upsert === true && items.some(function (item) {
+    return item.kind === 'command' && item.body;
+  });
+  details.open = keepOpen || openForCommand;
   if (details.open) {
     details.classList.add('is-expanded');
   } else {
@@ -501,6 +548,9 @@ function appendTurnActivityCard(event) {
   syncTurnActivityChevron(details);
   updateEmptyStateVisibility();
   scrollTurnActivityThoughts(details);
+  details.querySelectorAll('.turn-activity-item.open .turn-activity-tool-detail').forEach(function (panel) {
+    panel.scrollTop = panel.scrollHeight;
+  });
   scrollToBottom();
 }
 

@@ -177,6 +177,7 @@ public sealed partial class SessionTurnUiController
         var summary = TurnActivitySummaryBuilder.OverlayLiveThought(replayed, live);
         if (summary.HasContent)
         {
+            DiscardPendingCommandOutput();
             _ = ChatView!.DispatchTurnActivityAsync(
                 summary,
                 upsert: true,

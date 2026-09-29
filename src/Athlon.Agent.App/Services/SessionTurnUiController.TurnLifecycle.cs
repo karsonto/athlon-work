@@ -143,6 +143,7 @@ public sealed partial class SessionTurnUiController
         var summary = _turnActivityTracker.Snapshot();
         if (summary is { HasContent: true })
         {
+            DiscardPendingCommandOutput();
             _ = ChatView!.DispatchTurnActivityAsync(
                 summary,
                 upsert: false,
@@ -169,6 +170,7 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
+        DiscardPendingCommandOutput();
         _ = ChatView!.DispatchTurnActivityAsync(
             summary,
             upsert: upsert,

@@ -129,6 +129,9 @@ function handleEvent(event) {
     case 'TURN_ACTIVITY':
       appendTurnActivityCard(event);
       break;
+    case 'TURN_ACTIVITY_OUTPUT':
+      appendTurnActivityOutput(event);
+      break;
     case 'COMPACTION_CHECKPOINT':
       upsertCompactionCheckpoint(event);
       break;

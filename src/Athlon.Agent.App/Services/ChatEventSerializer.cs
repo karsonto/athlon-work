@@ -218,6 +218,9 @@ internal static class ChatEventSerializer
         return "activity:" + turnAnchorId + ":" + Math.Max(0, activityBlockIndex);
     }
 
+    public static string SerializeTurnActivityOutput(string toolCallId, string delta) =>
+        SerializeAgui("TURN_ACTIVITY_OUTPUT", new { toolCallId, delta });
+
     private static string LocalizeActivityVerb(TurnActivityKind kind) => kind switch
     {
         TurnActivityKind.Edited => Strings.Get("Chat_ActivityVerbEdited"),

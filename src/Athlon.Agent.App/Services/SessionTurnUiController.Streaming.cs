@@ -1,4 +1,6 @@
 ﻿using System.Collections.Specialized;
+using System.Linq;
+using System.Text;
 using System.Windows.Threading;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
@@ -295,6 +297,13 @@ public sealed partial class SessionTurnUiController
         _tokenBuffer.FlushTokens(Messages, IsDisplayed, RequestScroll);
         if (!IsDisplayed || ChatView is null)
         {
+            // The tracker already has these lines. Drop the unsent tail so a later
+            // snapshot refresh does not append them a second time.
+            if (!IsDisplayed)
+            {
+                DiscardPendingCommandOutput();
+            }
+
             return;
         }
 
@@ -315,7 +324,52 @@ public sealed partial class SessionTurnUiController
                 _ = ChatView.ApplyAssistantMarkdownAsync(assistant, streaming: true);
             }
         }
+
+        FlushPendingCommandOutput();
     }
+
+    private void AcceptCommandOutput(AgentStreamEvent.ToolCallOutput output)
+    {
+        _turnActivityTracker.Process(output);
+        if (!IsDisplayed
+            || !TurnActivitySummaryBuilder.CommandTools.Contains(
+                _turnActivityTracker.ResolveToolName(output.ToolCallId) ?? string.Empty)
+            || string.IsNullOrEmpty(output.Delta))
+        {
+            return;
+        }
+
+        if (!_pendingCommandOutput.TryGetValue(output.ToolCallId, out var buffer))
+        {
+            buffer = new StringBuilder();
+            _pendingCommandOutput[output.ToolCallId] = buffer;
+        }
+
+        buffer.Append(output.Delta);
+        _tokenBuffer.ScheduleFlush(true);
+    }
+
+    private void FlushPendingCommandOutput()
+    {
+        if (_pendingCommandOutput.Count == 0 || !IsDisplayed || ChatView is null)
+        {
+            return;
+        }
+
+        foreach (var (toolCallId, buffer) in _pendingCommandOutput)
+        {
+            if (buffer.Length == 0)
+            {
+                continue;
+            }
+
+            _ = ChatView.DispatchTurnActivityOutputAsync(toolCallId, buffer.ToString());
+        }
+
+        _pendingCommandOutput.Clear();
+    }
+
+    private void DiscardPendingCommandOutput() => _pendingCommandOutput.Clear();
 
     private ChatMessageViewModel? FindAssistantMessage(string messageId) =>
         Messages.LastOrDefault(message =>

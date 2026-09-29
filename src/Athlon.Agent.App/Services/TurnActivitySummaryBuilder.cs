@@ -175,7 +175,9 @@ public static class TurnActivitySummaryBuilder
 
             var messageId = message.MessageId;
             var toolCallId = message.ToolCallId;
-            var detailBody = ResolveActivityBody(message);
+            var detailBody = CommandTools.Contains(toolName)
+                ? ResolveCommandActivityBody(message)
+                : ResolveActivityBody(message);
 
             // Successful edits render in FILES_CHANGED; show in-flight / failed edits here.
             if (EditTools.Contains(toolName))
@@ -384,22 +386,38 @@ public static class TurnActivitySummaryBuilder
             Body: trimmed);
     }
 
-    private static string? ResolveActivityBody(ChatMessageViewModel message)
+    /// <summary>
+    /// Command rows show the expanded result so a finished run is not cut to the 4096 preview.
+    /// </summary>
+    private static string? ResolveCommandActivityBody(ChatMessageViewModel message)
     {
-        if (!string.IsNullOrWhiteSpace(message.ToolDetail))
+        var detail = message.ToolDetailExpandedDisplay;
+        if (string.IsNullOrWhiteSpace(detail))
         {
-            var args = message.ToolArgumentsText;
-            if (string.IsNullOrWhiteSpace(args))
-            {
-                return message.ToolDetail;
-            }
-
-            return "Arguments:\n" + args.Trim() + "\n\nResult:\n" + message.ToolDetail.Trim();
+            detail = message.ToolDetail;
         }
 
-        if (!string.IsNullOrWhiteSpace(message.ToolArgumentsText))
+        return FormatActivityBody(message.ToolArgumentsText, detail);
+    }
+
+    private static string? ResolveActivityBody(ChatMessageViewModel message) =>
+        FormatActivityBody(message.ToolArgumentsText, message.ToolDetail);
+
+    private static string? FormatActivityBody(string? argumentsText, string? detail)
+    {
+        if (!string.IsNullOrWhiteSpace(detail))
         {
-            return "Arguments:\n" + message.ToolArgumentsText.Trim();
+            if (string.IsNullOrWhiteSpace(argumentsText))
+            {
+                return detail;
+            }
+
+            return "Arguments:\n" + argumentsText.Trim() + "\n\nResult:\n" + detail.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(argumentsText))
+        {
+            return "Arguments:\n" + argumentsText.Trim();
         }
 
         return null;

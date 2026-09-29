@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Text;
 using System.Collections.Specialized;
 using System.Collections.Concurrent;
 using System.Linq;
@@ -55,6 +57,8 @@ public sealed partial class SessionTurnUiController
     private readonly object _manualCompactionRefreshGate = new();
     private readonly ToolCallArgsDisplayCoordinator _displayCoordinator = new();
     private readonly StreamingTokenBuffer _tokenBuffer;
+    /// <summary>Coalesced execute_command stdout/stderr waiting for the next flush.</summary>
+    private readonly Dictionary<string, StringBuilder> _pendingCommandOutput = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, PendingUiApproval> _pendingApprovals =
         new(StringComparer.Ordinal);
     // Cache ViewModels by message ID so switching back to a previously-viewed
@@ -384,6 +388,8 @@ public sealed partial class SessionTurnUiController
                     }
 
                     return Task.CompletedTask;
+                case AgentStreamEvent.ToolCallOutput output:
+                    return RunOnUiAsync(() => AcceptCommandOutput(output));
                 default:
                     if (!IsDisplayed)
                     {

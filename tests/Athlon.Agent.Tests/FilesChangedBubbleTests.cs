@@ -867,6 +867,96 @@ public sealed class FilesChangedBubbleTests
     }
 
     [Fact]
+    public void SessionTurnActivityTracker_appends_execute_command_output_while_running()
+    {
+        var tracker = new SessionTurnActivityTracker();
+        tracker.BeginTurn();
+        tracker.Process(new AgentStreamEvent.ToolCallStart("c1", "execute_command", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("c1", """{"command":"echo hi"}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd("c1"));
+        tracker.Process(new AgentStreamEvent.ToolCallOutput("c1", "hello\n"));
+        tracker.Process(new AgentStreamEvent.ToolCallOutput("c1", "world\n"));
+
+        var summary = tracker.Snapshot();
+        var item = Assert.Single(summary!.Items, entry => entry.Kind == TurnActivityKind.Command);
+        Assert.Contains("hello", item.Body, StringComparison.Ordinal);
+        Assert.Contains("world", item.Body, StringComparison.Ordinal);
+        Assert.Equal("running", item.Status);
+    }
+
+    [Fact]
+    public void SessionTurnActivityTracker_ignores_output_for_non_command_tools()
+    {
+        var tracker = new SessionTurnActivityTracker();
+        tracker.BeginTurn();
+        tracker.Process(new AgentStreamEvent.ToolCallStart("c1", "file_read", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("c1", """{"path":"a.ts"}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd("c1"));
+        tracker.Process(new AgentStreamEvent.ToolCallOutput("c1", "secret\n"));
+
+        var summary = tracker.Snapshot();
+        var item = Assert.Single(summary!.Items);
+        Assert.DoesNotContain("secret", item.Body ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SessionTurnActivityTracker_command_result_replaces_live_output()
+    {
+        var tracker = new SessionTurnActivityTracker();
+        tracker.BeginTurn();
+        tracker.Process(new AgentStreamEvent.ToolCallStart("c1", "execute_command", 0));
+        tracker.Process(new AgentStreamEvent.ToolCallArgs("c1", """{"command":"echo hi"}"""));
+        tracker.Process(new AgentStreamEvent.ToolCallEnd("c1"));
+        tracker.Process(new AgentStreamEvent.ToolCallOutput("c1", "LIVE_ONLY\n"));
+        tracker.Process(new AgentStreamEvent.ToolCallResult(
+            "c1",
+            string.Join(
+                Environment.NewLine,
+                "ToolCallId: c1",
+                "Tool `execute_command` succeeded.",
+                "",
+                "Arguments: command = echo hi",
+                "Summary: Command succeeded",
+                "",
+                "FINAL_OUTPUT"),
+            "m1"));
+
+        var summary = tracker.Snapshot();
+        var item = Assert.Single(summary!.Items, entry => entry.Kind == TurnActivityKind.Command);
+        Assert.Contains("FINAL_OUTPUT", item.Body, StringComparison.Ordinal);
+        Assert.DoesNotContain("LIVE_ONLY", item.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TurnActivitySummaryBuilder_command_body_keeps_output_past_preview_limit()
+    {
+        var output = new string('x', 5_000);
+        var summary = TurnActivitySummaryBuilder.Build(
+        [
+            new ChatMessageViewModel(ChatMessage.Create(
+                MessageRole.Tool,
+                string.Join(
+                    Environment.NewLine,
+                    "ToolCallId: c1",
+                    "Tool `execute_command` succeeded.",
+                    "",
+                    "Arguments: command = echo",
+                    "Summary: Command succeeded",
+                    "",
+                    output)))
+        ]);
+
+        var item = Assert.Single(summary!.Items, entry => entry.Kind == TurnActivityKind.Command);
+        Assert.Contains(output, item.Body, StringComparison.Ordinal);
+        Assert.True(item.Body!.Length > 4_096);
+
+        var json = ChatEventSerializer.SerializeTurnActivity(summary);
+        using var doc = JsonDocument.Parse(json);
+        var body = doc.RootElement.GetProperty("items")[0].GetProperty("body").GetString();
+        Assert.Equal(item.Body, body);
+    }
+
+    [Fact]
     public void SessionTurnActivityTracker_result_replaces_pending_and_drops_successful_edit()
     {
         var tracker = new SessionTurnActivityTracker();

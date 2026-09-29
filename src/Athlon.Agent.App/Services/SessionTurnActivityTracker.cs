@@ -75,6 +75,9 @@ public sealed class SessionTurnActivityTracker
             case AgentStreamEvent.ToolCallEnd(var toolCallId):
                 PromotePendingToolToRunning(toolCallId);
                 break;
+            case AgentStreamEvent.ToolCallOutput(var toolCallId, var delta):
+                AppendCommandOutput(toolCallId, delta);
+                break;
             case AgentStreamEvent.ToolCallResult(var toolCallId, var content, _):
                 FinishActiveThought();
                 HandleResult(toolCallId, content);
@@ -165,6 +168,26 @@ public sealed class SessionTurnActivityTracker
 
         _toolCallIdToName.TryGetValue(toolCallId, out var toolName);
         pending.ToolArgumentsText = FormatArgsForDisplay(argsJson, toolName ?? pending.ToolName);
+    }
+
+    private void AppendCommandOutput(string toolCallId, string delta)
+    {
+        if (string.IsNullOrEmpty(delta))
+        {
+            return;
+        }
+
+        var pending = FindToolMessage(toolCallId);
+        if (pending is null
+            || pending.ToolCallStatus is not (ToolCallDisplayStatus.Preparing or ToolCallDisplayStatus.Running)
+            || !TurnActivitySummaryBuilder.CommandTools.Contains(pending.ToolName))
+        {
+            return;
+        }
+
+        // Expanded so the live detail keeps the full display cap, not the 4096 preview.
+        pending.IsExpanded = true;
+        pending.AppendToolOutput(delta);
     }
 
     private void PromotePendingToolToRunning(string toolCallId)
