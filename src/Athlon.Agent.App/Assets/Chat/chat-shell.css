@@ -39,6 +39,9 @@ html, body {
   content-visibility: auto;
   contain-intrinsic-size: auto 96px;
 }
+#messages > .message-row:last-child {
+  content-visibility: visible;
+}
 .empty-state {
   display: none !important;
 }

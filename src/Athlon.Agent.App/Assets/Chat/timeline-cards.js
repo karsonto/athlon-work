@@ -370,6 +370,249 @@ function appendTurnActivityOutput(event) {
   scrollToBottom();
 }
 
+function activityLineText(item) {
+  var verbText = item.verb || '';
+  var detailText = item.detail || item.path || '';
+  return verbText && detailText
+    ? (verbText + ' ' + detailText)
+    : (verbText || detailText);
+}
+
+function commandStillRunning(item) {
+  return item.kind === 'command' && (item.status === 'running' || item.status === 'preparing');
+}
+
+function createTurnActivityEntry(item) {
+  var hasDiff = item.lines && item.lines.length;
+  var hasThought = item.kind === 'thought' && item.body;
+  var entry = document.createElement('div');
+  entry.className = 'turn-activity-item'
+    + (hasDiff ? ' has-diff' : '')
+    + (hasThought ? ' has-thought' : '');
+
+  if (hasThought) {
+    var thoughtLabel = document.createElement('div');
+    thoughtLabel.className = 'turn-activity-thought-label';
+    thoughtLabel.textContent = item.verb || (t('thought') || 'Thought');
+    entry.appendChild(thoughtLabel);
+
+    var thought = document.createElement('div');
+    thought.className = 'turn-activity-thought';
+    thought.textContent = item.body || '';
+    entry.appendChild(thought);
+    return entry;
+  }
+
+  var button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'turn-activity-row';
+  button.title = item.path || item.detail || '';
+
+  var line = document.createElement('span');
+  line.className = 'turn-activity-line';
+  line.textContent = activityLineText(item);
+  button.appendChild(line);
+
+  if (item.status) {
+    var status = document.createElement('span');
+    status.className = 'turn-activity-status tool-status';
+    applyToolStatusBadge(status, item.status);
+    if (item.statusLabel) status.textContent = item.statusLabel;
+    button.appendChild(status);
+  }
+
+  entry.appendChild(button);
+
+  if (hasDiff) {
+    var diff = document.createElement('div');
+    diff.className = 'turn-activity-diff';
+    diff.innerHTML = renderDiffLines(item.lines);
+    button.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      entry.classList.toggle('open');
+      scrollToBottom();
+    });
+    entry.appendChild(diff);
+  } else if (item.body || item.messageId || item.toolCallId) {
+    var detailPanel = document.createElement('pre');
+    detailPanel.className = 'turn-activity-tool-detail';
+    if (item.body) {
+      detailPanel.textContent = item.body;
+      entry.dataset.hydrated = '1';
+    } else {
+      detailPanel.textContent = '…';
+      entry.dataset.hydrated = '0';
+    }
+    if (item.messageId) entry.dataset.messageId = item.messageId;
+    if (item.toolCallId) entry.dataset.toolCallId = item.toolCallId;
+    if (item.kind === 'command' && item.body) {
+      entry.classList.add('open');
+      detailPanel.scrollTop = detailPanel.scrollHeight;
+    }
+    button.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var opening = !entry.classList.contains('open');
+      entry.classList.toggle('open');
+      if (opening && entry.dataset.hydrated !== '1') {
+        requestToolDetailForEntry(entry, detailPanel);
+      }
+      scrollToBottom();
+    });
+    entry.appendChild(detailPanel);
+  }
+
+  return entry;
+}
+
+function syncTurnActivityEntry(entry, item) {
+  if (item.kind === 'thought') {
+    var thought = entry.querySelector('.turn-activity-thought');
+    if (thought) thought.textContent = item.body || '';
+    var label = entry.querySelector('.turn-activity-thought-label');
+    if (label) label.textContent = item.verb || (t('thought') || 'Thought');
+    return;
+  }
+
+  var line = entry.querySelector('.turn-activity-line');
+  if (line) line.textContent = activityLineText(item);
+  var button = entry.querySelector('.turn-activity-row');
+  if (button) button.title = item.path || item.detail || '';
+  if (item.status && button) {
+    var status = button.querySelector('.turn-activity-status');
+    if (!status) {
+      status = document.createElement('span');
+      status.className = 'turn-activity-status tool-status';
+      button.appendChild(status);
+    }
+    applyToolStatusBadge(status, item.status);
+    if (item.statusLabel) status.textContent = item.statusLabel;
+  }
+
+  var panel = entry.querySelector('.turn-activity-tool-detail');
+  if (commandStillRunning(item)) {
+    if (item.body) entry.classList.add('open');
+    return;
+  }
+  if (panel && item.body) {
+    panel.textContent = item.body;
+    entry.dataset.hydrated = '1';
+    if (item.kind === 'command') {
+      entry.classList.add('open');
+      panel.scrollTop = panel.scrollHeight;
+    }
+  }
+  var diff = entry.querySelector('.turn-activity-diff');
+  if (diff && item.lines && item.lines.length) {
+    diff.innerHTML = renderDiffLines(item.lines);
+  }
+}
+
+function findActivityEntry(body, item, thoughtCursor, plainCursor) {
+  if (item.kind === 'thought') {
+    var thoughts = body.querySelectorAll('.turn-activity-item.has-thought');
+    return thoughts[thoughtCursor] || null;
+  }
+  if (item.toolCallId) {
+    var nodes = body.querySelectorAll('.turn-activity-item[data-tool-call-id]');
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].dataset.toolCallId === item.toolCallId) return nodes[i];
+    }
+    return null;
+  }
+  var plains = body.querySelectorAll('.turn-activity-item:not(.has-thought):not([data-tool-call-id])');
+  return plains[plainCursor] || null;
+}
+
+function syncActivityDuration(body, durationMs) {
+  var workedFor = formatWorkedFor(durationMs);
+  var duration = body.querySelector('.turn-activity-duration');
+  if (!workedFor) {
+    if (duration) duration.remove();
+    return;
+  }
+  if (!duration) {
+    duration = document.createElement('div');
+    duration.className = 'turn-activity-duration';
+    body.insertBefore(duration, body.firstChild);
+  }
+  duration.textContent = workedFor;
+}
+
+function finishTurnActivityFold(details, event, items, keepOpen) {
+  var openForCommand = event.upsert === true && items.some(function (item) {
+    return item.kind === 'command' && item.body;
+  });
+  details.open = keepOpen || openForCommand;
+  if (details.open) {
+    details.classList.add('is-expanded');
+  } else {
+    details.classList.remove('is-expanded');
+  }
+  syncTurnActivityChevron(details);
+  updateEmptyStateVisibility();
+  scrollTurnActivityThoughts(details);
+  scrollToBottom();
+}
+
+function fillTurnActivityDetails(details, event, items) {
+  details.innerHTML = '';
+  var summary = document.createElement('summary');
+  var summaryText = document.createElement('span');
+  summaryText.className = 'turn-activity-summary-text';
+  summaryText.textContent = turnActivitySummaryText(event);
+  summary.appendChild(summaryText);
+
+  var chevron = document.createElement('span');
+  chevron.className = 'turn-activity-chevron';
+  chevron.textContent = '›';
+  summary.appendChild(chevron);
+  details.appendChild(summary);
+
+  var body = document.createElement('div');
+  body.className = 'turn-activity-body';
+  var workedFor = formatWorkedFor(event.durationMs);
+  if (workedFor) {
+    var duration = document.createElement('div');
+    duration.className = 'turn-activity-duration';
+    duration.textContent = workedFor;
+    body.appendChild(duration);
+  }
+  items.forEach(function (item) {
+    body.appendChild(createTurnActivityEntry(item));
+  });
+  details.appendChild(body);
+}
+
+function updateTurnActivityDetails(details, event, items) {
+  var summaryText = details.querySelector('.turn-activity-summary-text');
+  if (summaryText) summaryText.textContent = turnActivitySummaryText(event);
+  var body = details.querySelector('.turn-activity-body');
+  if (!body) {
+    fillTurnActivityDetails(details, event, items);
+    return;
+  }
+  syncActivityDuration(body, event.durationMs);
+  var wanted = [];
+  var thoughtCursor = 0;
+  var plainCursor = 0;
+  items.forEach(function (item) {
+    var existing = findActivityEntry(body, item, thoughtCursor, plainCursor);
+    if (item.kind === 'thought') thoughtCursor++;
+    else if (!item.toolCallId) plainCursor++;
+    if (!existing) existing = createTurnActivityEntry(item);
+    else syncTurnActivityEntry(existing, item);
+    wanted.push(existing);
+  });
+  body.querySelectorAll('.turn-activity-item').forEach(function (entry) {
+    if (wanted.indexOf(entry) < 0) entry.remove();
+  });
+  wanted.forEach(function (entry) {
+    body.appendChild(entry);
+  });
+}
+
 /**
  * Renders (or refreshes) the turn-activity fold at its seq slot.
  *
@@ -414,145 +657,18 @@ function appendTurnActivityCard(event) {
     });
     row.appendChild(details);
     registerEntry(key, row, seq === undefined ? nextLiveContentSeq() : seq);
+    fillTurnActivityDetails(details, event, items);
+  } else if (event.upsert === true) {
+    if (seq !== undefined) insertBySeq(row, seq);
+    updateTurnActivityDetails(details, event, items);
   } else {
-    details.innerHTML = '';
-    if (seq !== undefined) {
-      insertBySeq(row, seq);
-    }
+    if (seq !== undefined) insertBySeq(row, seq);
+    fillTurnActivityDetails(details, event, items);
   }
 
-  var summary = document.createElement('summary');
-  var summaryText = document.createElement('span');
-  summaryText.className = 'turn-activity-summary-text';
-  summaryText.textContent = turnActivitySummaryText(event);
-  summary.appendChild(summaryText);
-
-  var chevron = document.createElement('span');
-  chevron.className = 'turn-activity-chevron';
-  chevron.textContent = '›';
-  summary.appendChild(chevron);
-  details.appendChild(summary);
-
-  var body = document.createElement('div');
-  body.className = 'turn-activity-body';
-
-  var workedFor = formatWorkedFor(event.durationMs);
-  if (workedFor) {
-    var duration = document.createElement('div');
-    duration.className = 'turn-activity-duration';
-    duration.textContent = workedFor;
-    body.appendChild(duration);
-  }
-
-  items.forEach(function (item) {
-    var hasDiff = item.lines && item.lines.length;
-    var hasThought = item.kind === 'thought' && item.body;
-    var entry = document.createElement('div');
-    entry.className = 'turn-activity-item'
-      + (hasDiff ? ' has-diff' : '')
-      + (hasThought ? ' has-thought' : '');
-
-    if (hasThought) {
-      var thoughtLabel = document.createElement('div');
-      thoughtLabel.className = 'turn-activity-thought-label';
-      thoughtLabel.textContent = item.verb || (t('thought') || 'Thought');
-      entry.appendChild(thoughtLabel);
-
-      var thought = document.createElement('div');
-      thought.className = 'turn-activity-thought';
-      thought.textContent = item.body || '';
-      entry.appendChild(thought);
-      body.appendChild(entry);
-      return;
-    }
-
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'turn-activity-row';
-    button.title = item.path || item.detail || '';
-
-    var line = document.createElement('span');
-    line.className = 'turn-activity-line';
-    var verbText = item.verb || '';
-    var detailText = item.detail || item.path || '';
-    line.textContent = verbText && detailText
-      ? (verbText + ' ' + detailText)
-      : (verbText || detailText);
-    button.appendChild(line);
-
-    if (item.status) {
-      var status = document.createElement('span');
-      status.className = 'turn-activity-status tool-status';
-      applyToolStatusBadge(status, item.status);
-      if (item.statusLabel) status.textContent = item.statusLabel;
-      button.appendChild(status);
-    }
-
-    entry.appendChild(button);
-
-    if (hasDiff) {
-      var diff = document.createElement('div');
-      diff.className = 'turn-activity-diff';
-      diff.innerHTML = renderDiffLines(item.lines);
-      button.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        entry.classList.toggle('open');
-        scrollToBottom();
-      });
-      entry.appendChild(diff);
-    } else if (item.body || item.messageId || item.toolCallId) {
-      var detailPanel = document.createElement('pre');
-      detailPanel.className = 'turn-activity-tool-detail';
-      if (item.body) {
-        detailPanel.textContent = item.body;
-        entry.dataset.hydrated = '1';
-      } else {
-        detailPanel.textContent = '…';
-        entry.dataset.hydrated = '0';
-      }
-      if (item.messageId) entry.dataset.messageId = item.messageId;
-      if (item.toolCallId) entry.dataset.toolCallId = item.toolCallId;
-      if (item.kind === 'command' && item.body) {
-        entry.classList.add('open');
-        detailPanel.scrollTop = detailPanel.scrollHeight;
-      }
-      button.addEventListener('click', function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var opening = !entry.classList.contains('open');
-        entry.classList.toggle('open');
-        if (opening && entry.dataset.hydrated !== '1') {
-          requestToolDetailForEntry(entry, detailPanel);
-        }
-        scrollToBottom();
-      });
-      entry.appendChild(detailPanel);
-    }
-
-    body.appendChild(entry);
-  });
-
-  details.appendChild(body);
-  // A live fold preserves an already-opened state; a final/replayed fold starts collapsed.
-  // A live command with output opens the fold so the stream stays visible after a refresh.
-  var openForCommand = event.upsert === true && items.some(function (item) {
-    return item.kind === 'command' && item.body;
-  });
-  details.open = keepOpen || openForCommand;
-  if (details.open) {
-    details.classList.add('is-expanded');
-  } else {
-    details.classList.remove('is-expanded');
-  }
-  syncTurnActivityChevron(details);
-  updateEmptyStateVisibility();
-  scrollTurnActivityThoughts(details);
-  details.querySelectorAll('.turn-activity-item.open .turn-activity-tool-detail').forEach(function (panel) {
-    panel.scrollTop = panel.scrollHeight;
-  });
-  scrollToBottom();
+  finishTurnActivityFold(details, event, items, keepOpen);
 }
+
 
 function upsertCompactionCheckpoint(event) {
   const id = event.id || 'compaction';

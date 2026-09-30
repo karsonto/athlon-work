@@ -157,6 +157,15 @@ function enhanceCodeBlocks(root) {
   scheduleEnhanceFlush();
 }
 
+function enhanceCodeBlocksNow(root) {
+  const scope = root || document;
+  var index = 0;
+  scope.querySelectorAll('.md-root pre').forEach(function (pre) {
+    if (pre.closest('.code-block')) return;
+    enhanceOneCodeBlock(pre, index++);
+  });
+}
+
 function resetTimeline() {
   // The mounted rows are being rebuilt from a replay, so a snapshot saved for this session is
   // stale by definition. Other sessions' snapshots stay untouched — they are the per-session roots

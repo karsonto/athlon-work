@@ -559,24 +559,6 @@ if (window.chrome && window.chrome.webview) {
   });
 }
 
-const chatScroller = getChatScroller();
-if (chatScroller) {
-  chatScroller.addEventListener('scroll', function () {
-    state.autoScrollEnabled = isNearBottom();
-    maybeLoadOlderOnScroll();
-  }, { passive: true });
-  chatScroller.addEventListener('wheel', function (e) {
-    if (e.deltaY < 0) state.autoScrollEnabled = false;
-  }, { passive: true });
-  chatScroller.addEventListener('touchmove', function () {
-    if (!isNearBottom()) state.autoScrollEnabled = false;
-  }, { passive: true });
-}
-document.addEventListener('selectionchange', function () {
-  if (hasActiveSelection()) state.autoScrollEnabled = false;
-  else if (isNearBottom()) state.autoScrollEnabled = true;
-});
-
 (function bindExternalLinks() {
   var root = document.getElementById('messages');
   if (!root) return;

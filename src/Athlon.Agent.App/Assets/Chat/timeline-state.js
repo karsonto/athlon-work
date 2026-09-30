@@ -12,6 +12,10 @@ const state = {
   scrollFrame: 0,
   scrollForcePending: false,
   autoScrollEnabled: true,
+  // True while a programmatic pin writes scrollTop, so that scroll event does not
+  // clear follow-the-bottom.
+  applyingPin: false,
+  pinClearFrame: 0,
   batchTarget: null,
   hasOlderMessages: false,
   loadingOlder: false,
@@ -645,9 +649,76 @@ function scrollToBottom(force) {
         return;
       }
     }
-    scroller.scrollTop = newHeight;
-    state.lastScrollHeight = newHeight;
+    pinScroller(scroller, newHeight);
   });
+}
+
+function pinScroller(scroller, height) {
+  state.applyingPin = true;
+  scroller.scrollTop = height;
+  state.lastScrollHeight = scroller.scrollHeight;
+  state.lastPinnedTop = scroller.scrollTop;
+  if (state.pinClearFrame) cancelAnimationFrame(state.pinClearFrame);
+  // If the position did not change, no scroll event arrives to clear the flag.
+  state.pinClearFrame = requestAnimationFrame(function () {
+    state.pinClearFrame = 0;
+    state.applyingPin = false;
+  });
+}
+
+function noteUserScroll(scroller) {
+  if (state.applyingPin) {
+    state.applyingPin = false;
+    if (state.pinClearFrame) {
+      cancelAnimationFrame(state.pinClearFrame);
+      state.pinClearFrame = 0;
+    }
+    return;
+  }
+  var top = scroller.scrollTop;
+  var movedUp = state.lastPinnedTop !== undefined && top < state.lastPinnedTop - 1;
+  state.lastPinnedTop = top;
+  if (movedUp) state.autoScrollEnabled = false;
+  else if (isNearBottom()) state.autoScrollEnabled = true;
+}
+
+function bindPinController() {
+  var scroller = getChatScroller();
+  var root = document.getElementById('messages');
+  if (!scroller) return;
+  state.lastPinnedTop = scroller.scrollTop;
+  scroller.addEventListener('scroll', function () {
+    noteUserScroll(scroller);
+    if (typeof maybeLoadOlderOnScroll === 'function') maybeLoadOlderOnScroll();
+  }, { passive: true });
+  scroller.addEventListener('wheel', function (e) {
+    if (e.deltaY < 0) state.autoScrollEnabled = false;
+  }, { passive: true });
+  scroller.addEventListener('touchmove', function () {
+    if (!isNearBottom()) state.autoScrollEnabled = false;
+  }, { passive: true });
+  document.addEventListener('selectionchange', function () {
+    if (hasActiveSelection()) state.autoScrollEnabled = false;
+    else if (isNearBottom()) state.autoScrollEnabled = true;
+  });
+  if (!root || typeof ResizeObserver !== 'function') return;
+  var frame = 0;
+  var observer = new ResizeObserver(function () {
+    if (state.pendingRestoreTop !== null || !state.autoScrollEnabled || hasActiveSelection()) return;
+    if (frame) return;
+    frame = requestAnimationFrame(function () {
+      frame = 0;
+      if (state.pendingRestoreTop !== null || !state.autoScrollEnabled || hasActiveSelection()) return;
+      var current = getChatScroller();
+      if (!current) return;
+      if (isNearBottom() && current.scrollHeight - (state.lastScrollHeight || 0) < SCROLL_MERGE_THRESHOLD) {
+        state.lastScrollHeight = current.scrollHeight;
+        return;
+      }
+      pinScroller(current, current.scrollHeight);
+    });
+  });
+  observer.observe(root);
 }
 
 /** Remembers a session's current scroll position before switching away from it. */
@@ -665,7 +736,9 @@ function restoreScroll(sessionId) {
   const saved = sessionId ? state.scrollBySession[sessionId] : undefined;
   if (typeof saved === 'number') {
     const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    state.applyingPin = true;
     scroller.scrollTop = Math.min(saved, maxTop);
+    state.lastPinnedTop = scroller.scrollTop;
   }
   state.autoScrollEnabled = isNearBottom();
 }
@@ -795,7 +868,9 @@ function restoreSessionSnapshot(sessionId, revision) {
   var scroller = getChatScroller();
   if (scroller) {
     var maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    state.applyingPin = true;
     scroller.scrollTop = Math.min(entry.scrollTop, maxTop);
+    state.lastPinnedTop = scroller.scrollTop;
   }
   state.autoScrollEnabled = isNearBottom();
   updateEmptyStateVisibility();
@@ -857,7 +932,7 @@ function applyMarkdownHtml(node, html, enhance) {
   if (state.batching) {
     state.pendingEnhancementRoots.push(node);
   } else {
-    enhanceCodeBlocks(node);
+    enhanceCodeBlocksNow(node);
     scheduleMermaidRender(node);
   }
 }
@@ -997,6 +1072,8 @@ function scheduleEnhanceFlush() {
     setTimeout(function () { flushEnhanceQueue(); }, 0);
   }
 }
+
+bindPinController();
 
 // --- Mermaid diagrams -------------------------------------------------------
 // The bundled runtime (~2.5 MB) is lazy-loaded the first time a ```mermaid block appears.
