@@ -247,6 +247,28 @@ const copyIconSvg =
     '<rect x="2" y="2" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.25" fill="var(--chat-bg)"></rect>' +
   '</svg>';
 
+const forkIconSvg =
+  '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<circle cx="4" cy="3.5" r="1.5" stroke="currentColor" stroke-width="1.25"></circle>' +
+    '<circle cx="4" cy="12.5" r="1.5" stroke="currentColor" stroke-width="1.25"></circle>' +
+    '<circle cx="12" cy="8" r="1.5" stroke="currentColor" stroke-width="1.25"></circle>' +
+    '<path d="M4 5v6M4 8h5.2a2.3 2.3 0 0 0 2.3-2.3V6.5" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"></path>' +
+  '</svg>';
+
+function createForkButton(messageId) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'message-action-btn';
+  btn.setAttribute('aria-label', t('fork') || 'Fork');
+  btn.innerHTML = forkIconSvg;
+  btn.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    post({ type: 'forkChat', messageId: messageId });
+  });
+  return btn;
+}
+
 function createCopyButton(onCopy) {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -435,6 +457,9 @@ function applyChatTtsConfig() {
 function createMessageActions(row) {
   const actions = document.createElement('div');
   actions.className = 'message-actions';
+  if (row.classList.contains('user') && row.dataset.messageId) {
+    actions.appendChild(createForkButton(row.dataset.messageId));
+  }
   actions.appendChild(createCopyButton(function (button) {
     copyMessageText(resolveRowCopyText(row), button);
   }));

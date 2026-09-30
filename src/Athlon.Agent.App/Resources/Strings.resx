@@ -154,6 +154,12 @@
   <data name="Chat_Copy" xml:space="preserve">
     <value>复制</value>
   </data>
+  <data name="Chat_Fork" xml:space="preserve">
+    <value>分叉</value>
+  </data>
+  <data name="Chat_ForkFailed" xml:space="preserve">
+    <value>无法从这条消息分叉</value>
+  </data>
   <data name="Chat_Play" xml:space="preserve">
     <value>朗读这条消息</value>
   </data>

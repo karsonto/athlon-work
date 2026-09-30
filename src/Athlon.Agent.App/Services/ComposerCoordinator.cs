@@ -230,6 +230,9 @@ public sealed class ComposerCoordinator
         items.Clear();
     }
 
+    public SessionForkMaterialization MaterializeFork(AgentSession source, SessionForkSlice slice) =>
+        SessionForkFiles.Materialize(source, slice, _paths, _imageAttachmentStore);
+
     public void AddPendingImages(
         IEnumerable<ImageAttachment> images,
         ObservableCollection<PendingImageAttachmentViewModel> pending)

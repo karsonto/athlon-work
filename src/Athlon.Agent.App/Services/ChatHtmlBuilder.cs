@@ -131,6 +131,7 @@ public sealed class ChatHtmlBuilder
         {
             ["copy"] = Strings.Get("Chat_Copy"),
             ["copied"] = Strings.Get("Chat_Copied"),
+            ["fork"] = Strings.Get("Chat_Fork"),
             ["play"] = Strings.Get("Chat_Play"),
             ["stop"] = Strings.Get("Chat_Stop"),
             ["playing"] = Strings.Get("Chat_Playing"),

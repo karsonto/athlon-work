@@ -1099,6 +1099,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         {
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
+            _savedChatView.ForkChatRequested -= OnForkChatRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
             _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
             _savedChatView.PlanReviseRequested -= OnPlanReviseRequested;

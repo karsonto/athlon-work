@@ -341,6 +341,7 @@ public partial class MainShellViewModel
         {
             _savedChatView.OlderMessagesRequested -= OnOlderMessagesRequested;
             _savedChatView.ExternalLinkRequested -= OnChatExternalLinkRequested;
+            _savedChatView.ForkChatRequested -= OnForkChatRequested;
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
             _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
             _savedChatView.PlanReviseRequested -= OnPlanReviseRequested;
@@ -349,6 +350,7 @@ public partial class MainShellViewModel
         _savedChatView = chatView;
         chatView.OlderMessagesRequested += OnOlderMessagesRequested;
         chatView.ExternalLinkRequested += OnChatExternalLinkRequested;
+        chatView.ForkChatRequested += OnForkChatRequested;
         chatView.ToolDetailRequested += OnToolDetailRequested;
         chatView.PlanBuildRequested += OnPlanBuildRequested;
         chatView.PlanReviseRequested += OnPlanReviseRequested;

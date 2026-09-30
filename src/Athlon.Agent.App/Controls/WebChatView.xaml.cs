@@ -75,6 +75,7 @@ public partial class WebChatView : UserControl
     public event EventHandler<string>? InitializationFailed;
     public event EventHandler<string>? ScriptExecutionFailed;
     public event EventHandler? OlderMessagesRequested;
+    public event EventHandler<string>? ForkChatRequested;
     public event EventHandler<string>? ExternalLinkRequested;
     public event EventHandler<ToolApprovalDecisionEventArgs>? ToolApprovalDecisionReceived;
     public event EventHandler<ToolDetailRequestEventArgs>? ToolDetailRequested;
@@ -1105,6 +1106,16 @@ public partial class WebChatView : UserControl
                         break;
                     case "snapshotMiss":
                         _pendingSnapshotSwitch?.TrySetResult(false);
+                        break;
+                    case "forkChat":
+                        var forkMessageId = root.TryGetProperty("messageId", out var forkMessageIdElement)
+                            ? forkMessageIdElement.GetString()
+                            : null;
+                        if (!string.IsNullOrEmpty(forkMessageId))
+                        {
+                            ForkChatRequested?.Invoke(this, forkMessageId);
+                        }
+
                         break;
                     case "copy":
                         var text = root.TryGetProperty("text", out var textElement)

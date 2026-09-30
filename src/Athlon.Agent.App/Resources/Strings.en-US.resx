@@ -154,6 +154,12 @@
   <data name="Chat_Copy" xml:space="preserve">
     <value>Copy</value>
   </data>
+  <data name="Chat_Fork" xml:space="preserve">
+    <value>Fork</value>
+  </data>
+  <data name="Chat_ForkFailed" xml:space="preserve">
+    <value>Can't fork from this message</value>
+  </data>
   <data name="Chat_Play" xml:space="preserve">
     <value>Read this message aloud</value>
   </data>

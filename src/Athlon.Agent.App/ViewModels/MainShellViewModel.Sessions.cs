@@ -464,6 +464,65 @@ public partial class MainShellViewModel
 
     private void RequestScrollToBottomImmediate() => _chatScroll.ScrollToBottomImmediate();
 
+    private int _forkInProgress;
+
+    private void OnForkChatRequested(object? sender, string messageId) =>
+        _ = ForkChatFromMessageAsync(messageId);
+
+    private async Task ForkChatFromMessageAsync(string? messageId)
+    {
+        if (string.IsNullOrWhiteSpace(messageId) || Interlocked.Exchange(ref _forkInProgress, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            await EnsureDisplayedSessionReadyAsync().ConfigureAwait(true);
+            var source = _session;
+            var slice = SessionFork.TrySlice(source.Messages, messageId);
+            if (slice is null)
+            {
+                ShowShellToast(_loc["Chat_ForkFailed"], ShellToastKind.Error);
+                return;
+            }
+
+            var materialized = _composer.MaterializeFork(source, slice);
+            await _storage.SaveSessionAsync(materialized.Session).ConfigureAwait(true);
+            _sessionNavigation.Invalidate(materialized.Session.Id);
+
+            var preservePrevious = await PrepareSessionForSwitchAsync(source).ConfigureAwait(true);
+            await LoadSessionInternalAsync(materialized.Session.Id).ConfigureAwait(true);
+            if (preservePrevious)
+            {
+                _runtime.UpdateSession(source);
+            }
+
+            if (!string.Equals(_displayedSessionId, materialized.Session.Id, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            ComposerText = slice.ComposerMessage.Content ?? string.Empty;
+            if (materialized.ComposerImages.Count > 0)
+            {
+                AddPendingImages(materialized.ComposerImages);
+            }
+
+            await RefreshSessionHistoryAsync().ConfigureAwait(true);
+            NotifyCommandStatesChanged();
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Fork chat failed: {ex.Message}");
+            ShowShellToast(_loc["Chat_ForkFailed"], ShellToastKind.Error);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _forkInProgress, 0);
+        }
+    }
+
     private async void OnOlderMessagesRequested(object? sender, EventArgs e)
     {
         if (_olderHistoryLoadInProgress
