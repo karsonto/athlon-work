@@ -279,8 +279,14 @@ public partial class MainShellViewModel
         OnPropertyChanged(nameof(SsoAvatarInitial));
     }
 
-    private void OnAppThemeChanged(object? sender, EventArgs e) =>
+    private void OnAppThemeChanged(object? sender, EventArgs e)
+    {
         NotifyThemeToggleStateChanged();
+        foreach (var group in AgentRecordGroups)
+        {
+            group.NotifyThemeBrushesChanged();
+        }
+    }
 
     private void NotifyThemeToggleStateChanged()
     {

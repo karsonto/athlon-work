@@ -45,6 +45,12 @@ public sealed partial class SessionHistoryItemViewModel : ObservableObject
 
     public string? RunningBrushKey { get; }
 
+    public void NotifyThemeBrushesChanged()
+    {
+        OnPropertyChanged(nameof(MetaForegroundBrushKey));
+        OnPropertyChanged(nameof(RunningBrushKey));
+    }
+
     public string MetaForegroundBrushKey =>
         IsRunning && RunningBrushKey is not null
             ? RunningBrushKey

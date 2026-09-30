@@ -1,8 +1,10 @@
 using System.Collections.Frozen;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
+using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.App.Services;
 
@@ -35,21 +37,23 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
 
     private readonly string _contentRoot;
     private readonly int _port;
+    private readonly AthlonWebChatForwarder? _forwarder;
     private readonly SemaphoreSlim _startLock = new(1, 1);
     private HttpListener? _listener;
     private CancellationTokenSource? _cts;
     private Task? _listenTask;
     private int _started;
 
-    public AthlonWebStaticServer()
-        : this(AthlonWebAssets.AssetsDirectory, FixedPort)
+    public AthlonWebStaticServer(AthlonWebChatForwarder forwarder)
+        : this(AthlonWebAssets.AssetsDirectory, FixedPort, forwarder)
     {
     }
 
-    internal AthlonWebStaticServer(string contentRoot, int port = FixedPort)
+    internal AthlonWebStaticServer(string contentRoot, int port = FixedPort, AthlonWebChatForwarder? forwarder = null)
     {
         _contentRoot = Path.GetFullPath(contentRoot);
         _port = port;
+        _forwarder = forwarder;
     }
 
     public string? BaseUrl { get; private set; }
@@ -212,6 +216,13 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
     {
         try
         {
+            if (_forwarder is not null
+                && AthlonWebChatForwarder.IsChatCompletionRequest(context.Request.HttpMethod, context.Request.Url))
+            {
+                await ForwardChatAsync(context).ConfigureAwait(false);
+                return;
+            }
+
             if (!string.Equals(context.Request.HttpMethod, "GET", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(context.Request.HttpMethod, "HEAD", StringComparison.OrdinalIgnoreCase))
             {
@@ -320,6 +331,54 @@ public sealed class AthlonWebStaticServer : IAsyncDisposable
         return MimeTypes.TryGetValue(extension, out var mimeType)
             ? mimeType
             : "application/octet-stream";
+    }
+
+    private async Task ForwardChatAsync(HttpListenerContext context)
+    {
+        try
+        {
+            using var upstream = await _forwarder!.SendAsync(context.Request.InputStream).ConfigureAwait(false);
+            await WriteUpstreamAsync(context.Response, upstream).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            try
+            {
+                await WriteResponseAsync(context.Response, HttpStatusCode.BadGateway, "text/plain; charset=utf-8", "Bad Gateway")
+                    .ConfigureAwait(false);
+            }
+            catch
+            {
+                // Best effort.
+            }
+        }
+    }
+
+    private static async Task WriteUpstreamAsync(HttpListenerResponse response, HttpResponseMessage upstream)
+    {
+        response.StatusCode = (int)upstream.StatusCode;
+        var mediaType = upstream.Content.Headers.ContentType?.ToString();
+        if (!string.IsNullOrWhiteSpace(mediaType))
+        {
+            response.ContentType = mediaType;
+        }
+
+        response.SendChunked = true;
+        await using var stream = await upstream.Content.ReadAsStreamAsync().ConfigureAwait(false);
+        var buffer = new byte[8192];
+        while (true)
+        {
+            var read = await stream.ReadAsync(buffer).ConfigureAwait(false);
+            if (read == 0)
+            {
+                break;
+            }
+
+            await response.OutputStream.WriteAsync(buffer.AsMemory(0, read)).ConfigureAwait(false);
+            await response.OutputStream.FlushAsync().ConfigureAwait(false);
+        }
+
+        response.Close();
     }
 
     private static async Task WriteResponseAsync(

@@ -94,6 +94,7 @@ public static class ServiceCollectionExtensions
         services.AddAthlonEnvironmentPrompt();
         services.AddSingleton<IJsonFileStore>(jsonFileStore);
         services.AddSingleton<ICredentialStore, DpapiCredentialStore>();
+        services.AddSingleton<AthlonWebChatForwarder>();
         services.AddSingleton<IImpSsoSessionStore, ImpSsoSessionStore>();
         services.AddSingleton<ICurrentSsoUserContext, CurrentSsoUserContext>();
         services.AddHttpClient<IImpSsoAuthService, ImpSsoAuthService>(

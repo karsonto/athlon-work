@@ -52,6 +52,17 @@ public sealed partial class AgentRecordGroupViewModel : ObservableObject
         OnPropertyChanged(nameof(FolderGlyphBrushKey));
     }
 
+    public void NotifyThemeBrushesChanged()
+    {
+        OnPropertyChanged(nameof(HeaderForegroundBrushKey));
+        OnPropertyChanged(nameof(FolderGlyphBrushKey));
+        OnPropertyChanged(nameof(RunningBrushKey));
+        foreach (var item in Items)
+        {
+            item.NotifyThemeBrushesChanged();
+        }
+    }
+
     public string HeaderForegroundBrushKey =>
         HasRunningSessions && RunningBrushKey is not null
             ? RunningBrushKey
