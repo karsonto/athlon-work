@@ -378,6 +378,19 @@ function activityLineText(item) {
     : (verbText || detailText);
 }
 
+function setActivityStatus(button, item) {
+  var status = button.querySelector('.turn-activity-status');
+  if (!status) {
+    status = document.createElement('span');
+    button.appendChild(status);
+  }
+  applyToolStatusBadge(status, item.status);
+  // applyToolStatusBadge replaces className, which would hide this badge from the next lookup
+  // and leave the previous label on the row.
+  status.classList.add('turn-activity-status');
+  if (item.statusLabel) status.textContent = item.statusLabel;
+}
+
 function commandStillRunning(item) {
   return item.kind === 'command' && (item.status === 'running' || item.status === 'preparing');
 }
@@ -413,13 +426,7 @@ function createTurnActivityEntry(item) {
   line.textContent = activityLineText(item);
   button.appendChild(line);
 
-  if (item.status) {
-    var status = document.createElement('span');
-    status.className = 'turn-activity-status tool-status';
-    applyToolStatusBadge(status, item.status);
-    if (item.statusLabel) status.textContent = item.statusLabel;
-    button.appendChild(status);
-  }
+  if (item.status) setActivityStatus(button, item);
 
   entry.appendChild(button);
 
@@ -479,16 +486,7 @@ function syncTurnActivityEntry(entry, item) {
   if (line) line.textContent = activityLineText(item);
   var button = entry.querySelector('.turn-activity-row');
   if (button) button.title = item.path || item.detail || '';
-  if (item.status && button) {
-    var status = button.querySelector('.turn-activity-status');
-    if (!status) {
-      status = document.createElement('span');
-      status.className = 'turn-activity-status tool-status';
-      button.appendChild(status);
-    }
-    applyToolStatusBadge(status, item.status);
-    if (item.statusLabel) status.textContent = item.statusLabel;
-  }
+  if (item.status && button) setActivityStatus(button, item);
 
   var panel = entry.querySelector('.turn-activity-tool-detail');
   if (commandStillRunning(item)) {
