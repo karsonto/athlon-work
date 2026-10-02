@@ -211,6 +211,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, KnowledgeSearchTool>();
         services.AddSingleton<IAgentTool, LoadSkillThroughPathTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserNavigateTool>();
+        services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserScreenshotTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserGetPageInfoTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserReadAriaTreeTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Browser.BrowserFindAriaNodesTool>();

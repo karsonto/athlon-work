@@ -263,6 +263,7 @@ function handleEvent(event) {
         result.style.display = 'block';
         applyMarkdownHtml(html, resolveRenderedHtml(event, event.content || ''));
       }
+      renderToolResultImages(card, event.images);
       var contentText = event.content || '';
       var needsHydration = !!(event.messageId || event.toolCallId)
         && (contentText.indexOf('[Tool result evicted') >= 0 || contentText.length < 80);

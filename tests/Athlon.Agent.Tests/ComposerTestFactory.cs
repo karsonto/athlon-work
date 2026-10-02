@@ -127,6 +127,9 @@ internal static class ComposerTestFactory
 
         public ImageAttachment SaveByteFrame(string sessionId, string fileName, string mimeType, byte[] bytes) =>
             new(fileName, mimeType, LocalPath: Path.Combine(Path.GetTempPath(), fileName));
+
+        public ImageAttachment SaveBrowserFrame(string sessionId, string mimeType, byte[] bytes) =>
+            new("browser-frame-stub.png", mimeType, LocalPath: Path.Combine(Path.GetTempPath(), "browser-frame-stub.png"));
     }
 
     internal sealed class StubSkillCatalog(IReadOnlyList<AgentSkill> skills) : IAgentSkillCatalog

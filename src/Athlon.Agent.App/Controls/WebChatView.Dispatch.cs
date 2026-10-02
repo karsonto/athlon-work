@@ -61,9 +61,14 @@ public partial class WebChatView
     public Task ApplyAssistantMarkdownAsync(
         ChatMessageViewModel message,
         bool streaming = false,
-        int? responseDurationMs = null)
+        int? responseDurationMs = null,
+        IReadOnlyList<ImageAttachment>? browserScreenshots = null)
     {
-        PostTimelineEvent(ChatEventSerializer.SerializeStaticAssistantHtml(message, streaming, responseDurationMs));
+        PostTimelineEvent(ChatEventSerializer.SerializeStaticAssistantHtml(
+            message,
+            streaming,
+            responseDurationMs,
+            browserScreenshots: browserScreenshots));
         return Task.CompletedTask;
     }
 

@@ -279,6 +279,32 @@ function finalizeReasoningLabel(messageId) {
   delete state.reasoningStartAt[messageId];
 }
 
+function renderToolResultImages(card, images) {
+  if (!card) return;
+  var existing = card.querySelector('.tool-images');
+  if (existing) existing.remove();
+  if (!images || !images.length) return;
+  var gallery = document.createElement('div');
+  gallery.className = 'user-images tool-images';
+  images.forEach(function (image) {
+    if (!image || !image.url) return;
+    var thumb = document.createElement('img');
+    thumb.className = 'user-image-thumb';
+    thumb.src = image.url;
+    thumb.alt = image.fileName || '';
+    thumb.title = image.fileName || '';
+    thumb.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openImagePreview(image.url, image.fileName);
+    });
+    gallery.appendChild(thumb);
+  });
+  if (!gallery.childNodes.length) return;
+  var body = card.querySelector('.tool-body');
+  if (body) body.appendChild(gallery);
+}
+
 function openImagePreview(url, fileName) {
   var lightbox = document.getElementById('image-lightbox');
   if (!lightbox || !url) return;

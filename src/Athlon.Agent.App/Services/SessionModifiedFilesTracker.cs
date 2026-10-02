@@ -154,7 +154,7 @@ public sealed class SessionModifiedFilesTracker
                 }
 
                 break;
-            case AgentStreamEvent.ToolCallResult(var toolCallId, var content, _):
+            case AgentStreamEvent.ToolCallResult(var toolCallId, var content, _, _):
                 HandleToolCallResult(toolCallId, content);
                 _toolCallIdToName.Remove(toolCallId);
                 _toolCallIdToArgs.Remove(toolCallId);

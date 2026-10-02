@@ -78,7 +78,7 @@ public sealed class SessionTurnActivityTracker
             case AgentStreamEvent.ToolCallOutput(var toolCallId, var delta):
                 AppendCommandOutput(toolCallId, delta);
                 break;
-            case AgentStreamEvent.ToolCallResult(var toolCallId, var content, _):
+            case AgentStreamEvent.ToolCallResult(var toolCallId, var content, _, _):
                 FinishActiveThought();
                 HandleResult(toolCallId, content);
                 _toolCallIdToName.Remove(toolCallId);

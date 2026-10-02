@@ -6,7 +6,7 @@ namespace Athlon.Agent.App.Services;
 
 /// <summary>
 /// Classifies tools that fold into the single per-turn activity summary.
-/// Computer Use keeps full tool cards (screenshots); everything else folds.
+/// Computer Use and browser_screenshot keep full tool cards (screenshots); everything else folds.
 /// </summary>
 internal static class TurnActivityClassifier
 {
@@ -14,7 +14,8 @@ internal static class TurnActivityClassifier
     {
         "computer_observe",
         "computer_interact",
-        "computer_wait"
+        "computer_wait",
+        "browser_screenshot"
     };
 
     public static bool IsActivityTool(string? toolName) =>
@@ -28,7 +29,7 @@ internal static class TurnActivityClassifier
                 IsActivityTool(resolveToolName?.Invoke(toolCallId)),
             AgentStreamEvent.ToolCallEnd(var toolCallId) =>
                 IsActivityTool(resolveToolName?.Invoke(toolCallId)),
-            AgentStreamEvent.ToolCallResult(var toolCallId, var content, _) =>
+            AgentStreamEvent.ToolCallResult(var toolCallId, var content, _, _) =>
                 IsActivityTool(resolveToolName?.Invoke(toolCallId) ?? TryParseToolName(content)),
             AgentStreamEvent.ToolCallOutput(var toolCallId, _) =>
                 IsActivityTool(resolveToolName?.Invoke(toolCallId)),

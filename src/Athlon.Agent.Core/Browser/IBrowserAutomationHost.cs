@@ -1,6 +1,11 @@
+using Athlon.Agent.Core;
+
 namespace Athlon.Agent.Core.Browser;
 
 public sealed record BrowserPageInfo(string Url, string Title);
+
+/// <summary>Visible-area capture of the active Browser tab, already stored as an attachment.</summary>
+public sealed record BrowserScreenshotCapture(ImageAttachment Image, string Url, string Title);
 
 public enum BrowserNavigateAction
 {
@@ -18,6 +23,12 @@ public interface IBrowserAutomationHost
     Task NavigateAsync(BrowserNavigateAction action, string? url = null, CancellationToken cancellationToken = default);
 
     Task<BrowserPageInfo> GetPageInfoAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Captures the visible area of the current Browser tab as PNG.
+    /// Returns null when no tab is open or the run has no session, without writing a file.
+    /// </summary>
+    Task<BrowserScreenshotCapture?> CaptureScreenshotAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Runs an ARIA host operation in the active Browser WebView.

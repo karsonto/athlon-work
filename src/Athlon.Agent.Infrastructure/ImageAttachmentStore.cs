@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Browser;
 
 namespace Athlon.Agent.Infrastructure;
 
@@ -13,6 +14,12 @@ public interface IImageAttachmentStore
     /// name prefix so maintenance can prune them without ever touching user-uploaded images.
     /// </summary>
     ImageAttachment SaveByteFrame(string sessionId, string fileName, string mimeType, byte[] bytes);
+
+    /// <summary>
+    /// Saves a Browser tab capture. The attachment file name is the stored
+    /// <c>browser-frame-</c> name so a report can cite it.
+    /// </summary>
+    ImageAttachment SaveBrowserFrame(string sessionId, string mimeType, byte[] bytes);
 }
 
 public sealed class ImageAttachmentStore : IImageAttachmentStore
@@ -57,8 +64,20 @@ public sealed class ImageAttachmentStore : IImageAttachmentStore
     /// <summary>Prefix marking a disposable Computer Use frame capture.</summary>
     public const string FrameFilePrefix = "cu-frame-";
 
+    /// <summary>Prefix marking a disposable Browser tab capture. Matches <see cref="BrowserFrameFiles.Prefix"/>.</summary>
+    public const string BrowserFrameFilePrefix = BrowserFrameFiles.Prefix;
+
     public ImageAttachment SaveByteFrame(string sessionId, string fileName, string mimeType, byte[] bytes) =>
         Save(sessionId, fileName, mimeType, bytes, FrameFilePrefix);
+
+    public ImageAttachment SaveBrowserFrame(string sessionId, string mimeType, byte[] bytes)
+    {
+        var saved = Save(sessionId, "frame.png", mimeType, bytes, BrowserFrameFilePrefix);
+        var storedName = Path.GetFileName(saved.LocalPath);
+        return string.IsNullOrWhiteSpace(storedName)
+            ? saved
+            : saved with { FileName = storedName };
+    }
 
     private ImageAttachment Save(
         string sessionId,

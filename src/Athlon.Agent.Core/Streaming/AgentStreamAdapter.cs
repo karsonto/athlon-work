@@ -110,7 +110,11 @@ public sealed class AgentStreamAdapter
             events.Add(new AgentStreamEvent.ToolCallEnd(toolCall.Id));
         }
 
-        events.Add(new AgentStreamEvent.ToolCallResult(toolCall.Id, toolMessage.Content, toolMessage.Id));
+        events.Add(new AgentStreamEvent.ToolCallResult(
+            toolCall.Id,
+            toolMessage.Content,
+            toolMessage.Id,
+            toolMessage.ImageAttachments));
         return events;
     }
 

@@ -109,8 +109,19 @@ public sealed partial class SessionTurnUiController
         if (!string.IsNullOrWhiteSpace(message.Content))
         {
             // Duration is attached only when sealing the final turn reply.
-            _ = ChatView!.ApplyAssistantMarkdownAsync(message);
+            _ = ChatView!.ApplyAssistantMarkdownAsync(message, browserScreenshots: BrowserScreenshotsSoFar());
         }
+    }
+
+    private IReadOnlyList<ImageAttachment> BrowserScreenshotsSoFar()
+    {
+        var shots = new List<ImageAttachment>();
+        foreach (var message in Messages)
+        {
+            BrowserScreenshotMarkdown.Collect(message.ImageAttachments, shots);
+        }
+
+        return shots;
     }
 
     private static bool IsStreamingChatItem(ChatMessageViewModel message) =>
@@ -161,7 +172,10 @@ public sealed partial class SessionTurnUiController
             {
                 if (lastAssistant is not null)
                 {
-                    _ = ChatView.ApplyAssistantMarkdownAsync(lastAssistant, streaming: false);
+                    _ = ChatView.ApplyAssistantMarkdownAsync(
+                        lastAssistant,
+                        streaming: false,
+                        browserScreenshots: BrowserScreenshotsSoFar());
                 }
 
                 lastAssistant = message;
@@ -173,7 +187,8 @@ public sealed partial class SessionTurnUiController
             _ = ChatView.ApplyAssistantMarkdownAsync(
                 lastAssistant,
                 streaming: false,
-                ResolveTurnResponseDurationMs(lastAssistant));
+                responseDurationMs: ResolveTurnResponseDurationMs(lastAssistant),
+                browserScreenshots: BrowserScreenshotsSoFar());
         }
     }
 
@@ -273,13 +288,16 @@ public sealed partial class SessionTurnUiController
                 // The reply is its own bubble; seal the fold that preceded it so the next activity
                 // starts a fresh card after this bubble.
                 SealActivitySegment();
-                _ = ChatView.ApplyAssistantMarkdownAsync(assistant, streaming: false);
+                _ = ChatView.ApplyAssistantMarkdownAsync(
+                    assistant,
+                    streaming: false,
+                    browserScreenshots: BrowserScreenshotsSoFar());
             }
 
             return;
         }
 
-        if (streamEvent is AgentStreamEvent.ToolCallResult(var toolCallId, _, _))
+        if (streamEvent is AgentStreamEvent.ToolCallResult(var toolCallId, _, _, _))
         {
             var toolMessage = Messages.LastOrDefault(message =>
                 message.IsTool
@@ -321,7 +339,10 @@ public sealed partial class SessionTurnUiController
             var assistant = FindAssistantMessage(textMessageId);
             if (assistant is not null && !string.IsNullOrWhiteSpace(assistant.Content))
             {
-                _ = ChatView.ApplyAssistantMarkdownAsync(assistant, streaming: true);
+                _ = ChatView.ApplyAssistantMarkdownAsync(
+                    assistant,
+                    streaming: true,
+                    browserScreenshots: BrowserScreenshotsSoFar());
             }
         }
 

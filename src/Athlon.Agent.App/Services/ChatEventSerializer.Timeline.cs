@@ -168,17 +168,22 @@ internal static partial class ChatEventSerializer
         ChatMessageViewModel message,
         bool streaming = false,
         int? responseDurationMs = null,
-        long? seq = null) =>
-        SerializeAgui("STATIC_ASSISTANT_HTML", new
+        long? seq = null,
+        IReadOnlyList<ImageAttachment>? browserScreenshots = null)
+    {
+        var markdown = message.Content ?? string.Empty;
+        var rendered = BrowserScreenshotMarkdown.Rewrite(markdown, browserScreenshots);
+        return SerializeAgui("STATIC_ASSISTANT_HTML", new
         {
             seq,
             messageId = message.MessageId,
-            markdown = message.Content,
-            html = MarkdownHtmlRenderer.ToHtmlFragment(message.Content),
+            markdown,
+            html = MarkdownHtmlRenderer.ToHtmlFragment(rendered),
             createIfMissing = true,
             streaming,
             responseDurationMs = streaming ? null : responseDurationMs
         });
+    }
 
     public static string SerializeCompactionCheckpoint(ChatMessageViewModel message)
     {
@@ -208,7 +213,8 @@ internal static partial class ChatEventSerializer
 
         var toolCallId = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;
         var detail = ResolveToolResultDetail(message);
-        if (string.IsNullOrWhiteSpace(detail))
+        var images = ResolveTimelineImages(message.ImageAttachments);
+        if (string.IsNullOrWhiteSpace(detail) && images.Count == 0)
         {
             return "{}";
         }
@@ -222,7 +228,8 @@ internal static partial class ChatEventSerializer
             summary = message.ToolSummary,
             status = SerializeToolStatus(message.ToolCallStatus, message.ToolApprovalState),
             markdown = detail,
-            html = RenderToolResultHtml(message, detail)
+            html = RenderToolResultHtml(message, detail),
+            images
         });
     }
 

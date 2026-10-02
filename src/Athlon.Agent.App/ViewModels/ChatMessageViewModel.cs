@@ -196,7 +196,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
     public bool IsTool { get; }
     public bool IsCompaction { get; }
     public string UserAttachmentSummary { get; }
-    public IReadOnlyList<ImageAttachment> ImageAttachments { get; }
+    public IReadOnlyList<ImageAttachment> ImageAttachments { get; private set; }
     public bool IsCollapsibleCard => IsTool || IsCompaction || _isFoldedHistoryPlaceholder;
     public bool IsHiddenPlaceholder { get; }
     public bool AssistantTone => !IsUser;
@@ -619,6 +619,9 @@ public sealed partial class ChatMessageViewModel : ObservableObject
         }
 
         Content = message.Content;
+        ImageAttachments = message.ImageAttachments is { Count: > 0 }
+            ? message.ImageAttachments
+            : Array.Empty<ImageAttachment>();
         SetCreatedAt(message.CreatedAt);
         IsStreaming = false;
         ToolMessageDisplayParser.ParseToolContent(message.Content, out var toolCallId, out var toolName, out var header, out var summary, out var detail, out var argumentsText, out var status);

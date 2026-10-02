@@ -3,8 +3,10 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 using Athlon.Agent.Core;
+using Athlon.Agent.App.Services.ComputerUse;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core.Browser;
+using Athlon.Agent.Infrastructure;
 using Microsoft.Web.WebView2.Core;
 
 namespace Athlon.Agent.App.Services.Browser;
@@ -17,15 +19,24 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
     private readonly WorkspacePaneViewModel _pane;
     private readonly BrowserWebViewRegistry _registry;
     private readonly BrowserDevToolsRegistry _devToolsRegistry;
+    private readonly IAgentRunContextAccessor _runContext;
+    private readonly IImageAttachmentStore _images;
+    private readonly IImageAttachmentPruner _pruner;
 
     public BrowserAutomationHost(
         WorkspacePaneViewModel pane,
         BrowserWebViewRegistry registry,
-        BrowserDevToolsRegistry devToolsRegistry)
+        BrowserDevToolsRegistry devToolsRegistry,
+        IAgentRunContextAccessor runContext,
+        IImageAttachmentStore images,
+        IImageAttachmentPruner pruner)
     {
         _pane = pane;
         _registry = registry;
         _devToolsRegistry = devToolsRegistry;
+        _runContext = runContext;
+        _images = images;
+        _pruner = pruner;
     }
 
     public Task EnsureBrowserTabAsync(CancellationToken cancellationToken = default) =>
@@ -88,6 +99,27 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
                 webView.Source ?? tab.CurrentUrl ?? string.Empty,
                 webView.DocumentTitle ?? tab.Title ?? string.Empty);
         }, cancellationToken);
+
+    public async Task<BrowserScreenshotCapture?> CaptureScreenshotAsync(CancellationToken cancellationToken = default)
+    {
+        var sessionId = _runContext.Current?.SessionId;
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return null;
+        }
+
+        var captured = await UiDispatcherHelper.RunAsync(
+            () => ReadVisiblePngAsync(cancellationToken),
+            cancellationToken).ConfigureAwait(false);
+        if (captured is null)
+        {
+            return null;
+        }
+
+        var attachment = _images.SaveBrowserFrame(sessionId, "image/png", captured.Value.Bytes);
+        await _pruner.PruneAsync(sessionId, cancellationToken).ConfigureAwait(false);
+        return new BrowserScreenshotCapture(attachment, captured.Value.Url, captured.Value.Title);
+    }
 
     public Task<string> ExecuteAriaAsync(
         string operation,
@@ -243,6 +275,38 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         }
 
         return _pane.AddBrowserTabAndActivate();
+    }
+
+    private readonly record struct VisiblePng(byte[] Bytes, string Url, string Title);
+
+    private async Task<VisiblePng?> ReadVisiblePngAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var tab = ResolveTargetTab();
+        if (tab is null)
+        {
+            return null;
+        }
+
+        if (!ReferenceEquals(_pane.ActiveTab, tab))
+        {
+            _pane.ActiveTab = tab;
+        }
+
+        var webView = await WaitForWebViewAsync(tab.Id, cancellationToken).ConfigureAwait(true);
+
+        await using var buffer = new MemoryStream();
+        await webView.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, buffer)
+            .ConfigureAwait(true);
+        if (buffer.Length == 0)
+        {
+            return null;
+        }
+
+        return new VisiblePng(
+            buffer.ToArray(),
+            webView.Source ?? tab.CurrentUrl ?? string.Empty,
+            webView.DocumentTitle ?? tab.Title ?? string.Empty);
     }
 
     private BrowserWorkspaceTabViewModel? ResolveTargetTab()

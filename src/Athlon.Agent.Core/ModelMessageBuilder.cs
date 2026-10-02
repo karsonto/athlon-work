@@ -7,6 +7,9 @@ internal static class ModelMessageBuilder
     internal const string ToolScreenshotCaption =
         "[Computer Use screenshot returned by the preceding tool result.]";
 
+    internal const string BrowserScreenshotCaption =
+        "[Browser tab screenshot returned by the preceding tool result.]";
+
     public static List<AgentModelMessage> BuildForSession(
         string environmentPrompt,
         IReadOnlyList<ChatMessage> history,
@@ -28,9 +31,10 @@ internal static class ModelMessageBuilder
     }
 
     /// <summary>
-    /// Keeps at most <paramref name="maxImages"/> Computer Use tool screenshots in the API
-    /// payload (newest first). Older tool-screenshot user messages are removed; user-uploaded
-    /// images are left untouched. Values below 0 are treated as 0.
+    /// Keeps at most <paramref name="maxImages"/> tool screenshots in the API payload
+    /// (newest first). Computer Use and Browser captions share this quota. Older
+    /// tool-screenshot user messages are removed; user-uploaded images are left untouched.
+    /// Values below 0 are treated as 0.
     /// </summary>
     public static void RetainLatestToolScreenshots(
         List<AgentModelMessage> messages,
@@ -113,7 +117,7 @@ internal static class ModelMessageBuilder
         }
 
         var list = contentParts as List<object> ?? contentParts.ToList();
-        if (list.Count == 0 || !IsTextPart(list[0], ToolScreenshotCaption))
+        if (list.Count == 0 || !IsToolScreenshotCaption(list[0]))
         {
             return false;
         }
@@ -121,6 +125,9 @@ internal static class ModelMessageBuilder
         parts = list;
         return true;
     }
+
+    private static bool IsToolScreenshotCaption(object part) =>
+        IsTextPart(part, ToolScreenshotCaption) || IsTextPart(part, BrowserScreenshotCaption);
 
     private static bool IsTextPart(object part, string expectedText)
     {
@@ -432,9 +439,11 @@ internal static class ModelMessageBuilder
             return;
         }
 
-        var parts = BuildImageContentParts(
-            ToolScreenshotCaption,
-            toolMessage.ImageAttachments);
+        var caption = toolMessage.ImageAttachments.Any(image =>
+            image.FileName.StartsWith(Browser.BrowserFrameFiles.Prefix, StringComparison.Ordinal))
+            ? BrowserScreenshotCaption
+            : ToolScreenshotCaption;
+        var parts = BuildImageContentParts(caption, toolMessage.ImageAttachments);
         if (parts.Count > 1)
         {
             messages.Add(new AgentModelMessage("user", parts));

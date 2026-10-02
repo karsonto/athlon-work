@@ -217,6 +217,7 @@ html.replaying .message-row { animation: none; }
   margin-bottom: 8px;
 }
 .user-images:last-child { margin-bottom: 0; }
+.tool-images { margin-top: 8px; }
 .user-image-thumb {
   width: 96px;
   height: 96px;

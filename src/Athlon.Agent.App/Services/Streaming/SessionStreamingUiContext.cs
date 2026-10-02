@@ -137,13 +137,13 @@ public sealed class SessionStreamingUiContext
                 }
 
                 break;
-            case AgentStreamEvent.ToolCallResult(var toolCallId, var content, var messageId):
+            case AgentStreamEvent.ToolCallResult(var toolCallId, var content, var messageId, var images):
                 if (!ShowToolCalls() || IsActivityToolResult(toolCallId, content))
                 {
                     break;
                 }
 
-                HandleToolCallResult(toolCallId, content, messageId, messages);
+                HandleToolCallResult(toolCallId, content, messageId, images, messages);
                 break;
             case AgentStreamEvent.ToolCallOutput(var toolCallId, var delta):
                 if (!ShowToolCalls() || IsTrackedActivityOnly(toolCallId))
@@ -287,12 +287,17 @@ public sealed class SessionStreamingUiContext
         string toolCallId,
         string content,
         string messageId,
+        IReadOnlyList<ImageAttachment>? images,
         ObservableCollection<ChatMessageViewModel> messages)
     {
         _outputToolBubbles.Remove(toolCallId);
 
         var existing = FindToolMessage(messages, toolCallId);
-        var toolMessage = ChatMessage.CreateWithId(messageId, MessageRole.Tool, content);
+        var toolMessage = ChatMessage.CreateWithId(
+            messageId,
+            MessageRole.Tool,
+            content,
+            imageAttachments: images);
         if (existing is not null)
         {
             existing.ApplyCompletedTool(toolMessage);

@@ -95,12 +95,18 @@ internal static partial class ChatEventSerializer
                     && !string.IsNullOrWhiteSpace(content.Message.Content))
                 ?.Message;
 
+            var browserScreenshots = new List<ImageAttachment>();
             foreach (var block in segment.Blocks)
             {
                 var seq = TimelineOrderPolicy.Block(currentTurn, blockOrdinal++);
                 switch (block)
                 {
                     case ChatTimelineProjector.ActivityBlock activityBlock:
+                        foreach (var activityMessage in activityBlock.Messages)
+                        {
+                            BrowserScreenshotMarkdown.Collect(activityMessage.ImageAttachments, browserScreenshots);
+                        }
+
                         var activity = TurnActivitySummaryBuilder.Build(activityBlock.Messages);
                         if (activity is { HasContent: true })
                         {
@@ -118,6 +124,7 @@ internal static partial class ChatEventSerializer
 
                     case ChatTimelineProjector.ContentBlock { Message.IsTool: true } edit
                         when ChatTimelineProjector.IsSucceededFileEdit(edit.Message):
+                        BrowserScreenshotMarkdown.Collect(edit.Message.ImageAttachments, browserScreenshots);
                         var editEvent = SerializeEditCard(edit.Message, seq);
                         if (editEvent is not null)
                         {
@@ -130,6 +137,7 @@ internal static partial class ChatEventSerializer
                         var content = contentBlock.Message;
                         if (content.IsTool)
                         {
+                            BrowserScreenshotMarkdown.Collect(content.ImageAttachments, browserScreenshots);
                             blockEvents.AddRange(BuildReplayEventsForMessage(content, seq: seq));
                             break;
                         }
@@ -138,7 +146,11 @@ internal static partial class ChatEventSerializer
                             && segment.TurnUserCreatedAt is { } startedAt
                             ? ComputeResponseDurationMs(startedAt, content.CreatedAtUtc)
                             : null;
-                        blockEvents.AddRange(BuildReplayEventsForMessage(content, durationMs, seq));
+                        blockEvents.AddRange(BuildReplayEventsForMessage(
+                            content,
+                            durationMs,
+                            seq,
+                            browserScreenshots));
                         break;
                 }
             }
@@ -262,7 +274,8 @@ internal static partial class ChatEventSerializer
     private static IEnumerable<string> BuildReplayEventsForMessage(
         ChatMessageViewModel message,
         int? responseDurationMs = null,
-        long? seq = null)
+        long? seq = null,
+        IReadOnlyList<ImageAttachment>? browserScreenshots = null)
     {
         if (message.IsUser)
         {
@@ -294,7 +307,12 @@ internal static partial class ChatEventSerializer
 
         if (!string.IsNullOrWhiteSpace(message.Content))
         {
-            yield return SerializeStaticAssistantHtml(message, streaming: false, responseDurationMs, seq);
+            yield return SerializeStaticAssistantHtml(
+                message,
+                streaming: false,
+                responseDurationMs,
+                seq,
+                browserScreenshots);
         }
     }
 
@@ -352,7 +370,8 @@ internal static partial class ChatEventSerializer
         }
 
         var detail = ResolveToolResultDetail(message);
-        if (!string.IsNullOrWhiteSpace(detail))
+        var images = ResolveTimelineImages(message.ImageAttachments);
+        if (!string.IsNullOrWhiteSpace(detail) || images.Count > 0)
         {
             yield return SerializeAgui("TOOL_CALL_RESULT", new
             {
@@ -364,7 +383,8 @@ internal static partial class ChatEventSerializer
                 summary = message.ToolSummary,
                 status = SerializeToolStatus(message.ToolCallStatus, message.ToolApprovalState),
                 markdown = detail,
-                html = RenderToolResultHtml(message, detail)
+                html = RenderToolResultHtml(message, detail),
+                images
             });
         }
     }

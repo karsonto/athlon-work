@@ -103,8 +103,12 @@ public sealed partial class SessionTurnUiController
     {
         switch (streamEvent)
         {
-            case AgentStreamEvent.ToolCallResult(_, var content, var messageId):
-                AppendActivitySourceMessage(ChatMessage.CreateWithId(messageId, MessageRole.Tool, content));
+            case AgentStreamEvent.ToolCallResult(_, var content, var messageId, var images):
+                AppendActivitySourceMessage(ChatMessage.CreateWithId(
+                    messageId,
+                    MessageRole.Tool,
+                    content,
+                    imageAttachments: images));
                 break;
             case AgentStreamEvent.ChatMessageAppended(var message):
                 AppendActivitySourceMessage(message);

@@ -52,7 +52,7 @@ public sealed class AgentRuntimeProgressTests
                 {
                     AgentStreamEvent.RunStarted => "run-started",
                     AgentStreamEvent.ToolCallStart(var id, var name, _) => $"start:{id}:{name}",
-                    AgentStreamEvent.ToolCallResult(var id, _, _) => $"result:{id}",
+                    AgentStreamEvent.ToolCallResult(var id, _, _, _) => $"result:{id}",
                     AgentStreamEvent.TextMessageContent(_, var delta) => $"text:{delta}",
                     AgentStreamEvent.RunFinished => "run-finished",
                     _ => streamEvent.GetType().Name

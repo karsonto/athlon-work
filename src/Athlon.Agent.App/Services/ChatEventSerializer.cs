@@ -32,7 +32,8 @@ internal static partial class ChatEventSerializer
                 toolCallId = e.ToolCallId,
                 content = e.Content,
                 messageId = e.MessageId,
-                status = ParseToolStatusFromContent(e.Content)
+                status = ParseToolStatusFromContent(e.Content),
+                images = ResolveTimelineImages(e.ImageAttachments)
             }),
             AgentStreamEvent.ToolCallOutput e => SerializeAgui("TOOL_CALL_OUTPUT", new { toolCallId = e.ToolCallId, delta = e.Delta }),
             AgentStreamEvent.OverflowRetrySkipped e => SerializeAgui("OVERFLOW_RETRY_SKIPPED", new
@@ -176,6 +177,33 @@ internal static partial class ChatEventSerializer
             out _,
             out var status);
         return SerializeToolStatus(status);
+    }
+
+    private static List<object> ResolveTimelineImages(IReadOnlyList<ImageAttachment>? images)
+    {
+        var list = new List<object>();
+        if (images is not { Count: > 0 })
+        {
+            return list;
+        }
+
+        foreach (var image in images)
+        {
+            var url = ImageAttachmentDataUrlResolver.ResolveDataUrl(image);
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                continue;
+            }
+
+            list.Add(new
+            {
+                fileName = image.FileName,
+                mimeType = image.MimeType,
+                url
+            });
+        }
+
+        return list;
     }
 
     private static string SerializeAgui(string type, object payload)

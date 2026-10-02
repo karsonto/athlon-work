@@ -49,9 +49,13 @@ public sealed class ComputerUseAttachmentPruner(
                 return;
             }
 
-            // Frames carry the store's frame prefix, so user-uploaded attachments are never touched.
-            var frames = new DirectoryInfo(directory)
+            // Frame prefixes mark disposable captures, so user-uploaded attachments are never touched.
+            var directoryInfo = new DirectoryInfo(directory);
+            var frames = directoryInfo
                 .EnumerateFiles(ImageAttachmentStore.FrameFilePrefix + "*", SearchOption.TopDirectoryOnly)
+                .Concat(directoryInfo.EnumerateFiles(
+                    ImageAttachmentStore.BrowserFrameFilePrefix + "*",
+                    SearchOption.TopDirectoryOnly))
                 .ToList();
             if (frames.Count == 0)
             {

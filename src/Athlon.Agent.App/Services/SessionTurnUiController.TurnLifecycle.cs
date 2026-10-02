@@ -217,7 +217,7 @@ public sealed partial class SessionTurnUiController
             NotifyChatViewAfterStreamEvent(uiEvent);
         }
 
-        if (streamEvent is AgentStreamEvent.ToolCallResult(var resultCallId, _, _)
+        if (streamEvent is AgentStreamEvent.ToolCallResult(var resultCallId, _, _, _)
             && !string.IsNullOrWhiteSpace(resultCallId)
             && _modifiedFilesTracker.PeekSegmentEditCards().Any(card =>
                 string.Equals(card.ToolCallId, resultCallId, StringComparison.Ordinal)))

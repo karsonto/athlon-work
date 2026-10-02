@@ -1,3 +1,4 @@
+using Athlon.Agent.Core;
 using Athlon.Agent.Core.Compaction;
 
 namespace Athlon.Agent.Core.Streaming;
@@ -27,7 +28,11 @@ public abstract record AgentStreamEvent
 
     public sealed record ToolCallEnd(string ToolCallId) : AgentStreamEvent;
 
-    public sealed record ToolCallResult(string ToolCallId, string Content, string MessageId) : AgentStreamEvent;
+    public sealed record ToolCallResult(
+        string ToolCallId,
+        string Content,
+        string MessageId,
+        IReadOnlyList<ImageAttachment>? ImageAttachments = null) : AgentStreamEvent;
 
     /// <summary>Incremental stdout/stderr output while a tool is still running.</summary>
     public sealed record ToolCallOutput(string ToolCallId, string Delta) : AgentStreamEvent;
