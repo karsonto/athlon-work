@@ -9,9 +9,37 @@ public static class AtomicFile
 
     private static async Task WriteAllTextCoreAsync(string path, string content, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var temp = path + ".tmp";
-        await File.WriteAllTextAsync(temp, content, cancellationToken).ConfigureAwait(false);
-        File.Move(temp, path, true);
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        // A fixed "<path>.tmp" name overwrites a real sibling the caller did not ask to touch.
+        var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            await File.WriteAllTextAsync(temp, content, cancellationToken).ConfigureAwait(false);
+            File.Move(temp, path, overwrite: true);
+        }
+        catch
+        {
+            TryDelete(temp);
+            throw;
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
     }
 }

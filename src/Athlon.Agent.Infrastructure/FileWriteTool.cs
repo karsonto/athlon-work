@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Athlon.Agent.Core;
 
 namespace Athlon.Agent.Infrastructure;
@@ -28,7 +27,7 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
             return EnrichFailure(invocation, error);
         }
 
-        if (!TryGetContent(invocation, out var content, out error))
+        if (!FileWriteSupport.TryGetContent(invocation, out var content, out error))
         {
             return error;
         }
@@ -52,8 +51,19 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
                     $"Cannot determine parent directory for '{ToolPathNormalizer.ForModel(modelPath)}'.");
             }
 
+            string? original = null;
+            if (File.Exists(fullPath))
+            {
+                original = await File.ReadAllTextAsync(fullPath, cancellationToken);
+            }
+
             Directory.CreateDirectory(parent);
             await AtomicFile.WriteAllTextAsync(fullPath, content, cancellationToken);
+            var mismatch = await VerifyWrittenAsync(fullPath, content, original, modelPath, cancellationToken);
+            if (mismatch is not null)
+            {
+                return mismatch;
+            }
         }
         catch (OperationCanceledException)
         {
@@ -64,7 +74,7 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
             return ToolResult.Failure("Write failed", DescribeWriteException(ex, modelPath));
         }
 
-        await WorkspaceToolHelper.AuditAsync(
+        await FileWriteSupport.TryAuditAsync(
             audit,
             "file_write",
             new { path = WorkspaceToolHelper.ToAuditPath(guard, fullPath), chars = content.Length },
@@ -74,86 +84,68 @@ public sealed class FileWriteTool(WorkspaceGuard guard, AuditLogService audit) :
         return ToolResult.Success($"Wrote {content.Length} chars to {fileName}");
     }
 
-    /// <summary>
-    /// Resolves <c>content</c> for writing. Returns structured parameter errors so the model can retry
-    /// when the argument was omitted, empty, or not a JSON string (common streaming truncation).
-    /// </summary>
-    private static bool TryGetContent(ToolInvocation invocation, out string content, out ToolResult error)
+    private static async Task<ToolResult?> VerifyWrittenAsync(
+        string fullPath,
+        string content,
+        string? original,
+        string modelPath,
+        CancellationToken cancellationToken)
     {
-        content = string.Empty;
-
-        if (!invocation.Arguments.TryGetValue("content", out var element))
+        string readBack;
+        try
         {
-            error = ToolInvocationErrors.Failure(
-                "Invalid tool arguments",
-                new ToolInvocationError(
-                    "file_write.content.missing",
-                    "$.content",
-                    "non-empty JSON string with the full file body",
-                    "missing",
-                    "Include `content` as a JSON string in the tool arguments object, e.g. "
-                    + "{\"path\":\"src/a.cs\",\"content\":\"using System;\\n...\"}. "
-                    + "Do not omit content; an empty file is not allowed."));
-            return false;
+            readBack = await File.ReadAllTextAsync(fullPath, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            var restoreError = await TryRestoreAsync(fullPath, original);
+            return ToolResult.Failure("Write failed", DescribeUnverified(modelPath, ex.Message, restoreError));
         }
 
-        if (element.ValueKind == JsonValueKind.Null
-            || element.ValueKind == JsonValueKind.Undefined)
+        if (string.Equals(readBack, content, StringComparison.Ordinal))
         {
-            error = ToolInvocationErrors.Failure(
-                "Invalid tool arguments",
-                new ToolInvocationError(
-                    "file_write.content.null",
-                    "$.content",
-                    "non-empty JSON string",
-                    "null",
-                    "Pass the file body as a JSON string. Null is not valid for file_write.content."));
-            return false;
+            return null;
         }
 
-        if (element.ValueKind != JsonValueKind.String)
-        {
-            error = ToolInvocationErrors.Failure(
-                "Invalid tool arguments",
-                new ToolInvocationError(
-                    "file_write.content.type_mismatch",
-                    "$.content",
-                    "JSON string",
-                    DescribeJsonKind(element),
-                    "Serialize the entire file body as one JSON string value for `content`. "
-                    + "Do not pass a number, boolean, object, or array. "
-                    + "If arguments JSON was truncated during generation, regenerate the tool call with complete `content`."));
-            return false;
-        }
-
-        content = element.GetString() ?? string.Empty;
-        if (content.Length == 0)
-        {
-            error = ToolInvocationErrors.Failure(
-                "Invalid tool arguments",
-                new ToolInvocationError(
-                    "file_write.content.empty",
-                    "$.content",
-                    "non-empty string (minLength 1)",
-                    "\"\" (empty string)",
-                    "Provide the full file contents in `content`. Creating zero-byte files via file_write is not supported."));
-            return false;
-        }
-
-        error = ToolResult.Success("OK");
-        return true;
+        var mismatchRestoreError = await TryRestoreAsync(fullPath, original);
+        return ToolResult.Failure("Write failed", DescribeMismatch(modelPath, mismatchRestoreError));
     }
 
-    private static string DescribeJsonKind(JsonElement element) =>
-        element.ValueKind switch
+    private static async Task<string?> TryRestoreAsync(string fullPath, string? original)
+    {
+        try
         {
-            JsonValueKind.Number => $"number ({element.GetRawText()})",
-            JsonValueKind.True or JsonValueKind.False => $"boolean ({element.GetRawText()})",
-            JsonValueKind.Object => "object",
-            JsonValueKind.Array => "array",
-            JsonValueKind.Null => "null",
-            _ => element.ValueKind.ToString()
-        };
+            if (original is null)
+            {
+                if (File.Exists(fullPath))
+                {
+                    File.Delete(fullPath);
+                }
+
+                return null;
+            }
+
+            await AtomicFile.WriteAllTextAsync(fullPath, original, CancellationToken.None);
+            return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return ex.Message;
+        }
+    }
+
+    private static string DescribeMismatch(string modelPath, string? restoreError) =>
+        AppendRestoreError($"'{ToolPathNormalizer.ForModel(modelPath)}': written content did not match the requested content.", restoreError);
+
+    private static string DescribeUnverified(string modelPath, string readError, string? restoreError) =>
+        AppendRestoreError($"'{ToolPathNormalizer.ForModel(modelPath)}': could not verify the written content. {readError}", restoreError);
+
+    private static string AppendRestoreError(string message, string? restoreError) =>
+        restoreError is null ? message : message + $" Restoring the previous file failed: {restoreError}";
 
     private static ToolResult EnrichFailure(ToolInvocation invocation, ToolResult error)
     {

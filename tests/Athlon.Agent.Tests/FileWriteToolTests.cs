@@ -1,6 +1,8 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Infrastructure;
+using Athlon.Agent.Infrastructure.Ssh;
 
 namespace Athlon.Agent.Tests;
 
@@ -138,6 +140,108 @@ public sealed class FileWriteToolTests
     }
 
     [Fact]
+    public async Task Overwrite_LeavesSiblingTempFileUntouched()
+    {
+        var env = await CreateEnvironmentAsync();
+        var target = Path.Combine(env.WorkspaceRoot, "sample.txt");
+        var sibling = target + ".tmp";
+        await File.WriteAllTextAsync(target, "alpha\nbeta\ngamma\n");
+        await File.WriteAllTextAsync(sibling, "keep-me");
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("file_write", new Dictionary<string, string>
+            {
+                ["path"] = "sample.txt",
+                ["content"] = "z\n"
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("z\n", await File.ReadAllTextAsync(target));
+            Assert.Equal("keep-me", await File.ReadAllTextAsync(sibling));
+            var extras = Directory.GetFiles(env.WorkspaceRoot)
+                .Where(file => file != target && file != sibling)
+                .ToArray();
+            Assert.Empty(extras);
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Overwrite_PreservesRequestedNewlines()
+    {
+        var env = await CreateEnvironmentAsync();
+        var target = Path.Combine(env.WorkspaceRoot, "sample.txt");
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("file_write", new Dictionary<string, string>
+            {
+                ["path"] = "sample.txt",
+                ["content"] = "alpha\r\nbeta\r\n"
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("alpha\r\nbeta\r\n", await File.ReadAllTextAsync(target));
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task SshOverwrite_ReturnsFailureAndRestoresOriginal_WhenReadBackDiffers()
+    {
+        var env = CreateSshEnvironment(corruptWrites: true);
+        env.Client.Files["/home/u/proj/sample.txt"] = "alpha\nbeta\n";
+
+        var result = await env.Tool.InvokeAsync(new ToolInvocation("file_write", new Dictionary<string, string>
+        {
+            ["path"] = "sample.txt",
+            ["content"] = "z\n"
+        }));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("Write failed", result.Summary);
+        Assert.Contains("did not match", result.Error, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("alpha\nbeta\n", env.Client.Files["/home/u/proj/sample.txt"]);
+    }
+
+    [Fact]
+    public async Task SshCreate_DeletesNewFile_WhenReadBackDiffers()
+    {
+        var env = CreateSshEnvironment(corruptWrites: true);
+
+        var result = await env.Tool.InvokeAsync(new ToolInvocation("file_write", new Dictionary<string, string>
+        {
+            ["path"] = "sample.txt",
+            ["content"] = "hello"
+        }));
+
+        Assert.False(result.Succeeded);
+        Assert.DoesNotContain("/home/u/proj/sample.txt", env.Client.Files.Keys);
+    }
+
+    [Fact]
+    public async Task SshWrite_UsesStructuredContentError_WhenContentIsNull()
+    {
+        var env = CreateSshEnvironment(corruptWrites: false);
+
+        var result = await env.Tool.InvokeAsync(new ToolInvocation(
+            "file_write",
+            ToolCallArgumentsParser.ParseJson("""{"path":"sample.txt","content":null}""")));
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("Invalid tool arguments", result.Summary);
+        Assert.Equal("file_write.content.null", DeserializeError(result).Code);
+        Assert.Empty(env.Client.Files);
+    }
+
+    [Fact]
     public async Task FailsWhenPathIsDirectory()
     {
         var env = await CreateEnvironmentAsync();
@@ -268,6 +372,105 @@ public sealed class FileWriteToolTests
 
         public string ResolveSkillPath(string path) =>
             Path.IsPathRooted(path) ? path : Path.Combine(SkillsPath, path);
+    }
+
+    private static SshEnvironment CreateSshEnvironment(bool corruptWrites)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"athlon-ssh-file-write-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var context = new ActiveWorkspaceContext();
+        context.SetWorkspace("/home/u/proj", WorkspaceKind.Ssh, "ws1", "proj");
+        var guard = new WorkspaceGuard(
+            context,
+            new AgentRunContextAccessor(),
+            new AppSettings(),
+            new TestPathProvider(root));
+        var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(root), new JsonFileStore());
+        var client = new MemorySshClient(corruptWrites);
+        return new SshEnvironment(client, new SshFileWriteTool(guard, client, audit));
+    }
+
+    private sealed record SshEnvironment(MemorySshClient Client, SshFileWriteTool Tool);
+
+    private sealed class MemorySshClient(bool corruptWrites) : ISshWorkspaceClient
+    {
+        private int _writes;
+
+        public Dictionary<string, string> Files { get; } = new(StringComparer.Ordinal);
+
+        public bool IsConnected => true;
+
+        public Task<bool> FileExistsAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Files.ContainsKey(remotePath));
+
+        public Task<SshFileInfo> GetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default)
+        {
+            if (!Files.TryGetValue(remotePath, out var content))
+            {
+                throw new FileNotFoundException(remotePath);
+            }
+
+            return Task.FromResult(new SshFileInfo(remotePath, content.Length, false, DateTimeOffset.UtcNow));
+        }
+
+        public Task<SshFileInfo?> TryGetFileInfoAsync(string remotePath, CancellationToken cancellationToken = default)
+        {
+            if (!Files.TryGetValue(remotePath, out var content))
+            {
+                return Task.FromResult<SshFileInfo?>(null);
+            }
+
+            return Task.FromResult<SshFileInfo?>(new SshFileInfo(remotePath, content.Length, false, DateTimeOffset.UtcNow));
+        }
+
+        public Task<string> ReadTextAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Files[remotePath]);
+
+        public Task<T> ReadViaStreamAsync<T>(
+            string remotePath,
+            Func<Stream, CancellationToken, Task<T>> reader,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task WriteTextAsync(string remotePath, string content, CancellationToken cancellationToken = default)
+        {
+            _writes++;
+            Files[remotePath] = corruptWrites && _writes == 1 ? content + "TAIL" : content;
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteFileAsync(string remotePath, CancellationToken cancellationToken = default)
+        {
+            Files.Remove(remotePath);
+            return Task.CompletedTask;
+        }
+
+        public Task DownloadFileAsync(string remotePath, string localPath, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task UploadFileAsync(string localPath, string remotePath, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task CreateDirectoryAsync(string remotePath, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public async IAsyncEnumerable<SshEntry> ListAsync(
+            string remotePath,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
+
+        public Task<SshCommandResult> ExecuteAsync(
+            string command,
+            string? workingDirectory,
+            TimeSpan timeout,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> HasCommandAsync(string commandName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
     }
 
     private sealed class NoOpLogger : IAppLogger

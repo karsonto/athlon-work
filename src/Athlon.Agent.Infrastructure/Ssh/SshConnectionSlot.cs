@@ -229,6 +229,8 @@ internal sealed class SshConnectionSlot(IAppLogger logger) : IDisposable
     {
         var path = RemotePathNormalizer.Collapse(remotePath);
         var directory = RemotePathNormalizer.GetDirectoryName(path);
+        var temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        var text = content ?? string.Empty;
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -236,16 +238,34 @@ internal sealed class SshConnectionSlot(IAppLogger logger) : IDisposable
             await Task.Run(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!string.IsNullOrWhiteSpace(directory) && directory != "/" && !sftp.Exists(directory))
+                var committed = false;
+                try
                 {
-                    CreateDirectoryRecursive(sftp, directory);
-                }
+                    if (!string.IsNullOrWhiteSpace(directory) && directory != "/" && !sftp.Exists(directory))
+                    {
+                        CreateDirectoryRecursive(sftp, directory);
+                    }
 
-                using var stream = sftp.OpenWrite(path);
-                using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                writer.Write(content ?? string.Empty);
-                writer.Flush();
-                stream.SetLength(stream.Position);
+                    // Write a new temp file, check it, then rename over the destination.
+                    // OpenWrite on the destination leaves the old tail in place when a later step fails.
+                    WriteNewTextFile(sftp, temp, text);
+                    if (!string.Equals(ReadTextFile(sftp, temp), text, StringComparison.Ordinal))
+                    {
+                        throw new IOException("Remote file content did not match the write.");
+                    }
+
+                    ReplaceRemoteFile(sftp, temp, path);
+                    committed = true;
+                }
+                catch
+                {
+                    if (!committed)
+                    {
+                        TryDeleteRemote(sftp, temp);
+                    }
+
+                    throw;
+                }
             }, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -662,6 +682,101 @@ internal sealed class SshConnectionSlot(IAppLogger logger) : IDisposable
             attrs.LastWriteTime.Kind == DateTimeKind.Unspecified
                 ? DateTime.SpecifyKind(attrs.LastWriteTime, DateTimeKind.Utc)
                 : attrs.LastWriteTime.ToUniversalTime());
+
+    private static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
+    private void ReplaceRemoteFile(SftpClient sftp, string temp, string path)
+    {
+        if (TryPosixRename(sftp, temp, path))
+        {
+            return;
+        }
+
+        if (!sftp.Exists(path))
+        {
+            sftp.RenameFile(temp, path);
+            return;
+        }
+
+        // Servers without posix-rename cannot replace an existing name in one step.
+        // Move the original aside first so a failed replacement can put it back.
+        var backup = path + "." + Guid.NewGuid().ToString("N") + ".bak";
+        sftp.RenameFile(path, backup);
+        try
+        {
+            sftp.RenameFile(temp, path);
+        }
+        catch (Exception)
+        {
+            try
+            {
+                if (!sftp.Exists(path) && sftp.Exists(backup))
+                {
+                    sftp.RenameFile(backup, path);
+                }
+            }
+            catch (Exception restoreEx)
+            {
+                _logger.Warning(
+                    "Remote write failed for {Path}. Previous content remains at {Backup}. {Message}",
+                    path,
+                    backup,
+                    restoreEx.Message);
+            }
+
+            throw;
+        }
+
+        TryDeleteRemote(sftp, backup);
+    }
+
+    private static bool TryPosixRename(SftpClient sftp, string temp, string path)
+    {
+        try
+        {
+            sftp.RenameFile(temp, path, isPosix: true);
+            return true;
+        }
+        catch (NotSupportedException)
+        {
+            return false;
+        }
+        catch (SftpException ex) when (ex.StatusCode == StatusCode.OperationUnsupported)
+        {
+            return false;
+        }
+    }
+
+    private static void WriteNewTextFile(SftpClient sftp, string path, string content)
+    {
+        var bytes = Utf8NoBom.GetBytes(content);
+        using var stream = sftp.Create(path);
+        stream.Write(bytes, 0, bytes.Length);
+        stream.Flush();
+        stream.SetLength(bytes.Length);
+    }
+
+    private static string ReadTextFile(SftpClient sftp, string path)
+    {
+        using var stream = sftp.OpenRead(path);
+        using var reader = new StreamReader(stream, Utf8NoBom, detectEncodingFromByteOrderMarks: true);
+        return reader.ReadToEnd();
+    }
+
+    private static void TryDeleteRemote(SftpClient sftp, string path)
+    {
+        try
+        {
+            if (sftp.Exists(path))
+            {
+                sftp.DeleteFile(path);
+            }
+        }
+        catch
+        {
+            // Cleanup must not replace the write error that got us here.
+        }
+    }
 
     private static void CreateDirectoryRecursive(SftpClient sftp, string path)
     {
