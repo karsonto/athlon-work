@@ -53,6 +53,10 @@ public interface ISshWorkspaceClient
 
     Task WriteTextAsync(string remotePath, string content, CancellationToken cancellationToken = default);
 
+    /// <summary>Deletes a remote file. Used to roll back a new file created by apply_patch.</summary>
+    Task DeleteFileAsync(string remotePath, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
     /// <summary>Download a remote file to a local path (binary-safe).</summary>
     Task DownloadFileAsync(string remotePath, string localPath, CancellationToken cancellationToken = default);
 

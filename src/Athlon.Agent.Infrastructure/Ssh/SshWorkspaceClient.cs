@@ -163,6 +163,13 @@ public sealed class SshWorkspaceClient(IAppLogger logger)
         slot.Touch();
     }
 
+    public async Task DeleteFileAsync(string remotePath, CancellationToken cancellationToken = default)
+    {
+        var slot = ResolveConnectedSlot();
+        await slot.DeleteFileAsync(remotePath, cancellationToken).ConfigureAwait(false);
+        slot.Touch();
+    }
+
     public async Task DownloadFileAsync(string remotePath, string localPath, CancellationToken cancellationToken = default)
     {
         var slot = ResolveConnectedSlot();

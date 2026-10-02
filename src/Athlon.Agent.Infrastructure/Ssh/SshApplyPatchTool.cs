@@ -13,7 +13,7 @@ public sealed class SshApplyPatchTool(
         "Apply a unified diff patch to workspace files. Prefer for multi-line or fragile exact-match edits when file_edit fails. "
             + "Patch must use standard --- / +++ / @@ headers.",
         ToolSchema.Object()
-            .String("patch", "Unified diff text (--- / +++ / @@ hunks)", required: true, pattern: @"(?s)^.*(?:--- |\*\*\* Begin Patch).*")
+            .String("patch", "Unified diff text (--- / +++ / @@ hunks)", required: true, pattern: @"(?s)^.*--- .*")
             .String("path", "Workspace-relative path; when set, only hunks for this file are applied")
             .Build(),
         RequiresApproval: true);
@@ -45,7 +45,8 @@ public sealed class SshApplyPatchTool(
             }
         }
 
-        var appliedFiles = new List<string>();
+        var pending = new List<PendingWrite>();
+        var matched = 0;
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -56,6 +57,7 @@ public sealed class SshApplyPatchTool(
                 continue;
             }
 
+            matched++;
             if (!SshWorkspaceToolHelper.TryResolveNormalizedPath(
                     new ToolInvocation("apply_patch", new Dictionary<string, string> { [ToolPathNormalizer.PathArgumentName] = relativePath }),
                     guard,
@@ -66,10 +68,11 @@ public sealed class SshApplyPatchTool(
                 return error;
             }
 
-            string content;
+            string? original = null;
+            string source;
             if (file.IsNewFile)
             {
-                content = string.Empty;
+                source = string.Empty;
             }
             else
             {
@@ -79,29 +82,99 @@ public sealed class SshApplyPatchTool(
                     return ToolResult.Failure("File not found", $"Cannot patch missing file: {relativePath}");
                 }
 
-                content = await client.ReadTextAsync(fullPath, cancellationToken).ConfigureAwait(false);
+                original = await client.ReadTextAsync(fullPath, cancellationToken).ConfigureAwait(false);
+                source = original;
             }
 
-            var patched = UnifiedDiffApplier.ApplyAllHunks(content, file.Hunks, out var applyError);
+            var patched = UnifiedDiffApplier.ApplyAllHunks(source, file.Hunks, out var applyError);
             if (applyError is not null)
             {
                 return ToolResult.Failure("Patch failed", $"{relativePath}: {applyError}");
             }
 
-            await client.WriteTextAsync(fullPath, patched, cancellationToken).ConfigureAwait(false);
-            appliedFiles.Add(relativePath);
+            var toWrite = file.IsNewFile ? patched : UnifiedDiffApplier.ToDiskText(source, patched);
+            if (original is not null && string.Equals(toWrite, original, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            pending.Add(new PendingWrite(relativePath, fullPath, original, toWrite));
         }
 
-        if (appliedFiles.Count == 0)
+        if (pending.Count == 0)
         {
-            return ToolResult.Failure("No files patched", "Patch contained no matching file hunks.");
+            return ToolResult.Failure(
+                "No files patched",
+                matched == 0
+                    ? "Patch contained no matching file hunks."
+                    : "Patch did not change any file.");
         }
 
+        var written = new List<PendingWrite>();
+        foreach (var change in pending)
+        {
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await client.WriteTextAsync(change.FullPath, change.ToWrite, cancellationToken).ConfigureAwait(false);
+                var readBack = await client.ReadTextAsync(change.FullPath, cancellationToken).ConfigureAwait(false);
+                if (!string.Equals(readBack, change.ToWrite, StringComparison.Ordinal))
+                {
+                    written.Add(change);
+                    await RollbackAsync(client, written, CancellationToken.None).ConfigureAwait(false);
+                    return ToolResult.Failure(
+                        "Patch failed",
+                        $"{change.RelativePath}: written content did not match the patch.");
+                }
+
+                written.Add(change);
+            }
+            catch (Exception ex)
+            {
+                await RollbackAsync(client, written, CancellationToken.None).ConfigureAwait(false);
+                await RestoreOneAsync(client, change, CancellationToken.None).ConfigureAwait(false);
+                if (ex is OperationCanceledException)
+                {
+                    throw;
+                }
+
+                return ToolResult.Failure("Patch failed", $"{change.RelativePath}: {ex.Message}");
+            }
+        }
+
+        var appliedFiles = written.Select(change => change.RelativePath).ToArray();
         await WorkspaceToolHelper.AuditAsync(
             audit,
             "apply_patch",
             new { files = appliedFiles, remote = true },
             cancellationToken).ConfigureAwait(false);
-        return ToolResult.Success($"Patched {appliedFiles.Count} file(s)", string.Join(Environment.NewLine, appliedFiles));
+        return ToolResult.Success($"Patched {appliedFiles.Length} file(s)", string.Join(Environment.NewLine, appliedFiles));
     }
+
+    private static async Task RollbackAsync(
+        ISshWorkspaceClient client,
+        IReadOnlyList<PendingWrite> written,
+        CancellationToken cancellationToken)
+    {
+        for (var i = written.Count - 1; i >= 0; i--)
+        {
+            await RestoreOneAsync(client, written[i], cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static async Task RestoreOneAsync(
+        ISshWorkspaceClient client,
+        PendingWrite change,
+        CancellationToken cancellationToken)
+    {
+        if (change.Original is null)
+        {
+            await client.DeleteFileAsync(change.FullPath, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        await client.WriteTextAsync(change.FullPath, change.Original, cancellationToken).ConfigureAwait(false);
+    }
+
+    private sealed record PendingWrite(string RelativePath, string FullPath, string? Original, string ToWrite);
 }

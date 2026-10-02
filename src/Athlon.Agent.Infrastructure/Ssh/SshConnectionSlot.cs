@@ -203,6 +203,28 @@ internal sealed class SshConnectionSlot(IAppLogger logger) : IDisposable
         }
     }
 
+    public async Task DeleteFileAsync(string remotePath, CancellationToken cancellationToken = default)
+    {
+        var path = RemotePathNormalizer.Collapse(remotePath);
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var sftp = RequireSftp();
+            await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (sftp.Exists(path))
+                {
+                    sftp.DeleteFile(path);
+                }
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task WriteTextAsync(string remotePath, string content, CancellationToken cancellationToken = default)
     {
         var path = RemotePathNormalizer.Collapse(remotePath);

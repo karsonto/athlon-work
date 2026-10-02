@@ -17,7 +17,8 @@ internal sealed record UnifiedDiffHunk(
     int OldCount,
     int NewStart,
     int NewCount,
-    IReadOnlyList<UnifiedDiffLine> Lines);
+    IReadOnlyList<UnifiedDiffLine> Lines,
+    bool OmitTrailingNewline = false);
 
 internal sealed record UnifiedDiffFile(string? OldPath, string NewPath, IReadOnlyList<UnifiedDiffHunk> Hunks)
 {
@@ -37,6 +38,13 @@ internal static partial class UnifiedDiffParser
             return false;
         }
 
+        if (patch.Contains("*** Begin Patch", StringComparison.Ordinal)
+            && !patch.Contains("--- ", StringComparison.Ordinal))
+        {
+            error = "Only unified diff is supported (--- / +++ / @@). The *** Begin Patch format is not supported.";
+            return false;
+        }
+
         var normalized = patch.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
         var lines = normalized.Split('\n');
         var parsedFiles = new List<UnifiedDiffFile>();
@@ -48,6 +56,8 @@ internal static partial class UnifiedDiffParser
         int? oldCount = null;
         int? newStart = null;
         int? newCount = null;
+        var omitTrailingNewline = false;
+        string? lineError = null;
 
         void FlushHunk()
         {
@@ -61,12 +71,14 @@ internal static partial class UnifiedDiffParser
                 oldCount ?? 0,
                 newStart ?? 1,
                 newCount ?? 0,
-                currentHunkLines));
+                currentHunkLines,
+                omitTrailingNewline));
             currentHunkLines = null;
             oldStart = null;
             oldCount = null;
             newStart = null;
             newCount = null;
+            omitTrailingNewline = false;
         }
 
         void FlushFile()
@@ -109,26 +121,56 @@ internal static partial class UnifiedDiffParser
                 continue;
             }
 
+            if (rawLine.Length == 0)
+            {
+                continue;
+            }
+
+            if (currentHunkLines is not null && IsGitMetadata(rawLine))
+            {
+                FlushHunk();
+                continue;
+            }
+
             if (currentHunkLines is null)
             {
                 continue;
             }
 
-            if (rawLine.Length == 0)
+            if (rawLine.StartsWith("\\", StringComparison.Ordinal))
             {
-                currentHunkLines.Add(new UnifiedDiffLine(UnifiedDiffLineKind.Context, string.Empty));
+                omitTrailingNewline = true;
                 continue;
             }
 
             var prefix = rawLine[0];
-            var text = rawLine[1..];
-            currentHunkLines.Add(prefix switch
+            var text = rawLine.Length == 1 ? string.Empty : rawLine[1..];
+            switch (prefix)
             {
-                ' ' => new UnifiedDiffLine(UnifiedDiffLineKind.Context, text),
-                '-' => new UnifiedDiffLine(UnifiedDiffLineKind.Remove, text),
-                '+' => new UnifiedDiffLine(UnifiedDiffLineKind.Add, text),
-                _ => throw new FormatException($"Invalid hunk line prefix '{prefix}' in patch.")
-            });
+                case ' ':
+                    currentHunkLines.Add(new UnifiedDiffLine(UnifiedDiffLineKind.Context, text));
+                    break;
+                case '-':
+                    currentHunkLines.Add(new UnifiedDiffLine(UnifiedDiffLineKind.Remove, text));
+                    break;
+                case '+':
+                    currentHunkLines.Add(new UnifiedDiffLine(UnifiedDiffLineKind.Add, text));
+                    break;
+                default:
+                    lineError = $"Invalid hunk line prefix '{prefix}' in patch.";
+                    break;
+            }
+
+            if (lineError is not null)
+            {
+                break;
+            }
+        }
+
+        if (lineError is not null)
+        {
+            error = lineError;
+            return false;
         }
 
         FlushFile();
@@ -144,9 +186,30 @@ internal static partial class UnifiedDiffParser
         return true;
     }
 
+    private static bool IsGitMetadata(string line) =>
+        line.StartsWith("diff --git ", StringComparison.Ordinal)
+        || line.StartsWith("index ", StringComparison.Ordinal)
+        || line.StartsWith("old mode ", StringComparison.Ordinal)
+        || line.StartsWith("new mode ", StringComparison.Ordinal)
+        || line.StartsWith("new file mode ", StringComparison.Ordinal)
+        || line.StartsWith("deleted file mode ", StringComparison.Ordinal)
+        || line.StartsWith("similarity index ", StringComparison.Ordinal)
+        || line.StartsWith("dissimilarity index ", StringComparison.Ordinal)
+        || line.StartsWith("rename from ", StringComparison.Ordinal)
+        || line.StartsWith("rename to ", StringComparison.Ordinal)
+        || line.StartsWith("copy from ", StringComparison.Ordinal)
+        || line.StartsWith("copy to ", StringComparison.Ordinal);
+
     private static string NormalizeDiffPath(string path)
     {
-        path = path.Trim().Trim('"');
+        path = path.Trim();
+        var tab = path.IndexOf('\t');
+        if (tab >= 0)
+        {
+            path = path[..tab].Trim();
+        }
+
+        path = path.Trim('"');
         if (path.StartsWith("a/", StringComparison.Ordinal) || path.StartsWith("b/", StringComparison.Ordinal))
         {
             path = path[2..];
@@ -163,7 +226,8 @@ internal static class UnifiedDiffApplier
 {
     public static bool TryApply(string content, UnifiedDiffHunk hunk, out string patched, out string? error)
     {
-        var hadTrailingNewline = content.EndsWith('\n') || content.EndsWith("\r\n", StringComparison.Ordinal);
+        var hadTrailingNewline = !hunk.OmitTrailingNewline
+            && (content.EndsWith('\n') || content.EndsWith("\r\n", StringComparison.Ordinal));
         var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
         var fileLines = normalized.Length == 0 ? new List<string>() : normalized.Split('\n').ToList();
         if (fileLines.Count > 0 && fileLines[^1] == string.Empty && normalized.EndsWith('\n'))
@@ -231,4 +295,13 @@ internal static class UnifiedDiffApplier
         error = null;
         return current;
     }
+
+    /// <summary>
+    /// Restores the original file's newline style. Hunks are applied on LF text; a CRLF
+    /// source must be written back as CRLF so the patch does not rewrite the whole file.
+    /// </summary>
+    public static string ToDiskText(string original, string patchedLf) =>
+        original.Contains("\r\n", StringComparison.Ordinal)
+            ? patchedLf.Replace("\n", "\r\n", StringComparison.Ordinal)
+            : patchedLf;
 }
