@@ -31,6 +31,8 @@ public sealed class BrowserScreenshotTests
         Assert.Contains("screenshot_file: browser-frame-abc.png", result.Content, StringComparison.Ordinal);
         Assert.Contains("url: https://example.com/login", result.Content, StringComparison.Ordinal);
         Assert.Contains("title: Login", result.Content, StringComparison.Ordinal);
+        Assert.Contains("capture: viewport", result.Content, StringComparison.Ordinal);
+        Assert.False(host.LastFullPage);
         var attachment = Assert.Single(result.ImageAttachments!);
         Assert.Equal("browser-frame-abc.png", attachment.FileName);
         Assert.StartsWith(BrowserFrameFiles.Prefix, attachment.FileName, StringComparison.Ordinal);
@@ -48,6 +50,32 @@ public sealed class BrowserScreenshotTests
         Assert.Null(result.ImageAttachments);
         Assert.Equal(1, host.CaptureCalls);
         Assert.False(host.WroteFile);
+    }
+
+    [Fact]
+    public async Task BrowserScreenshot_full_page_is_passed_to_the_host()
+    {
+        var image = new ImageAttachment(
+            "browser-frame-abc.png",
+            "image/png",
+            DataUrl: "data:image/png;base64,AQID");
+        var host = new FakeBrowserHost
+        {
+            Capture = new BrowserScreenshotCapture(
+                image,
+                "https://example.com/login",
+                "Login",
+                FullPage: true,
+                Clipped: true)
+        };
+
+        var result = await new BrowserScreenshotTool(host).InvokeAsync(
+            new ToolInvocation("browser_screenshot", ToolCallArguments.Parse("""{"full_page":true}""")));
+
+        Assert.True(result.Succeeded);
+        Assert.True(host.LastFullPage);
+        Assert.Contains("capture: full_page", result.Content, StringComparison.Ordinal);
+        Assert.Contains("clipped: true", result.Content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -313,9 +341,14 @@ public sealed class BrowserScreenshotTests
 
         public bool WroteFile { get; private set; }
 
-        public Task<BrowserScreenshotCapture?> CaptureScreenshotAsync(CancellationToken cancellationToken = default)
+        public bool? LastFullPage { get; private set; }
+
+        public Task<BrowserScreenshotCapture?> CaptureScreenshotAsync(
+            bool fullPage = false,
+            CancellationToken cancellationToken = default)
         {
             CaptureCalls++;
+            LastFullPage = fullPage;
             return Task.FromResult(Capture);
         }
 

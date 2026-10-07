@@ -100,7 +100,9 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
                 webView.DocumentTitle ?? tab.Title ?? string.Empty);
         }, cancellationToken);
 
-    public async Task<BrowserScreenshotCapture?> CaptureScreenshotAsync(CancellationToken cancellationToken = default)
+    public async Task<BrowserScreenshotCapture?> CaptureScreenshotAsync(
+        bool fullPage = false,
+        CancellationToken cancellationToken = default)
     {
         var sessionId = _runContext.Current?.SessionId;
         if (string.IsNullOrWhiteSpace(sessionId))
@@ -109,7 +111,7 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         }
 
         var captured = await UiDispatcherHelper.RunAsync(
-            () => ReadVisiblePngAsync(cancellationToken),
+            () => ReadPngAsync(fullPage, cancellationToken),
             cancellationToken).ConfigureAwait(false);
         if (captured is null)
         {
@@ -118,7 +120,12 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
 
         var attachment = _images.SaveBrowserFrame(sessionId, "image/png", captured.Value.Bytes);
         await _pruner.PruneAsync(sessionId, cancellationToken).ConfigureAwait(false);
-        return new BrowserScreenshotCapture(attachment, captured.Value.Url, captured.Value.Title);
+        return new BrowserScreenshotCapture(
+            attachment,
+            captured.Value.Url,
+            captured.Value.Title,
+            captured.Value.FullPage,
+            captured.Value.Clipped);
     }
 
     public Task<string> ExecuteAriaAsync(
@@ -277,9 +284,16 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         return _pane.AddBrowserTabAndActivate();
     }
 
-    private readonly record struct VisiblePng(byte[] Bytes, string Url, string Title);
+    private const int MaxFullPageEdgeCssPx = 16_384;
 
-    private async Task<VisiblePng?> ReadVisiblePngAsync(CancellationToken cancellationToken)
+    private readonly record struct VisiblePng(
+        byte[] Bytes,
+        string Url,
+        string Title,
+        bool FullPage,
+        bool Clipped);
+
+    private async Task<VisiblePng?> ReadPngAsync(bool fullPage, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var tab = ResolveTargetTab();
@@ -294,19 +308,85 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         }
 
         var webView = await WaitForWebViewAsync(tab.Id, cancellationToken).ConfigureAwait(true);
-
-        await using var buffer = new MemoryStream();
-        await webView.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, buffer)
-            .ConfigureAwait(true);
-        if (buffer.Length == 0)
+        var captured = fullPage
+            ? await CaptureFullPagePngAsync(webView).ConfigureAwait(true)
+            : await CaptureVisiblePngAsync(webView).ConfigureAwait(true);
+        if (captured.Bytes is not { Length: > 0 })
         {
             return null;
         }
 
         return new VisiblePng(
-            buffer.ToArray(),
+            captured.Bytes,
             webView.Source ?? tab.CurrentUrl ?? string.Empty,
-            webView.DocumentTitle ?? tab.Title ?? string.Empty);
+            webView.DocumentTitle ?? tab.Title ?? string.Empty,
+            fullPage,
+            captured.Clipped);
+    }
+
+    private static async Task<(byte[]? Bytes, bool Clipped)> CaptureVisiblePngAsync(CoreWebView2 webView)
+    {
+        await using var buffer = new MemoryStream();
+        await webView.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, buffer)
+            .ConfigureAwait(true);
+        return (buffer.ToArray(), false);
+    }
+
+    private static async Task<(byte[]? Bytes, bool Clipped)> CaptureFullPagePngAsync(CoreWebView2 webView)
+    {
+        await webView.CallDevToolsProtocolMethodAsync("Page.enable", "{}").ConfigureAwait(true);
+        var metricsJson = await webView.CallDevToolsProtocolMethodAsync("Page.getLayoutMetrics", "{}")
+            .ConfigureAwait(true);
+        using var metrics = JsonDocument.Parse(metricsJson);
+        if (!TryGetContentSize(metrics.RootElement, out var width, out var height))
+        {
+            throw new InvalidOperationException("Page layout metrics did not include a content size.");
+        }
+
+        var clipped = width > MaxFullPageEdgeCssPx || height > MaxFullPageEdgeCssPx;
+        width = Math.Min(width, MaxFullPageEdgeCssPx);
+        height = Math.Min(height, MaxFullPageEdgeCssPx);
+        var request = JsonSerializer.Serialize(new
+        {
+            format = "png",
+            captureBeyondViewport = true,
+            clip = new { x = 0, y = 0, width, height, scale = 1 }
+        });
+        var shotJson = await webView.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", request)
+            .ConfigureAwait(true);
+        using var shot = JsonDocument.Parse(shotJson);
+        var data = shot.RootElement.TryGetProperty("data", out var dataElement)
+            ? dataElement.GetString()
+            : null;
+        if (string.IsNullOrWhiteSpace(data))
+        {
+            return (null, clipped);
+        }
+
+        return (Convert.FromBase64String(data), clipped);
+    }
+
+    private static bool TryGetContentSize(JsonElement metrics, out double width, out double height)
+    {
+        width = 0;
+        height = 0;
+        if (!metrics.TryGetProperty("cssContentSize", out var content)
+            && !metrics.TryGetProperty("contentSize", out content))
+        {
+            return false;
+        }
+
+        if (!content.TryGetProperty("width", out var widthElement)
+            || !content.TryGetProperty("height", out var heightElement)
+            || widthElement.ValueKind != JsonValueKind.Number
+            || heightElement.ValueKind != JsonValueKind.Number)
+        {
+            return false;
+        }
+
+        width = widthElement.GetDouble();
+        height = heightElement.GetDouble();
+        return width >= 1 && height >= 1;
     }
 
     private BrowserWorkspaceTabViewModel? ResolveTargetTab()

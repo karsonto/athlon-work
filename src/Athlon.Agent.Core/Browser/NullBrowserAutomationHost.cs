@@ -20,7 +20,9 @@ public sealed class NullBrowserAutomationHost : IBrowserAutomationHost
     public Task<BrowserPageInfo> GetPageInfoAsync(CancellationToken cancellationToken = default) =>
         Task.FromException<BrowserPageInfo>(new InvalidOperationException("Browser automation host is not available."));
 
-    public Task<BrowserScreenshotCapture?> CaptureScreenshotAsync(CancellationToken cancellationToken = default) =>
+    public Task<BrowserScreenshotCapture?> CaptureScreenshotAsync(
+        bool fullPage = false,
+        CancellationToken cancellationToken = default) =>
         Task.FromException<BrowserScreenshotCapture?>(new InvalidOperationException("Browser automation host is not available."));
 
     public Task<string> ExecuteAriaAsync(string operation, string? argsJson = null, CancellationToken cancellationToken = default) =>
