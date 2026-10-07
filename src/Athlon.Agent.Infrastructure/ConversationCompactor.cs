@@ -33,7 +33,8 @@ public sealed partial class ConversationCompactor(
         }
 
         var cfg = settings.ContextCompaction;
-        var conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
+        var conversation = ConversationMessageFilters.WithoutHandoffNotes(
+            ConversationMessageFilters.WithoutCompactionAudits(session.Messages));
         if (conversation.Count == 0)
         {
             return new ConversationCompactResult(session, false);
@@ -151,6 +152,7 @@ public sealed partial class ConversationCompactor(
             transcriptPath = await storage.SaveTranscriptAsync(session.Id, session.Messages, cancellationToken);
         }
 
+        var handoffMessage = await LoadHandoffMessageAsync(session.Id, cancellationToken).ConfigureAwait(false);
         var mustPreserve = request.Plan?.MustPreserveAppendix;
         var summaryRequest = BuildSummaryRequest(
             prefix,
@@ -158,6 +160,7 @@ public sealed partial class ConversationCompactor(
             request,
             mustPreserve,
             request.EmitAudit,
+            handoffMessage is not null,
             out var summaryInputCharsBefore,
             out var summaryInputCharsAfter,
             out var hygieneSavingsEstimate);
@@ -263,8 +266,10 @@ public sealed partial class ConversationCompactor(
             return new ConversationCompactResult(session, false);
         }
 
-        var summaryMessage = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath);
-        var handoffMessage = await LoadHandoffMessageAsync(session.Id, cancellationToken).ConfigureAwait(false);
+        var summaryMessage = SummaryMessageBuilder.CreateSummaryPlaceholder(
+            summary,
+            transcriptPath,
+            handoffAttached: handoffMessage is not null);
         var compactMessages = new List<ChatMessage>();
 
         var strategy = request.Strategy;

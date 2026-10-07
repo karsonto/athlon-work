@@ -75,6 +75,7 @@ public sealed partial class ConversationCompactor
         CompactionExecutionRequest request,
         string? mustPreserve,
         bool computeAuditMetrics,
+        bool handoffNotePresent,
         out int? summaryInputCharsBefore,
         out int? summaryInputCharsAfter,
         out int? hygieneSavingsEstimate)
@@ -134,7 +135,8 @@ public sealed partial class ConversationCompactor
             BuildSummaryPrompt(
                 cfg.SummaryPrompt,
                 ConversationCompactionDefaults.PrecedingMessagesPlaceholder,
-                mustPreserve)));
+                mustPreserve,
+                handoffNotePresent)));
 
         return new AgentModelRequest(
             messages,
@@ -181,11 +183,21 @@ public sealed partial class ConversationCompactor
         };
     }
 
-    private static string BuildSummaryPrompt(string template, string formattedMessages, string? mustPreserveAppendix)
+    private static string BuildSummaryPrompt(
+        string template,
+        string formattedMessages,
+        string? mustPreserveAppendix,
+        bool handoffNotePresent)
     {
         var mustPreserve = string.IsNullOrWhiteSpace(mustPreserveAppendix) ? string.Empty : mustPreserveAppendix.Trim();
-        return template
+        var prompt = template
             .Replace("{must_preserve}", mustPreserve, StringComparison.Ordinal)
             .Replace("{messages}", formattedMessages, StringComparison.Ordinal);
+        if (!handoffNotePresent)
+        {
+            return prompt;
+        }
+
+        return prompt + "\n\n" + ConversationCompactionDefaults.HandoffPreservedSummaryOverride;
     }
 }

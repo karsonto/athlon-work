@@ -243,7 +243,8 @@ public static class SemanticCutoffPlanner
         PlanContinuePrompt.IsPlanContinueMessage(message)
         || PlanPublishRepairPrompt.IsRepairMessage(message)
         || SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
-        || ApprovedPlanPrompt.IsApprovedPlanMessage(message);
+        || ApprovedPlanPrompt.IsApprovedPlanMessage(message)
+        || SessionHandoffNote.IsHandoffMessage(message);
 
     private static int FindTokenBasedTailStart(
         IReadOnlyList<ChatMessage> conversation,

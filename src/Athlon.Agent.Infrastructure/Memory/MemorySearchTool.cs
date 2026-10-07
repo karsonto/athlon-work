@@ -21,7 +21,7 @@ public sealed class MemorySearchTool(ILongTermMemory longTermMemory, IAppLogger 
     public ToolDefinition Definition => new(
         Name: "memory_search",
         Description:
-        "Search through long-term memory files (MEMORY.md and memory/*.md) for relevant information. Use before answering questions about past work, decisions, dates, people, preferences, or todos.",
+        "Search durable facts for this workspace session (MEMORY.md and daily memory files): preferences, people, stable decisions, and deadlines. The live task skeleton (goal, failed paths, next step) is not in these files; read it with session_note_read.",
         ToolSchema.Object()
             .String("query", "Keywords to search for in memory files", required: true, minLength: 1)
             .Build());

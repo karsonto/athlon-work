@@ -8,6 +8,19 @@ public static class ConversationCompactionDefaults
     public const string PrecedingMessagesPlaceholder =
         "The conversation to summarize is in the preceding messages.";
 
+    /// <summary>
+    /// Appended when a handoff note will be reattached. Overrides the sections that duplicate the note.
+    /// </summary>
+    public const string HandoffPreservedSummaryOverride =
+        """
+        The session handoff note is stored separately and will be attached verbatim after your summary. Do not restate it.
+        Write exactly None for SESSION INTENT.
+        Write exactly None for decisions and rejected options.
+        Write exactly None for NEXT STEPS.
+        Keep ## SUMMARY as a narrative of what happened.
+        Keep ## ARTIFACTS as file paths only.
+        """;
+
     public const string DefaultSummaryPrompt =
         """
         <role>

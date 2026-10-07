@@ -17,7 +17,8 @@ public sealed partial class ConversationCompactor
         CancellationToken cancellationToken)
     {
         var cfg = settings.ContextCompaction;
-        var conversation = ConversationMessageFilters.WithoutCompactionAudits(session.Messages);
+        var conversation = ConversationMessageFilters.WithoutHandoffNotes(
+            ConversationMessageFilters.WithoutCompactionAudits(session.Messages));
         if (conversation.Count == 0)
         {
             return new ConversationCompactResult(session, false);
@@ -82,12 +83,14 @@ public sealed partial class ConversationCompactor
             return new ConversationCompactResult(session, false);
         }
 
+        var handoffMessage = await LoadHandoffMessageAsync(session.Id, cancellationToken).ConfigureAwait(false);
         var summaryRequest = BuildSummaryRequest(
             summarizedMiddle,
             cfg,
             request,
             request.Plan?.MustPreserveAppendix,
             computeAuditMetrics: false,
+            handoffMessage is not null,
             out _,
             out _,
             out _);
@@ -141,8 +144,11 @@ public sealed partial class ConversationCompactor
             return new ConversationCompactResult(session, false);
         }
 
-        var hiddenSummary = SummaryMessageBuilder.CreateSummaryPlaceholder(summary, transcriptPath: null, hiddenFromTimeline: true);
-        var handoffMessage = await LoadHandoffMessageAsync(session.Id, cancellationToken).ConfigureAwait(false);
+        var hiddenSummary = SummaryMessageBuilder.CreateSummaryPlaceholder(
+            summary,
+            transcriptPath: null,
+            hiddenFromTimeline: true,
+            handoffAttached: handoffMessage is not null);
         var compactMessages = new List<ChatMessage>(head.Count + tail.Count + 3);
         compactMessages.AddRange(head);
         compactMessages.Add(hiddenSummary);

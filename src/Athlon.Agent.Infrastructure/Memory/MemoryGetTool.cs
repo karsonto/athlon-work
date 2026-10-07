@@ -10,7 +10,7 @@ public sealed class MemoryGetTool(ILongTermMemory longTermMemory, IAppLogger log
 
     public ToolDefinition Definition => new(
         Name: "memory_get",
-        Description: "Read specific lines from a memory file. Use after memory_search to pull full context around matched lines. Path is relative to memory directory (e.g., MEMORY.md or 2026-04-01.md).",
+        Description: "Read specific lines from a memory file after memory_search. Memory holds durable facts for this workspace session, not the live task skeleton. Path is relative to the memory directory (e.g., MEMORY.md or 2026-04-01.md).",
         ToolSchema.Object()
             .String("path", "Relative path to the memory file (e.g., MEMORY.md or 2026-04-01.md)", required: true, minLength: 1)
             .Integer("start_line", "Start line number (1-based, inclusive)", required: true, minimum: 1)

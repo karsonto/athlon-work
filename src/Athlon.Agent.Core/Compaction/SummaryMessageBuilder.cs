@@ -2,9 +2,13 @@ namespace Athlon.Agent.Core.Compaction;
 
 public static class SummaryMessageBuilder
 {
-    public static ChatMessage CreateSummaryPlaceholder(string summaryText, string? transcriptPath, bool hiddenFromTimeline = false)
+    public static ChatMessage CreateSummaryPlaceholder(
+        string summaryText,
+        string? transcriptPath,
+        bool hiddenFromTimeline = false,
+        bool handoffAttached = false)
     {
-        var content = BuildSummaryContent(summaryText, transcriptPath, hiddenFromTimeline);
+        var content = BuildSummaryContent(summaryText, transcriptPath, hiddenFromTimeline, handoffAttached);
         return ChatMessage.Create(MessageRole.Summary, content);
     }
 
@@ -32,12 +36,19 @@ public static class SummaryMessageBuilder
     public static IReadOnlyList<ChatMessage> FilterSummaryMessages(IReadOnlyList<ChatMessage> messages) =>
         messages.Where(message => !IsSummaryMessage(message)).ToList();
 
-    private static string BuildSummaryContent(string summaryText, string? transcriptPath, bool hiddenFromTimeline)
+    private static string BuildSummaryContent(
+        string summaryText,
+        string? transcriptPath,
+        bool hiddenFromTimeline,
+        bool handoffAttached)
     {
         var trimmedSummary = summaryText.Trim();
         var marker = hiddenFromTimeline
             ? ConversationCompactionDefaults.HiddenSummaryMessageMarker
             : ConversationCompactionDefaults.SummaryMessageMarker;
+        var handoffHint = handoffAttached
+            ? "The task skeleton is in the following [session-handoff] message. Read that first.\n\n"
+            : string.Empty;
         if (!string.IsNullOrWhiteSpace(transcriptPath))
         {
             var fileName = Path.GetFileName(transcriptPath);
@@ -46,6 +57,7 @@ public static class SummaryMessageBuilder
                 "The summary is an outline. The full history was archived as transcript file " +
                 fileName +
                 ". Use history_list_transcripts, history_read_transcript, or history_search_transcripts to recover details. Use history_read_evicted for truncated tool output.\n\n" +
+                handoffHint +
                 "A condensed summary follows:\n\n" +
                 "<summary>\n" +
                 trimmedSummary +
@@ -55,6 +67,7 @@ public static class SummaryMessageBuilder
 
         return marker + "\n" +
                "Here is a summary of the conversation to date:\n\n" +
+               handoffHint +
                trimmedSummary;
     }
 }

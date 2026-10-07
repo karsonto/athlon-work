@@ -112,7 +112,8 @@ public sealed class ContextMemoryTests
             ChatMessage.Create(MessageRole.Assistant, "earlier"),
             ChatMessage.Create(MessageRole.User, "current question")
         ]);
-        Assert.True(await storage.TryAppendHandoffNoteAsync(session.Id, "Goal: finish the migration.\nNext: run tests."));
+        var appended = await storage.TryAppendHandoffNoteAsync(session.Id, "Goal: finish the migration.\nNext: run tests.");
+        Assert.True(appended.Written);
 
         var settings = new AppSettings
         {
@@ -124,9 +125,10 @@ public sealed class ContextMemoryTests
                 MaxConversationCharsForSummary = 10_000
             }
         };
+        var model = new SummaryModelClient();
         var result = await new ConversationCompactor(
             settings,
-            new SummaryModelClient(),
+            model,
             storage,
             new TruncateArgsService(),
             new SessionUsageAccumulator(),
@@ -139,6 +141,95 @@ public sealed class ContextMemoryTests
         Assert.True(summaryIndex >= 0);
         Assert.True(SessionHandoffNote.IsHandoffMessage(result.Session.Messages[summaryIndex + 1]));
         Assert.Contains("finish the migration", result.Session.Messages[summaryIndex + 1].Content, StringComparison.Ordinal);
+        Assert.Contains("[session-handoff]", result.Session.Messages[summaryIndex].Content, StringComparison.Ordinal);
+        var summaryPrompt = string.Join(
+            "\n",
+            model.LastRequest!.Messages.Select(message => message.Content as string ?? string.Empty));
+        Assert.Contains(ConversationCompactionDefaults.HandoffPreservedSummaryOverride, summaryPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("finish the migration", summaryPrompt, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Handoff_append_over_the_limit_keeps_the_existing_note()
+    {
+        using var temp = new TempDirectoryScope("athlon-handoff-limit");
+        var paths = new ArchivePathProvider(temp.Root);
+        paths.EnsureCreated();
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var session = AgentSession.Create("limit-session");
+        var filler = new string('a', SessionHandoffNote.MaxChars - 10);
+        var written = await storage.TryAppendHandoffNoteAsync(session.Id, filler);
+        Assert.True(written.Written);
+        Assert.Equal(filler.Length, written.CurrentChars);
+        Assert.Equal(10, written.RemainingChars);
+
+        var rejected = await storage.TryAppendHandoffNoteAsync(session.Id, new string('b', 20));
+        Assert.False(rejected.Written);
+        Assert.Equal(filler.Length, rejected.CurrentChars);
+        Assert.Equal(SessionHandoffNote.MaxChars, rejected.MaxChars);
+        Assert.Equal(10, rejected.RemainingChars);
+        Assert.Equal(filler, await storage.ReadHandoffNoteAsync(session.Id));
+
+        var sessions = new ActiveAgentSessionContext();
+        sessions.SetSession(session.Id);
+        var toolResult = await new SessionNoteAppendTool(storage, sessions).InvokeAsync(
+            new ToolInvocation("session_note_append", new Dictionary<string, string> { ["text"] = new string('c', 20) }));
+        Assert.False(toolResult.Succeeded);
+        Assert.Contains("existing note is unchanged", toolResult.Error, StringComparison.Ordinal);
+        Assert.Contains("current: " + filler.Length, toolResult.Error, StringComparison.Ordinal);
+        Assert.Contains("remaining: 10", toolResult.Error, StringComparison.Ordinal);
+        Assert.Equal(filler, await storage.ReadHandoffNoteAsync(session.Id));
+    }
+
+    [Fact]
+    public async Task Compaction_drops_a_stale_handoff_message_and_keeps_the_disk_note()
+    {
+        using var temp = new TempDirectoryScope("athlon-handoff-dedupe");
+        var paths = new ArchivePathProvider(temp.Root);
+        paths.EnsureCreated();
+        var storage = new FileStorageService(new NoOpLogger(), paths, new JsonFileStore(), new AgentRunContextAccessor());
+        var session = AgentSession.Create("dedupe-session").WithMessages(
+        [
+            ChatMessage.Create(MessageRole.User, "old"),
+            ChatMessage.Create(MessageRole.Assistant, "earlier"),
+            SessionHandoffNote.CreateMessage("OLD-NOTE should disappear"),
+            ChatMessage.Create(MessageRole.User, "current question")
+        ]);
+        Assert.True((await storage.TryAppendHandoffNoteAsync(session.Id, "DISK-NOTE is authoritative")).Written);
+
+        var settings = new AppSettings
+        {
+            ContextCompaction = new ContextCompactionSettings
+            {
+                TriggerMessages = 2,
+                KeepMessages = 1,
+                SummaryMaxTokens = 256,
+                MaxConversationCharsForSummary = 10_000
+            }
+        };
+        var model = new SummaryModelClient();
+        var result = await new ConversationCompactor(
+            settings,
+            model,
+            storage,
+            new TruncateArgsService(),
+            new SessionUsageAccumulator(),
+            new NoOpLogger()).CompactIfNeededAsync(
+            session,
+            new CompactionExecutionRequest(CompactionKind.ConversationCompact, Force: false, EmitAudit: true));
+
+        Assert.True(result.Compacted);
+        var handoffs = result.Session.Messages.Where(SessionHandoffNote.IsHandoffMessage).ToList();
+        var kept = Assert.Single(handoffs);
+        Assert.Contains("DISK-NOTE", kept.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("OLD-NOTE", kept.Content, StringComparison.Ordinal);
+        var summaryIndex = result.Session.Messages.ToList().FindIndex(SummaryMessageBuilder.IsSummaryMessage);
+        Assert.Equal(summaryIndex + 1, result.Session.Messages.ToList().IndexOf(kept));
+        var summaryPrompt = string.Join(
+            "\n",
+            model.LastRequest!.Messages.Select(message => message.Content as string ?? string.Empty));
+        Assert.DoesNotContain("OLD-NOTE", summaryPrompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("DISK-NOTE", summaryPrompt, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -202,13 +293,18 @@ public sealed class ContextMemoryTests
 
     private sealed class SummaryModelClient : IAgentModelClient
     {
+        public AgentModelRequest? LastRequest { get; private set; }
+
         public Task<AgentModelResponse> CompleteAsync(
             AgentModelRequest request,
             Func<string, Task>? onTextDelta = null,
             Func<string, Task>? onReasoningDelta = null,
             Func<StreamingToolCallDelta, Task>? onToolCallDelta = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new AgentModelResponse("summary text", []));
+            CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
+            return Task.FromResult(new AgentModelResponse("summary text", []));
+        }
     }
 
     private sealed class ArchivePathProvider(string root) : IAppPathProvider

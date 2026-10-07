@@ -1,4 +1,5 @@
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Memory;
 using Athlon.Agent.Infrastructure.Memory;
 
@@ -110,6 +111,34 @@ public sealed class MemoryFlushTests
         Assert.Null(client.LastRequest);
         Assert.Empty(memory.Appended);
         Assert.Equal(0, memory.ReadCuratedCount);
+    }
+
+    [Fact]
+    public async Task Flush_SkipsHandoffNote_AndDoesNotExtractIt()
+    {
+        var (service, client, memory) = CreateSut(llmContent: "- prefers tabs");
+        var note = SessionHandoffNote.CreateMessage("Goal: finish the migration. Next: run tests.");
+
+        var mixed = await service.FlushAsync(new MemoryTurnContext(
+        [
+            ChatMessage.Create(MessageRole.User, "I prefer tabs over spaces"),
+            note
+        ],
+        "You are Athlon."));
+
+        Assert.True(mixed.Flushed);
+        Assert.DoesNotContain("finish the migration", client.LastPrompt, StringComparison.Ordinal);
+        Assert.Contains("I prefer tabs over spaces", client.LastPrompt, StringComparison.Ordinal);
+
+        var onlyNote = await service.FlushAsync(new MemoryTurnContext(
+        [
+            ChatMessage.Create(MessageRole.User, "<session_context>\nworkspace\n</session_context>"),
+            note
+        ],
+        "You are Athlon."));
+
+        Assert.False(onlyNote.Flushed);
+        Assert.Single(memory.Appended);
     }
 
     private static MemoryTurnContext CreateExtractableContext() =>

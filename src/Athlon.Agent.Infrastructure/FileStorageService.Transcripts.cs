@@ -197,32 +197,32 @@ public sealed partial class FileStorageService
         return await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<bool> TryAppendHandoffNoteAsync(
+    public async Task<HandoffNoteAppendResult> TryAppendHandoffNoteAsync(
         string sessionId,
         string text,
         CancellationToken cancellationToken = default)
     {
         var addition = text.Trim();
-        if (addition.Length == 0)
-        {
-            return false;
-        }
-
         using (await SessionWriteLock.AcquireAsync(sessionId, cancellationToken).ConfigureAwait(false))
         {
             var existing = await ReadHandoffNoteAsync(sessionId, cancellationToken).ConfigureAwait(false);
-            var combined = string.IsNullOrWhiteSpace(existing)
+            var current = string.IsNullOrWhiteSpace(existing) ? 0 : existing.Length;
+            if (addition.Length == 0)
+            {
+                return new HandoffNoteAppendResult(false, current, SessionHandoffNote.MaxChars);
+            }
+
+            var combined = current == 0
                 ? addition
                 : existing.TrimEnd() + "\n" + addition;
             if (combined.Length > SessionHandoffNote.MaxChars)
             {
-                return false;
+                return new HandoffNoteAppendResult(false, current, SessionHandoffNote.MaxChars);
             }
 
             var path = GetHandoffNotePath(sessionId);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            await File.WriteAllTextAsync(path, combined, cancellationToken).ConfigureAwait(false);
-            return true;
+            await AtomicFile.WriteAllTextAsync(path, combined, cancellationToken).ConfigureAwait(false);
+            return new HandoffNoteAppendResult(true, combined.Length, SessionHandoffNote.MaxChars);
         }
     }
 

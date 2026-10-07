@@ -1,5 +1,10 @@
 namespace Athlon.Agent.Core.Compaction;
 
+public readonly record struct HandoffNoteAppendResult(bool Written, int CurrentChars, int MaxChars)
+{
+    public int RemainingChars => Math.Max(0, MaxChars - CurrentChars);
+}
+
 public static class SessionHandoffNote
 {
     public const string Marker = "[session-handoff]";

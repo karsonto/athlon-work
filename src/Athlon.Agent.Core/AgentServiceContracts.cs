@@ -102,8 +102,8 @@ public interface IFileStorageService
     Task<string> ReadHandoffNoteAsync(string sessionId, CancellationToken cancellationToken = default) =>
         Task.FromResult(string.Empty);
 
-    Task<bool> TryAppendHandoffNoteAsync(string sessionId, string text, CancellationToken cancellationToken = default) =>
-        Task.FromResult(false);
+    Task<HandoffNoteAppendResult> TryAppendHandoffNoteAsync(string sessionId, string text, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new HandoffNoteAppendResult(false, 0, SessionHandoffNote.MaxChars));
     /// <summary>
     /// Loads the latest unstripped conversation.jsonl line for <paramref name="messageId"/> (last-wins).
     /// </summary>

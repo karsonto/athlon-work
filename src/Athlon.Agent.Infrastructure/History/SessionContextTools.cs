@@ -194,7 +194,7 @@ public sealed class SessionNoteAppendTool(
     public ToolDefinition Definition => new(
         Name: "session_note_append",
         Description:
-            "Append a short handoff note for this session. Write the goal, confirmed decisions, failed paths, next step, and verification commands before requesting compaction. The note is kept locally and reattached after compaction. It is not long-term memory.",
+            "Append a short handoff note for this session's compaction handoff: the goal, confirmed decisions, failed paths, next step, and verification commands. The note is kept locally and reattached after compaction. Do not put preferences, names, or stable project facts here; those are extracted into memory after the turn and read with memory_search.",
         ToolSchema.Object()
             .String("text", "Text appended exactly as provided.", required: true, minLength: 1)
             .Build());
@@ -212,14 +212,15 @@ public sealed class SessionNoteAppendTool(
         }
 
         var appended = await storage.TryAppendHandoffNoteAsync(sessionId, text, cancellationToken).ConfigureAwait(false);
-        if (!appended)
+        var usage = $"current: {appended.CurrentChars}\nmax: {appended.MaxChars}\nremaining: {appended.RemainingChars}";
+        if (!appended.Written)
         {
             return ToolResult.Failure(
                 "Note not written",
-                $"The handoff note must stay within {SessionHandoffNote.MaxChars} characters.");
+                "This append was rejected because it would exceed the limit. The existing note is unchanged.\n" + usage);
         }
 
-        return ToolResult.Success("Appended handoff note", "Handoff note updated.");
+        return ToolResult.Success("Appended handoff note", "Handoff note updated.\n" + usage);
     }
 }
 

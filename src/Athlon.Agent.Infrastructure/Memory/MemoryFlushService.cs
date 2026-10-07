@@ -25,10 +25,10 @@ Output ONLY the extracted memories as a markdown bullet list. Each item should b
 If there is nothing worth remembering, respond with exactly: NO_REPLY
 
 Guidelines:
-- Extract user preferences, personal information, project decisions
+- Extract user preferences, personal information, and stable project decisions
 - Capture important technical decisions and their rationale
-- Note any commitments, deadlines, or action items
-- Ignore routine greetings, tool invocations, and ephemeral status updates
+- Note commitments and deadlines
+- Ignore routine greetings, tool invocations, ephemeral status updates, and the current task skeleton (goal, failed paths, and the immediate next step). Those belong in the session handoff note
 
 IMPORTANT:
 - You are writing to TODAY's daily memory ledger (memory/YYYY-MM-DD.md), NOT to MEMORY.md.
@@ -37,10 +37,10 @@ IMPORTANT:
 """;
 
     internal static readonly string FlushSystemPrompt =
-        "You are a memory extraction assistant. Analyze the conversation below and extract important facts, decisions, preferences, and contextual information that should be remembered for future conversations.\n\n" + FlushGuidelines;
+        "You are a memory extraction assistant. Analyze the conversation below and extract durable facts, preferences, and stable decisions that should be remembered later in this session. Do not extract the live task skeleton.\n\n" + FlushGuidelines;
 
     internal static readonly string FlushInstruction =
-        "Analyze the preceding conversation and extract important facts, decisions, preferences, and contextual information that should be remembered for future conversations.\n\n" + FlushGuidelines + "\n- The conversation to extract from is in the preceding messages.";
+        "Analyze the preceding conversation and extract durable facts, preferences, and stable decisions that should be remembered later in this session. Do not extract the live task skeleton.\n\n" + FlushGuidelines + "\n- The conversation to extract from is in the preceding messages.";
 
     private readonly IAppLogger _logger = logger.ForContext("MemoryFlushService");
     private readonly MemorySettings _cfg = settings.Memory;
@@ -115,12 +115,13 @@ IMPORTANT:
         string? existingDaily)
     {
         var ledger = BuildLedgerAppendix(existingMemory, existingDaily);
+        var sourceMessages = WithoutHandoffNotes(context.Messages);
         if (!string.IsNullOrWhiteSpace(context.EnvironmentPrompt))
         {
             var built = ModelMessagesForApiBuilder.Build(
                 cache: null,
                 context.EnvironmentPrompt,
-                context.Messages,
+                sourceMessages,
                 settings.ContextCompaction);
             var messages = built.Messages.ToList();
             messages.Add(new AgentModelMessage("user", FlushInstruction + ledger));
@@ -131,7 +132,7 @@ IMPORTANT:
                 MaxTokens: _cfg.SummaryMaxTokens);
         }
 
-        var conversationText = SerializeMessages(context.Messages);
+        var conversationText = SerializeMessages(sourceMessages);
         return new AgentModelRequest(
             [
                 new AgentModelMessage("system", FlushSystemPrompt),
@@ -167,12 +168,7 @@ IMPORTANT:
     {
         foreach (var message in messages)
         {
-            if (message.Role is MessageRole.System or MessageRole.Compaction)
-            {
-                continue;
-            }
-
-            if (message.Role == MessageRole.User && message.Content?.Contains("<session_context>") == true)
+            if (IsSkippedForMemory(message))
             {
                 continue;
             }
@@ -191,10 +187,10 @@ IMPORTANT:
         var sb = new StringBuilder();
         foreach (var message in messages)
         {
-            if (message.Role is MessageRole.System or MessageRole.Compaction)
+            if (IsSkippedForMemory(message))
+            {
                 continue;
-            if (message.Role == MessageRole.User && message.Content?.Contains("<session_context>") == true)
-                continue;
+            }
 
             sb.Append('[').Append(message.Role).Append("]: ");
             sb.AppendLine(message.Content);
@@ -209,5 +205,23 @@ IMPORTANT:
         }
 
         return result;
+    }
+
+    private static List<ChatMessage> WithoutHandoffNotes(IReadOnlyList<ChatMessage> messages) =>
+        messages.Where(message => !SessionHandoffNote.IsHandoffMessage(message)).ToList();
+
+    private static bool IsSkippedForMemory(ChatMessage message)
+    {
+        if (message.Role is MessageRole.System or MessageRole.Compaction)
+        {
+            return true;
+        }
+
+        if (SessionHandoffNote.IsHandoffMessage(message))
+        {
+            return true;
+        }
+
+        return message.Role == MessageRole.User && message.Content?.Contains("<session_context>") == true;
     }
 }

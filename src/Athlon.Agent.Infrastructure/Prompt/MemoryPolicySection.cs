@@ -21,11 +21,11 @@ public sealed class MemoryPolicySection : IEnvironmentPromptSection
         }
 
         builder.AppendLine("Project session memory:");
-        builder.AppendLine("- Long-term memory is scoped to the current workspace and this conversation session.");
-        builder.AppendLine("- memory_search reads curated memory only. Archived conversation transcripts are not memory files; use the history transcript tools for those.");
+        builder.AppendLine("- Long-term memory is scoped to the current workspace and this conversation session. It stores durable facts. The live task skeleton is session_note_read, not memory.");
+        builder.AppendLine("- memory_search reads curated memory only. Archived conversation transcripts are not memory files; use the history transcript tools for those. There is no memory write tool; do not use memory in place of session_note_append.");
         if (PromptModeHelper.HasTool(context, "memory_search"))
         {
-            builder.AppendLine("- Call memory_search before answering questions about past work, preferences, or decisions in this session.");
+            builder.AppendLine("- Call memory_search before answering questions about preferences, people, stable decisions, or deadlines. Do not use it for the current goal or next step.");
         }
 
         if (PromptModeHelper.HasTool(context, "memory_get"))
