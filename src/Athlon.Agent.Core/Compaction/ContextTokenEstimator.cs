@@ -116,7 +116,7 @@ public static class ContextTokenEstimator
             : null;
         var remainingToolScreenshots = Math.Max(0, maxToolScreenshots);
         var total = 0;
-        // Newest-first allocation for Tool screenshots (matches RetainLatestToolScreenshots).
+        // Newest-first allocation for tool screenshots (matches the trailing media suffix).
         for (var index = messages.Count - 1; index >= 0; index--)
         {
             var message = messages[index];

@@ -8,7 +8,7 @@ public sealed class WorkspaceFilesSection(ISshWorkspaceClient? sshClient = null)
 {
     public string Name => "workspace:files";
 
-    public int Order => PromptSectionBands.WorkflowStart + 1;
+    public int Order => PromptSectionBands.WorkspaceFiles;
 
     public PromptSectionPlacement Placement => PromptSectionPlacement.PreCall;
 

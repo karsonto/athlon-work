@@ -17,33 +17,17 @@ public sealed class SubAgentDelegationSection(AppSettings settings) : IEnvironme
             || PromptModeHelper.IsChatOnly(context)
             || PromptModeHelper.IsAskMode(context)
             || PromptModeHelper.IsPlanMode(context)
-            || PromptModeHelper.IsDebugMode(context)
-            || !PromptModeHelper.HasAny(context, "sessions_spawn", "sessions_send", "sessions_list"))
+            || PromptModeHelper.IsDebugMode(context))
         {
             return;
         }
 
         builder.AppendLine("## Delegating sub-tasks");
-        builder.AppendLine("Use `sessions_spawn` / `sessions_send` for structured sub-agent orchestration.");
-        if (PromptModeHelper.HasTool(context, "sessions_spawn"))
-        {
-            builder.AppendLine("- **New child:** `sessions_spawn` with `role` (who the child is, boundaries, output style), optional `message`, optional `label` for reuse.");
-        }
-
-        if (PromptModeHelper.HasTool(context, "sessions_send"))
-        {
-            builder.AppendLine("- **Continue:** `sessions_send` with `session_key` or `label` and a new `message`.");
-        }
-
-        if (PromptModeHelper.HasAny(context, "sessions_list", "sessions_history"))
-        {
-            builder.AppendLine("- **Discover:** `sessions_list` when you do not remember session_key; `sessions_history` for transcript snippets.");
-        }
-
-        if (PromptModeHelper.HasAny(context, "sessions_pending_completions", "task_output"))
-        {
-            builder.AppendLine("- **Long tasks:** `timeout_seconds=0` returns `task_id`; next turn call `sessions_pending_completions` or wait for system reminder injection; use `task_output` to poll.");
-        }
+        builder.AppendLine("Use `sessions_spawn` / `sessions_send` when they are advertised for structured sub-agent orchestration.");
+        builder.AppendLine("- **New child:** when sessions_spawn is advertised, call it with `role` (who the child is, boundaries, output style), optional `message`, optional `label` for reuse.");
+        builder.AppendLine("- **Continue:** when sessions_send is advertised, call it with `session_key` or `label` and a new `message`.");
+        builder.AppendLine("- **Discover:** when sessions_list is advertised and you do not remember session_key, use it; sessions_history is for transcript snippets when advertised.");
+        builder.AppendLine("- **Long tasks:** when sessions_pending_completions or task_output are advertised, `timeout_seconds=0` returns `task_id`; next turn call `sessions_pending_completions` or wait for system reminder injection; use `task_output` to poll.");
 
         builder.AppendLine("- You may name a skill in `message` or let the child use `load_skill_through_path` from the skills list.");
         builder.AppendLine("- Wait for tool results; summarize for the user. Children cannot spawn nested agents.");

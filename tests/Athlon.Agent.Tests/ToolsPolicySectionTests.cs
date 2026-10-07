@@ -93,17 +93,20 @@ public sealed class ToolsPolicySectionTests
     }
 
     [Fact]
-    public void Append_AgentMode_DoesNotRequireTodoBeforeWrites()
+    public void Append_AgentMode_TodoLineStaysWhenToolIsAbsent()
     {
-        var tools = FullWorkspaceTools.Where(tool => tool.Name != "todo_write").ToArray();
-        var builder = new StringBuilder();
+        var withoutTodo = FullWorkspaceTools.Where(tool => tool.Name != "todo_write").ToArray();
+        var withBuilder = new StringBuilder();
+        var withoutBuilder = new StringBuilder();
         new ToolsPolicySection().Append(
-            builder,
-            CreateContext(hasWorkspace: true, tools: tools, mode: SessionAgentMode.Agent));
+            withBuilder,
+            CreateContext(hasWorkspace: true, tools: FullWorkspaceTools, mode: SessionAgentMode.Agent));
+        new ToolsPolicySection().Append(
+            withoutBuilder,
+            CreateContext(hasWorkspace: true, tools: withoutTodo, mode: SessionAgentMode.Agent));
 
-        var text = builder.ToString();
-        Assert.DoesNotContain("maintain an accurate todo list", text, StringComparison.Ordinal);
-        Assert.Contains("Shell:", text, StringComparison.Ordinal);
+        Assert.Equal(withBuilder.ToString(), withoutBuilder.ToString());
+        Assert.Contains("maintain an accurate todo list", withoutBuilder.ToString(), StringComparison.Ordinal);
     }
 
     private static EnvironmentPromptContext CreateContext(

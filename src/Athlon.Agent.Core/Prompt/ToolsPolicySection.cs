@@ -102,8 +102,6 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
                 ? "  4. Execute independent read-only calls in parallel; otherwise preserve dependency order."
                 : "  3. Execute independent read-only calls in parallel; otherwise preserve dependency order.");
 
-            AppendMcpDecisionFlow(builder, context);
-
             builder.AppendLine("- If the same tool fails with the same error twice, stop repeating it; gather more context or switch tools.");
 
             builder.AppendLine();
@@ -122,75 +120,19 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
         builder.AppendLine("  2. Consecutive read-only calls may be sent together; keep writes and execute_command in their own groups, and preserve dependency order.");
 
-        var step = 3;
+        builder.AppendLine("  3. When todo_write is advertised, multi-step / multi-file work: maintain an accurate todo list via todo_write (create or merge) before and during writes.");
 
-        if (PromptModeHelper.HasTool(context, "todo_write"))
+        builder.AppendLine("  4. When file_write, file_edit, or apply_patch are advertised, explain the intended write before calling them.");
 
-        {
+        builder.AppendLine("  5. Shell: when execute_command is advertised, cmd.exe only, not PowerShell; quote paths with spaces or non-ASCII and source workspace paths from tool results.");
 
-            builder.AppendLine($"  {step}. Multi-step / multi-file work: maintain an accurate todo list via todo_write (create or merge) before and during writes.");
+        builder.AppendLine("- When execute_command is advertised, skill scripts use absolute paths from each skill's files-root; execute_command cwd defaults to workspace root.");
 
-            step++;
+        builder.AppendLine("- Interactive CLI agents in the workspace Terminal tab: when terminal_open, terminal_send_input, or terminal_read_output are advertised, see runtime context for terminal_* rules; use execute_command only for one-off non-interactive shell commands.");
 
-        }
+        builder.AppendLine("- Browser tab tools: when browser_navigate, browser_find_aria_nodes, or browser_network_list are advertised, see runtime context for ARIA find → act → verify rules and DevTools network/console tools.");
 
-
-
-        if (PromptModeHelper.HasAny(context, "file_write", "file_edit", "apply_patch"))
-
-        {
-
-            builder.AppendLine($"  {step}. Before file_write, file_edit, or apply_patch, explain the intended write.");
-
-            step++;
-
-        }
-
-
-
-        if (PromptModeHelper.HasTool(context, "execute_command"))
-
-        {
-
-            builder.AppendLine($"  {step}. Shell: cmd.exe only, not PowerShell; quote paths with spaces or non-ASCII and source workspace paths from tool results.");
-
-            step++;
-
-        }
-
-
-
-        if (PromptModeHelper.HasTool(context, "execute_command"))
-
-        {
-
-            builder.AppendLine("- Skill scripts: use absolute paths from each skill's files-root; execute_command cwd defaults to workspace root.");
-
-        }
-
-
-
-        if (PromptModeHelper.HasAny(context, "terminal_open", "terminal_send_input", "terminal_read_output"))
-
-        {
-
-            builder.AppendLine("- Interactive CLI agents in the workspace Terminal tab: see runtime context for terminal_* rules; use execute_command only for one-off non-interactive shell commands.");
-
-        }
-
-
-
-        if (PromptModeHelper.HasAny(context, "browser_navigate", "browser_find_aria_nodes", "browser_network_list"))
-
-        {
-
-            builder.AppendLine("- Browser tab tools: see runtime context for ARIA find → act → verify rules and DevTools network/console tools.");
-
-        }
-
-
-
-        AppendMcpDecisionFlow(builder, context);
+        AppendMcpDecisionFlow(builder);
 
         builder.AppendLine("- If the same tool fails with the same error twice, stop repeating it; gather more context or switch tools.");
 
@@ -200,52 +142,16 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
 
 
-    private static void AppendMcpDecisionFlow(StringBuilder builder, EnvironmentPromptContext context)
-
+    private static void AppendMcpDecisionFlow(StringBuilder builder)
     {
-
-        if (!PromptModeHelper.HasMcpGateway(context)
-
-            && !context.Tools.Any(tool => string.Equals(tool.Source, "mcp", StringComparison.OrdinalIgnoreCase)))
-
-        {
-
-            return;
-
-        }
-
-
-
         builder.AppendLine("- MCP tools (when present) are advertised only via function schemas.");
-
         builder.AppendLine("- MCP decision flow:");
-
         builder.AppendLine("  1. If a concrete MCP tool is directly advertised, call it using its schema.");
-
-        if (PromptModeHelper.HasTool(context, "mcp_search"))
-
-        {
-
-            builder.AppendLine("  2. If mcp_search is advertised, search by user intent and inspect the top-ranked results.");
-
-        }
-
-
-
-        if (PromptModeHelper.HasAny(context, "mcp_describe", "mcp_call"))
-
-        {
-
-            builder.AppendLine("  3. When a search result says requiresDescribe=false, its inputSchema is complete and mcp_call may be used directly.");
-
-            builder.AppendLine("  4. When requiresDescribe=true or schemaTruncated=true, call mcp_describe first and follow the complete schema.");
-
-            builder.AppendLine("  5. Call mcp_call with a native arguments object; never pass argumentsJson or JSON-stringify arguments.");
-
-            builder.AppendLine("  6. Re-search or re-describe when the schema fingerprint changes or validation reports schema drift.");
-
-        }
-
+        builder.AppendLine("  2. If mcp_search is advertised, search by user intent and inspect the top-ranked results.");
+        builder.AppendLine("  3. When mcp_describe or mcp_call are advertised and a search result says requiresDescribe=false, its inputSchema is complete and mcp_call may be used directly.");
+        builder.AppendLine("  4. When requiresDescribe=true or schemaTruncated=true, call mcp_describe first and follow the complete schema.");
+        builder.AppendLine("  5. Call mcp_call with a native arguments object; never pass argumentsJson or JSON-stringify arguments.");
+        builder.AppendLine("  6. Re-search or re-describe when the schema fingerprint changes or validation reports schema drift.");
     }
 
 }

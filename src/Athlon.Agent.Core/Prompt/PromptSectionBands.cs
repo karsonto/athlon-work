@@ -14,6 +14,9 @@ public static class PromptSectionBands
     public const int Workspace = 300;
     public const int WorkflowStart = 400;
     public const int ToolGuidanceStart = 450;
-    public const int Skills = 600;
+    public const int Skills = 800;
     public const int Product = 700;
+
+    /// <summary>Project files change more often than tool policy, so they stay after it.</summary>
+    public const int WorkspaceFiles = 900;
 }

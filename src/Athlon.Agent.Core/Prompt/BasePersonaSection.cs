@@ -56,8 +56,6 @@ public sealed class BasePersonaSection : IEnvironmentPromptSection
 
         builder.AppendLine("You are Athlon Agent, a Windows desktop workspace agent powered by the {{model}} model.");
 
-        builder.AppendLine("Working directory (workspace root): {{cwd}}.");
-
         builder.AppendLine("Use only the tools advertised for the current session mode. Do not guess file contents.");
 
         builder.AppendLine("Think through the user's goal, constraints, and risks before calling tools or making changes. Share concise reasoning when it helps the user follow your approach.");

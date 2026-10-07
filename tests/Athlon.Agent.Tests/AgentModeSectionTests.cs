@@ -36,6 +36,18 @@ public sealed class AgentModeSectionTests
     }
 
     [Fact]
+    public void Append_AskUserLinesStayWhenToolIsAbsent()
+    {
+        var withTool = new StringBuilder();
+        var withoutTool = new StringBuilder();
+        new AgentModeSection().Append(withTool, CreateContext(SessionAgentMode.Agent, includeAskUser: true));
+        new AgentModeSection().Append(withoutTool, CreateContext(SessionAgentMode.Agent));
+
+        Assert.Equal(withTool.ToString(), withoutTool.ToString());
+        Assert.Contains("When ask_user is advertised", withTool.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Append_AskMode_DelegatesToolRulesToSingleDecisionTree()
     {
         var builder = new StringBuilder();
@@ -48,7 +60,10 @@ public sealed class AgentModeSectionTests
         Assert.DoesNotContain("sessions_", text, StringComparison.Ordinal);
     }
 
-    private static EnvironmentPromptContext CreateContext(SessionAgentMode mode, bool hasWorkspace = true)
+    private static EnvironmentPromptContext CreateContext(
+        SessionAgentMode mode,
+        bool hasWorkspace = true,
+        bool includeAskUser = false)
     {
         var tools = new List<ToolDefinition>
         {
@@ -58,6 +73,11 @@ public sealed class AgentModeSectionTests
         if (mode == SessionAgentMode.Agent || mode == SessionAgentMode.Coding)
         {
             tools.Add(new ToolDefinition("todo_write", "t", ToolSchema.Object().Build()));
+        }
+
+        if (includeAskUser)
+        {
+            tools.Add(new ToolDefinition("ask_user", "ask", ToolSchema.Object().Build()));
         }
 
         return new EnvironmentPromptContext

@@ -2,8 +2,6 @@ namespace Athlon.Agent.Core;
 
 internal static class ModelMessageBuilder
 {
-    /// <summary>Default matching <see cref="Compaction.ContextCompactionSettings.MaxToolScreenshotsInModelContext"/>.</summary>
-    internal const int DefaultMaxToolScreenshotsInModelContext = 2;
     internal const string ToolScreenshotCaption =
         "[Computer Use screenshot returned by the preceding tool result.]";
 
@@ -13,179 +11,43 @@ internal static class ModelMessageBuilder
     public static List<AgentModelMessage> BuildForSession(
         string environmentPrompt,
         IReadOnlyList<ChatMessage> history,
-        bool includeReasoningInModelContext) =>
-        BuildModelMessages(environmentPrompt, history, includeReasoningInModelContext);
+        bool includeReasoningInModelContext,
+        bool stripUiTrees = false) =>
+        BuildModelMessages(environmentPrompt, history, includeReasoningInModelContext, stripUiTrees);
 
     public static List<AgentModelMessage> BuildModelMessages(
         string environmentPrompt,
         IReadOnlyList<ChatMessage> history,
-        bool includeReasoningInModelContext = false)
+        bool includeReasoningInModelContext = false,
+        bool stripUiTrees = false)
     {
         var messages = new List<AgentModelMessage>
         {
             new("system", environmentPrompt)
         };
 
-        AppendHistoryRange(messages, history, 0, includeReasoningInModelContext);
+        AppendHistoryRange(messages, history, 0, includeReasoningInModelContext, stripUiTrees);
         return messages;
-    }
-
-    /// <summary>
-    /// Keeps at most <paramref name="maxImages"/> tool screenshots in the API payload
-    /// (newest first). Computer Use and Browser captions share this quota. Older
-    /// tool-screenshot user messages are removed; user-uploaded images are left untouched.
-    /// Values below 0 are treated as 0.
-    /// </summary>
-    public static void RetainLatestToolScreenshots(
-        List<AgentModelMessage> messages,
-        int maxImages = DefaultMaxToolScreenshotsInModelContext)
-    {
-        if (messages.Count == 0)
-        {
-            return;
-        }
-
-        maxImages = Math.Max(0, maxImages);
-        var keptImages = 0;
-        for (var index = messages.Count - 1; index >= 0; index--)
-        {
-            var message = messages[index];
-            if (!TryGetToolScreenshotParts(message, out var parts))
-            {
-                continue;
-            }
-
-            var imageIndexes = new List<int>();
-            for (var partIndex = 0; partIndex < parts.Count; partIndex++)
-            {
-                if (IsImageUrlPart(parts[partIndex]))
-                {
-                    imageIndexes.Add(partIndex);
-                }
-            }
-
-            if (imageIndexes.Count == 0)
-            {
-                continue;
-            }
-
-            if (keptImages >= maxImages)
-            {
-                messages.RemoveAt(index);
-                continue;
-            }
-
-            var remaining = maxImages - keptImages;
-            if (imageIndexes.Count <= remaining)
-            {
-                keptImages += imageIndexes.Count;
-                continue;
-            }
-
-            // Keep the newest images within this message (last image_url parts).
-            var dropCount = imageIndexes.Count - remaining;
-            for (var drop = 0; drop < dropCount; drop++)
-            {
-                parts.RemoveAt(imageIndexes[drop]);
-            }
-
-            // Re-resolve after removals: text + remaining images.
-            if (CountImageUrlParts(parts) == 0)
-            {
-                messages.RemoveAt(index);
-                continue;
-            }
-
-            messages[index] = message with { Content = parts };
-            keptImages += remaining;
-        }
-    }
-
-    private static bool TryGetToolScreenshotParts(
-        AgentModelMessage message,
-        out List<object> parts)
-    {
-        parts = null!;
-        if (!string.Equals(message.Role, "user", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        if (message.Content is not IEnumerable<object> contentParts)
-        {
-            return false;
-        }
-
-        var list = contentParts as List<object> ?? contentParts.ToList();
-        if (list.Count == 0 || !IsToolScreenshotCaption(list[0]))
-        {
-            return false;
-        }
-
-        parts = list;
-        return true;
-    }
-
-    private static bool IsToolScreenshotCaption(object part) =>
-        IsTextPart(part, ToolScreenshotCaption) || IsTextPart(part, BrowserScreenshotCaption);
-
-    private static bool IsTextPart(object part, string expectedText)
-    {
-        if (part is IDictionary<string, object?> map)
-        {
-            return map.TryGetValue("type", out var typeObj)
-                && typeObj is string type
-                && string.Equals(type, "text", StringComparison.Ordinal)
-                && map.TryGetValue("text", out var textObj)
-                && textObj is string text
-                && string.Equals(text, expectedText, StringComparison.Ordinal);
-        }
-
-        return false;
-    }
-
-    private static bool IsImageUrlPart(object part)
-    {
-        if (part is IDictionary<string, object?> map
-            && map.TryGetValue("type", out var typeObj)
-            && typeObj is string type)
-        {
-            return string.Equals(type, "image_url", StringComparison.Ordinal);
-        }
-
-        return false;
-    }
-
-    private static int CountImageUrlParts(IReadOnlyList<object> parts)
-    {
-        var count = 0;
-        foreach (var part in parts)
-        {
-            if (IsImageUrlPart(part))
-            {
-                count++;
-            }
-        }
-
-        return count;
     }
 
     public static int AppendHistoryMessage(
         List<AgentModelMessage> messages,
         IReadOnlyList<ChatMessage> history,
         int index,
-        bool includeReasoningInModelContext) =>
-        AppendHistoryMessageCore(messages, history, index, includeReasoningInModelContext);
+        bool includeReasoningInModelContext,
+        bool stripUiTrees = false) =>
+        AppendHistoryMessageCore(messages, history, index, includeReasoningInModelContext, stripUiTrees);
 
     private static void AppendHistoryRange(
         List<AgentModelMessage> messages,
         IReadOnlyList<ChatMessage> history,
         int startIndex,
-        bool includeReasoningInModelContext)
+        bool includeReasoningInModelContext,
+        bool stripUiTrees)
     {
         for (var index = startIndex; index < history.Count; index++)
         {
-            index = AppendHistoryMessageCore(messages, history, index, includeReasoningInModelContext);
+            index = AppendHistoryMessageCore(messages, history, index, includeReasoningInModelContext, stripUiTrees);
         }
     }
 
@@ -193,7 +55,8 @@ internal static class ModelMessageBuilder
         List<AgentModelMessage> messages,
         IReadOnlyList<ChatMessage> history,
         int index,
-        bool includeReasoningInModelContext)
+        bool includeReasoningInModelContext,
+        bool stripUiTrees)
     {
         var message = history[index];
         switch (message.Role)
@@ -204,7 +67,7 @@ internal static class ModelMessageBuilder
                 messages.Add(new AgentModelMessage("user", BuildUserContent(message)));
                 return index;
             case MessageRole.Assistant:
-                return AppendAssistantModelMessages(messages, history, index, includeReasoningInModelContext);
+                return AppendAssistantModelMessages(messages, history, index, includeReasoningInModelContext, stripUiTrees);
             case MessageRole.Tool:
             {
                 if (IsRunningToolResult(message.Content))
@@ -215,14 +78,11 @@ internal static class ModelMessageBuilder
                 var toolCallId = ExtractToolCallId(message.Content);
                 if (toolCallId is not null)
                 {
-                    var stripped = StripToolCallIdAndMetadata(message.Content);
-                    messages.Add(new AgentModelMessage("tool", stripped, toolCallId));
-                    AppendToolImageMessage(messages, message);
+                    messages.Add(new AgentModelMessage("tool", HistoryToolBody(message.Content, stripUiTrees), toolCallId));
                 }
                 else
                 {
-                    messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(message.Content)));
-                    AppendToolImageMessage(messages, message);
+                    messages.Add(new AgentModelMessage("user", HistoryToolBody(FormatToolResultAsUserContent(message.Content), stripUiTrees)));
                 }
                 return index;
             }
@@ -345,7 +205,8 @@ internal static class ModelMessageBuilder
         List<AgentModelMessage> messages,
         IReadOnlyList<ChatMessage> history,
         int assistantIndex,
-        bool includeReasoningInModelContext)
+        bool includeReasoningInModelContext,
+        bool stripUiTrees)
     {
         var message = history[assistantIndex];
         var toolCalls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
@@ -394,23 +255,12 @@ internal static class ModelMessageBuilder
         }
 
         messages.Add(new AgentModelMessage("assistant", message.Content, ToolCalls: toolCalls, ReasoningContent: reasoningContent));
-        var toolImageMessages = new List<ChatMessage>();
         foreach (var toolCall in toolCalls)
         {
             var rawContent = toolByCallId.TryGetValue(toolCall.Id, out var toolMessage)
                 ? toolMessage.Content
                 : "Tool did not run or the result was not recorded.";
-            var content = StripToolCallIdAndMetadata(rawContent);
-            messages.Add(new AgentModelMessage("tool", content, toolCall.Id));
-            if (toolMessage?.ImageAttachments is { Count: > 0 })
-            {
-                toolImageMessages.Add(toolMessage);
-            }
-        }
-
-        foreach (var toolImageMessage in toolImageMessages)
-        {
-            AppendToolImageMessage(messages, toolImageMessage);
+            messages.Add(new AgentModelMessage("tool", HistoryToolBody(rawContent, stripUiTrees), toolCall.Id));
         }
 
         var consumed = new HashSet<string>(toolCalls.Select(call => call.Id), StringComparer.Ordinal);
@@ -422,8 +272,9 @@ internal static class ModelMessageBuilder
                 continue;
             }
 
-            messages.Add(new AgentModelMessage("user", FormatToolResultAsUserContent(toolMessage.Content)));
-            AppendToolImageMessage(messages, toolMessage);
+            messages.Add(new AgentModelMessage(
+                "user",
+                HistoryToolBody(FormatToolResultAsUserContent(toolMessage.Content), stripUiTrees)));
         }
 
         return scanIndex - 1;
@@ -432,18 +283,117 @@ internal static class ModelMessageBuilder
     private static string FormatToolResultAsUserContent(string content) =>
         string.Join(Environment.NewLine, "[Tool output]", content);
 
-    private static void AppendToolImageMessage(List<AgentModelMessage> messages, ChatMessage toolMessage)
+    private static string HistoryToolBody(string content, bool stripUiTrees)
     {
-        if (toolMessage.ImageAttachments is not { Count: > 0 })
+        var body = StripToolCallIdAndMetadata(content);
+        return stripUiTrees ? Compaction.RequestHistoryHygiene.StripUiTree(body) : body;
+    }
+
+    /// <summary>
+    /// Appends the newest tool screenshots and, when history stored only UI-tree summaries,
+    /// the newest full trees. Both sit after history so earlier messages stay byte-stable.
+    /// </summary>
+    public static void AppendRetainedToolMedia(
+        List<AgentModelMessage> messages,
+        IReadOnlyList<ChatMessage> history,
+        int maxImages,
+        bool retainFullUiTrees,
+        int uiTreeRetention)
+    {
+        if (retainFullUiTrees && uiTreeRetention > 0)
+        {
+            var bodies = new List<string>();
+            foreach (var message in history)
+            {
+                if (message.Role != MessageRole.Tool || string.IsNullOrEmpty(message.Content))
+                {
+                    continue;
+                }
+
+                var body = StripToolCallIdAndMetadata(message.Content);
+                if (string.Equals(Compaction.RequestHistoryHygiene.StripUiTree(body), body, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                bodies.Add(body);
+            }
+
+            if (bodies.Count > uiTreeRetention)
+            {
+                bodies = bodies.GetRange(bodies.Count - uiTreeRetention, uiTreeRetention);
+            }
+
+            foreach (var body in bodies)
+            {
+                messages.Add(new AgentModelMessage(
+                    "user",
+                    "[Retained UI tree for the preceding observation.]\n" + body));
+            }
+        }
+
+        AppendRetainedScreenshots(messages, history, maxImages);
+    }
+
+    private static void AppendRetainedScreenshots(
+        List<AgentModelMessage> messages,
+        IReadOnlyList<ChatMessage> history,
+        int maxImages)
+    {
+        maxImages = Math.Max(0, maxImages);
+        var shots = new List<(ChatMessage Source, ImageAttachment Image)>();
+        foreach (var message in history)
+        {
+            if (message.Role != MessageRole.Tool || message.ImageAttachments is not { Count: > 0 } images)
+            {
+                continue;
+            }
+
+            foreach (var image in images)
+            {
+                shots.Add((message, image));
+            }
+        }
+
+        if (shots.Count > maxImages)
+        {
+            shots = shots.GetRange(shots.Count - maxImages, maxImages);
+        }
+
+        ChatMessage? current = null;
+        var batch = new List<ImageAttachment>();
+        foreach (var shot in shots)
+        {
+            if (current is not null && !ReferenceEquals(current, shot.Source))
+            {
+                AppendToolImageMessage(messages, batch);
+                batch = [];
+            }
+
+            current = shot.Source;
+            batch.Add(shot.Image);
+        }
+
+        if (current is not null && batch.Count > 0)
+        {
+            AppendToolImageMessage(messages, batch);
+        }
+    }
+
+    private static void AppendToolImageMessage(
+        List<AgentModelMessage> messages,
+        IReadOnlyList<ImageAttachment> images)
+    {
+        if (images.Count == 0)
         {
             return;
         }
 
-        var caption = toolMessage.ImageAttachments.Any(image =>
+        var caption = images.Any(image =>
             image.FileName.StartsWith(Browser.BrowserFrameFiles.Prefix, StringComparison.Ordinal))
             ? BrowserScreenshotCaption
             : ToolScreenshotCaption;
-        var parts = BuildImageContentParts(caption, toolMessage.ImageAttachments);
+        var parts = BuildImageContentParts(caption, images);
         if (parts.Count > 1)
         {
             messages.Add(new AgentModelMessage("user", parts));

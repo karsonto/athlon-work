@@ -22,12 +22,15 @@ public sealed class HarnessPlanningSectionTests
     }
 
     [Fact]
-    public void Append_Skips_WhenNoTodoTool()
+    public void Append_AgentMode_StaysWhenTodoToolIsAbsent()
     {
-        var builder = new StringBuilder();
-        new HarnessPlanningSection().Append(builder, CreateContext(SessionAgentMode.Agent, includeTodo: false));
+        var withTodo = new StringBuilder();
+        var withoutTodo = new StringBuilder();
+        new HarnessPlanningSection().Append(withTodo, CreateContext(SessionAgentMode.Agent));
+        new HarnessPlanningSection().Append(withoutTodo, CreateContext(SessionAgentMode.Agent, includeTodo: false));
 
-        Assert.Equal(string.Empty, builder.ToString());
+        Assert.Equal(withTodo.ToString(), withoutTodo.ToString());
+        Assert.Contains("todo_write", withoutTodo.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

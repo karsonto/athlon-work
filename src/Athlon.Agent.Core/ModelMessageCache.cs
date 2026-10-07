@@ -11,6 +11,7 @@ public sealed class ModelMessageCache
     private List<AgentModelMessage>? _messages;
     private string? _environmentPrompt;
     private bool _includeReasoning;
+    private bool _stripUiTrees;
     private int _processedHistoryCount;
     private List<AgentModelMessage>? _hygienizedPrefix;
     private int _hygienizedMessageCount;
@@ -109,13 +110,15 @@ public sealed class ModelMessageCache
     public List<AgentModelMessage> Build(
         string environmentPrompt,
         IReadOnlyList<ChatMessage> history,
-        bool includeReasoningInModelContext)
+        bool includeReasoningInModelContext,
+        bool stripUiTrees = false)
     {
         lock (_buildLock)
         {
             if (_messages is not null
                 && string.Equals(_environmentPrompt, environmentPrompt, StringComparison.Ordinal)
                 && _includeReasoning == includeReasoningInModelContext
+                && _stripUiTrees == stripUiTrees
                 && history.Count >= _processedHistoryCount)
             {
                 if (history.Count == _processedHistoryCount)
@@ -129,16 +132,22 @@ public sealed class ModelMessageCache
                         _messages,
                         history,
                         index,
-                        includeReasoningInModelContext);
+                        includeReasoningInModelContext,
+                        stripUiTrees);
                 }
 
                 _processedHistoryCount = history.Count;
                 return _messages;
             }
 
-            _messages = ModelMessageBuilder.BuildForSession(environmentPrompt, history, includeReasoningInModelContext);
+            _messages = ModelMessageBuilder.BuildForSession(
+                environmentPrompt,
+                history,
+                includeReasoningInModelContext,
+                stripUiTrees);
             _environmentPrompt = environmentPrompt;
             _includeReasoning = includeReasoningInModelContext;
+            _stripUiTrees = stripUiTrees;
             _processedHistoryCount = history.Count;
             return _messages;
         }

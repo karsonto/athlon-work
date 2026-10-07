@@ -39,10 +39,7 @@ public sealed class WorkspacePolicySection : IEnvironmentPromptSection
         builder.AppendLine("When using relative paths, use src/foo.cs. Avoid prefixing with the workspace label/.");
         builder.AppendLine("The workspace label is informational, not a path prefix. Exact root/name are in runtime context.");
         builder.AppendLine("Workspace contents are intentionally not embedded in this prompt because they change often.");
-        if (PromptModeHelper.HasTool(context, "file_list"))
-        {
-            builder.AppendLine("Use file_list to fetch a live directory listing when needed.");
-        }
+        builder.AppendLine("Use file_list when it is advertised to fetch a live directory listing.");
 
         builder.AppendLine();
     }

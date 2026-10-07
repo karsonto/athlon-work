@@ -14,22 +14,24 @@ public static class ModelMessagesForApiBuilder
         RuntimeContextInjectionState? runtimeContextState = null,
         string? tokenBudgetNotice = null)
     {
+        var stripUiTrees = compaction.RequestHistoryHygiene.PruneHistoricalUiTree;
         List<AgentModelMessage> messages;
         if (cache is not null)
         {
-            messages = cache.Build(environmentPrompt, history, compaction.IncludeReasoningInModelContext);
+            messages = cache.Build(
+                environmentPrompt,
+                history,
+                compaction.IncludeReasoningInModelContext,
+                stripUiTrees);
         }
         else
         {
             messages = ModelMessageBuilder.BuildForSession(
                 environmentPrompt,
                 history,
-                compaction.IncludeReasoningInModelContext);
+                compaction.IncludeReasoningInModelContext,
+                stripUiTrees);
         }
-
-        ModelMessageBuilder.RetainLatestToolScreenshots(
-            messages,
-            compaction.MaxToolScreenshotsInModelContext);
 
         var hygieneResult = cache is not null
             ? cache.ApplyHygiene(compaction.RequestHistoryHygiene)
@@ -65,6 +67,15 @@ public static class ModelMessagesForApiBuilder
                     hygieneResult.EstimatedSavingsTokens);
             }
         }
+
+        var withMedia = result.Messages.ToList();
+        ModelMessageBuilder.AppendRetainedToolMedia(
+            withMedia,
+            history,
+            compaction.MaxToolScreenshotsInModelContext,
+            stripUiTrees,
+            compaction.RequestHistoryHygiene.HistoryUiTreeRetention);
+        result = new RequestHistoryHygiene.ApplyResult(withMedia, result.EstimatedSavingsTokens);
 
         if (string.IsNullOrWhiteSpace(tokenBudgetNotice))
         {

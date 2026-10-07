@@ -3,6 +3,7 @@ using Athlon.Agent.App.Services;
 using Athlon.Agent.App.Services.ComputerUse;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Browser;
 using Athlon.Agent.Core.Streaming;
 using Athlon.Agent.Infrastructure;
@@ -142,8 +143,9 @@ public sealed class BrowserScreenshotTests
     }
 
     [Fact]
-    public void RetainLatestToolScreenshots_keeps_newest_browser_shots_inside_shared_quota()
+    public void Retained_screenshots_append_after_history_and_keep_newest_two()
     {
+        var cache = new ModelMessageCache();
         var history = new List<ChatMessage>
         {
             ChatMessage.Create(MessageRole.User, "look at the page")
@@ -157,19 +159,19 @@ public sealed class BrowserScreenshotTests
         history.AddRange(Shot("call-2", "browser_screenshot", "browser-frame-2.png", "data:image/png;base64,MID"));
         history.AddRange(Shot("call-3", "browser_screenshot", "browser-frame-3.png", "data:image/png;base64,NEW"));
 
-        var messages = ModelMessageBuilder.BuildModelMessages("system", history);
-        ModelMessageBuilder.RetainLatestToolScreenshots(messages, maxImages: 2);
+        var settings = new ContextCompactionSettings();
+        var state = new RuntimeContextInjectionState();
+        var first = ModelMessagesForApiBuilder.Build(cache, "system", history, settings, "runtime", state);
+        Assert.True(state.FingerprintChanged);
+        AssertRetainedShots(first.Messages, "data:image/png;base64,MID", "data:image/png;base64,NEW");
+        var firstToolText = ToolTexts(first.Messages);
 
-        var screenshots = messages.Where(IsToolScreenshot).ToArray();
-        Assert.Equal(2, screenshots.Length);
-        Assert.All(screenshots, message =>
-            Assert.Equal(ModelMessageBuilder.BrowserScreenshotCaption, FirstText(message)));
-        var urls = messages.SelectMany(ImageUrls).ToArray();
-        Assert.Contains("data:image/png;base64,MID", urls);
-        Assert.Contains("data:image/png;base64,NEW", urls);
-        Assert.Contains("data:image/png;base64,USER", urls);
-        Assert.DoesNotContain("data:image/png;base64,OLD", urls);
-        Assert.DoesNotContain("data:image/png;base64,CU", urls);
+        history.AddRange(Shot("call-4", "browser_screenshot", "browser-frame-4.png", "data:image/png;base64,NEWER"));
+        var second = ModelMessagesForApiBuilder.Build(cache, "system", history, settings, "runtime", state);
+
+        Assert.False(state.FingerprintChanged);
+        Assert.Equal(firstToolText, ToolTexts(second.Messages).Take(firstToolText.Count));
+        AssertRetainedShots(second.Messages, "data:image/png;base64,NEW", "data:image/png;base64,NEWER");
     }
 
     [Fact]
@@ -269,6 +271,38 @@ public sealed class BrowserScreenshotTests
             toolContent,
             imageAttachments: [new ImageAttachment(fileName, "image/png", DataUrl: dataUrl)]);
     }
+
+    private static void AssertRetainedShots(IReadOnlyList<AgentModelMessage> messages, params string[] expectedUrls)
+    {
+        var runtimeIndex = messages.ToList().FindIndex(message => Equals(message.Content, "runtime"));
+        Assert.True(runtimeIndex > 0);
+
+        var listed = messages.ToList();
+        var screenshots = messages.Where(IsToolScreenshot).ToArray();
+        Assert.Equal(expectedUrls.Length, screenshots.Length);
+        Assert.All(screenshots, message =>
+        {
+            Assert.Equal(ModelMessageBuilder.BrowserScreenshotCaption, FirstText(message));
+            Assert.True(listed.IndexOf(message) > runtimeIndex);
+        });
+
+        Assert.Contains(
+            messages.Take(runtimeIndex).SelectMany(ImageUrls),
+            url => url == "data:image/png;base64,USER");
+        var suffixUrls = messages.Skip(runtimeIndex + 1).SelectMany(ImageUrls).ToArray();
+        Assert.Equal(expectedUrls, suffixUrls);
+        var urls = messages.SelectMany(ImageUrls).ToArray();
+        Assert.DoesNotContain("data:image/png;base64,OLD", urls);
+        Assert.DoesNotContain("data:image/png;base64,CU", urls);
+        Assert.All(messages.Where(message => message.Role == "tool"), message =>
+            Assert.DoesNotContain("data:image/png;base64,", Assert.IsType<string>(message.Content), StringComparison.Ordinal));
+    }
+
+    private static IReadOnlyList<string> ToolTexts(IReadOnlyList<AgentModelMessage> messages) =>
+        messages
+            .Where(message => message.Role == "tool")
+            .Select(message => Assert.IsType<string>(message.Content))
+            .ToArray();
 
     private static bool IsToolScreenshot(AgentModelMessage message)
     {
