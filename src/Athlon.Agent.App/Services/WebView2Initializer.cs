@@ -35,4 +35,23 @@ internal static class WebView2Initializer
 
         await webView.EnsureCoreWebView2Async().ConfigureAwait(true);
     }
+
+    /// <summary>
+    /// Initializes a workspace Browser tab on the shared persistent profile.
+    /// Does not fall back to the executable-adjacent user data folder.
+    /// </summary>
+    public static async Task EnsureBrowserCoreWebView2Async(
+        WebView2 webView,
+        CancellationToken cancellationToken = default)
+    {
+        if (webView.CoreWebView2 is not null)
+        {
+            return;
+        }
+
+        var provider = WebView2ServiceAccess.TryResolve()
+            ?? throw new InvalidOperationException("Browser WebView2 environment is not available.");
+        var environment = await provider.GetBrowserEnvironmentAsync(cancellationToken).ConfigureAwait(true);
+        await webView.EnsureCoreWebView2Async(environment).ConfigureAwait(true);
+    }
 }

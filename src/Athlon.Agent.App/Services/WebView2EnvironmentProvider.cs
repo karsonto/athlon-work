@@ -10,12 +10,14 @@ namespace Athlon.Agent.App.Services;
 public sealed class WebView2EnvironmentProvider
 {
     private const string BundledUserDataFolderName = "bundled";
+    private const string BrowserUserDataFolderName = "browser";
 
     private readonly IAppPathProvider _paths;
     private readonly IAppLogger _logger;
     private readonly IRuntimeDiagnosticEventSink? _runtimeDiagnosticEventSink;
     private readonly object _lock = new();
     private Task<CoreWebView2Environment?>? _bundledEnvironmentTask;
+    private Task<CoreWebView2Environment>? _browserEnvironmentTask;
 
     public WebView2EnvironmentProvider(
         IAppPathProvider paths,
@@ -43,6 +45,61 @@ public sealed class WebView2EnvironmentProvider
             _bundledEnvironmentTask ??= CreateBundledEnvironmentAsync(cancellationToken);
             return _bundledEnvironmentTask;
         }
+    }
+
+    /// <summary>
+    /// Shared environment for workspace Browser tabs. Cookies and site storage stay in
+    /// <c>webview2/browser</c> under the app data root, independent of the executable path.
+    /// </summary>
+    public Task<CoreWebView2Environment> GetBrowserEnvironmentAsync(CancellationToken cancellationToken = default)
+    {
+        lock (_lock)
+        {
+            _browserEnvironmentTask ??= CreateBrowserEnvironmentAsync(cancellationToken);
+            return _browserEnvironmentTask;
+        }
+    }
+
+    internal static string BrowserUserDataFolder(string rootPath) =>
+        UserDataFolder(rootPath, BrowserUserDataFolderName);
+
+    internal static string BundledUserDataFolder(string rootPath) =>
+        UserDataFolder(rootPath, BundledUserDataFolderName);
+
+    private static string UserDataFolder(string rootPath, string modeFolderName) =>
+        Path.Combine(rootPath, "webview2", modeFolderName);
+
+    private async Task<CoreWebView2Environment> CreateBrowserEnvironmentAsync(CancellationToken cancellationToken)
+    {
+        var userData = EnsureUserDataFolder(BrowserUserDataFolderName);
+        var bundledFolder = WebView2RuntimePolicy.ShouldUseBundledRuntime()
+            ? WebView2RuntimeLocator.TryResolveBundledFolder()
+            : null;
+        if (!string.IsNullOrWhiteSpace(bundledFolder))
+        {
+            try
+            {
+                _logger.Information(
+                    "WebView2 browser profile using bundled runtime at {Folder}",
+                    bundledFolder);
+                return await CoreWebView2Environment.CreateAsync(bundledFolder, userData)
+                    .WaitAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(
+                    "Bundled WebView2 browser profile failed at {Folder}: {Error}",
+                    bundledFolder,
+                    ex.Message);
+                App.StartupTrace($"WebView2 browser bundled runtime failed ({ex.Message})");
+            }
+        }
+
+        _logger.Information("WebView2 browser profile using Evergreen runtime at {UserData}", userData);
+        return await CoreWebView2Environment.CreateAsync(null, userData)
+            .WaitAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private async Task<CoreWebView2Environment?> CreateBundledEnvironmentAsync(CancellationToken cancellationToken)
@@ -125,7 +182,7 @@ public sealed class WebView2EnvironmentProvider
 
     private string EnsureUserDataFolder(string modeFolderName)
     {
-        var userDataFolder = Path.Combine(_paths.RootPath, "webview2", modeFolderName);
+        var userDataFolder = UserDataFolder(_paths.RootPath, modeFolderName);
         Directory.CreateDirectory(userDataFolder);
         return userDataFolder;
     }

@@ -102,9 +102,10 @@ public partial class BrowserWorkspaceView : UserControl
 
         try
         {
-            await WebView2Initializer.EnsureCoreWebView2Async(BrowserWebView).ConfigureAwait(true);
+            await WebView2Initializer.EnsureBrowserCoreWebView2Async(BrowserWebView).ConfigureAwait(true);
             BrowserWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             BrowserWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            BrowserWebView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
             BrowserWebView.CoreWebView2.NavigationStarting += (_, args) =>
             {
                 if (_tab is not null)
@@ -281,6 +282,54 @@ public partial class BrowserWorkspaceView : UserControl
         {
             NavigateTo(url);
         }
+    }
+
+    private void OnNewWindowRequested(object? sender, CoreWebView2NewWindowRequestedEventArgs e)
+    {
+        // target=_blank and window.open otherwise become a WebView2 window outside the workspace.
+        e.Handled = true;
+        if (!TryGetPopupUrl(e.Uri, out var url))
+        {
+            return;
+        }
+
+        if (Dispatcher.CheckAccess())
+        {
+            OpenInWorkspaceTab(url);
+            return;
+        }
+
+        Dispatcher.BeginInvoke(() => OpenInWorkspaceTab(url));
+    }
+
+    private static void OpenInWorkspaceTab(string url)
+    {
+        try
+        {
+            if (Application.Current is App app)
+            {
+                app.Services?.GetService<WorkspacePaneViewModel>()?.OpenUrlInBrowserTab(url);
+            }
+        }
+        catch (Exception ex)
+        {
+            App.StartupTrace($"Browser popup open failed: {ex.Message}");
+        }
+    }
+
+    private static bool TryGetPopupUrl(string? uri, out string url)
+    {
+        url = string.Empty;
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out var absolute)
+            || (absolute.Scheme != Uri.UriSchemeHttp
+                && absolute.Scheme != Uri.UriSchemeHttps
+                && absolute.Scheme != Uri.UriSchemeFile))
+        {
+            return false;
+        }
+
+        url = absolute.AbsoluteUri;
+        return true;
     }
 
     private void OnNavigateRequested(object? sender, string url) => NavigateTo(url);
