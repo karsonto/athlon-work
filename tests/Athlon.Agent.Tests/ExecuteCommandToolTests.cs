@@ -1,4 +1,6 @@
+using System.Text;
 using Athlon.Agent.Core;
+using Athlon.Agent.Core.Prompt;
 using Athlon.Agent.Infrastructure;
 
 namespace Athlon.Agent.Tests;
@@ -88,6 +90,7 @@ public sealed class ExecuteCommandToolTests
     {
         Assert.Equal(3600, ExecuteCommandTool.DefaultTimeoutSeconds);
         Assert.Equal(3600, ExecuteCommandTool.MaxTimeoutSeconds);
+        Assert.Equal(30_000, BackgroundCommandRegistry.DefaultBlockUntilMs);
     }
 
     [Fact]
@@ -197,7 +200,118 @@ public sealed class ExecuteCommandToolTests
         Assert.DoesNotContain("\uFFFD", result.Content);
     }
 
-    private static ExecuteCommandTool CreateTool(string? workspaceRoot = null)
+    [Fact]
+    public async Task InvokeAsync_BlockUntilElapsed_KeepsProcessAliveUntilCommandKill()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var harness = CreateHarness();
+        harness.Sessions.SetSession("block-session");
+        var started = await harness.Execute.InvokeAsync(new ToolInvocation(
+            "execute_command",
+            new Dictionary<string, string>
+            {
+                ["command"] = "ping -n 30 127.0.0.1 >nul",
+                ["block_until_ms"] = "200"
+            }));
+
+        Assert.True(started.Succeeded, started.Error ?? started.Summary);
+        Assert.Contains("status: running", started.Content, StringComparison.Ordinal);
+        var commandId = CommandId(started.Content);
+        var immediate = await harness.Await.InvokeAsync(new ToolInvocation(
+            "command_await",
+            new Dictionary<string, string>
+            {
+                ["command_id"] = commandId,
+                ["block_until_ms"] = "0"
+            }));
+        Assert.Contains("status: running", immediate.Content, StringComparison.Ordinal);
+
+        var killed = await harness.Kill.InvokeAsync(new ToolInvocation(
+            "command_kill",
+            new Dictionary<string, string> { ["command_id"] = commandId }));
+        Assert.True(killed.Succeeded, killed.Error ?? killed.Summary);
+
+        var finished = await harness.Await.InvokeAsync(new ToolInvocation(
+            "command_await",
+            new Dictionary<string, string>
+            {
+                ["command_id"] = commandId,
+                ["block_until_ms"] = "10000"
+            }));
+        Assert.Contains("command_id: " + commandId, finished.Error ?? finished.Content, StringComparison.Ordinal);
+        Assert.Contains("killed", (finished.Error ?? finished.Content) ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BackgroundCommand_ExitAppearsInRuntimeContext()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var harness = CreateHarness();
+        var session = AgentSession.Create("background-exit");
+        harness.Sessions.SetSession(session.Id);
+        var started = await harness.Execute.InvokeAsync(new ToolInvocation(
+            "execute_command",
+            new Dictionary<string, string>
+            {
+                ["command"] = "ping -n 2 127.0.0.1",
+                ["block_until_ms"] = "100"
+            }));
+
+        Assert.True(started.Succeeded, started.Error ?? started.Summary);
+        if (!started.Content!.Contains("status: running", StringComparison.Ordinal))
+        {
+            Assert.Contains("exited 0", started.Summary, StringComparison.OrdinalIgnoreCase);
+            return;
+        }
+
+        var commandId = CommandId(started.Content);
+
+        var finished = await harness.Await.InvokeAsync(new ToolInvocation(
+            "command_await",
+            new Dictionary<string, string>
+            {
+                ["command_id"] = commandId,
+                ["block_until_ms"] = "15000"
+            }));
+        var finishedText = finished.Content ?? finished.Error ?? string.Empty;
+        Assert.Contains("exit_code: 0", finishedText, StringComparison.Ordinal);
+
+        var builder = new StringBuilder();
+        new BackgroundCommandPromptContributor(harness.Registry, new AgentRunContextAccessor())
+            .Append(builder, new EnvironmentPromptContext
+            {
+                Session = session,
+                Tools = Array.Empty<ToolDefinition>(),
+                SkillsDirectory = @"C:\skills",
+                Host = new PromptTestHelpers.FakeHostEnvironment(@"C:\skills", @"C:\app"),
+                PromptSettings = new PromptSettings()
+            });
+        var reminder = builder.ToString();
+        Assert.Contains(commandId, reminder, StringComparison.Ordinal);
+        Assert.Contains("exit_code: 0", reminder, StringComparison.Ordinal);
+    }
+
+    private static string CommandId(string? content)
+    {
+        const string prefix = "command_id: ";
+        var line = Assert.IsType<string>(content)
+            .Split('\n')
+            .First(item => item.StartsWith(prefix, StringComparison.Ordinal));
+        return line[prefix.Length..].Trim();
+    }
+
+    private static ExecuteCommandTool CreateTool(string? workspaceRoot = null) =>
+        CreateHarness(workspaceRoot).Execute;
+
+    private static CommandHarness CreateHarness(string? workspaceRoot = null)
     {
         var root = Path.Combine(Path.GetTempPath(), $".athlon-agent-exec-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -211,8 +325,23 @@ public sealed class ExecuteCommandToolTests
         }
 
         var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), paths);
-        return new ExecuteCommandTool(new AppSettings(), guard, audit, new ExecuteCommandProcessRegistry());
+        var processes = new ExecuteCommandProcessRegistry();
+        var registry = new BackgroundCommandRegistry(processes);
+        var sessions = new ActiveAgentSessionContext();
+        return new CommandHarness(
+            new ExecuteCommandTool(new AppSettings(), guard, audit, processes, registry, sessions),
+            new CommandAwaitTool(registry, sessions),
+            new CommandKillTool(registry, sessions),
+            registry,
+            sessions);
     }
+
+    private sealed record CommandHarness(
+        ExecuteCommandTool Execute,
+        CommandAwaitTool Await,
+        CommandKillTool Kill,
+        BackgroundCommandRegistry Registry,
+        ActiveAgentSessionContext Sessions);
 
     private sealed class NoOpLogger : IAppLogger
     {

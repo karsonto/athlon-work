@@ -189,6 +189,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RuntimeDiagnosticEventSink>();
         services.AddSingleton<IRuntimeDiagnosticEventSink>(sp => sp.GetRequiredService<RuntimeDiagnosticEventSink>());
         services.AddSingleton<ExecuteCommandProcessRegistry>();
+        services.AddSingleton<BackgroundCommandRegistry>();
         services.AddSingleton<IAgentTool, FileListTool>();
         services.AddSingleton<IAgentTool, FileReadTool>();
         services.AddSingleton<IAgentTool, FileWriteTool>();
@@ -200,6 +201,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Plan.PublishPlanTool>();
         services.AddSingleton<IAgentTool, Athlon.Agent.Infrastructure.Plan.AskUserTool>();
         services.AddSingleton<IAgentTool, ExecuteCommandTool>();
+        services.AddSingleton<IAgentTool, CommandAwaitTool>();
+        services.AddSingleton<IAgentTool, CommandKillTool>();
         services.AddSingleton<IAgentTool, SshFileListTool>();
         services.AddSingleton<IAgentTool, SshFileReadTool>();
         services.AddSingleton<IAgentTool, SshFileWriteTool>();
@@ -292,6 +295,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IAgentTool, SessionNoteReadTool>();
         services.AddSingleton<IAgentTool, RequestContextCompactTool>();
         services.AddSingleton<IAgentTool, TodoWriteTool>();
+        services.AddSingleton<IRuntimeContextContributor, BackgroundCommandPromptContributor>();
         services.AddSingleton<IRuntimeContextContributor, HostWorkspaceRuntimeContributor>();
         services.AddSingleton<IRuntimeContextContributor, DebugRuntimeContextContributor>();
         services.AddSingleton<IRuntimeContextContributor, PlanRuntimeContextContributor>();

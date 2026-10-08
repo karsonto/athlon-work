@@ -243,6 +243,7 @@ public static class SemanticCutoffPlanner
         PlanContinuePrompt.IsPlanContinueMessage(message)
         || PlanPublishRepairPrompt.IsRepairMessage(message)
         || SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
+        || BackgroundCommandAutoContinuePrompt.IsAutoContinueMessage(message)
         || ApprovedPlanPrompt.IsApprovedPlanMessage(message)
         || SessionHandoffNote.IsHandoffMessage(message);
 

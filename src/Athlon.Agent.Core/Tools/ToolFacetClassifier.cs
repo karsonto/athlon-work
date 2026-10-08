@@ -20,7 +20,9 @@ public static class ToolFacetClassifier
 
     private static readonly HashSet<string> ShellToolNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "execute_command"
+        "execute_command",
+        "command_await",
+        "command_kill"
     };
 
     public static ToolFacet Classify(IAgentTool tool)

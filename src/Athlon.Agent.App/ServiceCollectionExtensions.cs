@@ -87,6 +87,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISubAgentCompletionNotifier>(sp =>
             sp.GetRequiredService<SubAgentCompletionContinuationService>());
 
+        services.AddSingleton<BackgroundCommandContinuationService>();
+
+        services.AddSingleton<IBackgroundCommandCompletionNotifier>(sp =>
+            sp.GetRequiredService<BackgroundCommandContinuationService>());
+
         services.AddSingleton<IPlanContinuationTracker, PlanContinuationTracker>();
 
         services.AddSingleton<PlanExecutionContinuationService>();

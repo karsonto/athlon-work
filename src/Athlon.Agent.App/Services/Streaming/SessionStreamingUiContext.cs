@@ -222,6 +222,8 @@ public sealed class SessionStreamingUiContext
         if (SummaryMessageBuilder.IsSummaryMessage(message)
             || message.Role == MessageRole.User
                 && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
+            || message.Role == MessageRole.User
+                && BackgroundCommandAutoContinuePrompt.IsAutoContinueMessage(message)
             || ApprovedPlanPrompt.IsApprovedPlanMessage(message)
             || PlanContinuePrompt.IsPlanContinueMessage(message)
             || PlanPublishRepairPrompt.IsRepairMessage(message))

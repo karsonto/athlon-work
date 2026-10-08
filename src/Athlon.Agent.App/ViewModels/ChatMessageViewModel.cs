@@ -49,6 +49,7 @@ public sealed partial class ChatMessageViewModel : ObservableObject
             ? false
             : SummaryMessageBuilder.IsSummaryMessage(message)
             || IsUser && SubAgentAutoContinuePrompt.IsAutoContinueMessage(message)
+            || IsUser && BackgroundCommandAutoContinuePrompt.IsAutoContinueMessage(message)
             || ApprovedPlanPrompt.IsApprovedPlanMessage(message)
             || PlanContinuePrompt.IsPlanContinueMessage(message)
             || PlanPublishRepairPrompt.IsRepairMessage(message)

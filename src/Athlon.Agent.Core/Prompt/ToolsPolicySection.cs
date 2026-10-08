@@ -127,6 +127,7 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
         builder.AppendLine("  5. Shell: when execute_command is advertised, cmd.exe only, not PowerShell; quote paths with spaces or non-ASCII and source workspace paths from tool results.");
 
         builder.AppendLine("- When execute_command is advertised, skill scripts use absolute paths from each skill's files-root; execute_command cwd defaults to workspace root.");
+        builder.AppendLine("- When execute_command is advertised, block_until_ms defaults to 30000 and only returns control. Servers and watch use 0. Builds and tests that may run longer stay in the background; read them with command_await or the completion reminder. timeout still stops the process.");
 
         builder.AppendLine("- Interactive CLI agents in the workspace Terminal tab: when terminal_open, terminal_send_input, or terminal_read_output are advertised, see runtime context for terminal_* rules; use execute_command only for one-off non-interactive shell commands.");
 

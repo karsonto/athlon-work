@@ -96,6 +96,9 @@ public partial class App : Application
             SessionSwitchHotspotProfiler.Initialize();
             ChatRenderTrace.Initialize(_services.GetService<IAppLogger>());
             _services.GetRequiredService<SubAgentCompletionContinuationService>();
+            var commandRegistry = _services.GetRequiredService<BackgroundCommandRegistry>();
+            commandRegistry.SetNotifier(_services.GetRequiredService<IBackgroundCommandCompletionNotifier>());
+            _services.GetRequiredService<BackgroundCommandContinuationService>();
             _services.GetRequiredService<PlanExecutionContinuationService>();
 
             if (startupSettings.SubAgent.Enabled)
