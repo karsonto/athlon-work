@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Json;
 using Athlon.Agent.Core;
 using Athlon.Agent.Core.RuntimeDiagnostics;
@@ -35,7 +36,7 @@ public sealed class OpenAiCompatibleChatModelClient(
             {
                 return await CompleteOpenAiCompatibleAsync(request, apiKey, stream: true, onTextDelta, onReasoningDelta, onToolCallDelta, cancellationToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (ex is not OperationCanceledException && !IsForbidden(ex))
             {
                 _logger.Warning(
                     "Streaming completion failed, fallback to non-stream mode: {Message} (AllowToolCalls={AllowToolCalls})",
@@ -107,7 +108,10 @@ public sealed class OpenAiCompatibleChatModelClient(
                     sessionId ?? "(none)",
                     requestId,
                     HttpLogSanitizer.Truncate(responseBody) ?? string.Empty);
-                throw new HttpRequestException($"{error}. Body: {HttpLogSanitizer.Truncate(responseBody)}");
+                throw new HttpRequestException(
+                    $"{error}. Body: {HttpLogSanitizer.Truncate(responseBody)}",
+                    inner: null,
+                    statusCode: response.StatusCode);
             }
 
             if (stream)
@@ -178,6 +182,9 @@ public sealed class OpenAiCompatibleChatModelClient(
             }
         }
     }
+
+    private static bool IsForbidden(Exception exception) =>
+        exception is HttpRequestException { StatusCode: HttpStatusCode.Forbidden };
 
     private async Task EnqueueDiagnosticAsync(
         string? sessionId,

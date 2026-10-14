@@ -349,6 +349,28 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
     }
 
     [Fact]
+    public async Task CompleteAsync_WhenStreamingReturns403_DoesNotRetry()
+    {
+        var callCount = 0;
+        var handler = new StubHttpMessageHandler(_ =>
+        {
+            callCount++;
+            return new HttpResponseMessage(HttpStatusCode.Forbidden)
+            {
+                Content = new StringContent("{\"error\":\"forbidden\"}", Encoding.UTF8, "application/json")
+            };
+        });
+
+        var client = CreateClient(handler, enableStreaming: true);
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => client.CompleteAsync(
+            new AgentModelRequest(new[] { new AgentModelMessage("user", "hi") }, Array.Empty<ToolDefinition>())));
+
+        Assert.Equal(HttpStatusCode.Forbidden, ex.StatusCode);
+        Assert.Equal(1, callCount);
+    }
+
+    [Fact]
     public async Task CompleteAsync_StreamRequested_WithNonSseContentType_FallsBackToJsonParsing()
     {
         var streamFlags = new List<bool>();

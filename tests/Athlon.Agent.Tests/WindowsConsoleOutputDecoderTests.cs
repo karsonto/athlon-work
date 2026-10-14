@@ -49,4 +49,45 @@ public sealed class WindowsConsoleOutputDecoderTests
 
         Assert.Equal("错误输出", decoded);
     }
+
+    [Theory]
+    [InlineData("完成")]
+    [InlineData("成功")]
+    [InlineData("你好世界")]
+    [InlineData("ok 完成")]
+    [InlineData("用户名：admin")]
+    public void DecodeLine_Utf8Chinese_StaysUtf8WhenGbkDecodeIsLonger(string text)
+    {
+        var gbk = Gbk();
+        var decoded = WindowsConsoleOutputDecoder.DecodeLine(Encoding.UTF8.GetBytes(text), gbk);
+
+        Assert.Equal(text, decoded);
+    }
+
+    [Fact]
+    public void DecodeLine_GbkCmdError_WithExplicit936_ReturnsChinese()
+    {
+        var gbk = Gbk();
+        var text = "'head' 不是内部或外部命令，也不是可运行的程序或批处理文件。";
+
+        var decoded = WindowsConsoleOutputDecoder.DecodeLine(gbk.GetBytes(text), gbk);
+
+        Assert.Equal(text, decoded);
+    }
+
+    [Fact]
+    public void DecodeLine_GbkCharacterThatIsAlsoValidUtf8_StaysGbk()
+    {
+        var gbk = Gbk();
+
+        var decoded = WindowsConsoleOutputDecoder.DecodeLine(gbk.GetBytes("山"), gbk);
+
+        Assert.Equal("山", decoded);
+    }
+
+    private static Encoding Gbk()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        return Encoding.GetEncoding(936);
+    }
 }

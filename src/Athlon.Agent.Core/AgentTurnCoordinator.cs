@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http;
 using System.Diagnostics;
 using System.Text.Json;
@@ -53,7 +54,7 @@ internal sealed class AgentTurnCoordinator(
                 runtimeContext, contextSavingsTokens, initialAttemptId, null, cancellationToken).ConfigureAwait(false);
             return (session, response);
         }
-        catch (HttpRequestException ex) when (AgentRuntime.IsContextLengthError(ex))
+        catch (HttpRequestException ex) when (ex.StatusCode is not HttpStatusCode.Forbidden && AgentRuntime.IsContextLengthError(ex))
         {
             var failedTokens = RequestHistoryHygiene.EstimatePayloadTokens(modelMessages);
             _logger.Warning("Context length exceeded for session {SessionId}; forcing compact before retry", session.Id);
