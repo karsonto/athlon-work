@@ -72,7 +72,9 @@ public sealed class OpenAiCompatibleChatModelClient(
         var payload = OpenAiChatRequestFactory.BuildPayload(request, settings, stream);
         var httpLogEnabled = sessionHttpLog.IsEnabled;
 
-        var sessionId = activeSessionContext.SessionId;
+        // Prefer ambient session (same conversation across turns); fall back to run context.
+        var sessionId = activeSessionContext.SessionId
+            ?? _runContextAccessor?.Current?.SessionId;
         var sw = Stopwatch.StartNew();
         string? responseBody = null;
         int? statusCode = null;
@@ -86,6 +88,11 @@ public sealed class OpenAiCompatibleChatModelClient(
             };
             httpRequest.Headers.TryAddWithoutValidation("User-Agent", "Athlon-Agent");
             httpRequest.Headers.TryAddWithoutValidation("X-Request-Id", requestId);
+            // Stable across multi-turn model calls in the same conversation (vs per-request X-Request-Id).
+            if (!string.IsNullOrWhiteSpace(sessionId))
+            {
+                httpRequest.Headers.TryAddWithoutValidation("X-Session-Id", sessionId);
+            }
             if (!string.IsNullOrWhiteSpace(apiKey))
             {
                 httpRequest.Headers.Authorization =

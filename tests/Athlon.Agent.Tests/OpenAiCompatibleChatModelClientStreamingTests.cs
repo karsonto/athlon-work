@@ -554,6 +554,7 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
             Assert.NotNull(capturedRequest);
             Assert.Null(capturedRequest!.Headers.Authorization);
             Assert.Equal("Athlon-Agent", capturedRequest.Headers.UserAgent.ToString());
+            Assert.False(capturedRequest.Headers.Contains("X-Session-Id"));
         }
         finally
         {
@@ -561,7 +562,48 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
         }
     }
 
-    private static OpenAiCompatibleChatModelClient CreateClient(HttpMessageHandler handler, bool enableStreaming)
+    [Fact]
+    public async Task CompleteAsync_AddsSessionIdHeader_WhenActiveSessionPresent()
+    {
+        HttpRequestMessage? capturedRequest = null;
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            capturedRequest = request;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "choices": [
+                        { "message": { "content": "ok" } }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+
+        var sessionContext = new ActiveAgentSessionContext();
+        using var sessionScope = sessionContext.Enter("sess-multi-turn-1");
+        var client = CreateClient(handler, enableStreaming: false, sessionContext);
+
+        var result = await client.CompleteAsync(
+            new AgentModelRequest(
+                [new AgentModelMessage("user", "hi")],
+                Array.Empty<ToolDefinition>()));
+
+        Assert.Equal("ok", result.Content);
+        Assert.NotNull(capturedRequest);
+        Assert.True(capturedRequest!.Headers.TryGetValues("X-Session-Id", out var sessionIds));
+        Assert.Equal(["sess-multi-turn-1"], sessionIds);
+        Assert.True(capturedRequest.Headers.Contains("X-Request-Id"));
+    }
+
+    private static OpenAiCompatibleChatModelClient CreateClient(
+        HttpMessageHandler handler,
+        bool enableStreaming,
+        IActiveAgentSessionContext? sessionContext = null)
     {
         var settings = new AppSettings
         {
@@ -579,7 +621,7 @@ public sealed class OpenAiCompatibleChatModelClientStreamingTests
             settings,
             new FixedCredentialStore("test-key"),
             new CaptureHttpLogService(),
-            new ActiveAgentSessionContext());
+            sessionContext ?? new ActiveAgentSessionContext());
     }
 
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
