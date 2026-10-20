@@ -515,6 +515,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
         await RefreshMcpRuntimeAsync().ConfigureAwait(true);
 
         await RefreshSessionHistoryAsync().ConfigureAwait(true);
+        await RestoreLastActiveSessionAsync().ConfigureAwait(true);
     }
 
     public ObservableCollection<ChatMessageViewModel> Messages => _activeUi.Messages;

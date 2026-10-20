@@ -328,4 +328,10 @@ public sealed class UiSettings
     /// to the bottom on every switch.
     /// </summary>
     public bool PreserveSessionUiState { get; set; } = true;
+
+    /// <summary>
+    /// Last durable chat session the user had open. Restored on cold start so the shell opens the
+    /// previous conversation instead of an empty New Chat.
+    /// </summary>
+    public string? LastActiveSessionId { get; set; }
 }

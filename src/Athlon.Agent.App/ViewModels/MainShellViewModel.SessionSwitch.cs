@@ -75,6 +75,79 @@ public partial class MainShellViewModel
     }
 
     /// <summary>
+    /// Opens the last durable conversation after cold start. Prefers
+    /// <see cref="UiSettings.LastActiveSessionId"/>, then the newest history entry.
+    /// </summary>
+    private async Task RestoreLastActiveSessionAsync()
+    {
+        var sessionId = await ResolveLastActiveSessionIdAsync().ConfigureAwait(true);
+        if (string.IsNullOrWhiteSpace(sessionId)
+            || string.Equals(sessionId, _displayedSessionId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        CurrentPage = AppPage.Chat;
+        SessionSwitchProfiler.Begin(sessionId);
+        SessionDirectoryLayout.ResetProbeStats();
+        SessionSwitchHotspotProfiler.Reset();
+        var switchStarted = Stopwatch.GetTimestamp();
+        try
+        {
+            using (SessionSwitchProfiler.Measure(SessionSwitchPhases.Prepare))
+            {
+                await PrepareSessionForSwitchAsync(_session).ConfigureAwait(true);
+            }
+
+            await LoadSessionInternalAsync(sessionId, announceLoad: false).ConfigureAwait(true);
+        }
+        finally
+        {
+            RecordDirectoryProbeStats();
+            SessionSwitchProfiler.Complete(Stopwatch.GetElapsedTime(switchStarted).TotalMilliseconds);
+        }
+    }
+
+    private async Task<string?> ResolveLastActiveSessionIdAsync()
+    {
+        var sessions = await _storage.ListSessionsAsync().ConfigureAwait(true);
+        if (sessions.Count == 0)
+        {
+            return null;
+        }
+
+        var lastActive = _appSettings.Ui.LastActiveSessionId?.Trim();
+        if (!string.IsNullOrWhiteSpace(lastActive)
+            && sessions.Any(entry => string.Equals(entry.Id, lastActive, StringComparison.Ordinal)))
+        {
+            return lastActive;
+        }
+
+        // ListSessionsAsync is ordered by UpdatedAt descending.
+        return sessions[0].Id;
+    }
+
+    private void RememberLastActiveSession(AgentSession session) =>
+        _ = RememberLastActiveSessionAsync(session);
+
+    private async Task RememberLastActiveSessionAsync(AgentSession session)
+    {
+        if (string.IsNullOrWhiteSpace(session.Id))
+        {
+            return;
+        }
+
+        // Empty startup / New Chat shells must not overwrite the last real conversation.
+        if (session.Messages.Count == 0
+            && await _storage.LoadSessionAsync(session.Id).ConfigureAwait(false) is null)
+        {
+            return;
+        }
+
+        _appSettings.Ui.LastActiveSessionId = session.Id;
+    }
+
+    /// <summary>
     /// Attributes the nested-directory index builds performed during this switch to the sample.
     /// Both the cost and the count are reported: after the index is warm the count is the useful
     /// signal (a healthy switch does at most one build), while the cost covers the residual case
@@ -100,7 +173,7 @@ public partial class MainShellViewModel
     private bool IsSessionLoadCurrent(int loadGeneration) =>
         loadGeneration == Volatile.Read(ref _sessionLoadGeneration);
 
-    private async Task LoadSessionInternalAsync(string sessionId)
+    private async Task LoadSessionInternalAsync(string sessionId, bool announceLoad = true)
     {
         var loadGeneration = Interlocked.Increment(ref _sessionLoadGeneration);
         IsLoadingSession = true;
@@ -121,7 +194,11 @@ public partial class MainShellViewModel
             if (snapshot is null)
             {
                 SetComposerStatus(null);
-                ShowShellToast(_loc["Shell_LoadConversationFailed"], ShellToastKind.Error);
+                if (announceLoad)
+                {
+                    ShowShellToast(_loc["Shell_LoadConversationFailed"], ShellToastKind.Error);
+                }
+
                 return;
             }
 
@@ -180,7 +257,10 @@ public partial class MainShellViewModel
                 }
 
                 SetComposerStatus(null);
-                ShowShellToast(_loc.Format("Shell_LoadConversationDone", snapshot.Session.Title), ShellToastKind.Success);
+                if (announceLoad)
+                {
+                    ShowShellToast(_loc.Format("Shell_LoadConversationDone", snapshot.Session.Title), ShellToastKind.Success);
+                }
 
                 // First paint is on screen: hide the loading overlay now instead of waiting for the
                 // full payload. This is the point of the two-phase load — the timeline is visible
@@ -453,6 +533,7 @@ public partial class MainShellViewModel
         RefreshPlanCard();
         QuestionBar.RefreshFromActiveSession();
         RequestRefreshSessionHistory();
+        RememberLastActiveSession(session);
     }
 
     /// <summary>

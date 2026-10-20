@@ -427,6 +427,10 @@ public partial class MainShellViewModel
         }
         _sessionNavigation.Invalidate(item.Id);
         ChatPage.ForgetComposerDraft(item.Id);
+        if (string.Equals(_appSettings.Ui.LastActiveSessionId, item.Id, StringComparison.Ordinal))
+        {
+            _appSettings.Ui.LastActiveSessionId = null;
+        }
 
         if (string.Equals(_session.Id, item.Id, StringComparison.Ordinal))
         {
