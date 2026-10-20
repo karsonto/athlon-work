@@ -302,12 +302,14 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
             return null;
         }
 
-        if (!ReferenceEquals(_pane.ActiveTab, tab))
+        var activated = !ReferenceEquals(_pane.ActiveTab, tab);
+        if (activated)
         {
             _pane.ActiveTab = tab;
         }
 
         var webView = await WaitForWebViewAsync(tab.Id, cancellationToken).ConfigureAwait(true);
+        await WaitForScreenshotReadyAsync(tab, webView, activated, cancellationToken).ConfigureAwait(true);
         var captured = fullPage
             ? await CaptureFullPagePngAsync(webView).ConfigureAwait(true)
             : await CaptureVisiblePngAsync(webView).ConfigureAwait(true);
@@ -324,12 +326,74 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
             captured.Clipped);
     }
 
+    /// <summary>
+    /// Avoids stale tool-card PNGs: wait for navigation to settle, WPF layout after tab
+    /// activation, and at least two animation frames before capturing.
+    /// </summary>
+    private static async Task WaitForScreenshotReadyAsync(
+        BrowserWorkspaceTabViewModel tab,
+        CoreWebView2 webView,
+        bool tabJustActivated,
+        CancellationToken cancellationToken)
+    {
+        // After ContentControl remounts the Browser tab, give layout/render a chance
+        // before CapturePreview / CDP would otherwise snapshot an old surface.
+        var layoutPasses = tabJustActivated ? 5 : 2;
+        for (var i = 0; i < layoutPasses; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Dispatcher.Yield(DispatcherPriority.Loaded);
+        }
+
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (tab.IsLoading && DateTime.UtcNow < deadline)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await Task.Delay(50, cancellationToken).ConfigureAwait(true);
+        }
+
+        try
+        {
+            await EvaluateScriptAwaitingPromiseAsync(
+                    webView,
+                    """
+                    (async function () {
+                      if (document.readyState === 'loading') {
+                        await new Promise(function (resolve) {
+                          document.addEventListener('DOMContentLoaded', resolve, { once: true });
+                        });
+                      }
+                      await new Promise(function (resolve) {
+                        requestAnimationFrame(function () {
+                          requestAnimationFrame(resolve);
+                        });
+                      });
+                      return true;
+                    })()
+                    """)
+                .ConfigureAwait(true);
+        }
+        catch
+        {
+            // Best-effort; still attempt the capture.
+            await Task.Delay(100, cancellationToken).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Viewport capture via CDP (not CapturePreviewAsync). Preview bitmaps can lag behind
+    /// SPA / navigation updates and show up as stale images on the tool card.
+    /// </summary>
     private static async Task<(byte[]? Bytes, bool Clipped)> CaptureVisiblePngAsync(CoreWebView2 webView)
     {
-        await using var buffer = new MemoryStream();
-        await webView.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, buffer)
-            .ConfigureAwait(true);
-        return (buffer.ToArray(), false);
+        await webView.CallDevToolsProtocolMethodAsync("Page.enable", "{}").ConfigureAwait(true);
+        var request = JsonSerializer.Serialize(new
+        {
+            format = "png",
+            fromSurface = true,
+            captureBeyondViewport = false
+        });
+        return await CaptureCdpPngAsync(webView, request, clipped: false).ConfigureAwait(true);
     }
 
     private static async Task<(byte[]? Bytes, bool Clipped)> CaptureFullPagePngAsync(CoreWebView2 webView)
@@ -349,10 +413,19 @@ public sealed class BrowserAutomationHost : IBrowserAutomationHost
         var request = JsonSerializer.Serialize(new
         {
             format = "png",
+            fromSurface = true,
             captureBeyondViewport = true,
             clip = new { x = 0, y = 0, width, height, scale = 1 }
         });
-        var shotJson = await webView.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", request)
+        return await CaptureCdpPngAsync(webView, request, clipped).ConfigureAwait(true);
+    }
+
+    private static async Task<(byte[]? Bytes, bool Clipped)> CaptureCdpPngAsync(
+        CoreWebView2 webView,
+        string requestJson,
+        bool clipped)
+    {
+        var shotJson = await webView.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", requestJson)
             .ConfigureAwait(true);
         using var shot = JsonDocument.Parse(shotJson);
         var data = shot.RootElement.TryGetProperty("data", out var dataElement)
