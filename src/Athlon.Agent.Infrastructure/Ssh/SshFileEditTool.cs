@@ -12,11 +12,7 @@ public sealed class SshFileEditTool(
 
     public ToolDefinition Definition { get; } = new(
         "file_edit",
-        "Replace exact text in a file. old_text must match the file body exactly. file_read returns that body without line-number prefixes; line numbers are only in the footer. "
-            + "For multi-line or long (>= 5 lines) old_text, prefer apply_patch — exact matching is fragile for large blocks. "
-            + "If matching fails: re-read the file, retry once with corrected old_text; after two failures switch to apply_patch "
-            + "(or file_write for small files only). Never retry the same old_text a third time. "
-            + $"For files larger than {MaxFileEditBytes / 1024} KiB, use apply_patch.",
+        ToolDescriptions.FileEdit(MaxFileEditBytes),
         ToolSchema.Object()
             .String("path", ToolPathDescriptions.WorkspaceRelativePath, required: true, minLength: 1)
             .String("old_text", "Exact substring from the file (no line-number prefixes)", required: true, minLength: 1)

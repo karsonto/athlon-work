@@ -19,9 +19,10 @@ public sealed class PlanModePromptSectionTests
         var text = sb.ToString();
         Assert.Contains("ask_user", text, StringComparison.Ordinal);
         Assert.Contains("publish_plan", text, StringComparison.Ordinal);
-        Assert.Contains("Build", text, StringComparison.Ordinal);
-        Assert.Contains("multi-turn consulting", text, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("auto-advances", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("runtime context", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("never implement", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("multi-turn consulting", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("auto-advances", text, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -40,8 +41,9 @@ public sealed class PlanModePromptSectionTests
         new AgentModeSection().Append(sb, CreateContext(SessionAgentMode.Plan));
         var text = sb.ToString();
         Assert.Contains("Plan mode", text, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("publish_plan", text, StringComparison.Ordinal);
-        Assert.Contains("ask_user", text, StringComparison.Ordinal);
+        Assert.Contains("Build", text, StringComparison.Ordinal);
+        Assert.Contains("runtime context", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("multi-turn consulting", text, StringComparison.OrdinalIgnoreCase);
     }
 
     private static EnvironmentPromptContext CreateContext(SessionAgentMode mode) =>

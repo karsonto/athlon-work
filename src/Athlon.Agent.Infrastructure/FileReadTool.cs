@@ -6,13 +6,7 @@ public sealed class FileReadTool(WorkspaceGuard guard, AuditLogService audit, Ap
 {
     public ToolDefinition Definition { get; } = new(
         "file_read",
-        "Read file content exactly as stored on disk. The body has no line-number prefixes; "
-            + "line numbers are only in the footer (start_line, end_line, next_start_line). "
-            + "Paths may be inside or outside the workspace. "
-            + "Use 1-based start_line/end_line to read in chunks; "
-            + "do not assume a single read covers the whole file. When the result has truncated:true or next_start_line, "
-            + "continue from that 1-based line. Prefer grep_files/glob_files to locate content in large files first. "
-            + "file_edit old_text must copy this body, not a line-number prefix.",
+        ToolDescriptions.FileRead,
         ToolSchema.Object()
             .String("path", "Absolute or workspace-relative file path to read.", required: true, minLength: 1)
             .Integer("start_line", "1-based start line (default 1)", defaultValue: 1, minimum: 1)

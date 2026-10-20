@@ -29,11 +29,7 @@ public sealed class TaskListPromptContributor(
         builder.AppendLine();
         builder.AppendLine("## Current Task List");
         builder.AppendLine();
-        builder.AppendLine("Your persisted todo list is shown below. Re-read it every turn and keep statuses accurate.");
-        builder.AppendLine("- Focus this turn on the current in_progress item (at most one).");
-        builder.AppendLine("- Mark completed only after verification passes.");
-        builder.AppendLine("- If scope changes, call todo_write before further edits.");
-        builder.AppendLine("- If an approved Session Plan is in context, keep work aligned with it.");
+        builder.AppendLine("Your persisted todo list is shown below. Execute against it this turn (follow Long-task discipline).");
         builder.AppendLine();
         foreach (var item in list.Items)
         {

@@ -10,8 +10,7 @@ public sealed class SshApplyPatchTool(
 {
     public ToolDefinition Definition { get; } = new(
         "apply_patch",
-        "Apply a unified diff patch to workspace files. Prefer for multi-line or fragile exact-match edits when file_edit fails. "
-            + "Patch must use standard --- / +++ / @@ headers.",
+        ToolDescriptions.ApplyPatch,
         ToolSchema.Object()
             .String("patch", "Unified diff text (--- / +++ / @@ hunks)", required: true, pattern: @"(?s)^.*--- .*")
             .String("path", "Workspace-relative path; when set, only hunks for this file are applied")

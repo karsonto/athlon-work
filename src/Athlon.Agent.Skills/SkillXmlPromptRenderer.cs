@@ -71,14 +71,11 @@ public static class SkillXmlPromptRenderer
         builder.AppendLine("## Code Execution");
         builder.AppendLine();
         builder.AppendLine("<code_execution>");
-        builder.AppendLine("You have access to execute_command. Each skill in <available_skills> includes a <files-root> element giving the absolute path to that skill's files.");
+        builder.AppendLine("Each skill in <available_skills> may include <files-root> (absolute path to that skill's files).");
         builder.AppendLine("Workflow:");
-        builder.AppendLine("1. After loading a skill, look at its <files-root> in <available_skills> or the Files root line in the load response.");
+        builder.AppendLine("1. After loading a skill, use its <files-root> (or the Files root line in the load response).");
         builder.AppendLine("2. List its files:    dir \"<files-root>\"");
-        builder.AppendLine("3. Run scripts:       python \"<files-root>/scripts/<script-name>\"");
-        builder.AppendLine("4. Always use absolute paths derived from <files-root>; never invent paths.");
-        builder.AppendLine("5. execute_command cwd still defaults to the workspace root; run skill scripts via absolute paths in the command, not by switching cwd.");
-        builder.AppendLine("6. Quote paths that contain spaces or non-ASCII characters.");
+        builder.AppendLine("3. Run scripts via absolute paths under <files-root> (cwd stays the workspace root); never invent paths.");
         builder.AppendLine("</code_execution>");
         builder.AppendLine();
     }

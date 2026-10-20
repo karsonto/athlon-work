@@ -51,7 +51,8 @@ public sealed class AgentEnvironmentPromptBuilderTests
             Assert.DoesNotContain($"Workspace root: {workspaceRoot}", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain($"none installed under {skillsPath}", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("~/.athlon-agent/skills", prompt, StringComparison.Ordinal);
-            Assert.Contains("Shell: cmd.exe only, not PowerShell", prompt, StringComparison.Ordinal);
+            Assert.Contains("follow its schema", prompt, StringComparison.Ordinal);
+            Assert.Contains("block_until_ms", prompt, StringComparison.Ordinal);
             Assert.Contains("File tools:", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("prefer PowerShell", prompt, StringComparison.OrdinalIgnoreCase);
 

@@ -14,7 +14,7 @@ public sealed class ComputerObserveTool(
 
     public ToolDefinition Definition { get; } = new(
         "computer_observe",
-        "Capture the desktop: screenshot, frame id, foreground window, cursor, display geometry, and an optional bounded UI Automation tree. Nodes carry physical bounds and image_bounds relative to the screenshot. Defaults to the monitor under the cursor; pass monitor_index or window_title to target a display or app without moving the pointer. Observe before interacting.",
+        ToolDescriptions.ComputerObserve,
         ToolSchema.Object()
             .Boolean("include_ui_tree", "Include the bounded UI Automation tree.", defaultValue: true)
             .Integer(
@@ -60,7 +60,7 @@ public sealed class ComputerInteractTool(IComputerUseAutomationHost host) : IAge
 {
     public ToolDefinition Definition { get; } = new(
         "computer_interact",
-        "Perform exactly one desktop action against a fresh frame. Prefer element_id: the host acts through the control itself and never moves the pointer. Use image_x/image_y for canvas or self-drawn targets; right_click and drag require them. Returns a post-action screenshot and a new frame id; call computer_observe for a fresh UI tree.",
+        ToolDescriptions.ComputerInteract,
         ToolSchema.Object()
             .String("frame_id", "Frame id from the latest computer_observe.", required: true, minLength: 1)
             .String(

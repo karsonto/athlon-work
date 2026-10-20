@@ -120,14 +120,13 @@ public sealed class ToolsPolicySection : IEnvironmentPromptSection
 
         builder.AppendLine("  2. Consecutive read-only calls may be sent together; keep writes and execute_command in their own groups, and preserve dependency order.");
 
-        builder.AppendLine("  3. When todo_write is advertised, multi-step / multi-file work: maintain an accurate todo list via todo_write (create or merge) before and during writes.");
+        builder.AppendLine("  3. When todo_write is advertised, multi-step / multi-file work: follow Long-task discipline; keep the list accurate before and during writes.");
 
         builder.AppendLine("  4. When file_write, file_edit, or apply_patch are advertised, explain the intended write before calling them.");
 
-        builder.AppendLine("  5. Shell: when execute_command is advertised, cmd.exe only, not PowerShell; quote paths with spaces or non-ASCII and source workspace paths from tool results.");
+        builder.AppendLine("  5. Shell: when execute_command is advertised, follow its schema (cmd.exe, UTF-8, block_until_ms, timeout); quote paths from tool results.");
 
-        builder.AppendLine("- When execute_command is advertised, skill scripts use absolute paths from each skill's files-root; execute_command cwd defaults to workspace root.");
-        builder.AppendLine("- When execute_command is advertised, block_until_ms defaults to 30000 and only returns control. Servers and watch use 0. Builds and tests that may run longer stay in the background; read them with command_await or the completion reminder. timeout still stops the process.");
+        builder.AppendLine("- When execute_command is advertised and skills have <files-root>, run skill scripts via absolute paths (see Code Execution).");
 
         builder.AppendLine("- Interactive CLI agents in the workspace Terminal tab: when terminal_open, terminal_send_input, or terminal_read_output are advertised, see runtime context for terminal_* rules; use execute_command only for one-off non-interactive shell commands.");
 

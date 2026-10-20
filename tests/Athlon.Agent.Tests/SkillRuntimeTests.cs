@@ -231,7 +231,7 @@ public sealed class SkillRuntimeTests
             Assert.Contains("load_skill_through_path", prompt, StringComparison.Ordinal);
             Assert.Contains("<files-root>", prompt, StringComparison.Ordinal);
             Assert.Contains("## Code Execution", prompt, StringComparison.Ordinal);
-            Assert.Contains("Skill scripts:", prompt, StringComparison.Ordinal);
+            Assert.Contains("absolute paths under <files-root>", prompt, StringComparison.Ordinal);
             Assert.DoesNotContain("skills directory root as path", prompt, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("- file_read:", prompt, StringComparison.Ordinal);
         }

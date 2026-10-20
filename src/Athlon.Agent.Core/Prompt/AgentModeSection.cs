@@ -22,19 +22,15 @@ public sealed class AgentModeSection : IEnvironmentPromptSection
             case SessionAgentMode.Coding:
             default:
                 builder.AppendLine("- The user selected Agent mode for this session — the unified entry point with full workspace tools (read, write, shell) as advertised, plus long-term memory and task planning when those tools are present.");
-                builder.AppendLine("- You have complete workspace autonomy: inspect, implement, and verify. Use todo_write for multi-step or multi-file work when available.");
-                builder.AppendLine("- Explore, write todos when useful, implement, and verify.");
+                builder.AppendLine("- You have complete workspace autonomy: inspect, implement, and verify. For multi-step work follow Long-task discipline and the todo_write schema when advertised.");
                 break;
             case SessionAgentMode.Ask:
                 builder.AppendLine("- The user selected Ask mode for this session — read-only Q&A about the workspace.");
                 builder.AppendLine("- Follow the tool decision tree below; write/patch/shell/terminal/MCP/sub-agent tools are not permitted.");
                 break;
             case SessionAgentMode.Plan:
-                builder.AppendLine("- The user selected Plan mode — produce an implementation plan for review before coding.");
-                builder.AppendLine("- Consult across turns: explore with read/search; ask with ask_user when ambiguous; call publish_plan when ready.");
-                builder.AppendLine("- When calling ask_user: finish any brief user-facing note first, keep reasoning short, and make ask_user the last action of the turn — then stop.");
-                builder.AppendLine("- Nothing auto-drafts the plan for you; never implement.");
-                builder.AppendLine("- After the plan is published, wait for the user to Build (which enters implementation) or send a revision.");
+                builder.AppendLine("- The user selected Plan mode — produce an implementation plan for review before coding; never implement.");
+                builder.AppendLine("- Follow the active plan phase instructions in runtime context. After publish_plan, wait for Build or a revision.");
                 break;
             case SessionAgentMode.Debug:
                 builder.AppendLine("- The user selected Debug mode — investigate a reproducible bug with runtime logs.");

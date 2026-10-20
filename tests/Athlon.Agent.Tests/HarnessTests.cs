@@ -88,10 +88,12 @@ public sealed class HarnessTests
 
         contributor.Append(builder, context);
 
-        Assert.Contains("## Current Task List", builder.ToString(), StringComparison.Ordinal);
-        Assert.Contains("Do work", builder.ToString(), StringComparison.Ordinal);
-        Assert.Contains("in_progress", builder.ToString(), StringComparison.Ordinal);
-        Assert.Contains("todo_write before further edits", builder.ToString(), StringComparison.Ordinal);
+        var text = builder.ToString();
+        Assert.Contains("## Current Task List", text, StringComparison.Ordinal);
+        Assert.Contains("Do work", text, StringComparison.Ordinal);
+        Assert.Contains("Long-task discipline", text, StringComparison.Ordinal);
+        Assert.Contains("[pending]", text, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("todo_write before further edits", text, StringComparison.Ordinal);
     }
 
     [Fact]

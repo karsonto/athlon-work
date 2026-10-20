@@ -7,7 +7,7 @@ public sealed class BrowserScreenshotTool(IBrowserAutomationHost host) : IAgentT
 {
     public ToolDefinition Definition { get; } = new(
         "browser_screenshot",
-        "Capture the open Browser tab. By default this is the visible area. Set full_page to true to capture the whole document (very tall pages are clipped at 16384 CSS pixels). Call after navigation or an interaction, before deciding the next step. The result names a screenshot_file to cite in the final report.",
+        ToolDescriptions.BrowserScreenshot,
         ToolSchema.Object()
             .Boolean(
                 "full_page",

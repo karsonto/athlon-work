@@ -10,10 +10,7 @@ public sealed class GrepFilesTool(WorkspaceGuard guard, AuditLogService audit, A
     private const long MaxFileSizeBytes = 2 * 1024 * 1024;
     public ToolDefinition Definition { get; } = new(
         "grep_files",
-        "Search file contents. Literal matching by default (case-insensitive); set regex true for .NET regular expressions. "
-            + "Paths may be inside or outside the workspace. "
-            + "Use for simple strings or patterns/class names before file_read on large files. "
-            + $"Scans up to {MaxFilesToScan} files, returns up to {MaxMatches} matches.",
+        ToolDescriptions.GrepFiles(MaxFilesToScan, MaxMatches),
         ToolSchema.Object()
             .String("pattern", "Text pattern (literal or regex). Regex example with regex true: class\\s+\\w+", required: true, minLength: 1)
             .String("path", ToolPathDescriptions.OptionalReadDirectory)

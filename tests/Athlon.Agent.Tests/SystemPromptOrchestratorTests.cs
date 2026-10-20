@@ -110,8 +110,9 @@ public sealed class SystemPromptOrchestratorTests
         var prompt = orchestrator.PrepareForTurn(session, tools).Text;
 
         Assert.Contains("Coding workflow:", prompt, StringComparison.Ordinal);
-        Assert.Contains("mvn -q -pl", prompt, StringComparison.Ordinal);
-        Assert.Contains("state a brief plan before editing", prompt, StringComparison.Ordinal);
+        Assert.Contains("Verification:", prompt, StringComparison.Ordinal);
+        Assert.Contains("project-appropriate checks", prompt, StringComparison.Ordinal);
+        Assert.DoesNotContain("mvn -q -pl", prompt, StringComparison.Ordinal);
     }
 
     [Fact]

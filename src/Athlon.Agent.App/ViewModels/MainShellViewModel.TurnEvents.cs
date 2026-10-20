@@ -253,9 +253,8 @@ public partial class MainShellViewModel
         var message = ApprovedPlanPrompt.BuildUserMessage(markdown);
         return taskListSeeded
             ? message
-              + "\n\nThe session task list has already been seeded from this plan's steps. "
-              + "Update it with todo_write using merge=true (update items by id) and keep exactly one item in_progress. "
-              + "Do not use merge=false — that would discard the seeded list."
+              + "\n\nThe session task list is already seeded from this plan. "
+              + "Update with todo_write merge=true only — merge=false would discard the seeded list."
             : message;
     }
 

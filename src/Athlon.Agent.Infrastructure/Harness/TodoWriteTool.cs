@@ -15,14 +15,7 @@ public sealed class TodoWriteTool(
 
     public ToolDefinition Definition => new(
         Name: "todo_write",
-        Description:
-            "Create or update the session task list for multi-step Coding work. "
-            + "Use for multi-file, multi-step, or architectural tasks; do not use for trivial single-step requests or pure Q&A. "
-            + "Pass todos as an array of objects with id, content, and status "
-            + "(pending, in_progress, completed, cancelled). "
-            + "Use stable kebab-case ids (e.g. verify-compile). Keep content as one verifiable step. "
-            + "Prefer at most one in_progress item at a time. "
-            + "Set merge=false to replace the full list (first write); merge=true to update existing items by id.",
+        Description: ToolDescriptions.TodoWrite,
         ParametersSchema: ToolSchema.Object()
             .Array(
                 "todos",

@@ -26,18 +26,17 @@ public sealed class CodingWorkflowSectionTests
     }
 
     [Fact]
-    public void Append_IncludesVerificationAndDotnet_InAgentMode()
+    public void Append_IncludesVerificationAndPlanning_InAgentMode()
     {
         var builder = new StringBuilder();
         new CodingWorkflowSection().Append(builder, CreateContext(hasWorkspace: true, SessionAgentMode.Agent));
 
         var text = builder.ToString();
         Assert.Contains("Coding workflow:", text, StringComparison.Ordinal);
-        Assert.Contains("use todo_write for structured steps", text, StringComparison.Ordinal);
+        Assert.Contains("Long-task discipline", text, StringComparison.Ordinal);
         Assert.Contains("Verification:", text, StringComparison.Ordinal);
-        Assert.Contains("mvn -q -pl", text, StringComparison.Ordinal);
-        Assert.Contains("npx tsc", text, StringComparison.Ordinal);
-        Assert.Contains("pytest", text, StringComparison.Ordinal);
+        Assert.Contains("project-appropriate checks", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("mvn -q -pl", text, StringComparison.Ordinal);
         Assert.Contains("apply_patch", text, StringComparison.Ordinal);
     }
 

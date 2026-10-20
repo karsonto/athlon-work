@@ -17,10 +17,7 @@ public sealed class GlobFilesTool(WorkspaceGuard guard, AuditLogService audit) :
 {
     public ToolDefinition Definition { get; } = new(
         "glob_files",
-        "Find files by name using a glob pattern (recursive with **, respects workspace ignore rules). "
-            + "Paths may be inside or outside the workspace. "
-            + "Supports ** and {a,b} brace expansions. Directories are suffixed with /. "
-            + "Matching is case-insensitive. Returns up to 200 matches. Prefer this over shell find.",
+        ToolDescriptions.GlobFiles(200),
         ToolSchema.Object()
             .String("pattern", "Glob pattern (supports ** and {a,b} extensions), e.g. **/*.cs or **/*.{png,jpg}", required: true, minLength: 1)
             .String("path", ToolPathDescriptions.OptionalReadDirectory)

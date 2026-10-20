@@ -27,8 +27,8 @@ public sealed class ToolsPolicySectionTests
 
         var text = builder.ToString();
         Assert.Contains("Tools:", text, StringComparison.Ordinal);
-        Assert.Contains("Shell: cmd.exe only", text, StringComparison.Ordinal);
-        Assert.Contains("block_until_ms defaults to 30000", text, StringComparison.Ordinal);
+        Assert.Contains("follow its schema", text, StringComparison.Ordinal);
+        Assert.Contains("block_until_ms", text, StringComparison.Ordinal);
         Assert.Contains("Native tools via function calling", text, StringComparison.Ordinal);
     }
 
@@ -89,7 +89,7 @@ public sealed class ToolsPolicySectionTests
 
         var text = builder.ToString();
         Assert.Contains("todo_write", text, StringComparison.Ordinal);
-        Assert.Contains("maintain an accurate todo list", text, StringComparison.Ordinal);
+        Assert.Contains("Long-task discipline", text, StringComparison.Ordinal);
         Assert.Contains("Shell:", text, StringComparison.Ordinal);
     }
 

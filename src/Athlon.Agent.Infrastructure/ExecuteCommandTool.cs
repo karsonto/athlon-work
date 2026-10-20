@@ -17,12 +17,10 @@ public sealed class ExecuteCommandTool(
 
     public ToolDefinition Definition { get; } = new(
         "execute_command",
-        "Execute a shell command (user approval required). On Windows use cmd.exe semantics, not PowerShell. "
-            + "After code changes, verify with project-appropriate checks (e.g. mvn -q -pl <module> compile, npx eslint <path>, pytest <test file>) on only the files you changed. "
-            + "Console I/O prefers UTF-8 (chcp 65001) and normalizes captured output to UTF-8. "
-            + $"block_until_ms (default {BackgroundCommandRegistry.DefaultBlockUntilMs}, 0 = return as soon as the process starts) only returns control. "
-            + "A still-running process stays in the background until it exits, timeout, or command_kill. "
-        + $"Default timeout {DefaultTimeoutSeconds}s (max {MaxTimeoutSeconds}s) stops the process; it does not end the agent turn.",
+        ToolDescriptions.ExecuteCommandLocal(
+            BackgroundCommandRegistry.DefaultBlockUntilMs,
+            DefaultTimeoutSeconds,
+            MaxTimeoutSeconds),
         ToolSchema.Object()
             .String("command", "Command line (quote paths that contain spaces or non-ASCII characters)", required: true, minLength: 1)
             .String("cwd", ToolPathDescriptions.OptionalWorkspaceRelativeCwd)
