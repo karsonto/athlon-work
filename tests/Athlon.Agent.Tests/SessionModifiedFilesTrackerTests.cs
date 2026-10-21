@@ -94,6 +94,11 @@ public sealed class SessionModifiedFilesTrackerTests
         var second = Assert.Single(cards[1].Files);
         Assert.Contains("line-c", second.UnifiedDiffText, StringComparison.Ordinal);
         Assert.DoesNotContain("line-a", second.UnifiedDiffText, StringComparison.Ordinal);
+
+        var published = Assert.Single(tracker.PeekTurnFiles());
+        Assert.Equal("src/SqliteUsageRecorder.java", published.RelativePath);
+        Assert.Contains("line-a", published.UnifiedDiffText, StringComparison.Ordinal);
+        Assert.Contains("line-c", published.UnifiedDiffText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -273,6 +278,68 @@ public sealed class SessionModifiedFilesTrackerTests
     }
 
     [Fact]
+    public void RebuildFromMessages_file_write_restores_multiline_body_as_diff()
+    {
+        var tracker = new SessionModifiedFilesTracker();
+        var source = string.Join(
+            "\n",
+            "public class HelloWorld {",
+            "    public static void main(String[] args) {",
+            "        System.out.println(\"Hello, World!\");",
+            "    }",
+            "}");
+        var content = string.Join(
+            "\n",
+            "ToolCallId: call-1",
+            "Tool `file_write` succeeded.",
+            "",
+            "Arguments: path=HelloWorld.java",
+            "content=" + source,
+            "Summary: Wrote 120 chars to HelloWorld.java",
+            "");
+
+        tracker.RebuildFromMessages(
+        [
+            new ChatMessageViewModel(ChatMessage.Create(MessageRole.User, "write it")),
+            new ChatMessageViewModel(ChatMessage.Create(MessageRole.Tool, content))
+        ]);
+
+        var file = Assert.Single(tracker.PeekTurnFiles());
+        Assert.Equal("HelloWorld.java", file.RelativePath);
+        Assert.True(file.HasDiff);
+        Assert.Contains("Hello, World!", file.UnifiedDiffText, StringComparison.Ordinal);
+        Assert.True(file.AddedCount >= 5);
+        Assert.Equal(0, file.RemovedCount);
+    }
+
+    [Fact]
+    public void ExtractDiff_reads_crlf_file_write_body_from_a_stored_tool_result()
+    {
+        var content =
+            "ToolCallId: call_00_fHtuuFVtBlcwv1S9sIAn9148\r\n"
+            + "Tool `file_write` succeeded.\r\n"
+            + "\r\n"
+            + "Arguments: path=HelloWorld.java\r\n"
+            + "content=public class HelloWorld {\n"
+            + "    public static void main(String[] args) {\n"
+            + "        System.out.println(\"Hello, World!\");\n"
+            + "    }\n"
+            + "}\n"
+            + "\r\n"
+            + "Summary: Wrote 124 chars to HelloWorld.java\r\n"
+            + "\r\n";
+
+        var files = SessionModifiedFilesTracker.BuildEditCardFiles(
+            "file_write",
+            "path = HelloWorld.java",
+            content);
+        var file = Assert.Single(files);
+        Assert.True(file.HasDiff);
+        Assert.Contains("Hello, World!", file.UnifiedDiffText, StringComparison.Ordinal);
+        Assert.True(file.AddedCount >= 5);
+    }
+
+    [Fact]
     public void RebuildFromMessages_keeps_only_current_turn_edits()
     {
         static ChatMessageViewModel Edit(string id, string path) =>
@@ -378,5 +445,52 @@ public sealed class SessionModifiedFilesTrackerTests
     {
         var path = ModifiedFilePathExtractor.ExtractPathFromArguments(input);
         Assert.Equal(expected, path);
+    }
+
+    [Fact]
+    public void CollectTurnFiles_includes_writes_whose_stored_arguments_lead_with_content()
+    {
+        var write = new AgentToolCall(
+            "call-jwt",
+            "file_write",
+            new Dictionary<string, string>
+            {
+                ["path"] = "src/security/JwtTokenProvider.java",
+                ["content"] = "public class JwtTokenProvider {}\n"
+            });
+        var assistant = ChatMessage.Create(MessageRole.Assistant, "writing", toolCalls: [write]);
+        var tool = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                "\n",
+                "ToolCallId: call-jwt",
+                "Tool `file_write` succeeded.",
+                "",
+                "Arguments: content=public class JwtTokenProvider {}",
+                "Summary: Wrote 32 chars to JwtTokenProvider.java",
+                ""));
+        var edit = ChatMessage.Create(
+            MessageRole.Tool,
+            string.Join(
+                "\n",
+                "ToolCallId: call-pom",
+                "Tool `file_edit` succeeded.",
+                "",
+                "Arguments: path = pom.xml",
+                "Summary: Edited",
+                "",
+                "--- a/pom.xml",
+                "+++ b/pom.xml",
+                "@@ -1,1 +1,2 @@",
+                " context",
+                "+added"));
+
+        var files = SessionModifiedFilesTracker.CollectTurnFiles([assistant, tool, edit]);
+
+        Assert.Equal(2, files.Count);
+        Assert.Contains(files, file => file.RelativePath == "pom.xml" && file.HasDiff);
+        var jwt = Assert.Single(files, file => file.RelativePath.EndsWith("JwtTokenProvider.java", StringComparison.Ordinal));
+        Assert.True(jwt.HasDiff);
+        Assert.Contains("class JwtTokenProvider", jwt.UnifiedDiffText, StringComparison.Ordinal);
     }
 }

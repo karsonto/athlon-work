@@ -20,6 +20,9 @@
         <DataTemplate DataType="{x:Type vm:TerminalWorkspaceTabViewModel}">
             <controls:TerminalWorkspaceView />
         </DataTemplate>
+        <DataTemplate DataType="{x:Type vm:ChangesWorkspaceTabViewModel}">
+            <controls:ChangesReviewView />
+        </DataTemplate>
 
         <Style x:Key="WorkspaceShortcutPillStyle" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource Brush.PanelAlt}" />
@@ -117,6 +120,9 @@
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Kind}" Value="Skills">
                                                             <Setter Property="Kind" Value="StarOutline" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Kind}" Value="Changes">
+                                                            <Setter Property="Kind" Value="FileCompare" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>

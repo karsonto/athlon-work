@@ -155,6 +155,8 @@ public sealed class ChatHtmlBuilder
             ["denied"] = Strings.Get("Chat_ToolApprovalDenied"),
             ["filesChangedOne"] = Strings.Get("Chat_FilesChangedOne"),
             ["filesChangedMany"] = Strings.Get("Chat_FilesChangedMany"),
+            ["filesChangedReview"] = Strings.Get("Chat_FilesChangedReview"),
+            ["filesChangedShowMore"] = Strings.Get("Chat_FilesChangedShowMore"),
             ["editedFilesOne"] = Strings.Get("Chat_EditedFilesOne"),
             ["editedFilesMany"] = Strings.Get("Chat_EditedFilesMany"),
             ["exploredFilesOne"] = Strings.Get("Chat_ExploredFilesOne"),

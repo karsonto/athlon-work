@@ -74,9 +74,25 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
-        if (_activitySourceMessages.Any(existing =>
-                string.Equals(existing.Id, message.Id, StringComparison.Ordinal)))
+        var existingIndex = -1;
+        for (var i = 0; i < _activitySourceMessages.Count; i++)
         {
+            if (string.Equals(_activitySourceMessages[i].Id, message.Id, StringComparison.Ordinal))
+            {
+                existingIndex = i;
+                break;
+            }
+        }
+
+        if (existingIndex >= 0)
+        {
+            // A running tool placeholder and its final result share one id. Keep the later body so
+            // Review can read the succeeded file_write content instead of the placeholder.
+            if (message.Role == MessageRole.Tool)
+            {
+                _activitySourceMessages[existingIndex] = message;
+            }
+
             return;
         }
 
@@ -164,8 +180,8 @@ public sealed partial class SessionTurnUiController
         // place instead of stacking a twin beside them.
         ReanchorLiveTurnToTranscript();
 
-        // Per-edit cards are keyed by tool call id in both paths, so re-publishing the segment's
-        // edits after a reload rewrites the replayed cards in place rather than stacking twins.
+        // The summary card is keyed by the turn anchor in both paths, so re-publishing the merged
+        // files after a reload rewrites the replayed card in place rather than stacking a twin.
         PublishEditCards();
 
         var live = _turnActivityTracker.Snapshot();

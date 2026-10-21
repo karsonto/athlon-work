@@ -130,18 +130,6 @@ function filesChangedTitle(count) {
   return (t('filesChangedMany') || '{0} Files Changed').replace('{0}', String(count));
 }
 
-/**
- * Title for a single-edit card: the edited file's name is the headline, so each edit reads as one
- * line on the timeline instead of a count.
- */
-function filesChangedTitleFor(files) {
-  if (files && files.length === 1) {
-    var first = files[0];
-    return first.displayName || first.path || filesChangedTitle(1);
-  }
-  return filesChangedTitle(files ? files.length : 0);
-}
-
 function joinSummaryParts(parts) {
   if (!parts.length) return '';
   if (parts.length === 1) return parts[0];
@@ -211,22 +199,18 @@ function appendFilesChangedCard(event) {
   var key = filesChangedEntryKey(event);
   var existingRow = getEntryRow(key);
 
-  // Empty payload with no card yet: nothing to show.
   if (!files.length && !existingRow) return;
 
   var hasExplicitSeq = event && typeof event.seq === 'number' && isFinite(event.seq);
-  var openPaths = {};
   var row = existingRow;
   var card;
+  var expanded = false;
   if (row) {
     card = row.querySelector('.files-changed-card');
     if (!card) {
       row = null;
     } else {
-      card.querySelectorAll('.files-changed-item.open').forEach(function (item) {
-        var path = item.getAttribute('data-path') || '';
-        if (path) openPaths[path] = true;
-      });
+      expanded = card.getAttribute('data-expanded') === '1';
       card.innerHTML = '';
     }
   }
@@ -237,76 +221,103 @@ function appendFilesChangedCard(event) {
     card = document.createElement('div');
     card.className = 'files-changed-card';
     row.appendChild(card);
-    // A live card claims the next content slot; a replayed card carries its edit's own seq so it
-    // lands exactly where the edit happened in the turn.
     registerEntry(key, row, hasExplicitSeq ? event.seq : nextLiveContentSeq());
   } else if (hasExplicitSeq) {
     insertBySeq(row, event.seq);
   }
 
   if (!files.length) {
-    // Sealed-and-empty: the card stays as the turn's marker.
     updateEmptyStateVisibility();
     return;
   }
 
   card.setAttribute('data-turn-key', key);
+  if (expanded) card.setAttribute('data-expanded', '1');
 
+  var header = document.createElement('div');
+  header.className = 'files-changed-header';
   var title = document.createElement('div');
   title.className = 'files-changed-title';
-  title.textContent = filesChangedTitleFor(files);
-  card.appendChild(title);
+  title.textContent = filesChangedTitle(files.length);
+  header.appendChild(title);
+  var review = document.createElement('button');
+  review.type = 'button';
+  review.className = 'files-changed-review';
+  review.textContent = t('filesChangedReview') || 'Review';
+  review.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    post({ type: 'reviewFiles', entryId: key, path: '' });
+  });
+  header.appendChild(review);
+  card.appendChild(header);
 
   var list = document.createElement('div');
   list.className = 'files-changed-list';
-
-  files.forEach(function (file) {
-    var item = document.createElement('div');
-    item.className = 'files-changed-item';
-    item.setAttribute('data-path', file.path || '');
-    if (openPaths[file.path || '']) item.classList.add('open');
-
-    var button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'files-changed-row';
-    button.title = file.path || file.displayName || '';
-
-    var name = document.createElement('span');
-    name.className = 'files-changed-name';
-    name.textContent = file.displayName || file.path || '';
-    button.appendChild(name);
-
-    var counts = document.createElement('span');
-    counts.className = 'files-changed-counts';
-    if ((file.added || 0) > 0) {
-      var a = document.createElement('span');
-      a.className = 'turn-activity-add';
-      a.textContent = '+' + file.added;
-      counts.appendChild(a);
-    }
-    if ((file.removed || 0) > 0) {
-      var d = document.createElement('span');
-      d.className = 'turn-activity-del';
-      d.textContent = '-' + file.removed;
-      counts.appendChild(d);
-    }
-    button.appendChild(counts);
-    item.appendChild(button);
-
-    var diff = document.createElement('div');
-    diff.className = 'files-changed-diff';
-    diff.innerHTML = renderDiffLines(file.lines || []);
-    button.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      item.classList.toggle('open');
-      scrollToBottom();
-    });
-    item.appendChild(diff);
-    list.appendChild(item);
-  });
-
   card.appendChild(list);
+
+  function renderRows(showAll) {
+    list.innerHTML = '';
+    var visible = showAll || files.length <= 4 ? files : files.slice(0, 4);
+    visible.forEach(function (file) {
+      var item = document.createElement('div');
+      item.className = 'files-changed-item';
+      item.setAttribute('data-path', file.path || '');
+
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'files-changed-row';
+      button.title = file.path || file.displayName || '';
+
+      var icon = document.createElement('span');
+      icon.className = 'files-changed-icon';
+      button.appendChild(icon);
+
+      var name = document.createElement('span');
+      name.className = 'files-changed-name';
+      name.textContent = file.displayName || file.path || '';
+      button.appendChild(name);
+
+      var counts = document.createElement('span');
+      counts.className = 'files-changed-counts';
+      if ((file.added || 0) > 0) {
+        var a = document.createElement('span');
+        a.className = 'turn-activity-add';
+        a.textContent = '+' + file.added;
+        counts.appendChild(a);
+      }
+      if ((file.removed || 0) > 0) {
+        var d = document.createElement('span');
+        d.className = 'turn-activity-del';
+        d.textContent = '-' + file.removed;
+        counts.appendChild(d);
+      }
+      button.appendChild(counts);
+      button.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        post({ type: 'reviewFiles', entryId: key, path: file.path || '' });
+      });
+      item.appendChild(button);
+      list.appendChild(item);
+    });
+
+    if (!showAll && files.length > 4) {
+      var more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'files-changed-more';
+      more.textContent = (t('filesChangedShowMore') || 'Show {0} more').replace('{0}', String(files.length - 4));
+      more.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        card.setAttribute('data-expanded', '1');
+        renderRows(true);
+      });
+      list.appendChild(more);
+    }
+  }
+
+  renderRows(expanded);
   updateEmptyStateVisibility();
   scrollToBottom();
 }

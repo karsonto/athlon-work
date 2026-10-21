@@ -179,9 +179,14 @@ public sealed partial class SessionTurnUiController
     }
 
     /// <summary>
-    /// Publishes each completed file edit as its own timeline card. The card is keyed by the tool
-    /// call id (matching replay's entry id), so re-publishing after a rebuild rewrites the same
-    /// entry instead of stacking a twin.
+    /// Raised after the live files card is published. The changes pane uses it to stay in step
+    /// with the card while the turn is still writing files.
+    /// </summary>
+    internal event Action<string, IReadOnlyList<ModifiedFileViewModel>>? TurnFilesPublished;
+
+    /// <summary>
+    /// Publishes this turn's edits as one summary card. The entry id is the turn anchor, matching
+    /// replay, so a reload rewrites the same card instead of stacking a twin.
     /// </summary>
     private void PublishEditCards()
     {
@@ -190,10 +195,53 @@ public sealed partial class SessionTurnUiController
             return;
         }
 
-        foreach (var card in _modifiedFilesTracker.PeekSegmentEditCards())
+        var files = _modifiedFilesTracker.PeekTurnFiles();
+        if (files.Count == 0)
         {
-            _ = ChatView!.DispatchEditFileCardAsync(card.ToolCallId, card.Files);
+            return;
         }
+
+        _ = ChatView!.DispatchFilesChangedAsync(
+            files,
+            upsert: true,
+            turnAnchorId: _currentTurnAnchorId,
+            seq: CurrentTurnFilesSeq());
+        if (!string.IsNullOrWhiteSpace(_currentTurnAnchorId))
+        {
+            TurnFilesPublished?.Invoke("files:" + _currentTurnAnchorId, files);
+        }
+    }
+
+    /// <summary>
+    /// Seq of the current turn's files card: the <see cref="TimelineOrderPolicy.Files"/> slot of
+    /// the content segment replay would assign, so a live upsert and a replay land on one row.
+    /// </summary>
+    private long? CurrentTurnFilesSeq()
+    {
+        if (string.IsNullOrWhiteSpace(_currentTurnAnchorId))
+        {
+            return null;
+        }
+
+        var projected = ProjectActivitySourceViewModels(BuildReplayActivitySource());
+        var segments = ChatTimelineProjector.BuildSegments(projected, _showToolCalls());
+        long turnIndex = -1;
+        long? filesTurn = null;
+        foreach (var segment in segments)
+        {
+            turnIndex++;
+            if (!string.Equals(segment.TurnAnchorId, _currentTurnAnchorId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (segment.FileEdits.Count > 0 || segment.Blocks.Count > 0)
+            {
+                filesTurn = turnIndex;
+            }
+        }
+
+        return filesTurn is { } index ? TimelineOrderPolicy.Files(index) : null;
     }
 
     private void ProcessUiStreamEvents(AgentStreamEvent streamEvent, bool notifyTracker)
@@ -222,8 +270,8 @@ public sealed partial class SessionTurnUiController
             && _modifiedFilesTracker.PeekSegmentEditCards().Any(card =>
                 string.Equals(card.ToolCallId, resultCallId, StringComparison.Ordinal)))
         {
-            // A succeeded file edit becomes its own card, which the projector places after the fold.
-            // Seal the fold before publishing the card so the live card lands after it too.
+            // A succeeded file edit joins this turn's summary card, which the projector places after
+            // the fold. Seal the fold before publishing so the live card lands after it too.
             SealOpenActivityFoldBeforeContent(opensContent: true);
         }
 

@@ -11,6 +11,7 @@ using Athlon.Agent.App.Services.Diagnostics;
 using Athlon.Agent.App.Services.Streaming;
 using Athlon.Agent.App.ViewModels;
 using Athlon.Agent.Core;
+using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Core.Compaction;
 using Athlon.Agent.Core.Plan;
 using Athlon.Agent.Core.Streaming;
@@ -240,6 +241,56 @@ public sealed partial class SessionTurnUiController
     /// <see cref="AddUserMessage"/>, or a replay and a live upsert render two cards.
     /// </summary>
     internal string? CurrentTurnAnchorId => _currentTurnAnchorId;
+
+    /// <summary>
+    /// Merged file edits for the turn whose summary card id is <paramref name="entryId"/>
+    /// (<c>files:{anchor}</c>). Used when Review opens the changes pane.
+    /// </summary>
+    public IReadOnlyList<ModifiedFileViewModel> GetTurnFiles(string? entryId)
+    {
+        var anchor = entryId;
+        const string prefix = "files:";
+        if (!string.IsNullOrEmpty(anchor)
+            && anchor.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            anchor = anchor[prefix.Length..];
+        }
+
+        if (string.IsNullOrWhiteSpace(anchor))
+        {
+            return Array.Empty<ModifiedFileViewModel>();
+        }
+
+        var source = BuildReplayActivitySource();
+        var start = -1;
+        for (var i = 0; i < source.Count; i++)
+        {
+            if (string.Equals(source[i].Id, anchor, StringComparison.Ordinal))
+            {
+                start = i;
+                break;
+            }
+        }
+
+        if (start < 0)
+        {
+            return Array.Empty<ModifiedFileViewModel>();
+        }
+
+        var body = new List<ChatMessage>();
+        for (var i = start + 1; i < source.Count; i++)
+        {
+            var message = source[i];
+            if (message.Role is MessageRole.User or MessageRole.Compaction)
+            {
+                break;
+            }
+
+            body.Add(message);
+        }
+
+        return SessionModifiedFilesTracker.CollectTurnFiles(body);
+    }
 
     /// <summary>
     /// Materializes buffered tokens and returns the in-flight assistant row that is not yet

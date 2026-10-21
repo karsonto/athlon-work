@@ -10,7 +10,12 @@ public enum DiffLineKind
     Collapsed
 }
 
-public sealed record DiffDisplayLine(DiffLineKind Kind, string Text, int? CollapsedCount = null);
+public sealed record DiffDisplayLine(
+    DiffLineKind Kind,
+    string Text,
+    int? CollapsedCount = null,
+    int? OldLine = null,
+    int? NewLine = null);
 
 public readonly record struct DiffChangeCounts(int Added, int Removed);
 
@@ -56,10 +61,18 @@ public static class UnifiedDiffDisplayParser
         }
 
         var raw = new List<DiffDisplayLine>();
+        int? oldLine = null;
+        int? newLine = null;
         foreach (var line in SplitLines(unifiedDiff))
         {
             if (line.StartsWith("@@", StringComparison.Ordinal))
             {
+                if (TryReadHunkStarts(line, out var oldStart, out var newStart))
+                {
+                    oldLine = oldStart;
+                    newLine = newStart;
+                }
+
                 raw.Add(new DiffDisplayLine(DiffLineKind.HunkHeader, line));
                 continue;
             }
@@ -72,30 +85,86 @@ public static class UnifiedDiffDisplayParser
 
             if (line.StartsWith('+'))
             {
-                raw.Add(new DiffDisplayLine(DiffLineKind.Added, line[1..]));
+                raw.Add(new DiffDisplayLine(DiffLineKind.Added, line[1..], NewLine: newLine));
+                if (newLine is not null)
+                {
+                    newLine++;
+                }
+
                 continue;
             }
 
             if (line.StartsWith('-'))
             {
-                raw.Add(new DiffDisplayLine(DiffLineKind.Removed, line[1..]));
+                raw.Add(new DiffDisplayLine(DiffLineKind.Removed, line[1..], OldLine: oldLine));
+                if (oldLine is not null)
+                {
+                    oldLine++;
+                }
+
                 continue;
             }
 
             if (line.StartsWith(' '))
             {
-                raw.Add(new DiffDisplayLine(DiffLineKind.Context, line[1..]));
+                raw.Add(new DiffDisplayLine(DiffLineKind.Context, line[1..], OldLine: oldLine, NewLine: newLine));
+                if (oldLine is not null)
+                {
+                    oldLine++;
+                }
+
+                if (newLine is not null)
+                {
+                    newLine++;
+                }
+
                 continue;
             }
 
             // Bare context / misc lines (no prefix)
             if (!string.IsNullOrEmpty(line))
             {
-                raw.Add(new DiffDisplayLine(DiffLineKind.Context, line));
+                raw.Add(new DiffDisplayLine(DiffLineKind.Context, line, OldLine: oldLine, NewLine: newLine));
+                if (oldLine is not null)
+                {
+                    oldLine++;
+                }
+
+                if (newLine is not null)
+                {
+                    newLine++;
+                }
             }
         }
 
         return foldContext ? FoldContextRuns(raw) : raw;
+    }
+
+    private static bool TryReadHunkStarts(string line, out int oldStart, out int newStart)
+    {
+        oldStart = 0;
+        newStart = 0;
+        var minus = line.IndexOf('-');
+        var plus = line.IndexOf('+');
+        if (minus < 0 || plus < 0 || plus < minus)
+        {
+            return false;
+        }
+
+        return TryReadLeadingInt(line, minus + 1, out oldStart)
+            && TryReadLeadingInt(line, plus + 1, out newStart);
+    }
+
+    private static bool TryReadLeadingInt(string text, int start, out int value)
+    {
+        value = 0;
+        var end = start;
+        while (end < text.Length && char.IsDigit(text[end]))
+        {
+            end++;
+        }
+
+        return end > start && int.TryParse(text.AsSpan(start, end - start), out value);
     }
 
     private static IReadOnlyList<DiffDisplayLine> FoldContextRuns(IReadOnlyList<DiffDisplayLine> lines)

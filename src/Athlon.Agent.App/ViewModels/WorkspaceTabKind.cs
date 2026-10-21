@@ -6,4 +6,5 @@ public enum WorkspaceTabKind
     Skills,
     Browser,
     Terminal,
+    Changes,
 }

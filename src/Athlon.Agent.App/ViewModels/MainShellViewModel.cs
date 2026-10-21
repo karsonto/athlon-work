@@ -1104,6 +1104,7 @@ public partial class MainShellViewModel : ObservableObject, IDisposable, ISessio
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
             _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
             _savedChatView.PlanReviseRequested -= OnPlanReviseRequested;
+            _savedChatView.ReviewFilesRequested -= OnReviewFilesRequested;
         }
 
         _activeUi.Messages.CollectionChanged -= OnMessagesCollectionChanged;

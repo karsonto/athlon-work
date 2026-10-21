@@ -146,6 +146,34 @@ public sealed partial class WorkspacePaneViewModel : ObservableObject
         return tab;
     }
 
+    /// <summary>Opens or focuses the single Changes tab and loads this turn's files.</summary>
+    public void ShowChanges(IReadOnlyList<ModifiedFileViewModel> files, string? selectedPath, string? sourceEntryId = null)
+    {
+        var existing = Tabs.OfType<ChangesWorkspaceTabViewModel>().FirstOrDefault();
+        if (existing is null)
+        {
+            existing = new ChangesWorkspaceTabViewModel(_loc["Context_TabChanges"]);
+            Tabs.Add(existing);
+        }
+
+        existing.Show(files, selectedPath, sourceEntryId);
+        ActiveTab = existing;
+        IsAddMenuOpen = false;
+    }
+
+    /// <summary>Replaces the open changes list when the same turn publishes more files.</summary>
+    public void RefreshChanges(string sourceEntryId, IReadOnlyList<ModifiedFileViewModel> files)
+    {
+        var existing = Tabs.OfType<ChangesWorkspaceTabViewModel>().FirstOrDefault();
+        if (existing is null
+            || !string.Equals(existing.SourceEntryId, sourceEntryId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        existing.Show(files, existing.SelectedFile?.RelativePath, sourceEntryId);
+    }
+
     [RelayCommand]
     private void ToggleAddMenu() => IsAddMenuOpen = !IsAddMenuOpen;
 

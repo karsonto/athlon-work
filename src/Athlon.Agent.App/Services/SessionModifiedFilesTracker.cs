@@ -8,10 +8,10 @@ namespace Athlon.Agent.App.Services;
 /// <summary>
 /// Live state for the current turn's file edits.
 ///
-/// <para>Successful edits are published as independent per-edit timeline cards keyed by tool call
-/// id; there is no aggregate "N files changed" card. This tracker only keeps (a) the per-edit cards
-/// the live publish re-emits, and (b) the set of paths touched this turn, which anchors the live
-/// turn surface so a refresh/reload is deferred instead of stacking a twin card.</para>
+/// <para>Successful edits are staged per tool call, then published as one turn summary card.
+/// Paths touched more than once are merged (later <c>file_write</c> replaces, edits append).
+/// The path set also anchors the live turn surface so a refresh/reload is deferred instead of
+/// stacking a twin card.</para>
 /// </summary>
 public sealed class SessionModifiedFilesTracker
 {
@@ -20,11 +20,7 @@ public sealed class SessionModifiedFilesTracker
     private readonly HashSet<string> _currentTurnPaths = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<EditFileCard> _segmentEditCards = new();
 
-    /// <summary>
-    /// One completed file edit, shaped for its own single-file timeline card. Edits render as
-    /// independent entries along the timeline (keyed by the tool call id), not as an aggregate
-    /// per-turn "N files changed" card.
-    /// </summary>
+    /// <summary>One completed file edit, kept so a repeated result for the same call can replace it.</summary>
     public sealed record EditFileCard(string ToolCallId, IReadOnlyList<ModifiedFileViewModel> Files);
 
     /// <summary>
@@ -55,6 +51,57 @@ public sealed class SessionModifiedFilesTracker
     /// the upsert idempotent.
     /// </summary>
     public IReadOnlyList<EditFileCard> PeekSegmentEditCards() => _segmentEditCards;
+
+    /// <summary>This turn's edits merged by path, in first-seen order. This is the summary card payload.</summary>
+    public IReadOnlyList<ModifiedFileViewModel> PeekTurnFiles() =>
+        MergeByPath(_segmentEditCards.SelectMany(card => card.Files));
+
+    /// <summary>
+    /// Collapses edits onto one view model per path. A later <c>file_write</c> replaces the diff;
+    /// other edits append.
+    /// </summary>
+    public static IReadOnlyList<ModifiedFileViewModel> MergeByPath(IEnumerable<ModifiedFileViewModel> files)
+    {
+        var order = new List<ModifiedFileViewModel>();
+        var byPath = new Dictionary<string, ModifiedFileViewModel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in files)
+        {
+            if (string.IsNullOrWhiteSpace(file.RelativePath))
+            {
+                continue;
+            }
+
+            if (!byPath.TryGetValue(file.RelativePath, out var existing))
+            {
+                var copy = new ModifiedFileViewModel(file.RelativePath, file.ToolName, file.Status);
+                if (file.HasDiff)
+                {
+                    copy.SetDiff(file.UnifiedDiffText);
+                }
+
+                byPath[file.RelativePath] = copy;
+                order.Add(copy);
+                continue;
+            }
+
+            existing.SetToolName(file.ToolName);
+            if (!file.HasDiff)
+            {
+                continue;
+            }
+
+            if (string.Equals(file.ToolName, "file_write", StringComparison.Ordinal))
+            {
+                existing.SetDiff(file.UnifiedDiffText);
+            }
+            else
+            {
+                existing.AppendDiff(file.UnifiedDiffText);
+            }
+        }
+
+        return order;
+    }
 
     /// <summary>
     /// Single-edit card payload for a succeeded file tool: one file for <c>file_edit</c> /
@@ -119,6 +166,99 @@ public sealed class SessionModifiedFilesTracker
         }
 
         return files;
+    }
+
+    /// <summary>
+    /// Files changed in one turn. Tool results supply edit diffs; a succeeded
+    /// <c>file_write</c> whose stored arguments lead with the file body (so the path is not on
+    /// the first line) is recovered from the assistant tool call.
+    /// </summary>
+    public static IReadOnlyList<ModifiedFileViewModel> CollectTurnFiles(IReadOnlyList<ChatMessage> turnBody)
+    {
+        var files = new List<ModifiedFileViewModel>();
+        var succeededCallIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var message in turnBody)
+        {
+            if (message.Role != MessageRole.Tool)
+            {
+                continue;
+            }
+
+            var viewModel = new ChatMessageViewModel(message);
+            if (!ChatTimelineProjector.IsSucceededFileEdit(viewModel))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(viewModel.ToolCallId))
+            {
+                succeededCallIds.Add(viewModel.ToolCallId);
+            }
+
+            files.AddRange(BuildEditCardFiles(viewModel));
+        }
+
+        foreach (var message in turnBody)
+        {
+            if (message.Role != MessageRole.Assistant || string.IsNullOrWhiteSpace(message.ToolCallsJson))
+            {
+                continue;
+            }
+
+            var calls = AssistantToolCallsCodec.Deserialize(message.ToolCallsJson);
+            if (calls is null)
+            {
+                continue;
+            }
+
+            foreach (var call in calls)
+            {
+                if (!succeededCallIds.Contains(call.Id)
+                    || !ModifiedFilePathExtractor.IsFileTool(call.Name))
+                {
+                    continue;
+                }
+
+                EnsureFileFromAssistantCall(files, call);
+            }
+        }
+
+        return MergeByPath(files);
+    }
+
+    private static void EnsureFileFromAssistantCall(List<ModifiedFileViewModel> files, AgentToolCall call)
+    {
+        if (!call.Arguments.TryGetString(ToolPathNormalizer.PathArgumentName, out var path)
+            || string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        var normalized = ToolPathNormalizer.ForModel(path);
+        var existing = files.FirstOrDefault(file =>
+            string.Equals(file.RelativePath, normalized, StringComparison.OrdinalIgnoreCase));
+        if (!string.Equals(call.Name, "file_write", StringComparison.Ordinal)
+            || !call.Arguments.TryGetString("content", out var content)
+            || string.IsNullOrEmpty(content))
+        {
+            if (existing is null)
+            {
+                files.Add(new ModifiedFileViewModel(normalized, call.Name, ModifiedFileStatus.Succeeded));
+            }
+
+            return;
+        }
+
+        if (existing is null)
+        {
+            existing = new ModifiedFileViewModel(normalized, call.Name, ModifiedFileStatus.Succeeded);
+            files.Add(existing);
+        }
+
+        if (!existing.HasDiff)
+        {
+            existing.SetDiff(UnifiedDiffGenerator.Generate(string.Empty, content, existing.RelativePath));
+        }
     }
 
     public void Process(AgentStreamEvent streamEvent)
@@ -352,7 +492,16 @@ public sealed class SessionModifiedFilesTracker
 
         if (string.Equals(toolName, "file_write", StringComparison.Ordinal))
         {
-            if (TryExtractFileWriteContent(argumentsText, out var content))
+            // Persisted results keep the full body after "content=", spanning lines until Summary.
+            // The display arguments line only has the path, so the review pane has to read the body.
+            if (TryExtractPersistedFileWriteContent(toolContent, out var persisted)
+                && !IsFileWriteContentPlaceholder(persisted))
+            {
+                return UnifiedDiffGenerator.Generate(string.Empty, persisted, relativePath);
+            }
+
+            if (TryExtractFileWriteContent(argumentsText, out var content)
+                && !IsFileWriteContentPlaceholder(content))
             {
                 return UnifiedDiffGenerator.Generate(string.Empty, content, relativePath);
             }
@@ -438,6 +587,102 @@ public sealed class SessionModifiedFilesTracker
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Reads a file_write body out of a stored tool result. The arguments header is
+    /// <c>path=...</c> on the Arguments line and <c>content=</c> on the following lines, through
+    /// the Summary line. A one-line <c>content = hello</c> form is accepted too.
+    /// </summary>
+    private static bool TryExtractPersistedFileWriteContent(string? toolContent, out string content)
+    {
+        content = string.Empty;
+        if (string.IsNullOrWhiteSpace(toolContent))
+        {
+            return false;
+        }
+
+        var lines = toolContent.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var contentLine = -1;
+        var first = string.Empty;
+        var summaryLine = lines.Length;
+        for (var i = 0; i < lines.Length; i++)
+        {
+            if (contentLine < 0 && TryTakeContentAssignment(lines[i], out first))
+            {
+                contentLine = i;
+                continue;
+            }
+
+            if (contentLine >= 0 && lines[i].StartsWith("Summary:", StringComparison.OrdinalIgnoreCase))
+            {
+                summaryLine = i;
+                break;
+            }
+        }
+
+        if (contentLine < 0)
+        {
+            return false;
+        }
+
+        if (summaryLine == contentLine + 1)
+        {
+            content = first;
+            return true;
+        }
+
+        var tail = string.Join("\n", lines[(contentLine + 1)..summaryLine]);
+        content = string.IsNullOrEmpty(tail) ? first : first + "\n" + tail;
+        return true;
+    }
+
+    private static bool TryTakeContentAssignment(string line, out string rest)
+    {
+        rest = string.Empty;
+        var source = line.StartsWith("Arguments:", StringComparison.OrdinalIgnoreCase)
+            ? line["Arguments:".Length..]
+            : line;
+        var index = source.IndexOf("content", StringComparison.OrdinalIgnoreCase);
+        while (index >= 0)
+        {
+            var after = source[(index + "content".Length)..].TrimStart();
+            if (after.StartsWith('='))
+            {
+                rest = after[1..].TrimStart();
+                return true;
+            }
+
+            index = source.IndexOf("content", index + 1, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    private static bool IsFileWriteContentPlaceholder(string content)
+    {
+        var trimmed = content.Trim();
+        if (trimmed.Length < 8 || trimmed[0] != '(' || trimmed[^1] != ')')
+        {
+            return false;
+        }
+
+        var inner = trimmed[1..^1];
+        var space = inner.IndexOf(' ');
+        if (space <= 0 || !string.Equals(inner[space..], " chars", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        for (var i = 0; i < space; i++)
+        {
+            if (!char.IsDigit(inner[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool TryExtractPatchArgument(string? argumentsText, out string patch)

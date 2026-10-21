@@ -345,6 +345,7 @@ public partial class MainShellViewModel
             _savedChatView.ToolDetailRequested -= OnToolDetailRequested;
             _savedChatView.PlanBuildRequested -= OnPlanBuildRequested;
             _savedChatView.PlanReviseRequested -= OnPlanReviseRequested;
+            _savedChatView.ReviewFilesRequested -= OnReviewFilesRequested;
         }
 
         _savedChatView = chatView;
@@ -354,6 +355,7 @@ public partial class MainShellViewModel
         chatView.ToolDetailRequested += OnToolDetailRequested;
         chatView.PlanBuildRequested += OnPlanBuildRequested;
         chatView.PlanReviseRequested += OnPlanReviseRequested;
+        chatView.ReviewFilesRequested += OnReviewFilesRequested;
         _uiCache.AttachChatViewToAll(chatView);
         _activeUi.ChatView = chatView;
         _ = _activeUi.ReloadChatViewAsync();
@@ -370,6 +372,83 @@ public partial class MainShellViewModel
         {
             App.StartupTrace($"Open chat link in browser failed: {ex.Message}");
             ShowShellToast(ex.Message, ShellToastKind.Error);
+        }
+    }
+
+    private void OnReviewFilesRequested(object? sender, Controls.ReviewFilesRequestedEventArgs e)
+    {
+        var files = _activeUi.GetTurnFiles(e.EntryId);
+        FillMissingWriteDiffsFromWorkspace(files);
+        WorkspacePane.ShowChanges(files, e.Path, e.EntryId);
+        if (!IsContextSidebarVisible)
+        {
+            SetContextSidebarVisible(true, animate: true);
+        }
+    }
+
+    /// <summary>
+    /// A file_write that did not keep a diff still has the file on disk. Show that text as additions
+    /// so Review is not an empty "no diff" pane.
+    /// </summary>
+    private void FillMissingWriteDiffsFromWorkspace(IReadOnlyList<ModifiedFileViewModel> files)
+    {
+        if (_workspaceContext.Kind == WorkspaceKind.Ssh)
+        {
+            return;
+        }
+
+        var workspaceRoot = !string.IsNullOrWhiteSpace(_session.ActiveWorkspace)
+            ? _session.ActiveWorkspace
+            : _workspaceContext.RootPath;
+        if (string.IsNullOrWhiteSpace(workspaceRoot))
+        {
+            return;
+        }
+
+        var root = Path.GetFullPath(workspaceRoot);
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            return;
+        }
+
+        var rootPrefix = root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        foreach (var file in files)
+        {
+            if (file.HasDiff || string.IsNullOrWhiteSpace(file.RelativePath))
+            {
+                continue;
+            }
+
+            var combined = Path.GetFullPath(Path.Combine(
+                root,
+                file.RelativePath.Replace('/', Path.DirectorySeparatorChar)));
+            if (!combined.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(combined, root, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (!File.Exists(combined))
+            {
+                continue;
+            }
+
+            try
+            {
+                var text = File.ReadAllText(combined);
+                if (string.IsNullOrEmpty(text))
+                {
+                    continue;
+                }
+
+                file.SetDiff(UnifiedDiffGenerator.Generate(string.Empty, text, file.RelativePath));
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
         }
     }
 

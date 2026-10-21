@@ -87,7 +87,8 @@ public partial class WebChatView
     public Task DispatchFilesChangedAsync(
         IReadOnlyList<ModifiedFileViewModel> files,
         bool upsert = true,
-        string? turnAnchorId = null)
+        string? turnAnchorId = null,
+        long? seq = null)
     {
         // Empty upsert: nothing to show. Empty seal must still reach JS so a live card
         // is finalized and cannot be stolen by the next turn.
@@ -96,22 +97,11 @@ public partial class WebChatView
             return Task.CompletedTask;
         }
 
-        PostTimelineEvent(ChatEventSerializer.SerializeFilesChanged(files, upsert, turnAnchorId: turnAnchorId));
-        return Task.CompletedTask;
-    }
-
-    public Task DispatchEditFileCardAsync(string toolCallId, IReadOnlyList<ModifiedFileViewModel> files)
-    {
-        if (files.Count == 0 || string.IsNullOrWhiteSpace(toolCallId))
-        {
-            return Task.CompletedTask;
-        }
-
-        // Keyed by the tool call id so a live publish and its replayed twin share one entry.
         PostTimelineEvent(ChatEventSerializer.SerializeFilesChanged(
             files,
-            upsert: true,
-            entryId: "files:edit:" + toolCallId));
+            upsert,
+            seq,
+            turnAnchorId: turnAnchorId));
         return Task.CompletedTask;
     }
 

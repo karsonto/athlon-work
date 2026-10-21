@@ -602,6 +602,7 @@ public partial class MainShellViewModel
                 ShowShellToast(_loc["Chat_OverflowRetrySkipped"], ShellToastKind.Info);
             });
         ui.PendingApprovalsChanged += OnPendingApprovalsChanged;
+        ui.TurnFilesPublished += OnTurnFilesPublished;
         RefreshComputerUseApprovals();
         SessionUsageLine = SessionUsageFormatter.Format(_sessionUsageAccumulator.Get(_displayedSessionId));
         RefreshContextOccupancy();
@@ -616,6 +617,16 @@ public partial class MainShellViewModel
         ui.OnContextBudgetUpdated = null;
         ui.OnOverflowRetrySkipped = null;
         ui.PendingApprovalsChanged -= OnPendingApprovalsChanged;
+        ui.TurnFilesPublished -= OnTurnFilesPublished;
+    }
+
+    private void OnTurnFilesPublished(string entryId, IReadOnlyList<ModifiedFileViewModel> files)
+    {
+        RunOnUi(() =>
+        {
+            FillMissingWriteDiffsFromWorkspace(files);
+            WorkspacePane.RefreshChanges(entryId, files);
+        });
     }
 
     private static void RunOnUi(Action action)

@@ -247,6 +247,23 @@ public partial class WebChatView
                     case "planRevise":
                         PlanReviseRequested?.Invoke(this, EventArgs.Empty);
                         break;
+                    case "reviewFiles":
+                    {
+                        var reviewEntryId = root.TryGetProperty("entryId", out var reviewEntryElement)
+                            ? reviewEntryElement.GetString()
+                            : null;
+                        var reviewPath = root.TryGetProperty("path", out var reviewPathElement)
+                            ? reviewPathElement.GetString()
+                            : null;
+                        if (!string.IsNullOrWhiteSpace(reviewEntryId))
+                        {
+                            ReviewFilesRequested?.Invoke(
+                                this,
+                                new ReviewFilesRequestedEventArgs(reviewEntryId, reviewPath));
+                        }
+
+                        break;
+                    }
                     case "requestToolDetail":
                     {
                         var detailMessageId = root.TryGetProperty("messageId", out var detailMessageIdElement)

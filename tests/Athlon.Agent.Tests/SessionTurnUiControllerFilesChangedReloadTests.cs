@@ -205,8 +205,8 @@ public sealed class SessionTurnUiControllerFilesChangedReloadTests
     }
 
     /// <summary>
-    /// A rebuild from disk restores each succeeded edit as its own card, keyed by tool call id, so
-    /// the live re-publish after a switch-back rewrites the replayed cards in place.
+    /// A rebuild from disk restores each succeeded edit as its own staged card, keyed by tool call
+    /// id. The published summary still merges those cards by path.
     /// </summary>
     [Fact]
     public void RebuildFromMessages_restores_one_edit_card_per_succeeded_file_tool()

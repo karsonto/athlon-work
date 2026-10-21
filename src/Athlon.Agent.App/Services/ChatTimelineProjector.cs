@@ -48,7 +48,9 @@ internal static class ChatTimelineProjector
         /// </summary>
         long TurnIndex,
         /// <summary>True when the turn called <c>publish_plan</c>; see <see cref="PlanTimelinePolicy"/>.</summary>
-        bool HasPlanPublish);
+        bool HasPlanPublish,
+        /// <summary>Succeeded file edits in this turn, rendered as one summary card rather than per edit.</summary>
+        IReadOnlyList<ChatMessageViewModel> FileEdits);
 
     public static IReadOnlyList<TurnSegment> BuildSegments(
         IReadOnlyList<ChatMessageViewModel> timeline,
@@ -57,6 +59,7 @@ internal static class ChatTimelineProjector
         var segments = new List<TurnSegment>();
         var blocks = new List<TurnBlock>();
         var activityBlock = new List<ChatMessageViewModel>();
+        var fileEdits = new List<ChatMessageViewModel>();
         DateTimeOffset? turnUserCreatedAt = null;
         string? turnAnchorId = null;
         var hasPlanPublish = false;
@@ -77,7 +80,7 @@ internal static class ChatTimelineProjector
         void FlushTurn()
         {
             FlushActivityBlock();
-            if (blocks.Count > 0 || hasPlanPublish)
+            if (blocks.Count > 0 || hasPlanPublish || fileEdits.Count > 0)
             {
                 segments.Add(new TurnSegment(
                     UserMessages: Array.Empty<ChatMessageViewModel>(),
@@ -86,10 +89,12 @@ internal static class ChatTimelineProjector
                     TurnUserCreatedAt: turnUserCreatedAt,
                     TurnAnchorId: turnAnchorId,
                     TurnIndex: segments.Count,
-                    HasPlanPublish: hasPlanPublish));
+                    HasPlanPublish: hasPlanPublish,
+                    FileEdits: fileEdits.ToArray()));
             }
 
             blocks.Clear();
+            fileEdits.Clear();
             hasPlanPublish = false;
         }
 
@@ -112,7 +117,8 @@ internal static class ChatTimelineProjector
                     TurnUserCreatedAt: turnUserCreatedAt,
                     TurnAnchorId: turnAnchorId,
                     TurnIndex: segments.Count,
-                    HasPlanPublish: false));
+                    HasPlanPublish: false,
+                    FileEdits: Array.Empty<ChatMessageViewModel>()));
                 continue;
             }
 
@@ -130,7 +136,8 @@ internal static class ChatTimelineProjector
                         TurnUserCreatedAt: null,
                         TurnAnchorId: turnAnchorId,
                         TurnIndex: segments.Count,
-                        HasPlanPublish: false));
+                        HasPlanPublish: false,
+                        FileEdits: Array.Empty<ChatMessageViewModel>()));
                 }
 
                 continue;
@@ -146,11 +153,15 @@ internal static class ChatTimelineProjector
                     continue;
                 }
 
-                // A successful edit renders as its own single-file card at the edit's slot in the
-                // turn's content stream — not folded into the activity summary and not aggregated
-                // into one per-turn "N files changed" card. Placing it here is what makes file
-                // modifications appear along the timeline in the order they happened.
-                if (IsSucceededFileEdit(message) || ShouldEmitToolCard(showToolCalls, message))
+                // Succeeded edits are collected for one end-of-turn summary card. They are not
+                // activity items and not their own timeline bubbles.
+                if (IsSucceededFileEdit(message))
+                {
+                    fileEdits.Add(message);
+                    continue;
+                }
+
+                if (ShouldEmitToolCard(showToolCalls, message))
                 {
                     FlushActivityBlock();
                     blocks.Add(new ContentBlock(message));
@@ -202,8 +213,7 @@ internal static class ChatTimelineProjector
     }
 
     /// <summary>
-    /// A file tool that finished successfully. These are rendered one card per edit (see
-    /// <see cref="IsSucceededFileEdit"/>) instead of folding into the turn's file-change summary.
+    /// A file tool that finished successfully. Collected onto the turn's single files-changed card.
     /// </summary>
     internal static bool IsSucceededFileEdit(ChatMessageViewModel message) =>
         message.IsTool

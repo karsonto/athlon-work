@@ -81,6 +81,7 @@ public partial class WebChatView : UserControl
     public event EventHandler<ToolDetailRequestEventArgs>? ToolDetailRequested;
     public event EventHandler? PlanBuildRequested;
     public event EventHandler? PlanReviseRequested;
+    public event EventHandler<ReviewFilesRequestedEventArgs>? ReviewFilesRequested;
 
     /// <summary>
     /// Read-aloud orchestration, assigned by the window once services are resolved. Null leaves the
@@ -317,3 +318,5 @@ public sealed record ToolDetailRequestEventArgs(
     string? MessageId,
     string? ToolCallId,
     string? RequestId);
+
+public sealed record ReviewFilesRequestedEventArgs(string EntryId, string? Path);

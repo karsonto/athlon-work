@@ -78,10 +78,9 @@ internal static partial class ChatEventSerializer
             turnIndex++;
             var currentTurn = turnIndex;
 
-            // Folds, tool cards, per-edit cards and assistant replies are numbered together in
-            // transcript order, so the rebuilt timeline keeps the exact interleaving the turn
-            // streamed with. A succeeded file edit renders as its own single-file card at its slot
-            // instead of a tool card, so file modifications appear where they happened.
+            // Folds, tool cards and assistant replies are numbered together in transcript order.
+            // Succeeded file edits are held aside and emitted once, after the reply, as this turn's
+            // summary card.
             var blockEvents = new List<string>();
             var blockOrdinal = 0;
             var activityBlockIndex = 0;
@@ -122,17 +121,6 @@ internal static partial class ChatEventSerializer
 
                         break;
 
-                    case ChatTimelineProjector.ContentBlock { Message.IsTool: true } edit
-                        when ChatTimelineProjector.IsSucceededFileEdit(edit.Message):
-                        BrowserScreenshotMarkdown.Collect(edit.Message.ImageAttachments, browserScreenshots);
-                        var editEvent = SerializeEditCard(edit.Message, seq);
-                        if (editEvent is not null)
-                        {
-                            blockEvents.Add(editEvent);
-                        }
-
-                        break;
-
                     case ChatTimelineProjector.ContentBlock contentBlock:
                         var content = contentBlock.Message;
                         if (content.IsTool)
@@ -155,6 +143,22 @@ internal static partial class ChatEventSerializer
                 }
             }
 
+            if (segment.FileEdits.Count > 0)
+            {
+                var merged = SessionModifiedFilesTracker.MergeByPath(
+                    segment.FileEdits.SelectMany(SessionModifiedFilesTracker.BuildEditCardFiles));
+                if (merged.Count > 0)
+                {
+                    blockEvents.Add(SerializeFilesChanged(
+                        merged,
+                        upsert: false,
+                        seq: TimelineOrderPolicy.Files(currentTurn),
+                        entryId: string.IsNullOrWhiteSpace(segment.TurnAnchorId)
+                            ? null
+                            : "files:" + segment.TurnAnchorId));
+                }
+            }
+
             if (blockEvents.Count > 0
                 // A turn whose only tool was publish_plan has no other events, but still owns the
                 // plan card's slot. Dropping the segment here would drop the card on replay.
@@ -170,28 +174,6 @@ internal static partial class ChatEventSerializer
         }
 
         return segments;
-    }
-
-    /// <summary>
-    /// One succeeded file edit as its own timeline card, keyed by the tool call id so the live
-    /// publish and this replayed card are the same entry. Returns <c>null</c> when the edit has no
-    /// resolvable path.
-    /// </summary>
-    private static string? SerializeEditCard(ChatMessageViewModel message, long seq)
-    {
-        var files = SessionModifiedFilesTracker.BuildEditCardFiles(message);
-        if (files.Count == 0)
-        {
-            return null;
-        }
-
-        return SerializeFilesChanged(files, seq: seq, entryId: EditCardEntryId(message));
-    }
-
-    internal static string EditCardEntryId(ChatMessageViewModel message)
-    {
-        var id = string.IsNullOrWhiteSpace(message.ToolCallId) ? message.MessageId : message.ToolCallId;
-        return "files:edit:" + id;
     }
 
     /// <summary>

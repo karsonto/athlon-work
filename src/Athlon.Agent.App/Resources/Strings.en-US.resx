@@ -181,6 +181,12 @@
   <data name="Chat_FilesChangedMany" xml:space="preserve">
     <value>{0} Files Changed</value>
   </data>
+  <data name="Chat_FilesChangedReview" xml:space="preserve">
+    <value>Review</value>
+  </data>
+  <data name="Chat_FilesChangedShowMore" xml:space="preserve">
+    <value>Show {0} more</value>
+  </data>
   <data name="Chat_EditedFilesOne" xml:space="preserve">
     <value>Edited 1 file</value>
   </data>
@@ -520,6 +526,9 @@ Hold to talk</value>
   </data>
   <data name="Context_TabFiles" xml:space="preserve">
     <value>Files</value>
+  </data>
+  <data name="Context_TabChanges" xml:space="preserve">
+    <value>Changes</value>
   </data>
   <data name="Context_TabSkills" xml:space="preserve">
     <value>Skills</value>
