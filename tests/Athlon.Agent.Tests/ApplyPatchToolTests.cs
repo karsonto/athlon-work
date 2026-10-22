@@ -247,6 +247,66 @@ public sealed class ApplyPatchToolTests
     }
 
     [Fact]
+    public async Task InvokeAsync_RejectsFileHeaderWithoutHunks()
+    {
+        var env = await CreateEnvironmentAsync();
+        var path = Path.Combine(env.WorkspaceRoot, "sample.txt");
+        await File.WriteAllTextAsync(path, "alpha\n");
+        var patch = """
+            --- a/sample.txt
+            +++ b/sample.txt
+            index 111..222 100644
+            """;
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("apply_patch", new Dictionary<string, string>
+            {
+                ["patch"] = patch
+            }));
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("Invalid patch", result.Summary);
+            Assert.Contains("no @@ hunks", result.Error, StringComparison.Ordinal);
+            Assert.Equal("alpha\n", await File.ReadAllTextAsync(path));
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_AcceptsCompactAndUnicodeMinusHunkHeaders()
+    {
+        var env = await CreateEnvironmentAsync();
+        var path = Path.Combine(env.WorkspaceRoot, "sample.txt");
+        await File.WriteAllTextAsync(path, "alpha\nbeta\n");
+        var patch = """
+            --- a/sample.txt
+            +++ b/sample.txt
+            @@−2,1 +2,1@@
+            -beta
+            +BRAVO
+            """;
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("apply_patch", new Dictionary<string, string>
+            {
+                ["patch"] = patch
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("alpha\nBRAVO\n", await File.ReadAllTextAsync(path));
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task InvokeAsync_NormalizesMultiCrLineEndings_AndWritesCleanLf()
     {
         var env = await CreateEnvironmentAsync();
@@ -368,18 +428,223 @@ public sealed class ApplyPatchToolTests
     }
 
     [Fact]
-    public async Task InvokeAsync_RejectsBeginPatchFormat()
+    public async Task InvokeAsync_AppliesV4AUpdateUsingContextAnchor()
     {
         var env = await CreateEnvironmentAsync();
+        var path = Path.Combine(env.WorkspaceRoot, "sample.txt");
+        await File.WriteAllTextAsync(path, "alpha\nbeta\nsecond\nalpha\nbeta\n");
+        var patch = """
+            *** Begin Patch
+            *** Update File: sample.txt
+            @@ second
+             alpha
+            -beta
+            +BETA
+            *** End Patch
+            """;
+
         try
         {
             var result = await env.Tool.InvokeAsync(new ToolInvocation("apply_patch", new Dictionary<string, string>
             {
-                ["patch"] = "*** Begin Patch\n*** Update File: sample.txt\n*** End Patch"
+                ["patch"] = patch
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("alpha\nbeta\nsecond\nalpha\nBETA\n", await File.ReadAllTextAsync(path));
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_AddsDeletesAndMovesFiles()
+    {
+        var env = await CreateEnvironmentAsync();
+        var source = Path.Combine(env.WorkspaceRoot, "a.txt");
+        var doomed = Path.Combine(env.WorkspaceRoot, "gone.txt");
+        await File.WriteAllTextAsync(source, "alpha\n");
+        await File.WriteAllTextAsync(doomed, "bye\n");
+        var patch = """
+            *** Begin Patch
+            *** Add File: nested/new.txt
+            +hello
+            *** Delete File: gone.txt
+            *** Update File: a.txt
+            *** Move to: b.txt
+            @@
+            -alpha
+            +beta
+            *** End Patch
+            """;
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("apply_patch", new Dictionary<string, string>
+            {
+                ["patch"] = patch
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("hello\n", await File.ReadAllTextAsync(Path.Combine(env.WorkspaceRoot, "nested", "new.txt")));
+            Assert.False(File.Exists(doomed));
+            Assert.False(File.Exists(source));
+            Assert.Equal("beta\n", await File.ReadAllTextAsync(Path.Combine(env.WorkspaceRoot, "b.txt")));
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_AppendsAtEndOfFile()
+    {
+        var env = await CreateEnvironmentAsync();
+        var path = Path.Combine(env.WorkspaceRoot, "sample.txt");
+        await File.WriteAllTextAsync(path, "alpha\nbeta\n");
+        var patch = "*** Begin Patch\n*** Update File: sample.txt\n*** End of File\n-beta\n+BETA\n*** End Patch\n";
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("apply_patch", new Dictionary<string, string>
+            {
+                ["patch"] = patch
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("alpha\nBETA\n", await File.ReadAllTextAsync(path));
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_KeepsDiskIndent_WhenContextWhitespaceDiffers()
+    {
+        var env = await CreateEnvironmentAsync();
+        var path = Path.Combine(env.WorkspaceRoot, "sample.txt");
+        var original = "    keep\n    value = 1 \u2013 2;\n";
+        await File.WriteAllTextAsync(path, original);
+        var patch = "*** Begin Patch\n"
+            + "*** Update File: sample.txt\n"
+            + "@@\n"
+            + "   keep\n"
+            + "-    value = 1 - 2;\n"
+            + "+    value = 3;\n"
+            + "*** End Patch\n";
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("apply_patch", new Dictionary<string, string>
+            {
+                ["patch"] = patch
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("    keep\n    value = 3;\n", await File.ReadAllTextAsync(path));
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_SucceedsWithoutWriting_WhenChangeIsAlreadyApplied()
+    {
+        var env = await CreateEnvironmentAsync();
+        var path = Path.Combine(env.WorkspaceRoot, "sample.txt");
+        await File.WriteAllTextAsync(path, "alpha\nBRAVO\n");
+        var before = File.GetLastWriteTimeUtc(path);
+        var patch = """
+            *** Begin Patch
+            *** Update File: sample.txt
+            @@
+             alpha
+            -beta
+            +BRAVO
+            *** End Patch
+            """;
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("apply_patch", new Dictionary<string, string>
+            {
+                ["patch"] = patch
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("Already applied", result.Summary);
+            Assert.Equal("alpha\nBRAVO\n", await File.ReadAllTextAsync(path));
+            Assert.Equal(before, File.GetLastWriteTimeUtc(path));
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_ReportsExpectedLines_WhenContextIsMissing()
+    {
+        var env = await CreateEnvironmentAsync();
+        var path = Path.Combine(env.WorkspaceRoot, "sample.txt");
+        await File.WriteAllTextAsync(path, "alpha\n");
+        var patch = """
+            *** Begin Patch
+            *** Update File: sample.txt
+            -missing
+            +beta
+            *** End Patch
+            """;
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("apply_patch", new Dictionary<string, string>
+            {
+                ["patch"] = patch
             }));
 
             Assert.False(result.Succeeded);
-            Assert.Contains("unified diff", result.Error, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("Patch failed", result.Summary);
+            Assert.Contains("Failed to find expected lines", result.Error, StringComparison.Ordinal);
+            Assert.Contains("missing", result.Error, StringComparison.Ordinal);
+            Assert.Equal("alpha\n", await File.ReadAllTextAsync(path));
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_AppliesUnifiedDiff_WhenLineNumberIsWrong()
+    {
+        var env = await CreateEnvironmentAsync();
+        var path = Path.Combine(env.WorkspaceRoot, "sample.txt");
+        await File.WriteAllTextAsync(path, "alpha\nbeta\ngamma\n");
+        var patch = """
+            --- a/sample.txt
+            +++ b/sample.txt
+            @@ -80,1 +80,1 @@
+            -beta
+            +BRAVO
+            """;
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("apply_patch", new Dictionary<string, string>
+            {
+                ["patch"] = patch
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("alpha\nBRAVO\ngamma\n", await File.ReadAllTextAsync(path));
         }
         finally
         {

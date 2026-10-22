@@ -29,22 +29,33 @@ internal static partial class UnifiedDiffParser
 {
     private static readonly Regex HunkHeaderPattern = HunkHeaderRegex();
 
-    public static bool TryParse(string patch, out IReadOnlyList<UnifiedDiffFile> files, out string? error)
+    public static bool TryParse(string patch, out IReadOnlyList<PatchFile> files, out string? error)
     {
-        files = Array.Empty<UnifiedDiffFile>();
+        files = Array.Empty<PatchFile>();
         if (string.IsNullOrWhiteSpace(patch))
         {
             error = "Patch text is empty.";
             return false;
         }
 
-        if (patch.Contains("*** Begin Patch", StringComparison.Ordinal)
-            && !patch.Contains("--- ", StringComparison.Ordinal))
+        patch = patch.TrimStart('\uFEFF');
+        if (patch.Contains("*** Begin Patch", StringComparison.Ordinal))
         {
-            error = "Only unified diff is supported (--- / +++ / @@). The *** Begin Patch format is not supported.";
+            return PatchDocument.TryParseV4A(patch, out files, out error);
+        }
+
+        if (!TryParseUnified(patch, out var unified, out error))
+        {
             return false;
         }
 
+        files = unified.Select(PatchDocument.FromUnified).ToArray();
+        return true;
+    }
+
+    private static bool TryParseUnified(string patch, out IReadOnlyList<UnifiedDiffFile> files, out string? error)
+    {
+        files = Array.Empty<UnifiedDiffFile>();
         var normalized = TextLineEndings.NormalizeToLf(patch);
         var lines = normalized.Split('\n');
         var parsedFiles = new List<UnifiedDiffFile>();
@@ -109,7 +120,7 @@ internal static partial class UnifiedDiffParser
                 continue;
             }
 
-            var hunkMatch = HunkHeaderPattern.Match(rawLine);
+            var hunkMatch = HunkHeaderPattern.Match(NormalizeHunkHeader(rawLine));
             if (hunkMatch.Success)
             {
                 FlushHunk();
@@ -119,6 +130,12 @@ internal static partial class UnifiedDiffParser
                 newCount = hunkMatch.Groups[4].Success ? int.Parse(hunkMatch.Groups[4].Value) : 1;
                 currentHunkLines = [];
                 continue;
+            }
+
+            if (currentHunkLines is null && rawLine.TrimStart().StartsWith("@@", StringComparison.Ordinal))
+            {
+                lineError = $"Unrecognized hunk header: {rawLine.Trim()}";
+                break;
             }
 
             if (rawLine.Length == 0)
@@ -181,6 +198,14 @@ internal static partial class UnifiedDiffParser
             return false;
         }
 
+        var withoutHunks = parsedFiles.FirstOrDefault(file => file.Hunks.Count == 0);
+        if (withoutHunks is not null)
+        {
+            error = $"{withoutHunks.NewPath}: patch has file headers but no @@ hunks. "
+                + "Each change needs a hunk header such as @@ -12,3 +12,4 @@ and lines starting with a space, '-' or '+'.";
+            return false;
+        }
+
         files = parsedFiles;
         error = null;
         return true;
@@ -218,89 +243,25 @@ internal static partial class UnifiedDiffParser
         return path.Replace('\\', '/');
     }
 
-    [GeneratedRegex(@"^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@")]
-    private static partial Regex HunkHeaderRegex();
-}
-
-internal static class UnifiedDiffApplier
-{
-    public static bool TryApply(string content, UnifiedDiffHunk hunk, out string patched, out string? error)
-    {
-        var hadTrailingNewline = !hunk.OmitTrailingNewline
-            && (content.EndsWith('\n') || content.EndsWith('\r') || content.EndsWith("\r\n", StringComparison.Ordinal));
-        var normalized = TextLineEndings.NormalizeToLf(content);
-        var fileLines = normalized.Length == 0 ? new List<string>() : normalized.Split('\n').ToList();
-        if (fileLines.Count > 0 && fileLines[^1] == string.Empty && normalized.EndsWith('\n'))
-        {
-            fileLines.RemoveAt(fileLines.Count - 1);
-        }
-
-        var index = Math.Max(0, hunk.OldStart - 1);
-        var cursor = index;
-
-        foreach (var line in hunk.Lines)
-        {
-            switch (line.Kind)
-            {
-                case UnifiedDiffLineKind.Context:
-                case UnifiedDiffLineKind.Remove:
-                    if (cursor >= fileLines.Count || !string.Equals(fileLines[cursor], line.Text, StringComparison.Ordinal))
-                    {
-                        patched = content;
-                        error = $"Hunk context mismatch at line {cursor + 1}. Expected: {line.Text}";
-                        return false;
-                    }
-
-                    cursor++;
-                    break;
-                case UnifiedDiffLineKind.Add:
-                    break;
-            }
-        }
-
-        var replacement = new List<string>();
-        foreach (var line in hunk.Lines)
-        {
-            if (line.Kind is UnifiedDiffLineKind.Context or UnifiedDiffLineKind.Add)
-            {
-                replacement.Add(line.Text);
-            }
-        }
-
-        fileLines.RemoveRange(index, cursor - index);
-        fileLines.InsertRange(index, replacement);
-
-        var joined = string.Join('\n', fileLines);
-        if (hadTrailingNewline && joined.Length > 0)
-        {
-            joined += '\n';
-        }
-
-        patched = joined;
-        error = null;
-        return true;
-    }
-
-    public static string ApplyAllHunks(string content, IReadOnlyList<UnifiedDiffHunk> hunks, out string? error)
-    {
-        var current = content;
-        foreach (var hunk in hunks.OrderByDescending(h => h.OldStart))
-        {
-            if (!TryApply(current, hunk, out current, out error))
-            {
-                return content;
-            }
-        }
-
-        error = null;
-        return current;
-    }
-
     /// <summary>
-    /// Restores the original file's newline style. Hunks are applied on LF text; a CRLF
-    /// source must be written back as CRLF so the patch does not rewrite the whole file.
-    /// Nonstandard endings (e.g. <c>\r\r\r\r\n</c>) are written as clean LF.
+    /// Models often omit the spaces around <c>@@</c> or emit a unicode minus in the ranges.
+    /// Those headers used to be skipped, leaving a file with zero hunks that was reported as a no-op.
     /// </summary>
-    public static string ToDiskText(string original, string patchedLf) =>
-        TextLineEndings.ToDiskText(original, patchedLf);
+    private static string NormalizeHunkHeader(string line)
+    {
+        if (!line.Contains("@@", StringComparison.Ordinal))
+        {
+            return line;
+        }
+
+        return line
+            .Replace('\u2212', '-')
+            .Replace('\u2013', '-')
+            .Replace('\u2014', '-')
+            .Replace('\uFE63', '-')
+            .Replace('\uFF0D', '-');
+    }
+
+    [GeneratedRegex(@"^@@\s*-(\d+)(?:,\s*(\d+))?\s+\+(\d+)(?:,\s*(\d+))?\s*@@")]
+    private static partial Regex HunkHeaderRegex();
 }

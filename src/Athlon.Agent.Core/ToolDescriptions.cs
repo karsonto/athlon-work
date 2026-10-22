@@ -30,8 +30,17 @@ public static class ToolDescriptions
         + $"Scans up to {maxFilesToScan} files, returns up to {maxMatches} matches.";
 
     public const string ApplyPatch =
-        "Apply a unified diff patch to workspace files. "
-        + "Patch must use standard --- / +++ / @@ headers. Optional path limits application to that file.";
+        "Apply a patch to workspace files. Prefer this shape:\n"
+        + "*** Begin Patch\n"
+        + "*** Update File: path/to/file\n"
+        + "@@ Class or function name\n"
+        + " context copied from the file\n"
+        + "-old line\n"
+        + "+new line\n"
+        + "*** End Patch\n"
+        + "@@ is a context anchor, not a line number. Context and removed lines must be copied from the file. "
+        + "Also accepts a unified diff (--- / +++ / @@). Optional path limits application to that file. "
+        + "On failure the error includes the lines that were not found.";
 
     public static string GlobFiles(int maxMatches) =>
         "Find files by name using a glob pattern (recursive with **, respects workspace ignore rules). "
