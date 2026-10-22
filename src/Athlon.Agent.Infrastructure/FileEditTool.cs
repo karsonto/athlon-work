@@ -75,11 +75,19 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
         }
 
         var effectiveNewText = FileEditMatcher.ResolveNewText(oldText, newText, match);
-        var updated = FileEditMatcher.ApplyReplace(content, match.MatchedOldText, effectiveNewText, replaceAll);
+        var updated = FileEditMatcher.ApplyMatchedEdit(content, match, newText, replaceAll);
 
         try
         {
             await AtomicFile.WriteAllTextAsync(fullPath, updated, cancellationToken);
+            var readBack = await File.ReadAllTextAsync(fullPath, cancellationToken);
+            if (!string.Equals(readBack, updated, StringComparison.Ordinal))
+            {
+                await AtomicFile.WriteAllTextAsync(fullPath, content, CancellationToken.None);
+                return ToolResult.Failure(
+                    "Write failed",
+                    $"{ToolPathNormalizer.ForModel(invocation.Arguments.GetString(ToolPathNormalizer.PathArgumentName) ?? fullPath)}: written content did not match the edit.");
+            }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -96,7 +104,8 @@ public sealed class FileEditTool(WorkspaceGuard guard, AuditLogService audit) : 
                 oldChars = match.MatchedOldText.Length,
                 newChars = effectiveNewText.Length,
                 occurrences = replaceAll ? match.Occurrences : 1,
-                normalized = match.Kind != OldTextCandidateKind.Exact
+                normalized = match.Kind != OldTextCandidateKind.Exact,
+                nonstandardEol = TextLineEndings.IsNonstandard(content)
             },
             cancellationToken);
 

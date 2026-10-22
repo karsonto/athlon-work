@@ -45,7 +45,7 @@ internal static partial class UnifiedDiffParser
             return false;
         }
 
-        var normalized = patch.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        var normalized = TextLineEndings.NormalizeToLf(patch);
         var lines = normalized.Split('\n');
         var parsedFiles = new List<UnifiedDiffFile>();
         string? oldPath = null;
@@ -227,8 +227,8 @@ internal static class UnifiedDiffApplier
     public static bool TryApply(string content, UnifiedDiffHunk hunk, out string patched, out string? error)
     {
         var hadTrailingNewline = !hunk.OmitTrailingNewline
-            && (content.EndsWith('\n') || content.EndsWith("\r\n", StringComparison.Ordinal));
-        var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+            && (content.EndsWith('\n') || content.EndsWith('\r') || content.EndsWith("\r\n", StringComparison.Ordinal));
+        var normalized = TextLineEndings.NormalizeToLf(content);
         var fileLines = normalized.Length == 0 ? new List<string>() : normalized.Split('\n').ToList();
         if (fileLines.Count > 0 && fileLines[^1] == string.Empty && normalized.EndsWith('\n'))
         {
@@ -299,9 +299,8 @@ internal static class UnifiedDiffApplier
     /// <summary>
     /// Restores the original file's newline style. Hunks are applied on LF text; a CRLF
     /// source must be written back as CRLF so the patch does not rewrite the whole file.
+    /// Nonstandard endings (e.g. <c>\r\r\r\r\n</c>) are written as clean LF.
     /// </summary>
     public static string ToDiskText(string original, string patchedLf) =>
-        original.Contains("\r\n", StringComparison.Ordinal)
-            ? patchedLf.Replace("\n", "\r\n", StringComparison.Ordinal)
-            : patchedLf;
+        TextLineEndings.ToDiskText(original, patchedLf);
 }

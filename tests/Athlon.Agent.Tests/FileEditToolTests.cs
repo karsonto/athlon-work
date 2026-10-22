@@ -58,6 +58,59 @@ public sealed class FileEditToolTests
     }
 
     [Fact]
+    public async Task InvokeAsync_NormalizesMultiCrLineEndings_AndWritesCleanLf()
+    {
+        var root = CreateWorkspaceRoot();
+        var file = Path.Combine(root, "sample.txt");
+        await File.WriteAllTextAsync(file, "alpha\r\r\r\r\nbeta\r\r\r\r\ngamma\r\r\r\r\n");
+
+        try
+        {
+            var tool = CreateTool(root);
+            var result = await tool.InvokeAsync(new ToolInvocation("file_edit", new Dictionary<string, string>
+            {
+                ["path"] = "sample.txt",
+                ["old_text"] = "beta",
+                ["new_text"] = "BRAVO"
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("alpha\nBRAVO\ngamma\n", await File.ReadAllTextAsync(file));
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_WhenTextMissing_OnNonstandardEol_MentionsLineEndings()
+    {
+        var root = CreateWorkspaceRoot();
+        var file = Path.Combine(root, "sample.txt");
+        await File.WriteAllTextAsync(file, "alpha\r\r\r\r\nbeta\r\r\r\r\n");
+
+        try
+        {
+            var tool = CreateTool(root);
+            var result = await tool.InvokeAsync(new ToolInvocation("file_edit", new Dictionary<string, string>
+            {
+                ["path"] = "sample.txt",
+                ["old_text"] = "missing-anchor",
+                ["new_text"] = "x"
+            }));
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("Text not found", result.Summary);
+            Assert.Contains("nonstandard line endings", result.Error!, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Cleanup(root);
+        }
+    }
+
+    [Fact]
     public async Task InvokeAsync_AllowsEmptyNewText_ToDeleteMatchedText()
     {
         var root = CreateWorkspaceRoot();

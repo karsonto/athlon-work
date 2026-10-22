@@ -236,8 +236,69 @@ public sealed class ApplyPatchToolTests
             }));
 
             Assert.False(result.Succeeded);
-            Assert.Equal("No files patched", result.Summary);
+            Assert.Equal("No-op", result.Summary);
+            Assert.Contains("No-op: patch applied but file content unchanged", result.Error, StringComparison.Ordinal);
             Assert.Equal("alpha\n", await File.ReadAllTextAsync(path));
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_NormalizesMultiCrLineEndings_AndWritesCleanLf()
+    {
+        var env = await CreateEnvironmentAsync();
+        var path = Path.Combine(env.WorkspaceRoot, "sample.txt");
+        await File.WriteAllTextAsync(path, "alpha\r\r\r\r\nbeta\r\r\r\r\ngamma\r\r\r\r\n");
+        var patch = """
+            --- a/sample.txt
+            +++ b/sample.txt
+            @@ -2,1 +2,1 @@
+            -beta
+            +BRAVO
+            """;
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("apply_patch", new Dictionary<string, string>
+            {
+                ["patch"] = patch
+            }));
+
+            Assert.True(result.Succeeded, result.Error);
+            Assert.Equal("alpha\nBRAVO\ngamma\n", await File.ReadAllTextAsync(path));
+        }
+        finally
+        {
+            env.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task InvokeAsync_RejectsNewFilePatch_WhenTargetAlreadyExists()
+    {
+        var env = await CreateEnvironmentAsync();
+        var path = Path.Combine(env.WorkspaceRoot, "sample.txt");
+        await File.WriteAllTextAsync(path, "existing\n");
+        var patch = """
+            --- /dev/null
+            +++ b/sample.txt
+            @@ -0,0 +1,1 @@
+            +new
+            """;
+
+        try
+        {
+            var result = await env.Tool.InvokeAsync(new ToolInvocation("apply_patch", new Dictionary<string, string>
+            {
+                ["patch"] = patch
+            }));
+
+            Assert.False(result.Succeeded);
+            Assert.Equal("File exists", result.Summary);
+            Assert.Equal("existing\n", await File.ReadAllTextAsync(path));
         }
         finally
         {

@@ -92,6 +92,14 @@ public sealed class SshApplyPatchTool(
             string source;
             if (file.IsNewFile)
             {
+                var existingNew = await client.TryGetFileInfoAsync(fullPath, cancellationToken).ConfigureAwait(false);
+                if (existingNew is not null)
+                {
+                    var message = $"Cannot create file that already exists: {relativePath}";
+                    Fail("exists", message, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+                    return ToolResult.Failure("File exists", message);
+                }
+
                 source = string.Empty;
             }
             else
@@ -111,7 +119,7 @@ public sealed class SshApplyPatchTool(
             var patched = UnifiedDiffApplier.ApplyAllHunks(source, file.Hunks, out var applyError);
             if (applyError is not null)
             {
-                var message = $"{relativePath}: {applyError}";
+                var message = TextLineEndings.WithNonstandardEolHint($"{relativePath}: {applyError}", source);
                 Fail("hunk_mismatch", message, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
                 return ToolResult.Failure("Patch failed", message);
             }
@@ -127,11 +135,12 @@ public sealed class SshApplyPatchTool(
 
         if (pending.Count == 0)
         {
+            var noop = matched > 0;
             var message = matched == 0
                 ? "Patch contained no matching file hunks."
-                : "Patch did not change any file.";
+                : "No-op: patch applied but file content unchanged.";
             Fail("noop", message, clock, sessionId, patchChars, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-            return ToolResult.Failure("No files patched", message);
+            return ToolResult.Failure(noop ? "No-op" : "No files patched", message);
         }
 
         var written = new List<PendingWrite>();

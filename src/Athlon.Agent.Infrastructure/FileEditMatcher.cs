@@ -10,7 +10,9 @@ internal enum OldTextCandidateKind
     Exact,
     StrippedLinePrefixes,
     CrlfNormalized,
-    StrippedLinePrefixesCrlf
+    StrippedLinePrefixesCrlf,
+    LfNormalized,
+    StrippedLfNormalized
 }
 
 internal enum FileEditMatchStatus
@@ -45,7 +47,8 @@ internal static partial class FileEditMatcher
     {
         foreach (var candidate in EnumerateOldTextCandidates(content, oldText))
         {
-            var occurrences = CountOccurrences(content, candidate.Text);
+            var haystack = HaystackFor(content, candidate.Kind);
+            var occurrences = CountOccurrences(haystack, candidate.Text);
             if (occurrences == 0)
             {
                 continue;
@@ -62,6 +65,26 @@ internal static partial class FileEditMatcher
         return FileEditMatchResult.NotFound(oldText);
     }
 
+    /// <summary>
+    /// Apply a successful match and map the result to the correct on-disk line-ending style.
+    /// </summary>
+    public static string ApplyMatchedEdit(string content, FileEditMatchResult match, string originalNewText, bool replaceAll)
+    {
+        var effectiveNewText = ResolveNewText(match.OriginalOldText, originalNewText, match);
+
+        if (match.Kind is OldTextCandidateKind.LfNormalized or OldTextCandidateKind.StrippedLfNormalized
+            || TextLineEndings.IsNonstandard(content))
+        {
+            var lfContent = TextLineEndings.NormalizeToLf(content);
+            var lfOld = TextLineEndings.NormalizeToLf(match.MatchedOldText);
+            var lfNew = TextLineEndings.NormalizeToLf(effectiveNewText);
+            var updatedLf = ApplyReplace(lfContent, lfOld, lfNew, replaceAll);
+            return TextLineEndings.ToDiskText(content, updatedLf);
+        }
+
+        return ApplyReplace(content, match.MatchedOldText, effectiveNewText, replaceAll);
+    }
+
     public static string ApplyReplace(string content, string matchedOldText, string newText, bool replaceAll) =>
         replaceAll
             ? content.Replace(matchedOldText, newText)
@@ -74,6 +97,9 @@ internal static partial class FileEditMatcher
             OldTextCandidateKind.StrippedLinePrefixes => StripFileReadLinePrefixes(originalNewText),
             OldTextCandidateKind.CrlfNormalized => ToCrlf(originalNewText),
             OldTextCandidateKind.StrippedLinePrefixesCrlf => ToCrlf(StripFileReadLinePrefixes(originalNewText)),
+            OldTextCandidateKind.LfNormalized => TextLineEndings.NormalizeToLf(originalNewText),
+            OldTextCandidateKind.StrippedLfNormalized =>
+                TextLineEndings.NormalizeToLf(StripFileReadLinePrefixes(originalNewText)),
             _ => originalNewText
         };
 
@@ -93,6 +119,11 @@ internal static partial class FileEditMatcher
         }
 
         builder.Append(" Check whitespace, indentation, and line endings (CRLF vs LF).");
+
+        if (content is not null && TextLineEndings.IsNonstandard(content))
+        {
+            builder.Append(TextLineEndings.NonstandardEolHint());
+        }
 
         var closestLine = TryFindClosestSimilarBlockLine(content, oldText);
         if (closestLine is > 0)
@@ -123,6 +154,11 @@ internal static partial class FileEditMatcher
         builder.Append(" Set replace_all=true, narrow old_text to a unique span, or use apply_patch.");
         return builder.ToString();
     }
+
+    private static string HaystackFor(string content, OldTextCandidateKind kind) =>
+        kind is OldTextCandidateKind.LfNormalized or OldTextCandidateKind.StrippedLfNormalized
+            ? TextLineEndings.NormalizeToLf(content)
+            : content;
 
     private static List<int> CollectOccurrenceLineNumbers(string content, string matchedOldText, int maxCount)
     {
@@ -228,9 +264,7 @@ internal static partial class FileEditMatcher
     }
 
     private static string[] SplitLines(string text) =>
-        text.Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n')
-            .Split('\n');
+        TextLineEndings.NormalizeToLf(text).Split('\n');
 
     private static IEnumerable<OldTextCandidate> EnumerateOldTextCandidates(string content, string oldText)
     {
@@ -247,26 +281,44 @@ internal static partial class FileEditMatcher
             yield break;
         }
 
-        var crlf = ToCrlf(oldText);
-        if (!string.Equals(crlf, oldText, StringComparison.Ordinal))
+        // Prefer standard CRLF candidates before LF-normalized matching so CRLF files keep CRLF.
+        if (!TextLineEndings.IsNonstandard(content))
         {
-            yield return new OldTextCandidate(crlf, OldTextCandidateKind.CrlfNormalized);
+            var crlf = ToCrlf(oldText);
+            if (!string.Equals(crlf, oldText, StringComparison.Ordinal))
+            {
+                yield return new OldTextCandidate(crlf, OldTextCandidateKind.CrlfNormalized);
+            }
+
+            if (!string.Equals(stripped, oldText, StringComparison.Ordinal))
+            {
+                var strippedCrlf = ToCrlf(stripped);
+                if (!string.Equals(strippedCrlf, stripped, StringComparison.Ordinal)
+                    && !string.Equals(strippedCrlf, crlf, StringComparison.Ordinal))
+                {
+                    yield return new OldTextCandidate(strippedCrlf, OldTextCandidateKind.StrippedLinePrefixesCrlf);
+                }
+            }
         }
 
-        if (!string.Equals(stripped, oldText, StringComparison.Ordinal))
+        var lfOld = TextLineEndings.NormalizeToLf(oldText);
+        if (!string.Equals(lfOld, oldText, StringComparison.Ordinal)
+            || TextLineEndings.IsNonstandard(content)
+            || !string.Equals(TextLineEndings.NormalizeToLf(content), content, StringComparison.Ordinal))
         {
-            var strippedCrlf = ToCrlf(stripped);
-            if (!string.Equals(strippedCrlf, stripped, StringComparison.Ordinal)
-                && !string.Equals(strippedCrlf, crlf, StringComparison.Ordinal))
+            yield return new OldTextCandidate(lfOld, OldTextCandidateKind.LfNormalized);
+
+            var lfStripped = TextLineEndings.NormalizeToLf(stripped);
+            if (!string.Equals(lfStripped, lfOld, StringComparison.Ordinal))
             {
-                yield return new OldTextCandidate(strippedCrlf, OldTextCandidateKind.StrippedLinePrefixesCrlf);
+                yield return new OldTextCandidate(lfStripped, OldTextCandidateKind.StrippedLfNormalized);
             }
         }
     }
 
     internal static string StripFileReadLinePrefixes(string text)
     {
-        var normalized = text.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var normalized = TextLineEndings.NormalizeToLf(text);
         var lines = normalized.Split('\n');
         var changed = false;
         for (var index = 0; index < lines.Length; index++)
@@ -287,7 +339,7 @@ internal static partial class FileEditMatcher
         }
 
         var joined = string.Join('\n', lines);
-        return text.Contains("\r\n", StringComparison.Ordinal) ? joined.Replace("\n", "\r\n", StringComparison.Ordinal) : joined;
+        return TextLineEndings.IsCrlf(text) ? joined.Replace("\n", "\r\n", StringComparison.Ordinal) : joined;
     }
 
     private static string ToCrlf(string text) =>

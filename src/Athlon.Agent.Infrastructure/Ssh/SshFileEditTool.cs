@@ -68,8 +68,17 @@ public sealed class SshFileEditTool(
             }
 
             var effectiveNewText = FileEditMatcher.ResolveNewText(oldText, newText, match);
-            var updated = FileEditMatcher.ApplyReplace(content, match.MatchedOldText, effectiveNewText, replaceAll);
+            var updated = FileEditMatcher.ApplyMatchedEdit(content, match, newText, replaceAll);
             await client.WriteTextAsync(fullPath, updated, cancellationToken).ConfigureAwait(false);
+            var readBack = await client.ReadTextAsync(fullPath, cancellationToken).ConfigureAwait(false);
+            if (!string.Equals(readBack, updated, StringComparison.Ordinal))
+            {
+                await client.WriteTextAsync(fullPath, content, CancellationToken.None).ConfigureAwait(false);
+                return ToolResult.Failure(
+                    "Write failed",
+                    $"{RemotePathNormalizer.GetFileName(fullPath)}: written content did not match the edit.");
+            }
+
             await WorkspaceToolHelper.AuditAsync(
                 audit,
                 "file_edit",
@@ -79,7 +88,9 @@ public sealed class SshFileEditTool(
                     oldChars = match.MatchedOldText.Length,
                     newChars = effectiveNewText.Length,
                     occurrences = replaceAll ? match.Occurrences : 1,
-                    remote = true
+                    remote = true,
+                    normalized = match.Kind != OldTextCandidateKind.Exact,
+                    nonstandardEol = TextLineEndings.IsNonstandard(content)
                 },
                 cancellationToken).ConfigureAwait(false);
             return ToolResult.Success($"Edited {RemotePathNormalizer.GetFileName(fullPath)}");

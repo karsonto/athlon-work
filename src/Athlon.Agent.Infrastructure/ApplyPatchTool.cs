@@ -84,6 +84,13 @@ public sealed class ApplyPatchTool(
             string source;
             if (file.IsNewFile)
             {
+                if (File.Exists(fullPath))
+                {
+                    var message = $"Cannot create file that already exists: {relativePath}";
+                    Fail("exists", message, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
+                    return ToolResult.Failure("File exists", message);
+                }
+
                 source = string.Empty;
             }
             else
@@ -102,7 +109,7 @@ public sealed class ApplyPatchTool(
             var patched = UnifiedDiffApplier.ApplyAllHunks(source, file.Hunks, out var applyError);
             if (applyError is not null)
             {
-                var message = $"{relativePath}: {applyError}";
+                var message = TextLineEndings.WithNonstandardEolHint($"{relativePath}: {applyError}", source);
                 Fail("hunk_mismatch", message, clock, sessionId, patchChars, path: relativePath, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
                 return ToolResult.Failure("Patch failed", message);
             }
@@ -118,13 +125,14 @@ public sealed class ApplyPatchTool(
 
         if (pending.Count == 0)
         {
+            var noop = matched > 0;
             var message = matched == 0
                 ? pathFilter is null
                     ? "Patch contained no applicable file hunks."
                     : $"No hunks matched path filter: {pathFilter}"
-                : "Patch did not change any file.";
+                : "No-op: patch applied but file content unchanged.";
             Fail("noop", message, clock, sessionId, patchChars, pathFilter: pathFilter, fileCount: fileCount, hunkCount: hunkCount, patchPreview: patch);
-            return ToolResult.Failure("No files patched", message);
+            return ToolResult.Failure(noop ? "No-op" : "No files patched", message);
         }
 
         var written = new List<PendingWrite>();
