@@ -10,7 +10,7 @@ public sealed class AppLogger : IAppLogger, IDisposable
     internal const string ChinaTimestampPropertyName = "ChinaTimestamp";
 
     private const string FileOutputTemplate =
-        "{" + ChinaTimestampPropertyName + ":yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
+        "{" + ChinaTimestampPropertyName + ":yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}";
 
     private readonly ILogger _logger;
     private readonly Logger? _rootLogger;
@@ -32,6 +32,7 @@ public sealed class AppLogger : IAppLogger, IDisposable
         var logger = new LoggerConfiguration()
             .MinimumLevel.Is(level)
             .Enrich.FromLogContext()
+            .Enrich.WithProperty("SourceContext", "-")
             .Enrich.With<ChinaTimestampEnricher>()
             .WriteTo.File(
                 Path.Combine(logDirectory, "app-.log"),
@@ -50,7 +51,11 @@ public sealed class AppLogger : IAppLogger, IDisposable
     public void Information(string messageTemplate, params object[] values) => _logger.Information(SensitiveText.Redact(messageTemplate), values);
     public void Warning(string messageTemplate, params object[] values) => _logger.Warning(SensitiveText.Redact(messageTemplate), values);
     public void Error(Exception exception, string messageTemplate, params object[] values) => _logger.Error(exception, SensitiveText.Redact(messageTemplate), values);
-    public IAppLogger ForContext(string sourceContext) => new AppLogger(_logger.ForContext("SourceContext", sourceContext));
+    public IAppLogger ForContext(string sourceContext) =>
+        new AppLogger(_logger.ForContext(
+            "SourceContext",
+            string.IsNullOrWhiteSpace(sourceContext) ? "-" : sourceContext));
+
     public void Dispose() => _rootLogger?.Dispose();
 }
 

@@ -14,6 +14,7 @@ public static class RuntimeDiagnosticErrorCodes
     // Tool
     public const string ToolInvokeFailed = "tool.invoke_failed";
     public const string ToolOutputEvicted = "tool.output_evicted";
+    public const string ApplyPatchFailed = "tool.apply_patch_failed";
 
     // Storage
     public const string StoragePersistFailed = "storage.persist_failed";

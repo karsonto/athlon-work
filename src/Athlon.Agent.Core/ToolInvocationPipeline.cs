@@ -78,20 +78,6 @@ internal sealed class ToolInvocationPipeline(
             SessionSkillActivationScope.CurrentState?.RecordToolOutcome(result.Succeeded);
         }
 
-        await storage.AppendToolCallLogAsync(
-            sessionId,
-            new SessionToolCallLogEntry(
-                DateTimeOffset.UtcNow,
-                toolCall.Id,
-                toolCall.Name,
-                toolCall.Arguments,
-                result.Succeeded,
-                result.Summary,
-                result.Content,
-                result.Error,
-                sw.ElapsedMilliseconds),
-            cancellationToken).ConfigureAwait(false);
-
         var definition = resolveToolRouter().FindDefinition(toolCall.Name);
         var context = runContextAccessor.Current;
         await storage.AppendAttemptEventAsync(

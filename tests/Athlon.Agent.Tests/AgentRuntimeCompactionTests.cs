@@ -205,11 +205,7 @@ public sealed class AgentRuntimeCompactionTests
 
         public Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
-        public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) =>
 
-            Task.CompletedTask;
-
-        public Task FlushPendingToolCallLogsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
 
 

@@ -226,17 +226,29 @@ public sealed class DiagnoseLogsTool(
 
     private string ResolveRuntimeEventsPath(string sessionId)
     {
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            return Path.Combine(paths.LogsPath, "runtime-events.jsonl");
+        }
+
         var sessionsPath = paths.SessionsPath;
         var resolved = runContextAccessor.ResolveSessionDirectory(sessionsPath, sessionId);
 
-        // Mirror sink resolution rules (best-effort).
+        // Mirror sink resolution rules (best-effort), including logs/ fallback when session is empty.
         resolved = SessionDirectoryLayout.ResolveEffectiveSessionDirectory(
             sessionsPath,
             sessionId,
             resolved,
             runContextAccessor.Current?.Kind ?? AgentRunKind.Root);
 
-        return Path.Combine(resolved, "diagnostics", "runtime-events.jsonl");
+        var sessionPath = Path.Combine(resolved, "diagnostics", "runtime-events.jsonl");
+        if (File.Exists(sessionPath))
+        {
+            return sessionPath;
+        }
+
+        var logsFallback = Path.Combine(paths.LogsPath, "runtime-events.jsonl");
+        return File.Exists(logsFallback) ? logsFallback : sessionPath;
     }
 
     private static string BuildSummary(string? rootCause, IEnumerable<object> errorCodeCounts)

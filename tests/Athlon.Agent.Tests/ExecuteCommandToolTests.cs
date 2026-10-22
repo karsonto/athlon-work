@@ -317,7 +317,7 @@ public sealed class ExecuteCommandToolTests
         Directory.CreateDirectory(root);
         var paths = new TestPathProvider(root);
         var logger = new NoOpLogger();
-        var audit = new AuditLogService(logger, paths, new JsonFileStore());
+        var audit = new AuditLogService(paths, new JsonFileStore());
         var context = new ActiveWorkspaceContext();
         if (!string.IsNullOrWhiteSpace(workspaceRoot))
         {

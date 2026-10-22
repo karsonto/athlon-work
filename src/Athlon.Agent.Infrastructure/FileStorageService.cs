@@ -28,11 +28,7 @@ public sealed partial class FileStorageService(
     private readonly IAppLogger _logger = logger.ForContext("Storage");
     private readonly SessionIndexCoordinator _indexCoordinator = new(paths, jsonFileStore, runContextAccessor);
     private readonly IRuntimeDiagnosticEventSink? _runtimeDiagnosticEventSink = runtimeDiagnosticEventSink;
-    private ToolCallLogWriteQueue? _toolCallLogQueue;
     private readonly ConcurrentDictionary<string, byte> _ensuredSessionDirs = new(StringComparer.OrdinalIgnoreCase);
-
-    private ToolCallLogWriteQueue ToolCallLogQueue =>
-        _toolCallLogQueue ??= new ToolCallLogWriteQueue(WriteToolCallLogCoreAsync, _logger);
 
     public string RootPath => paths.RootPath;
 

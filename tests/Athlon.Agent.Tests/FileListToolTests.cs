@@ -19,7 +19,7 @@ public sealed class FileListToolTests
             var appDataRoot = Path.Combine(Path.GetDirectoryName(root)!, ".athlon-agent-test");
             Directory.CreateDirectory(appDataRoot);
             var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
-            var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+            var audit = new AuditLogService(new TestPathProvider(appDataRoot), new JsonFileStore());
             var tool = new FileListTool(guard, audit);
 
             var result = await tool.InvokeAsync(new ToolInvocation("file_list", new Dictionary<string, string>()));
@@ -48,7 +48,7 @@ public sealed class FileListToolTests
             var appDataRoot = Path.Combine(Path.GetDirectoryName(root)!, ".athlon-agent-test");
             Directory.CreateDirectory(appDataRoot);
             var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
-            var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+            var audit = new AuditLogService(new TestPathProvider(appDataRoot), new JsonFileStore());
             var tool = new FileListTool(guard, audit);
 
             var result = await tool.InvokeAsync(new ToolInvocation("file_list", new Dictionary<string, string>()));
@@ -78,7 +78,7 @@ public sealed class FileListToolTests
             var appDataRoot = Path.Combine(Path.GetDirectoryName(root)!, ".athlon-agent-test");
             Directory.CreateDirectory(appDataRoot);
             var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
-            var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+            var audit = new AuditLogService(new TestPathProvider(appDataRoot), new JsonFileStore());
             var tool = new FileListTool(guard, audit);
 
             var result = await tool.InvokeAsync(new ToolInvocation(

@@ -192,6 +192,12 @@ public sealed class LoggingSettings
     public string MinimumLevel { get; set; } = "Information";
     public int RetainedDays { get; set; } = 14;
     public long MaxFileSizeBytes { get; set; } = 10 * 1024 * 1024;
+
+    /// <summary>When true, chat model HTTP request/response bodies are written to session http/interactions.jsonl.</summary>
+    public bool HttpInteractionLogEnabled { get; set; } = true;
+
+    /// <summary>Max characters retained for HTTP request/response bodies in interaction logs.</summary>
+    public int HttpMaxBodyChars { get; set; } = 120_000;
 }
 public sealed class ToolPermissionSettings
 {

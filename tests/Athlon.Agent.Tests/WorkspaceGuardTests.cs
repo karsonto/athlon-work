@@ -76,7 +76,7 @@ public sealed class WorkspaceGuardTests
         var appDataRoot = Path.Combine(root, ".athlon-agent");
         Directory.CreateDirectory(appDataRoot);
         var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
-        var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+        var audit = new AuditLogService(new TestPathProvider(appDataRoot), new JsonFileStore());
         var tool = new FileWriteTool(guard, audit);
 
         try

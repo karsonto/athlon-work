@@ -92,6 +92,10 @@ public sealed class ApplyPatchToolTests
             Assert.False(result.Succeeded);
             Assert.Equal("Patch failed", result.Summary);
             Assert.Equal("alpha\n", await File.ReadAllTextAsync(Path.Combine(env.WorkspaceRoot, "sample.txt")));
+            Assert.Contains(env.Logger.Warnings, w => w.Contains("hunk_mismatch", StringComparison.Ordinal));
+            var failed = Assert.Single(env.Sink.Events);
+            Assert.Equal("tool.apply_patch_failed", failed.eventType);
+            Assert.Contains("stage=hunk_mismatch", failed.message, StringComparison.Ordinal);
         }
         finally
         {
@@ -342,12 +346,26 @@ public sealed class ApplyPatchToolTests
         var context = new ActiveWorkspaceContext();
         context.SetWorkspace(workspaceRoot);
         var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
-        var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+        var audit = new AuditLogService(new TestPathProvider(appDataRoot), new JsonFileStore());
+        var logger = new RecordingLogger();
+        var sink = new RecordingDiagnosticSink();
 
-        return new TestEnvironment(root, workspaceRoot, outsideRoot, new ApplyPatchTool(guard, audit));
+        return new TestEnvironment(
+            root,
+            workspaceRoot,
+            outsideRoot,
+            new ApplyPatchTool(guard, audit, logger, sink),
+            logger,
+            sink);
     }
 
-    private sealed record TestEnvironment(string Root, string WorkspaceRoot, string OutsideRoot, ApplyPatchTool Tool)
+    private sealed record TestEnvironment(
+        string Root,
+        string WorkspaceRoot,
+        string OutsideRoot,
+        ApplyPatchTool Tool,
+        RecordingLogger Logger,
+        RecordingDiagnosticSink Sink)
     {
         public void Dispose()
         {
@@ -358,13 +376,37 @@ public sealed class ApplyPatchToolTests
         }
     }
 
-    private sealed class NoOpLogger : IAppLogger
+    private sealed class RecordingLogger : IAppLogger
     {
+        public List<string> Warnings { get; } = [];
+        public List<string> Informations { get; } = [];
+
         public void Debug(string messageTemplate, params object[] values) { }
-        public void Information(string messageTemplate, params object[] values) { }
-        public void Warning(string messageTemplate, params object[] values) { }
+
+        public void Information(string messageTemplate, params object[] values) =>
+            Informations.Add(string.Join("|", values.Select(v => v?.ToString() ?? "")));
+
+        public void Warning(string messageTemplate, params object[] values) =>
+            Warnings.Add(string.Join("|", values.Select(v => v?.ToString() ?? "")));
+
         public void Error(Exception exception, string messageTemplate, params object[] values) { }
+
         public IAppLogger ForContext(string sourceContext) => this;
+    }
+
+    private sealed class RecordingDiagnosticSink : Athlon.Agent.Core.RuntimeDiagnostics.IRuntimeDiagnosticEventSink
+    {
+        public List<Athlon.Agent.Core.RuntimeDiagnostics.RuntimeDiagnosticEvent> Events { get; } = [];
+
+        public ValueTask EnqueueAsync(
+            Athlon.Agent.Core.RuntimeDiagnostics.RuntimeDiagnosticEvent evt,
+            CancellationToken cancellationToken = default)
+        {
+            Events.Add(evt);
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask FlushAsync(CancellationToken cancellationToken = default) => ValueTask.CompletedTask;
     }
 
     private sealed class TestPathProvider(string rootPath) : IAppPathProvider

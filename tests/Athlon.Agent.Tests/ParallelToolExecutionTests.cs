@@ -487,7 +487,7 @@ public sealed class ParallelToolExecutionTests
     {
         var root = Path.Combine(Path.GetTempPath(), $"athlon-audit-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
-        return new AuditLogService(new NoOpLogger(), new TestPathProvider(root), new JsonFileStore());
+        return new AuditLogService(new TestPathProvider(root), new JsonFileStore());
     }
 
     private sealed class TestPathProvider(string rootPath) : IAppPathProvider
@@ -692,13 +692,11 @@ public sealed class ParallelToolExecutionTests
             Task.FromResult<IReadOnlyList<ChatMessage>>(Array.Empty<ChatMessage>());
         public Task ReplaceConversationDisplayAsync(string sessionId, IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) => Task.CompletedTask;
-        public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task AppendAttemptEventAsync(string sessionId, AgentAttemptEvent entry, CancellationToken cancellationToken = default)
         {
             Attempts.Add(entry);
             return Task.CompletedTask;
         }
-        public Task FlushPendingToolCallLogsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<SessionIndexEntry>>(Array.Empty<SessionIndexEntry>());
         public Task SaveSettingsAsync(AppSettings settings, CancellationToken cancellationToken = default) => Task.CompletedTask;

@@ -384,7 +384,7 @@ public sealed class GrepFilesToolTests
         var context = new ActiveWorkspaceContext();
         context.SetWorkspace(workspaceRoot);
         var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), new AppSettings(), new TestPathProvider(appDataRoot));
-        var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+        var audit = new AuditLogService(new TestPathProvider(appDataRoot), new JsonFileStore());
         var settings = new AppSettings();
         if (sequential)
         {

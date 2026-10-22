@@ -114,7 +114,7 @@ internal static class ChatRenderTrace
 
         try
         {
-            logger.Information("{Line}", line);
+            logger.Debug("{Line}", line);
         }
         catch
         {

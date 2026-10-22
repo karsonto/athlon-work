@@ -39,7 +39,7 @@ public sealed class SshWorkspaceGuardAndToolTests
         var tool = new SshFileReadTool(
             guard,
             client,
-            new AuditLogService(new NoOpLogger(), paths, new JsonFileStore()),
+            new AuditLogService(paths, new JsonFileStore()),
             new AppSettings());
 
         var result = await tool.InvokeAsync(new ToolInvocation("file_read", new Dictionary<string, string>

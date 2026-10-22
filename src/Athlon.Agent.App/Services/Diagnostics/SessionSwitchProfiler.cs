@@ -384,7 +384,7 @@ public static class SessionSwitchProfiler
 
         try
         {
-            _logger?.Information("{EventType} {Switch}", EventType, message);
+            _logger?.Debug("{EventType} {Switch}", EventType, message);
         }
         catch
         {

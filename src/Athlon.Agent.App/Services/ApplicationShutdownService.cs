@@ -7,7 +7,6 @@ using Athlon.Agent.Infrastructure;
 using Athlon.Agent.Infrastructure.Cli;
 using Athlon.Agent.Infrastructure.BehaviorReport;
 using Athlon.Agent.Mcp;
-using Serilog;
 
 namespace Athlon.Agent.App.Services;
 
@@ -81,8 +80,6 @@ public sealed class ApplicationShutdownService(
         {
             // Best-effort persist on exit.
         }
-
-        await storage.FlushPendingToolCallLogsAsync(cancellationToken).ConfigureAwait(false);
 
         progress?.Report(Strings.Get("Shutdown_KillingProcesses"));
         processRegistry.KillAll();
@@ -181,7 +178,5 @@ public sealed class ApplicationShutdownService(
         {
             disposable.Dispose();
         }
-
-        Log.CloseAndFlush();
     }
 }

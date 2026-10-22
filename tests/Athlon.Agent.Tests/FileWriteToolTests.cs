@@ -342,7 +342,7 @@ public sealed class FileWriteToolTests
             new AgentRunContextAccessor(),
             new AppSettings(),
             new TestPathProvider(appDataRoot));
-        var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+        var audit = new AuditLogService(new TestPathProvider(appDataRoot), new JsonFileStore());
 
         return Task.FromResult(new TestEnvironment(root, workspaceRoot, outsideRoot, new FileWriteTool(guard, audit)));
     }
@@ -385,7 +385,7 @@ public sealed class FileWriteToolTests
             new AgentRunContextAccessor(),
             new AppSettings(),
             new TestPathProvider(root));
-        var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(root), new JsonFileStore());
+        var audit = new AuditLogService(new TestPathProvider(root), new JsonFileStore());
         var client = new MemorySshClient(corruptWrites);
         return new SshEnvironment(client, new SshFileWriteTool(guard, client, audit));
     }

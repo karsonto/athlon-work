@@ -155,7 +155,7 @@ public sealed class WorkspaceToolBoundaryTests
         context.SetWorkspace(workspaceRoot);
         var settings = new AppSettings();
         var guard = new WorkspaceGuard(context, new AgentRunContextAccessor(), settings, new TestPathProvider(appDataRoot));
-        var audit = new AuditLogService(new NoOpLogger(), new TestPathProvider(appDataRoot), new JsonFileStore());
+        var audit = new AuditLogService(new TestPathProvider(appDataRoot), new JsonFileStore());
 
         await Task.CompletedTask;
         return new TestEnvironment(

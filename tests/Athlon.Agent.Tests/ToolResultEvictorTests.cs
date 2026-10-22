@@ -210,10 +210,7 @@ public sealed class ToolResultEvictorTests
         public Task ClearConversationDisplayAsync(string sessionId, CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
-        public Task AppendToolCallLogAsync(string sessionId, SessionToolCallLogEntry entry, CancellationToken cancellationToken = default) =>
-            Task.CompletedTask;
 
-        public Task FlushPendingToolCallLogsAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 
         public Task<IReadOnlyList<SessionIndexEntry>> ListSessionsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<SessionIndexEntry>>(Array.Empty<SessionIndexEntry>());

@@ -14,7 +14,15 @@ public sealed class SessionHttpLogServiceTests
 
         try
         {
-            var service = new SessionHttpLogService(paths, new JsonFileStore(), new AgentRunContextAccessor(), new NoOpLogger());
+            var settings = new AppSettings();
+            var service = new SessionHttpLogService(
+                paths,
+                new JsonFileStore(),
+                new AgentRunContextAccessor(),
+                settings,
+                new NoOpLogger());
+            Assert.True(service.IsEnabled);
+
             await service.LogInteractionAsync(
                 "session-1",
                 new SessionHttpInteractionLog(
@@ -22,10 +30,11 @@ public sealed class SessionHttpLogServiceTests
                     "https://example.com/v1/chat/completions",
                     "chat-completion",
                     400,
-                    new { model = "test" },
+                    new { model = "test", Authorization = "Bearer sk-secret" },
                     "{\"error\":\"bad request\"}",
                     "HTTP 400 Bad Request",
-                    120));
+                    120,
+                    RequestId: "req-1"));
 
             var path = Path.Combine(paths.SessionsPath, "session-1", "http", "interactions.jsonl");
             Assert.True(File.Exists(path));
@@ -33,7 +42,94 @@ public sealed class SessionHttpLogServiceTests
             Assert.Contains("chat-completion", line, StringComparison.Ordinal);
             Assert.Contains("400", line, StringComparison.Ordinal);
             Assert.Contains("+08:00", line, StringComparison.Ordinal);
+            Assert.Contains("req-1", line, StringComparison.Ordinal);
             Assert.DoesNotContain("Bearer sk-", line, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LogInteractionAsync_WithoutSession_WritesUnderLogsHttpFolder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-http-log-tests", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+        Directory.CreateDirectory(paths.LogsPath);
+
+        try
+        {
+            var service = new SessionHttpLogService(
+                paths,
+                new JsonFileStore(),
+                new AgentRunContextAccessor(),
+                new AppSettings(),
+                new NoOpLogger());
+
+            await service.LogInteractionAsync(
+                null,
+                new SessionHttpInteractionLog(
+                    DateTimeOffset.UtcNow,
+                    "https://example.com/v1/chat/completions",
+                    "chat-completion",
+                    200,
+                    new { model = "test" },
+                    "{\"ok\":true}",
+                    null,
+                    50,
+                    RequestId: "req-fallback"));
+
+            var path = Path.Combine(paths.LogsPath, "http", "interactions.jsonl");
+            Assert.True(File.Exists(path));
+            var line = await File.ReadAllTextAsync(path);
+            Assert.Contains("req-fallback", line, StringComparison.Ordinal);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LogInteractionAsync_WhenDisabled_DoesNotWrite()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "athlon-http-log-tests", Guid.NewGuid().ToString("N"));
+        var paths = new TestAppPathProvider(root);
+        paths.EnsureCreated();
+
+        try
+        {
+            var settings = new AppSettings { Logging = { HttpInteractionLogEnabled = false } };
+            var service = new SessionHttpLogService(
+                paths,
+                new JsonFileStore(),
+                new AgentRunContextAccessor(),
+                settings,
+                new NoOpLogger());
+            Assert.False(service.IsEnabled);
+
+            await service.LogInteractionAsync(
+                "session-1",
+                new SessionHttpInteractionLog(
+                    DateTimeOffset.UtcNow,
+                    "https://example.com/v1/chat/completions",
+                    "chat-completion",
+                    200,
+                    new { model = "test" },
+                    "{}",
+                    null,
+                    10));
+
+            var path = Path.Combine(paths.SessionsPath, "session-1", "http", "interactions.jsonl");
+            Assert.False(File.Exists(path));
         }
         finally
         {
