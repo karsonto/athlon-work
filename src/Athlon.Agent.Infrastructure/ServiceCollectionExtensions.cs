@@ -146,6 +146,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IImageAttachmentStore, ImageAttachmentStore>();
         services.AddSingleton<IChatDocumentAttachmentExtractor, ChatDocumentAttachmentExtractor>();
         services.AddSingleton<IMcpRegistry, McpRegistry>();
+        services.AddSingleton<Athlon.Agent.Core.Tools.IToolAvailabilityContextFactory, Athlon.Agent.Infrastructure.Tools.ToolAvailabilityContextFactory>();
+        services.AddSingleton<Athlon.Agent.Infrastructure.Tools.McpAdvertisementPolicy>();
         services.AddSingleton<IToolRouter, CompositeToolRouter>();
         services.AddSingleton<IAgentRunContextAccessor, AgentRunContextAccessor>();
         services.AddSingleton<IActiveWorkspaceContext, ActiveWorkspaceContext>();

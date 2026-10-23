@@ -10,28 +10,35 @@ namespace Athlon.Agent.Core.Tools;
 /// </summary>
 public static class ToolAvailabilityPolicy
 {
-    private readonly record struct Rule(
+    private sealed record Rule(
         string Name,
         Func<ToolAvailabilityContext, bool> When,
-        Func<ToolAvailabilityContext, ToolFacet, bool?> Decide);
+        Func<ToolAvailabilityContext, ToolFacet, bool?> Decide) : IToolAvailabilityRule
+    {
+        bool IToolAvailabilityRule.Applies(ToolAvailabilityContext context) => When(context);
 
-    // Priority matches the former McpDelegatingToolRouter.IsToolEnabled if-chain.
-    private static readonly Rule[] Rules =
+        bool? IToolAvailabilityRule.Decide(ToolAvailabilityContext context, ToolFacet facets) =>
+            Decide(context, facets);
+
+        string IToolAvailabilityRule.Name => Name;
+    }
+
+    /// <summary>Default rule chain (priority matches the historical IsToolEnabled if-chain).</summary>
+    public static IReadOnlyList<IToolAvailabilityRule> DefaultRules { get; } =
     [
-        new(
+        new Rule(
             "computer-use-exclusive",
             static ctx => ctx.ComputerUseActive,
             static (_, facets) => facets.HasFlag(ToolFacet.ComputerUse)),
-        new(
+        new Rule(
             "computer-use-blocked-outside-cu",
             static ctx => !ctx.ComputerUseActive,
             static (_, facets) => facets.HasFlag(ToolFacet.ComputerUse) ? false : null),
-        new(
+        new Rule(
             "chat-only",
             static ctx => !ctx.HasWorkspace,
             static (ctx, facets) =>
             {
-                // Ask mode is read-only: never unlock Terminal / shell bootstrap without a workspace.
                 if (ctx.Mode == SessionAgentMode.Ask
                     && (facets.HasFlag(ToolFacet.Terminal)
                         || facets.HasFlag(ToolFacet.TerminalBootstrap)
@@ -64,23 +71,23 @@ public static class ToolAvailabilityPolicy
 
                 return false;
             }),
-        new(
+        new Rule(
             "local-tools-on-ssh",
             static ctx => ctx.WorkspaceKind == WorkspaceKind.Ssh,
             static (_, facets) => facets.HasFlag(ToolFacet.LocalWorkspace) ? false : null),
-        new(
+        new Rule(
             "remote-tools-off-ssh",
             static ctx => ctx.WorkspaceKind != WorkspaceKind.Ssh,
             static (_, facets) => facets.HasFlag(ToolFacet.RemoteWorkspace) ? false : null),
-        new(
+        new Rule(
             "harness-todo-ask-plan-only",
             static ctx => ctx.Mode == SessionAgentMode.Ask || ctx.Mode == SessionAgentMode.Plan,
             static (_, facets) => facets.HasFlag(ToolFacet.HarnessTodo) ? false : null),
-        new(
+        new Rule(
             "plan-document-plan-mode-only",
             static ctx => ctx.Mode != SessionAgentMode.Plan,
             static (_, facets) => facets.HasFlag(ToolFacet.PlanDocument) ? false : null),
-        new(
+        new Rule(
             "plan-block-writes-shell-subagents",
             static ctx => ctx.Mode == SessionAgentMode.Plan,
             static (_, facets) =>
@@ -89,22 +96,21 @@ public static class ToolAvailabilityPolicy
                 || facets.HasFlag(ToolFacet.SubAgent)
                     ? false
                     : null),
-        new(
+        new Rule(
             "browser-requires-tab",
             static ctx => !ctx.BrowserTabOpen,
             static (_, facets) =>
                 facets.HasFlag(ToolFacet.Browser) && !facets.HasFlag(ToolFacet.BrowserBootstrap)
                     ? false
                     : null),
-        new(
+        new Rule(
             "terminal-requires-tab",
             static ctx => !ctx.TerminalTabOpen,
             static (_, facets) =>
                 facets.HasFlag(ToolFacet.Terminal) && !facets.HasFlag(ToolFacet.TerminalBootstrap)
                     ? false
                     : null),
-        // Memory without workspace is already rejected by chat-only (never null there).
-        new(
+        new Rule(
             "ask-block-writes-shell-terminal-subagents",
             static ctx => ctx.Mode == SessionAgentMode.Ask,
             static (_, facets) =>
@@ -115,21 +121,21 @@ public static class ToolAvailabilityPolicy
                 || facets.HasFlag(ToolFacet.SubAgent)
                     ? false
                     : null),
-        new(
+        new Rule(
             "debug-mode-block-subagents-and-shell",
             static ctx => ctx.Mode == SessionAgentMode.Debug,
             static (_, facets) =>
                 facets.HasFlag(ToolFacet.SubAgent) || facets.HasFlag(ToolFacet.Shell) ? false : null),
-        new(
+        new Rule(
             "debug-mode-hypothesize-readonly",
             static ctx => ctx.Mode == SessionAgentMode.Debug && ctx.ActiveDebugPhase == DebugPhase.Hypothesize,
             static (_, facets) =>
                 facets.HasFlag(ToolFacet.WriteFileOrShell) ? false : null),
-        new(
+        new Rule(
             "debug-mode-analyze-readonly",
             static ctx => ctx.Mode == SessionAgentMode.Debug && ctx.ActiveDebugPhase == DebugPhase.Analyze,
             static (_, facets) => facets.HasFlag(ToolFacet.WriteFileOrShell) ? false : null),
-        new(
+        new Rule(
             "debug-mode-await-readonly",
             static ctx => ctx.Mode == SessionAgentMode.Debug && ctx.ActiveDebugPhase is { } phase && phase.IsReadOnlyFollowUp(),
             static (_, facets) =>
@@ -138,22 +144,25 @@ public static class ToolAvailabilityPolicy
                 || facets.HasFlag(ToolFacet.SubAgent)
                     ? false
                     : null),
-        new(
+        new Rule(
             "knowledge-session-gate",
             static _ => true,
             static (ctx, facets) =>
                 facets.HasFlag(ToolFacet.Knowledge) ? ctx.KnowledgeEnabled : null)
     ];
 
-    public static bool IsEnabled(IAgentTool tool, ToolAvailabilityContext context)
+    public static bool IsEnabled(
+        IAgentTool tool,
+        ToolAvailabilityContext context,
+        IEnumerable<IToolAvailabilityRule>? rules = null)
     {
         ArgumentNullException.ThrowIfNull(tool);
         ArgumentNullException.ThrowIfNull(context);
 
         var facets = ToolFacetClassifier.Classify(tool);
-        foreach (var rule in Rules)
+        foreach (var rule in rules ?? DefaultRules)
         {
-            if (!rule.When(context))
+            if (!rule.Applies(context))
             {
                 continue;
             }
